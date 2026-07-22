@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
-<link rel="manifest" href="manifest.json">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Lokalex Toolkit</title>
@@ -309,12 +308,12 @@
             <div id="commission-receipts-list" class="flex flex-col gap-3 pb-20"></div>
         </section>
 
-        <!-- ================= DIRECTORY VIEW ================= -->
+        <!-- ================= DIRECTORY VIEW (ALPHABETICAL SCRUBBER FIXED) ================= -->
         <section id="view-directory" class="hidden flex-1 flex flex-col relative p-4">
             <div class="flex gap-2 mb-4 pr-6">
                 <div class="relative flex-1">
                     <i class="fa-solid fa-search absolute left-3 top-3.5 text-gray-400 text-sm"></i>
-                    <input type="text" id="search-input" oninput="filterRecords()" placeholder="Search all records..." class="w-full bg-inputBg text-sm rounded-xl pl-9 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
+                    <input type="text" id="search-input" oninput="filterDirectoryRecords()" placeholder="Search all records..." class="w-full bg-inputBg text-sm rounded-xl pl-9 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
                 </div>
                 <button onclick="syncData()" class="bg-cardBg hover:bg-inputBg px-4 rounded-xl border border-gray-800 text-gray-300 transition active:scale-90" title="Refresh">
                     <i class="fa-solid fa-rotate"></i>
@@ -322,7 +321,7 @@
             </div>
             
             <div id="record-list" class="flex-1 flex flex-col gap-3 pb-20 pr-8 overflow-y-auto"></div>
-            <div id="alphabet-scrubber" class="fixed right-1 top-1/2 -translate-y-1/2 flex flex-col text-[10px] text-gray-500 font-bold bg-darkBg/80 py-2 rounded-full z-10 touch-none"></div>
+            <div id="alphabet-scrubber" class="fixed right-1 top-1/2 -translate-y-1/2 flex flex-col text-[10px] text-gray-500 font-bold bg-darkBg/90 py-2 rounded-full z-20 touch-none select-none"></div>
 
             <button onclick="openForm(null)" class="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center text-xl z-40 transition active:scale-90">
                 <i class="fa-solid fa-plus"></i>
@@ -528,6 +527,7 @@
         let selectedCartIds = new Set();
         let editItemIndex = -1;
         let wizState = { storeCount: 1 };
+        let currentReceiptTransactionId = "";
 
         let rosterMembers = [];
         let globalCateredHistory = [];
@@ -611,15 +611,11 @@
                     rosterMembers = bundle.roster || [];
                     globalCateredHistory = bundle.catered_history || [];
                     globalLogins = bundle.logins || [];
+                    chatMessages = bundle.chat || [];
 
                     updateRosterUI();
                     loadGlobalCateredList();
                     loadGlobalLoginList();
-                }
-
-                const resChat = await fetch(`${API_URL}?type=chat`);
-                if (resChat.ok) {
-                    chatMessages = await resChat.json();
                     updateChatBadgesAndUI();
                 }
             } catch(e) {}
@@ -792,7 +788,7 @@
             } catch(e) {}
         }
 
-        // ================= ADMIN CONTROLS (WITH EXPLICIT QUEUE SHIFTING BUTTONS) =================
+        // ================= ADMIN CONTROLS =================
         function adminForceStatus(id, name, actionValue) {
             if (actionValue === 'Catering') {
                 pendingAdminTarget = { id, name };
@@ -1125,7 +1121,7 @@
             } catch(e) {}
         }
 
-        // ================= 4. UI UPDATERS (WITH EXPLICIT ADMIN QUEUE SHIFTING BUTTONS) =================
+        // ================= 4. UI UPDATERS =================
         function updateRosterUI() {
             let avail = [], busy = [], brk = [];
             
@@ -1156,7 +1152,6 @@
                     let adminSelect = ` <select onchange="adminForceStatus('${m.telegramId}', '${m.riderName}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Admin Force</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
                     nameStr += adminSelect;
 
-                    // EXPLICIT QUEUE SHIFTING BUTTONS FOR AVAILABLE RIDERS
                     if (m.status === 'Available') {
                         nameStr += `
                         <div class="inline-flex gap-1 ml-2 text-[10px] align-middle">
@@ -1406,7 +1401,7 @@ ${customerLines}
             showToast("Daily report copied to clipboard!");
         }
 
-        // ================= 7. DIRECTORY =================
+        // ================= 7. DIRECTORY & ALPHABETICAL SCRUBBER FIXED =================
         async function openDirectory(type) {
             currentType = type; activeFilterLetter = ""; document.getElementById('search-input').value = "";
             document.getElementById('header-title').innerText = type === 'customers' ? "Customer Directory" : "Store Directory";
@@ -1416,25 +1411,33 @@ ${customerLines}
 
         function buildAlphabetScrubber() {
             document.getElementById('alphabet-scrubber').innerHTML = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('').map(letter => 
-                `<div class="scrubber-letter w-6 text-center py-[2px] ${activeFilterLetter === letter ? 'text-blue-500 font-black text-sm' : ''}">${letter}</div>`
+                `<div data-letter="${letter}" class="scrubber-letter w-6 text-center py-[2px] ${activeFilterLetter === letter ? 'text-blue-500 font-black text-sm' : ''}">${letter}</div>`
             ).join('');
         }
 
         function attachScrubberEvents() {
             const scrubber = document.getElementById('alphabet-scrubber');
+            let isScrubbing = false;
+
             const handleScrub = (e) => {
-                e.preventDefault();
-                const el = document.elementFromPoint(e.touches ? e.touches[0].clientX : e.clientX, e.touches ? e.touches[0].clientY : e.clientY);
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                const el = document.elementFromPoint(clientX, clientY);
+                
                 if (el && el.classList.contains('scrubber-letter')) {
-                    const letter = el.innerText;
-                    if (activeFilterLetter !== letter) {
-                        activeFilterLetter = letter; document.getElementById('search-input').value = ""; 
-                        buildAlphabetScrubber(); filterDirectoryRecords();
+                    const letter = el.getAttribute('data-letter');
+                    if (letter && activeFilterLetter !== letter) {
+                        activeFilterLetter = letter;
+                        document.getElementById('search-input').value = ""; 
+                        buildAlphabetScrubber();
+                        filterDirectoryRecords();
                     }
                 }
             };
-            scrubber.addEventListener('touchmove', handleScrub, { passive: false });
-            scrubber.addEventListener('pointermove', (e) => { if(e.pointerType === 'mouse') handleScrub(e); });
+
+            scrubber.onpointerdown = (e) => { isScrubbing = true; handleScrub(e); };
+            window.onpointermove = (e) => { if (isScrubbing) handleScrub(e); };
+            window.onpointerup = () => { isScrubbing = false; };
         }
 
         function filterDirectoryRecords() {
@@ -1446,6 +1449,7 @@ ${customerLines}
             });
             renderDirectoryRecords(filtered);
         }
+        function filterRecords() { filterDirectoryRecords(); } // Alias for safety
 
         function renderDirectoryRecords(list) {
             const container = document.getElementById('record-list');
@@ -1652,7 +1656,7 @@ ${customerLines}
             goBack();
         }
 
-        // ================= 8. SMART CART, SLIDE DELETE & WIZARD =================
+        // ================= 8. SMART CART, SLIDE DELETE & REWORKED WIZARD =================
         function showBulkAddModal() { document.getElementById('bulk-modal').classList.remove('hidden'); document.getElementById('bulk-input').value = ""; document.getElementById('bulk-input').focus(); }
         function closeBulkModal() { document.getElementById('bulk-modal').classList.add('hidden'); }
         
@@ -1706,6 +1710,7 @@ ${customerLines}
                 openSlideDeleteModal("Sigurado ka bang gusto mong i-clear ang buong cart?", () => {
                     cartItems = [];
                     selectedCartIds.clear();
+                    currentReceiptTransactionId = "";
                     renderCart();
                 });
             }
@@ -1813,6 +1818,11 @@ ${customerLines}
             document.getElementById('header-title').innerText = "Fee Wizard";
             switchView('view-wizard');
 
+            // Generate session Transaction ID for receipt if not existing
+            if (!currentReceiptTransactionId) {
+                currentReceiptTransactionId = "TX-" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 4).toUpperCase();
+            }
+
             const myRecord = rosterMembers ? rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
             const btnBox = document.getElementById('catered-client-buttons');
             const rcptInput = document.getElementById('rcpt-name');
@@ -1916,7 +1926,8 @@ ${customerLines}
 
         function updateWizardUI() { calculateGrandTotal(); }
 
-        function generateFinalReceipt() {
+        // GENERATE DIGITAL RECEIPT & SAVE IMMEDIATELY TO DATABASE
+        async function generateFinalReceipt() {
             const customerName = document.getElementById('rcpt-name').value.trim();
             if (!customerName) {
                 showToast("⚠️ Paki-lagay ang pangalan ng customer bago magpatuloy.");
@@ -1928,25 +1939,43 @@ ${customerLines}
             if (wizState.deliveryFee === 0 && !isFree) return showToast("Please input Rider Delivery Fee.");
 
             document.getElementById('header-title').innerText = "Official Receipt";
-            switchView('view-receipt-final');
+            
+            // SAVE TO DATABASE IMMEDIATELY ON GENERATE
+            saveReceiptToDatabase(customerName);
 
+            switchView('view-receipt-final');
             renderFinalReceiptText();
+        }
+
+        async function saveReceiptToDatabase(customerName) {
+            const feesObj = {
+                handling: wizState.finalHFee || 0,
+                market: wizState.finalMFee || 0,
+                multistore: wizState.finalMulti || 0,
+                delivery: wizState.deliveryFee || 0,
+                discount: wizState.discount || 0
+            };
+            const totalFees = (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0);
+
+            const payload = {
+                type: "receipts",
+                transactionId: currentReceiptTransactionId,
+                telegramId: appState.telegramId,
+                riderName: appState.riderName,
+                customerName: customerName,
+                fees: feesObj,
+                totalFees: totalFees,
+                date: new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0')
+            };
+
+            showToast("Saving receipt record...");
+            try {
+                await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+            } catch(e) {}
         }
 
         function renderFinalReceiptText() {
             const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' });
-            
-            const now = new Date();
-            const rawDateStr = now.getFullYear().toString() + 
-                               String(now.getMonth() + 1).padStart(2, '0') + 
-                               String(now.getDate()).padStart(2, '0');
-            const rawCode = `${appState.telegramId}_${rawDateStr}`;
-            let hash = 0;
-            for (let i = 0; i < rawCode.length; i++) {
-                hash = ((hash << 5) - hash) + rawCode.charCodeAt(i);
-                hash |= 0;
-            }
-            const riderIdCode = "RID-" + Math.abs(hash).toString(16).toUpperCase().substring(0, 5).padEnd(5, '0');
 
             let itemsTxt = cartItems.map(i => `🔸 ${i.item} - ₱${i.price.toFixed(2)}`).join("\n");
             let feesTxt = "";
@@ -1963,7 +1992,7 @@ ${customerLines}
 
 📅 **Date:** ${dateStr}
 🛵 **Rider:** ${appState.riderName}
-🔑 **ID Code:** \`${riderIdCode}\`
+🔑 **Transaction ID:** \`${currentReceiptTransactionId}\`
 ➖➖➖➖➖➖➖➖➖➖➖➖
 🛍️ **ITEMS:**
 ${itemsTxt}
@@ -1977,34 +2006,11 @@ ${feesTxt}➖➖➖➖➖➖➖➖➖➖➖➖
 💙 Salamat sa pagtitiwala sa Lokalex!`;
         }
 
-        async function completeReceiptDone() {
-            const customerName = document.getElementById('rcpt-name').value.trim();
-            const feesObj = {
-                handling: wizState.finalHFee || 0,
-                market: wizState.finalMFee || 0,
-                multistore: wizState.finalMulti || 0,
-                delivery: wizState.deliveryFee || 0,
-                discount: wizState.discount || 0
-            };
-            const totalFees = (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0);
-
-            const payload = {
-                type: "receipts",
-                telegramId: appState.telegramId,
-                riderName: appState.riderName,
-                customerName: customerName,
-                fees: feesObj,
-                totalFees: totalFees,
-                date: new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0')
-            };
-
-            showToast("Saving receipt to database...");
-            try {
-                await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-            } catch(e) {}
-
+        // DONE BUTTON ONLY EXITS HOME (NO EXTRA DATABASE CALL NEEDED)
+        function completeReceiptDone() {
             cartItems = [];
             selectedCartIds.clear();
+            currentReceiptTransactionId = ""; // Reset transaction state
             switchView('view-home');
         }
 
