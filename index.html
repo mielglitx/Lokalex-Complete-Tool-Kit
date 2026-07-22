@@ -1,0 +1,2016 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lokalex Toolkit</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: { colors: { darkBg: '#121212', cardBg: '#1E1E1E', inputBg: '#2A2A2A', tgBg: '#0e1621', tgCard: '#17212b', tgBtn: '#202b36' } } }
+        }
+    </script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- LEAFLET MAPS CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        ::-webkit-scrollbar { width: 0px; background: transparent; }
+        body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+        .leaflet-container { width: 100%; height: 100%; z-index: 1; }
+        .map-center-marker {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -100%);
+            z-index: 1000; pointer-events: none; color: #ef4444; font-size: 40px;
+            filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.5));
+        }
+        .snap-animate {
+            transition: left 0.3s cubic-bezier(0.25, 1, 0.5, 1), top 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+    </style>
+</head>
+<body class="bg-darkBg text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative">
+
+    <!-- HEADER BAR -->
+    <header id="app-header" class="hidden bg-cardBg px-4 py-4 flex items-center justify-between shadow-md sticky top-0 z-40">
+        <button id="back-btn" onclick="goBack()" class="hidden text-blue-400 font-semibold flex items-center gap-2 transition active:scale-95">
+            <i class="fa-solid fa-arrow-left"></i> Back
+        </button>
+        <h1 id="header-title" class="text-lg font-bold tracking-wide mx-auto">
+            L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub
+        </h1>
+        <div id="header-spacer" class="w-16"></div>
+    </header>
+
+    <!-- CONTAINER -->
+    <main class="flex-1 max-w-md w-full mx-auto flex flex-col relative pb-20">
+
+        <!-- ================= LOGIN SPLASH SCREEN ================= -->
+        <section id="view-login" class="hidden flex-1 flex flex-col justify-center p-6 gap-6">
+            <div class="text-center">
+                <i class="fa-solid fa-motorcycle text-5xl text-blue-500 mb-4"></i>
+                <h2 class="text-2xl font-black">L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Access</h2>
+                <p class="text-xs text-gray-400 mt-2">Requires valid ID and GPS location to log in.</p>
+            </div>
+            
+            <div class="bg-cardBg p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col gap-4">
+                <div class="relative">
+                    <i class="fa-solid fa-key absolute left-3 top-3.5 text-gray-400"></i>
+                    <input type="text" id="login-id" placeholder="Enter Login ID" class="w-full bg-inputBg text-sm rounded-xl pl-10 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
+                </div>
+                <button id="login-btn" onclick="processLogin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95">
+                    LOGIN & MARK AVAILABLE
+                </button>
+            </div>
+        </section>
+
+        <!-- ================= HOME / DASHBOARD VIEW ================= -->
+        <section id="view-home" class="hidden flex-1 flex flex-col p-4 gap-4 py-4">
+            <!-- Hub Grid -->
+            <div class="grid grid-cols-2 gap-3 mt-1">
+                <button onclick="switchView('view-cart')" class="col-span-2 bg-emerald-600/20 border border-emerald-600 hover:bg-emerald-600/30 p-4 rounded-xl flex items-center gap-4 transition active:scale-95">
+                    <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-xl"><i class="fa-solid fa-receipt"></i></div>
+                    <div class="text-left"><div class="text-base font-bold text-emerald-400">Smart Cart</div><div class="text-xs text-gray-400">Draft orders & receipts</div></div>
+                </button>
+
+                <button onclick="openCommissionScreen()" class="col-span-2 bg-amber-600/20 border border-amber-600 hover:bg-amber-600/30 p-4 rounded-xl flex items-center gap-4 transition active:scale-95">
+                    <div class="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center text-xl"><i class="fa-solid fa-wallet"></i></div>
+                    <div class="text-left"><div class="text-base font-bold text-amber-400">Daily Commission</div><div class="text-xs text-gray-400">View daily attained fees & earnings</div></div>
+                </button>
+
+                <button onclick="openDirectory('customers')" class="bg-cardBg border border-gray-800 p-4 rounded-xl flex flex-col items-center gap-2 transition active:scale-95">
+                    <i class="fa-solid fa-users text-2xl text-blue-400"></i>
+                    <div class="text-sm font-bold">Customers</div>
+                </button>
+
+                <button onclick="openDirectory('stores')" class="bg-cardBg border border-gray-800 p-4 rounded-xl flex flex-col items-center gap-2 transition active:scale-95">
+                    <i class="fa-solid fa-store text-2xl text-orange-400"></i>
+                    <div class="text-sm font-bold">Stores</div>
+                </button>
+            </div>
+
+            <!-- EMBEDDED TELEGRAM-STYLE LIVE ROSTER -->
+            <div class="bg-tgBg text-[#f5f5f5] rounded-xl border border-gray-800 p-4 flex flex-col gap-4 shadow-md">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-sm font-bold tracking-wide">🛵 LOKALEX RIDER ROTATION</h3>
+                    <button id="admin-force-all-btn" onclick="forceAllEndShift()" class="hidden bg-red-600/20 border border-red-600 text-red-400 text-[10px] px-2 py-1 rounded font-bold transition active:scale-95">Force All End</button>
+                </div>
+                
+                <div>
+                    <div class="flex items-center gap-2 text-green-500 font-bold text-xs">
+                        <div class="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_6px_#22c55e]"></div> AVAILABLE (Queue):
+                    </div>
+                    <div class="pl-2 text-xs text-gray-400 mt-1 flex flex-col gap-1.5" id="home-roster-avail">(Walang naka-duty)</div>
+                </div>
+                
+                <div>
+                    <div class="flex items-center gap-2 text-red-500 font-bold text-xs">
+                        <div class="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_6px_#ef4444]"></div> CATERING / BUSY:
+                    </div>
+                    <div class="pl-2 text-xs text-gray-400 mt-1 flex flex-col gap-1.5" id="home-roster-busy">(Walang bumibiyahe)</div>
+                </div>
+
+                <div>
+                    <div class="flex items-center gap-2 text-gray-300 font-bold text-xs">☕ ON BREAK:</div>
+                    <div class="pl-2 text-xs text-gray-400 mt-1 flex flex-col gap-1.5" id="home-roster-break">(Walang naka-break)</div>
+                </div>
+
+                <!-- Status Update Buttons -->
+                <div class="grid grid-cols-2 gap-2 mt-2 pt-3 border-t border-gray-700/50">
+                     <button id="btn-status-avail" onclick="triggerStatusWithSlide('Available')" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95">
+                         <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div> Available
+                     </button>
+                     <button id="btn-status-cater" onclick="promptCateringStatus()" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95">
+                         <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div> Catering
+                     </button>
+                     <button id="btn-status-break" onclick="triggerStatusWithSlide('Break')" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95">
+                         ☕ Break
+                     </button>
+                     <button id="btn-status-end" onclick="triggerStatusWithSlide('End')" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95 text-gray-400">
+                         <div class="w-2.5 h-2.5 rounded-full bg-black border border-gray-500"></div> End Shift
+                     </button>
+                </div>
+            </div>
+
+            <!-- LOGIN LIST PANEL -->
+            <div class="bg-cardBg border border-gray-800 rounded-xl flex flex-col mt-2 overflow-hidden">
+                <div class="bg-gray-800/50 p-3 text-xs font-bold text-gray-300 flex justify-between items-center">
+                    <span><i class="fa-solid fa-right-to-bracket text-blue-400"></i> Rider Login List (Today)</span>
+                    <span class="text-[10px] text-gray-400" id="login-count-badge">0 logins</span>
+                </div>
+                <div id="login-list-feed" class="p-3 flex flex-col gap-2 text-xs max-h-36 overflow-y-auto">
+                    <div class="text-gray-500 italic text-center py-2">No logins recorded yet today.</div>
+                </div>
+            </div>
+
+            <!-- GLOBAL COMPLETED CATERED CUSTOMERS LIST -->
+            <div class="bg-cardBg border border-gray-800 rounded-xl flex flex-col mt-2 overflow-hidden">
+                <div class="bg-gray-800/50 p-3 text-xs font-bold text-gray-300 flex justify-between items-center">
+                    <span><i class="fa-solid fa-list-check text-orange-400"></i> Catered Customers List</span>
+                    <span class="text-[10px] text-gray-400" id="catered-count-badge">0 recorded</span>
+                </div>
+                <div id="catered-customers-feed" class="p-3 flex flex-col gap-2 text-xs max-h-48 overflow-y-auto">
+                    <div class="text-gray-500 italic text-center py-4">No completed catered customers yet today.</div>
+                </div>
+            </div>
+            
+            <button onclick="logout()" class="text-xs text-red-400/50 hover:text-red-400 py-2 mt-2">Log out of device</button>
+        </section>
+
+        <!-- ================= SMART CART VIEW ================= -->
+        <section id="view-cart" class="hidden flex-1 flex flex-col">
+            <div class="bg-black/40 p-3 px-4 flex justify-between items-center text-sm border-b border-gray-800">
+                <span class="text-gray-400">Cart Subtotal:</span>
+                <span class="text-lg font-bold text-green-400">₱<span id="cart-subtotal-display">0.00</span></span>
+            </div>
+            
+            <div class="p-3 flex justify-between gap-2">
+                <button onclick="showBulkAddModal()" class="flex-1 bg-blue-600/20 text-blue-400 text-xs font-bold py-2 rounded-lg border border-blue-600/30 transition active:scale-95">
+                    <i class="fa-solid fa-list-check"></i> Paste List
+                </button>
+                <button id="cart-action-btn" onclick="handleCartActionBtn()" class="flex-1 bg-red-600/20 text-red-400 text-xs font-bold py-2 rounded-lg border border-red-600/30 transition active:scale-95">
+                    <i class="fa-solid fa-trash-can"></i> Clear All
+                </button>
+            </div>
+
+            <div id="cart-items-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 pb-20"></div>
+
+            <div class="p-4 bg-darkBg border-t border-gray-800">
+                <button onclick="proceedToWizard()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold p-3.5 rounded-xl shadow-lg transition active:scale-95">
+                    Create Receipt
+                </button>
+            </div>
+        </section>
+
+        <!-- ================= FEE WIZARD VIEW ================= -->
+        <section id="view-wizard" class="hidden flex-1 flex flex-col gap-3 p-4 overflow-y-auto">
+            <div class="bg-cardBg rounded-xl border border-gray-800 p-4">
+                <h3 class="text-sm font-bold text-emerald-500 uppercase tracking-wider mb-2">Client Details</h3>
+                
+                <div id="catered-client-selector-box" class="flex flex-col gap-2 mb-2">
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Select Active Catering Client:</label>
+                    <div id="catered-client-buttons" class="flex flex-wrap gap-2"></div>
+                </div>
+
+                <div class="flex items-center gap-2 my-1">
+                    <input type="checkbox" id="manual-client-toggle" onchange="toggleManualClientInput(this.checked)" class="w-4 h-4 accent-blue-500">
+                    <label for="manual-client-toggle" class="text-xs text-gray-300">Type client name manually</label>
+                </div>
+
+                <input type="text" id="rcpt-name" placeholder="Customer / Store Name (Required)" class="w-full bg-inputBg text-sm rounded-lg p-2.5 mt-1 outline-none border border-gray-700">
+                <input type="text" id="rcpt-contact" placeholder="Contact Number / Address" class="w-full bg-inputBg text-sm rounded-lg p-2.5 mt-2 outline-none border border-gray-700">
+            </div>
+
+            <div class="text-xs text-gray-400 mt-2 uppercase tracking-wider font-bold">Auto-Calculated Fees (Editable)</div>
+            <div class="bg-cardBg rounded-xl border border-gray-800 overflow-hidden text-sm flex flex-col gap-3 p-3">
+                <div class="flex justify-between items-center gap-2">
+                    <span class="text-gray-300 flex-1">Handling Fee (Store)</span>
+                    <input type="number" id="wiz-handling" oninput="calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold">
+                </div>
+                <div class="flex justify-between items-center gap-2">
+                    <span class="text-gray-300 flex-1">Market Fee</span>
+                    <input type="number" id="wiz-market" oninput="calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold">
+                </div>
+                <div class="flex justify-between items-center gap-2">
+                    <span class="text-gray-300 flex-1">Multi-Stop Fee</span>
+                    <div class="flex items-center gap-2">
+                        <button onclick="adjustStoreCount(-1)" class="text-red-400"><i class="fa-solid fa-circle-minus"></i></button>
+                        <span id="wiz-store-count" class="font-bold w-4 text-center">1</span>
+                        <button onclick="adjustStoreCount(1)" class="text-green-400"><i class="fa-solid fa-circle-plus"></i></button>
+                        <input type="number" id="wiz-multistop" oninput="calculateGrandTotal()" placeholder="0" class="w-20 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 text-blue-400 font-bold">
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-xs text-gray-400 mt-2 uppercase tracking-wider font-bold">Manual Adjustments</div>
+            <div class="bg-cardBg rounded-xl border border-gray-800 overflow-hidden text-sm flex flex-col gap-3 p-3">
+                <div class="flex justify-between items-center gap-2">
+                    <span class="text-gray-300 flex-1">Rider Delivery Fee</span>
+                    <input type="number" id="wiz-delivery" oninput="calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold">
+                </div>
+                <div class="flex justify-between items-center gap-2">
+                    <span class="text-gray-300 flex-1">Discount Bawas</span>
+                    <input type="number" id="wiz-discount" oninput="calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 text-red-400 font-bold">
+                </div>
+            </div>
+
+            <div class="text-xs text-gray-400 mt-2 uppercase tracking-wider font-bold">Payment Options</div>
+
+            <label class="bg-cardBg p-3 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer">
+                <div>
+                    <div class="text-sm font-bold text-orange-400"><i class="fa-solid fa-gift"></i> Libreng Deliberi</div>
+                    <div class="text-[10px] text-gray-400">Walang sasaguting fees ang customer</div>
+                </div>
+                <input type="checkbox" id="wiz-free-delivery" onchange="calculateGrandTotal()" class="w-5 h-5 accent-orange-500">
+            </label>
+
+            <label class="bg-cardBg p-3 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer">
+                <div>
+                    <div class="text-sm font-bold text-blue-400"><i class="fa-solid fa-mobile-screen"></i> ePayment (G-Cash/Maya)</div>
+                    <div class="text-[10px] text-gray-400" id="epayment-fee-display">Auto-added processing fee</div>
+                </div>
+                <input type="checkbox" id="wiz-epayment" onchange="calculateGrandTotal()" class="w-5 h-5 accent-blue-500">
+            </label>
+
+            <div class="mt-4 p-4 bg-emerald-900/20 border border-emerald-800/50 rounded-xl flex justify-between items-center">
+                <span class="text-gray-400 text-sm font-bold">GRAND TOTAL</span>
+                <span class="text-2xl font-black text-emerald-400">₱<span id="wiz-grand-total">0.00</span></span>
+            </div>
+
+            <button onclick="generateFinalReceipt()" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold p-3.5 rounded-xl shadow-lg transition active:scale-95">
+                Generate Digital Receipt
+            </button>
+        </section>
+
+        <!-- ================= FINAL RECEIPT VIEW ================= -->
+        <section id="view-receipt-final" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
+            <div class="flex-1 bg-cardBg border border-gray-800 rounded-xl p-4 overflow-y-auto min-h-[180px]">
+                <pre id="final-receipt-text" class="text-xs font-mono text-gray-300 whitespace-pre-wrap"></pre>
+            </div>
+            
+            <div class="flex gap-2">
+                <button onclick="copyFinalReceipt()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center items-center gap-2 transition active:scale-95">
+                    <i class="fa-solid fa-copy"></i> Copy
+                </button>
+                <button onclick="completeReceiptDone()" class="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center items-center gap-2 transition active:scale-95">
+                    <i class="fa-solid fa-check-double"></i> Done
+                </button>
+            </div>
+        </section>
+
+        <!-- ================= DAILY COMMISSION VIEW ================= -->
+        <section id="view-commission" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
+            <div class="bg-cardBg p-3 rounded-xl border border-gray-800 flex flex-col gap-2">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs text-gray-400 font-bold">Select Date:</span>
+                    <input type="date" id="commission-date-picker" onchange="openCommissionScreen(this.value)" class="bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
+                </div>
+                
+                <div id="admin-commission-filter-box" class="hidden flex justify-between items-center pt-2 border-t border-gray-800">
+                    <span class="text-xs text-amber-400 font-bold">Rider Filter:</span>
+                    <select id="admin-rider-select" onchange="openCommissionScreen()" class="bg-inputBg text-xs text-yellow-300 rounded p-1.5 outline-none border border-gray-700"></select>
+                </div>
+            </div>
+
+            <div class="bg-cardBg p-4 rounded-xl border border-gray-800 shadow-sm flex flex-col gap-2 text-center">
+                <div class="text-xs text-gray-400 uppercase tracking-widest font-bold">Total Commission (<span id="commission-date-label">Today</span>)</div>
+                <div class="text-3xl font-black text-amber-400">₱<span id="daily-total-commission">0.00</span></div>
+            </div>
+
+            <button onclick="generateDailyReportText()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2 transition active:scale-95">
+                <i class="fa-solid fa-file-lines"></i> Generate & Copy Report
+            </button>
+
+            <div class="text-xs text-gray-400 uppercase tracking-wider font-bold mt-2">Customers Served & Fees</div>
+            <div id="commission-receipts-list" class="flex flex-col gap-3 pb-20"></div>
+        </section>
+
+        <!-- ================= DIRECTORY VIEW ================= -->
+        <section id="view-directory" class="hidden flex-1 flex flex-col relative p-4">
+            <div class="flex gap-2 mb-4 pr-6">
+                <div class="relative flex-1">
+                    <i class="fa-solid fa-search absolute left-3 top-3.5 text-gray-400 text-sm"></i>
+                    <input type="text" id="search-input" oninput="filterRecords()" placeholder="Search all records..." class="w-full bg-inputBg text-sm rounded-xl pl-9 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
+                </div>
+                <button onclick="syncData()" class="bg-cardBg hover:bg-inputBg px-4 rounded-xl border border-gray-800 text-gray-300 transition active:scale-90" title="Refresh">
+                    <i class="fa-solid fa-rotate"></i>
+                </button>
+            </div>
+            
+            <div id="record-list" class="flex-1 flex flex-col gap-3 pb-20 pr-8 overflow-y-auto"></div>
+            <div id="alphabet-scrubber" class="fixed right-1 top-1/2 -translate-y-1/2 flex flex-col text-[10px] text-gray-500 font-bold bg-darkBg/80 py-2 rounded-full z-10 touch-none"></div>
+
+            <button onclick="openForm(null)" class="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center text-xl z-40 transition active:scale-90">
+                <i class="fa-solid fa-plus"></i>
+            </button>
+        </section>
+
+        <!-- ================= ADD / EDIT FORM VIEW ================= -->
+        <section id="view-form" class="hidden flex-1 flex flex-col gap-4 p-4 overflow-y-auto">
+            <div id="edit-warning" class="hidden bg-amber-500/10 border border-amber-500 p-3 rounded-xl flex items-center gap-3 text-amber-400 text-xs">
+                <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+                <div id="warning-text">Editing record.</div>
+            </div>
+            <div class="flex flex-col gap-3">
+                <label class="text-xs text-gray-400 font-bold">Name / Store Name</label>
+                <input type="text" id="form-name" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+                <label class="text-xs text-gray-400 font-bold">Contact Number</label>
+                <input type="text" id="form-contact" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+                <label class="text-xs text-gray-400 font-bold">General Address</label>
+                <input type="text" id="form-address" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+                <label class="text-xs text-gray-400 font-bold">Map Link (Lat_Lon_Link)</label>
+                <div class="flex gap-2">
+                    <input type="text" id="form-latlon" placeholder="Paste link or get from Google Map" class="flex-1 bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+                    <button onclick="openMapPicker()" class="bg-blue-600 hover:bg-blue-500 px-4 rounded-xl text-white text-sm font-bold flex items-center gap-2 transition active:scale-95">
+                        <i class="fa-solid fa-map-location-dot"></i> Map
+                    </button>
+                </div>
+            </div>
+            <button onclick="submitForm()" id="form-submit-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold p-4 rounded-xl shadow-lg mt-auto transition active:scale-95">
+                SAVE RECORD
+            </button>
+        </section>
+
+        <!-- ================= MAP PICKER VIEW ================= -->
+        <section id="view-map" class="hidden flex-1 flex flex-col absolute inset-0 bg-darkBg z-50">
+            <header class="bg-cardBg px-4 py-4 flex items-center justify-between shadow-md">
+                <button onclick="goBack()" class="text-red-400 font-semibold flex items-center gap-2 transition active:opacity-50">Cancel</button>
+                <h1 class="text-base font-bold">Pick Location</h1>
+                <div class="w-16"></div>
+            </header>
+            <div class="flex-1 relative">
+                <div id="google-map-container" class="w-full h-full"></div>
+                <div class="map-center-marker"><i class="fa-solid fa-location-dot"></i></div>
+            </div>
+            <div class="p-4 bg-cardBg shadow-lg">
+                <button onclick="confirmGoogleMapPin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold p-4 rounded-xl shadow-lg transition active:scale-95">
+                    Confirm Location Pin
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FLOATING CHAT WIDGET -->
+    <div id="floating-chat-container" class="fixed bottom-6 right-4 z-50 flex flex-col items-end touch-none snap-animate">
+        <div id="expanded-chat-window" class="hidden bg-cardBg border border-gray-700 rounded-2xl shadow-2xl w-80 sm:w-88 h-96 flex flex-col overflow-hidden mb-3 transition-all">
+            <div id="chat-drag-handle" class="bg-gray-800 p-3 flex items-center justify-between cursor-move select-none border-b border-gray-700">
+                <div class="flex items-center gap-2 font-bold text-xs text-blue-400">
+                    <i class="fa-solid fa-comments text-base"></i> Team Comms
+                    <span class="text-[9px] text-gray-400 font-normal">(Drag header to move)</span>
+                </div>
+                <button onclick="toggleChatWindow(false)" class="text-gray-400 hover:text-white text-sm active:scale-90">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div id="bubble-chat-messages" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 text-xs">
+                <div class="text-center text-gray-500 italic py-10">Loading messages...</div>
+            </div>
+
+            <div class="p-2 bg-inputBg border-t border-gray-700 flex flex-col relative">
+                <div id="tag-suggestions" class="hidden absolute bottom-full left-0 right-0 bg-cardBg border border-gray-700 rounded-t-xl max-h-32 overflow-y-auto z-20 p-1 text-xs shadow-xl"></div>
+                
+                <div class="flex gap-2 items-center">
+                    <input type="text" id="bubble-chat-input" oninput="handleChatInput(this)" onkeydown="if(event.key==='Enter') sendBubbleChatMessage()" placeholder="Type a message or @rider..." class="flex-1 bg-darkBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white">
+                    <button onclick="sendBubbleChatMessage()" class="bg-blue-600 hover:bg-blue-500 text-white w-9 h-9 rounded-xl flex items-center justify-center text-xs transition active:scale-90 shrink-0">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="chat-bubble" onclick="onBubbleClick()" class="relative w-14 h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center text-2xl cursor-pointer transition active:scale-90 border-2 border-white/20 select-none">
+            <i class="fa-solid fa-comments"></i>
+            <div id="chat-tag-badge" class="hidden absolute -top-1 -left-1 w-6 h-6 bg-amber-500 text-black text-xs font-black rounded-full flex items-center justify-center border-2 border-darkBg animate-bounce shadow-md">!</div>
+            <div id="chat-unread-badge" class="hidden absolute -top-1 -right-1 min-w-[22px] h-5 px-1 bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-darkBg shadow-md">0</div>
+        </div>
+    </div>
+
+    <!-- CATERING PROMPT MODAL -->
+    <div id="catering-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
+            <h3 class="font-bold text-base text-center text-red-400"><i class="fa-solid fa-motorcycle"></i> Start Catering</h3>
+            <div class="flex flex-col gap-1 text-left">
+                <label class="text-[10px] text-gray-400 font-bold">Customer Name</label>
+                <input type="text" id="catering-customer-name" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
+            </div>
+            <div class="flex gap-2 mt-2">
+                <button onclick="closeCateringModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="confirmCateringStatus()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Start</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADMIN FORCE CATERING MODAL -->
+    <div id="admin-catering-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
+            <h3 class="font-bold text-base text-center text-yellow-400"><i class="fa-solid fa-user-shield"></i> Admin Force Cater</h3>
+            <div class="flex flex-col gap-1 text-left">
+                <label class="text-[10px] text-gray-400 font-bold">Customer Name</label>
+                <input type="text" id="admin-catering-customer-name" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
+            </div>
+            <div class="flex gap-2 mt-2">
+                <button onclick="closeAdminCateringModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="confirmAdminCatering()" class="flex-1 bg-yellow-600 hover:bg-yellow-500 py-2.5 rounded-xl text-xs font-bold text-black transition active:scale-95">Force Cater</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- UNIVERSAL SLIDE CONFIRMATION MODAL -->
+    <div id="slide-delete-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+        <div class="bg-[#1E1A1A] border border-red-500/30 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl flex flex-col gap-4">
+            <i id="slide-modal-icon" class="fa-solid fa-triangle-exclamation text-red-500 text-3xl mx-auto"></i>
+            <h3 id="slide-delete-title" class="font-bold text-base">Confirm Action</h3>
+            <p id="slide-delete-sub" class="text-xs text-gray-400">I-drag pakanan ang slider para kumpirmahin.</p>
+            
+            <div class="relative h-12 bg-black/40 rounded-full border border-red-500/30 flex items-center px-2 overflow-hidden mt-2">
+                <span class="absolute inset-0 flex items-center justify-center text-[10px] text-white/30 font-bold tracking-widest pointer-events-none">&gt;&gt;&gt;&gt; SLIDE TO CONFIRM &gt;&gt;&gt;&gt;</span>
+                <input type="range" id="slide-delete-range" min="0" max="100" value="0" oninput="onSlideProgress(this.value)" onmouseup="onSlideEnd()" ontouchend="onSlideEnd()" class="w-full accent-red-500 cursor-pointer z-10 opacity-80 h-10">
+            </div>
+            <button onclick="closeSlideDeleteModal()" class="text-xs text-gray-400 py-1">Cancel</button>
+        </div>
+    </div>
+
+    <!-- UNIVERSAL PASSWORD MODAL (NON-ADMINS ONLY) -->
+    <div id="password-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl">
+            <div class="w-12 h-12 bg-amber-500/20 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-3"><i class="fa-solid fa-lock"></i></div>
+            <h3 class="font-bold text-base mb-1">Protected Record</h3>
+            <p class="text-xs text-gray-400 mb-4">Enter password to authorize editing.</p>
+            <input type="password" id="modal-pass" placeholder="Password" class="w-full bg-inputBg text-sm text-center rounded-xl p-3 mb-4 outline-none border border-gray-700">
+            <div class="flex gap-2">
+                <button onclick="closePasswordModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-3 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="verifyPassword()" class="flex-1 bg-amber-500 hover:bg-amber-400 py-3 rounded-xl text-xs font-bold text-black transition active:scale-95">Verify</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="bulk-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl w-full max-w-md shadow-2xl flex flex-col gap-4">
+            <h3 class="font-bold text-base"><i class="fa-solid fa-paste text-blue-400"></i> Paste Listahan</h3>
+            <textarea id="bulk-input" rows="6" placeholder="Format: Item Name Price&#10;Halimbawa:&#10;1pc chicken 150&#10;Sibuyas&#10;Bigas 60" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 focus:border-blue-500 resize-none font-mono"></textarea>
+            <div class="flex gap-2">
+                <button onclick="closeBulkModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-3 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="processBulkAdd()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded-xl text-xs font-bold text-white transition active:scale-95">Add Items</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="edit-item-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
+            <h3 class="font-bold text-base text-center">Edit Item</h3>
+            <div class="flex flex-col gap-1 text-left">
+                <label class="text-[10px] text-gray-400 font-bold">Item Name</label>
+                <input type="text" id="edit-name-input" class="w-full bg-inputBg text-sm rounded-xl p-2.5 outline-none border border-gray-700 focus:border-blue-500">
+            </div>
+            <div class="flex flex-col gap-1 text-left">
+                <label class="text-[10px] text-gray-400 font-bold">Price (₱)</label>
+                <input type="number" id="edit-price-input" placeholder="0.00" class="w-full bg-inputBg text-sm rounded-xl p-2.5 outline-none border border-gray-700 focus:border-blue-500">
+            </div>
+            <div class="flex gap-2 mt-2">
+                <button onclick="closeEditItemModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="saveItemEdit()" class="flex-1 bg-green-600 hover:bg-green-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 bg-gray-900 border border-gray-700 text-white text-xs px-4 py-2.5 rounded-xl shadow-xl opacity-0 transition-opacity pointer-events-none z-[9999]"></div>
+
+    <!-- MAIN JAVASCRIPT LOGIC -->
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbyIz6OEd7dZh2gx1T5oT3G6xo7i4D3Lq8jPre4ke26tcqqq3v0pollbGtRcTr8JATnvtQ/exec"; 
+        const CSV_AUTH_URL = "https://docs.google.com/spreadsheets/d/1lc-1os3xTnAuE0dsm6UmEle7vxuRyewBnuBlSrfPSWk/export?format=csv&gid=0";
+        
+        let appState = {
+            telegramId: localStorage.getItem('telegramId') || "",
+            riderName: localStorage.getItem('riderName') || "",
+            lat: 0, lon: 0
+        };
+
+        const ADMIN_IDS = ["4547425", "5548562"];
+        function isAdmin() { return ADMIN_IDS.includes(appState.telegramId); }
+
+        let viewHistory = [];
+        let currentType = 'customers';
+        let records = [];
+        let editingRecord = null;
+        let pendingRecordToEdit = null;
+        let activeFilterLetter = "";
+        
+        let leafletMap = null;
+
+        let cartItems = [];
+        let selectedCartIds = new Set();
+        let editItemIndex = -1;
+        let wizState = { storeCount: 1 };
+
+        let rosterMembers = [];
+        let globalCateredHistory = [];
+        let globalLogins = [];
+        let chatMessages = [];
+        let lastReadChatCount = parseInt(localStorage.getItem('lastReadChatCount') || "0");
+        let tagObserver = null;
+
+        let slideDeleteCallback = null;
+        let pendingAdminTarget = null;
+
+        let currentDayCustomerMap = {};
+        let currentDayTotalCommission = 0;
+
+        function isSameDate(dateVal, targetDateStr) {
+            if (!dateVal) return false;
+            const clean = dateVal.toString().split('T')[0].trim();
+            return clean === targetDateStr;
+        }
+
+        window.onload = () => {
+            initDraggableChat();
+            if (appState.telegramId) {
+                switchView('view-home');
+                startRealTimePolling();
+            } else {
+                document.getElementById('view-login').classList.remove('hidden');
+            }
+        };
+
+        // ================= 1. LOGIN & AUTH =================
+        async function processLogin() {
+            const idInput = document.getElementById('login-id').value.trim();
+            if (!idInput) return showToast("Please enter a valid ID");
+            const btn = document.getElementById('login-btn');
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Checking...`; btn.disabled = true;
+
+            try {
+                if (!navigator.geolocation) throw new Error("GPS not supported");
+                const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, {enableHighAccuracy:true, timeout:10000}));
+                appState.lat = pos.coords.latitude; appState.lon = pos.coords.longitude;
+
+                const res = await fetch(CSV_AUTH_URL);
+                if (!res.ok) throw new Error("Cannot reach server");
+                const csvData = await res.text();
+                
+                let authorized = false;
+                for (let line of csvData.split('\n')) {
+                    const cols = line.split(',');
+                    if (cols.length >= 2 && cols[0].trim() === idInput) {
+                        appState.riderName = cols[1].trim(); appState.telegramId = idInput; authorized = true; break;
+                    }
+                }
+
+                if (authorized) {
+                    localStorage.setItem('telegramId', appState.telegramId);
+                    localStorage.setItem('riderName', appState.riderName);
+                    showToast("Login Successful!");
+                    
+                    switchView('view-home');
+                    await updateRosterStatus('Available');
+                    startRealTimePolling();
+                } else { showToast("Access Denied."); }
+            } catch (err) { showToast(err.message || "Error"); } 
+            finally { btn.innerHTML = "LOGIN & MARK AVAILABLE"; btn.disabled = false; }
+        }
+
+        function logout() { localStorage.clear(); location.reload(); }
+
+        // ================= 2. REAL-TIME FAST POLLING =================
+        function startRealTimePolling() {
+            fetchAllData();
+            setInterval(() => { fetchAllData(); }, 2000);
+        }
+
+        async function fetchAllData() {
+            try {
+                const res = await fetch(`${API_URL}?type=all`);
+                if (res.ok) {
+                    const bundle = await res.json();
+                    rosterMembers = bundle.roster || [];
+                    globalCateredHistory = bundle.catered_history || [];
+                    globalLogins = bundle.logins || [];
+
+                    updateRosterUI();
+                    loadGlobalCateredList();
+                    loadGlobalLoginList();
+                }
+
+                const resChat = await fetch(`${API_URL}?type=chat`);
+                if (resChat.ok) {
+                    chatMessages = await resChat.json();
+                    updateChatBadgesAndUI();
+                }
+            } catch(e) {}
+        }
+
+        function promptCateringStatus() {
+            const myRecord = rosterMembers ? rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
+            if (myRecord && myRecord.status === 'End') {
+                showToast("⚠️ Naka-End Shift ka. Mag-Available muna bago mag-Cater.");
+                return;
+            }
+
+            const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
+            const availableRiders = rosterMembers ? rosterMembers
+                .filter(m => m.status === 'Available')
+                .sort((a, b) => (parseFloat(a.queueTime) || 0) - (parseFloat(b.queueTime) || 0)) : [];
+
+            if (!amIAlreadyCatering && availableRiders.length > 0) {
+                const firstAvailable = availableRiders[0];
+                if (firstAvailable.telegramId.toString() !== appState.telegramId.toString()) {
+                    showToast("⚠️ Hindi ikaw ang nasa unahan ng queue. Maghintay muna sa iyong turn.");
+                    return;
+                }
+            }
+
+            document.getElementById('catering-customer-name').value = "";
+            document.getElementById('catering-modal').classList.remove('hidden');
+            document.getElementById('catering-customer-name').focus();
+        }
+
+        function closeCateringModal() {
+            document.getElementById('catering-modal').classList.add('hidden');
+        }
+
+        async function confirmCateringStatus() {
+            const custName = document.getElementById('catering-customer-name').value.trim();
+            if (!custName) return showToast("Please enter customer name");
+            closeCateringModal();
+            
+            const startTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            const myRecord = rosterMembers ? rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
+            let existingCustomers = [];
+            let existingTimes = [];
+            
+            if (myRecord && myRecord.status === 'Catering' && myRecord.customerName) {
+                existingCustomers = myRecord.customerName.split(', ');
+                existingTimes = myRecord.startTime ? myRecord.startTime.split(', ') : [];
+            }
+
+            existingCustomers.push(custName);
+            existingTimes.push(startTime);
+
+            await updateRosterStatusData('Catering', existingCustomers.join(', '), existingTimes.join(', '), myRecord ? myRecord.queueTime : 0);
+        }
+
+        function triggerStatusWithSlide(targetStatus) {
+            const myRecord = rosterMembers ? rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
+            
+            if (myRecord && myRecord.status === 'End' && targetStatus !== 'Available') {
+                showToast("⚠️ Naka-End Shift ka. Ang Available button lamang ang maaaring pindutin.");
+                return;
+            }
+
+            if (targetStatus === 'Available') {
+                updateRosterStatus('Available');
+            } else {
+                openSlideDeleteModal(`Sigurado ka bang mag-iiba ng status sa [${targetStatus}]?`, () => {
+                    updateRosterStatus(targetStatus);
+                });
+            }
+        }
+
+        async function updateRosterStatus(status, targetId = null, targetName = null) {
+            const tId = targetId || appState.telegramId;
+            const tName = targetName || appState.riderName;
+
+            let completedHistory = [];
+            let recordLogin = false;
+            let loginType = "(From End Shift)";
+
+            const targetRecord = rosterMembers ? rosterMembers.find(m => m.telegramId.toString() === tId.toString()) : null;
+
+            if (status !== 'Catering' && targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
+                const custs = targetRecord.customerName.split(', ');
+                const times = targetRecord.startTime ? targetRecord.startTime.split(', ') : [];
+                
+                for (let i = 0; i < custs.length; i++) {
+                    completedHistory.push({
+                        riderName: tName,
+                        customerName: custs[i],
+                        startTime: times[i] || 'N/A',
+                        completedDate: new Date().toISOString().split('T')[0]
+                    });
+                }
+            }
+
+            if (status === 'Available') {
+                if (!targetRecord || targetRecord.status === 'End' || !targetRecord.status) {
+                    recordLogin = true;
+                    loginType = "(From End Shift)";
+                } else if (targetRecord.status === 'Break') {
+                    recordLogin = true;
+                    loginType = "(From Break)";
+                }
+            }
+
+            let locationLink = "";
+            if (appState.lat && appState.lon) {
+                locationLink = `https://www.google.com/maps/search/?api=1&query=${appState.lat.toFixed(6)},${appState.lon.toFixed(6)}`;
+            }
+
+            const newQueueTime = (status === 'Available') ? new Date().getTime() : 0;
+            await updateRosterStatusData(status, "", "", newQueueTime, tId, tName, completedHistory, recordLogin, loginType, locationLink);
+        }
+
+        async function updateRosterStatusData(status, customerName, startTime, queueTime = 0, specificId = null, specificName = null, completedHistory = [], recordLogin = false, loginType = "(From End Shift)", locationLink = "") {
+            const tId = specificId || appState.telegramId;
+            const tName = specificName || appState.riderName;
+
+            let existingRider = rosterMembers.find(m => m.telegramId.toString() === tId.toString());
+            if (existingRider) {
+                existingRider.status = status;
+                existingRider.customerName = customerName;
+                existingRider.startTime = startTime;
+                if (queueTime) existingRider.queueTime = queueTime;
+            } else {
+                rosterMembers.push({
+                    telegramId: tId, riderName: tName, status: status, customerName: customerName, startTime: startTime, queueTime: queueTime
+                });
+            }
+
+            if (completedHistory && completedHistory.length > 0) {
+                globalCateredHistory = globalCateredHistory.concat(completedHistory);
+            }
+            if (recordLogin) {
+                globalLogins.push({
+                    riderName: tName,
+                    loginTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    date: new Date().toISOString().split('T')[0],
+                    loginType: loginType,
+                    location: locationLink
+                });
+            }
+
+            updateRosterUI();
+            loadGlobalCateredList();
+            loadGlobalLoginList();
+            showToast(`Status updated to ${status}`);
+
+            const payload = { 
+                type: "roster", 
+                telegramId: tId, 
+                riderName: tName, 
+                status: status, 
+                customerName: customerName, 
+                startTime: startTime,
+                queueTime: queueTime,
+                completedHistory: completedHistory,
+                recordLogin: recordLogin,
+                loginType: loginType,
+                location: locationLink,
+                loginTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                date: new Date().toISOString().split('T')[0]
+            };
+            
+            try {
+                await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+                setTimeout(() => { fetchAllData(); }, 800);
+            } catch(e) {}
+        }
+
+        // ================= ADMIN CONTROLS (WITH EXPLICIT QUEUE SHIFTING BUTTONS) =================
+        function adminForceStatus(id, name, actionValue) {
+            if (actionValue === 'Catering') {
+                pendingAdminTarget = { id, name };
+                document.getElementById('admin-catering-customer-name').value = "";
+                document.getElementById('admin-catering-modal').classList.remove('hidden');
+                document.getElementById('admin-catering-customer-name').focus();
+            } else if (actionValue === 'Break' || actionValue === 'End') {
+                openSlideDeleteModal(`Sigurado ka bang i-force [${actionValue === 'End' ? 'End Shift' : 'Break'}] si Rider ${name}?`, () => {
+                    updateRosterStatus(actionValue, id, name);
+                });
+            } else if (actionValue === 'VoidActive') {
+                openSlideDeleteModal(`I-void ang kasalukuyang order ni Rider ${name}?`, () => {
+                    adminVoidActiveCustomer(id, name);
+                });
+            } else {
+                updateRosterStatus(actionValue, id, name);
+            }
+        }
+
+        async function adminVoidActiveCustomer(riderId, riderName) {
+            const availableRiders = rosterMembers ? rosterMembers.filter(m => m.status === 'Available').sort((a,b) => (parseFloat(a.queueTime)||0) - (parseFloat(b.queueTime)||0)) : [];
+            let topQueueTime = new Date().getTime();
+            if (availableRiders.length > 0) {
+                topQueueTime = (parseFloat(availableRiders[0].queueTime) || new Date().getTime()) - 1000;
+            }
+
+            await updateRosterStatusData('Available', "", "", topQueueTime, riderId, riderName, [], false);
+            showToast(`Voided order for ${riderName}. Placed at top of queue.`);
+        }
+
+        function adminShiftRiderQueue(riderId, moveAction) {
+            const availableRiders = rosterMembers ? rosterMembers.filter(m => m.status === 'Available').sort((a,b) => (parseFloat(a.queueTime)||0) - (parseFloat(b.queueTime)||0)) : [];
+            const idx = availableRiders.findIndex(r => r.telegramId.toString() === riderId.toString());
+
+            if (idx === -1) return showToast("Rider must be in Available status to shift queue.");
+
+            let targetQueueTime = availableRiders[idx].queueTime;
+
+            if (moveAction === 'move_top') {
+                targetQueueTime = (parseFloat(availableRiders[0].queueTime) || 0) - 1000;
+            } else if (moveAction === 'move_bottom') {
+                targetQueueTime = (parseFloat(availableRiders[availableRiders.length - 1].queueTime) || 0) + 1000;
+            } else if (moveAction === 'move_up' && idx > 0) {
+                targetQueueTime = (parseFloat(availableRiders[idx - 1].queueTime) || 0) - 100;
+            } else if (moveAction === 'move_down' && idx < availableRiders.length - 1) {
+                targetQueueTime = (parseFloat(availableRiders[idx + 1].queueTime) || 0) + 100;
+            } else {
+                return showToast("Cannot move further in queue.");
+            }
+
+            const rider = availableRiders[idx];
+            updateRosterStatusData('Available', "", "", targetQueueTime, rider.telegramId, rider.riderName);
+        }
+
+        function closeAdminCateringModal() {
+            document.getElementById('admin-catering-modal').classList.add('hidden');
+            pendingAdminTarget = null;
+        }
+
+        async function confirmAdminCatering() {
+            const custName = document.getElementById('admin-catering-customer-name').value.trim();
+            if (!custName) return showToast("Please enter customer name");
+            const target = pendingAdminTarget;
+            closeAdminCateringModal();
+
+            if (!target) return;
+            const startTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            await updateRosterStatusData('Catering', custName, startTime, 0, target.id, target.name, [], false);
+        }
+
+        async function forceAllEndShift() {
+            openSlideDeleteModal("Sigurado ka bang nais mong i-force end shift ang lahat ng riders?", async () => {
+                const payload = { type: "roster", action: "force_all_end" };
+                try {
+                    await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+                    setTimeout(() => { fetchAllData(); showToast("All riders forced to End Shift."); }, 500);
+                } catch(e) { showToast("Failed to force end shift"); }
+            });
+        }
+
+        // ================= 3. MOVEABLE CHAT BUBBLE =================
+        let isChatDragging = false;
+        let chatMoved = false;
+        let startX = 0, startY = 0, initialLeft = 0, initialTop = 0;
+
+        function initDraggableChat() {
+            const container = document.getElementById('floating-chat-container');
+            const bubble = document.getElementById('chat-bubble');
+            const handle = document.getElementById('chat-drag-handle');
+
+            const startDrag = (e) => {
+                isChatDragging = true;
+                chatMoved = false;
+                container.classList.remove('snap-animate');
+
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+                startX = clientX; startY = clientY;
+
+                const rect = container.getBoundingClientRect();
+                initialLeft = rect.left; initialTop = rect.top;
+
+                document.addEventListener('mousemove', moveDrag);
+                document.addEventListener('mouseup', endDrag);
+                document.addEventListener('touchmove', moveDrag, { passive: false });
+                document.addEventListener('touchend', endDrag);
+            };
+
+            const moveDrag = (e) => {
+                if (!isChatDragging) return;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+                const dx = clientX - startX;
+                const dy = clientY - startY;
+
+                if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+                    chatMoved = true;
+                    if (e.cancelable) e.preventDefault();
+                }
+
+                let newLeft = initialLeft + dx;
+                let newTop = initialTop + dy;
+
+                const maxX = window.innerWidth - container.offsetWidth;
+                const maxY = window.innerHeight - container.offsetHeight;
+
+                newLeft = Math.max(10, Math.min(newLeft, maxX - 10));
+                newTop = Math.max(10, Math.min(newTop, maxY - 10));
+
+                container.style.left = newLeft + 'px';
+                container.style.top = newTop + 'px';
+                container.style.bottom = 'auto';
+                container.style.right = 'auto';
+            };
+
+            const endDrag = () => {
+                if (!isChatDragging) return;
+                isChatDragging = false;
+                document.removeEventListener('mousemove', moveDrag);
+                document.removeEventListener('mouseup', endDrag);
+                document.removeEventListener('touchmove', moveDrag);
+                document.removeEventListener('touchend', endDrag);
+
+                const currentLeft = container.offsetLeft;
+                const bubbleWidth = container.offsetWidth;
+                const screenWidth = window.innerWidth;
+                const centerX = currentLeft + bubbleWidth / 2;
+
+                let snapLeft = 10;
+                if (centerX > screenWidth / 2) {
+                    snapLeft = screenWidth - bubbleWidth - 10;
+                }
+
+                container.classList.add('snap-animate');
+                container.style.left = snapLeft + 'px';
+            };
+
+            bubble.addEventListener('mousedown', startDrag);
+            bubble.addEventListener('touchstart', startDrag, { passive: false });
+            handle.addEventListener('mousedown', startDrag);
+            handle.addEventListener('touchstart', startDrag, { passive: false });
+        }
+
+        function onBubbleClick() {
+            if (chatMoved) return;
+            const windowEl = document.getElementById('expanded-chat-window');
+            const isHidden = windowEl.classList.contains('hidden');
+            toggleChatWindow(isHidden);
+        }
+
+        function toggleChatWindow(show) {
+            const windowEl = document.getElementById('expanded-chat-window');
+            if (show) {
+                windowEl.classList.remove('hidden');
+                lastReadChatCount = chatMessages.length;
+                localStorage.setItem('lastReadChatCount', lastReadChatCount.toString());
+                document.getElementById('chat-unread-badge').classList.add('hidden');
+                document.getElementById('chat-tag-badge').classList.add('hidden');
+                
+                renderBubbleMessages(); 
+            } else {
+                windowEl.classList.add('hidden');
+            }
+        }
+
+        function updateChatBadgesAndUI() {
+            const isChatOpen = !document.getElementById('expanded-chat-window').classList.contains('hidden');
+            if (isChatOpen) {
+                lastReadChatCount = chatMessages.length;
+                localStorage.setItem('lastReadChatCount', lastReadChatCount.toString());
+                renderBubbleMessages();
+                return;
+            }
+
+            const unreadCount = Math.max(0, chatMessages.length - lastReadChatCount);
+            const unreadBadge = document.getElementById('chat-unread-badge');
+            const tagBadge = document.getElementById('chat-tag-badge');
+
+            if (unreadCount > 0) {
+                unreadBadge.innerText = unreadCount > 99 ? '99+' : unreadCount;
+                unreadBadge.classList.remove('hidden');
+
+                const myName = (appState.riderName || "").toLowerCase();
+                const hasTag = myName && chatMessages.slice(lastReadChatCount).some(m => {
+                    return m.text && m.text.toLowerCase().includes('@' + myName);
+                });
+
+                if (hasTag) {
+                    tagBadge.classList.remove('hidden');
+                } else {
+                    tagBadge.classList.add('hidden');
+                }
+            } else {
+                unreadBadge.classList.add('hidden');
+                tagBadge.classList.add('hidden');
+            }
+        }
+
+        function renderBubbleMessages() {
+            const feed = document.getElementById('bubble-chat-messages');
+            if (!chatMessages || chatMessages.length === 0) {
+                feed.innerHTML = `<div class="text-center text-gray-500 italic py-10">No messages yet.</div>`;
+                return;
+            }
+
+            const myName = (appState.riderName || "").toLowerCase();
+
+            feed.innerHTML = chatMessages.map((m) => {
+                const isMe = m.sender === appState.riderName;
+                const isTagged = myName && m.text && m.text.toLowerCase().includes('@' + myName);
+
+                return `
+                <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'} my-0.5">
+                    <span class="text-[9px] text-gray-400 font-bold px-1">${escapeHtml(m.sender || 'Rider')} • ${escapeHtml(m.time || '')}</span>
+                    <div class="chat-msg-bubble px-3 py-2 rounded-2xl max-w-[85%] text-xs transition-all duration-700 ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'} ${isTagged ? 'pending-tag-highlight' : ''}">
+                        ${formatMessageWithTags(m.text || '')}
+                    </div>
+                </div>`;
+            }).join('');
+
+            feed.scrollTop = feed.scrollHeight;
+
+            if (tagObserver) tagObserver.disconnect();
+
+            tagObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const el = entry.target;
+                        el.classList.add('bg-amber-500/30', 'border', 'border-amber-400', 'p-2', 'shadow-lg');
+                        
+                        setTimeout(() => {
+                            el.classList.remove('bg-amber-500/30', 'border', 'border-amber-400', 'shadow-lg');
+                        }, 3000);
+
+                        tagObserver.unobserve(el);
+                    }
+                });
+            }, { root: feed, threshold: 0.5 });
+
+            document.querySelectorAll('.pending-tag-highlight').forEach(el => {
+                tagObserver.observe(el);
+            });
+        }
+
+        function formatMessageWithTags(text) {
+            const safeText = escapeHtml(text);
+            return safeText.replace(/@(\w+)/g, '<span class="bg-blue-900/80 text-blue-300 font-bold px-1 rounded">@$1</span>');
+        }
+
+        function handleChatInput(inputEl) {
+            const val = inputEl.value;
+            const dropdown = document.getElementById('tag-suggestions');
+            const atIndex = val.lastIndexOf('@');
+
+            if (atIndex !== -1 && atIndex === val.length - 1 || (atIndex !== -1 && !val.substring(atIndex).includes(' '))) {
+                const query = val.substring(atIndex + 1).toLowerCase();
+                let riders = rosterMembers ? rosterMembers.map(r => r.riderName) : [];
+                riders = [...new Set(riders)].filter(r => r.toLowerCase().includes(query));
+
+                if (riders.length > 0) {
+                    dropdown.innerHTML = riders.map(r => `
+                        <div onclick="selectTagRider('${escapeHtml(r)}')" class="p-2 hover:bg-blue-600/30 rounded cursor-pointer flex items-center gap-2 font-bold text-blue-400">
+                            <i class="fa-solid fa-at"></i> ${escapeHtml(r)}
+                        </div>
+                    `).join('');
+                    dropdown.classList.remove('hidden');
+                    return;
+                }
+            }
+            dropdown.classList.add('hidden');
+        }
+
+        function selectTagRider(name) {
+            const inputEl = document.getElementById('bubble-chat-input');
+            const val = inputEl.value;
+            const atIndex = val.lastIndexOf('@');
+            inputEl.value = val.substring(0, atIndex) + '@' + name + ' ';
+            document.getElementById('tag-suggestions').classList.add('hidden');
+            inputEl.focus();
+        }
+
+        async function sendBubbleChatMessage() {
+            const input = document.getElementById('bubble-chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            input.value = "";
+            document.getElementById('tag-suggestions').classList.add('hidden');
+
+            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            chatMessages.push({
+                sender: appState.riderName,
+                text: text,
+                time: timeStr
+            });
+            renderBubbleMessages();
+
+            const payload = {
+                type: "chat",
+                sender: appState.riderName,
+                text: text,
+                time: timeStr
+            };
+
+            try {
+                await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+            } catch(e) {}
+        }
+
+        // ================= 4. UI UPDATERS (WITH EXPLICIT ADMIN QUEUE SHIFTING BUTTONS) =================
+        function updateRosterUI() {
+            let avail = [], busy = [], brk = [];
+            
+            const sortedRoster = rosterMembers ? [...rosterMembers].sort((a, b) => {
+                if (a.status === 'Available' && b.status === 'Available') {
+                    return (parseFloat(a.queueTime) || 0) - (parseFloat(b.queueTime) || 0);
+                }
+                return 0;
+            }) : [];
+
+            const myRecord = rosterMembers ? rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
+            const isEnded = myRecord && myRecord.status === 'End';
+
+            document.getElementById('btn-status-cater').disabled = isEnded;
+            document.getElementById('btn-status-break').disabled = isEnded;
+            document.getElementById('btn-status-cater').style.opacity = isEnded ? '0.3' : '1';
+            document.getElementById('btn-status-break').style.opacity = isEnded ? '0.3' : '1';
+
+            sortedRoster.forEach(m => {
+                let nameStr = m.riderName;
+                if (m.status === 'Catering' && m.customerName) {
+                    nameStr += ` <span class="text-orange-300 text-[10px]">(${escapeHtml(m.customerName)})</span>`;
+                }
+
+                if (isAdmin()) {
+                    document.getElementById('admin-force-all-btn').classList.remove('hidden');
+                    
+                    let adminSelect = ` <select onchange="adminForceStatus('${m.telegramId}', '${m.riderName}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Admin Force</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
+                    nameStr += adminSelect;
+
+                    // EXPLICIT QUEUE SHIFTING BUTTONS FOR AVAILABLE RIDERS
+                    if (m.status === 'Available') {
+                        nameStr += `
+                        <div class="inline-flex gap-1 ml-2 text-[10px] align-middle">
+                            <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_top')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Top">⬆️</button>
+                            <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_up')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Up (+1)">▲</button>
+                            <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_down')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Down (-1)">▼</button>
+                            <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_bottom')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Bottom">⬇️</button>
+                        </div>`;
+                    }
+                }
+
+                if (m.status === 'Available') avail.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
+                else if (m.status === 'Catering') busy.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
+                else if (m.status === 'Break') brk.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
+            });
+
+            document.getElementById('home-roster-avail').innerHTML = avail.length ? avail.join('') : '(Walang naka-duty)';
+            document.getElementById('home-roster-busy').innerHTML = busy.length ? busy.join('') : '(Walang bumibiyahe)';
+            document.getElementById('home-roster-break').innerHTML = brk.length ? brk.join('') : '(Walang naka-break)';
+        }
+
+        function loadGlobalCateredList() {
+            const feed = document.getElementById('catered-customers-feed');
+            const badge = document.getElementById('catered-count-badge');
+            
+            const todayStr = new Date().toISOString().split('T')[0];
+            const todayHistory = globalCateredHistory ? globalCateredHistory.filter(h => isSameDate(h.completedDate, todayStr)) : [];
+
+            badge.innerText = `${todayHistory.length} recorded`;
+
+            if (todayHistory.length === 0) {
+                feed.innerHTML = `<div class="text-gray-500 italic text-center py-4">No completed catered customers yet today.</div>`;
+                return;
+            }
+
+            feed.innerHTML = todayHistory.map(h => {
+                let voidBtn = "";
+                if (isAdmin()) {
+                    voidBtn = `<button onclick="promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate)}')" class="bg-red-900/40 text-red-400 hover:bg-red-800 text-[10px] font-bold px-2 py-1 rounded border border-red-700/50 transition active:scale-95"><i class="fa-solid fa-ban"></i> Void</button>`;
+                }
+                return `
+                <div class="bg-gray-800/40 border border-gray-700/60 p-2.5 rounded-lg flex justify-between items-center">
+                    <div>
+                        <div class="font-bold text-orange-400"><i class="fa-solid fa-user"></i> ${escapeHtml(h.customerName)}</div>
+                        <div class="text-[10px] text-gray-400">Rider: <span class="text-blue-400">${escapeHtml(h.riderName)}</span></div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="text-[10px] text-gray-400 font-mono text-right">Started: ${escapeHtml(h.startTime)}</div>
+                        ${voidBtn}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function promptVoidCustomer(riderName, customerName, completedDate) {
+            openSlideDeleteModal(`Sigurado ka bang nais i-void si [${customerName}] ni Rider ${riderName}?`, () => {
+                executeVoidCustomer(riderName, customerName, completedDate);
+            });
+        }
+
+        async function executeVoidCustomer(riderName, customerName, completedDate) {
+            const payload = {
+                type: "void_history",
+                riderName: riderName,
+                customerName: customerName,
+                completedDate: completedDate
+            };
+            try {
+                await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+                setTimeout(() => { fetchAllData(); showToast("Customer record voided."); }, 500);
+            } catch(e) {}
+        }
+
+        function loadGlobalLoginList() {
+            const feed = document.getElementById('login-list-feed');
+            const badge = document.getElementById('login-count-badge');
+
+            const todayStr = new Date().toISOString().split('T')[0];
+            const todayLogins = globalLogins ? globalLogins.filter(l => isSameDate(l.date, todayStr)) : [];
+
+            badge.innerText = `${todayLogins.length} logins`;
+
+            if (todayLogins.length === 0) {
+                feed.innerHTML = `<div class="text-gray-500 italic text-center py-2">No logins recorded yet today.</div>`;
+                return;
+            }
+
+            feed.innerHTML = todayLogins.map(l => {
+                let mapBtn = "";
+                if (l.location) {
+                    mapBtn = `<a href="${escapeHtml(l.location)}" target="_blank" class="text-[10px] text-emerald-400 font-bold underline flex items-center gap-1 mt-0.5 active:opacity-60"><i class="fa-solid fa-location-dot text-red-500"></i> View Pin Location</a>`;
+                }
+                return `
+                <div class="bg-gray-800/30 border border-gray-700/40 p-2 rounded-lg flex justify-between items-center">
+                    <div class="flex flex-col">
+                        <span class="font-bold text-blue-400"><i class="fa-solid fa-motorcycle"></i> ${escapeHtml(l.riderName)} <span class="text-[10px] text-gray-400 font-normal">${escapeHtml(l.loginType || '(From End Shift)')}</span></span>
+                        ${mapBtn}
+                    </div>
+                    <span class="text-[10px] text-gray-400 font-mono">Login: ${escapeHtml(l.loginTime)}</span>
+                </div>`;
+            }).join('');
+        }
+
+        // ================= 5. NAVIGATION & BACK STACK =================
+        function switchView(targetViewId, isBackwards = false) {
+            const currentViewId = document.querySelector('main > section:not(.hidden)')?.id;
+            if (!isBackwards && currentViewId && currentViewId !== targetViewId && currentViewId !== 'view-login') {
+                viewHistory.push(currentViewId);
+            }
+
+            document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
+            document.getElementById(targetViewId).classList.remove('hidden');
+
+            if (targetViewId === 'view-home' || targetViewId === 'view-login') {
+                document.getElementById('app-header').classList.remove('hidden');
+                document.getElementById('back-btn').classList.add('hidden');
+                document.getElementById('header-spacer').classList.remove('hidden');
+                viewHistory = [];
+                if(targetViewId === 'view-home') {
+                    document.getElementById('header-title').innerHTML = `L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub`;
+                }
+                if(targetViewId === 'view-login') document.getElementById('app-header').classList.add('hidden');
+            } else {
+                document.getElementById('app-header').classList.remove('hidden');
+                document.getElementById('back-btn').classList.remove('hidden');
+                document.getElementById('header-spacer').classList.add('hidden');
+            }
+        }
+
+        function goBack() {
+            if (viewHistory.length > 0) {
+                const previousView = viewHistory.pop();
+                switchView(previousView, true);
+            } else {
+                switchView('view-home', true);
+            }
+        }
+
+        // ================= 6. DAILY COMMISSION & REPORT =================
+        async function openCommissionScreen(selectedDate = null) {
+            switchView('view-commission');
+            document.getElementById('header-title').innerText = "Daily Commission";
+            const container = document.getElementById('commission-receipts-list');
+            container.innerHTML = `<div class="text-center py-10 text-gray-500"><i class="fa-solid fa-spinner fa-spin"></i> Loading records...</div>`;
+
+            const now = new Date();
+            const todayStr = now.getFullYear() + '-' + 
+                             String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                             String(now.getDate()).padStart(2, '0');
+            
+            const targetDate = selectedDate || todayStr;
+            document.getElementById('commission-date-picker').value = targetDate;
+            document.getElementById('commission-date-label').innerText = targetDate === todayStr ? "Today" : targetDate;
+
+            const filterBox = document.getElementById('admin-commission-filter-box');
+            const riderSelect = document.getElementById('admin-rider-select');
+
+            if (isAdmin()) {
+                filterBox.classList.remove('hidden');
+                let riders = rosterMembers ? rosterMembers.map(r => r.riderName) : [];
+                riders = [...new Set(riders)];
+                
+                let currentSel = riderSelect.value || "ALL";
+                riderSelect.innerHTML = `<option value="ALL">All Riders</option>` + riders.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+                riderSelect.value = currentSel;
+            } else {
+                filterBox.classList.add('hidden');
+            }
+
+            try {
+                const res = await fetch(`${API_URL}?type=receipts`);
+                if (res.ok) {
+                    const allReceipts = await res.json();
+                    
+                    const selectedFilterRider = isAdmin() ? riderSelect.value : appState.riderName;
+
+                    const myTargetReceipts = allReceipts.filter(r => {
+                        let rDate = (r.date || r.Date || "").toString().split('T')[0];
+                        if (rDate !== targetDate) return false;
+
+                        if (isAdmin() && selectedFilterRider === "ALL") return true;
+                        
+                        const rName = (r.riderName || r.ridername || r.RiderName || "").toString().trim().toLowerCase();
+                        return rName === (selectedFilterRider || appState.riderName).trim().toLowerCase();
+                    });
+
+                    currentDayTotalCommission = 0;
+                    currentDayCustomerMap = {};
+
+                    if (myTargetReceipts.length === 0) {
+                        container.innerHTML = `<div class="text-center py-10 text-gray-400 text-xs">No receipts logged for date: ${targetDate}</div>`;
+                    } else {
+                        myTargetReceipts.forEach(r => {
+                            const custName = r.customerName || r.customername || r.CustomerName || "Unknown";
+                            const riderWhoServed = r.riderName || r.ridername || r.RiderName || appState.riderName;
+                            const feesVal = parseFloat(r.totalFees || r.totalfees || r.TotalFees || 0);
+                            currentDayTotalCommission += feesVal;
+                            
+                            const keyKey = (isAdmin() && selectedFilterRider === "ALL") ? `${custName} (${riderWhoServed})` : custName;
+                            if (!currentDayCustomerMap[keyKey]) currentDayCustomerMap[keyKey] = 0;
+                            currentDayCustomerMap[keyKey] += feesVal;
+                        });
+
+                        container.innerHTML = Object.keys(currentDayCustomerMap).map(custName => {
+                            return `
+                            <div class="bg-cardBg border border-gray-800 p-4 rounded-xl shadow-sm flex justify-between items-center">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-9 h-9 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-sm">
+                                        <i class="fa-solid fa-user"></i>
+                                    </div>
+                                    <div class="font-bold text-sm text-white">${escapeHtml(custName)}</div>
+                                </div>
+                                <div class="font-bold text-base text-green-400">
+                                    ₱${currentDayCustomerMap[custName].toFixed(2)}
+                                </div>
+                            </div>`;
+                        }).join('');
+                    }
+                    document.getElementById('daily-total-commission').innerText = currentDayTotalCommission.toFixed(2);
+                }
+            } catch(e) {
+                container.innerHTML = `<div class="text-center py-10 text-red-400">Failed to load commission logs.</div>`;
+            }
+        }
+
+        function generateDailyReportText() {
+            const targetDate = document.getElementById('commission-date-picker').value || new Date().toISOString().split('T')[0];
+            const filterTarget = isAdmin() ? document.getElementById('admin-rider-select').value : appState.riderName;
+            
+            let customerLines = Object.keys(currentDayCustomerMap).length > 0 
+                ? Object.keys(currentDayCustomerMap).map(c => `• ${c}: ₱${currentDayCustomerMap[c].toFixed(2)}`).join('\n')
+                : '• No customers served.';
+
+            const reportText = 
+`📊 **LOKALEX COMMISSION REPORT** 📊
+📅 **Date:** ${targetDate}
+🛵 **Target:** ${filterTarget}
+➖➖➖➖➖➖➖➖➖➖➖➖
+👥 **CUSTOMERS SERVED & FEES:**
+${customerLines}
+➖➖➖➖➖➖➖➖➖➖➖➖
+🔥 **TOTAL COMMISSION: ₱${currentDayTotalCommission.toFixed(2)}** 🔥
+
+💙 Generated via Lokalex Hub`;
+
+            copyText(reportText);
+            showToast("Daily report copied to clipboard!");
+        }
+
+        // ================= 7. DIRECTORY =================
+        async function openDirectory(type) {
+            currentType = type; activeFilterLetter = ""; document.getElementById('search-input').value = "";
+            document.getElementById('header-title').innerText = type === 'customers' ? "Customer Directory" : "Store Directory";
+            switchView('view-directory');
+            buildAlphabetScrubber(); attachScrubberEvents(); loadLocalRecords(); await syncData();
+        }
+
+        function buildAlphabetScrubber() {
+            document.getElementById('alphabet-scrubber').innerHTML = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('').map(letter => 
+                `<div class="scrubber-letter w-6 text-center py-[2px] ${activeFilterLetter === letter ? 'text-blue-500 font-black text-sm' : ''}">${letter}</div>`
+            ).join('');
+        }
+
+        function attachScrubberEvents() {
+            const scrubber = document.getElementById('alphabet-scrubber');
+            const handleScrub = (e) => {
+                e.preventDefault();
+                const el = document.elementFromPoint(e.touches ? e.touches[0].clientX : e.clientX, e.touches ? e.touches[0].clientY : e.clientY);
+                if (el && el.classList.contains('scrubber-letter')) {
+                    const letter = el.innerText;
+                    if (activeFilterLetter !== letter) {
+                        activeFilterLetter = letter; document.getElementById('search-input').value = ""; 
+                        buildAlphabetScrubber(); filterDirectoryRecords();
+                    }
+                }
+            };
+            scrubber.addEventListener('touchmove', handleScrub, { passive: false });
+            scrubber.addEventListener('pointermove', (e) => { if(e.pointerType === 'mouse') handleScrub(e); });
+        }
+
+        function filterDirectoryRecords() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            const filtered = records.filter(r => {
+                const name = (r['name'] || r['customer name'] || r['store name'] || "").toLowerCase();
+                if (query.length > 0) { activeFilterLetter = ""; buildAlphabetScrubber(); return name.includes(query); }
+                return activeFilterLetter === "" || name.toUpperCase().startsWith(activeFilterLetter);
+            });
+            renderDirectoryRecords(filtered);
+        }
+
+        function renderDirectoryRecords(list) {
+            const container = document.getElementById('record-list');
+            if (list.length === 0) return container.innerHTML = `<div class="text-center py-20 text-gray-500">No records found.</div>`;
+            
+            container.innerHTML = list.map((record) => {
+                const name = record['name'] || record['customer name'] || record['store name'] || "Unknown";
+                const contact = record['contact'] || record['phone'] || "";
+                const address = record['address'] || "";
+                
+                const latLon = record['lat_lon_link'] || record['lat_lon'] || record['latlon'] || record['lat lon'] || record['coordinates'] || record['map'] || "";
+                const uid = Math.random().toString(36).substr(2, 9);
+
+                let mapHtml = "";
+                if (latLon) {
+                    const cleanCoords = latLon.toString().replace(/['"]+/g, '').trim();
+                    const mapUrl = cleanCoords.startsWith('http') ? cleanCoords : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanCoords)}`;
+                    mapHtml = `<a href="${mapUrl}" target="_blank" class="text-blue-400 flex items-center gap-2 py-1 active:opacity-50"><i class="fa-solid fa-map-location-dot w-4 text-red-500"></i> <span class="underline">${cleanCoords}</span></a>`;
+                }
+
+                return `
+                    <div class="bg-cardBg border border-gray-800/80 rounded-xl shadow-sm flex flex-col transition-all overflow-hidden">
+                        <div onclick="toggleCard('${uid}')" class="p-4 flex items-center justify-between cursor-pointer active:bg-white/5 transition">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-full ${currentType === 'customers' ? 'bg-blue-600/20 text-blue-400' : 'bg-orange-600/20 text-orange-400'} flex items-center justify-center font-bold text-sm">
+                                    <i class="fa-solid ${currentType === 'customers' ? 'fa-user' : 'fa-store'}"></i>
+                                </div>
+                                <h3 class="font-bold text-sm">${escapeHtml(name)}</h3>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button onclick='event.stopPropagation(); promptEditRecord(${JSON.stringify(record)})' class="w-8 h-8 rounded-lg bg-inputBg hover:bg-gray-700 text-amber-400 flex items-center justify-center text-sm transition active:scale-90" title="Edit"><i class="fa-solid fa-pen"></i></button>
+                                ${isAdmin() ? `<button onclick='event.stopPropagation(); promptDeleteRecord(${JSON.stringify(record)})' class="w-8 h-8 rounded-lg bg-inputBg hover:bg-gray-700 text-red-400 flex items-center justify-center text-sm transition active:scale-90" title="Delete"><i class="fa-solid fa-trash"></i></button>` : ''}
+                                <i id="card-icon-${uid}" class="fa-solid fa-chevron-down text-gray-500 transition-transform duration-300"></i>
+                            </div>
+                        </div>
+                        <div id="card-details-${uid}" class="hidden px-4 pb-4 pt-1 border-t border-gray-800/50 text-xs text-gray-300 flex flex-col gap-2">
+                            ${contact ? `<div onclick="copyText('${contact}')" class="text-emerald-400 flex items-center gap-2 cursor-pointer py-1"><i class="fa-solid fa-copy w-4"></i> <span class="font-mono text-sm">${contact}</span></div>` : ''}
+                            ${address ? `<div class="flex items-start gap-2 py-1"><i class="fa-solid fa-location-dot w-4 mt-0.5 text-gray-500"></i> <span class="leading-tight">${escapeHtml(address)}</span></div>` : ''}
+                            ${mapHtml}
+                            ${(!contact && !address && !latLon) ? `<div class="text-gray-500 italic">No additional details recorded.</div>` : ''}
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        function toggleCard(uid) {
+            const details = document.getElementById(`card-details-${uid}`);
+            const icon = document.getElementById(`card-icon-${uid}`);
+            details.classList.toggle('hidden');
+            icon.style.transform = details.classList.contains('hidden') ? "rotate(0deg)" : "rotate(180deg)";
+        }
+
+        function loadLocalRecords() { 
+            const cached = localStorage.getItem(`lokalex_${currentType}`); 
+            if (cached) { 
+                records = JSON.parse(cached); 
+                sortRecordsAlphabetically();
+                filterDirectoryRecords(); 
+            } 
+        }
+
+        async function syncData() {
+            showToast("Syncing database...");
+            try {
+                const response = await fetch(`${API_URL}?type=${currentType}`);
+                if (response.ok) { 
+                    records = await response.json(); 
+                    sortRecordsAlphabetically();
+                    localStorage.setItem(`lokalex_${currentType}`, JSON.stringify(records)); 
+                    filterDirectoryRecords(); 
+                    showToast("Synchronized!"); 
+                }
+            } catch (e) { showToast("Offline mode."); }
+        }
+
+        function sortRecordsAlphabetically() {
+            records.sort((a, b) => {
+                const nameA = (a['name'] || a['customer name'] || a['store name'] || "").toLowerCase();
+                const nameB = (b['name'] || b['customer name'] || b['store name'] || "").toLowerCase();
+                return nameA.localeCompare(nameB);
+            });
+        }
+
+        // Form Logic & Map Picker
+        function promptEditRecord(record) {
+            if (isAdmin()) {
+                openSlideDeleteModal(`I-edit ang record na ito [${record['name'] || record['customer name'] || record['store name']}]?`, () => {
+                    openForm(record);
+                });
+            } else {
+                pendingRecordToEdit = record; 
+                document.getElementById('password-modal').classList.remove('hidden'); 
+                document.getElementById('modal-pass').value = ''; 
+                document.getElementById('modal-pass').focus();
+            }
+        }
+
+        function promptDeleteRecord(record) {
+            const recName = record['name'] || record['customer name'] || record['store name'] || "Record";
+            openSlideDeleteModal(`Sigurado ka bang nais burahin ang [${recName}]?`, async () => {
+                const payload = {
+                    type: currentType,
+                    action: "delete",
+                    data: { name: recName }
+                };
+                try {
+                    await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+                    setTimeout(() => {
+                        showToast("Record deleted!");
+                        syncData();
+                    }, 600);
+                } catch(e) { showToast("Failed to delete record."); }
+            });
+        }
+
+        function closePasswordModal() { document.getElementById('password-modal').classList.add('hidden'); }
+        function verifyPassword() { if (document.getElementById('modal-pass').value === "Smart09300") { closePasswordModal(); openForm(pendingRecordToEdit); } else { showToast("Incorrect Password!"); } }
+
+        function openForm(record) {
+            switchView('view-form');
+            const isEdit = record !== null; editingRecord = record;
+            document.getElementById('edit-warning').classList.toggle('hidden', !isEdit);
+            document.getElementById('header-title').innerText = isEdit ? "Edit Record" : "Add New Record";
+            document.getElementById('form-name').value = isEdit ? (record['name'] || record['customer name'] || record['store name'] || "") : "";
+            document.getElementById('form-contact').value = isEdit ? (record['contact'] || record['phone'] || "") : "";
+            document.getElementById('form-address').value = isEdit ? (record['address'] || "") : "";
+            document.getElementById('form-latlon').value = isEdit ? (record['lat_lon_link'] || record['lat_lon'] || record['latlon'] || record['coordinates'] || record['map'] || "") : "";
+        }
+
+        async function submitForm() {
+            const name = document.getElementById('form-name').value.trim();
+            if (!name) return showToast("Name is required");
+            const btn = document.getElementById('form-submit-btn');
+            btn.disabled = true; btn.innerText = "SAVING...";
+            const payload = { 
+                type: currentType, 
+                action: editingRecord ? "edit" : "add", 
+                data: { 
+                    name: name, 
+                    contact: document.getElementById('form-contact').value.trim(), 
+                    address: document.getElementById('form-address').value.trim(), 
+                    lat_lon_link: document.getElementById('form-latlon').value.trim() 
+                } 
+            };
+            try {
+                await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+                setTimeout(() => {
+                    showToast("Database updated!"); 
+                    goBack(); 
+                    openDirectory(currentType);
+                }, 600);
+            } catch (e) { showToast("Network error."); } 
+            finally { btn.disabled = false; btn.innerText = "SAVE RECORD"; }
+        }
+
+        // ================= LEAFLET INTEGRATION =================
+        function openMapPicker() {
+            switchView('view-map');
+
+            const initOrCenterMap = (lat, lng) => {
+                if (!leafletMap) {
+                    leafletMap = L.map('google-map-container').setView([lat, lng], 17);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        maxZoom: 19,
+                        attribution: '© OpenStreetMap'
+                    }).addTo(leafletMap);
+                } else {
+                    leafletMap.setView([lat, lng], 17);
+                    leafletMap.invalidateSize();
+                }
+                appState.lat = lat;
+                appState.lon = lng;
+            };
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        initOrCenterMap(pos.coords.latitude, pos.coords.longitude);
+                    },
+                    () => {
+                        const fallbackLat = appState.lat || 15.6881;
+                        const fallbackLng = appState.lon || 120.4144;
+                        initOrCenterMap(fallbackLat, fallbackLng);
+                    },
+                    { enableHighAccuracy: true, timeout: 5000 }
+                );
+            } else {
+                const fallbackLat = appState.lat || 15.6881;
+                const fallbackLng = appState.lon || 120.4144;
+                initOrCenterMap(fallbackLat, fallbackLng);
+            }
+        }
+
+        function confirmGoogleMapPin() {
+            if (leafletMap) {
+                const center = leafletMap.getCenter();
+                const lat = center.lat.toFixed(6);
+                const lng = center.lng.toFixed(6);
+                const mapLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+                document.getElementById('form-latlon').value = mapLink;
+                appState.lat = center.lat;
+                appState.lon = center.lng;
+            }
+            goBack();
+        }
+
+        // ================= 8. SMART CART, SLIDE DELETE & WIZARD =================
+        function showBulkAddModal() { document.getElementById('bulk-modal').classList.remove('hidden'); document.getElementById('bulk-input').value = ""; document.getElementById('bulk-input').focus(); }
+        function closeBulkModal() { document.getElementById('bulk-modal').classList.add('hidden'); }
+        
+        function processBulkAdd() {
+            const raw = document.getElementById('bulk-input').value.trim();
+            if(!raw) return closeBulkModal();
+            raw.split('\n').forEach(line => {
+                line = line.trim(); if(!line) return;
+                let price = 0.0; let name = line;
+                const match = line.match(/[\s\-:]+([\d\.,]+)$/);
+                if(match) { price = parseFloat(match[1].replace(/,/g, '')) || 0.0; name = line.substring(0, match.index).trim(); }
+                cartItems.push({ id: Math.random().toString(36).substr(2,9), item: name, price: price, category: null });
+            });
+            closeBulkModal(); renderCart();
+        }
+
+        function openSlideDeleteModal(title, callback) {
+            document.getElementById('slide-delete-title').innerText = title;
+            document.getElementById('slide-delete-range').value = 0;
+            slideDeleteCallback = callback;
+            document.getElementById('slide-delete-modal').classList.remove('hidden');
+        }
+        function closeSlideDeleteModal() {
+            document.getElementById('slide-delete-modal').classList.add('hidden');
+            slideDeleteCallback = null;
+        }
+        function onSlideProgress(val) {
+            if (val >= 90) {
+                document.getElementById('slide-delete-range').value = 100;
+                if (slideDeleteCallback) {
+                    let cb = slideDeleteCallback;
+                    closeSlideDeleteModal();
+                    cb();
+                }
+            }
+        }
+        function onSlideEnd() {
+            const range = document.getElementById('slide-delete-range');
+            if (range.value < 90) { range.value = 0; }
+        }
+
+        function handleCartActionBtn() {
+            if (selectedCartIds.size > 0) {
+                openSlideDeleteModal(`Burahin ang ${selectedCartIds.size} na napiling item(s)?`, () => {
+                    cartItems = cartItems.filter(i => !selectedCartIds.has(i.id));
+                    selectedCartIds.clear();
+                    renderCart();
+                });
+            } else {
+                if (cartItems.length === 0) return;
+                openSlideDeleteModal("Sigurado ka bang gusto mong i-clear ang buong cart?", () => {
+                    cartItems = [];
+                    selectedCartIds.clear();
+                    renderCart();
+                });
+            }
+        }
+
+        function toggleSelectCartItem(id) {
+            if (selectedCartIds.has(id)) {
+                selectedCartIds.delete(id);
+            } else {
+                selectedCartIds.add(id);
+            }
+            renderCartActionBtnState();
+        }
+
+        function renderCartActionBtnState() {
+            const btn = document.getElementById('cart-action-btn');
+            if (selectedCartIds.size > 0) {
+                btn.innerHTML = `<i class="fa-solid fa-trash-can"></i> Delete Selected (${selectedCartIds.size})`;
+                btn.className = "flex-1 bg-red-600 text-white text-xs font-bold py-2 rounded-lg border border-red-500 transition active:scale-95";
+            } else {
+                btn.innerHTML = `<i class="fa-solid fa-trash-can"></i> Clear All`;
+                btn.className = "flex-1 bg-red-600/20 text-red-400 text-xs font-bold py-2 rounded-lg border border-red-600/30 transition active:scale-95";
+            }
+        }
+
+        function removeCartItem(id) {
+            openSlideDeleteModal("Tanggalin ang item na ito?", () => {
+                cartItems = cartItems.filter(i => i.id !== id);
+                selectedCartIds.delete(id);
+                renderCart();
+            });
+        }
+
+        function setItemCategory(id, cat) { 
+            const item = cartItems.find(i => i.id === id); 
+            if(item && item.price > 0) { item.category = cat; renderCart(); } 
+            else if(item && item.price === 0) { showToast("Set price before categorizing!"); } 
+        }
+        
+        function promptEditItem(id) {
+            editItemIndex = cartItems.findIndex(i => i.id === id);
+            if(editItemIndex === -1) return;
+            document.getElementById('edit-name-input').value = cartItems[editItemIndex].item || "";
+            document.getElementById('edit-price-input').value = cartItems[editItemIndex].price || "";
+            document.getElementById('edit-item-modal').classList.remove('hidden'); 
+            document.getElementById('edit-name-input').focus();
+        }
+        function closeEditItemModal() { document.getElementById('edit-item-modal').classList.add('hidden'); }
+        function saveItemEdit() {
+            const newName = document.getElementById('edit-name-input').value.trim();
+            const newPrice = parseFloat(document.getElementById('edit-price-input').value) || 0.0;
+            if (!newName) return showToast("Item name cannot be empty!");
+            if(editItemIndex !== -1) { 
+                cartItems[editItemIndex].item = newName;
+                cartItems[editItemIndex].price = newPrice; 
+            }
+            closeEditItemModal(); 
+            renderCart();
+        }
+
+        function renderCart() {
+            const container = document.getElementById('cart-items-list');
+            let subtotal = 0;
+            if (cartItems.length === 0) {
+                container.innerHTML = `<div class="text-center py-10 text-gray-500">Cart is empty. Paste a list!</div>`;
+                selectedCartIds.clear();
+            } else {
+                container.innerHTML = cartItems.map((item, index) => {
+                    subtotal += item.price;
+                    const isTask = item.price === 0.0;
+                    const catM = item.category === 'Market';
+                    const catS = item.category === 'Store';
+                    const isChecked = selectedCartIds.has(item.id);
+
+                    return `
+                    <div class="bg-cardBg border ${isTask ? 'border-orange-500/50' : 'border-gray-800'} p-3 rounded-xl shadow-sm flex items-center gap-3 relative">
+                        <input type="checkbox" onchange="toggleSelectCartItem('${item.id}')" ${isChecked ? 'checked' : ''} class="w-4 h-4 accent-blue-500 cursor-pointer">
+                        <div class="flex-1 flex flex-col gap-1">
+                            <div class="font-bold text-sm ${isTask ? 'text-orange-400' : 'text-white'}">${index + 1}. ${escapeHtml(item.item)}</div>
+                            <div class="flex justify-between items-end">
+                                <div class="flex gap-2">
+                                    <button onclick="setItemCategory('${item.id}', 'Market')" class="text-[10px] px-2.5 py-0.5 rounded-full font-bold border transition ${catM ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-600 text-gray-400'}">Market</button>
+                                    <button onclick="setItemCategory('${item.id}', 'Store')" class="text-[10px] px-2.5 py-0.5 rounded-full font-bold border transition ${catS ? 'bg-orange-600 border-orange-600 text-white' : 'border-gray-600 text-gray-400'}">Store</button>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-xs font-bold ${isTask ? 'text-orange-400' : 'text-green-400'} mb-0.5">${isTask ? 'Kulang Presyo' : '₱'+item.price.toFixed(2)}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-2 items-end pl-2 border-l border-gray-800">
+                            <button onclick="removeCartItem('${item.id}')" class="text-red-400 hover:text-red-500 p-1 text-xs"><i class="fa-solid fa-trash"></i></button>
+                            <button onclick="promptEditItem('${item.id}')" class="text-blue-400 hover:text-blue-300 p-1 text-xs"><i class="fa-solid fa-pen"></i></button>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+            document.getElementById('cart-subtotal-display').innerText = subtotal.toFixed(2);
+            renderCartActionBtnState();
+        }
+
+        function proceedToWizard() {
+            if (cartItems.length === 0) return showToast("Cart is empty!");
+            if (cartItems.some(i => i.price === 0.0 || (i.price > 0 && !i.category))) return showToast("Fix prices and categories first!");
+
+            document.getElementById('header-title').innerText = "Fee Wizard";
+            switchView('view-wizard');
+
+            const myRecord = rosterMembers ? rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
+            const btnBox = document.getElementById('catered-client-buttons');
+            const rcptInput = document.getElementById('rcpt-name');
+            const toggleManual = document.getElementById('manual-client-toggle');
+
+            toggleManual.checked = false;
+            rcptInput.disabled = false;
+
+            if (myRecord && myRecord.status === 'Catering' && myRecord.customerName) {
+                const activeCusts = myRecord.customerName.split(', ');
+                btnBox.innerHTML = activeCusts.map(c => `
+                    <button onclick="selectCateredClientName('${escapeHtml(c)}')" class="bg-blue-600/30 border border-blue-500 text-blue-300 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition active:scale-95">
+                        <i class="fa-solid fa-user"></i> ${escapeHtml(c)}
+                    </button>
+                `).join('');
+                
+                rcptInput.value = activeCusts[0] || "";
+                rcptInput.disabled = true;
+            } else {
+                btnBox.innerHTML = `<span class="text-gray-500 italic text-xs">Wala kang active na nilalutong customer ngayon.</span>`;
+                rcptInput.value = "";
+                rcptInput.disabled = false;
+                toggleManual.checked = true;
+            }
+
+            const marketSum = cartItems.filter(i => i.category === 'Market').reduce((s, i) => s + i.price, 0);
+            const storeSum = cartItems.filter(i => i.category === 'Store').reduce((s, i) => s + i.price, 0);
+
+            wizState.subtotal = marketSum + storeSum;
+            const autoMarket = marketSum > 0 ? Math.ceil(marketSum / 500) * 15 : 0;
+            const autoHandling = storeSum > 0 ? Math.ceil(storeSum / 500) * 10 : 0;
+            wizState.storeCount = 1;
+
+            document.getElementById('rcpt-contact').value = "";
+            document.getElementById('wiz-handling').value = autoHandling;
+            document.getElementById('wiz-market').value = autoMarket;
+            document.getElementById('wiz-multistop').value = 0;
+            document.getElementById('wiz-delivery').value = ""; 
+            document.getElementById('wiz-discount').value = "";
+            document.getElementById('wiz-free-delivery').checked = false;
+            document.getElementById('wiz-epayment').checked = false;
+            updateWizardUI();
+        }
+
+        function selectCateredClientName(cName) {
+            const rcptInput = document.getElementById('rcpt-name');
+            rcptInput.value = cName;
+            document.getElementById('manual-client-toggle').checked = false;
+            rcptInput.disabled = true;
+            showToast(`Selected: ${cName}`);
+        }
+
+        function toggleManualClientInput(isManual) {
+            const rcptInput = document.getElementById('rcpt-name');
+            rcptInput.disabled = !isManual;
+            if (isManual) rcptInput.focus();
+        }
+
+        function adjustStoreCount(delta) {
+            if (document.getElementById('wiz-free-delivery').checked) return;
+            wizState.storeCount = Math.max(1, wizState.storeCount + delta);
+            const autoMulti = wizState.storeCount > 1 ? (wizState.storeCount - 1) * 10 : 0;
+            document.getElementById('wiz-multistop').value = autoMulti;
+            calculateGrandTotal();
+        }
+
+        function calculateGrandTotal() {
+            const isFree = document.getElementById('wiz-free-delivery').checked;
+            const isEpay = document.getElementById('wiz-epayment').checked;
+
+            let hFee = parseFloat(document.getElementById('wiz-handling').value) || 0;
+            let mFee = parseFloat(document.getElementById('wiz-market').value) || 0;
+            let multistop = parseFloat(document.getElementById('wiz-multistop').value) || 0;
+            let dFee = parseFloat(document.getElementById('wiz-delivery').value) || 0;
+            let disc = parseFloat(document.getElementById('wiz-discount').value) || 0;
+
+            if (isFree) {
+                hFee = 0; mFee = 0; multistop = 0; dFee = 0;
+            }
+
+            let total = wizState.subtotal + hFee + mFee + multistop + dFee - disc;
+
+            let epayFee = 0;
+            if (isEpay && total > 0) {
+                epayFee = total <= 1000 ? 15 : 15 + Math.ceil((total - 1000) / 500) * 5;
+                total += epayFee;
+            }
+
+            document.getElementById('wiz-store-count').innerText = isFree ? "0" : wizState.storeCount;
+            document.getElementById('epayment-fee-display').innerText = isEpay ? `Added: ₱${epayFee.toFixed(2)}` : "Magbabayad ng Cash";
+            document.getElementById('wiz-grand-total').innerText = total.toFixed(2);
+
+            wizState.finalHFee = hFee; 
+            wizState.finalMFee = mFee; 
+            wizState.finalMulti = multistop; 
+            wizState.deliveryFee = dFee;
+            wizState.discount = disc;
+            wizState.finalEpay = epayFee; 
+            wizState.finalTotal = total;
+        }
+
+        function updateWizardUI() { calculateGrandTotal(); }
+
+        function generateFinalReceipt() {
+            const customerName = document.getElementById('rcpt-name').value.trim();
+            if (!customerName) {
+                showToast("⚠️ Paki-lagay ang pangalan ng customer bago magpatuloy.");
+                document.getElementById('rcpt-name').focus();
+                return;
+            }
+
+            const isFree = document.getElementById('wiz-free-delivery').checked;
+            if (wizState.deliveryFee === 0 && !isFree) return showToast("Please input Rider Delivery Fee.");
+
+            document.getElementById('header-title').innerText = "Official Receipt";
+            switchView('view-receipt-final');
+
+            renderFinalReceiptText();
+        }
+
+        function renderFinalReceiptText() {
+            const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' });
+            
+            const now = new Date();
+            const rawDateStr = now.getFullYear().toString() + 
+                               String(now.getMonth() + 1).padStart(2, '0') + 
+                               String(now.getDate()).padStart(2, '0');
+            const rawCode = `${appState.telegramId}_${rawDateStr}`;
+            let hash = 0;
+            for (let i = 0; i < rawCode.length; i++) {
+                hash = ((hash << 5) - hash) + rawCode.charCodeAt(i);
+                hash |= 0;
+            }
+            const riderIdCode = "RID-" + Math.abs(hash).toString(16).toUpperCase().substring(0, 5).padEnd(5, '0');
+
+            let itemsTxt = cartItems.map(i => `🔸 ${i.item} - ₱${i.price.toFixed(2)}`).join("\n");
+            let feesTxt = "";
+            if (wizState.finalHFee > 0) feesTxt += `🔹 Handling Fee: ₱${wizState.finalHFee.toFixed(2)}\n`;
+            if (wizState.finalMFee > 0) feesTxt += `🔹 Market Fee: ₱${wizState.finalMFee.toFixed(2)}\n`;
+            if (wizState.finalMulti > 0) feesTxt += `🔹 Multistore Fee: ₱${wizState.finalMulti.toFixed(2)}\n`;
+            if (wizState.deliveryFee > 0) feesTxt += `🔹 Delivery Fee: ₱${wizState.deliveryFee.toFixed(2)}\n`;
+            if (wizState.finalEpay > 0) feesTxt += `🔹 ePayment Processing Fee: ₱${wizState.finalEpay.toFixed(2)}\n`;
+            if (wizState.discount > 0) feesTxt += `🔻 Discount: -₱${wizState.discount.toFixed(2)}\n`;
+            if (!feesTxt) feesTxt = "🔹 Wala pong karagdagang fees.\n";
+
+            document.getElementById('final-receipt-text').innerText = 
+`🧾 **LOKALEX OFFICIAL RECEIPT** 🧾
+
+📅 **Date:** ${dateStr}
+🛵 **Rider:** ${appState.riderName}
+🔑 **ID Code:** \`${riderIdCode}\`
+➖➖➖➖➖➖➖➖➖➖➖➖
+🛍️ **ITEMS:**
+${itemsTxt}
+
+💵 **Subtotal:** ₱${wizState.subtotal.toFixed(2)}
+➖➖➖➖➖➖➖➖➖➖➖➖
+📋 **FEES:**
+${feesTxt}➖➖➖➖➖➖➖➖➖➖➖➖
+🔥 **GRAND TOTAL: ₱${wizState.finalTotal.toFixed(2)}** 🔥
+
+💙 Salamat sa pagtitiwala sa Lokalex!`;
+        }
+
+        async function completeReceiptDone() {
+            const customerName = document.getElementById('rcpt-name').value.trim();
+            const feesObj = {
+                handling: wizState.finalHFee || 0,
+                market: wizState.finalMFee || 0,
+                multistore: wizState.finalMulti || 0,
+                delivery: wizState.deliveryFee || 0,
+                discount: wizState.discount || 0
+            };
+            const totalFees = (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0);
+
+            const payload = {
+                type: "receipts",
+                telegramId: appState.telegramId,
+                riderName: appState.riderName,
+                customerName: customerName,
+                fees: feesObj,
+                totalFees: totalFees,
+                date: new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0')
+            };
+
+            showToast("Saving receipt to database...");
+            try {
+                await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+            } catch(e) {}
+
+            cartItems = [];
+            selectedCartIds.clear();
+            switchView('view-home');
+        }
+
+        function copyFinalReceipt() { copyText(document.getElementById('final-receipt-text').innerText); }
+        function copyText(text) { navigator.clipboard.writeText(text); showToast("Copied to clipboard!"); }
+        function showToast(msg) { const toast = document.getElementById('toast'); toast.innerText = msg; toast.style.opacity = '1'; setTimeout(() => { toast.style.opacity = '0'; }, 2500); }
+        function escapeHtml(str) { return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    </script>
+</body>
+</html>
