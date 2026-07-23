@@ -1055,7 +1055,7 @@
 
                 return `
                 <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'} my-0.5">
-                    <span class="text-[9px] text-gray-400 font-bold px-1">${escapeHtml(m.sender || 'Rider')}</span>
+                    <span class="text-[9px] text-gray-400 font-bold px-1">${escapeHtml(m.sender || 'Rider')} • ${escapeHtml(m.time || '')}</span>
                     <div class="chat-msg-bubble px-3 py-2 rounded-2xl max-w-[85%] text-xs transition-all duration-700 ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'} ${isTagged ? 'pending-tag-highlight' : ''}">
                         ${formatMessageWithTags(m.text || '')}
                     </div>
