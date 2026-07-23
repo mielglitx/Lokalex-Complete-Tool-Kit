@@ -430,7 +430,7 @@
             </div>
         </div>
 
-        <!-- TUCKED EDGE TAB (No longer floating over elements) -->
+        <!-- TUCKED EDGE TAB -->
         <div id="chat-bubble" onclick="onBubbleClick()" class="relative bg-blue-600 hover:bg-blue-500 text-white py-2.5 px-3 rounded-l-2xl shadow-2xl flex items-center gap-2 cursor-pointer transition-all active:scale-95 border-l-2 border-t-2 border-b-2 border-white/20 select-none">
             <i class="fa-solid fa-comments text-base"></i>
             <span class="text-xs font-bold tracking-wide pr-1">Chat</span>
@@ -607,7 +607,6 @@
             { name: "Tuec", km: "3.3", fee: 65 }
         ];
 
-        let viewHistory = [];
         let currentType = 'customers';
         let records = [];
         let editingRecord = null;
@@ -640,6 +639,53 @@
         let currentDayTotalCommission = 0;
 
         let audioCtx = null;
+
+        // ================= DEVICE BACK BUTTON HISTORY API =================
+        window.addEventListener('popstate', function(event) {
+            if (event.state && event.state.view) {
+                renderViewUI(event.state.view);
+            } else {
+                const currentView = document.querySelector('main > section:not(.hidden)')?.id;
+                if (currentView && currentView !== 'view-home' && currentView !== 'view-login') {
+                    renderViewUI('view-home');
+                }
+            }
+        });
+
+        function switchView(targetViewId, isBackwards = false) {
+            if (!isBackwards) {
+                history.pushState({ view: targetViewId }, '', '#' + targetViewId);
+            }
+            renderViewUI(targetViewId);
+        }
+
+        function renderViewUI(targetViewId) {
+            document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
+            const targetEl = document.getElementById(targetViewId);
+            if (targetEl) targetEl.classList.remove('hidden');
+
+            if (targetViewId === 'view-home' || targetViewId === 'view-login') {
+                document.getElementById('app-header').classList.remove('hidden');
+                document.getElementById('back-btn').classList.add('hidden');
+                document.getElementById('header-spacer').classList.remove('hidden');
+                if(targetViewId === 'view-home') {
+                    document.getElementById('header-title').innerHTML = `L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub`;
+                }
+                if(targetViewId === 'view-login') document.getElementById('app-header').classList.add('hidden');
+            } else {
+                document.getElementById('app-header').classList.remove('hidden');
+                document.getElementById('back-btn').classList.remove('hidden');
+                document.getElementById('header-spacer').classList.add('hidden');
+            }
+        }
+
+        function goBack() {
+            if (window.history.length > 1) {
+                history.back();
+            } else {
+                switchView('view-home', true);
+            }
+        }
 
         function showSideNotification(title, message, iconClass = "fa-sync fa-spin", colorClass = "text-blue-400", borderClass = "border-blue-500") {
             const banner = document.getElementById('side-notification-banner');
@@ -707,7 +753,6 @@
             } catch (e) {}
         }
 
-        // ACCURATE LOCAL TODAY DATE GENERATOR
         function getLocalTodayStr() {
             const d = new Date();
             const y = d.getFullYear();
@@ -716,7 +761,6 @@
             return `${y}-${m}-${day}`;
         }
 
-        // ACCURATE STRICT LOCAL DATE COMPARISON
         function isSameDate(dateVal, targetDateStr) {
             if (!dateVal) return false;
             let str = dateVal.toString().trim();
@@ -746,10 +790,12 @@
         window.onload = () => {
             initDraggableChat();
             if (appState.telegramId) {
-                switchView('view-home');
+                history.replaceState({ view: 'view-home' }, '', '#view-home');
+                renderViewUI('view-home');
                 startRealTimePolling();
             } else {
-                document.getElementById('view-login').classList.remove('hidden');
+                history.replaceState({ view: 'view-login' }, '', '#view-login');
+                renderViewUI('view-login');
             }
         };
 
@@ -808,7 +854,8 @@
                     localStorage.setItem('riderName', appState.riderName);
                     showToast("Login Successful!");
                     
-                    switchView('view-home');
+                    history.replaceState({ view: 'view-home' }, '', '#view-home');
+                    renderViewUI('view-home');
                     await updateRosterStatus('Available');
                     startRealTimePolling();
                 } else { 
@@ -1131,7 +1178,7 @@
 
         // ================= 3. MOVEABLE CHAT BUBBLE =================
         function initDraggableChat() {
-            // Static side-tab handle (no drag required)
+            // Static side-tab handle
         }
 
         function onBubbleClick() {
@@ -1478,41 +1525,6 @@
                     <span class="text-[10px] text-gray-400 font-mono">Login: ${escapeHtml(l.loginTime)}</span>
                 </div>`;
             }).join('');
-        }
-
-        // ================= 5. NAVIGATION & BACK STACK =================
-        function switchView(targetViewId, isBackwards = false) {
-            const currentViewId = document.querySelector('main > section:not(.hidden)')?.id;
-            if (!isBackwards && currentViewId && currentViewId !== targetViewId && currentViewId !== 'view-login') {
-                viewHistory.push(currentViewId);
-            }
-
-            document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
-            document.getElementById(targetViewId).classList.remove('hidden');
-
-            if (targetViewId === 'view-home' || targetViewId === 'view-login') {
-                document.getElementById('app-header').classList.remove('hidden');
-                document.getElementById('back-btn').classList.add('hidden');
-                document.getElementById('header-spacer').classList.remove('hidden');
-                viewHistory = [];
-                if(targetViewId === 'view-home') {
-                    document.getElementById('header-title').innerHTML = `L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub`;
-                }
-                if(targetViewId === 'view-login') document.getElementById('app-header').classList.add('hidden');
-            } else {
-                document.getElementById('app-header').classList.remove('hidden');
-                document.getElementById('back-btn').classList.remove('hidden');
-                document.getElementById('header-spacer').classList.add('hidden');
-            }
-        }
-
-        function goBack() {
-            if (viewHistory.length > 0) {
-                const previousView = viewHistory.pop();
-                switchView(previousView, true);
-            } else {
-                switchView('view-home', true);
-            }
         }
 
         // ================= 6. DAILY COMMISSION & REPORT =================
@@ -1881,7 +1893,7 @@ ${customerLines}
             finally { btn.disabled = false; btn.innerText = "SAVE RECORD"; }
         }
 
-        // ================= LEAFLET MAP INTEGRATION (FIXED VIEWPORT) =================
+        // ================= LEAFLET MAP INTEGRATION =================
         function openMapPicker() {
             switchView('view-map');
 
