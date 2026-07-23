@@ -53,7 +53,7 @@
             <div class="text-center">
                 <i class="fa-solid fa-motorcycle text-5xl text-blue-500 mb-4"></i>
                 <h2 class="text-2xl font-black">L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Access</h2>
-                <p class="text-xs text-gray-400 mt-2">Requires valid ID and GPS location to log in.</p>
+                <p class="text-xs text-gray-400 mt-2">Requires valid ID to log in.</p>
             </div>
             
             <div class="bg-cardBg p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col gap-4">
@@ -308,7 +308,7 @@
             <div id="commission-receipts-list" class="flex flex-col gap-3 pb-20"></div>
         </section>
 
-        <!-- ================= DIRECTORY VIEW (ALPHABETICAL SCRUBBER FIXED) ================= -->
+        <!-- ================= DIRECTORY VIEW ================= -->
         <section id="view-directory" class="hidden flex-1 flex flex-col relative p-4">
             <div class="flex gap-2 mb-4 pr-6">
                 <div class="relative flex-1">
@@ -558,6 +558,26 @@
             }
         };
 
+        // HELPER TO GET GPS WITH FAST FALLBACK (PREVENTS TIMEOUT EXPIRED CRASH)
+        function getDeviceLocation() {
+            return new Promise((resolve) => {
+                if (!navigator.geolocation) return resolve({ lat: 0, lon: 0 });
+
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+                    (err) => {
+                        // Fallback to fast low-accuracy position
+                        navigator.geolocation.getCurrentPosition(
+                            (fPos) => resolve({ lat: fPos.coords.latitude, lon: fPos.coords.longitude }),
+                            () => resolve({ lat: 0, lon: 0 }),
+                            { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
+                        );
+                    },
+                    { enableHighAccuracy: true, timeout: 7000, maximumAge: 60000 }
+                );
+            });
+        }
+
         // ================= 1. LOGIN & AUTH =================
         async function processLogin() {
             const idInput = document.getElementById('login-id').value.trim();
@@ -566,19 +586,26 @@
             btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Checking...`; btn.disabled = true;
 
             try {
-                if (!navigator.geolocation) throw new Error("GPS not supported");
-                const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, {enableHighAccuracy:true, timeout:10000}));
-                appState.lat = pos.coords.latitude; appState.lon = pos.coords.longitude;
+                const coords = await getDeviceLocation();
+                appState.lat = coords.lat; appState.lon = coords.lon;
 
                 const res = await fetch(CSV_AUTH_URL);
-                if (!res.ok) throw new Error("Cannot reach server");
+                if (!res.ok) throw new Error("Cannot reach authorization sheet");
                 const csvData = await res.text();
                 
                 let authorized = false;
                 for (let line of csvData.split('\n')) {
                     const cols = line.split(',');
-                    if (cols.length >= 2 && cols[0].trim() === idInput) {
-                        appState.riderName = cols[1].trim(); appState.telegramId = idInput; authorized = true; break;
+                    if (cols.length >= 2) {
+                        const cleanId = cols[0].replace(/['"\r\n]+/g, '').trim();
+                        const cleanName = cols[1].replace(/['"\r\n]+/g, '').trim();
+
+                        if (cleanId === idInput) {
+                            appState.riderName = cleanName; 
+                            appState.telegramId = idInput; 
+                            authorized = true; 
+                            break;
+                        }
                     }
                 }
 
@@ -590,9 +617,15 @@
                     switchView('view-home');
                     await updateRosterStatus('Available');
                     startRealTimePolling();
-                } else { showToast("Access Denied."); }
-            } catch (err) { showToast(err.message || "Error"); } 
-            finally { btn.innerHTML = "LOGIN & MARK AVAILABLE"; btn.disabled = false; }
+                } else { 
+                    showToast("Access Denied: ID not found in sheet."); 
+                }
+            } catch (err) { 
+                showToast(err.message || "Error during login"); 
+            } finally { 
+                btn.innerHTML = "LOGIN & MARK AVAILABLE"; 
+                btn.disabled = false; 
+            }
         }
 
         function logout() { localStorage.clear(); location.reload(); }
@@ -1449,7 +1482,7 @@ ${customerLines}
             });
             renderDirectoryRecords(filtered);
         }
-        function filterRecords() { filterDirectoryRecords(); } // Alias for safety
+        function filterRecords() { filterDirectoryRecords(); }
 
         function renderDirectoryRecords(list) {
             const container = document.getElementById('record-list');
@@ -1656,7 +1689,7 @@ ${customerLines}
             goBack();
         }
 
-        // ================= 8. SMART CART, SLIDE DELETE & REWORKED WIZARD =================
+        // ================= 8. SMART CART, SLIDE DELETE & WIZARD =================
         function showBulkAddModal() { document.getElementById('bulk-modal').classList.remove('hidden'); document.getElementById('bulk-input').value = ""; document.getElementById('bulk-input').focus(); }
         function closeBulkModal() { document.getElementById('bulk-modal').classList.add('hidden'); }
         
@@ -1818,7 +1851,6 @@ ${customerLines}
             document.getElementById('header-title').innerText = "Fee Wizard";
             switchView('view-wizard');
 
-            // Generate session Transaction ID for receipt if not existing
             if (!currentReceiptTransactionId) {
                 currentReceiptTransactionId = "TX-" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 4).toUpperCase();
             }
@@ -1926,7 +1958,6 @@ ${customerLines}
 
         function updateWizardUI() { calculateGrandTotal(); }
 
-        // GENERATE DIGITAL RECEIPT & SAVE IMMEDIATELY TO DATABASE
         async function generateFinalReceipt() {
             const customerName = document.getElementById('rcpt-name').value.trim();
             if (!customerName) {
@@ -1940,7 +1971,6 @@ ${customerLines}
 
             document.getElementById('header-title').innerText = "Official Receipt";
             
-            // SAVE TO DATABASE IMMEDIATELY ON GENERATE
             saveReceiptToDatabase(customerName);
 
             switchView('view-receipt-final');
@@ -2006,11 +2036,10 @@ ${feesTxt}➖➖➖➖➖➖➖➖➖➖➖➖
 💙 Salamat sa pagtitiwala sa Lokalex!`;
         }
 
-        // DONE BUTTON ONLY EXITS HOME (NO EXTRA DATABASE CALL NEEDED)
         function completeReceiptDone() {
             cartItems = [];
             selectedCartIds.clear();
-            currentReceiptTransactionId = ""; // Reset transaction state
+            currentReceiptTransactionId = "";
             switchView('view-home');
         }
 
