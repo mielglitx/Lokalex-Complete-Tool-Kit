@@ -545,6 +545,12 @@
 
         let audioCtx = null;
 
+        function parseQueueTime(val) {
+            if (!val) return 0;
+            const clean = val.toString().replace(/,/g, '').trim();
+            return parseFloat(clean) || 0;
+        }
+
         function unlockAudioContext() {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -712,7 +718,7 @@
             const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
             const availableRiders = rosterMembers ? rosterMembers
                 .filter(m => m.status === 'Available')
-                .sort((a, b) => (parseFloat(a.queueTime) || 0) - (parseFloat(b.queueTime) || 0)) : [];
+                .sort((a, b) => parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime)) : [];
 
             if (!amIAlreadyCatering && availableRiders.length > 0) {
                 const firstAvailable = availableRiders[0];
@@ -750,7 +756,7 @@
             existingCustomers.push(custName);
             existingTimes.push(startTime);
 
-            await updateRosterStatusData('Catering', existingCustomers.join(', '), existingTimes.join(', '), myRecord ? myRecord.queueTime : 0);
+            await updateRosterStatusData('Catering', existingCustomers.join(', '), existingTimes.join(', '), myRecord ? parseQueueTime(myRecord.queueTime) : 0);
         }
 
         function triggerStatusWithSlide(targetStatus) {
@@ -809,16 +815,16 @@
                 locationLink = `https://www.google.com/maps/search/?api=1&query=${appState.lat.toFixed(6)},${appState.lon.toFixed(6)}`;
             }
 
-            // GUARANTEE LAST IN LINE POSITION WHEN MARKING AVAILABLE
+            // GUARANTEE STRICT LAST IN LINE POSITION WHEN MARKING AVAILABLE
             let newQueueTime = 0;
             if (status === 'Available') {
                 const availableRiders = rosterMembers ? rosterMembers.filter(m => m.status === 'Available' && m.telegramId.toString() !== tId.toString()) : [];
                 let maxTime = new Date().getTime();
                 availableRiders.forEach(r => {
-                    const t = parseFloat(r.queueTime) || 0;
+                    const t = parseQueueTime(r.queueTime);
                     if (t > maxTime) maxTime = t;
                 });
-                newQueueTime = maxTime + 1000; // Pushes rider strictly to the very bottom of the queue
+                newQueueTime = maxTime + 1000;
             }
 
             await updateRosterStatusData(status, "", "", newQueueTime, tId, tName, completedHistory, recordLogin, loginType, locationLink);
@@ -901,10 +907,10 @@
         }
 
         async function adminVoidActiveCustomer(riderId, riderName) {
-            const availableRiders = rosterMembers ? rosterMembers.filter(m => m.status === 'Available').sort((a,b) => (parseFloat(a.queueTime)||0) - (parseFloat(b.queueTime)||0)) : [];
+            const availableRiders = rosterMembers ? rosterMembers.filter(m => m.status === 'Available').sort((a,b) => parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime)) : [];
             let topQueueTime = new Date().getTime();
             if (availableRiders.length > 0) {
-                topQueueTime = (parseFloat(availableRiders[0].queueTime) || new Date().getTime()) - 1000;
+                topQueueTime = parseQueueTime(availableRiders[0].queueTime) - 1000;
             }
 
             await updateRosterStatusData('Available', "", "", topQueueTime, riderId, riderName, [], false);
@@ -912,21 +918,21 @@
         }
 
         function adminShiftRiderQueue(riderId, moveAction) {
-            const availableRiders = rosterMembers ? rosterMembers.filter(m => m.status === 'Available').sort((a,b) => (parseFloat(a.queueTime)||0) - (parseFloat(b.queueTime)||0)) : [];
+            const availableRiders = rosterMembers ? rosterMembers.filter(m => m.status === 'Available').sort((a,b) => parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime)) : [];
             const idx = availableRiders.findIndex(r => r.telegramId.toString() === riderId.toString());
 
             if (idx === -1) return showToast("Rider must be in Available status to shift queue.");
 
-            let targetQueueTime = availableRiders[idx].queueTime;
+            let targetQueueTime = parseQueueTime(availableRiders[idx].queueTime);
 
             if (moveAction === 'move_top') {
-                targetQueueTime = (parseFloat(availableRiders[0].queueTime) || 0) - 1000;
+                targetQueueTime = parseQueueTime(availableRiders[0].queueTime) - 1000;
             } else if (moveAction === 'move_bottom') {
-                targetQueueTime = (parseFloat(availableRiders[availableRiders.length - 1].queueTime) || 0) + 1000;
+                targetQueueTime = parseQueueTime(availableRiders[availableRiders.length - 1].queueTime) + 1000;
             } else if (moveAction === 'move_up' && idx > 0) {
-                targetQueueTime = (parseFloat(availableRiders[idx - 1].queueTime) || 0) - 100;
+                targetQueueTime = parseQueueTime(availableRiders[idx - 1].queueTime) - 100;
             } else if (moveAction === 'move_down' && idx < availableRiders.length - 1) {
-                targetQueueTime = (parseFloat(availableRiders[idx + 1].queueTime) || 0) + 100;
+                targetQueueTime = parseQueueTime(availableRiders[idx + 1].queueTime) + 100;
             } else {
                 return showToast("Cannot move further in queue.");
             }
@@ -1240,13 +1246,13 @@
             } catch(e) {}
         }
 
-        // ================= 4. UI UPDATERS =================
+        // ================= 4. UI UPDATERS (ACCURATE PARSED QUEUE SORTING) =================
         function updateRosterUI() {
             let avail = [], busy = [], brk = [];
             
             const sortedRoster = rosterMembers ? [...rosterMembers].sort((a, b) => {
                 if (a.status === 'Available' && b.status === 'Available') {
-                    return (parseFloat(a.queueTime) || 0) - (parseFloat(b.queueTime) || 0);
+                    return parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime);
                 }
                 return 0;
             }) : [];
