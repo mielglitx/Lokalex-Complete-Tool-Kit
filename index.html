@@ -30,9 +30,29 @@
         .snap-animate {
             transition: left 0.3s cubic-bezier(0.25, 1, 0.5, 1), top 0.3s cubic-bezier(0.25, 1, 0.5, 1);
         }
+        /* SIDE NOTIFICATION ANIMATION */
+        .side-notify-hidden {
+            transform: translateX(110%);
+            opacity: 0;
+        }
+        .side-notify-visible {
+            transform: translateX(0);
+            opacity: 1;
+        }
     </style>
 </head>
 <body onclick="unlockAudioContext()" class="bg-darkBg text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative">
+
+    <!-- SLIDE-OUT SIDE NOTIFICATION BANNER -->
+    <div id="side-notification-banner" class="fixed top-16 right-3 z-[9999] max-w-xs w-72 bg-gray-900/95 border-l-4 border-blue-500 text-white p-3.5 rounded-xl shadow-2xl transition-all duration-300 ease-out side-notify-hidden pointer-events-none flex items-start gap-3 backdrop-blur-md">
+        <div id="side-notify-icon-box" class="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 mt-0.5 text-sm">
+            <i id="side-notify-icon" class="fa-solid fa-sync fa-spin"></i>
+        </div>
+        <div class="flex-1 flex flex-col">
+            <span id="side-notify-title" class="font-bold text-xs text-blue-400 tracking-wide uppercase">RECORDING CHANGE...</span>
+            <p id="side-notify-msg" class="text-[11px] text-gray-300 leading-tight mt-0.5 font-medium">Updating system records...</p>
+        </div>
+    </div>
 
     <!-- HEADER BAR -->
     <header id="app-header" class="hidden bg-cardBg px-4 py-4 flex items-center justify-between shadow-md sticky top-0 z-40">
@@ -537,13 +557,39 @@
         let lastSoundProcessedCount = -1;
         let tagObserver = null;
 
+        // RUBBERBANDING PREVENTION LOCK
+        let lastLocalRosterUpdate = 0;
+
         let slideDeleteCallback = null;
         let pendingAdminTarget = null;
+        let sideNotifyTimeout = null;
 
         let currentDayCustomerMap = {};
         let currentDayTotalCommission = 0;
 
         let audioCtx = null;
+
+        // SIDE NOTIFICATION SLIDE-OUT HELPER
+        function showSideNotification(title, message, iconClass = "fa-sync fa-spin", colorClass = "text-blue-400", borderClass = "border-blue-500") {
+            const banner = document.getElementById('side-notification-banner');
+            const icon = document.getElementById('side-notify-icon');
+            const iconBox = document.getElementById('side-notify-icon-box');
+            const titleEl = document.getElementById('side-notify-title');
+            const msgEl = document.getElementById('side-notify-msg');
+
+            banner.className = `fixed top-16 right-3 z-[9999] max-w-xs w-72 bg-gray-900/95 border-l-4 ${borderClass} text-white p-3.5 rounded-xl shadow-2xl transition-all duration-300 ease-out side-notify-visible pointer-events-none flex items-start gap-3 backdrop-blur-md`;
+            
+            icon.className = `fa-solid ${iconClass}`;
+            titleEl.innerText = title;
+            titleEl.className = `font-bold text-xs ${colorClass} tracking-wide uppercase`;
+            msgEl.innerText = message;
+
+            if (sideNotifyTimeout) clearTimeout(sideNotifyTimeout);
+            sideNotifyTimeout = setTimeout(() => {
+                banner.classList.remove('side-notify-visible');
+                banner.classList.add('side-notify-hidden');
+            }, 3500);
+        }
 
         function parseQueueTime(val) {
             if (!val) return 0;
@@ -678,7 +724,7 @@
 
         function logout() { localStorage.clear(); location.reload(); }
 
-        // ================= 2. REAL-TIME FAST POLLING =================
+        // ================= 2. REAL-TIME FAST POLLING WITH RUBBERBAND LOCK =================
         function startRealTimePolling() {
             fetchAllData();
             setInterval(() => { fetchAllData(); }, 2000);
@@ -689,12 +735,17 @@
                 const res = await fetch(`${API_URL}?type=all`);
                 if (res.ok) {
                     const bundle = await res.json();
-                    rosterMembers = bundle.roster || [];
+                    
+                    // PREVENT RUBBERBANDING: Only overwrite local roster if no local action was taken in last 4 seconds
+                    if (Date.now() - lastLocalRosterUpdate > 4000) {
+                        rosterMembers = bundle.roster || [];
+                        updateRosterUI();
+                    }
+
                     globalCateredHistory = bundle.catered_history || [];
                     globalLogins = bundle.logins || [];
                     chatMessages = bundle.chat || [];
 
-                    updateRosterUI();
                     loadGlobalCateredList();
                     loadGlobalLoginList();
                     updateChatBadgesAndUI();
@@ -756,6 +807,8 @@
             existingCustomers.push(custName);
             existingTimes.push(startTime);
 
+            showSideNotification("RECORDING CATERING", `Moving to Catering — adding customer ${custName} to ${appState.riderName}`, "fa-motorcycle", "text-red-400", "border-red-500");
+
             await updateRosterStatusData('Catering', existingCustomers.join(', '), existingTimes.join(', '), myRecord ? parseQueueTime(myRecord.queueTime) : 0);
         }
 
@@ -768,9 +821,11 @@
             }
 
             if (targetStatus === 'Available') {
+                showSideNotification("RECORDING STATUS", `Marking ${appState.riderName} Available — placing at end of line`, "fa-user-check", "text-green-400", "border-green-500");
                 updateRosterStatus('Available');
             } else {
                 openSlideDeleteModal(`Sigurado ka bang mag-iiba ng status sa [${targetStatus}]?`, () => {
+                    showSideNotification("RECORDING STATUS", `Setting status to ${targetStatus} for ${appState.riderName}...`, "fa-user-clock", "text-amber-400", "border-amber-500");
                     updateRosterStatus(targetStatus);
                 });
             }
@@ -833,6 +888,8 @@
             const tId = specificId || appState.telegramId;
             const tName = specificName || appState.riderName;
 
+            lastLocalRosterUpdate = Date.now(); // SET LOCK TO STOP RUBBERBANDING
+
             let existingRider = rosterMembers.find(m => m.telegramId.toString() === tId.toString());
             if (existingRider) {
                 existingRider.status = status;
@@ -861,7 +918,6 @@
             updateRosterUI();
             loadGlobalCateredList();
             loadGlobalLoginList();
-            showToast(`Status updated to ${status}`);
 
             const payload = { 
                 type: "roster", 
@@ -881,7 +937,6 @@
             
             try {
                 await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-                setTimeout(() => { fetchAllData(); }, 800);
             } catch(e) {}
         }
 
@@ -894,13 +949,16 @@
                 document.getElementById('admin-catering-customer-name').focus();
             } else if (actionValue === 'Break' || actionValue === 'End') {
                 openSlideDeleteModal(`Sigurado ka bang i-force [${actionValue === 'End' ? 'End Shift' : 'Break'}] si Rider ${name}?`, () => {
+                    showSideNotification("ADMIN ACTION", `Force updating ${name} to ${actionValue}...`, "fa-user-shield", "text-amber-400", "border-amber-500");
                     updateRosterStatus(actionValue, id, name);
                 });
             } else if (actionValue === 'VoidActive') {
                 openSlideDeleteModal(`I-void ang kasalukuyang order ni Rider ${name}?`, () => {
+                    showSideNotification("ORDER VOIDED", `Voiding active customer order for ${name}...`, "fa-ban", "text-red-400", "border-red-500");
                     adminVoidActiveCustomer(id, name);
                 });
             } else {
+                showSideNotification("ADMIN ACTION", `Force updating ${name} to ${actionValue}...`, "fa-user-shield", "text-amber-400", "border-amber-500");
                 updateRosterStatus(actionValue, id, name);
             }
         }
@@ -913,7 +971,6 @@
             }
 
             await updateRosterStatusData('Available', "", "", topQueueTime, riderId, riderName, [], false);
-            showToast(`Voided order for ${riderName}. Placed at top of queue.`);
         }
 
         function adminShiftRiderQueue(riderId, moveAction) {
@@ -923,6 +980,7 @@
             if (idx === -1) return showToast("Rider must be in Available status to shift queue.");
 
             let targetQueueTime = parseQueueTime(availableRiders[idx].queueTime);
+            const rider = availableRiders[idx];
 
             if (moveAction === 'move_top') {
                 targetQueueTime = parseQueueTime(availableRiders[0].queueTime) - 1000;
@@ -936,7 +994,7 @@
                 return showToast("Cannot move further in queue.");
             }
 
-            const rider = availableRiders[idx];
+            showSideNotification("LINEUP SHIFTED", `Adjusted lineup position for ${rider.riderName}`, "fa-arrow-up-1-9", "text-blue-400", "border-blue-500");
             updateRosterStatusData('Available', "", "", targetQueueTime, rider.telegramId, rider.riderName);
         }
 
@@ -953,16 +1011,22 @@
 
             if (!target) return;
             const startTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            showSideNotification("ADMIN FORCE CATER", `Force assigned customer ${custName} to ${target.name}`, "fa-user-shield", "text-amber-400", "border-amber-500");
             await updateRosterStatusData('Catering', custName, startTime, 0, target.id, target.name, [], false);
         }
 
         async function forceAllEndShift() {
             openSlideDeleteModal("Sigurado ka bang nais mong i-force end shift ang lahat ng riders?", async () => {
+                showSideNotification("FORCE ALL END", "Ending shift for all roster riders...", "fa-power-off", "text-red-400", "border-red-500");
+                lastLocalRosterUpdate = Date.now();
+                
+                rosterMembers.forEach(m => { m.status = 'End'; m.customerName = ""; m.startTime = ""; });
+                updateRosterUI();
+
                 const payload = { type: "roster", action: "force_all_end" };
                 try {
                     await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-                    setTimeout(() => { fetchAllData(); showToast("All riders forced to End Shift."); }, 500);
-                } catch(e) { showToast("Failed to force end shift"); }
+                } catch(e) {}
             });
         }
 
@@ -1314,7 +1378,6 @@
             document.getElementById('home-roster-break').innerHTML = brkHtml.length ? brkHtml.join('') : '(Walang naka-break)';
         }
 
-        // REVERSED TO DISPLAY LATEST ENTRY AT THE TOP
         function loadGlobalCateredList() {
             const feed = document.getElementById('catered-customers-feed');
             const badge = document.getElementById('catered-count-badge');
@@ -1329,7 +1392,6 @@
                 return;
             }
 
-            // Slice & reverse so the latest entry appears at the top
             feed.innerHTML = todayHistory.slice().reverse().map(h => {
                 let voidBtn = "";
                 if (isAdmin()) {
@@ -1356,6 +1418,7 @@
         }
 
         async function executeVoidCustomer(riderName, customerName, completedDate) {
+            showSideNotification("CUSTOMER VOIDED", `Voiding customer ${customerName} for ${riderName}...`, "fa-ban", "text-red-400", "border-red-500");
             const payload = {
                 type: "void_history",
                 riderName: riderName,
@@ -1364,11 +1427,9 @@
             };
             try {
                 await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-                setTimeout(() => { fetchAllData(); showToast("Customer record voided."); }, 500);
             } catch(e) {}
         }
 
-        // REVERSED TO DISPLAY LATEST LOGIN AT THE TOP
         function loadGlobalLoginList() {
             const feed = document.getElementById('login-list-feed');
             const badge = document.getElementById('login-count-badge');
@@ -1383,7 +1444,6 @@
                 return;
             }
 
-            // Slice & reverse so the newest login appears at the top
             feed.innerHTML = todayLogins.slice().reverse().map(l => {
                 let mapBtn = "";
                 if (l.location) {
@@ -1695,6 +1755,7 @@ ${customerLines}
         function promptDeleteRecord(record) {
             const recName = record['name'] || record['customer name'] || record['store name'] || "Record";
             openSlideDeleteModal(`Sigurado ka bang nais burahin ang [${recName}]?`, async () => {
+                showSideNotification("DELETING RECORD", `Removing ${recName} from database...`, "fa-trash", "text-red-400", "border-red-500");
                 const payload = {
                     type: currentType,
                     action: "delete",
@@ -1702,11 +1763,8 @@ ${customerLines}
                 };
                 try {
                     await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-                    setTimeout(() => {
-                        showToast("Record deleted!");
-                        syncData();
-                    }, 600);
-                } catch(e) { showToast("Failed to delete record."); }
+                    setTimeout(() => { syncData(); }, 600);
+                } catch(e) {}
             });
         }
 
@@ -1729,6 +1787,9 @@ ${customerLines}
             if (!name) return showToast("Name is required");
             const btn = document.getElementById('form-submit-btn');
             btn.disabled = true; btn.innerText = "SAVING...";
+
+            showSideNotification("SAVING RECORD", `Updating ${name} in database...`, "fa-floppy-disk", "text-green-400", "border-green-500");
+
             const payload = { 
                 type: currentType, 
                 action: editingRecord ? "edit" : "add", 
@@ -1742,7 +1803,6 @@ ${customerLines}
             try {
                 await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
                 setTimeout(() => {
-                    showToast("Database updated!"); 
                     goBack(); 
                     openDirectory(currentType);
                 }, 600);
@@ -2083,6 +2143,7 @@ ${customerLines}
 
             document.getElementById('header-title').innerText = "Official Receipt";
             
+            showSideNotification("SAVING RECEIPT", `Saving receipt log for ${customerName}`, "fa-receipt", "text-emerald-400", "border-emerald-500");
             saveReceiptToDatabase(customerName);
 
             switchView('view-receipt-final');
@@ -2110,7 +2171,6 @@ ${customerLines}
                 date: new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0')
             };
 
-            showToast("Saving receipt record...");
             try {
                 await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
             } catch(e) {}
