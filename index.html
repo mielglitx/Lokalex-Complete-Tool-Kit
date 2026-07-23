@@ -30,7 +30,6 @@
         .snap-animate {
             transition: left 0.3s cubic-bezier(0.25, 1, 0.5, 1), top 0.3s cubic-bezier(0.25, 1, 0.5, 1);
         }
-        /* SIDE NOTIFICATION ANIMATION */
         .side-notify-hidden {
             transform: translateX(110%);
             opacity: 0;
@@ -62,7 +61,11 @@
         <h1 id="header-title" class="text-lg font-bold tracking-wide mx-auto">
             L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub
         </h1>
-        <div id="header-spacer" class="w-16"></div>
+        
+        <!-- KEEP SCREEN ON / WAKE LOCK TOGGLE -->
+        <button id="wakelock-btn" onclick="toggleWakeLock()" class="text-[11px] font-bold px-2 py-1 rounded-lg border border-gray-700 bg-inputBg text-gray-400 flex items-center gap-1 transition active:scale-95" title="Keep screen awake while on duty">
+            <i id="wakelock-icon" class="fa-solid fa-sun text-xs"></i> <span id="wakelock-text">Awake</span>
+        </button>
     </header>
 
     <!-- CONTAINER -->
@@ -382,7 +385,7 @@
             </button>
         </section>
 
-        <!-- ================= MAP PICKER VIEW (FIXED SCREEN FIT) ================= -->
+        <!-- ================= MAP PICKER VIEW ================= -->
         <section id="view-map" class="hidden fixed inset-0 bg-darkBg z-[100] flex flex-col h-screen max-h-screen overflow-hidden">
             <header class="bg-cardBg px-4 py-4 flex items-center justify-between shadow-md shrink-0">
                 <button onclick="goBack()" class="text-red-400 font-semibold flex items-center gap-2 transition active:opacity-50">Cancel</button>
@@ -402,7 +405,7 @@
 
     </main>
 
-    <!-- TUCKED TEAM COMMS CHAT WIDGET (Sits neatly on right side edge) -->
+    <!-- TUCKED TEAM COMMS CHAT WIDGET -->
     <div id="floating-chat-container" class="fixed right-0 bottom-24 z-50 flex flex-col items-end">
         <div id="expanded-chat-window" class="hidden bg-cardBg border border-gray-700 rounded-2xl shadow-2xl w-80 sm:w-88 h-96 flex flex-col overflow-hidden mr-3 mb-2 transition-all">
             <div id="chat-drag-handle" class="bg-gray-800 p-3 flex items-center justify-between select-none border-b border-gray-700">
@@ -430,12 +433,29 @@
             </div>
         </div>
 
-        <!-- TUCKED EDGE TAB -->
         <div id="chat-bubble" onclick="onBubbleClick()" class="relative bg-blue-600 hover:bg-blue-500 text-white py-2.5 px-3 rounded-l-2xl shadow-2xl flex items-center gap-2 cursor-pointer transition-all active:scale-95 border-l-2 border-t-2 border-b-2 border-white/20 select-none">
             <i class="fa-solid fa-comments text-base"></i>
             <span class="text-xs font-bold tracking-wide pr-1">Chat</span>
             <div id="chat-tag-badge" class="hidden absolute -top-1.5 -left-1.5 w-5 h-5 bg-amber-500 text-black text-[10px] font-black rounded-full flex items-center justify-center border-2 border-darkBg animate-bounce shadow-md">!</div>
             <div id="chat-unread-badge" class="hidden absolute -top-1.5 -left-1.5 min-w-[20px] h-5 px-1 bg-red-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-darkBg shadow-md">0</div>
+        </div>
+    </div>
+
+    <!-- TARGET RIDER ALARM / RING MODAL -->
+    <div id="rider-ring-modal" class="hidden fixed inset-0 bg-red-950/90 backdrop-blur-md z-[10000] flex items-center justify-center p-4">
+        <div class="bg-cardBg border-2 border-red-500 p-6 rounded-3xl w-full max-w-xs text-center shadow-2xl flex flex-col gap-4 animate-bounce">
+            <div class="w-16 h-16 bg-red-600/30 text-red-500 rounded-full flex items-center justify-center mx-auto text-3xl">
+                <i class="fa-solid fa-bell fa-shake"></i>
+            </div>
+            <div>
+                <h3 class="font-black text-xl text-red-400">🚨 YOU ARE #1 IN QUEUE!</h3>
+                <p class="text-xs text-gray-300 mt-2 leading-relaxed">
+                    <span id="ring-caller-name" class="font-bold text-amber-400">A teammate</span> is reminding you to start catering your order!
+                </p>
+            </div>
+            <button onclick="dismissRiderRing()" class="w-full bg-red-600 hover:bg-red-500 text-white font-black py-3.5 rounded-xl shadow-lg transition active:scale-95 text-sm uppercase tracking-wider">
+                <i class="fa-solid fa-check"></i> I'm On It!
+            </button>
         </div>
     </div>
 
@@ -629,24 +649,75 @@
         let lastSoundProcessedCount = -1;
         let tagObserver = null;
 
+        // OPTIMISTIC UPDATE LOCK & STATE
         let lastLocalRosterUpdate = 0;
+        let localOptimisticUserRecord = null;
+
+        let lastRungAlertTime = 0;
+        let ringIntervalTimer = null;
+        let wakeLock = null;
 
         let slideDeleteCallback = null;
         let pendingAdminTarget = null;
         let sideNotifyTimeout = null;
+        let lastBackPressTime = 0;
 
         let currentDayCustomerMap = {};
         let currentDayTotalCommission = 0;
 
         let audioCtx = null;
 
-        // ================= DEVICE BACK BUTTON HISTORY API =================
-        window.addEventListener('popstate', function(event) {
-            if (event.state && event.state.view) {
-                renderViewUI(event.state.view);
+        // SCREEN WAKE LOCK API
+        async function toggleWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    if (wakeLock) {
+                        await wakeLock.release();
+                        wakeLock = null;
+                        updateWakeLockUI(false);
+                        showToast("Screen Wake Lock disabled");
+                    } else {
+                        wakeLock = await navigator.wakeLock.request('screen');
+                        updateWakeLockUI(true);
+                        showToast("Screen Wake Lock active — device will stay awake!");
+                    }
+                } catch (err) {
+                    showToast("Could not enable wake lock");
+                }
             } else {
-                const currentView = document.querySelector('main > section:not(.hidden)')?.id;
-                if (currentView && currentView !== 'view-home' && currentView !== 'view-login') {
+                showToast("Wake Lock API not supported on browser");
+            }
+        }
+
+        function updateWakeLockUI(active) {
+            const btn = document.getElementById('wakelock-btn');
+            const icon = document.getElementById('wakelock-icon');
+            if (active) {
+                btn.className = "text-[11px] font-bold px-2 py-1 rounded-lg border border-amber-500 bg-amber-500/20 text-amber-400 flex items-center gap-1 transition active:scale-95";
+                icon.className = "fa-solid fa-sun text-xs animate-spin";
+            } else {
+                btn.className = "text-[11px] font-bold px-2 py-1 rounded-lg border border-gray-700 bg-inputBg text-gray-400 flex items-center gap-1 transition active:scale-95";
+                icon.className = "fa-solid fa-sun text-xs";
+            }
+        }
+
+        // ================= DEVICE BACK BUTTON & EXIT PREVENTION =================
+        window.addEventListener('popstate', function(event) {
+            const currentView = document.querySelector('main > section:not(.hidden)')?.id;
+            
+            if (currentView === 'view-home' || currentView === 'view-login') {
+                const now = Date.now();
+                if (now - lastBackPressTime < 2500) {
+                    return;
+                } else {
+                    lastBackPressTime = now;
+                    showToast("Press back again to minimize app");
+                    history.pushState({ view: currentView }, '', '#' + currentView);
+                }
+            } else {
+                if (event.state && event.state.view) {
+                    renderViewUI(event.state.view);
+                } else {
                     renderViewUI('view-home');
                 }
             }
@@ -751,6 +822,30 @@
                     osc.stop(now + 0.2);
                 }
             } catch (e) {}
+        }
+
+        function playLoudAlarmSiren() {
+            try {
+                unlockAudioContext();
+                if (!audioCtx) return;
+
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(950, now);
+                osc.frequency.linearRampToValueAtTime(1500, now + 0.25);
+                osc.frequency.linearRampToValueAtTime(950, now + 0.5);
+
+                gain.gain.setValueAtTime(0.6, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            } catch(e) {}
         }
 
         function getLocalTodayStr() {
@@ -871,7 +966,7 @@
 
         function logout() { localStorage.clear(); location.reload(); }
 
-        // ================= 2. REAL-TIME FAST POLLING =================
+        // ================= 2. REAL-TIME FAST POLLING & OPTIMISTIC ROSTER MERGE =================
         function startRealTimePolling() {
             fetchAllData();
             setInterval(() => { fetchAllData(); }, 2000);
@@ -883,10 +978,27 @@
                 if (res.ok) {
                     const bundle = await res.json();
                     
-                    if (Date.now() - lastLocalRosterUpdate > 4000) {
-                        rosterMembers = bundle.roster || [];
-                        updateRosterUI();
+                    let fetchedRoster = bundle.roster || [];
+
+                    // OPTIMISTIC SMART MERGE: Preserve all fetched riders, apply local override to current user if pending save
+                    if (Date.now() - lastLocalRosterUpdate < 4000 && localOptimisticUserRecord) {
+                        const myIdx = fetchedRoster.findIndex(m => m.telegramId.toString() === appState.telegramId.toString());
+                        if (myIdx !== -1) {
+                            fetchedRoster[myIdx] = {
+                                ...fetchedRoster[myIdx],
+                                ...localOptimisticUserRecord
+                            };
+                        } else if (appState.telegramId) {
+                            fetchedRoster.push({
+                                telegramId: appState.telegramId,
+                                riderName: appState.riderName,
+                                ...localOptimisticUserRecord
+                            });
+                        }
                     }
+
+                    rosterMembers = fetchedRoster;
+                    updateRosterUI();
 
                     globalCateredHistory = bundle.catered_history || [];
                     globalLogins = bundle.logins || [];
@@ -895,7 +1007,48 @@
                     loadGlobalCateredList();
                     loadGlobalLoginList();
                     updateChatBadgesAndUI();
+
+                    // CHECK FOR RING ALERT TARGETING THIS RIDER
+                    if (bundle.ringAlert && bundle.ringAlert.targetId && bundle.ringAlert.targetId.toString() === appState.telegramId.toString()) {
+                        const ringTime = parseFloat(bundle.ringAlert.time) || 0;
+                        if (Date.now() - ringTime < 25000 && ringTime !== lastRungAlertTime) {
+                            lastRungAlertTime = ringTime;
+                            triggerRiderRingModal(bundle.ringAlert.senderName);
+                        }
+                    }
                 }
+            } catch(e) {}
+        }
+
+        function triggerRiderRingModal(callerName) {
+            document.getElementById('ring-caller-name').innerText = callerName || "A teammate";
+            document.getElementById('rider-ring-modal').classList.remove('hidden');
+
+            if (ringIntervalTimer) clearInterval(ringIntervalTimer);
+            playLoudAlarmSiren();
+            ringIntervalTimer = setInterval(() => {
+                playLoudAlarmSiren();
+            }, 600);
+        }
+
+        function dismissRiderRing() {
+            if (ringIntervalTimer) {
+                clearInterval(ringIntervalTimer);
+                ringIntervalTimer = null;
+            }
+            document.getElementById('rider-ring-modal').classList.add('hidden');
+        }
+
+        async function ringFirstRider(targetId, targetName) {
+            showSideNotification("RINGING RIDER", `Ringing rider ${targetName}'s phone!`, "fa-bell", "text-amber-400", "border-amber-500");
+            const payload = {
+                type: "ring_rider",
+                targetId: targetId,
+                targetName: targetName,
+                senderName: appState.riderName
+            };
+            try {
+                await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
             } catch(e) {}
         }
 
@@ -1034,7 +1187,17 @@
             const tId = specificId || appState.telegramId;
             const tName = specificName || appState.riderName;
 
-            lastLocalRosterUpdate = Date.now();
+            const isMe = (tId.toString() === appState.telegramId.toString());
+
+            if (isMe) {
+                lastLocalRosterUpdate = Date.now();
+                localOptimisticUserRecord = {
+                    status: status,
+                    customerName: customerName,
+                    startTime: startTime,
+                    queueTime: queueTime
+                };
+            }
 
             let existingRider = rosterMembers.find(m => m.telegramId.toString() === tId.toString());
             if (existingRider) {
@@ -1177,9 +1340,7 @@
         }
 
         // ================= 3. MOVEABLE CHAT BUBBLE =================
-        function initDraggableChat() {
-            // Static side-tab handle
-        }
+        function initDraggableChat() {}
 
         function onBubbleClick() {
             const windowEl = document.getElementById('expanded-chat-window');
@@ -1374,7 +1535,7 @@
             } catch(e) {}
         }
 
-        // ================= 4. UI UPDATERS =================
+        // ================= 4. UI UPDATERS (CLEANED UP MARKUP) =================
         function updateRosterUI() {
             if (!rosterMembers) return;
 
@@ -1398,44 +1559,61 @@
             let availHtml = [], busyHtml = [], brkHtml = [];
             let availCounter = 1;
 
-            availableRiders.forEach(m => {
-                let nameStr = m.riderName;
+            availableRiders.forEach((m, idx) => {
+                let adminControls = "";
+                let ringBtn = "";
+
+                if (idx === 0 && m.telegramId.toString() !== appState.telegramId.toString()) {
+                    ringBtn = `
+                    <button onclick="ringFirstRider('${m.telegramId}', '${escapeHtml(m.riderName)}')" class="bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/40 text-[10px] font-bold px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-sm">
+                        <i class="fa-solid fa-bell text-xs animate-bounce"></i> Ring
+                    </button>`;
+                }
 
                 if (isAdmin()) {
                     document.getElementById('admin-force-all-btn').classList.remove('hidden');
                     
                     let adminSelect = ` <select onchange="adminForceStatus('${m.telegramId}', '${m.riderName}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Admin Force</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
-                    nameStr += adminSelect;
-
-                    nameStr += `
-                    <div class="inline-flex gap-1 ml-2 text-[10px] align-middle">
+                    
+                    let shiftBtns = `
+                    <div class="inline-flex gap-1 ml-1 text-[10px] align-middle">
                         <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_top')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Top">⬆️</button>
                         <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_up')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Up (+1)">▲</button>
                         <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_down')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Down (-1)">▼</button>
                         <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_bottom')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Bottom">⬇️</button>
                     </div>`;
+
+                    adminControls = adminSelect + shiftBtns;
                 }
 
-                availHtml.push(`<div class="flex items-center justify-between py-1"><span class="font-bold text-green-400 mr-2">${availCounter++}.</span><span class="flex-1">${nameStr}</span></div>`);
+                availHtml.push(`
+                    <div class="flex items-center justify-between py-1">
+                        <div class="flex items-center flex-wrap gap-1">
+                            <span class="font-bold text-green-400 mr-1">${availCounter++}.</span>
+                            <span class="font-bold text-white">${escapeHtml(m.riderName)}</span>
+                            ${adminControls}
+                        </div>
+                        ${ringBtn}
+                    </div>`);
             });
 
             cateringRiders.forEach(m => {
-                let nameStr = m.riderName;
+                let nameStr = `<span class="font-bold text-white">${escapeHtml(m.riderName)}</span>`;
                 if (m.customerName) {
                     nameStr += ` <span class="text-orange-300 text-[10px]">(${escapeHtml(m.customerName)})</span>`;
                 }
                 if (isAdmin()) {
                     nameStr += ` <select onchange="adminForceStatus('${m.telegramId}', '${m.riderName}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Admin Force</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
                 }
-                busyHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
+                busyHtml.push(`<div class="flex items-center justify-between py-1"><div>${nameStr}</div></div>`);
             });
 
             breakRiders.forEach(m => {
-                let nameStr = m.riderName;
+                let nameStr = `<span class="font-bold text-white">${escapeHtml(m.riderName)}</span>`;
                 if (isAdmin()) {
                     nameStr += ` <select onchange="adminForceStatus('${m.telegramId}', '${m.riderName}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Admin Force</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
                 }
-                brkHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
+                brkHtml.push(`<div class="flex items-center justify-between py-1"><div>${nameStr}</div></div>`);
             });
 
             document.getElementById('home-roster-avail').innerHTML = availHtml.length ? availHtml.join('') : '(Walang naka-duty)';
