@@ -1245,7 +1245,7 @@
             } catch(e) {}
         }
 
-        // ================= 4. UI UPDATERS (STRICT NUMERIC ISOLATED SORT) =================
+        // ================= 4. UI UPDATERS =================
         function updateRosterUI() {
             if (!rosterMembers) return;
 
@@ -1259,7 +1259,6 @@
             document.getElementById('btn-status-cater').style.opacity = (isEnded || isOnBreak) ? '0.3' : '1';
             document.getElementById('btn-status-break').style.opacity = isEnded ? '0.3' : '1';
 
-            // ISOLATE AVAILABLE RIDERS & SORT STRICTLY BY QUEUE TIME
             const availableRiders = rosterMembers
                 .filter(m => m.status === 'Available')
                 .sort((a, b) => parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime));
@@ -1315,6 +1314,7 @@
             document.getElementById('home-roster-break').innerHTML = brkHtml.length ? brkHtml.join('') : '(Walang naka-break)';
         }
 
+        // REVERSED TO DISPLAY LATEST ENTRY AT THE TOP
         function loadGlobalCateredList() {
             const feed = document.getElementById('catered-customers-feed');
             const badge = document.getElementById('catered-count-badge');
@@ -1329,7 +1329,8 @@
                 return;
             }
 
-            feed.innerHTML = todayHistory.map(h => {
+            // Slice & reverse so the latest entry appears at the top
+            feed.innerHTML = todayHistory.slice().reverse().map(h => {
                 let voidBtn = "";
                 if (isAdmin()) {
                     voidBtn = `<button onclick="promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate)}')" class="bg-red-900/40 text-red-400 hover:bg-red-800 text-[10px] font-bold px-2 py-1 rounded border border-red-700/50 transition active:scale-95"><i class="fa-solid fa-ban"></i> Void</button>`;
@@ -1367,6 +1368,7 @@
             } catch(e) {}
         }
 
+        // REVERSED TO DISPLAY LATEST LOGIN AT THE TOP
         function loadGlobalLoginList() {
             const feed = document.getElementById('login-list-feed');
             const badge = document.getElementById('login-count-badge');
@@ -1381,7 +1383,8 @@
                 return;
             }
 
-            feed.innerHTML = todayLogins.map(l => {
+            // Slice & reverse so the newest login appears at the top
+            feed.innerHTML = todayLogins.slice().reverse().map(l => {
                 let mapBtn = "";
                 if (l.location) {
                     mapBtn = `<a href="${escapeHtml(l.location)}" target="_blank" class="text-[10px] text-emerald-400 font-bold underline flex items-center gap-1 mt-0.5 active:opacity-60"><i class="fa-solid fa-location-dot text-red-500"></i> View Pin Location</a>`;
