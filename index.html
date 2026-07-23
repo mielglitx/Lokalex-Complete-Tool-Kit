@@ -1147,7 +1147,7 @@
 
                 return `
                 <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'} my-0.5">
-                    <span class="text-[9px] text-gray-400 font-bold px-1">${escapeHtml(m.sender || 'Rider')}</span>
+                    <span class="text-[9px] text-gray-400 font-bold px-1">${escapeHtml(m.sender || 'Rider')} • ${escapeHtml(m.time || '')}</span>
                     <div class="chat-msg-bubble px-3 py-2 rounded-2xl max-w-[85%] text-xs transition-all duration-700 ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'} ${isTagged ? 'pending-tag-highlight' : ''}">
                         ${formatMessageWithTags(m.text || '')}
                     </div>
@@ -1230,7 +1230,7 @@
                 text: text,
                 time: timeStr
             });
-            lastSoundProcessedCount = chatMessages.length; 
+            lastSoundProcessedCount = chatMessages.length;
             renderBubbleMessages();
 
             const payload = {
@@ -1245,18 +1245,11 @@
             } catch(e) {}
         }
 
-        // ================= 4. UI UPDATERS (NUMBERED QUEUE) =================
+        // ================= 4. UI UPDATERS (STRICT NUMERIC ISOLATED SORT) =================
         function updateRosterUI() {
-            let avail = [], busy = [], brk = [];
-            
-            const sortedRoster = rosterMembers ? [...rosterMembers].sort((a, b) => {
-                if (a.status === 'Available' && b.status === 'Available') {
-                    return parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime);
-                }
-                return 0;
-            }) : [];
+            if (!rosterMembers) return;
 
-            const myRecord = rosterMembers ? rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
+            const myRecord = rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString());
             const isEnded = myRecord && myRecord.status === 'End';
             const isOnBreak = myRecord && myRecord.status === 'Break';
 
@@ -1266,13 +1259,19 @@
             document.getElementById('btn-status-cater').style.opacity = (isEnded || isOnBreak) ? '0.3' : '1';
             document.getElementById('btn-status-break').style.opacity = isEnded ? '0.3' : '1';
 
+            // ISOLATE AVAILABLE RIDERS & SORT STRICTLY BY QUEUE TIME
+            const availableRiders = rosterMembers
+                .filter(m => m.status === 'Available')
+                .sort((a, b) => parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime));
+
+            const cateringRiders = rosterMembers.filter(m => m.status === 'Catering');
+            const breakRiders = rosterMembers.filter(m => m.status === 'Break');
+
+            let availHtml = [], busyHtml = [], brkHtml = [];
             let availCounter = 1;
 
-            sortedRoster.forEach(m => {
+            availableRiders.forEach(m => {
                 let nameStr = m.riderName;
-                if (m.status === 'Catering' && m.customerName) {
-                    nameStr += ` <span class="text-orange-300 text-[10px]">(${escapeHtml(m.customerName)})</span>`;
-                }
 
                 if (isAdmin()) {
                     document.getElementById('admin-force-all-btn').classList.remove('hidden');
@@ -1280,29 +1279,40 @@
                     let adminSelect = ` <select onchange="adminForceStatus('${m.telegramId}', '${m.riderName}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Admin Force</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
                     nameStr += adminSelect;
 
-                    if (m.status === 'Available') {
-                        nameStr += `
-                        <div class="inline-flex gap-1 ml-2 text-[10px] align-middle">
-                            <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_top')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Top">⬆️</button>
-                            <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_up')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Up (+1)">▲</button>
-                            <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_down')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Down (-1)">▼</button>
-                            <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_bottom')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Bottom">⬇️</button>
-                        </div>`;
-                    }
+                    nameStr += `
+                    <div class="inline-flex gap-1 ml-2 text-[10px] align-middle">
+                        <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_top')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Top">⬆️</button>
+                        <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_up')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Up (+1)">▲</button>
+                        <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_down')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Down (-1)">▼</button>
+                        <button onclick="adminShiftRiderQueue('${m.telegramId}', 'move_bottom')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Bottom">⬇️</button>
+                    </div>`;
                 }
 
-                if (m.status === 'Available') {
-                    avail.push(`<div class="flex items-center justify-between py-1"><span class="font-bold text-green-400 mr-2">${availCounter++}.</span><span class="flex-1">${nameStr}</span></div>`);
-                } else if (m.status === 'Catering') {
-                    busy.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
-                } else if (m.status === 'Break') {
-                    brk.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
-                }
+                availHtml.push(`<div class="flex items-center justify-between py-1"><span class="font-bold text-green-400 mr-2">${availCounter++}.</span><span class="flex-1">${nameStr}</span></div>`);
             });
 
-            document.getElementById('home-roster-avail').innerHTML = avail.length ? avail.join('') : '(Walang naka-duty)';
-            document.getElementById('home-roster-busy').innerHTML = busy.length ? busy.join('') : '(Walang bumibiyahe)';
-            document.getElementById('home-roster-break').innerHTML = brk.length ? brk.join('') : '(Walang naka-break)';
+            cateringRiders.forEach(m => {
+                let nameStr = m.riderName;
+                if (m.customerName) {
+                    nameStr += ` <span class="text-orange-300 text-[10px]">(${escapeHtml(m.customerName)})</span>`;
+                }
+                if (isAdmin()) {
+                    nameStr += ` <select onchange="adminForceStatus('${m.telegramId}', '${m.riderName}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Admin Force</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
+                }
+                busyHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
+            });
+
+            breakRiders.forEach(m => {
+                let nameStr = m.riderName;
+                if (isAdmin()) {
+                    nameStr += ` <select onchange="adminForceStatus('${m.telegramId}', '${m.riderName}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Admin Force</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
+                }
+                brkHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
+            });
+
+            document.getElementById('home-roster-avail').innerHTML = availHtml.length ? availHtml.join('') : '(Walang naka-duty)';
+            document.getElementById('home-roster-busy').innerHTML = busyHtml.length ? busyHtml.join('') : '(Walang bumibiyahe)';
+            document.getElementById('home-roster-break').innerHTML = brkHtml.length ? brkHtml.join('') : '(Walang naka-break)';
         }
 
         function loadGlobalCateredList() {
