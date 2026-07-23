@@ -809,7 +809,18 @@
                 locationLink = `https://www.google.com/maps/search/?api=1&query=${appState.lat.toFixed(6)},${appState.lon.toFixed(6)}`;
             }
 
-            const newQueueTime = (status === 'Available') ? new Date().getTime() : 0;
+            // GUARANTEE LAST IN LINE POSITION WHEN MARKING AVAILABLE
+            let newQueueTime = 0;
+            if (status === 'Available') {
+                const availableRiders = rosterMembers ? rosterMembers.filter(m => m.status === 'Available' && m.telegramId.toString() !== tId.toString()) : [];
+                let maxTime = new Date().getTime();
+                availableRiders.forEach(r => {
+                    const t = parseFloat(r.queueTime) || 0;
+                    if (t > maxTime) maxTime = t;
+                });
+                newQueueTime = maxTime + 1000; // Pushes rider strictly to the very bottom of the queue
+            }
+
             await updateRosterStatusData(status, "", "", newQueueTime, tId, tName, completedHistory, recordLogin, loginType, locationLink);
         }
 
@@ -1244,7 +1255,6 @@
             const isEnded = myRecord && myRecord.status === 'End';
             const isOnBreak = myRecord && myRecord.status === 'Break';
 
-            // Disable Catering if on End Shift OR on Break
             document.getElementById('btn-status-cater').disabled = isEnded || isOnBreak;
             document.getElementById('btn-status-break').disabled = isEnded;
             
