@@ -382,18 +382,18 @@
             </button>
         </section>
 
-        <!-- ================= MAP PICKER VIEW ================= -->
-        <section id="view-map" class="hidden flex-1 flex flex-col absolute inset-0 bg-darkBg z-50">
-            <header class="bg-cardBg px-4 py-4 flex items-center justify-between shadow-md">
+        <!-- ================= MAP PICKER VIEW (FIXED SCREEN FIT) ================= -->
+        <section id="view-map" class="hidden fixed inset-0 bg-darkBg z-[100] flex flex-col h-screen max-h-screen overflow-hidden">
+            <header class="bg-cardBg px-4 py-4 flex items-center justify-between shadow-md shrink-0">
                 <button onclick="goBack()" class="text-red-400 font-semibold flex items-center gap-2 transition active:opacity-50">Cancel</button>
-                <h1 class="text-base font-bold">Pick Location</h1>
+                <h1 class="text-base font-bold">Pick Location Pin</h1>
                 <div class="w-16"></div>
             </header>
-            <div class="flex-1 relative">
+            <div class="flex-1 relative w-full h-full min-h-0">
                 <div id="google-map-container" class="w-full h-full"></div>
                 <div class="map-center-marker"><i class="fa-solid fa-location-dot"></i></div>
             </div>
-            <div class="p-4 bg-cardBg shadow-lg">
+            <div class="p-4 bg-cardBg shadow-lg shrink-0 z-10 border-t border-gray-800">
                 <button onclick="confirmGoogleMapPin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold p-4 rounded-xl shadow-lg transition active:scale-95">
                     Confirm Location Pin
                 </button>
@@ -402,13 +402,12 @@
 
     </main>
 
-    <!-- FLOATING CHAT WIDGET -->
-    <div id="floating-chat-container" class="fixed bottom-6 right-4 z-50 flex flex-col items-end touch-none snap-animate">
-        <div id="expanded-chat-window" class="hidden bg-cardBg border border-gray-700 rounded-2xl shadow-2xl w-80 sm:w-88 h-96 flex flex-col overflow-hidden mb-3 transition-all">
-            <div id="chat-drag-handle" class="bg-gray-800 p-3 flex items-center justify-between cursor-move select-none border-b border-gray-700">
+    <!-- TUCKED TEAM COMMS CHAT WIDGET (Sits neatly on right side edge) -->
+    <div id="floating-chat-container" class="fixed right-0 bottom-24 z-50 flex flex-col items-end">
+        <div id="expanded-chat-window" class="hidden bg-cardBg border border-gray-700 rounded-2xl shadow-2xl w-80 sm:w-88 h-96 flex flex-col overflow-hidden mr-3 mb-2 transition-all">
+            <div id="chat-drag-handle" class="bg-gray-800 p-3 flex items-center justify-between select-none border-b border-gray-700">
                 <div class="flex items-center gap-2 font-bold text-xs text-blue-400">
                     <i class="fa-solid fa-comments text-base"></i> Team Comms
-                    <span class="text-[9px] text-gray-400 font-normal">(Drag header to move)</span>
                 </div>
                 <button onclick="toggleChatWindow(false)" class="text-gray-400 hover:text-white text-sm active:scale-90">
                     <i class="fa-solid fa-xmark"></i>
@@ -431,10 +430,12 @@
             </div>
         </div>
 
-        <div id="chat-bubble" onclick="onBubbleClick()" class="relative w-14 h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center text-2xl cursor-pointer transition active:scale-90 border-2 border-white/20 select-none">
-            <i class="fa-solid fa-comments"></i>
-            <div id="chat-tag-badge" class="hidden absolute -top-1 -left-1 w-6 h-6 bg-amber-500 text-black text-xs font-black rounded-full flex items-center justify-center border-2 border-darkBg animate-bounce shadow-md">!</div>
-            <div id="chat-unread-badge" class="hidden absolute -top-1 -right-1 min-w-[22px] h-5 px-1 bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-darkBg shadow-md">0</div>
+        <!-- TUCKED EDGE TAB (No longer floating over elements) -->
+        <div id="chat-bubble" onclick="onBubbleClick()" class="relative bg-blue-600 hover:bg-blue-500 text-white py-2.5 px-3 rounded-l-2xl shadow-2xl flex items-center gap-2 cursor-pointer transition-all active:scale-95 border-l-2 border-t-2 border-b-2 border-white/20 select-none">
+            <i class="fa-solid fa-comments text-base"></i>
+            <span class="text-xs font-bold tracking-wide pr-1">Chat</span>
+            <div id="chat-tag-badge" class="hidden absolute -top-1.5 -left-1.5 w-5 h-5 bg-amber-500 text-black text-[10px] font-black rounded-full flex items-center justify-center border-2 border-darkBg animate-bounce shadow-md">!</div>
+            <div id="chat-unread-badge" class="hidden absolute -top-1.5 -left-1.5 min-w-[20px] h-5 px-1 bg-red-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-darkBg shadow-md">0</div>
         </div>
     </div>
 
@@ -542,7 +543,6 @@
         const ADMIN_IDS = ["4547425", "5548562"];
         function isAdmin() { return ADMIN_IDS.includes(appState.telegramId); }
 
-        // HARDCODED BARANGAY DELIVERY RATES DATASET
         const BARANGAY_DATA = [
             { name: "Anoling 1st", km: "5.5", fee: 95 },
             { name: "Anoling 2nd", km: "6.7", fee: 110 },
@@ -630,7 +630,6 @@
         let lastSoundProcessedCount = -1;
         let tagObserver = null;
 
-        // RUBBERBANDING PREVENTION LOCK
         let lastLocalRosterUpdate = 0;
 
         let slideDeleteCallback = null;
@@ -642,7 +641,6 @@
 
         let audioCtx = null;
 
-        // SIDE NOTIFICATION SLIDE-OUT HELPER
         function showSideNotification(title, message, iconClass = "fa-sync fa-spin", colorClass = "text-blue-400", borderClass = "border-blue-500") {
             const banner = document.getElementById('side-notification-banner');
             const icon = document.getElementById('side-notify-icon');
@@ -709,10 +707,40 @@
             } catch (e) {}
         }
 
+        // ACCURATE LOCAL TODAY DATE GENERATOR
+        function getLocalTodayStr() {
+            const d = new Date();
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        // ACCURATE STRICT LOCAL DATE COMPARISON
         function isSameDate(dateVal, targetDateStr) {
             if (!dateVal) return false;
-            const clean = dateVal.toString().split('T')[0].trim();
-            return clean === targetDateStr;
+            let str = dateVal.toString().trim();
+            if (str.indexOf("T") !== -1) str = str.split("T")[0];
+            
+            str = str.replace(/\//g, '-');
+            
+            const parts = str.split('-');
+            if (parts.length === 3) {
+                let y, m, d;
+                if (parts[0].length === 4) {
+                    y = parts[0];
+                    m = parts[1].padStart(2, '0');
+                    d = parts[2].padStart(2, '0');
+                } else if (parts[2].length === 4) {
+                    m = parts[0].padStart(2, '0');
+                    d = parts[1].padStart(2, '0');
+                    y = parts[2];
+                }
+                if (y && m && d) {
+                    return `${y}-${m}-${d}` === targetDateStr;
+                }
+            }
+            return str === targetDateStr;
         }
 
         window.onload = () => {
@@ -921,7 +949,7 @@
                         riderName: tName,
                         customerName: custs[i],
                         startTime: times[i] || 'N/A',
-                        completedDate: new Date().toISOString().split('T')[0]
+                        completedDate: getLocalTodayStr()
                     });
                 }
             }
@@ -980,7 +1008,7 @@
                 globalLogins.push({
                     riderName: tName,
                     loginTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    date: new Date().toISOString().split('T')[0],
+                    date: getLocalTodayStr(),
                     loginType: loginType,
                     location: locationLink
                 });
@@ -1003,7 +1031,7 @@
                 loginType: loginType,
                 location: locationLink,
                 loginTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                date: new Date().toISOString().split('T')[0]
+                date: getLocalTodayStr()
             };
             
             try {
@@ -1102,92 +1130,11 @@
         }
 
         // ================= 3. MOVEABLE CHAT BUBBLE =================
-        let isChatDragging = false;
-        let chatMoved = false;
-        let startX = 0, startY = 0, initialLeft = 0, initialTop = 0;
-
         function initDraggableChat() {
-            const container = document.getElementById('floating-chat-container');
-            const bubble = document.getElementById('chat-bubble');
-            const handle = document.getElementById('chat-drag-handle');
-
-            const startDrag = (e) => {
-                isChatDragging = true;
-                chatMoved = false;
-                container.classList.remove('snap-animate');
-
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
-                startX = clientX; startY = clientY;
-
-                const rect = container.getBoundingClientRect();
-                initialLeft = rect.left; initialTop = rect.top;
-
-                document.addEventListener('mousemove', moveDrag);
-                document.addEventListener('mouseup', endDrag);
-                document.addEventListener('touchmove', moveDrag, { passive: false });
-                document.addEventListener('touchend', endDrag);
-            };
-
-            const moveDrag = (e) => {
-                if (!isChatDragging) return;
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
-                const dx = clientX - startX;
-                const dy = clientY - startY;
-
-                if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-                    chatMoved = true;
-                    if (e.cancelable) e.preventDefault();
-                }
-
-                let newLeft = initialLeft + dx;
-                let newTop = initialTop + dy;
-
-                const maxX = window.innerWidth - container.offsetWidth;
-                const maxY = window.innerHeight - container.offsetHeight;
-
-                newLeft = Math.max(10, Math.min(newLeft, maxX - 10));
-                newTop = Math.max(10, Math.min(newTop, maxY - 10));
-
-                container.style.left = newLeft + 'px';
-                container.style.top = newTop + 'px';
-                container.style.bottom = 'auto';
-                container.style.right = 'auto';
-            };
-
-            const endDrag = () => {
-                if (!isChatDragging) return;
-                isChatDragging = false;
-                document.removeEventListener('mousemove', moveDrag);
-                document.removeEventListener('mouseup', endDrag);
-                document.removeEventListener('touchmove', moveDrag);
-                document.removeEventListener('touchend', endDrag);
-
-                const currentLeft = container.offsetLeft;
-                const bubbleWidth = container.offsetWidth;
-                const screenWidth = window.innerWidth;
-                const centerX = currentLeft + bubbleWidth / 2;
-
-                let snapLeft = 10;
-                if (centerX > screenWidth / 2) {
-                    snapLeft = screenWidth - bubbleWidth - 10;
-                }
-
-                container.classList.add('snap-animate');
-                container.style.left = snapLeft + 'px';
-            };
-
-            bubble.addEventListener('mousedown', startDrag);
-            bubble.addEventListener('touchstart', startDrag, { passive: false });
-            handle.addEventListener('mousedown', startDrag);
-            handle.addEventListener('touchstart', startDrag, { passive: false });
+            // Static side-tab handle (no drag required)
         }
 
         function onBubbleClick() {
-            if (chatMoved) return;
             const windowEl = document.getElementById('expanded-chat-window');
             const isHidden = windowEl.classList.contains('hidden');
             toggleChatWindow(isHidden);
@@ -1449,11 +1396,12 @@
             document.getElementById('home-roster-break').innerHTML = brkHtml.length ? brkHtml.join('') : '(Walang naka-break)';
         }
 
+        // STRICT SAME-DAY LOG FILTERING
         function loadGlobalCateredList() {
             const feed = document.getElementById('catered-customers-feed');
             const badge = document.getElementById('catered-count-badge');
             
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = getLocalTodayStr();
             const todayHistory = globalCateredHistory ? globalCateredHistory.filter(h => isSameDate(h.completedDate, todayStr)) : [];
 
             badge.innerText = `${todayHistory.length} recorded`;
@@ -1501,11 +1449,12 @@
             } catch(e) {}
         }
 
+        // STRICT SAME-DAY LOG FILTERING
         function loadGlobalLoginList() {
             const feed = document.getElementById('login-list-feed');
             const badge = document.getElementById('login-count-badge');
 
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = getLocalTodayStr();
             const todayLogins = globalLogins ? globalLogins.filter(l => isSameDate(l.date, todayStr)) : [];
 
             badge.innerText = `${todayLogins.length} logins`;
@@ -1573,11 +1522,7 @@
             const container = document.getElementById('commission-receipts-list');
             container.innerHTML = `<div class="text-center py-10 text-gray-500"><i class="fa-solid fa-spinner fa-spin"></i> Loading records...</div>`;
 
-            const now = new Date();
-            const todayStr = now.getFullYear() + '-' + 
-                             String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-                             String(now.getDate()).padStart(2, '0');
-            
+            const todayStr = getLocalTodayStr();
             const targetDate = selectedDate || todayStr;
             document.getElementById('commission-date-picker').value = targetDate;
             document.getElementById('commission-date-label').innerText = targetDate === todayStr ? "Today" : targetDate;
@@ -1606,7 +1551,7 @@
 
                     const myTargetReceipts = allReceipts.filter(r => {
                         let rDate = (r.date || r.Date || "").toString().split('T')[0];
-                        if (rDate !== targetDate) return false;
+                        if (!isSameDate(rDate, targetDate)) return false;
 
                         if (isAdmin() && selectedFilterRider === "ALL") return true;
                         
@@ -1654,7 +1599,7 @@
         }
 
         function generateDailyReportText() {
-            const targetDate = document.getElementById('commission-date-picker').value || new Date().toISOString().split('T')[0];
+            const targetDate = document.getElementById('commission-date-picker').value || getLocalTodayStr();
             const filterTarget = isAdmin() ? document.getElementById('admin-rider-select').value : appState.riderName;
             
             let customerLines = Object.keys(currentDayCustomerMap).length > 0 
@@ -1695,7 +1640,7 @@ ${customerLines}
                 await syncData();
             } else if (type === 'barangays') {
                 document.getElementById('header-title').innerText = "Barangay Delivery Rates";
-                if(fab) fab.classList.add('hidden'); // Hide Add FAB for static rates
+                if(fab) fab.classList.add('hidden');
                 records = BARANGAY_DATA.map(b => ({ name: b.name, km: b.km, fee: b.fee }));
                 sortRecordsAlphabetically();
                 filterDirectoryRecords();
@@ -1752,7 +1697,6 @@ ${customerLines}
             const container = document.getElementById('record-list');
             if (list.length === 0) return container.innerHTML = `<div class="text-center py-20 text-gray-500">No records found.</div>`;
 
-            // SPECIAL RENDERER FOR BARANGAY RATES
             if (currentType === 'barangays') {
                 container.innerHTML = list.map((b) => {
                     const uid = Math.random().toString(36).substr(2, 9);
@@ -1788,7 +1732,6 @@ ${customerLines}
                 return;
             }
 
-            // STANDARD RENDERER FOR CUSTOMERS AND STORES
             container.innerHTML = list.map((record) => {
                 const name = record['name'] || record['customer name'] || record['store name'] || "Unknown";
                 const contact = record['contact'] || record['phone'] || "";
@@ -1867,7 +1810,6 @@ ${customerLines}
             });
         }
 
-        // Form Logic & Map Picker
         function promptEditRecord(record) {
             if (isAdmin()) {
                 openSlideDeleteModal(`I-edit ang record na ito [${record['name'] || record['customer name'] || record['store name']}]?`, () => {
@@ -1939,7 +1881,7 @@ ${customerLines}
             finally { btn.disabled = false; btn.innerText = "SAVE RECORD"; }
         }
 
-        // ================= LEAFLET INTEGRATION =================
+        // ================= LEAFLET MAP INTEGRATION (FIXED VIEWPORT) =================
         function openMapPicker() {
             switchView('view-map');
 
@@ -1952,8 +1894,8 @@ ${customerLines}
                     }).addTo(leafletMap);
                 } else {
                     leafletMap.setView([lat, lng], 17);
-                    leafletMap.invalidateSize();
                 }
+                setTimeout(() => { leafletMap.invalidateSize(); }, 300);
                 appState.lat = lat;
                 appState.lon = lng;
             };
@@ -2297,7 +2239,7 @@ ${customerLines}
                 customerName: customerName,
                 fees: feesObj,
                 totalFees: totalFees,
-                date: new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0')
+                date: getLocalTodayStr()
             };
 
             try {
