@@ -90,26 +90,34 @@
         <!-- ================= HOME / DASHBOARD VIEW ================= -->
         <section id="view-home" class="hidden flex-1 flex flex-col p-4 gap-4 py-4">
             <!-- Hub Grid -->
-            <div class="grid grid-cols-2 gap-3 mt-1">
-                <button onclick="switchView('view-cart')" class="col-span-2 bg-emerald-600/20 border border-emerald-600 hover:bg-emerald-600/30 p-4 rounded-xl flex items-center gap-4 transition active:scale-95">
+            <div class="flex flex-col gap-3 mt-1">
+                <button onclick="switchView('view-cart')" class="w-full bg-emerald-600/20 border border-emerald-600 hover:bg-emerald-600/30 p-4 rounded-xl flex items-center gap-4 transition active:scale-95">
                     <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-xl"><i class="fa-solid fa-receipt"></i></div>
                     <div class="text-left"><div class="text-base font-bold text-emerald-400">Smart Cart</div><div class="text-xs text-gray-400">Draft orders & receipts</div></div>
                 </button>
 
-                <button onclick="openCommissionScreen()" class="col-span-2 bg-amber-600/20 border border-amber-600 hover:bg-amber-600/30 p-4 rounded-xl flex items-center gap-4 transition active:scale-95">
+                <button onclick="openCommissionScreen()" class="w-full bg-amber-600/20 border border-amber-600 hover:bg-amber-600/30 p-4 rounded-xl flex items-center gap-4 transition active:scale-95">
                     <div class="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center text-xl"><i class="fa-solid fa-wallet"></i></div>
                     <div class="text-left"><div class="text-base font-bold text-amber-400">Daily Commission</div><div class="text-xs text-gray-400">View daily attained fees & earnings</div></div>
                 </button>
 
-                <button onclick="openDirectory('customers')" class="bg-cardBg border border-gray-800 p-4 rounded-xl flex flex-col items-center gap-2 transition active:scale-95">
-                    <i class="fa-solid fa-users text-2xl text-blue-400"></i>
-                    <div class="text-sm font-bold">Customers</div>
-                </button>
+                <!-- 3 DIRECTORIES: Customers, Stores, Barangay Rates -->
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="openDirectory('customers')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1.5 transition active:scale-95">
+                        <i class="fa-solid fa-users text-xl text-blue-400"></i>
+                        <div class="text-xs font-bold">Customers</div>
+                    </button>
 
-                <button onclick="openDirectory('stores')" class="bg-cardBg border border-gray-800 p-4 rounded-xl flex flex-col items-center gap-2 transition active:scale-95">
-                    <i class="fa-solid fa-store text-2xl text-orange-400"></i>
-                    <div class="text-sm font-bold">Stores</div>
-                </button>
+                    <button onclick="openDirectory('stores')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1.5 transition active:scale-95">
+                        <i class="fa-solid fa-store text-xl text-orange-400"></i>
+                        <div class="text-xs font-bold">Stores</div>
+                    </button>
+
+                    <button onclick="openDirectory('barangays')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1.5 transition active:scale-95">
+                        <i class="fa-solid fa-map-location-dot text-xl text-emerald-400"></i>
+                        <div class="text-xs font-bold">Rates</div>
+                    </button>
+                </div>
             </div>
 
             <!-- EMBEDDED TELEGRAM-STYLE LIVE ROSTER -->
@@ -333,7 +341,7 @@
             <div class="flex gap-2 mb-4 pr-6">
                 <div class="relative flex-1">
                     <i class="fa-solid fa-search absolute left-3 top-3.5 text-gray-400 text-sm"></i>
-                    <input type="text" id="search-input" oninput="filterDirectoryRecords()" placeholder="Search all records..." class="w-full bg-inputBg text-sm rounded-xl pl-9 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
+                    <input type="text" id="search-input" oninput="filterDirectoryRecords()" placeholder="Search records..." class="w-full bg-inputBg text-sm rounded-xl pl-9 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
                 </div>
                 <button onclick="syncData()" class="bg-cardBg hover:bg-inputBg px-4 rounded-xl border border-gray-800 text-gray-300 transition active:scale-90" title="Refresh">
                     <i class="fa-solid fa-rotate"></i>
@@ -343,7 +351,7 @@
             <div id="record-list" class="flex-1 flex flex-col gap-3 pb-20 pr-8 overflow-y-auto"></div>
             <div id="alphabet-scrubber" class="fixed right-1 top-1/2 -translate-y-1/2 flex flex-col text-[10px] text-gray-500 font-bold bg-darkBg/90 py-2 rounded-full z-20 touch-none select-none"></div>
 
-            <button onclick="openForm(null)" class="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center text-xl z-40 transition active:scale-90">
+            <button id="directory-add-fab" onclick="openForm(null)" class="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center text-xl z-40 transition active:scale-90">
                 <i class="fa-solid fa-plus"></i>
             </button>
         </section>
@@ -534,6 +542,71 @@
         const ADMIN_IDS = ["4547425", "5548562"];
         function isAdmin() { return ADMIN_IDS.includes(appState.telegramId); }
 
+        // HARDCODED BARANGAY DELIVERY RATES DATASET
+        const BARANGAY_DATA = [
+            { name: "Anoling 1st", km: "5.5", fee: 95 },
+            { name: "Anoling 2nd", km: "6.7", fee: 110 },
+            { name: "Anoling 3rd", km: "7.6", fee: 125 },
+            { name: "Bacabac", km: "5.4", fee: 95 },
+            { name: "Bacsay", km: "10.9", fee: 170 },
+            { name: "Bancay 1st", km: "5.3", fee: 95 },
+            { name: "Bilad", km: "7.1", fee: 125 },
+            { name: "Birbira", km: "7.6", fee: 125 },
+            { name: "Bobon 1st", km: "3.7", fee: 65 },
+            { name: "Bobon 2nd", km: "4.5", fee: 80 },
+            { name: "Bobon Caarosipan", km: "4.8", fee: 80 },
+            { name: "Cabanabaan", km: "5.5", fee: 95 },
+            { name: "Cacamilingan Norte", km: "1", fee: 50 },
+            { name: "Cacamilingan Sur", km: "1", fee: 50 },
+            { name: "Caniag", km: "7.7", fee: 125 },
+            { name: "Carael", km: "9.5", fee: 155 },
+            { name: "Cayaoan", km: "1", fee: 50 },
+            { name: "Cayasan", km: "8.6", fee: 140 },
+            { name: "Florida", km: "9", fee: 140 },
+            { name: "Lasong", km: "7.6", fee: 125 },
+            { name: "Libueg", km: "2.6", fee: 50 },
+            { name: "Malacampa", km: "6", fee: 95 },
+            { name: "Manaquem", km: "7.1", fee: 125 },
+            { name: "Manupeg", km: "8", fee: 125 },
+            { name: "Marawi", km: "5.7", fee: 95 },
+            { name: "Matubog", km: "3.6", fee: 65 },
+            { name: "Nagrambacan", km: "6", fee: 95 },
+            { name: "Nagserialan", km: "4.4", fee: 80 },
+            { name: "Palimbo Proper", km: "3.9", fee: 65 },
+            { name: "Palimbo-Caarosipan", km: "2.6", fee: 50 },
+            { name: "Pao 1st", km: "1.8", fee: 50 },
+            { name: "Pao 2nd", km: "2.2", fee: 50 },
+            { name: "Pao 3rd", km: "3.9", fee: 65 },
+            { name: "Papaac", km: "11.9", fee: 185 },
+            { name: "Pindangan 1st", km: "7.8", fee: 125 },
+            { name: "Pindangan 2nd", km: "10.1", fee: 170 },
+            { name: "Poblacion A", km: "1", fee: 50 },
+            { name: "Poblacion B", km: "1", fee: 50 },
+            { name: "Poblacion C", km: "1", fee: 50 },
+            { name: "Poblacion D", km: "1", fee: 50 },
+            { name: "Poblacion E", km: "1", fee: 50 },
+            { name: "Poblacion F", km: "1", fee: 50 },
+            { name: "Poblacion G", km: "1", fee: 50 },
+            { name: "Poblacion H", km: "1", fee: 50 },
+            { name: "Poblacion I", km: "1", fee: 50 },
+            { name: "Poblacion J", km: "1", fee: 50 },
+            { name: "San Isidro", km: "6.7", fee: 110 },
+            { name: "Santa Maria", km: "8.4", fee: 140 },
+            { name: "Sawat", km: "4.1", fee: 80 },
+            { name: "Sinilian 1st", km: "6.6", fee: 110 },
+            { name: "Sinilian 2nd", km: "8", fee: 125 },
+            { name: "Sinilian 3rd", km: "8.5", fee: 140 },
+            { name: "Sinilian Cacalibosoan", km: "7", fee: 110 },
+            { name: "Sinulatan 1st", km: "4.8", fee: 80 },
+            { name: "Sinulatan 2nd", km: "5.1", fee: 95 },
+            { name: "Surgui 1st", km: "1.8", fee: 50 },
+            { name: "Surgui 2nd", km: "2", fee: 50 },
+            { name: "Surgui 3rd", km: "2.5", fee: 50 },
+            { name: "Tambugan", km: "2.8", fee: 50 },
+            { name: "Telbang", km: "4.7", fee: 80 },
+            { name: "Tuec", km: "3.3", fee: 65 }
+        ];
+
         let viewHistory = [];
         let currentType = 'customers';
         let records = [];
@@ -573,7 +646,6 @@
         function showSideNotification(title, message, iconClass = "fa-sync fa-spin", colorClass = "text-blue-400", borderClass = "border-blue-500") {
             const banner = document.getElementById('side-notification-banner');
             const icon = document.getElementById('side-notify-icon');
-            const iconBox = document.getElementById('side-notify-icon-box');
             const titleEl = document.getElementById('side-notify-title');
             const msgEl = document.getElementById('side-notify-msg');
 
@@ -724,7 +796,7 @@
 
         function logout() { localStorage.clear(); location.reload(); }
 
-        // ================= 2. REAL-TIME FAST POLLING WITH RUBBERBAND LOCK =================
+        // ================= 2. REAL-TIME FAST POLLING =================
         function startRealTimePolling() {
             fetchAllData();
             setInterval(() => { fetchAllData(); }, 2000);
@@ -736,7 +808,6 @@
                 if (res.ok) {
                     const bundle = await res.json();
                     
-                    // PREVENT RUBBERBANDING: Only overwrite local roster if no local action was taken in last 4 seconds
                     if (Date.now() - lastLocalRosterUpdate > 4000) {
                         rosterMembers = bundle.roster || [];
                         updateRosterUI();
@@ -888,7 +959,7 @@
             const tId = specificId || appState.telegramId;
             const tName = specificName || appState.riderName;
 
-            lastLocalRosterUpdate = Date.now(); // SET LOCK TO STOP RUBBERBANDING
+            lastLocalRosterUpdate = Date.now();
 
             let existingRider = rosterMembers.find(m => m.telegramId.toString() === tId.toString());
             if (existingRider) {
@@ -1609,9 +1680,30 @@ ${customerLines}
         // ================= 7. DIRECTORY & ALPHABETICAL SCRUBBER =================
         async function openDirectory(type) {
             currentType = type; activeFilterLetter = ""; document.getElementById('search-input').value = "";
-            document.getElementById('header-title').innerText = type === 'customers' ? "Customer Directory" : "Store Directory";
+            
+            const fab = document.getElementById('directory-add-fab');
+
+            if (type === 'customers') {
+                document.getElementById('header-title').innerText = "Customer Directory";
+                if(fab) fab.classList.remove('hidden');
+                loadLocalRecords(); 
+                await syncData();
+            } else if (type === 'stores') {
+                document.getElementById('header-title').innerText = "Store Directory";
+                if(fab) fab.classList.remove('hidden');
+                loadLocalRecords(); 
+                await syncData();
+            } else if (type === 'barangays') {
+                document.getElementById('header-title').innerText = "Barangay Delivery Rates";
+                if(fab) fab.classList.add('hidden'); // Hide Add FAB for static rates
+                records = BARANGAY_DATA.map(b => ({ name: b.name, km: b.km, fee: b.fee }));
+                sortRecordsAlphabetically();
+                filterDirectoryRecords();
+            }
+
             switchView('view-directory');
-            buildAlphabetScrubber(); attachScrubberEvents(); loadLocalRecords(); await syncData();
+            buildAlphabetScrubber(); 
+            attachScrubberEvents(); 
         }
 
         function buildAlphabetScrubber() {
@@ -1659,7 +1751,44 @@ ${customerLines}
         function renderDirectoryRecords(list) {
             const container = document.getElementById('record-list');
             if (list.length === 0) return container.innerHTML = `<div class="text-center py-20 text-gray-500">No records found.</div>`;
-            
+
+            // SPECIAL RENDERER FOR BARANGAY RATES
+            if (currentType === 'barangays') {
+                container.innerHTML = list.map((b) => {
+                    const uid = Math.random().toString(36).substr(2, 9);
+                    const msgText = `Hello! 👋 The delivery fee to ${b.name} is ₱${b.fee}. Please note that additional fees (such as handling or multi-stop fees) may apply depending on your order. Would you like to see our full fee guidelines?`;
+
+                    return `
+                        <div class="bg-cardBg border border-gray-800/80 rounded-xl shadow-sm flex flex-col transition-all overflow-hidden">
+                            <div onclick="toggleCard('${uid}')" class="p-4 flex items-center justify-between cursor-pointer active:bg-white/5 transition">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-9 h-9 rounded-full bg-emerald-600/20 text-emerald-400 flex items-center justify-center font-bold text-sm">
+                                        <i class="fa-solid fa-map-location-dot"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="font-bold text-sm text-white">${escapeHtml(b.name)}</h3>
+                                        <div class="text-[10px] text-gray-400">${b.km} km distance</div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <span class="text-sm font-black text-emerald-400">₱${b.fee}</span>
+                                    <i id="card-icon-${uid}" class="fa-solid fa-chevron-down text-gray-500 transition-transform duration-300"></i>
+                                </div>
+                            </div>
+                            <div id="card-details-${uid}" class="hidden px-4 pb-4 pt-2 border-t border-gray-800/50 text-xs text-gray-300 flex flex-col gap-3">
+                                <div class="bg-darkBg p-3 rounded-xl border border-gray-700/60 font-sans text-xs text-gray-200 leading-relaxed select-text">
+                                    ${escapeHtml(msgText)}
+                                </div>
+                                <button onclick="event.stopPropagation(); copyText(\`${escapeHtml(msgText)}\`)" class="w-full bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 font-bold py-2.5 rounded-xl border border-emerald-600/30 flex items-center justify-center gap-2 transition active:scale-95">
+                                    <i class="fa-solid fa-copy"></i> Copy Customer Message
+                                </button>
+                            </div>
+                        </div>`;
+                }).join('');
+                return;
+            }
+
+            // STANDARD RENDERER FOR CUSTOMERS AND STORES
             container.innerHTML = list.map((record) => {
                 const name = record['name'] || record['customer name'] || record['store name'] || "Unknown";
                 const contact = record['contact'] || record['phone'] || "";
