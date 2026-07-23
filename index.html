@@ -32,7 +32,7 @@
         }
     </style>
 </head>
-<body class="bg-darkBg text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative">
+<body onclick="unlockAudioContext()" class="bg-darkBg text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative">
 
     <!-- HEADER BAR -->
     <header id="app-header" class="hidden bg-cardBg px-4 py-4 flex items-center justify-between shadow-md sticky top-0 z-40">
@@ -534,6 +534,7 @@
         let globalLogins = [];
         let chatMessages = [];
         let lastReadChatCount = parseInt(localStorage.getItem('lastReadChatCount') || "0");
+        let lastSoundProcessedCount = -1;
         let tagObserver = null;
 
         let slideDeleteCallback = null;
@@ -541,6 +542,48 @@
 
         let currentDayCustomerMap = {};
         let currentDayTotalCommission = 0;
+
+        let audioCtx = null;
+
+        function unlockAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playNotificationSound(isMention = false) {
+            try {
+                unlockAudioContext();
+                if (!audioCtx) return;
+
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = 'sine';
+                if (isMention) {
+                    osc.frequency.setValueAtTime(880, now);
+                    osc.frequency.exponentialRampToValueAtTime(1320, now + 0.15);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                } else {
+                    osc.frequency.setValueAtTime(600, now);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.2);
+                }
+            } catch (e) {}
+        }
 
         function isSameDate(dateVal, targetDateStr) {
             if (!dateVal) return false;
@@ -578,6 +621,7 @@
 
         // ================= 1. LOGIN & AUTH =================
         async function processLogin() {
+            unlockAudioContext();
             const idInput = document.getElementById('login-id').value.trim();
             if (!idInput) return showToast("Please enter a valid ID");
             const btn = document.getElementById('login-btn');
@@ -654,9 +698,15 @@
 
         function promptCateringStatus() {
             const myRecord = rosterMembers ? rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
-            if (myRecord && myRecord.status === 'End') {
-                showToast("⚠️ Naka-End Shift ka. Mag-Available muna bago mag-Cater.");
-                return;
+            if (myRecord) {
+                if (myRecord.status === 'End') {
+                    showToast("⚠️ Naka-End Shift ka. Mag-Available muna bago mag-Cater.");
+                    return;
+                }
+                if (myRecord.status === 'Break') {
+                    showToast("⚠️ Naka-Break ka. Mag-Available muna bago mag-Cater.");
+                    return;
+                }
             }
 
             const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
@@ -1008,6 +1058,33 @@
         }
 
         function updateChatBadgesAndUI() {
+            const myName = (appState.riderName || "").toLowerCase();
+
+            if (lastSoundProcessedCount === -1) {
+                lastSoundProcessedCount = chatMessages.length;
+            } else if (chatMessages.length > lastSoundProcessedCount) {
+                const newMessages = chatMessages.slice(lastSoundProcessedCount);
+                let hasIncoming = false;
+                let hasMention = false;
+
+                newMessages.forEach(m => {
+                    if (m.sender !== appState.riderName) {
+                        hasIncoming = true;
+                        if (myName && m.text && m.text.toLowerCase().includes('@' + myName)) {
+                            hasMention = true;
+                        }
+                    }
+                });
+
+                if (hasMention) {
+                    playNotificationSound(true);
+                } else if (hasIncoming) {
+                    playNotificationSound(false);
+                }
+
+                lastSoundProcessedCount = chatMessages.length;
+            }
+
             const isChatOpen = !document.getElementById('expanded-chat-window').classList.contains('hidden');
             if (isChatOpen) {
                 lastReadChatCount = chatMessages.length;
@@ -1024,7 +1101,6 @@
                 unreadBadge.innerText = unreadCount > 99 ? '99+' : unreadCount;
                 unreadBadge.classList.remove('hidden');
 
-                const myName = (appState.riderName || "").toLowerCase();
                 const hasTag = myName && chatMessages.slice(lastReadChatCount).some(m => {
                     return m.text && m.text.toLowerCase().includes('@' + myName);
                 });
@@ -1138,6 +1214,7 @@
                 text: text,
                 time: timeStr
             });
+            lastSoundProcessedCount = chatMessages.length;
             renderBubbleMessages();
 
             const payload = {
@@ -1165,10 +1242,13 @@
 
             const myRecord = rosterMembers ? rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
             const isEnded = myRecord && myRecord.status === 'End';
+            const isOnBreak = myRecord && myRecord.status === 'Break';
 
-            document.getElementById('btn-status-cater').disabled = isEnded;
+            // Disable Catering if on End Shift OR on Break
+            document.getElementById('btn-status-cater').disabled = isEnded || isOnBreak;
             document.getElementById('btn-status-break').disabled = isEnded;
-            document.getElementById('btn-status-cater').style.opacity = isEnded ? '0.3' : '1';
+            
+            document.getElementById('btn-status-cater').style.opacity = (isEnded || isOnBreak) ? '0.3' : '1';
             document.getElementById('btn-status-break').style.opacity = isEnded ? '0.3' : '1';
 
             sortedRoster.forEach(m => {
