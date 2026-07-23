@@ -815,7 +815,6 @@
                 locationLink = `https://www.google.com/maps/search/?api=1&query=${appState.lat.toFixed(6)},${appState.lon.toFixed(6)}`;
             }
 
-            // GUARANTEE STRICT LAST IN LINE POSITION WHEN MARKING AVAILABLE
             let newQueueTime = 0;
             if (status === 'Available') {
                 const availableRiders = rosterMembers ? rosterMembers.filter(m => m.status === 'Available' && m.telegramId.toString() !== tId.toString()) : [];
@@ -1246,7 +1245,7 @@
             } catch(e) {}
         }
 
-        // ================= 4. UI UPDATERS (ACCURATE PARSED QUEUE SORTING) =================
+        // ================= 4. UI UPDATERS (NUMBERED QUEUE) =================
         function updateRosterUI() {
             let avail = [], busy = [], brk = [];
             
@@ -1266,6 +1265,8 @@
             
             document.getElementById('btn-status-cater').style.opacity = (isEnded || isOnBreak) ? '0.3' : '1';
             document.getElementById('btn-status-break').style.opacity = isEnded ? '0.3' : '1';
+
+            let availCounter = 1;
 
             sortedRoster.forEach(m => {
                 let nameStr = m.riderName;
@@ -1290,9 +1291,13 @@
                     }
                 }
 
-                if (m.status === 'Available') avail.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
-                else if (m.status === 'Catering') busy.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
-                else if (m.status === 'Break') brk.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
+                if (m.status === 'Available') {
+                    avail.push(`<div class="flex items-center justify-between py-1"><span class="font-bold text-green-400 mr-2">${availCounter++}.</span><span class="flex-1">${nameStr}</span></div>`);
+                } else if (m.status === 'Catering') {
+                    busy.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
+                } else if (m.status === 'Break') {
+                    brk.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
+                }
             });
 
             document.getElementById('home-roster-avail').innerHTML = avail.length ? avail.join('') : '(Walang naka-duty)';
