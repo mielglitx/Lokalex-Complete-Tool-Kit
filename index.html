@@ -24,13 +24,9 @@
         .leaflet-container { width: 100%; height: 100%; z-index: 1; }
         .map-center-marker {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -100%);
-            z-index: 1000; pointer-events: none; color: #ef4444; font-size: 40px;
+            z-index: 1000; pointer-events: none; color: #ef4444; font-size: 36px;
             filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.5));
         }
-        .snap-animate {
-            transition: left 0.3s cubic-bezier(0.25, 1, 0.5, 1), top 0.3s cubic-bezier(0.25, 1, 0.5, 1);
-        }
-        /* SIDE NOTIFICATION ANIMATION */
         .side-notify-hidden {
             transform: translateX(110%);
             opacity: 0;
@@ -43,8 +39,24 @@
 </head>
 <body onclick="unlockAudioContext()" class="bg-darkBg text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative">
 
+    <!-- SCHEDULED DELIVERY ALERTS BANNER -->
+    <div id="adv-order-banner" class="hidden sticky top-0 z-[9999] bg-gradient-to-r from-amber-600 via-orange-600 to-red-600 text-white px-4 py-3 shadow-2xl flex items-center justify-between transition-all animate-bounce">
+        <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-full bg-black/30 flex items-center justify-center text-lg shrink-0">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+            </div>
+            <div>
+                <div id="adv-banner-title" class="font-black text-xs uppercase tracking-wider">SCHEDULED DELIVERY ALERT</div>
+                <div id="adv-banner-msg" class="text-xs font-semibold leading-tight">Order due soon!</div>
+            </div>
+        </div>
+        <button onclick="openAdvancedOrdersModal()" class="bg-black/40 hover:bg-black/60 text-white text-xs font-bold px-3 py-1.5 rounded-lg border border-white/20 transition active:scale-95 shrink-0">
+            View Orders
+        </button>
+    </div>
+
     <!-- SLIDE-OUT SIDE NOTIFICATION BANNER -->
-    <div id="side-notification-banner" class="fixed top-16 right-3 z-[9999] max-w-xs w-72 bg-gray-900/95 border-l-4 border-blue-500 text-white p-3.5 rounded-xl shadow-2xl transition-all duration-300 ease-out side-notify-hidden pointer-events-none flex items-start gap-3 backdrop-blur-md">
+    <div id="side-notification-banner" class="fixed top-16 right-3 z-[9998] max-w-xs w-72 bg-gray-900/95 border-l-4 border-blue-500 text-white p-3.5 rounded-xl shadow-2xl transition-all duration-300 ease-out side-notify-hidden pointer-events-none flex items-start gap-3 backdrop-blur-md">
         <div id="side-notify-icon-box" class="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 mt-0.5 text-sm">
             <i id="side-notify-icon" class="fa-solid fa-sync fa-spin"></i>
         </div>
@@ -68,7 +80,7 @@
     <!-- CONTAINER -->
     <main class="flex-1 max-w-md w-full mx-auto flex flex-col relative pb-20">
 
-        <!-- ================= LOGIN SPLASH SCREEN ================= -->
+        <!-- LOGIN SPLASH SCREEN -->
         <section id="view-login" class="hidden flex-1 flex flex-col justify-center p-6 gap-6">
             <div class="text-center">
                 <i class="fa-solid fa-motorcycle text-5xl text-blue-500 mb-4"></i>
@@ -87,21 +99,27 @@
             </div>
         </section>
 
-        <!-- ================= HOME / DASHBOARD VIEW ================= -->
+        <!-- HOME / DASHBOARD VIEW -->
         <section id="view-home" class="hidden flex-1 flex flex-col p-4 gap-4 py-4">
-            <!-- Hub Grid -->
             <div class="flex flex-col gap-3 mt-1">
                 <button onclick="switchView('view-cart')" class="w-full bg-emerald-600/20 border border-emerald-600 hover:bg-emerald-600/30 p-4 rounded-xl flex items-center gap-4 transition active:scale-95">
                     <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-xl"><i class="fa-solid fa-receipt"></i></div>
                     <div class="text-left"><div class="text-base font-bold text-emerald-400">Smart Cart</div><div class="text-xs text-gray-400">Draft orders & receipts</div></div>
                 </button>
 
-                <button onclick="openCommissionScreen()" class="w-full bg-amber-600/20 border border-amber-600 hover:bg-amber-600/30 p-4 rounded-xl flex items-center gap-4 transition active:scale-95">
-                    <div class="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center text-xl"><i class="fa-solid fa-wallet"></i></div>
-                    <div class="text-left"><div class="text-base font-bold text-amber-400">Daily Commission</div><div class="text-xs text-gray-400">View daily attained fees & earnings</div></div>
-                </button>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="openCommissionScreen()" class="bg-amber-600/20 border border-amber-600 hover:bg-amber-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95">
+                        <div class="w-10 h-10 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-wallet"></i></div>
+                        <div class="text-left"><div class="text-xs font-bold text-amber-400">Commission</div><div class="text-[10px] text-gray-400">Daily earnings</div></div>
+                    </button>
 
-                <!-- 3 DIRECTORIES: Customers, Stores, Barangay Rates -->
+                    <button onclick="openAdvancedOrdersModal()" class="bg-purple-600/20 border border-purple-600 hover:bg-purple-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95 relative">
+                        <div class="w-10 h-10 bg-purple-500/20 text-purple-400 rounded-full flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-calendar-check"></i></div>
+                        <div class="text-left"><div class="text-xs font-bold text-purple-400">Adv. Orders</div><div class="text-[10px] text-gray-400">Scheduled reminders</div></div>
+                        <div id="adv-count-badge" class="hidden absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-darkBg animate-pulse">0</div>
+                    </button>
+                </div>
+
                 <div class="grid grid-cols-3 gap-2">
                     <button onclick="openDirectory('customers')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1.5 transition active:scale-95">
                         <i class="fa-solid fa-users text-xl text-blue-400"></i>
@@ -146,7 +164,6 @@
                     <div class="pl-2 text-xs text-gray-400 mt-1 flex flex-col gap-1.5" id="home-roster-break">(Walang naka-break)</div>
                 </div>
 
-                <!-- Status Update Buttons -->
                 <div class="grid grid-cols-2 gap-2 mt-2 pt-3 border-t border-gray-700/50">
                      <button id="btn-status-avail" onclick="triggerStatusWithSlide('Available')" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95">
                          <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div> Available
@@ -188,7 +205,7 @@
             <button onclick="logout()" class="text-xs text-red-400/50 hover:text-red-400 py-2 mt-2">Log out of device</button>
         </section>
 
-        <!-- ================= SMART CART VIEW ================= -->
+        <!-- SMART CART VIEW -->
         <section id="view-cart" class="hidden flex-1 flex flex-col">
             <div class="bg-black/40 p-3 px-4 flex justify-between items-center text-sm border-b border-gray-800">
                 <span class="text-gray-400">Cart Subtotal:</span>
@@ -213,7 +230,7 @@
             </div>
         </section>
 
-        <!-- ================= FEE WIZARD VIEW ================= -->
+        <!-- FEE WIZARD VIEW -->
         <section id="view-wizard" class="hidden flex-1 flex flex-col gap-3 p-4 overflow-y-auto">
             <div class="bg-cardBg rounded-xl border border-gray-800 p-4">
                 <h3 class="text-sm font-bold text-emerald-500 uppercase tracking-wider mb-2">Client Details</h3>
@@ -293,7 +310,7 @@
             </button>
         </section>
 
-        <!-- ================= FINAL RECEIPT VIEW ================= -->
+        <!-- FINAL RECEIPT VIEW -->
         <section id="view-receipt-final" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
             <div class="flex-1 bg-cardBg border border-gray-800 rounded-xl p-4 overflow-y-auto min-h-[180px]">
                 <pre id="final-receipt-text" class="text-xs font-mono text-gray-300 whitespace-pre-wrap"></pre>
@@ -309,7 +326,7 @@
             </div>
         </section>
 
-        <!-- ================= DAILY COMMISSION VIEW ================= -->
+        <!-- DAILY COMMISSION VIEW -->
         <section id="view-commission" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
             <div class="bg-cardBg p-3 rounded-xl border border-gray-800 flex flex-col gap-2">
                 <div class="flex justify-between items-center">
@@ -336,7 +353,7 @@
             <div id="commission-receipts-list" class="flex flex-col gap-3 pb-20"></div>
         </section>
 
-        <!-- ================= DIRECTORY VIEW ================= -->
+        <!-- DIRECTORY VIEW -->
         <section id="view-directory" class="hidden flex-1 flex flex-col relative p-4">
             <div class="flex gap-2 mb-4 pr-6">
                 <div class="relative flex-1">
@@ -349,14 +366,16 @@
             </div>
             
             <div id="record-list" class="flex-1 flex flex-col gap-3 pb-20 pr-8 overflow-y-auto"></div>
-            <div id="alphabet-scrubber" class="fixed right-1 top-1/2 -translate-y-1/2 flex flex-col text-[10px] text-gray-500 font-bold bg-darkBg/90 py-2 rounded-full z-20 touch-none select-none"></div>
+            
+            <!-- RUBBER-BAND ALPHABET SCRUBBER -->
+            <div id="alphabet-scrubber" class="fixed right-1 top-1/2 -translate-y-1/2 flex flex-col text-[10px] text-gray-500 font-bold bg-darkBg/90 py-2 rounded-full z-20 touch-none select-none border border-gray-800 shadow-xl transition-transform duration-300"></div>
 
             <button id="directory-add-fab" onclick="openForm(null)" class="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center text-xl z-40 transition active:scale-90">
                 <i class="fa-solid fa-plus"></i>
             </button>
         </section>
 
-        <!-- ================= ADD / EDIT FORM VIEW ================= -->
+        <!-- ADD / EDIT FORM VIEW -->
         <section id="view-form" class="hidden flex-1 flex flex-col gap-4 p-4 overflow-y-auto">
             <div id="edit-warning" class="hidden bg-amber-500/10 border border-amber-500 p-3 rounded-xl flex items-center gap-3 text-amber-400 text-xs">
                 <i class="fa-solid fa-triangle-exclamation text-xl"></i>
@@ -371,7 +390,7 @@
                 <input type="text" id="form-address" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
                 <label class="text-xs text-gray-400 font-bold">Map Link (Lat_Lon_Link)</label>
                 <div class="flex gap-2">
-                    <input type="text" id="form-latlon" placeholder="Paste link or get from Google Map" class="flex-1 bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+                    <input type="text" id="form-latlon" placeholder="Paste link or get from Map" class="flex-1 bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
                     <button onclick="openMapPicker()" class="bg-blue-600 hover:bg-blue-500 px-4 rounded-xl text-white text-sm font-bold flex items-center gap-2 transition active:scale-95">
                         <i class="fa-solid fa-map-location-dot"></i> Map
                     </button>
@@ -382,19 +401,21 @@
             </button>
         </section>
 
-        <!-- ================= MAP PICKER VIEW (FIXED SCREEN FIT) ================= -->
-        <section id="view-map" class="hidden fixed inset-0 bg-darkBg z-[100] flex flex-col h-screen max-h-screen overflow-hidden">
-            <header class="bg-cardBg px-4 py-4 flex items-center justify-between shadow-md shrink-0">
-                <button onclick="goBack()" class="text-red-400 font-semibold flex items-center gap-2 transition active:opacity-50">Cancel</button>
-                <h1 class="text-base font-bold">Pick Location Pin</h1>
-                <div class="w-16"></div>
+        <!-- MAP PICKER VIEW (FIXED VIEWPORT BOUNDS & ALWAYS-VISIBLE BUTTON) -->
+        <section id="view-map" class="hidden fixed inset-0 bg-darkBg z-[100] flex flex-col h-screen h-[100dvh] w-full overflow-hidden">
+            <header class="bg-cardBg px-4 py-3 flex items-center justify-between shadow-md shrink-0 border-b border-gray-800">
+                <button onclick="goBack()" class="text-red-400 font-semibold flex items-center gap-2 transition active:opacity-50 text-sm">
+                    <i class="fa-solid fa-xmark"></i> Cancel
+                </button>
+                <h1 class="text-sm font-bold">Pick Location Pin</h1>
+                <div class="w-12"></div>
             </header>
-            <div class="flex-1 relative w-full h-full min-h-0">
+            <div class="flex-1 relative w-full h-full min-h-0 overflow-hidden">
                 <div id="google-map-container" class="w-full h-full"></div>
                 <div class="map-center-marker"><i class="fa-solid fa-location-dot"></i></div>
             </div>
-            <div class="p-4 bg-cardBg shadow-lg shrink-0 z-10 border-t border-gray-800">
-                <button onclick="confirmGoogleMapPin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold p-4 rounded-xl shadow-lg transition active:scale-95">
+            <div class="p-3 bg-cardBg shadow-lg shrink-0 border-t border-gray-800 z-10">
+                <button onclick="confirmGoogleMapPin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95">
                     Confirm Location Pin
                 </button>
             </div>
@@ -402,7 +423,7 @@
 
     </main>
 
-    <!-- TUCKED TEAM COMMS CHAT WIDGET (Sits neatly on right side edge) -->
+    <!-- SIDE-ONLY MOVEABLE CHAT BUBBLE WIDGET -->
     <div id="floating-chat-container" class="fixed right-0 bottom-24 z-50 flex flex-col items-end">
         <div id="expanded-chat-window" class="hidden bg-cardBg border border-gray-700 rounded-2xl shadow-2xl w-80 sm:w-88 h-96 flex flex-col overflow-hidden mr-3 mb-2 transition-all">
             <div id="chat-drag-handle" class="bg-gray-800 p-3 flex items-center justify-between select-none border-b border-gray-700">
@@ -430,12 +451,66 @@
             </div>
         </div>
 
-        <!-- TUCKED EDGE TAB -->
-        <div id="chat-bubble" onclick="onBubbleClick()" class="relative bg-blue-600 hover:bg-blue-500 text-white py-2.5 px-3 rounded-l-2xl shadow-2xl flex items-center gap-2 cursor-pointer transition-all active:scale-95 border-l-2 border-t-2 border-b-2 border-white/20 select-none">
-            <i class="fa-solid fa-comments text-base"></i>
-            <span class="text-xs font-bold tracking-wide pr-1">Chat</span>
-            <div id="chat-tag-badge" class="hidden absolute -top-1.5 -left-1.5 w-5 h-5 bg-amber-500 text-black text-[10px] font-black rounded-full flex items-center justify-center border-2 border-darkBg animate-bounce shadow-md">!</div>
-            <div id="chat-unread-badge" class="hidden absolute -top-1.5 -left-1.5 min-w-[20px] h-5 px-1 bg-red-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-darkBg shadow-md">0</div>
+        <!-- COMPACT SIDE-ONLY DRAGGABLE TAB -->
+        <div id="chat-bubble" class="relative bg-blue-600 hover:bg-blue-500 text-white py-2 px-2.5 rounded-l-xl shadow-2xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border-l-2 border-t-2 border-b-2 border-white/20 select-none touch-none">
+            <i class="fa-solid fa-comments text-sm"></i>
+            <span class="text-[11px] font-bold tracking-wide pr-0.5">Chat</span>
+            <div id="chat-tag-badge" class="hidden absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-black text-[9px] font-black rounded-full flex items-center justify-center border-2 border-darkBg animate-bounce shadow-md">!</div>
+            <div id="chat-unread-badge" class="hidden absolute -top-1.5 -left-1.5 min-w-[18px] h-4 px-1 bg-red-600 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-darkBg shadow-md">0</div>
+        </div>
+    </div>
+
+    <!-- SCHEDULED DELIVERY / ADVANCED ORDERS MODAL -->
+    <div id="adv-orders-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-gray-800 p-5 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col gap-4 max-h-[85vh]">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+                <h3 class="font-bold text-sm text-purple-400 flex items-center gap-2">
+                    <i class="fa-solid fa-calendar-check"></i> Scheduled Delivery Reminders
+                </h3>
+                <button onclick="closeAdvancedOrdersModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <!-- TAB SWITCHER -->
+            <div class="flex bg-inputBg p-1 rounded-xl text-xs font-bold">
+                <button id="adv-tab-btn-list" onclick="switchAdvTab('list')" class="flex-1 py-1.5 rounded-lg bg-purple-600 text-white transition">Orders List</button>
+                <button id="adv-tab-btn-add" onclick="switchAdvTab('add')" class="flex-1 py-1.5 rounded-lg text-gray-400 transition">+ Schedule New</button>
+            </div>
+
+            <!-- ORDERS LIST TAB -->
+            <div id="adv-tab-list-content" class="flex-1 overflow-y-auto flex flex-col gap-2 min-h-[180px]">
+                <div class="text-center text-gray-500 italic py-8 text-xs">Loading advanced orders...</div>
+            </div>
+
+            <!-- ADD ORDER TAB -->
+            <div id="adv-tab-add-content" class="hidden flex flex-col gap-2 overflow-y-auto">
+                <input type="text" id="adv-cust-name" placeholder="Customer Name *" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
+                <input type="text" id="adv-receiver" placeholder="Receiver Name / Alternate" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
+                <input type="text" id="adv-address" placeholder="Delivery Address" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
+                <input type="text" id="adv-contact" placeholder="Contact Number" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Time to Receive (Scheduled):</label>
+                    <input type="time" id="adv-receive-time" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
+                </div>
+                <button onclick="submitNewAdvancedOrder()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl mt-2 text-xs transition active:scale-95">
+                    Save Scheduled Order
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GPS REQUIRED ALERT MODAL -->
+    <div id="gps-alert-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-red-500/50 p-6 rounded-2xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-3">
+            <div class="w-14 h-14 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto text-2xl animate-pulse">
+                <i class="fa-solid fa-location-crosshairs"></i>
+            </div>
+            <h3 class="font-bold text-base text-red-400">GPS Location Required</h3>
+            <p class="text-xs text-gray-300 leading-relaxed">
+                Kailangan mong i-turn on ang iyong <strong>GPS Location</strong> sa telepono bago mag-Available sa roster.
+            </p>
+            <button onclick="closeGpsModal()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95 mt-2">
+                OK, Naintindihan Ko
+            </button>
         </div>
     </div>
 
@@ -484,7 +559,7 @@
         </div>
     </div>
 
-    <!-- UNIVERSAL PASSWORD MODAL (NON-ADMINS ONLY) -->
+    <!-- UNIVERSAL PASSWORD MODAL -->
     <div id="password-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl">
             <div class="w-12 h-12 bg-amber-500/20 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-3"><i class="fa-solid fa-lock"></i></div>
@@ -625,6 +700,7 @@
         let globalCateredHistory = [];
         let globalLogins = [];
         let chatMessages = [];
+        let globalAdvancedOrders = [];
         let lastReadChatCount = parseInt(localStorage.getItem('lastReadChatCount') || "0");
         let lastSoundProcessedCount = -1;
         let tagObserver = null;
@@ -640,13 +716,28 @@
 
         let audioCtx = null;
 
-        // ================= DEVICE BACK BUTTON HISTORY API =================
+        // 3-SWIPE BACK BUTTON EXIT PREVENTION
+        let backPressCount = 0;
+        let backPressTimer = null;
+
         window.addEventListener('popstate', function(event) {
-            if (event.state && event.state.view) {
-                renderViewUI(event.state.view);
+            const currentView = document.querySelector('main > section:not(.hidden)')?.id;
+
+            if (currentView === 'view-home' || currentView === 'view-login') {
+                backPressCount++;
+                if (backPressCount < 3) {
+                    history.pushState({ view: currentView }, '', '#' + currentView);
+                    showToast(`Press/Swipe Back ${3 - backPressCount} more time(s) to exit`);
+                    if (backPressTimer) clearTimeout(backPressTimer);
+                    backPressTimer = setTimeout(() => { backPressCount = 0; }, 3000);
+                } else {
+                    backPressCount = 0;
+                }
             } else {
-                const currentView = document.querySelector('main > section:not(.hidden)')?.id;
-                if (currentView && currentView !== 'view-home' && currentView !== 'view-login') {
+                backPressCount = 0;
+                if (event.state && event.state.view) {
+                    renderViewUI(event.state.view);
+                } else {
                     renderViewUI('view-home');
                 }
             }
@@ -693,7 +784,7 @@
             const titleEl = document.getElementById('side-notify-title');
             const msgEl = document.getElementById('side-notify-msg');
 
-            banner.className = `fixed top-16 right-3 z-[9999] max-w-xs w-72 bg-gray-900/95 border-l-4 ${borderClass} text-white p-3.5 rounded-xl shadow-2xl transition-all duration-300 ease-out side-notify-visible pointer-events-none flex items-start gap-3 backdrop-blur-md`;
+            banner.className = `fixed top-16 right-3 z-[9998] max-w-xs w-72 bg-gray-900/95 border-l-4 ${borderClass} text-white p-3.5 rounded-xl shadow-2xl transition-all duration-300 ease-out side-notify-visible pointer-events-none flex items-start gap-3 backdrop-blur-md`;
             
             icon.className = `fa-solid ${iconClass}`;
             titleEl.innerText = title;
@@ -765,24 +856,16 @@
             if (!dateVal) return false;
             let str = dateVal.toString().trim();
             if (str.indexOf("T") !== -1) str = str.split("T")[0];
-            
             str = str.replace(/\//g, '-');
-            
             const parts = str.split('-');
             if (parts.length === 3) {
                 let y, m, d;
                 if (parts[0].length === 4) {
-                    y = parts[0];
-                    m = parts[1].padStart(2, '0');
-                    d = parts[2].padStart(2, '0');
+                    y = parts[0]; m = parts[1].padStart(2, '0'); d = parts[2].padStart(2, '0');
                 } else if (parts[2].length === 4) {
-                    m = parts[0].padStart(2, '0');
-                    d = parts[1].padStart(2, '0');
-                    y = parts[2];
+                    m = parts[0].padStart(2, '0'); d = parts[1].padStart(2, '0'); y = parts[2];
                 }
-                if (y && m && d) {
-                    return `${y}-${m}-${d}` === targetDateStr;
-                }
+                if (y && m && d) return `${y}-${m}-${d}` === targetDateStr;
             }
             return str === targetDateStr;
         }
@@ -817,13 +900,20 @@
             });
         }
 
-        // ================= 1. LOGIN & AUTH =================
+        function showGpsRequiredModal() {
+            document.getElementById('gps-alert-modal').classList.remove('hidden');
+        }
+        function closeGpsModal() {
+            document.getElementById('gps-alert-modal').classList.add('hidden');
+        }
+
+        // 1. LOGIN & AUTH
         async function processLogin() {
             unlockAudioContext();
             const idInput = document.getElementById('login-id').value.trim();
             if (!idInput) return showToast("Please enter a valid ID");
             const btn = document.getElementById('login-btn');
-            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Checking...`; btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Checking GPS & Auth...`; btn.disabled = true;
 
             try {
                 const coords = await getDeviceLocation();
@@ -871,10 +961,10 @@
 
         function logout() { localStorage.clear(); location.reload(); }
 
-        // ================= 2. REAL-TIME FAST POLLING =================
+        // 2. REAL-TIME POLLING (30-SECOND INTERVAL)
         function startRealTimePolling() {
             fetchAllData();
-            setInterval(() => { fetchAllData(); }, 2000);
+            setInterval(() => { fetchAllData(); }, 30000);
         }
 
         async function fetchAllData() {
@@ -891,10 +981,12 @@
                     globalCateredHistory = bundle.catered_history || [];
                     globalLogins = bundle.logins || [];
                     chatMessages = bundle.chat || [];
+                    globalAdvancedOrders = bundle.advancedOrders || [];
 
                     loadGlobalCateredList();
                     loadGlobalLoginList();
                     updateChatBadgesAndUI();
+                    checkScheduledDeliveryAlerts();
                 }
             } catch(e) {}
         }
@@ -958,7 +1050,7 @@
             await updateRosterStatusData('Catering', existingCustomers.join(', '), existingTimes.join(', '), myRecord ? parseQueueTime(myRecord.queueTime) : 0);
         }
 
-        function triggerStatusWithSlide(targetStatus) {
+        async function triggerStatusWithSlide(targetStatus) {
             const myRecord = rosterMembers ? rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
             
             if (myRecord && myRecord.status === 'End' && targetStatus !== 'Available') {
@@ -967,14 +1059,42 @@
             }
 
             if (targetStatus === 'Available') {
+                showToast("Checking GPS location...");
+                const coords = await getDeviceLocation();
+                if (!coords || (coords.lat === 0 && coords.lon === 0)) {
+                    showGpsRequiredModal();
+                    return;
+                }
+                appState.lat = coords.lat; appState.lon = coords.lon;
                 showSideNotification("RECORDING STATUS", `Marking ${appState.riderName} Available — placing at end of line`, "fa-user-check", "text-green-400", "border-green-500");
                 updateRosterStatus('Available');
+            } else if (targetStatus === 'End') {
+                openSlideDeleteModal(`Sigurado ka bang mag-End Shift?`, async () => {
+                    showSideNotification("CLOCK OUT", `Clocking out ${appState.riderName}...`, "fa-power-off", "text-red-400", "border-red-500");
+                    await clockOutRider();
+                    updateRosterStatus('End');
+                });
             } else {
                 openSlideDeleteModal(`Sigurado ka bang mag-iiba ng status sa [${targetStatus}]?`, () => {
                     showSideNotification("RECORDING STATUS", `Setting status to ${targetStatus} for ${appState.riderName}...`, "fa-user-clock", "text-amber-400", "border-amber-500");
                     updateRosterStatus(targetStatus);
                 });
             }
+        }
+
+        async function clockOutRider() {
+            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const payload = {
+                type: "roster",
+                telegramId: appState.telegramId,
+                riderName: appState.riderName,
+                status: "End",
+                clockOut: true,
+                clockOutTime: timeStr
+            };
+            try {
+                await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+            } catch(e) {}
         }
 
         async function updateRosterStatus(status, targetId = null, targetName = null) {
@@ -1055,6 +1175,7 @@
                 globalLogins.push({
                     riderName: tName,
                     loginTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    clockOutTime: "",
                     date: getLocalTodayStr(),
                     loginType: loginType,
                     location: locationLink
@@ -1086,7 +1207,7 @@
             } catch(e) {}
         }
 
-        // ================= ADMIN CONTROLS =================
+        // ADMIN CONTROLS
         function adminForceStatus(id, name, actionValue) {
             if (actionValue === 'Catering') {
                 pendingAdminTarget = { id, name };
@@ -1176,9 +1297,43 @@
             });
         }
 
-        // ================= 3. MOVEABLE CHAT BUBBLE =================
+        // 3. MOVEABLE CHAT BUBBLE (SIDE Y-AXIS ONLY)
+        let isChatDragging = false;
+        let chatStartY = 0;
+        let chatTopOffset = 0;
+
         function initDraggableChat() {
-            // Static side-tab handle
+            const bubble = document.getElementById('chat-bubble');
+            const container = document.getElementById('floating-chat-container');
+
+            bubble.addEventListener('pointerdown', (e) => {
+                isChatDragging = false;
+                chatStartY = e.clientY;
+                const rect = container.getBoundingClientRect();
+                chatTopOffset = rect.top;
+                bubble.setPointerCapture(e.pointerId);
+            });
+
+            bubble.addEventListener('pointermove', (e) => {
+                if (Math.abs(e.clientY - chatStartY) > 5) {
+                    isChatDragging = true;
+                }
+                if (!isChatDragging) return;
+
+                const deltaY = e.clientY - chatStartY;
+                let newTop = chatTopOffset + deltaY;
+                newTop = Math.max(60, Math.min(window.innerHeight - 120, newTop));
+                container.style.top = newTop + 'px';
+                container.style.bottom = 'auto';
+            });
+
+            bubble.addEventListener('pointerup', (e) => {
+                try { bubble.releasePointerCapture(e.pointerId); } catch(err){}
+                if (!isChatDragging) {
+                    onBubbleClick();
+                }
+                isChatDragging = false;
+            });
         }
 
         function onBubbleClick() {
@@ -1374,7 +1529,7 @@
             } catch(e) {}
         }
 
-        // ================= 4. UI UPDATERS =================
+        // 4. UI UPDATERS
         function updateRosterUI() {
             if (!rosterMembers) return;
 
@@ -1443,7 +1598,6 @@
             document.getElementById('home-roster-break').innerHTML = brkHtml.length ? brkHtml.join('') : '(Walang naka-break)';
         }
 
-        // STRICT SAME-DAY LOG FILTERING
         function loadGlobalCateredList() {
             const feed = document.getElementById('catered-customers-feed');
             const badge = document.getElementById('catered-count-badge');
@@ -1496,7 +1650,6 @@
             } catch(e) {}
         }
 
-        // STRICT SAME-DAY LOG FILTERING
         function loadGlobalLoginList() {
             const feed = document.getElementById('login-list-feed');
             const badge = document.getElementById('login-count-badge');
@@ -1516,18 +1669,208 @@
                 if (l.location) {
                     mapBtn = `<a href="${escapeHtml(l.location)}" target="_blank" class="text-[10px] text-emerald-400 font-bold underline flex items-center gap-1 mt-0.5 active:opacity-60"><i class="fa-solid fa-location-dot text-red-500"></i> View Pin Location</a>`;
                 }
+                const clockOutTxt = l.clockOutTime ? `<span class="text-red-400 ml-1">(Out: ${escapeHtml(l.clockOutTime)})</span>` : '';
                 return `
                 <div class="bg-gray-800/30 border border-gray-700/40 p-2 rounded-lg flex justify-between items-center">
                     <div class="flex flex-col">
                         <span class="font-bold text-blue-400"><i class="fa-solid fa-motorcycle"></i> ${escapeHtml(l.riderName)} <span class="text-[10px] text-gray-400 font-normal">${escapeHtml(l.loginType || '(From End Shift)')}</span></span>
                         ${mapBtn}
                     </div>
-                    <span class="text-[10px] text-gray-400 font-mono">Login: ${escapeHtml(l.loginTime)}</span>
+                    <div class="text-[10px] text-gray-400 font-mono text-right">
+                        <span>In: ${escapeHtml(l.loginTime)}</span>
+                        ${clockOutTxt}
+                    </div>
                 </div>`;
             }).join('');
         }
 
-        // ================= 6. DAILY COMMISSION & REPORT =================
+        // 5. SCHEDULED DELIVERY REMINDERS (ADVANCED ORDERS)
+        function checkScheduledDeliveryAlerts() {
+            if (!globalAdvancedOrders || globalAdvancedOrders.length === 0) return;
+
+            const now = new Date();
+            let alertOrder = null;
+            let urgentLevel = 0; // 1: 30m, 2: 15m, 3: 5m
+
+            let pendingCount = 0;
+
+            globalAdvancedOrders.forEach(ord => {
+                if (ord.status === 'Catered') return;
+                pendingCount++;
+
+                if (!ord.timeToReceive) return;
+                
+                const timeParts = ord.timeToReceive.split(':');
+                if (timeParts.length < 2) return;
+
+                const targetDate = new Date();
+                targetDate.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]), 0, 0);
+
+                const diffMins = Math.round((targetDate - now) / 60000);
+
+                if (diffMins >= -10 && diffMins <= 30) {
+                    if (diffMins <= 5 && urgentLevel < 3) {
+                        alertOrder = ord; urgentLevel = 3;
+                    } else if (diffMins <= 15 && urgentLevel < 2) {
+                        alertOrder = ord; urgentLevel = 2;
+                    } else if (diffMins <= 30 && urgentLevel < 1) {
+                        alertOrder = ord; urgentLevel = 1;
+                    }
+                }
+            });
+
+            const badge = document.getElementById('adv-count-badge');
+            if (pendingCount > 0) {
+                badge.innerText = pendingCount;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+
+            const banner = document.getElementById('adv-order-banner');
+            if (alertOrder) {
+                const titleEl = document.getElementById('adv-banner-title');
+                const msgEl = document.getElementById('adv-banner-msg');
+
+                if (urgentLevel === 3) {
+                    titleEl.innerText = "🚨 URGENT: 5 MINS LEFT FOR SCHEDULED DELIVERY!";
+                    msgEl.innerText = `${alertOrder.custName} — ${alertOrder.timeToReceive} (${alertOrder.address || 'No Address'})`;
+                } else if (urgentLevel === 2) {
+                    titleEl.innerText = "⚠️ 15 MINS REMAINING FOR SCHEDULED ORDER";
+                    msgEl.innerText = `${alertOrder.custName} — Due at ${alertOrder.timeToReceive}`;
+                } else {
+                    titleEl.innerText = "🔔 30 MINS UPCOMING SCHEDULED DELIVERY";
+                    msgEl.innerText = `${alertOrder.custName} — Scheduled at ${alertOrder.timeToReceive}`;
+                }
+
+                banner.classList.remove('hidden');
+            } else {
+                banner.classList.add('hidden');
+            }
+        }
+
+        function openAdvancedOrdersModal() {
+            document.getElementById('adv-orders-modal').classList.remove('hidden');
+            switchAdvTab('list');
+            renderAdvancedOrdersList();
+        }
+
+        function closeAdvancedOrdersModal() {
+            document.getElementById('adv-orders-modal').classList.add('hidden');
+        }
+
+        function switchAdvTab(tab) {
+            const listBtn = document.getElementById('adv-tab-btn-list');
+            const addBtn = document.getElementById('adv-tab-btn-add');
+            const listContent = document.getElementById('adv-tab-list-content');
+            const addContent = document.getElementById('adv-tab-add-content');
+
+            if (tab === 'list') {
+                listBtn.className = "flex-1 py-1.5 rounded-lg bg-purple-600 text-white transition";
+                addBtn.className = "flex-1 py-1.5 rounded-lg text-gray-400 transition";
+                listContent.classList.remove('hidden');
+                addContent.classList.add('hidden');
+                renderAdvancedOrdersList();
+            } else {
+                addBtn.className = "flex-1 py-1.5 rounded-lg bg-purple-600 text-white transition";
+                listBtn.className = "flex-1 py-1.5 rounded-lg text-gray-400 transition";
+                addContent.classList.remove('hidden');
+                listContent.classList.add('hidden');
+            }
+        }
+
+        function renderAdvancedOrdersList() {
+            const container = document.getElementById('adv-tab-list-content');
+            if (!globalAdvancedOrders || globalAdvancedOrders.length === 0) {
+                container.innerHTML = `<div class="text-center text-gray-500 italic py-8 text-xs">No scheduled advanced orders found.</div>`;
+                return;
+            }
+
+            container.innerHTML = globalAdvancedOrders.slice().reverse().map(ord => {
+                const isCatered = ord.status === 'Catered';
+                return `
+                <div class="bg-cardBg border ${isCatered ? 'border-gray-800 opacity-60' : 'border-purple-500/40'} p-3 rounded-xl flex flex-col gap-1 text-xs">
+                    <div class="flex justify-between items-center font-bold">
+                        <span class="text-purple-300"><i class="fa-solid fa-user"></i> ${escapeHtml(ord.custName)}</span>
+                        <span class="text-emerald-400 font-mono"><i class="fa-solid fa-clock"></i> ${escapeHtml(ord.timeToReceive)}</span>
+                    </div>
+                    ${ord.receiver ? `<div class="text-[10px] text-gray-400">Receiver: ${escapeHtml(ord.receiver)}</div>` : ''}
+                    ${ord.address ? `<div class="text-[10px] text-gray-300"><i class="fa-solid fa-location-dot text-red-500"></i> ${escapeHtml(ord.address)}</div>` : ''}
+                    ${ord.contactNum ? `<div class="text-[10px] text-emerald-400"><i class="fa-solid fa-phone"></i> ${escapeHtml(ord.contactNum)}</div>` : ''}
+                    <div class="flex justify-between items-center mt-1 pt-1.5 border-t border-gray-800">
+                        <span class="text-[9px] text-gray-500">Ordered: ${escapeHtml(ord.timeOrdered)}</span>
+                        ${isCatered ? `<span class="text-[10px] font-bold text-gray-400"><i class="fa-solid fa-check"></i> Catered by ${escapeHtml(ord.cateredBy)}</span>` : 
+                        `<button onclick="takeAdvancedOrder('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}')" class="bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-motorcycle"></i> Cater Order</button>`}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        async function submitNewAdvancedOrder() {
+            const custName = document.getElementById('adv-cust-name').value.trim();
+            const receiveTime = document.getElementById('adv-receive-time').value.trim();
+            if (!custName || !receiveTime) return showToast("Customer Name and Scheduled Time are required!");
+
+            const payload = {
+                type: "add_advanced_order",
+                custName: custName,
+                receiver: document.getElementById('adv-receiver').value.trim(),
+                address: document.getElementById('adv-address').value.trim(),
+                contactNum: document.getElementById('adv-contact').value.trim(),
+                timeToReceive: receiveTime,
+                timeOrdered: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+
+            showSideNotification("SCHEDULED ORDER", `Saving advanced order for ${custName}`, "fa-calendar-plus", "text-purple-400", "border-purple-500");
+
+            globalAdvancedOrders.push({
+                custName: custName,
+                timeOrdered: payload.timeOrdered,
+                receiver: payload.receiver,
+                address: payload.address,
+                contactNum: payload.contactNum,
+                timeToReceive: receiveTime,
+                status: "Pending",
+                cateredBy: ""
+            });
+
+            document.getElementById('adv-cust-name').value = "";
+            document.getElementById('adv-receiver').value = "";
+            document.getElementById('adv-address').value = "";
+            document.getElementById('adv-contact').value = "";
+            document.getElementById('adv-receive-time').value = "";
+
+            switchAdvTab('list');
+
+            try {
+                await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+            } catch(e) {}
+        }
+
+        async function takeAdvancedOrder(custName, timeToReceive) {
+            showSideNotification("ORDER TAKEN", `Accepting scheduled order for ${custName}`, "fa-motorcycle", "text-purple-400", "border-purple-500");
+
+            const item = globalAdvancedOrders.find(o => o.custName === custName && o.timeToReceive === timeToReceive);
+            if (item) {
+                item.status = "Catered";
+                item.cateredBy = appState.riderName;
+            }
+            renderAdvancedOrdersList();
+            checkScheduledDeliveryAlerts();
+
+            const payload = {
+                type: "cater_advanced_order",
+                custName: custName,
+                timeToReceive: timeToReceive,
+                riderName: appState.riderName
+            };
+
+            try {
+                await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+            } catch(e) {}
+        }
+
+        // 6. DAILY COMMISSION & REPORT
         async function openCommissionScreen(selectedDate = null) {
             switchView('view-commission');
             document.getElementById('header-title').innerText = "Daily Commission";
@@ -1634,7 +1977,7 @@ ${customerLines}
             showToast("Daily report copied to clipboard!");
         }
 
-        // ================= 7. DIRECTORY & ALPHABETICAL SCRUBBER =================
+        // 7. DIRECTORY (OFFLINE-FIRST & BACKGROUND SILENT SYNC)
         async function openDirectory(type) {
             currentType = type; activeFilterLetter = ""; document.getElementById('search-input').value = "";
             
@@ -1644,12 +1987,12 @@ ${customerLines}
                 document.getElementById('header-title').innerText = "Customer Directory";
                 if(fab) fab.classList.remove('hidden');
                 loadLocalRecords(); 
-                await syncData();
+                syncDataBackground();
             } else if (type === 'stores') {
                 document.getElementById('header-title').innerText = "Store Directory";
                 if(fab) fab.classList.remove('hidden');
                 loadLocalRecords(); 
-                await syncData();
+                syncDataBackground();
             } else if (type === 'barangays') {
                 document.getElementById('header-title').innerText = "Barangay Delivery Rates";
                 if(fab) fab.classList.add('hidden');
@@ -1663,21 +2006,62 @@ ${customerLines}
             attachScrubberEvents(); 
         }
 
+        function loadLocalRecords() { 
+            const cached = localStorage.getItem(`lokalex_${currentType}`); 
+            if (cached) { 
+                records = JSON.parse(cached); 
+                sortRecordsAlphabetically();
+                filterDirectoryRecords(); 
+            } else {
+                records = [];
+                filterDirectoryRecords();
+            }
+        }
+
+        async function syncDataBackground() {
+            try {
+                const response = await fetch(`${API_URL}?type=${currentType}`);
+                if (response.ok) { 
+                    const freshData = await response.json(); 
+                    records = freshData;
+                    sortRecordsAlphabetically();
+                    localStorage.setItem(`lokalex_${currentType}`, JSON.stringify(records)); 
+                    filterDirectoryRecords(); 
+                }
+            } catch (e) {}
+        }
+
+        async function syncData() {
+            showToast("Syncing database...");
+            await syncDataBackground();
+            showToast("Synchronized!");
+        }
+
         function buildAlphabetScrubber() {
             document.getElementById('alphabet-scrubber').innerHTML = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('').map(letter => 
                 `<div data-letter="${letter}" class="scrubber-letter w-6 text-center py-[2px] ${activeFilterLetter === letter ? 'text-blue-500 font-black text-sm' : ''}">${letter}</div>`
             ).join('');
         }
 
+        // RUBBER-BAND ELASTIC PULL ANIMATION ON TOUCH SCRUBBER
         function attachScrubberEvents() {
             const scrubber = document.getElementById('alphabet-scrubber');
-            let isScrubbing = false;
+            let isDragging = false;
+            let startX = 0;
 
-            const handleScrub = (e) => {
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                const el = document.elementFromPoint(clientX, clientY);
-                
+            scrubber.ontouchstart = (e) => {
+                isDragging = true;
+                startX = e.touches[0].clientX;
+                scrubber.style.transition = 'none';
+            };
+
+            scrubber.ontouchmove = (e) => {
+                if (!isDragging) return;
+                const deltaX = e.touches[0].clientX - startX;
+                const pulledX = Math.sign(deltaX) * Math.pow(Math.abs(deltaX), 0.75) * 1.5;
+                scrubber.style.transform = `translateY(-50%) translateX(${pulledX}px)`;
+
+                const el = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
                 if (el && el.classList.contains('scrubber-letter')) {
                     const letter = el.getAttribute('data-letter');
                     if (letter && activeFilterLetter !== letter) {
@@ -1689,9 +2073,11 @@ ${customerLines}
                 }
             };
 
-            scrubber.onpointerdown = (e) => { isScrubbing = true; handleScrub(e); };
-            window.onpointermove = (e) => { if (isScrubbing) handleScrub(e); };
-            window.onpointerup = () => { isScrubbing = false; };
+            scrubber.ontouchend = () => {
+                isDragging = false;
+                scrubber.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+                scrubber.style.transform = 'translateY(-50%) translateX(0px)';
+            };
         }
 
         function filterDirectoryRecords() {
@@ -1703,7 +2089,6 @@ ${customerLines}
             });
             renderDirectoryRecords(filtered);
         }
-        function filterRecords() { filterDirectoryRecords(); }
 
         function renderDirectoryRecords(list) {
             const container = document.getElementById('record-list');
@@ -1748,12 +2133,15 @@ ${customerLines}
                 const name = record['name'] || record['customer name'] || record['store name'] || "Unknown";
                 const contact = record['contact'] || record['phone'] || "";
                 const address = record['address'] || "";
+                const recordedBy = record['recorded_by'] || record['recordedby'] || record['RecordedBy'] || "Amiel";
                 
                 const latLon = record['lat_lon_link'] || record['lat_lon'] || record['latlon'] || record['lat lon'] || record['coordinates'] || record['map'] || "";
                 const uid = Math.random().toString(36).substr(2, 9);
 
                 let mapHtml = "";
+                let hasMapBadge = false;
                 if (latLon) {
+                    hasMapBadge = true;
                     const cleanCoords = latLon.toString().replace(/['"]+/g, '').trim();
                     const mapUrl = cleanCoords.startsWith('http') ? cleanCoords : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanCoords)}`;
                     mapHtml = `<a href="${mapUrl}" target="_blank" class="text-blue-400 flex items-center gap-2 py-1 active:opacity-50"><i class="fa-solid fa-map-location-dot w-4 text-red-500"></i> <span class="underline">${cleanCoords}</span></a>`;
@@ -1763,10 +2151,13 @@ ${customerLines}
                     <div class="bg-cardBg border border-gray-800/80 rounded-xl shadow-sm flex flex-col transition-all overflow-hidden">
                         <div onclick="toggleCard('${uid}')" class="p-4 flex items-center justify-between cursor-pointer active:bg-white/5 transition">
                             <div class="flex items-center gap-3">
-                                <div class="w-9 h-9 rounded-full ${currentType === 'customers' ? 'bg-blue-600/20 text-blue-400' : 'bg-orange-600/20 text-orange-400'} flex items-center justify-center font-bold text-sm">
+                                <div class="w-9 h-9 rounded-full ${currentType === 'customers' ? 'bg-blue-600/20 text-blue-400' : 'bg-orange-600/20 text-orange-400'} flex items-center justify-center font-bold text-sm shrink-0">
                                     <i class="fa-solid ${currentType === 'customers' ? 'fa-user' : 'fa-store'}"></i>
                                 </div>
-                                <h3 class="font-bold text-sm">${escapeHtml(name)}</h3>
+                                <div class="flex flex-col">
+                                    <h3 class="font-bold text-sm">${escapeHtml(name)}</h3>
+                                    ${hasMapBadge ? `<span class="inline-flex items-center gap-1 text-[9px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded w-fit mt-0.5"><i class="fa-solid fa-location-dot text-red-500"></i> Map Saved</span>` : ''}
+                                </div>
                             </div>
                             <div class="flex items-center gap-2">
                                 <button onclick='event.stopPropagation(); promptEditRecord(${JSON.stringify(record)})' class="w-8 h-8 rounded-lg bg-inputBg hover:bg-gray-700 text-amber-400 flex items-center justify-center text-sm transition active:scale-90" title="Edit"><i class="fa-solid fa-pen"></i></button>
@@ -1778,7 +2169,9 @@ ${customerLines}
                             ${contact ? `<div onclick="copyText('${contact}')" class="text-emerald-400 flex items-center gap-2 cursor-pointer py-1"><i class="fa-solid fa-copy w-4"></i> <span class="font-mono text-sm">${contact}</span></div>` : ''}
                             ${address ? `<div class="flex items-start gap-2 py-1"><i class="fa-solid fa-location-dot w-4 mt-0.5 text-gray-500"></i> <span class="leading-tight">${escapeHtml(address)}</span></div>` : ''}
                             ${mapHtml}
-                            ${(!contact && !address && !latLon) ? `<div class="text-gray-500 italic">No additional details recorded.</div>` : ''}
+                            <div class="text-[10px] text-gray-500 mt-1 pt-1.5 border-t border-gray-800/40 flex justify-between items-center">
+                                <span>Recorded by: <strong class="text-gray-300">${escapeHtml(recordedBy)}</strong></span>
+                            </div>
                         </div>
                     </div>`;
             }).join('');
@@ -1789,29 +2182,6 @@ ${customerLines}
             const icon = document.getElementById(`card-icon-${uid}`);
             details.classList.toggle('hidden');
             icon.style.transform = details.classList.contains('hidden') ? "rotate(0deg)" : "rotate(180deg)";
-        }
-
-        function loadLocalRecords() { 
-            const cached = localStorage.getItem(`lokalex_${currentType}`); 
-            if (cached) { 
-                records = JSON.parse(cached); 
-                sortRecordsAlphabetically();
-                filterDirectoryRecords(); 
-            } 
-        }
-
-        async function syncData() {
-            showToast("Syncing database...");
-            try {
-                const response = await fetch(`${API_URL}?type=${currentType}`);
-                if (response.ok) { 
-                    records = await response.json(); 
-                    sortRecordsAlphabetically();
-                    localStorage.setItem(`lokalex_${currentType}`, JSON.stringify(records)); 
-                    filterDirectoryRecords(); 
-                    showToast("Synchronized!"); 
-                }
-            } catch (e) { showToast("Offline mode."); }
         }
 
         function sortRecordsAlphabetically() {
@@ -1880,7 +2250,8 @@ ${customerLines}
                     name: name, 
                     contact: document.getElementById('form-contact').value.trim(), 
                     address: document.getElementById('form-address').value.trim(), 
-                    lat_lon_link: document.getElementById('form-latlon').value.trim() 
+                    lat_lon_link: document.getElementById('form-latlon').value.trim(),
+                    recorded_by: appState.riderName || "Amiel"
                 } 
             };
             try {
@@ -1893,7 +2264,7 @@ ${customerLines}
             finally { btn.disabled = false; btn.innerText = "SAVE RECORD"; }
         }
 
-        // ================= LEAFLET MAP INTEGRATION =================
+        // 8. LEAFLET MAP INTEGRATION
         function openMapPicker() {
             switchView('view-map');
 
@@ -1944,7 +2315,7 @@ ${customerLines}
             goBack();
         }
 
-        // ================= 8. SMART CART, SLIDE DELETE & WIZARD =================
+        // 9. SMART CART, SLIDE DELETE & WIZARD
         function showBulkAddModal() { document.getElementById('bulk-modal').classList.remove('hidden'); document.getElementById('bulk-input').value = ""; document.getElementById('bulk-input').focus(); }
         function closeBulkModal() { document.getElementById('bulk-modal').classList.add('hidden'); }
         
