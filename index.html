@@ -434,9 +434,10 @@
 
     </main>
 
-    <!-- SIDE-ONLY MOVEABLE CHAT BUBBLE WIDGET -->
-    <div id="floating-chat-container" class="fixed right-0 bottom-24 z-50 flex flex-col items-end">
-        <div id="expanded-chat-window" class="hidden bg-cardBg border border-gray-700 rounded-2xl shadow-2xl w-80 sm:w-88 h-96 flex flex-col overflow-hidden mr-3 mb-2 transition-all">
+    <!-- SIDE-ONLY MOVEABLE COMPACT CHAT WIDGET -->
+    <div id="floating-chat-container" class="fixed right-0 z-50 flex flex-col items-end pointer-events-none" style="top: 80%;">
+        <!-- EXPANDED CHAT WINDOW -->
+        <div id="expanded-chat-window" class="hidden pointer-events-auto bg-cardBg border border-gray-700 rounded-2xl shadow-2xl w-80 sm:w-88 h-96 flex flex-col overflow-hidden mr-3 mb-2 transition-all">
             <div id="chat-drag-handle" class="bg-gray-800 p-3 flex items-center justify-between select-none border-b border-gray-700">
                 <div class="flex items-center gap-2 font-bold text-xs text-blue-400">
                     <i class="fa-solid fa-comments text-base"></i> Team Comms
@@ -462,9 +463,9 @@
             </div>
         </div>
 
-        <div id="chat-bubble" class="relative bg-blue-600 hover:bg-blue-500 text-white py-2 px-2.5 rounded-l-xl shadow-2xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border-l-2 border-t-2 border-b-2 border-white/20 select-none touch-none">
-            <i class="fa-solid fa-comments text-sm"></i>
-            <span class="text-[11px] font-bold tracking-wide pr-0.5">Chat</span>
+        <!-- COMPACT LOGO-ONLY TAB (NO TEXT) -->
+        <div id="chat-bubble" class="pointer-events-auto relative bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-l-2xl shadow-2xl flex items-center justify-center cursor-pointer transition-all active:scale-90 border-l-2 border-t-2 border-b-2 border-white/20 select-none touch-none">
+            <i class="fa-solid fa-comments text-base"></i>
             <div id="chat-tag-badge" class="hidden absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-black text-[9px] font-black rounded-full flex items-center justify-center border-2 border-darkBg animate-bounce shadow-md">!</div>
             <div id="chat-unread-badge" class="hidden absolute -top-1.5 -left-1.5 min-w-[18px] h-4 px-1 bg-red-600 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-darkBg shadow-md">0</div>
         </div>
@@ -625,7 +626,6 @@
         const ADMIN_IDS = ["4547425", "5548562"];
         function isAdmin() { return ADMIN_IDS.includes(appState.telegramId); }
 
-        // GENERATE CONSTANT DAILY RIDER ID FOR META SUITE SEARCHING
         function getDailyRiderId() {
             const nameClean = (appState.riderName || appState.telegramId || "RIDER").replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
             const dateClean = getLocalTodayStr().replace(/-/g, '');
@@ -1130,7 +1130,6 @@
             }
 
             if (targetStatus === 'Available') {
-                // 1. CHECK IF RIDER IS CURRENTLY CATERING & HAS UNRECEIPTED CUSTOMERS
                 if (myRecord && myRecord.status === 'Catering' && myRecord.customerName) {
                     const activeCusts = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
                     
@@ -1153,7 +1152,6 @@
                     }
                 }
 
-                // 2. CHECK GPS LOCATION
                 showToast("Checking GPS location...");
                 const coords = await getDeviceLocation();
                 if (!coords || (coords.lat === 0 && coords.lon === 0)) {
@@ -1392,20 +1390,22 @@
             });
         }
 
-        // 3. MOVEABLE CHAT BUBBLE
+        // 3. MOVEABLE CHAT BUBBLE & AUTOMATIC WINDOW POSITIONING
         let isChatDragging = false;
         let chatStartY = 0;
         let chatTopOffset = 0;
+        let currentBubbleY = Math.max(120, window.innerHeight - 180);
 
         function initDraggableChat() {
             const bubble = document.getElementById('chat-bubble');
             const container = document.getElementById('floating-chat-container');
 
+            updateChatPositions();
+
             bubble.addEventListener('pointerdown', (e) => {
                 isChatDragging = false;
                 chatStartY = e.clientY;
-                const rect = container.getBoundingClientRect();
-                chatTopOffset = rect.top;
+                chatTopOffset = currentBubbleY;
                 bubble.setPointerCapture(e.pointerId);
             });
 
@@ -1416,10 +1416,13 @@
                 if (!isChatDragging) return;
 
                 const deltaY = e.clientY - chatStartY;
-                let newTop = chatTopOffset + deltaY;
-                newTop = Math.max(60, Math.min(window.innerHeight - 120, newTop));
-                container.style.top = newTop + 'px';
-                container.style.bottom = 'auto';
+                let newY = chatTopOffset + deltaY;
+                
+                const maxY = window.innerHeight - 60;
+                const minY = 70;
+                currentBubbleY = Math.max(minY, Math.min(maxY, newY));
+
+                updateChatPositions();
             });
 
             bubble.addEventListener('pointerup', (e) => {
@@ -1429,6 +1432,41 @@
                 }
                 isChatDragging = false;
             });
+
+            // CLICK/TAP OUTSIDE TO MINIMIZE CHAT WINDOW
+            document.addEventListener('pointerdown', (e) => {
+                const windowEl = document.getElementById('expanded-chat-window');
+                const containerEl = document.getElementById('floating-chat-container');
+                if (windowEl && !windowEl.classList.contains('hidden')) {
+                    if (containerEl && !containerEl.contains(e.target)) {
+                        toggleChatWindow(false);
+                    }
+                }
+            });
+        }
+
+        function updateChatPositions() {
+            const container = document.getElementById('floating-chat-container');
+            const windowEl = document.getElementById('expanded-chat-window');
+            if (!container) return;
+            
+            if (windowEl.classList.contains('hidden')) {
+                container.style.top = currentBubbleY + 'px';
+                container.style.bottom = 'auto';
+            } else {
+                const windowHeight = 384; // h-96 approx
+                let windowTop = currentBubbleY - windowHeight - 8;
+                
+                if (windowTop < 60) {
+                    windowTop = 60;
+                }
+                if (windowTop + windowHeight + 50 > window.innerHeight) {
+                    windowTop = Math.max(60, window.innerHeight - windowHeight - 60);
+                }
+
+                container.style.top = windowTop + 'px';
+                container.style.bottom = 'auto';
+            }
         }
 
         function onBubbleClick() {
@@ -1450,6 +1488,7 @@
             } else {
                 windowEl.classList.add('hidden');
             }
+            updateChatPositions();
         }
 
         function updateChatBadgesAndUI() {
@@ -2703,7 +2742,6 @@ ${customerLines}
             document.getElementById('header-title').innerText = `Fee Wizard (Cart ${activeCartSlot})`;
             switchView('view-wizard');
 
-            // Unique DB ID for sheet entry, but uses same Daily Rider ID base
             if (!currentCart.txId) {
                 currentCart.txId = getDailyRiderId() + "-" + Date.now().toString(36).toUpperCase();
             }
