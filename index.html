@@ -104,7 +104,7 @@
             <div class="flex flex-col gap-3 mt-1">
                 <button onclick="switchView('view-cart')" class="w-full bg-emerald-600/20 border border-emerald-600 hover:bg-emerald-600/30 p-4 rounded-xl flex items-center gap-4 transition active:scale-95">
                     <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-xl"><i class="fa-solid fa-receipt"></i></div>
-                    <div class="text-left"><div class="text-base font-bold text-emerald-400">Smart Cart</div><div class="text-xs text-gray-400">Draft orders & receipts</div></div>
+                    <div class="text-left"><div class="text-base font-bold text-emerald-400">Smart Cart (1-4)</div><div class="text-xs text-gray-400">Manage multiple carts & customer receipts</div></div>
                 </button>
 
                 <div class="grid grid-cols-2 gap-2">
@@ -205,27 +205,38 @@
             <button onclick="logout()" class="text-xs text-red-400/50 hover:text-red-400 py-2 mt-2">Log out of device</button>
         </section>
 
-        <!-- SMART CART VIEW -->
+        <!-- MULTI SMART CART VIEW (CART 1, 2, 3, 4) -->
         <section id="view-cart" class="hidden flex-1 flex flex-col">
-            <div class="bg-black/40 p-3 px-4 flex justify-between items-center text-sm border-b border-gray-800">
-                <span class="text-gray-400">Cart Subtotal:</span>
+            <!-- CART SLOT TAB HEADER -->
+            <div class="bg-cardBg border-b border-gray-800 p-2 grid grid-cols-4 gap-1.5 shrink-0" id="cart-tabs-header"></div>
+
+            <!-- CUSTOMER ASSIGNMENT SELECTOR -->
+            <div class="bg-inputBg/80 px-3 py-2 border-b border-gray-800 flex items-center justify-between gap-2 shrink-0">
+                <span class="text-xs font-bold text-amber-400 shrink-0 flex items-center gap-1.5">
+                    <i class="fa-solid fa-user-check"></i> Assign Client:
+                </span>
+                <select id="cart-customer-select" onchange="assignCustomerToCurrentCart(this.value)" class="flex-1 bg-darkBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white font-semibold"></select>
+            </div>
+
+            <div class="bg-black/40 p-3 px-4 flex justify-between items-center text-sm border-b border-gray-800 shrink-0">
+                <span class="text-gray-400"><span id="cart-slot-label" class="font-bold text-white">Cart 1</span> Subtotal:</span>
                 <span class="text-lg font-bold text-green-400">₱<span id="cart-subtotal-display">0.00</span></span>
             </div>
             
-            <div class="p-3 flex justify-between gap-2">
+            <div class="p-3 flex justify-between gap-2 shrink-0">
                 <button onclick="showBulkAddModal()" class="flex-1 bg-blue-600/20 text-blue-400 text-xs font-bold py-2 rounded-lg border border-blue-600/30 transition active:scale-95">
                     <i class="fa-solid fa-list-check"></i> Paste List
                 </button>
                 <button id="cart-action-btn" onclick="handleCartActionBtn()" class="flex-1 bg-red-600/20 text-red-400 text-xs font-bold py-2 rounded-lg border border-red-600/30 transition active:scale-95">
-                    <i class="fa-solid fa-trash-can"></i> Clear All
+                    <i class="fa-solid fa-trash-can"></i> Clear Cart 1
                 </button>
             </div>
 
             <div id="cart-items-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 pb-20"></div>
 
-            <div class="p-4 bg-darkBg border-t border-gray-800">
+            <div class="p-4 bg-darkBg border-t border-gray-800 shrink-0">
                 <button onclick="proceedToWizard()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold p-3.5 rounded-xl shadow-lg transition active:scale-95">
-                    Create Receipt
+                    Create Receipt (<span id="btn-cart-slot-label">Cart 1</span>)
                 </button>
             </div>
         </section>
@@ -236,7 +247,7 @@
                 <h3 class="text-sm font-bold text-emerald-500 uppercase tracking-wider mb-2">Client Details</h3>
                 
                 <div id="catered-client-selector-box" class="flex flex-col gap-2 mb-2">
-                    <label class="text-[10px] text-gray-400 font-bold uppercase">Select Active Catering Client:</label>
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Selected Catering Client:</label>
                     <div id="catered-client-buttons" class="flex flex-wrap gap-2"></div>
                 </div>
 
@@ -401,7 +412,7 @@
             </button>
         </section>
 
-        <!-- MAP PICKER VIEW (FIXED VIEWPORT BOUNDS & ALWAYS-VISIBLE BUTTON) -->
+        <!-- MAP PICKER VIEW -->
         <section id="view-map" class="hidden fixed inset-0 bg-darkBg z-[100] flex flex-col h-screen h-[100dvh] w-full overflow-hidden">
             <header class="bg-cardBg px-4 py-3 flex items-center justify-between shadow-md shrink-0 border-b border-gray-800">
                 <button onclick="goBack()" class="text-red-400 font-semibold flex items-center gap-2 transition active:opacity-50 text-sm">
@@ -451,7 +462,6 @@
             </div>
         </div>
 
-        <!-- COMPACT SIDE-ONLY DRAGGABLE TAB -->
         <div id="chat-bubble" class="relative bg-blue-600 hover:bg-blue-500 text-white py-2 px-2.5 rounded-l-xl shadow-2xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border-l-2 border-t-2 border-b-2 border-white/20 select-none touch-none">
             <i class="fa-solid fa-comments text-sm"></i>
             <span class="text-[11px] font-bold tracking-wide pr-0.5">Chat</span>
@@ -470,18 +480,15 @@
                 <button onclick="closeAdvancedOrdersModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
-            <!-- TAB SWITCHER -->
             <div class="flex bg-inputBg p-1 rounded-xl text-xs font-bold">
                 <button id="adv-tab-btn-list" onclick="switchAdvTab('list')" class="flex-1 py-1.5 rounded-lg bg-purple-600 text-white transition">Orders List</button>
                 <button id="adv-tab-btn-add" onclick="switchAdvTab('add')" class="flex-1 py-1.5 rounded-lg text-gray-400 transition">+ Schedule New</button>
             </div>
 
-            <!-- ORDERS LIST TAB -->
             <div id="adv-tab-list-content" class="flex-1 overflow-y-auto flex flex-col gap-2 min-h-[180px]">
                 <div class="text-center text-gray-500 italic py-8 text-xs">Loading advanced orders...</div>
             </div>
 
-            <!-- ADD ORDER TAB -->
             <div id="adv-tab-add-content" class="hidden flex flex-col gap-2 overflow-y-auto">
                 <input type="text" id="adv-cust-name" placeholder="Customer Name *" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
                 <input type="text" id="adv-receiver" placeholder="Receiver Name / Alternate" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
@@ -690,8 +697,17 @@
         
         let leafletMap = null;
 
-        let cartItems = [];
-        let selectedCartIds = new Set();
+        // MULTI-CART STATE (4 SLOTS)
+        let activeCartSlot = 1;
+        let multiCarts = {
+            1: { items: [], selectedIds: new Set(), customerName: "", txId: "" },
+            2: { items: [], selectedIds: new Set(), customerName: "", txId: "" },
+            3: { items: [], selectedIds: new Set(), customerName: "", txId: "" },
+            4: { items: [], selectedIds: new Set(), customerName: "", txId: "" }
+        };
+
+        function getCurrentCart() { return multiCarts[activeCartSlot]; }
+
         let editItemIndex = -1;
         let wizState = { storeCount: 1 };
         let currentReceiptTransactionId = "";
@@ -715,6 +731,10 @@
         let currentDayTotalCommission = 0;
 
         let audioCtx = null;
+
+        // TRACKING CREATED RECEIPTS FOR CURRENT SESSION / TODAY
+        let createdReceiptCustomers = new Set(JSON.parse(localStorage.getItem('createdReceiptCustomers') || '[]'));
+        let cachedReceiptsList = [];
 
         // 3-SWIPE BACK BUTTON EXIT PREVENTION
         let backPressCount = 0;
@@ -767,6 +787,12 @@
                 document.getElementById('app-header').classList.remove('hidden');
                 document.getElementById('back-btn').classList.remove('hidden');
                 document.getElementById('header-spacer').classList.add('hidden');
+            }
+
+            if (targetViewId === 'view-cart') {
+                renderCartTabs();
+                renderCartCustomerSelector();
+                renderCart();
             }
         }
 
@@ -961,7 +987,41 @@
 
         function logout() { localStorage.clear(); location.reload(); }
 
-        // 2. REAL-TIME POLLING (30-SECOND INTERVAL)
+        // RECEIPT CHECK HELPERS
+        async function fetchReceiptsData() {
+            try {
+                const res = await fetch(`${API_URL}?type=receipts`);
+                if (res.ok) {
+                    cachedReceiptsList = await res.json();
+                }
+            } catch(e) {}
+        }
+
+        function hasReceiptForCustomer(custName) {
+            if (!custName) return true;
+            const cleanName = custName.trim().toLowerCase();
+            
+            if (createdReceiptCustomers.has(cleanName)) return true;
+
+            if (cachedReceiptsList && cachedReceiptsList.length > 0) {
+                const todayStr = getLocalTodayStr();
+                const found = cachedReceiptsList.some(r => {
+                    const rName = (r.riderName || r.ridername || r.RiderName || "").toString().trim().toLowerCase();
+                    const cName = (r.customerName || r.customername || r.CustomerName || "").toString().trim().toLowerCase();
+                    const rDate = (r.date || r.Date || "").toString().split('T')[0];
+                    return rName === (appState.riderName || "").trim().toLowerCase() && 
+                           cName === cleanName && 
+                           isSameDate(rDate, todayStr);
+                });
+                if (found) {
+                    createdReceiptCustomers.add(cleanName);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // 2. REAL-TIME POLLING
         function startRealTimePolling() {
             fetchAllData();
             setInterval(() => { fetchAllData(); }, 30000);
@@ -987,6 +1047,10 @@
                     loadGlobalLoginList();
                     updateChatBadgesAndUI();
                     checkScheduledDeliveryAlerts();
+
+                    if (!document.getElementById('view-cart').classList.contains('hidden')) {
+                        renderCartCustomerSelector();
+                    }
                 }
             } catch(e) {}
         }
@@ -1059,6 +1123,30 @@
             }
 
             if (targetStatus === 'Available') {
+                // 1. CHECK IF RIDER IS CURRENTLY CATERING & HAS UNRECEIPTED CUSTOMERS
+                if (myRecord && myRecord.status === 'Catering' && myRecord.customerName) {
+                    const activeCusts = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+                    
+                    showToast("Checking customer receipts...");
+                    await fetchReceiptsData();
+
+                    let missingReceiptCust = null;
+                    for (let cust of activeCusts) {
+                        if (!hasReceiptForCustomer(cust)) {
+                            missingReceiptCust = cust;
+                            break;
+                        }
+                    }
+
+                    if (missingReceiptCust) {
+                        showToast(`⚠️ Paki-gawaan muna ng resibo si ${missingReceiptCust} bago mag-Available!`);
+                        multiCarts[activeCartSlot].customerName = missingReceiptCust;
+                        switchView('view-cart');
+                        return;
+                    }
+                }
+
+                // 2. CHECK GPS LOCATION
                 showToast("Checking GPS location...");
                 const coords = await getDeviceLocation();
                 if (!coords || (coords.lat === 0 && coords.lon === 0)) {
@@ -1297,7 +1385,7 @@
             });
         }
 
-        // 3. MOVEABLE CHAT BUBBLE (SIDE Y-AXIS ONLY)
+        // 3. MOVEABLE CHAT BUBBLE
         let isChatDragging = false;
         let chatStartY = 0;
         let chatTopOffset = 0;
@@ -1684,13 +1772,13 @@
             }).join('');
         }
 
-        // 5. SCHEDULED DELIVERY REMINDERS (ADVANCED ORDERS)
+        // 5. SCHEDULED DELIVERY REMINDERS
         function checkScheduledDeliveryAlerts() {
             if (!globalAdvancedOrders || globalAdvancedOrders.length === 0) return;
 
             const now = new Date();
             let alertOrder = null;
-            let urgentLevel = 0; // 1: 30m, 2: 15m, 3: 5m
+            let urgentLevel = 0;
 
             let pendingCount = 0;
 
@@ -1848,15 +1936,47 @@
         }
 
         async function takeAdvancedOrder(custName, timeToReceive) {
-            showSideNotification("ORDER TAKEN", `Accepting scheduled order for ${custName}`, "fa-motorcycle", "text-purple-400", "border-purple-500");
+            const myRecord = rosterMembers ? rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
+            if (myRecord) {
+                if (myRecord.status === 'End') {
+                    showToast("⚠️ Naka-End Shift ka. Mag-Available muna bago mag-Cater.");
+                    return;
+                }
+                if (myRecord.status === 'Break') {
+                    showToast("⚠️ Naka-Break ka. Mag-Available muna bago mag-Cater.");
+                    return;
+                }
+            }
+
+            const startTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            let existingCustomers = [];
+            let existingTimes = [];
+            if (myRecord && myRecord.status === 'Catering' && myRecord.customerName) {
+                existingCustomers = myRecord.customerName.split(', ');
+                existingTimes = myRecord.startTime ? myRecord.startTime.split(', ') : [];
+            }
+
+            existingCustomers.push(custName);
+            existingTimes.push(startTime);
 
             const item = globalAdvancedOrders.find(o => o.custName === custName && o.timeToReceive === timeToReceive);
             if (item) {
                 item.status = "Catered";
                 item.cateredBy = appState.riderName;
             }
+
             renderAdvancedOrdersList();
             checkScheduledDeliveryAlerts();
+
+            showSideNotification("ADVANCED ORDER TAKEN", `Catering ${custName} — added to ${appState.riderName} on Roster`, "fa-motorcycle", "text-purple-400", "border-purple-500");
+
+            await updateRosterStatusData(
+                'Catering', 
+                existingCustomers.join(', '), 
+                existingTimes.join(', '), 
+                myRecord ? parseQueueTime(myRecord.queueTime) : 0
+            );
 
             const payload = {
                 type: "cater_advanced_order",
@@ -1977,7 +2097,7 @@ ${customerLines}
             showToast("Daily report copied to clipboard!");
         }
 
-        // 7. DIRECTORY (OFFLINE-FIRST & BACKGROUND SILENT SYNC)
+        // 7. DIRECTORY (OFFLINE-FIRST & SILENT BACKGROUND SYNC)
         async function openDirectory(type) {
             currentType = type; activeFilterLetter = ""; document.getElementById('search-input').value = "";
             
@@ -2043,7 +2163,6 @@ ${customerLines}
             ).join('');
         }
 
-        // RUBBER-BAND ELASTIC PULL ANIMATION ON TOUCH SCRUBBER
         function attachScrubberEvents() {
             const scrubber = document.getElementById('alphabet-scrubber');
             let isDragging = false;
@@ -2315,21 +2434,107 @@ ${customerLines}
             goBack();
         }
 
-        // 9. SMART CART, SLIDE DELETE & WIZARD
+        // 9. MULTI SMART CART (SLOTS 1-4) LOGIC
+        function switchCartSlot(slotNum) {
+            activeCartSlot = slotNum;
+            renderCartTabs();
+            renderCartCustomerSelector();
+            renderCart();
+        }
+
+        function renderCartTabs() {
+            const header = document.getElementById('cart-tabs-header');
+            if (!header) return;
+
+            let html = "";
+            for (let s = 1; s <= 4; s++) {
+                const cart = multiCarts[s];
+                const isActive = s === activeCartSlot;
+                const itemCount = cart.items.length;
+                const cust = cart.customerName;
+
+                let badgeTxt = "Empty";
+                if (cust) {
+                    badgeTxt = cust;
+                } else if (itemCount > 0) {
+                    badgeTxt = `${itemCount} item${itemCount > 1 ? 's' : ''}`;
+                }
+
+                html += `
+                <button onclick="switchCartSlot(${s})" class="flex flex-col items-center justify-center p-2 rounded-xl transition ${isActive ? 'bg-emerald-600 text-white shadow-lg ring-2 ring-emerald-400' : 'bg-inputBg text-gray-400 hover:text-white hover:bg-gray-800'} active:scale-95">
+                    <span class="text-xs font-black">Cart ${s}</span>
+                    <span class="text-[9px] truncate max-w-[68px] font-semibold mt-0.5 ${isActive ? 'text-emerald-100' : 'text-gray-400'}">${escapeHtml(badgeTxt)}</span>
+                </button>`;
+            }
+            header.innerHTML = html;
+
+            document.getElementById('cart-slot-label').innerText = `Cart ${activeCartSlot}`;
+            document.getElementById('btn-cart-slot-label').innerText = `Cart ${activeCartSlot}`;
+        }
+
+        function renderCartCustomerSelector() {
+            const select = document.getElementById('cart-customer-select');
+            if (!select) return;
+
+            const myRecord = rosterMembers ? rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
+            let activeCusts = [];
+            if (myRecord && myRecord.status === 'Catering' && myRecord.customerName) {
+                activeCusts = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+            }
+
+            const assignedInOtherCarts = [1, 2, 3, 4]
+                .filter(s => s !== activeCartSlot)
+                .map(s => multiCarts[s].customerName)
+                .filter(Boolean);
+
+            const availableCusts = activeCusts.filter(c => !assignedInOtherCarts.includes(c));
+            const currentAssigned = multiCarts[activeCartSlot].customerName;
+
+            let optionsHtml = `<option value="">-- Unassigned --</option>`;
+            let foundCurrentInAvailable = false;
+
+            availableCusts.forEach(c => {
+                const isSelected = c === currentAssigned;
+                if (isSelected) foundCurrentInAvailable = true;
+                optionsHtml += `<option value="${escapeHtml(c)}" ${isSelected ? 'selected' : ''}>${escapeHtml(c)}</option>`;
+            });
+
+            if (currentAssigned && !foundCurrentInAvailable) {
+                optionsHtml += `<option value="${escapeHtml(currentAssigned)}" selected>${escapeHtml(currentAssigned)}</option>`;
+            }
+
+            select.innerHTML = optionsHtml;
+        }
+
+        function assignCustomerToCurrentCart(custName) {
+            multiCarts[activeCartSlot].customerName = custName.trim();
+            renderCartTabs();
+            renderCartCustomerSelector();
+            if (custName) {
+                showToast(`Cart ${activeCartSlot} assigned to: ${custName}`);
+            } else {
+                showToast(`Cart ${activeCartSlot} unassigned.`);
+            }
+        }
+
         function showBulkAddModal() { document.getElementById('bulk-modal').classList.remove('hidden'); document.getElementById('bulk-input').value = ""; document.getElementById('bulk-input').focus(); }
         function closeBulkModal() { document.getElementById('bulk-modal').classList.add('hidden'); }
         
         function processBulkAdd() {
             const raw = document.getElementById('bulk-input').value.trim();
             if(!raw) return closeBulkModal();
+
+            const currentCart = getCurrentCart();
             raw.split('\n').forEach(line => {
                 line = line.trim(); if(!line) return;
                 let price = 0.0; let name = line;
                 const match = line.match(/[\s\-:]+([\d\.,]+)$/);
                 if(match) { price = parseFloat(match[1].replace(/,/g, '')) || 0.0; name = line.substring(0, match.index).trim(); }
-                cartItems.push({ id: Math.random().toString(36).substr(2,9), item: name, price: price, category: null });
+                currentCart.items.push({ id: Math.random().toString(36).substr(2,9), item: name, price: price, category: null });
             });
-            closeBulkModal(); renderCart();
+            closeBulkModal(); 
+            renderCartTabs();
+            renderCart();
         }
 
         function openSlideDeleteModal(title, callback) {
@@ -2358,62 +2563,71 @@ ${customerLines}
         }
 
         function handleCartActionBtn() {
-            if (selectedCartIds.size > 0) {
-                openSlideDeleteModal(`Burahin ang ${selectedCartIds.size} na napiling item(s)?`, () => {
-                    cartItems = cartItems.filter(i => !selectedCartIds.has(i.id));
-                    selectedCartIds.clear();
+            const currentCart = getCurrentCart();
+            if (currentCart.selectedIds.size > 0) {
+                openSlideDeleteModal(`Burahin ang ${currentCart.selectedIds.size} na napiling item(s) sa Cart ${activeCartSlot}?`, () => {
+                    currentCart.items = currentCart.items.filter(i => !currentCart.selectedIds.has(i.id));
+                    currentCart.selectedIds.clear();
+                    renderCartTabs();
                     renderCart();
                 });
             } else {
-                if (cartItems.length === 0) return;
-                openSlideDeleteModal("Sigurado ka bang gusto mong i-clear ang buong cart?", () => {
-                    cartItems = [];
-                    selectedCartIds.clear();
-                    currentReceiptTransactionId = "";
+                if (currentCart.items.length === 0) return;
+                openSlideDeleteModal(`Sigurado ka bang gusto mong i-clear ang Cart ${activeCartSlot}?`, () => {
+                    currentCart.items = [];
+                    currentCart.selectedIds.clear();
+                    currentCart.txId = "";
+                    renderCartTabs();
                     renderCart();
                 });
             }
         }
 
         function toggleSelectCartItem(id) {
-            if (selectedCartIds.has(id)) {
-                selectedCartIds.delete(id);
+            const currentCart = getCurrentCart();
+            if (currentCart.selectedIds.has(id)) {
+                currentCart.selectedIds.delete(id);
             } else {
-                selectedCartIds.add(id);
+                currentCart.selectedIds.add(id);
             }
             renderCartActionBtnState();
         }
 
         function renderCartActionBtnState() {
             const btn = document.getElementById('cart-action-btn');
-            if (selectedCartIds.size > 0) {
-                btn.innerHTML = `<i class="fa-solid fa-trash-can"></i> Delete Selected (${selectedCartIds.size})`;
+            const currentCart = getCurrentCart();
+            if (currentCart.selectedIds.size > 0) {
+                btn.innerHTML = `<i class="fa-solid fa-trash-can"></i> Delete Selected (${currentCart.selectedIds.size})`;
                 btn.className = "flex-1 bg-red-600 text-white text-xs font-bold py-2 rounded-lg border border-red-500 transition active:scale-95";
             } else {
-                btn.innerHTML = `<i class="fa-solid fa-trash-can"></i> Clear All`;
+                btn.innerHTML = `<i class="fa-solid fa-trash-can"></i> Clear Cart ${activeCartSlot}`;
                 btn.className = "flex-1 bg-red-600/20 text-red-400 text-xs font-bold py-2 rounded-lg border border-red-600/30 transition active:scale-95";
             }
         }
 
         function removeCartItem(id) {
             openSlideDeleteModal("Tanggalin ang item na ito?", () => {
-                cartItems = cartItems.filter(i => i.id !== id);
-                selectedCartIds.delete(id);
+                const currentCart = getCurrentCart();
+                currentCart.items = currentCart.items.filter(i => i.id !== id);
+                currentCart.selectedIds.delete(id);
+                renderCartTabs();
                 renderCart();
             });
         }
 
         function setItemCategory(id, cat) { 
-            const item = cartItems.find(i => i.id === id); 
+            const currentCart = getCurrentCart();
+            const item = currentCart.items.find(i => i.id === id); 
             if(item && item.price > 0) { item.category = cat; renderCart(); } 
             else if(item && item.price === 0) { showToast("Set price before categorizing!"); } 
         }
         
         function promptEditItem(id) {
-            editItemIndex = cartItems.findIndex(i => i.id === id);
+            const currentCart = getCurrentCart();
+            editItemIndex = currentCart.items.findIndex(i => i.id === id);
             if(editItemIndex === -1) return;
-            document.getElementById('edit-name-input').value = cartItems[editItemIndex].item || "";
-            document.getElementById('edit-price-input').value = cartItems[editItemIndex].price || "";
+            document.getElementById('edit-name-input').value = currentCart.items[editItemIndex].item || "";
+            document.getElementById('edit-price-input').value = currentCart.items[editItemIndex].price || "";
             document.getElementById('edit-item-modal').classList.remove('hidden'); 
             document.getElementById('edit-name-input').focus();
         }
@@ -2422,9 +2636,10 @@ ${customerLines}
             const newName = document.getElementById('edit-name-input').value.trim();
             const newPrice = parseFloat(document.getElementById('edit-price-input').value) || 0.0;
             if (!newName) return showToast("Item name cannot be empty!");
-            if(editItemIndex !== -1) { 
-                cartItems[editItemIndex].item = newName;
-                cartItems[editItemIndex].price = newPrice; 
+            const currentCart = getCurrentCart();
+            if(editItemIndex !== -1 && currentCart.items[editItemIndex]) { 
+                currentCart.items[editItemIndex].item = newName;
+                currentCart.items[editItemIndex].price = newPrice; 
             }
             closeEditItemModal(); 
             renderCart();
@@ -2432,17 +2647,19 @@ ${customerLines}
 
         function renderCart() {
             const container = document.getElementById('cart-items-list');
+            const currentCart = getCurrentCart();
             let subtotal = 0;
-            if (cartItems.length === 0) {
-                container.innerHTML = `<div class="text-center py-10 text-gray-500">Cart is empty. Paste a list!</div>`;
-                selectedCartIds.clear();
+
+            if (currentCart.items.length === 0) {
+                container.innerHTML = `<div class="text-center py-10 text-gray-500">Cart ${activeCartSlot} is empty. Paste a list!</div>`;
+                currentCart.selectedIds.clear();
             } else {
-                container.innerHTML = cartItems.map((item, index) => {
+                container.innerHTML = currentCart.items.map((item, index) => {
                     subtotal += item.price;
                     const isTask = item.price === 0.0;
                     const catM = item.category === 'Market';
                     const catS = item.category === 'Store';
-                    const isChecked = selectedCartIds.has(item.id);
+                    const isChecked = currentCart.selectedIds.has(item.id);
 
                     return `
                     <div class="bg-cardBg border ${isTask ? 'border-orange-500/50' : 'border-gray-800'} p-3 rounded-xl shadow-sm flex items-center gap-3 relative">
@@ -2471,15 +2688,17 @@ ${customerLines}
         }
 
         function proceedToWizard() {
-            if (cartItems.length === 0) return showToast("Cart is empty!");
-            if (cartItems.some(i => i.price === 0.0 || (i.price > 0 && !i.category))) return showToast("Fix prices and categories first!");
+            const currentCart = getCurrentCart();
+            if (currentCart.items.length === 0) return showToast(`Cart ${activeCartSlot} is empty!`);
+            if (currentCart.items.some(i => i.price === 0.0 || (i.price > 0 && !i.category))) return showToast("Fix prices and categories first!");
 
-            document.getElementById('header-title').innerText = "Fee Wizard";
+            document.getElementById('header-title').innerText = `Fee Wizard (Cart ${activeCartSlot})`;
             switchView('view-wizard');
 
-            if (!currentReceiptTransactionId) {
-                currentReceiptTransactionId = "TX-" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 4).toUpperCase();
+            if (!currentCart.txId) {
+                currentCart.txId = "TX-" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 4).toUpperCase();
             }
+            currentReceiptTransactionId = currentCart.txId;
 
             const myRecord = rosterMembers ? rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
             const btnBox = document.getElementById('catered-client-buttons');
@@ -2489,16 +2708,37 @@ ${customerLines}
             toggleManual.checked = false;
             rcptInput.disabled = false;
 
-            if (myRecord && myRecord.status === 'Catering' && myRecord.customerName) {
-                const activeCusts = myRecord.customerName.split(', ');
-                btnBox.innerHTML = activeCusts.map(c => `
-                    <button onclick="selectCateredClientName('${escapeHtml(c)}')" class="bg-blue-600/30 border border-blue-500 text-blue-300 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition active:scale-95">
-                        <i class="fa-solid fa-user"></i> ${escapeHtml(c)}
-                    </button>
-                `).join('');
-                
-                rcptInput.value = activeCusts[0] || "";
+            if (currentCart.customerName) {
+                rcptInput.value = currentCart.customerName;
                 rcptInput.disabled = true;
+                btnBox.innerHTML = `
+                    <button onclick="selectCateredClientName('${escapeHtml(currentCart.customerName)}')" class="bg-blue-600 border border-blue-400 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition active:scale-95">
+                        <i class="fa-solid fa-user"></i> ${escapeHtml(currentCart.customerName)} (Assigned to Cart ${activeCartSlot})
+                    </button>`;
+            } else if (myRecord && myRecord.status === 'Catering' && myRecord.customerName) {
+                const activeCusts = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+                const assignedInOtherCarts = [1, 2, 3, 4]
+                    .filter(s => s !== activeCartSlot)
+                    .map(s => multiCarts[s].customerName)
+                    .filter(Boolean);
+                const availableForWizard = activeCusts.filter(c => !assignedInOtherCarts.includes(c));
+
+                if (availableForWizard.length > 0) {
+                    btnBox.innerHTML = availableForWizard.map(c => `
+                        <button onclick="selectCateredClientName('${escapeHtml(c)}')" class="bg-blue-600/30 border border-blue-500 text-blue-300 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition active:scale-95">
+                            <i class="fa-solid fa-user"></i> ${escapeHtml(c)}
+                        </button>
+                    `).join('');
+                    
+                    rcptInput.value = availableForWizard[0] || "";
+                    rcptInput.disabled = true;
+                    currentCart.customerName = availableForWizard[0] || "";
+                } else {
+                    btnBox.innerHTML = `<span class="text-gray-500 italic text-xs">All active catering clients are assigned to other carts.</span>`;
+                    rcptInput.value = "";
+                    rcptInput.disabled = false;
+                    toggleManual.checked = true;
+                }
             } else {
                 btnBox.innerHTML = `<span class="text-gray-500 italic text-xs">Wala kang active na nilalutong customer ngayon.</span>`;
                 rcptInput.value = "";
@@ -2506,8 +2746,8 @@ ${customerLines}
                 toggleManual.checked = true;
             }
 
-            const marketSum = cartItems.filter(i => i.category === 'Market').reduce((s, i) => s + i.price, 0);
-            const storeSum = cartItems.filter(i => i.category === 'Store').reduce((s, i) => s + i.price, 0);
+            const marketSum = currentCart.items.filter(i => i.category === 'Market').reduce((s, i) => s + i.price, 0);
+            const storeSum = currentCart.items.filter(i => i.category === 'Store').reduce((s, i) => s + i.price, 0);
 
             wizState.subtotal = marketSum + storeSum;
             const autoMarket = marketSum > 0 ? Math.ceil(marketSum / 500) * 15 : 0;
@@ -2530,6 +2770,7 @@ ${customerLines}
             rcptInput.value = cName;
             document.getElementById('manual-client-toggle').checked = false;
             rcptInput.disabled = true;
+            getCurrentCart().customerName = cName;
             showToast(`Selected: ${cName}`);
         }
 
@@ -2605,6 +2846,12 @@ ${customerLines}
         }
 
         async function saveReceiptToDatabase(customerName) {
+            if (customerName) {
+                const cleanName = customerName.trim().toLowerCase();
+                createdReceiptCustomers.add(cleanName);
+                localStorage.setItem('createdReceiptCustomers', JSON.stringify(Array.from(createdReceiptCustomers)));
+            }
+
             const feesObj = {
                 handling: wizState.finalHFee || 0,
                 market: wizState.finalMFee || 0,
@@ -2633,7 +2880,8 @@ ${customerLines}
         function renderFinalReceiptText() {
             const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' });
 
-            let itemsTxt = cartItems.map(i => `🔸 ${i.item} - ₱${i.price.toFixed(2)}`).join("\n");
+            const currentCart = getCurrentCart();
+            let itemsTxt = currentCart.items.map(i => `🔸 ${i.item} - ₱${i.price.toFixed(2)}`).join("\n");
             let feesTxt = "";
             if (wizState.finalHFee > 0) feesTxt += `🔹 Handling Fee: ₱${wizState.finalHFee.toFixed(2)}\n`;
             if (wizState.finalMFee > 0) feesTxt += `🔹 Market Fee: ₱${wizState.finalMFee.toFixed(2)}\n`;
@@ -2663,8 +2911,7 @@ ${feesTxt}➖➖➖➖➖➖➖➖➖➖➖➖
         }
 
         function completeReceiptDone() {
-            cartItems = [];
-            selectedCartIds.clear();
+            multiCarts[activeCartSlot] = { items: [], selectedIds: new Set(), customerName: "", txId: "" };
             currentReceiptTransactionId = "";
             switchView('view-home');
         }
@@ -2672,7 +2919,7 @@ ${feesTxt}➖➖➖➖➖➖➖➖➖➖➖➖
         function copyFinalReceipt() { copyText(document.getElementById('final-receipt-text').innerText); }
         function copyText(text) { navigator.clipboard.writeText(text); showToast("Copied to clipboard!"); }
         function showToast(msg) { const toast = document.getElementById('toast'); toast.innerText = msg; toast.style.opacity = '1'; setTimeout(() => { toast.style.opacity = '0'; }, 2500); }
-        function escapeHtml(str) { return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+        function escapeHtml(str) { return str ? str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : ""; }
     </script>
 </body>
 </html>
