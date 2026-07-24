@@ -412,8 +412,8 @@
             </button>
         </section>
 
-        <!-- MAP PICKER VIEW -->
-        <section id="view-map" class="hidden fixed inset-0 bg-darkBg z-[100] flex flex-col h-screen h-[100dvh] w-full overflow-hidden">
+        <!-- MAP PICKER VIEW (FIXED FLEX-COL VIEWPORT FIT) -->
+        <section id="view-map" class="hidden fixed inset-0 bg-darkBg z-[100] flex flex-col w-full h-full overflow-hidden">
             <header class="bg-cardBg px-4 py-3 flex items-center justify-between shadow-md shrink-0 border-b border-gray-800">
                 <button onclick="goBack()" class="text-red-400 font-semibold flex items-center gap-2 transition active:opacity-50 text-sm">
                     <i class="fa-solid fa-xmark"></i> Cancel
@@ -421,12 +421,12 @@
                 <h1 class="text-sm font-bold">Pick Location Pin</h1>
                 <div class="w-12"></div>
             </header>
-            <div class="flex-1 relative w-full h-full min-h-0 overflow-hidden">
+            <div class="flex-1 relative w-full min-h-0 overflow-hidden">
                 <div id="google-map-container" class="w-full h-full"></div>
                 <div class="map-center-marker"><i class="fa-solid fa-location-dot"></i></div>
             </div>
-            <div class="p-3 bg-cardBg shadow-lg shrink-0 border-t border-gray-800 z-10">
-                <button onclick="confirmGoogleMapPin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95">
+            <div class="p-3 bg-cardBg shadow-lg shrink-0 border-t border-gray-800 z-10 pb-6 sm:pb-3">
+                <button onclick="confirmGoogleMapPin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95">
                     Confirm Location Pin
                 </button>
             </div>
@@ -1398,7 +1398,6 @@
 
         function initDraggableChat() {
             const bubble = document.getElementById('chat-bubble');
-            const container = document.getElementById('floating-chat-container');
 
             updateChatPositions();
 
@@ -1454,7 +1453,7 @@
                 container.style.top = currentBubbleY + 'px';
                 container.style.bottom = 'auto';
             } else {
-                const windowHeight = 384; // h-96 approx
+                const windowHeight = 384;
                 let windowTop = currentBubbleY - windowHeight - 8;
                 
                 if (windowTop < 60) {
