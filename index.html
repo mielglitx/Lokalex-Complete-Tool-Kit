@@ -35,6 +35,11 @@
             transform: translateX(0);
             opacity: 1;
         }
+        /* SCRUBBER LETTER CURVE STYLING */
+        .scrubber-letter {
+            will-change: transform;
+            transition: transform 0.05s linear;
+        }
     </style>
 </head>
 <body onclick="unlockAudioContext()" class="bg-darkBg text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative">
@@ -378,8 +383,8 @@
             
             <div id="record-list" class="flex-1 flex flex-col gap-3 pb-20 pr-8 overflow-y-auto"></div>
             
-            <!-- RUBBER-BAND ALPHABET SCRUBBER -->
-            <div id="alphabet-scrubber" class="fixed right-1 top-1/2 -translate-y-1/2 flex flex-col text-[10px] text-gray-500 font-bold bg-darkBg/90 py-2 rounded-full z-20 touch-none select-none border border-gray-800 shadow-xl transition-transform duration-300"></div>
+            <!-- CURVED ARC ALPHABET SCRUBBER -->
+            <div id="alphabet-scrubber" class="fixed right-2 top-1/2 -translate-y-1/2 flex flex-col text-[10px] text-gray-400 font-bold z-30 touch-none select-none"></div>
 
             <button id="directory-add-fab" onclick="openForm(null)" class="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center text-xl z-40 transition active:scale-90">
                 <i class="fa-solid fa-plus"></i>
@@ -2204,44 +2209,104 @@ ${customerLines}
         }
 
         function buildAlphabetScrubber() {
-            document.getElementById('alphabet-scrubber').innerHTML = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('').map(letter => 
-                `<div data-letter="${letter}" class="scrubber-letter w-6 text-center py-[2px] ${activeFilterLetter === letter ? 'text-blue-500 font-black text-sm' : ''}">${letter}</div>`
+            const scrubber = document.getElementById('alphabet-scrubber');
+            if (!scrubber) return;
+            scrubber.innerHTML = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('').map(letter => 
+                `<div data-letter="${letter}" class="scrubber-letter w-6 h-5 flex items-center justify-center text-[10px] rounded-full transition-all duration-100 ${activeFilterLetter === letter ? 'text-blue-400 font-black scale-125' : 'text-gray-400'}">${letter}</div>`
             ).join('');
         }
 
+        // CURVED ARC / WAVE SCRUBBER DRAG LOGIC (NIAGARA LAUNCHER STYLE)
         function attachScrubberEvents() {
             const scrubber = document.getElementById('alphabet-scrubber');
+            if (!scrubber) return;
+
             let isDragging = false;
-            let startX = 0;
 
-            scrubber.ontouchstart = (e) => {
-                isDragging = true;
-                startX = e.touches[0].clientX;
-                scrubber.style.transition = 'none';
-            };
+            const updateCurve = (touchY) => {
+                const letters = scrubber.querySelectorAll('.scrubber-letter');
+                const radius = 170; // Wave reach radius
+                const maxPull = 120; // Max horizontal pull to the left
 
-            scrubber.ontouchmove = (e) => {
-                if (!isDragging) return;
-                const deltaX = e.touches[0].clientX - startX;
-                const pulledX = Math.sign(deltaX) * Math.pow(Math.abs(deltaX), 0.75) * 1.5;
-                scrubber.style.transform = `translateY(-50%) translateX(${pulledX}px)`;
+                let closestLetter = null;
+                let minDistance = Infinity;
 
-                const el = document.elementFromPoint(e.touches[0].clientX, e.touches[0].clientY);
-                if (el && el.classList.contains('scrubber-letter')) {
-                    const letter = el.getAttribute('data-letter');
+                letters.forEach(el => {
+                    const rect = el.getBoundingClientRect();
+                    const elCenterY = rect.top + rect.height / 2;
+                    const distY = Math.abs(elCenterY - touchY);
+
+                    if (distY < minDistance) {
+                        minDistance = distY;
+                        closestLetter = el;
+                    }
+
+                    if (distY < radius) {
+                        // Smooth cosine wave calculation
+                        const factor = Math.cos((distY / radius) * (Math.PI / 2));
+                        const pullX = -maxPull * factor;
+                        const scale = 1 + (0.6 * factor);
+
+                        el.style.transform = `translateX(${pullX}px) scale(${scale})`;
+                        
+                        if (factor > 0.7) {
+                            el.style.color = '#60a5fa'; // Highlighted active color
+                            el.style.fontWeight = '900';
+                            el.classList.add('bg-blue-600/30', 'border', 'border-blue-400/50', 'shadow-lg');
+                        } else {
+                            el.style.color = '#9ca3af';
+                            el.style.fontWeight = '600';
+                            el.classList.remove('bg-blue-600/30', 'border', 'border-blue-400/50', 'shadow-lg');
+                        }
+                    } else {
+                        el.style.transform = 'translateX(0px) scale(1)';
+                        el.style.color = '';
+                        el.style.fontWeight = '';
+                        el.classList.remove('bg-blue-600/30', 'border', 'border-blue-400/50', 'shadow-lg');
+                    }
+                });
+
+                if (closestLetter) {
+                    const letter = closestLetter.getAttribute('data-letter');
                     if (letter && activeFilterLetter !== letter) {
                         activeFilterLetter = letter;
-                        document.getElementById('search-input').value = ""; 
-                        buildAlphabetScrubber();
+                        document.getElementById('search-input').value = "";
                         filterDirectoryRecords();
                     }
                 }
             };
 
+            const resetCurve = () => {
+                const letters = scrubber.querySelectorAll('.scrubber-letter');
+                letters.forEach(el => {
+                    el.style.transition = 'transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+                    el.style.transform = 'translateX(0px) scale(1)';
+                    el.style.color = '';
+                    el.style.fontWeight = '';
+                    el.classList.remove('bg-blue-600/30', 'border', 'border-blue-400/50', 'shadow-lg');
+                });
+            };
+
+            scrubber.ontouchstart = (e) => {
+                isDragging = true;
+                const letters = scrubber.querySelectorAll('.scrubber-letter');
+                letters.forEach(el => el.style.transition = 'none');
+                updateCurve(e.touches[0].clientY);
+            };
+
+            scrubber.ontouchmove = (e) => {
+                if (!isDragging) return;
+                if (e.cancelable) e.preventDefault();
+                updateCurve(e.touches[0].clientY);
+            };
+
             scrubber.ontouchend = () => {
                 isDragging = false;
-                scrubber.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
-                scrubber.style.transform = 'translateY(-50%) translateX(0px)';
+                resetCurve();
+            };
+            scrubber.ontouchcancel = () => {
+                isDragging = false;
+                resetCurve();
             };
         }
 
@@ -2249,7 +2314,7 @@ ${customerLines}
             const query = document.getElementById('search-input').value.toLowerCase();
             const filtered = records.filter(r => {
                 const name = (r['name'] || r['customer name'] || r['store name'] || "").toLowerCase();
-                if (query.length > 0) { activeFilterLetter = ""; buildAlphabetScrubber(); return name.includes(query); }
+                if (query.length > 0) { activeFilterLetter = ""; return name.includes(query); }
                 return activeFilterLetter === "" || name.toUpperCase().startsWith(activeFilterLetter);
             });
             renderDirectoryRecords(filtered);
