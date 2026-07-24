@@ -625,6 +625,13 @@
         const ADMIN_IDS = ["4547425", "5548562"];
         function isAdmin() { return ADMIN_IDS.includes(appState.telegramId); }
 
+        // GENERATE CONSTANT DAILY RIDER ID FOR META SUITE SEARCHING
+        function getDailyRiderId() {
+            const nameClean = (appState.riderName || appState.telegramId || "RIDER").replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            const dateClean = getLocalTodayStr().replace(/-/g, '');
+            return `LX-${nameClean}-${dateClean}`;
+        }
+
         const BARANGAY_DATA = [
             { name: "Anoling 1st", km: "5.5", fee: 95 },
             { name: "Anoling 2nd", km: "6.7", fee: 110 },
@@ -2085,6 +2092,7 @@
 `📊 **LOKALEX COMMISSION REPORT** 📊
 📅 **Date:** ${targetDate}
 🛵 **Target:** ${filterTarget}
+🔑 **Rider ID:** \`${getDailyRiderId()}\`
 ➖➖➖➖➖➖➖➖➖➖➖➖
 👥 **CUSTOMERS SERVED & FEES:**
 ${customerLines}
@@ -2695,8 +2703,9 @@ ${customerLines}
             document.getElementById('header-title').innerText = `Fee Wizard (Cart ${activeCartSlot})`;
             switchView('view-wizard');
 
+            // Unique DB ID for sheet entry, but uses same Daily Rider ID base
             if (!currentCart.txId) {
-                currentCart.txId = "TX-" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 4).toUpperCase();
+                currentCart.txId = getDailyRiderId() + "-" + Date.now().toString(36).toUpperCase();
             }
             currentReceiptTransactionId = currentCart.txId;
 
@@ -2881,6 +2890,8 @@ ${customerLines}
             const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' });
 
             const currentCart = getCurrentCart();
+            const dailyRiderId = getDailyRiderId();
+
             let itemsTxt = currentCart.items.map(i => `🔸 ${i.item} - ₱${i.price.toFixed(2)}`).join("\n");
             let feesTxt = "";
             if (wizState.finalHFee > 0) feesTxt += `🔹 Handling Fee: ₱${wizState.finalHFee.toFixed(2)}\n`;
@@ -2896,7 +2907,7 @@ ${customerLines}
 
 📅 **Date:** ${dateStr}
 🛵 **Rider:** ${appState.riderName}
-🔑 **Transaction ID:** \`${currentReceiptTransactionId}\`
+🔑 **Rider ID:** \`${dailyRiderId}\`
 ➖➖➖➖➖➖➖➖➖➖➖➖
 🛍️ **ITEMS:**
 ${itemsTxt}
