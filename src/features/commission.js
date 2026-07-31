@@ -1,397 +1,300 @@
 // src/features/commission.js
 import { appState, globalState } from '../store/state.js';
-import { API_URL, ADMIN_IDS } from '../config/constants.js';
+import { db } from '../config/firebase.js';
+import { getLocalTodayStr, copyText, getWeekString, getMonthString, getDateString, escapeHtml } from '../utils/helpers.js';
+import { showToast } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
-import { getLocalTodayStr, isSameDate, escapeHtml, copyText } from '../utils/helpers.js';
 
-// Direct CSV export URL for the CommissionSettings tab (gid=1969671340)
-const CSV_COMMISSION_SETTINGS_URL = "https://docs.google.com/spreadsheets/d/1lc-1os3xTnAuE0dsm6UmEle7vxuRyewBnuBlSrfPSWk/export?format=csv&gid=1969671340";
+let viewSettings = {
+    mode: 'earned', // 'earned' or 'company'
+    period: 'daily', // 'daily', 'weekly', 'monthly'
+    dateValue: getLocalTodayStr()
+};
 
-function isAdmin() {
-    const t = (appState.userType || "").toLowerCase();
-    return t === "admin" || ADMIN_IDS.includes(appState.telegramId);
-}
-
-// Fetch commission rates directly from Google Sheets CommissionSettings tab
-export async function fetchRiderRates() {
-    try {
-        // 1. Try Apps Script API first
-        const res = await fetch(`${API_URL}?type=all`);
-        if (res.ok) {
-            const bundle = await res.json();
-            if (bundle && bundle.riderRates && Object.keys(bundle.riderRates).length > 0) {
-                globalState.globalRiderRates = bundle.riderRates;
-                return;
-            }
-        }
-    } catch(e) {}
-
-    // 2. Direct CSV Export Fallback (gid=1969671340)
-    try {
-        const csvRes = await fetch(CSV_COMMISSION_SETTINGS_URL);
-        if (csvRes.ok) {
-            const csvText = await csvRes.text();
-            const lines = csvText.split('\n');
-            const rates = {};
-
-            lines.forEach((line, index) => {
-                if (index === 0) return; // Skip headers (Rider, Percentage, IsPromoLessPerc)
-                const cols = line.split(',');
-                if (cols.length >= 2) {
-                    const rider = cols[0].replace(/['"\r\n]+/g, '').trim().toLowerCase();
-                    const percentage = parseFloat(cols[1].replace(/['"\r\n]+/g, '').trim()) || 20;
-                    const promoLess = cols[2] ? (parseFloat(cols[2].replace(/['"\r\n]+/g, '').trim()) || 0) : 0;
-
-                    if (rider) {
-                        rates[rider] = {
-                            rate: percentage,
-                            promoLess: promoLess,
-                            effectiveRate: Math.max(0, percentage - promoLess)
-                        };
-                    }
-                }
-            });
-
-            if (Object.keys(rates).length > 0) {
-                globalState.globalRiderRates = rates;
-            }
-        }
-    } catch(e) {
-        console.warn("Failed to fetch CommissionSettings sheet CSV:", e);
-    }
-}
-
-export function getRiderEffectiveRate(rName) {
-    if (!rName) return 20;
-    const clean = rName.trim().toLowerCase();
-    
-    if (globalState.globalRiderRates && globalState.globalRiderRates[clean]) {
-        const item = globalState.globalRiderRates[clean];
-        if (item.effectiveRate !== undefined) return item.effectiveRate;
-        if (item.rate !== undefined) return item.rate;
-    }
-    return 20;
-}
-
-export function toggleRiderCustomers(uid) {
-    const drawer = document.getElementById(`rider-cust-drawer-${uid}`);
-    const icon = document.getElementById(`rider-cust-icon-${uid}`);
-    const textEl = document.getElementById(`rider-cust-text-${uid}`);
-
-    if (!drawer) return;
-
-    const isHidden = drawer.classList.contains('hidden');
-    if (isHidden) {
-        drawer.classList.remove('hidden');
-        if (icon) icon.style.transform = "rotate(180deg)";
-        if (textEl) textEl.innerText = "Hide Customers";
-    } else {
-        drawer.classList.add('hidden');
-        if (icon) icon.style.transform = "rotate(0deg)";
-        if (textEl) textEl.innerText = "Show Customers";
-    }
-}
-
-export async function openCommissionScreen(selectedDate = null) {
+export function openCommissionScreen() {
     switchView('view-commission');
-    document.getElementById('header-title').innerText = "Daily Commission";
-    const container = document.getElementById('commission-receipts-list');
-    container.innerHTML = `<div class="text-center py-10 text-gray-500"><i class="fa-solid fa-spinner fa-spin"></i> Loading records & settings...</div>`;
+    
+    // Set default dates if empty
+    if (!document.getElementById('comm-input-daily').value) {
+        const today = new Date();
+        document.getElementById('comm-input-daily').value = getLocalTodayStr();
+        document.getElementById('comm-input-weekly').value = getWeekString(today.getTime());
+        document.getElementById('comm-input-monthly').value = getMonthString(today.getTime());
+    }
 
-    // Always fetch latest rates from CommissionSettings tab first
-    await fetchRiderRates();
+    setupAdminControls();
+    refreshCommissionView();
+}
 
-    const todayStr = getLocalTodayStr();
-    const targetDate = selectedDate && typeof selectedDate === 'string' ? selectedDate : todayStr;
-    document.getElementById('commission-date-picker').value = targetDate;
-    document.getElementById('commission-date-label').innerText = targetDate === todayStr ? "Today" : targetDate;
-
+function setupAdminControls() {
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId); 
     const filterBox = document.getElementById('admin-commission-filter-box');
-    const riderSelect = document.getElementById('admin-rider-select');
-
-    if (isAdmin()) {
+    const select = document.getElementById('admin-rider-select');
+    
+    if (isAdmin) {
         filterBox.classList.remove('hidden');
-        let riders = globalState.rosterMembers ? globalState.rosterMembers.map(r => r.riderName) : [];
-        if (globalState.globalRiderRates) {
-            Object.keys(globalState.globalRiderRates).forEach(k => {
-                let formattedName = k.charAt(0).toUpperCase() + k.slice(1);
-                riders.push(formattedName);
-            });
-        }
-        riders = [...new Set(riders)];
-        let currentSel = riderSelect.value || "ALL";
-        riderSelect.innerHTML = `<option value="ALL">All Riders</option>` + riders.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
-        riderSelect.value = currentSel;
+        filterBox.classList.add('flex');
+        
+        // Populate rider dropdown
+        let options = `<option value="ALL">All Riders (Combined)</option>`;
+        const uniqueRiders = [...new Set(globalState.globalCateredHistory.map(h => h.riderId).filter(Boolean))];
+        
+        uniqueRiders.forEach(id => {
+            const historyItem = globalState.globalCateredHistory.find(h => h.riderId === id);
+            const name = historyItem ? historyItem.riderName : id;
+            options += `<option value="${id}">${name}</option>`;
+        });
+        
+        if (select.innerHTML === "") select.innerHTML = options;
     } else {
         filterBox.classList.add('hidden');
+        filterBox.classList.remove('flex');
+    }
+}
+
+export function setCommissionMode(mode) {
+    viewSettings.mode = mode;
+    
+    // UI Button toggles
+    const btnEarned = document.getElementById('comm-mode-earned');
+    const btnCompany = document.getElementById('comm-mode-company');
+    
+    if (mode === 'earned') {
+        btnEarned.className = "flex-1 py-2 rounded-md bg-emerald-600/20 text-emerald-400 border border-emerald-500/50 transition";
+        btnCompany.className = "flex-1 py-2 rounded-md text-gray-400 hover:text-white transition";
+    } else {
+        btnCompany.className = "flex-1 py-2 rounded-md bg-red-600/20 text-red-400 border border-red-500/50 transition";
+        btnEarned.className = "flex-1 py-2 rounded-md text-gray-400 hover:text-white transition";
+    }
+    
+    refreshCommissionView();
+}
+
+export function setCommissionPeriod(period) {
+    viewSettings.period = period;
+    
+    // UI Button toggles
+    ['daily', 'weekly', 'monthly'].forEach(p => {
+        const btn = document.getElementById(`comm-period-${p}`);
+        const input = document.getElementById(`comm-input-${p}`);
+        if (p === period) {
+            btn.className = "py-1.5 rounded bg-blue-600 text-white transition shadow";
+            input.classList.remove('hidden');
+        } else {
+            btn.className = "py-1.5 rounded text-gray-400 hover:text-white transition";
+            input.classList.add('hidden');
+        }
+    });
+
+    refreshCommissionView();
+}
+
+export function refreshCommissionView() {
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
+    let targetRiderId = isAdmin ? document.getElementById('admin-rider-select').value : appState.telegramId;
+    if (targetRiderId === "ALL") targetRiderId = null; // Admin viewing everyone
+
+    viewSettings.dateValue = document.getElementById(`comm-input-${viewSettings.period}`).value;
+    if (!viewSettings.dateValue) return;
+
+    // 1. Filter Data
+    let filteredHistory = globalState.globalCateredHistory.filter(record => {
+        if (targetRiderId && record.riderId !== targetRiderId.toString()) return false;
+
+        const recordTs = record.timestamp || Date.now();
+        if (viewSettings.period === 'daily') return getDateString(recordTs) === viewSettings.dateValue;
+        if (viewSettings.period === 'weekly') return getWeekString(recordTs) === viewSettings.dateValue;
+        if (viewSettings.period === 'monthly') return getMonthString(recordTs) === viewSettings.dateValue;
+        return false;
+    });
+
+    // 2. Calculate Totals
+    let grossTotal = 0;
+    let companyShare = 0;
+    let riderNet = 0;
+
+    filteredHistory.forEach(r => {
+        const hf = parseFloat(r.fees?.handling) || 0;
+        const mf = parseFloat(r.fees?.market) || 0;
+        const ms = parseFloat(r.fees?.multistop) || 0;
+        const rdf = parseFloat(r.fees?.delivery) || 0;
+        const disc = parseFloat(r.fees?.discount) || 0;
+        const epay = parseFloat(r.fees?.epaymentFee) || 0;
+
+        const recordGross = hf + mf + ms + rdf + epay - disc;
+        grossTotal += recordGross;
+        companyShare += (recordGross * 0.20);
+        riderNet += (recordGross * 0.80);
+    });
+
+    // 3. Update UI Text
+    const mainAmountEl = document.getElementById('comm-main-amount');
+    const mainLabelEl = document.getElementById('comm-main-label');
+    document.getElementById('comm-gross-amount').innerText = grossTotal.toFixed(2);
+    document.getElementById('comm-summary-title').innerText = `${viewSettings.period.toUpperCase()} SUMMARY`;
+
+    if (viewSettings.mode === 'earned') {
+        mainLabelEl.innerText = "YOUR EARNINGS (80%)";
+        mainLabelEl.className = "text-[10px] text-emerald-400 font-bold uppercase";
+        mainAmountEl.className = "text-4xl font-black text-emerald-400 drop-shadow-md";
+        mainAmountEl.innerText = riderNet.toFixed(2);
+    } else {
+        mainLabelEl.innerText = "TO PAY COMPANY (20%)";
+        mainLabelEl.className = "text-[10px] text-red-400 font-bold uppercase";
+        mainAmountEl.className = "text-4xl font-black text-red-400 drop-shadow-md";
+        mainAmountEl.innerText = companyShare.toFixed(2);
     }
 
-    try {
-        const res = await fetch(`${API_URL}?type=receipts`);
-        if (res.ok) {
-            const allReceipts = await res.json();
-            const selectedFilterRider = isAdmin() ? riderSelect.value : appState.riderName;
+    renderReceiptsList(filteredHistory);
 
-            const myTargetReceipts = allReceipts.filter(r => isSameDate(r.date || r.Date, targetDate));
-            globalState.globalDailyReceipts = myTargetReceipts;
+    // 4. Fetch Settlement Status from Firebase
+    checkSettlementStatus(targetRiderId, viewSettings.period, viewSettings.dateValue, isAdmin);
+}
 
-            // Helper: Detect if a rider name belongs to an Admin account
-            const isRiderAdmin = (rName) => {
-                if (!rName) return false;
-                const clean = rName.trim().toLowerCase();
-                const record = globalState.rosterMembers ? globalState.rosterMembers.find(rm => rm.riderName.trim().toLowerCase() === clean) : null;
-                if (record && (record.userType.toLowerCase() === 'admin' || ADMIN_IDS.includes(record.telegramId))) {
-                    return true;
-                }
-                return false;
-            };
+function checkSettlementStatus(riderId, period, dateVal, isAdmin) {
+    const badge = document.getElementById('comm-status-badge');
+    const adminBtn = document.getElementById('admin-mark-paid-btn');
+    
+    // If Admin is viewing "ALL", we don't allow marking as paid (must be done per rider)
+    if (!riderId) {
+        badge.classList.add('hidden');
+        adminBtn.classList.add('hidden');
+        return;
+    }
 
-            // -------------------------------------------------------------
-            // MODE A: ADMIN - ALL RIDERS SUMMARY VIEW WITH EXPANDABLE CUSTOMERS
-            // -------------------------------------------------------------
-            if (isAdmin() && selectedFilterRider === "ALL") {
-                const riderSummary = {};
+    const settlementKey = `${riderId}_${period}_${dateVal}`;
+    
+    db.ref(`commissionSettlements/${settlementKey}`).once('value').then(snapshot => {
+        const data = snapshot.val();
+        badge.classList.remove('hidden');
 
-                myTargetReceipts.forEach(r => {
-                    const cName = (r.customerName || r.customername || r.CustomerName || "").toString().trim();
-                    if (!cName || cName.toLowerCase() === "sample") return;
-
-                    const rName = r.riderName || r.ridername || r.RiderName || "Unknown";
-                    
-                    // EXCLUDE ADMINS
-                    if (isRiderAdmin(rName)) return;
-
-                    const feesVal = parseFloat(r.totalFees || r.totalfees || r.TotalFees || 0);
-                    const rate = getRiderEffectiveRate(rName);
-
-                    if (!riderSummary[rName]) {
-                        riderSummary[rName] = { gross: 0, rate: rate, pay: 0, customers: {} };
-                    }
-                    
-                    riderSummary[rName].gross += feesVal;
-                    riderSummary[rName].pay += feesVal * (rate / 100);
-
-                    if (!riderSummary[rName].customers[cName]) {
-                        riderSummary[rName].customers[cName] = 0;
-                    }
-                    riderSummary[rName].customers[cName] += feesVal;
-                });
-
-                let totalGross = 0;
-                let totalCompanyShare = 0;
-
-                const riderKeys = Object.keys(riderSummary).filter(rName => riderSummary[rName].pay > 0 || riderSummary[rName].gross > 0);
-
-                if (riderKeys.length === 0) {
-                    container.innerHTML = `<div class="text-center py-10 text-gray-400 text-xs">No rider commissions recorded for date: ${targetDate}</div>`;
-                } else {
-                    container.innerHTML = riderKeys.map(rName => {
-                        const item = riderSummary[rName];
-                        totalGross += item.gross;
-                        totalCompanyShare += item.pay;
-
-                        const uid = Math.random().toString(36).substr(2, 9);
-                        const custNames = Object.keys(item.customers);
-
-                        const customerListHtml = custNames.map(cName => `
-                            <div class="flex justify-between items-center py-1.5 px-2.5 rounded-lg bg-darkBg/50 border border-gray-800 text-xs">
-                                <span class="text-gray-300 flex items-center gap-2 font-medium">
-                                    <i class="fa-solid fa-user text-[10px] text-blue-400"></i> ${escapeHtml(cName)}
-                                </span>
-                                <span class="font-bold text-green-400">₱${item.customers[cName].toFixed(2)}</span>
-                            </div>
-                        `).join('');
-
-                        return `
-                        <div class="bg-cardBg border border-gray-800 p-4 rounded-xl shadow-sm flex flex-col gap-3 transition-all">
-                            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
-                                <div class="flex items-center gap-2.5">
-                                    <div class="w-8 h-8 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-xs">
-                                        <i class="fa-solid fa-motorcycle"></i>
-                                    </div>
-                                    <span class="font-bold text-sm text-white">${escapeHtml(rName)}</span>
-                                </div>
-                                <span class="bg-amber-500/20 text-amber-400 text-[11px] font-bold px-2.5 py-1 rounded-lg border border-amber-500/30">
-                                    ${item.rate}% Rate
-                                </span>
-                            </div>
-
-                            <div class="grid grid-cols-2 gap-2 text-xs pt-0.5">
-                                <div class="bg-darkBg/60 p-2.5 rounded-lg border border-gray-800/80">
-                                    <span class="text-[10px] text-gray-400 font-semibold block uppercase">Earned (Gross)</span>
-                                    <span class="font-black text-white text-sm mt-0.5 block">₱${item.gross.toFixed(2)}</span>
-                                </div>
-                                <div class="bg-red-950/30 p-2.5 rounded-lg border border-red-800/40">
-                                    <span class="text-[10px] text-red-400 font-semibold block uppercase">To Pay Company</span>
-                                    <span class="font-black text-red-400 text-sm mt-0.5 block">₱${item.pay.toFixed(2)}</span>
-                                </div>
-                            </div>
-
-                            <!-- TOGGLE SHOW CUSTOMERS BUTTON -->
-                            <button onclick="toggleRiderCustomers('${uid}')" class="w-full mt-1 py-2 px-3 rounded-lg bg-inputBg hover:bg-gray-800 border border-gray-700/60 text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center justify-between transition active:scale-98">
-                                <span class="flex items-center gap-1.5">
-                                    <i class="fa-solid fa-users text-xs"></i> 
-                                    <span id="rider-cust-text-${uid}">Show Customers</span> (${custNames.length})
-                                </span>
-                                <i id="rider-cust-icon-${uid}" class="fa-solid fa-chevron-down transition-transform duration-300 text-gray-400 text-xs"></i>
-                            </button>
-
-                            <!-- EXPANDABLE CUSTOMERS LIST DRAWER -->
-                            <div id="rider-cust-drawer-${uid}" class="hidden flex flex-col gap-1.5 pt-2 border-t border-gray-800/60 transition-all">
-                                ${customerListHtml}
-                            </div>
-                        </div>`;
-                    }).join('');
-                }
-
-                globalState.currentDayTotalCommission = totalGross;
-                globalState.currentDayCompanyShare = totalCompanyShare;
-                globalState.currentDayRiderNet = totalGross - totalCompanyShare;
-
-                document.getElementById('company-rate-label').innerText = "VAR";
-                document.getElementById('daily-gross-total').innerText = totalGross.toFixed(2);
-                document.getElementById('daily-company-share').innerText = totalCompanyShare.toFixed(2);
-                document.getElementById('daily-company-share-pay').innerText = totalCompanyShare.toFixed(2);
-                document.getElementById('daily-rider-net').innerText = (totalGross - totalCompanyShare).toFixed(2);
-
-            // -------------------------------------------------------------
-            // MODE B: SINGLE RIDER VIEW (Individual Customer Breakdowns)
-            // -------------------------------------------------------------
+        if (data && data.status === 'paid') {
+            badge.className = "absolute top-0 right-0 bg-emerald-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest shadow-md";
+            badge.innerText = "PAID";
+            if (isAdmin) {
+                adminBtn.classList.remove('hidden');
+                adminBtn.innerHTML = `<i class="fa-solid fa-rotate-left"></i> MARK AS UNPAID`;
+                adminBtn.className = "w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-black py-3 rounded-xl text-xs transition active:scale-95 shadow mt-1 border border-gray-700";
             } else {
-                const filteredReceipts = myTargetReceipts.filter(r => {
-                    const cName = (r.customerName || r.customername || r.CustomerName || "").toString().trim().toLowerCase();
-                    if (cName === "sample") return false;
-
-                    const rName = (r.riderName || r.ridername || r.RiderName || "").toString().trim().toLowerCase();
-                    return rName === (selectedFilterRider || appState.riderName).trim().toLowerCase();
-                });
-
-                globalState.currentDayTotalCommission = 0;
-                globalState.currentDayCompanyShare = 0;
-                globalState.currentDayCustomerMap = {};
-
-                if (filteredReceipts.length === 0) {
-                    container.innerHTML = `<div class="text-center py-10 text-gray-400 text-xs">No receipts logged for date: ${targetDate}</div>`;
-                } else {
-                    filteredReceipts.forEach(r => {
-                        const custName = r.customerName || r.customername || r.CustomerName || "Unknown";
-                        const riderWhoServed = r.riderName || r.ridername || r.RiderName || appState.riderName;
-                        const feesVal = parseFloat(r.totalFees || r.totalfees || r.TotalFees || 0);
-                        
-                        globalState.currentDayTotalCommission += feesVal;
-                        const riderEffectiveRate = getRiderEffectiveRate(riderWhoServed);
-                        globalState.currentDayCompanyShare += feesVal * (riderEffectiveRate / 100);
-
-                        if (!globalState.currentDayCustomerMap[custName]) globalState.currentDayCustomerMap[custName] = 0;
-                        globalState.currentDayCustomerMap[custName] += feesVal;
-                    });
-
-                    container.innerHTML = Object.keys(globalState.currentDayCustomerMap).map(custName => {
-                        return `
-                        <div class="bg-cardBg border border-gray-800 p-4 rounded-xl shadow-sm flex justify-between items-center">
-                            <div class="flex items-center gap-3">
-                                <div class="w-9 h-9 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-sm">
-                                    <i class="fa-solid fa-user"></i>
-                                </div>
-                                <div class="font-bold text-sm text-white">${escapeHtml(custName)}</div>
-                            </div>
-                            <div class="font-bold text-base text-green-400">
-                                ₱${globalState.currentDayCustomerMap[custName].toFixed(2)}
-                            </div>
-                        </div>`;
-                    }).join('');
-                }
-
-                globalState.currentDayRiderNet = globalState.currentDayTotalCommission - globalState.currentDayCompanyShare;
-
-                const displayRate = `${getRiderEffectiveRate(selectedFilterRider || appState.riderName)}%`;
-
-                document.getElementById('company-rate-label').innerText = displayRate;
-                document.getElementById('daily-gross-total').innerText = globalState.currentDayTotalCommission.toFixed(2);
-                document.getElementById('daily-company-share').innerText = globalState.currentDayCompanyShare.toFixed(2);
-                document.getElementById('daily-company-share-pay').innerText = globalState.currentDayCompanyShare.toFixed(2);
-                document.getElementById('daily-rider-net').innerText = globalState.currentDayRiderNet.toFixed(2);
+                adminBtn.classList.add('hidden');
+            }
+        } else {
+            badge.className = "absolute top-0 right-0 bg-red-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest shadow-md";
+            badge.innerText = "UNPAID";
+            if (isAdmin) {
+                adminBtn.classList.remove('hidden');
+                adminBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> MARK AS PAID`;
+                adminBtn.className = "w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl text-xs transition active:scale-95 shadow-lg mt-1 border border-emerald-400/50";
+            } else {
+                adminBtn.classList.add('hidden');
             }
         }
-    } catch(e) {
-        container.innerHTML = `<div class="text-center py-10 text-red-400">Failed to load commission logs.</div>`;
+    }); // <-- Missing closing brace was right here!
+}
+
+// Exposed to window for Admin button
+export function toggleSettlementStatus() {
+    const riderId = document.getElementById('admin-rider-select').value;
+    const settlementKey = `${riderId}_${viewSettings.period}_${viewSettings.dateValue}`;
+    
+    db.ref(`commissionSettlements/${settlementKey}`).once('value').then(snapshot => {
+        const isPaid = snapshot.val() && snapshot.val().status === 'paid';
+        
+        if (isPaid) {
+            db.ref(`commissionSettlements/${settlementKey}`).remove(); // Revert to unpaid
+            showToast("Marked as Unpaid.");
+        } else {
+            db.ref(`commissionSettlements/${settlementKey}`).set({
+                status: 'paid',
+                paidAt: Date.now(),
+                adminId: appState.telegramId
+            });
+            showToast("Marked as PAID! ✅");
+        }
+        refreshCommissionView();
+    });
+}
+
+function renderReceiptsList(historyArray) {
+    const container = document.getElementById('commission-receipts-list');
+    
+    if (historyArray.length === 0) {
+        container.innerHTML = `<div class="text-center text-gray-500 italic text-xs py-10">No records found for this period.</div>`;
+        return;
     }
+
+    container.innerHTML = historyArray.slice().reverse().map(record => {
+        const gross = parseFloat(record.totalFees) || 0;
+        const cShare = gross * 0.20;
+        const rNet = gross * 0.80;
+
+        let displayAmount = viewSettings.mode === 'earned' 
+            ? `<span class="text-emerald-400 font-bold">+ ₱${rNet.toFixed(2)}</span>`
+            : `<span class="text-red-400 font-bold">- ₱${cShare.toFixed(2)}</span>`;
+
+        const timeStr = new Date(record.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const dateStr = new Date(record.timestamp || Date.now()).toLocaleDateString([], {month: 'short', day:'numeric'});
+
+        return `
+            <div class="bg-cardBg p-3 rounded-xl border border-gray-800 shadow-sm flex flex-col gap-1 text-xs">
+                <div class="flex justify-between items-center border-b border-gray-800 pb-1 mb-1">
+                    <span class="font-bold text-blue-300 truncate max-w-[180px]"><i class="fa-solid fa-receipt"></i> ${escapeHtml(record.customerName.split(',')[0])}</span>
+                    <span class="text-[10px] text-gray-500">${dateStr} ${timeStr}</span>
+                </div>
+                <div class="flex justify-between items-center text-gray-300">
+                    <span>Gross Fee: ₱${gross.toFixed(2)}</span>
+                    ${displayAmount}
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 export function generateDailyReportText() {
-    const targetDate = document.getElementById('commission-date-picker').value || getLocalTodayStr();
-    const filterTarget = isAdmin() ? document.getElementById('admin-rider-select').value : appState.riderName;
-
-    let reportText = "";
-
-    if (isAdmin() && filterTarget === "ALL") {
-        let grandTotalGross = 0;
-        let grandTotalPay = 0;
-        const riderStats = {};
-
-        globalState.globalDailyReceipts.forEach(r => {
-            const cName = (r.customerName || r.customername || r.CustomerName || "").toString().trim().toLowerCase();
-            if (cName === "sample") return;
-
-            const rName = r.riderName || "Unknown";
-            const rRecord = globalState.rosterMembers ? globalState.rosterMembers.find(rm => rm.riderName.toLowerCase() === rName.toLowerCase()) : null;
-            if (rRecord && (rRecord.userType.toLowerCase() === "admin" || ADMIN_IDS.includes(rRecord.telegramId))) return;
-
-            const rate = getRiderEffectiveRate(rName);
-            if (rate <= 0) return;
-
-            if (!riderStats[rName]) riderStats[rName] = { gross: 0, rate: rate };
-            riderStats[rName].gross += parseFloat(r.totalFees || r.totalfees || r.TotalFees || 0);
-        });
-
-        let lines = [];
-        Object.keys(riderStats).forEach(rName => {
-            const gross = riderStats[rName].gross;
-            const rate = riderStats[rName].rate;
-            const pay = gross * (rate / 100);
-            grandTotalGross += gross; 
-            grandTotalPay += pay;
-
-            lines.push(
-`👤 **Rider:** ${rName}
-💵 **Total Earned:** ₱${gross.toFixed(2)}
-🏢 **Commission Rate:** ${rate}%
-🔴 **To Pay Company:** ₱${pay.toFixed(2)}
-------------------------`);
-        });
-
-        reportText = 
-`📊 **LOKALEX ALL-RIDERS COMMISSION REPORT** 📊
-📅 **Date:** ${targetDate}
-➖➖➖➖➖➖➖➖➖➖➖➖
-${lines.length ? lines.join('\n') : '• No commissionable riders recorded today.'}
-➖➖➖➖➖➖➖➖➖➖➖➖
-💵 **GRAND TOTAL GROSS:** ₱${grandTotalGross.toFixed(2)}
-🔴 **GRAND TOTAL TO PAY COMPANY:** ₱${grandTotalPay.toFixed(2)}
-
-💙 Generated via Lokalex Hub`;
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
+    let targetRiderId = isAdmin ? document.getElementById('admin-rider-select').value : appState.telegramId;
+    
+    let riderName = "Rider";
+    if (targetRiderId === "ALL") {
+        riderName = "ALL RIDERS (COMBINED)";
     } else {
-        const effectiveRate = getRiderEffectiveRate(filterTarget);
-        let customerLines = Object.keys(globalState.currentDayCustomerMap).length > 0 
-            ? Object.keys(globalState.currentDayCustomerMap).map(c => `• ${c}: ₱${globalState.currentDayCustomerMap[c].toFixed(2)}`).join('\n')
-            : '• No customers served.';
-
-        reportText = 
-`📊 **LOKALEX COMMISSION REPORT** 📊
-📅 **Date:** ${targetDate}
-🛵 **Target:** ${filterTarget}
-➖➖➖➖➖➖➖➖➖➖➖➖
-👥 **CUSTOMERS SERVED & FEES:**
-${customerLines}
-➖➖➖➖➖➖➖➖➖➖➖➖
-💵 **Total Fees Collected (Gross): ₱${globalState.currentDayTotalCommission.toFixed(2)}**
-🏢 **Company Share (${effectiveRate}%): ₱${globalState.currentDayCompanyShare.toFixed(2)}**
-💰 **Rider Take-Home (Net): ₱${globalState.currentDayRiderNet.toFixed(2)}**
-➖➖➖➖➖➖➖➖➖➖➖➖
-🔴 **AMOUNT TO PAY COMPANY: ₱${globalState.currentDayCompanyShare.toFixed(2)}** 🔴
-
-💙 Generated via Lokalex Hub`;
+        const rosterRec = globalState.rosterMembers?.find(r => r.telegramId && r.telegramId.toString() === targetRiderId.toString());
+        riderName = rosterRec ? rosterRec.name : (appState.riderName || "Rider");
     }
 
-    copyText(reportText);
+    let filteredHistory = globalState.globalCateredHistory.filter(record => {
+        if (targetRiderId && targetRiderId !== "ALL" && record.riderId !== targetRiderId.toString()) return false;
+        const recordTs = record.timestamp || Date.now();
+        if (viewSettings.period === 'daily') return getDateString(recordTs) === viewSettings.dateValue;
+        if (viewSettings.period === 'weekly') return getWeekString(recordTs) === viewSettings.dateValue;
+        if (viewSettings.period === 'monthly') return getMonthString(recordTs) === viewSettings.dateValue;
+        return false;
+    });
+
+    let grossTotal = 0;
+    let companyShare = 0;
+    let riderNet = 0;
+    let listText = "";
+
+    filteredHistory.slice().reverse().forEach((r, index) => {
+        const gross = parseFloat(r.totalFees) || 0;
+        grossTotal += gross;
+        companyShare += (gross * 0.20);
+        riderNet += (gross * 0.80);
+        const cName = (r.customerName || "Customer").split(',')[0];
+        listText += `${index + 1}. ${cName} - ₱${gross.toFixed(2)}\n`;
+    });
+
+    const periodLabel = viewSettings.period.toUpperCase();
+    
+    let report = `📊 LOKALEX COMMISSION REPORT\n`;
+    report += `Rider: ${riderName}\n`;
+    report += `Period: ${periodLabel} (${viewSettings.dateValue})\n\n`;
+    report += `💰 Gross Total: ₱${grossTotal.toFixed(2)}\n`;
+    report += `🟢 Rider Earned (80%): ₱${riderNet.toFixed(2)}\n`;
+    report += `🔴 To Pay Company (20%): ₱${companyShare.toFixed(2)}\n\n`;
+    report += `📋 TRANSACTIONS:\n${listText || "No transactions found."}`;
+
+    copyText(report);
+    showToast("📄 Text report copied to clipboard!");
 }

@@ -596,49 +596,68 @@
             </div>
         </section>
 
-        <!-- DAILY COMMISSION VIEW -->
+        <!-- DAILY / WEEKLY / MONTHLY COMMISSION VIEW -->
         <section id="view-commission" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
-            <div class="bg-cardBg p-3 rounded-xl border border-gray-800 flex flex-col gap-2">
-                <div class="flex justify-between items-center">
-                    <span class="text-xs text-gray-400 font-bold">Select Date:</span>
-                    <input type="date" id="commission-date-picker" onchange="openCommissionScreen(this.value)" class="bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
-                </div>
+            
+            <!-- CONTROLS & FILTERS -->
+            <div class="bg-cardBg p-3 rounded-xl border border-gray-800 flex flex-col gap-3 shadow-md">
                 
-                <div id="admin-commission-filter-box" class="hidden flex justify-between items-center pt-2 border-t border-gray-800">
-                    <span class="text-xs text-amber-400 font-bold">Rider Filter:</span>
-                    <select id="admin-rider-select" onchange="openCommissionScreen()" class="bg-inputBg text-xs text-yellow-300 rounded p-1.5 outline-none border border-gray-700"></select>
+                <!-- Admin Rider Selector (Hidden for standard riders) -->
+                <div id="admin-commission-filter-box" class="hidden flex-col gap-1 border-b border-gray-800 pb-3">
+                    <span class="text-[10px] text-amber-400 font-bold uppercase tracking-wider"><i class="fa-solid fa-user-shield"></i> Admin View: Select Rider</span>
+                    <select id="admin-rider-select" onchange="refreshCommissionView()" class="w-full bg-inputBg text-sm text-white rounded-lg p-2.5 outline-none border border-gray-700 focus:border-amber-500 transition"></select>
+                </div>
+
+                <!-- View Mode Toggle (Earned vs To Pay) -->
+                <div class="flex bg-darkBg rounded-lg p-1 text-xs font-bold border border-gray-800">
+                    <button id="comm-mode-earned" onclick="setCommissionMode('earned')" class="flex-1 py-2 rounded-md bg-emerald-600/20 text-emerald-400 border border-emerald-500/50 transition">My Earnings</button>
+                    <button id="comm-mode-company" onclick="setCommissionMode('company')" class="flex-1 py-2 rounded-md text-gray-400 hover:text-white transition">To Pay (Company)</button>
+                </div>
+
+                <!-- Period Type Selector -->
+                <div class="grid grid-cols-3 gap-1 bg-darkBg rounded-lg p-1 text-[10px] font-bold border border-gray-800">
+                    <button id="comm-period-daily" onclick="setCommissionPeriod('daily')" class="py-1.5 rounded bg-blue-600 text-white transition">Daily</button>
+                    <button id="comm-period-weekly" onclick="setCommissionPeriod('weekly')" class="py-1.5 rounded text-gray-400 hover:text-white transition">Weekly</button>
+                    <button id="comm-period-monthly" onclick="setCommissionPeriod('monthly')" class="py-1.5 rounded text-gray-400 hover:text-white transition">Monthly</button>
+                </div>
+
+                <!-- Dynamic Date Inputs -->
+                <div class="flex justify-between items-center">
+                    <span class="text-xs text-gray-400 font-bold" id="comm-date-label">Select Date:</span>
+                    <!-- Daily -->
+                    <input type="date" id="comm-input-daily" onchange="refreshCommissionView()" class="bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
+                    <!-- Weekly -->
+                    <input type="week" id="comm-input-weekly" onchange="refreshCommissionView()" class="hidden bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
+                    <!-- Monthly -->
+                    <input type="month" id="comm-input-monthly" onchange="refreshCommissionView()" class="hidden bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
                 </div>
             </div>
 
             <!-- FINANCIAL SUMMARY CARD -->
-            <div class="bg-cardBg p-4 rounded-xl border border-gray-800 shadow-sm flex flex-col gap-3">
-                <div class="text-xs text-gray-400 uppercase tracking-widest font-bold text-center">Daily Summary (<span id="commission-date-label">Today</span>)</div>
+            <div class="bg-cardBg p-4 rounded-xl border border-gray-800 shadow-sm flex flex-col gap-3 relative overflow-hidden">
                 
-                <div class="grid grid-cols-3 gap-2 text-center pt-1">
-                    <div class="bg-darkBg/60 p-2.5 rounded-xl border border-gray-800">
-                        <div class="text-[10px] text-gray-400 font-bold uppercase">Total Gross</div>
-                        <div class="text-sm font-black text-white mt-1">₱<span id="daily-gross-total">0.00</span></div>
-                    </div>
-                    <div class="bg-red-950/30 p-2.5 rounded-xl border border-red-800/50">
-                        <div class="text-[10px] text-red-400 font-bold uppercase">Company (<span id="company-rate-label">20%</span>)</div>
-                        <div class="text-sm font-black text-red-400 mt-1">₱<span id="daily-company-share">0.00</span></div>
-                    </div>
-                    <div class="bg-emerald-950/30 p-2.5 rounded-xl border border-emerald-800/50">
-                        <div class="text-[10px] text-gray-400 font-bold uppercase">Rider Net</div>
-                        <div class="text-sm font-black text-emerald-400 mt-1">₱<span id="daily-rider-net">0.00</span></div>
-                    </div>
+                <!-- Status Badge -->
+                <div id="comm-status-badge" class="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest shadow-md">UNPAID</div>
+
+                <div class="text-xs text-gray-400 uppercase tracking-widest font-bold text-center mt-2" id="comm-summary-title">Daily Summary</div>
+                
+                <div class="flex flex-col items-center justify-center py-2">
+                    <div class="text-[10px] text-gray-400 font-bold uppercase" id="comm-main-label">Total Earnings</div>
+                    <div class="text-4xl font-black text-emerald-400 drop-shadow-md">₱<span id="comm-main-amount">0.00</span></div>
+                    <div class="text-[10px] text-gray-500 mt-1">Gross Total: ₱<span id="comm-gross-amount">0.00</span></div>
                 </div>
 
-                <div class="bg-amber-500/10 border border-amber-500/30 p-2.5 rounded-xl text-center text-xs font-bold text-amber-400">
-                    <i class="fa-solid fa-hand-holding-dollar"></i> Amount to Pay Company: <strong class="text-sm underline">₱<span id="daily-company-share-pay">0.00</span></strong>
-                </div>
+                <!-- Admin Action Button -->
+                <button id="admin-mark-paid-btn" onclick="toggleSettlementStatus()" class="hidden w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl text-xs transition active:scale-95 shadow-lg mt-1 border border-emerald-400/50">
+                    <i class="fa-solid fa-check-double"></i> MARK AS PAID
+                </button>
             </div>
 
-            <button onclick="generateDailyReportText()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2 transition active:scale-95">
-                <i class="fa-solid fa-file-lines"></i> Generate & Copy Report
+            <button onclick="generateDailyReportText()" class="w-full bg-blue-600/20 border border-blue-600/50 hover:bg-blue-600 text-blue-400 hover:text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2 transition active:scale-95 text-xs">
+                <i class="fa-solid fa-file-lines"></i> Generate Text Report
             </button>
 
-            <div class="text-xs text-gray-400 uppercase tracking-wider font-bold mt-2">Customers Served & Fees</div>
+            <div class="text-[10px] text-gray-500 uppercase tracking-wider font-bold mt-2 border-b border-gray-800 pb-1">Transaction Breakdown</div>
             <div id="commission-receipts-list" class="flex flex-col gap-3 pb-20"></div>
         </section>
 
