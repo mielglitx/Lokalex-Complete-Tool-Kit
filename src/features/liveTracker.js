@@ -13,7 +13,7 @@ let riderMarker = null;
 let customerMarker = null;
 
 let lastPushTime = 0;
-const PUSH_TICK_INTERVAL_MS = 6000; // 6 seconds throttled tick
+const PUSH_TICK_INTERVAL_MS = 15000; // 15 seconds throttled tick for both Rider & Customer
 
 export async function promptStartLiveGpsSession() {
     const activeCustRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === (appState.telegramId || "").toString()) : null;
@@ -65,7 +65,7 @@ function startRiderGpsTracking(sessionKey) {
             }
         },
         (err) => {},
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
     );
 }
 
@@ -98,11 +98,181 @@ function renderLiveGpsManageStatus() {
                     <span class="text-gray-400">Customer Connected:</span>
                     ${hasCustomer 
                         ? `<span class="text-emerald-400 font-bold bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/30">🟢 Connected</span>` 
-                        : `<span class="text-amber-400 font-bold bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 animate-pulse">⏳ Waiting for Customer</span>`}
+                        : `<span class="text-amber-400 font-bold bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 animate-pulse">⏳ Waiting...</span>`}
                 </div>
-                <div class="text-[10px] text-gray-500 mt-1">Tick interval: 6s (Data Saver Active)</div>
+                <div class="text-[10px] text-gray-500 mt-1">Tick interval: 15s (Data Saver)</div>
             </div>`;
     });
+}
+
+// --- RIDER: SHOW / HIDE MAP ---
+export function showRiderLiveMap() {
+    if (!activeSessionKey) return showToast("No active session.");
+    closeLiveGpsManageModal();
+
+    // Configure UI for Rider view
+    document.getElementById('livegps-rider-close-btn').classList.remove('hidden');
+    document.getElementById('livegps-customer-controls').classList.add('hidden');
+
+    startMutualMapSync(activeSessionKey);
+}
+
+export function closeRiderLiveMap() {
+    const portal = document.getElementById('livegps-portal');
+    if (portal) portal.classList.add('hidden');
+    openLiveGpsManageModal(); // Return to the control modal
+}
+
+// --- CUSTOMER: INITIALIZE PORTAL ---
+export function checkAndInitLiveGpsPortal() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionKey = urlParams.get('livegps');
+    if (!sessionKey) return;
+
+    // Configure UI for Customer view
+    document.getElementById('livegps-rider-close-btn').classList.add('hidden');
+    document.getElementById('livegps-customer-controls').classList.remove('hidden');
+
+    startMutualMapSync(sessionKey);
+}
+
+// --- SHARED MAP SYNC LOGIC ---
+function startMutualMapSync(sessionKey) {
+    const portal = document.getElementById('livegps-portal');
+    const expiredPortal = document.getElementById('livegps-expired-portal');
+    if (!portal || !expiredPortal) return;
+
+    db.ref('liveSessions/' + sessionKey).on('value', (snapshot) => {
+        const data = snapshot.val();
+
+        if (!data || data.status === 'ended') {
+            portal.classList.add('hidden');
+            expiredPortal.classList.remove('hidden');
+            if (customerGpsWatchId) navigator.geolocation.clearWatch(customerGpsWatchId);
+            return;
+        }
+
+        expiredPortal.classList.add('hidden');
+        portal.classList.remove('hidden');
+
+        renderMutualLiveMap(data.users);
+    });
+}
+
+// --- CUSTOMER: SHARE GPS LOCATION ---
+export function startMutualCustomerLocationSharing() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionKey = urlParams.get('livegps');
+    if (!sessionKey) return;
+
+    const btn = document.getElementById('livegps-share-btn');
+    const statusEl = document.getElementById('livegps-status');
+    const mapBox = document.getElementById('livegps-map-container-box');
+    const step2Pointer = document.getElementById('livegps-step2-pointer');
+
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Kumukuha ng GPS...`;
+
+    if (!navigator.geolocation) {
+        statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
+        statusEl.innerText = "❌ Hindi suportado ang GPS sa browser na ito.";
+        return;
+    }
+
+    mapBox.classList.remove('hidden');
+    if (step2Pointer) step2Pointer.classList.add('hidden');
+
+    customerGpsWatchId = navigator.geolocation.watchPosition(
+        (pos) => {
+            const now = Date.now();
+            if (now - lastPushTime >= PUSH_TICK_INTERVAL_MS) {
+                lastPushTime = now;
+                db.ref(`liveSessions/${sessionKey}/users/customer`).set({
+                    name: "Customer",
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    updatedAt: now
+                });
+            }
+
+            statusEl.className = "text-xs font-bold text-indigo-400 bg-indigo-500/10 p-2.5 rounded-xl border border-indigo-500/20";
+            statusEl.innerHTML = "📡 <strong>Live Tracking Active</strong><br><span class=\"text-gray-300 font-normal\">Updating map every 15 seconds...</span>";
+            btn.innerHTML = `<i class="fa-solid fa-check-double"></i> TRACKING ACTIVE`;
+        },
+        (err) => {
+            statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
+            statusEl.innerText = "⚠️ Paki-allow ang GPS Location permission sa iyong browser.";
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-satellite-dish"></i> RETRY JOIN LIVE TRACKING`;
+        },
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
+    );
+}
+
+// --- RENDER MAP & ICONS ---
+function renderMutualLiveMap(usersData) {
+    if (typeof google === 'undefined' || !google.maps) return;
+
+    const container = document.getElementById('livegps-map-container');
+    const mapBox = document.getElementById('livegps-map-container-box');
+    
+    // Safety: ensure map container is unhidden before creating the map instance
+    if (!container || (mapBox && mapBox.classList.contains('hidden') && document.getElementById('livegps-customer-controls').classList.contains('hidden') === false)) return;
+
+    const riderData = usersData && usersData.rider;
+    const custData = usersData && usersData.customer;
+
+    const defaultCenter = riderData ? { lat: riderData.lat, lng: riderData.lng } : (custData ? { lat: custData.lat, lng: custData.lng } : { lat: 15.6881, lng: 120.4144 });
+
+    if (!liveMapObj) {
+        liveMapObj = new google.maps.Map(container, {
+            center: defaultCenter,
+            zoom: 16,
+            disableDefaultUI: false,
+            zoomControl: true
+        });
+    }
+
+    // 1. Rider Marker (Motorcycle Icon)
+    if (riderData && riderData.lat && riderData.lng) {
+        const pos = { lat: riderData.lat, lng: riderData.lng };
+        if (!riderMarker) {
+            riderMarker = new google.maps.Marker({
+                position: pos,
+                map: liveMapObj,
+                title: `Rider: ${riderData.name || 'Rider'}`,
+                icon: { 
+                    url: "https://maps.gstatic.com/mapfiles/ms2/micons/motorcycle.png" // Google's default motorcycle map pin
+                }
+            });
+        } else {
+            riderMarker.setPosition(pos);
+        }
+    }
+
+    // 2. Customer Marker (Red Dot Icon)
+    if (custData && custData.lat && custData.lng) {
+        const pos = { lat: custData.lat, lng: custData.lng };
+        if (!customerMarker) {
+            customerMarker = new google.maps.Marker({
+                position: pos,
+                map: liveMapObj,
+                title: "Customer Location",
+                icon: { 
+                    url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png" 
+                }
+            });
+        } else {
+            customerMarker.setPosition(pos);
+        }
+    }
+
+    if (riderMarker && customerMarker) {
+        const bounds = new google.maps.LatLngBounds();
+        bounds.extend(riderMarker.getPosition());
+        bounds.extend(customerMarker.getPosition());
+        liveMapObj.fitBounds(bounds);
+    }
 }
 
 export function promptEndLiveGpsSession() {
@@ -129,138 +299,4 @@ export async function endLiveGpsSession() {
     closeLiveGpsManageModal();
     showSideNotification("GPS SESSION ENDED", "Live GPS session has been closed", "fa-power-off", "text-red-400", "border-red-500");
     showToast("🔴 Live GPS Session ended.");
-}
-
-export function checkAndInitLiveGpsPortal() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionKey = urlParams.get('livegps');
-    if (!sessionKey) return;
-
-    const portal = document.getElementById('livegps-portal');
-    const expiredPortal = document.getElementById('livegps-expired-portal');
-    if (!portal || !expiredPortal) return;
-
-    db.ref('liveSessions/' + sessionKey).on('value', (snapshot) => {
-        const data = snapshot.val();
-
-        if (!data || data.status === 'ended') {
-            portal.classList.add('hidden');
-            expiredPortal.classList.remove('hidden');
-            if (customerGpsWatchId) navigator.geolocation.clearWatch(customerGpsWatchId);
-            return;
-        }
-
-        expiredPortal.classList.add('hidden');
-        portal.classList.remove('hidden');
-
-        // Only render the map with existing data (rider data) if the container is visible
-        renderMutualLiveMap(data.users);
-    });
-}
-
-// Triggered via HTML onclick
-export function startMutualCustomerLocationSharing() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionKey = urlParams.get('livegps');
-    if (!sessionKey) return;
-
-    const btn = document.getElementById('livegps-share-btn');
-    const statusEl = document.getElementById('livegps-status');
-    const mapBox = document.getElementById('livegps-map-container-box');
-    const step2Pointer = document.getElementById('livegps-step2-pointer');
-
-    btn.disabled = true;
-    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Kumukuha ng GPS...`;
-
-    if (!navigator.geolocation) {
-        statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
-        statusEl.innerText = "❌ Hindi suportado ang GPS sa browser na ito.";
-        return;
-    }
-
-    mapBox.classList.remove('hidden');
-    if (step2Pointer) step2Pointer.classList.add('hidden'); // Hide bouncing pointer
-
-    customerGpsWatchId = navigator.geolocation.watchPosition(
-        (pos) => {
-            const now = Date.now();
-            if (now - lastPushTime >= PUSH_TICK_INTERVAL_MS) {
-                lastPushTime = now;
-                db.ref(`liveSessions/${sessionKey}/users/customer`).set({
-                    name: "Customer",
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude,
-                    updatedAt: now
-                });
-            }
-
-            statusEl.className = "text-xs font-bold text-indigo-400 bg-indigo-500/10 p-2.5 rounded-xl border border-indigo-500/20";
-            statusEl.innerHTML = "📡 <strong>Live Tracking Active</strong><br><span class=\"text-gray-300 font-normal\">Updating map every 6 seconds...</span>";
-            btn.innerHTML = `<i class="fa-solid fa-check-double"></i> TRACKING ACTIVE`;
-        },
-        (err) => {
-            statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
-            statusEl.innerText = "⚠️ Paki-allow ang GPS Location permission sa iyong browser.";
-            btn.disabled = false;
-            btn.innerHTML = `<i class="fa-solid fa-satellite-dish"></i> RETRY JOIN LIVE TRACKING`;
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
-    );
-}
-
-function renderMutualLiveMap(usersData) {
-    if (typeof google === 'undefined' || !google.maps) return;
-
-    const container = document.getElementById('livegps-map-container');
-    const mapBox = document.getElementById('livegps-map-container-box');
-    if (!container || (mapBox && mapBox.classList.contains('hidden'))) return; // Don't render until box is unhidden
-
-    const riderData = usersData && usersData.rider;
-    const custData = usersData && usersData.customer;
-
-    const defaultCenter = riderData ? { lat: riderData.lat, lng: riderData.lng } : (custData ? { lat: custData.lat, lng: custData.lng } : { lat: 15.6881, lng: 120.4144 });
-
-    if (!liveMapObj) {
-        liveMapObj = new google.maps.Map(container, {
-            center: defaultCenter,
-            zoom: 16,
-            disableDefaultUI: false,
-            zoomControl: true
-        });
-    }
-
-    if (riderData && riderData.lat && riderData.lng) {
-        const pos = { lat: riderData.lat, lng: riderData.lng };
-        if (!riderMarker) {
-            riderMarker = new google.maps.Marker({
-                position: pos,
-                map: liveMapObj,
-                title: `Rider: ${riderData.name || 'Rider'}`,
-                icon: { url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png" }
-            });
-        } else {
-            riderMarker.setPosition(pos);
-        }
-    }
-
-    if (custData && custData.lat && custData.lng) {
-        const pos = { lat: custData.lat, lng: custData.lng };
-        if (!customerMarker) {
-            customerMarker = new google.maps.Marker({
-                position: pos,
-                map: liveMapObj,
-                title: "Customer Location",
-                icon: { url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png" }
-            });
-        } else {
-            customerMarker.setPosition(pos);
-        }
-    }
-
-    if (riderMarker && customerMarker) {
-        const bounds = new google.maps.LatLngBounds();
-        bounds.extend(riderMarker.getPosition());
-        bounds.extend(customerMarker.getPosition());
-        liveMapObj.fitBounds(bounds);
-    }
 }
