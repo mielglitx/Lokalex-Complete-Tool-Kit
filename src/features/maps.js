@@ -15,10 +15,11 @@ let mapDirectionsService = null;
 let mapDirectionsRenderer = null;
 let activeNavTargetCoords = null;
 
-// Local tracking session history persistence
 let trackingHistory = JSON.parse(localStorage.getItem('lokalex_tracking_history') || '{}');
 
-// --- 1. CUSTOMER TRACKING LINK GENERATION ---
+// ============================================================================
+// 1. DELIVERY TRACKING SYSTEM (?track=KEY) - FROM CATERING LINEUP
+// ============================================================================
 export function copyCustomerTrackingLink(custName, forceRefresh = false) {
     if (!custName) custName = "Customer";
     
@@ -45,16 +46,10 @@ export function copyCustomerTrackingLink(custName, forceRefresh = false) {
     localStorage.setItem('lokalex_tracking_history', JSON.stringify(trackingHistory));
 
     const fullUrl = `${window.location.origin}${window.location.pathname}?track=${custData.activeKey}`;
-
-    const customerMessage = `Magandang araw po! 👋\n\nPara mas mabilis, mas madali, at accurate ang paghatid ng inyong order, paki-pindot lang po ang link na ito para makuha ng ating Lokalex Rider ang inyong eksaktong lokasyon:\n\n${fullUrl}\n\n⚠️ PAALALA / INSTRUCTION:\nKung binuksan nyo po ito sa loob ng Messenger, paki-pindot po ang 3 dots (...) sa kanang itaas o ibaba at piliin ang "Open in Chrome" (para sa Android) o "Open in Safari" (para sa iPhone). Paki-approve o allow din po ang Location Access. Aabutin lang po ito ng 1 minuto para ma-pin ng ating system. Maraming salamat po! 🛵💙`;
+    const customerMessage = `Magandang araw po! 👋\n\nPara mas mabilis at accurate ang paghatid ng inyong order, paki-pindot lang po ang link na ito para makuha ng ating Lokalex Rider ang inyong eksaktong lokasyon:\n\n${fullUrl}\n\n⚠️ PAALALA:\nKung binuksan nyo po ito sa loob ng Messenger, paki-pindot po ang 3 dots (...) sa itaas at piliin ang "Open in Chrome/Safari". Maraming salamat po! 🛵💙`;
 
     copyText(customerMessage);
-
-    if (forceRefresh) {
-        showToast(`🔄 Fresh link & message copied for ${custName}!`);
-    } else {
-        showToast(`🔗 Tracking message & link copied for ${custName}! Send via Messenger.`);
-    }
+    showToast(`🔗 Tracking message & link copied for ${custName}!`);
 }
 
 export function refreshCustomerTrackingLink(custName) {
@@ -64,7 +59,80 @@ export function refreshCustomerTrackingLink(custName) {
     });
 }
 
-// --- 2. LIVE GPS NAV / MAP TRACKING FOR RIDER ---
+// 1.A Customer Opening ?track=KEY Portal
+export function checkAndInitTrackPortal() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (!urlParams.has('track')) return;
+    const portal = document.getElementById('customer-tracking-portal');
+    if (portal) portal.classList.remove('hidden');
+}
+
+export function startCustomerLocationSharing() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const trackKey = urlParams.get('track');
+    if (!trackKey) return;
+
+    const btn = document.getElementById('cust-share-btn');
+    const statusEl = document.getElementById('cust-share-status');
+    const mapBox = document.getElementById('cust-map-container-box');
+
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Kumukuha ng GPS...`;
+
+    if (!navigator.geolocation) {
+        statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
+        statusEl.innerText = "❌ Hindi suportado ang GPS sa browser na ito.";
+        return;
+    }
+
+    mapBox.classList.remove('hidden');
+    let shareCount = 0;
+
+    const watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            shareCount++;
+            const custLoc = { lat, lng };
+
+            if (!custGoogleMapObj && typeof google !== 'undefined' && google.maps) {
+                const mapEl = document.getElementById('cust-google-map');
+                custGoogleMapObj = new google.maps.Map(mapEl, {
+                    center: custLoc, zoom: 17, disableDefaultUI: true, zoomControl: true
+                });
+                custMarkerObj = new google.maps.Marker({
+                    position: custLoc, map: custGoogleMapObj, title: "Iyong Lokasyon", animation: google.maps.Animation.DROP
+                });
+            } else if (custGoogleMapObj && custMarkerObj) {
+                custGoogleMapObj.setCenter(custLoc);
+                custMarkerObj.setPosition(custLoc);
+            }
+
+            // Save pin to tracking database
+            db.ref('liveTracking/' + trackKey).set({
+                lat: lat, lng: lng, capturedAt: Date.now()
+            });
+
+            statusEl.className = "text-xs font-bold text-blue-400 bg-blue-500/10 p-3 rounded-xl border border-blue-500/20";
+            statusEl.innerHTML = `📡 Capturing signal accuracy... (${shareCount}/20)<br><span class="text-gray-300 font-normal">Nasa-save na ang iyong lokasyon...</span>`;
+
+            if (shareCount >= 20) {
+                navigator.geolocation.clearWatch(watchId);
+                statusEl.innerHTML = "🔒 <strong>Pin Permanently Saved (100%)!</strong><br><span class=\"text-gray-300 font-normal\">Nai-save na ang iyong lokasyon. Ipaalam na ito sa rider.</span>";
+                btn.innerHTML = `<i class="fa-solid fa-check-double"></i> LOCATION PINNED`;
+            }
+        },
+        (err) => {
+            statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
+            statusEl.innerText = "⚠️ Paki-allow ang GPS Location permission sa iyong browser.";
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> RETRY LOCATION CAPTURE`;
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+}
+
+// 1.B Rider Opening GPS Data from Customer
 export async function openLiveCustomerMap(custName) {
     if (!custName) custName = "Customer";
 
@@ -73,15 +141,12 @@ export async function openLiveCustomerMap(custName) {
     const todayClean = getLocalTodayStr().replace(/-/g, '');
     const sessionKey = `${rName}_${cleanCust}_${todayClean}`;
 
-    let trackKey = "";
-    if (trackingHistory[sessionKey] && trackingHistory[sessionKey].activeKey) {
-        trackKey = trackingHistory[sessionKey].activeKey;
-    } else {
-        trackKey = `${rName}_${cleanCust}_${todayClean}`;
-    }
+    let trackKey = trackingHistory[sessionKey] && trackingHistory[sessionKey].activeKey 
+        ? trackingHistory[sessionKey].activeKey 
+        : `${rName}_${cleanCust}_${todayClean}`;
 
     switchView('view-map');
-    document.getElementById('map-view-title').innerText = `Live Nav: ${custName}`;
+    document.getElementById('map-view-title').innerText = `Tracking: ${custName}`;
     document.getElementById('map-center-pin').classList.add('hidden');
     document.getElementById('map-confirm-btn').classList.add('hidden');
     document.getElementById('map-nav-app-btn').classList.remove('hidden');
@@ -100,13 +165,9 @@ export async function openLiveCustomerMap(custName) {
     }
 
     if (!mapDirectionsService) mapDirectionsService = new google.maps.DirectionsService();
-    if (!mapDirectionsRenderer) {
-        mapDirectionsRenderer = new google.maps.DirectionsRenderer({
-            map: googleMapObj, suppressMarkers: false
-        });
-    }
+    if (!mapDirectionsRenderer) mapDirectionsRenderer = new google.maps.DirectionsRenderer({ map: googleMapObj, suppressMarkers: false });
 
-    // Subscribe to Firebase real-time pin updates from customer tracking link
+    // Listen for customer's captured GPS Pin
     db.ref('liveTracking/' + trackKey).on('value', (snapshot) => {
         const data = snapshot.val();
         if (data && data.lat && data.lng) {
@@ -130,13 +191,9 @@ export async function openLiveCustomerMap(custName) {
     });
 }
 
-export function openExternalGoogleNav() {
-    if (!activeNavTargetCoords) return showToast("No customer GPS pin received yet.");
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${activeNavTargetCoords.lat},${activeNavTargetCoords.lng}&travelmode=driving`;
-    window.open(url, '_blank');
-}
-
-// --- 3. MAP CALCULATION BOARD & LINK GENERATION ---
+// ============================================================================
+// 2. MAP CALCULATION SYSTEM (?mapcalc=KEY) - DISTANCE CALCULATION
+// ============================================================================
 export function openMapCalcBoardModal() {
     const modal = document.getElementById('mapcalc-board-modal');
     if (modal) modal.classList.remove('hidden');
@@ -171,32 +228,102 @@ export async function confirmGenerateMapCalcLink() {
 
     const calcKey = `CALC_${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).substring(2,6).toUpperCase()}`;
     const dateStr = new Date().toLocaleDateString('en-US', { 
-        month: 'short', day: 'numeric', year: 'numeric', 
-        hour: '2-digit', minute: '2-digit' 
+        month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' 
     });
 
     const newRecord = {
-        key: calcKey,
-        custName: custName,
-        custMapPin: "",
-        dateAdded: dateStr,
-        createdBy: appState.riderName || "Rider",
-        pinCaptured: false
+        key: calcKey, custName: custName, custMapPin: "", dateAdded: dateStr,
+        createdBy: appState.riderName || "Rider", pinCaptured: false
     };
 
     db.ref('mapCalculations/' + calcKey).set(newRecord);
     copyMapCalcCustomerMessage(custName, calcKey);
-    showToast(`✅ Map Calc link created for ${custName}! Message copied.`);
+    showToast(`✅ Map Calc link created for ${custName}!`);
     renderMapCalcBoardList();
 }
 
 export function copyMapCalcCustomerMessage(custName, calcKey) {
     const fullUrl = `${window.location.origin}${window.location.pathname}?mapcalc=${calcKey}`;
-    const message = `Magandang araw po ${custName}! 👋\n\nPara ma-calculate po namin ang eksaktong distansya at delivery fee mula sa aming Hub papunta sa inyong lugar, paki-pindot lang po ang link na ito para ma-pin ang inyong lokasyon:\n\n${fullUrl}\n\n⚠️ PAALALA / INSTRUCTION:\nKung binuksan nyo po ito sa loob ng Messenger, paki-pindot po ang 3 dots (...) sa kanang itaas o ibaba at piliin ang "Open in Chrome" (para sa Android) o "Open in Safari" (para sa iPhone). Paki-approve o allow din po ang Location Access. Aabutin lang po ito ng 1 minuto para ma-pin ng ating system. Maraming salamat po! 🛵💙`;
-    
+    const message = `Magandang araw po ${custName}! 👋\n\nPara ma-calculate po namin ang eksaktong distansya mula sa aming Hub papunta sa inyong lugar, paki-pindot lang po ang link na ito para ma-pin ang inyong lokasyon:\n\n${fullUrl}\n\n⚠️ PAALALA:\nKung binuksan nyo po sa Messenger, paki-pindot ang 3 dots (...) at piliin ang "Open in Chrome / Safari". Maraming salamat po! 🛵💙`;
     copyText(message);
 }
 
+// 2.A Customer Opening ?mapcalc=KEY Portal
+export function checkAndInitMapCalcPortal() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (!urlParams.has('mapcalc')) return;
+    const portal = document.getElementById('mapcalc-customer-portal');
+    if (portal) portal.classList.remove('hidden');
+}
+
+export function startMapCalcLocationSharing() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const calcKey = urlParams.get('mapcalc');
+    if (!calcKey) return;
+
+    const btn = document.getElementById('mapcalc-cust-btn');
+    const statusEl = document.getElementById('mapcalc-cust-status');
+    const mapBox = document.getElementById('mapcalc-cust-map-box');
+
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Capturing GPS...`;
+
+    if (!navigator.geolocation) {
+        statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
+        statusEl.innerText = "❌ Hindi suportado ang GPS sa browser na ito.";
+        return;
+    }
+
+    mapBox.classList.remove('hidden');
+    let shareCount = 0;
+
+    const watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            shareCount++;
+            const custLoc = { lat, lng };
+
+            if (!custGoogleMapObj && typeof google !== 'undefined' && google.maps) {
+                const mapEl = document.getElementById('mapcalc-cust-google-map');
+                custGoogleMapObj = new google.maps.Map(mapEl, {
+                    center: custLoc, zoom: 17, disableDefaultUI: true, zoomControl: true
+                });
+                custMarkerObj = new google.maps.Marker({
+                    position: custLoc, map: custGoogleMapObj, title: "Iyong Lokasyon", animation: google.maps.Animation.DROP
+                });
+            } else if (custGoogleMapObj && custMarkerObj) {
+                custGoogleMapObj.setCenter(custLoc);
+                custMarkerObj.setPosition(custLoc);
+            }
+
+            const mapPinUrl = `https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lng.toFixed(6)}`;
+
+            // Save pin to Calculation database
+            db.ref('mapCalculations/' + calcKey).update({
+                lat: lat, lng: lng, custMapPin: mapPinUrl, pinCaptured: true, capturedAt: Date.now()
+            });
+
+            statusEl.className = "text-xs font-bold text-emerald-400 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20";
+            statusEl.innerHTML = `📡 Capturing signal accuracy... (${shareCount}/20)<br><span class="text-gray-300 font-normal">Nasa-save na ang iyong lokasyon...</span>`;
+
+            if (shareCount >= 20) {
+                navigator.geolocation.clearWatch(watchId);
+                statusEl.innerHTML = "🔒 <strong>Pin Permanently Saved (100%)!</strong><br><span class=\"text-gray-300 font-normal\">Nai-save na ang iyong lokasyon. Pwede mo nang isara ang window na ito.</span>";
+                btn.innerHTML = `<i class="fa-solid fa-check-double"></i> DISTANCE PINNED`;
+            }
+        },
+        (err) => {
+            statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
+            statusEl.innerText = "⚠️ Paki-allow ang GPS Location permission sa iyong browser.";
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> RETRY LOCATION CAPTURE`;
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+}
+
+// 2.B Map Calc Record Rendering
 export function renderMapCalcBoardList() {
     const container = document.getElementById('mapcalc-board-list');
     if (!container) return;
@@ -241,20 +368,6 @@ export function renderMapCalcBoardList() {
     }).join('');
 }
 
-export function deleteMapCalcRecord(key, custName) {
-    openSlideDeleteModal(`Sigurado ka bang nais burahin ang Map Calc record para kay [${custName}]?`, () => {
-        db.ref('mapCalculations/' + key).remove();
-        showToast(`Deleted Map Calc record for ${custName}`);
-
-        fetch(API_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            body: JSON.stringify({ type: "delete_map_calc", custName: custName })
-        }).catch(() => {});
-    });
-}
-
-// --- 4. ROUTE & DISTANCE DISPLAY FROM HUB ---
 export function openMapCalcRoute(targetLat, targetLng, custName) {
     closeMapCalcBoardModal();
     switchView('view-map');
@@ -270,22 +383,14 @@ export function openMapCalcRoute(targetLat, targetLng, custName) {
 
     const mapContainer = document.getElementById('google-map-container');
     if (!googleMapObj) {
-        googleMapObj = new google.maps.Map(mapContainer, {
-            center: hubLoc, zoom: 15, disableDefaultUI: false, zoomControl: true
-        });
+        googleMapObj = new google.maps.Map(mapContainer, { center: hubLoc, zoom: 15, disableDefaultUI: false, zoomControl: true });
     }
 
     if (!mapDirectionsService) mapDirectionsService = new google.maps.DirectionsService();
-    if (!mapDirectionsRenderer) {
-        mapDirectionsRenderer = new google.maps.DirectionsRenderer({
-            map: googleMapObj, suppressMarkers: false
-        });
-    }
+    if (!mapDirectionsRenderer) mapDirectionsRenderer = new google.maps.DirectionsRenderer({ map: googleMapObj, suppressMarkers: false });
 
     mapDirectionsService.route({
-        origin: hubLoc,
-        destination: custLoc,
-        travelMode: google.maps.TravelMode.DRIVING
+        origin: hubLoc, destination: custLoc, travelMode: google.maps.TravelMode.DRIVING
     }, (result, status) => {
         if (status === google.maps.DirectionsStatus.OK) {
             mapDirectionsRenderer.setDirections(result);
@@ -297,74 +402,23 @@ export function openMapCalcRoute(targetLat, targetLng, custName) {
     });
 }
 
-// --- 5. CUSTOMER PORTAL GPS CAPTURE (?mapcalc=KEY) ---
-export function startMapCalcLocationSharing() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const calcKey = urlParams.get('mapcalc');
-    if (!calcKey) return;
-
-    const btn = document.getElementById('mapcalc-cust-btn');
-    const statusEl = document.getElementById('mapcalc-cust-status');
-    const mapBox = document.getElementById('mapcalc-cust-map-box');
-
-    btn.disabled = true;
-    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Capturing GPS...`;
-
-    if (!navigator.geolocation) {
-        statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
-        statusEl.innerText = "❌ Hindi suportado ang GPS sa browser na ito.";
-        return;
-    }
-
-    mapBox.classList.remove('hidden');
-    let shareCount = 0;
-
-    const watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-            shareCount++;
-            const custLoc = { lat, lng };
-
-            if (!custGoogleMapObj) {
-                const mapEl = document.getElementById('mapcalc-cust-google-map');
-                custGoogleMapObj = new google.maps.Map(mapEl, {
-                    center: custLoc, zoom: 17, disableDefaultUI: true, zoomControl: true
-                });
-                custMarkerObj = new google.maps.Marker({
-                    position: custLoc, map: custGoogleMapObj, title: "Iyong Lokasyon", animation: google.maps.Animation.DROP
-                });
-            } else {
-                custGoogleMapObj.setCenter(custLoc);
-                if (custMarkerObj) custMarkerObj.setPosition(custLoc);
-            }
-
-            const mapPinUrl = `https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lng.toFixed(6)}`;
-
-            db.ref('mapCalculations/' + calcKey).update({
-                lat: lat, lng: lng, custMapPin: mapPinUrl, pinCaptured: true, capturedAt: Date.now()
-            });
-
-            statusEl.className = "text-xs font-bold text-emerald-400 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20";
-            statusEl.innerHTML = `📡 Capturing signal accuracy... (${shareCount}/20)<br><span class="text-gray-300 font-normal">Nasa-save na ang iyong lokasyon...</span>`;
-
-            if (shareCount >= 20) {
-                navigator.geolocation.clearWatch(watchId);
-                statusEl.innerHTML = "🔒 <strong>Pin Permanently Saved (100%)!</strong><br><span class=\"text-gray-300 font-normal\">Nai-save na ang iyong lokasyon. Pwede mo nang isara ang window na ito.</span>";
-                btn.innerHTML = `<i class="fa-solid fa-check-double"></i> DISTANCE PINNED`;
-            }
-        },
-        (err) => {
-            statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
-            statusEl.innerText = "⚠️ Paki-allow ang GPS Location permission sa iyong browser.";
-            btn.disabled = false;
-            btn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> RETRY LOCATION CAPTURE`;
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+export function deleteMapCalcRecord(key, custName) {
+    openSlideDeleteModal(`Sigurado ka bang nais burahin ang Map Calc record para kay [${custName}]?`, () => {
+        db.ref('mapCalculations/' + key).remove();
+        showToast(`Deleted Map Calc record for ${custName}`);
+        fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: "delete_map_calc", custName: custName }) }).catch(() => {});
+    });
 }
 
-// --- 6. RIDER MAP PIN PICKER ---
+// ============================================================================
+// 3. RIDER MAP PIN PICKER (MANUAL FORMS)
+// ============================================================================
+export function openExternalGoogleNav() {
+    if (!activeNavTargetCoords) return showToast("No customer GPS pin received yet.");
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${activeNavTargetCoords.lat},${activeNavTargetCoords.lng}&travelmode=driving`;
+    window.open(url, '_blank');
+}
+
 export function openMapPicker() {
     switchView('view-map');
     document.getElementById('map-view-title').innerText = "Pick Location Pin";

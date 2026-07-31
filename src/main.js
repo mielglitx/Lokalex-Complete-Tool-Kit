@@ -21,7 +21,7 @@ import * as helpers from './utils/helpers.js';
 import { unlockAudioContext } from './ui/notifications.js';
 
 // -------------------------------------------------------------
-// 1. GLOBAL WINDOW BINDER (Fixes all HTML `onclick="..."` calls)
+// 1. GLOBAL WINDOW BINDER (Fixes HTML `onclick` handlers)
 // -------------------------------------------------------------
 const allModules = [
     auth, cart, chat, roster, directory, commission, 
@@ -38,18 +38,43 @@ allModules.forEach(mod => {
     }
 });
 
-// Explicit audio context unlock binding for body click
 window.unlockAudioContext = unlockAudioContext;
 
 // -------------------------------------------------------------
-// 2. APPLICATION BOOTSTRAPPER
+// 2. APPLICATION BOOTSTRAPPER & PORTAL ROUTER
 // -------------------------------------------------------------
 function bootApp() {
     try {
         if (chat && chat.initDraggableChat) chat.initDraggableChat();
         if (cart && cart.loadCartState) cart.loadCartState();
-        if (liveTracker && liveTracker.checkAndInitLiveGpsPortal) liveTracker.checkAndInitLiveGpsPortal();
 
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        // ---------------------------------------------------------
+        // GUEST / CUSTOMER PUBLIC PORTAL ROUTING
+        // ---------------------------------------------------------
+        if (urlParams.has('livegps') || urlParams.has('track') || urlParams.has('mapcalc')) {
+            // Hide the app / login screen for customers
+            const loginView = document.getElementById('view-login');
+            if (loginView) loginView.classList.add('hidden');
+
+            // Route to the correct GPS portal
+            if (urlParams.has('livegps')) {
+                if (liveTracker && liveTracker.checkAndInitLiveGpsPortal) liveTracker.checkAndInitLiveGpsPortal();
+            } else if (urlParams.has('track')) {
+                if (maps && maps.checkAndInitTrackPortal) maps.checkAndInitTrackPortal();
+            } else if (urlParams.has('mapcalc')) {
+                if (maps && maps.checkAndInitMapCalcPortal) maps.checkAndInitMapCalcPortal();
+            }
+
+            // Init listeners so map locations can sync
+            initRealtimeFirebaseListeners();
+            return; 
+        }
+
+        // ---------------------------------------------------------
+        // RIDER APP ROUTING
+        // ---------------------------------------------------------
         if (appState.telegramId) {
             history.replaceState({ view: 'view-home' }, '', '#view-home');
             router.renderViewUI('view-home');
@@ -60,9 +85,6 @@ function bootApp() {
         }
     } catch (err) {
         console.error("Booting Error caught:", err);
-        if (router && router.renderViewUI) {
-            router.renderViewUI(appState.telegramId ? 'view-home' : 'view-login');
-        }
     }
 }
 
@@ -77,42 +99,31 @@ window.addEventListener('loginSuccess', () => {
 });
 
 // -------------------------------------------------------------
-// 3. FIREBASE REALTIME DATABASE LISTENERS
+// 3. FIREBASE REALTIME LISTENERS
 // -------------------------------------------------------------
 function initRealtimeFirebaseListeners() {
     try {
-        // Roster Rotation Updates
         db.ref('roster').on('value', (snapshot) => {
             globalState.rosterMembers = snapshot.val() ? Object.values(snapshot.val()) : [];
             window.dispatchEvent(new Event('rosterUpdated'));
         });
-
-        // Rider Logins
         db.ref('logins').on('value', (snapshot) => {
             globalState.globalLogins = snapshot.val() ? Object.values(snapshot.val()) : [];
             window.dispatchEvent(new Event('loginsUpdated'));
         });
-
-        // Completed Catering History
         db.ref('cateredHistory').on('value', (snapshot) => {
             globalState.globalCateredHistory = snapshot.val() ? Object.values(snapshot.val()) : [];
             window.dispatchEvent(new Event('cateredUpdated'));
         });
-
-        // Team Chat Comms
         db.ref('chat').on('value', (snapshot) => {
             globalState.chatMessages = snapshot.val() ? Object.values(snapshot.val()) : [];
             window.dispatchEvent(new Event('chatUpdated'));
         });
-
-        // Advanced / Scheduled Orders
         db.ref('advancedOrders').on('value', (snapshot) => {
             globalState.globalAdvancedOrders = snapshot.val() ? Object.values(snapshot.val()) : [];
             if (advancedOrders.checkScheduledDeliveryAlerts) advancedOrders.checkScheduledDeliveryAlerts();
             if (advancedOrders.renderAdvancedOrdersList) advancedOrders.renderAdvancedOrdersList();
         });
-
-        // Map Calculation Records
         db.ref('mapCalculations').on('value', (snapshot) => {
             globalState.globalMapCalculations = snapshot.val() ? Object.values(snapshot.val()) : [];
             if (maps.renderMapCalcBoardList) maps.renderMapCalcBoardList();
