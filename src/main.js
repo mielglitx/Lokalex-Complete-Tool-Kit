@@ -48,8 +48,26 @@ function bootApp() {
     try {
         if (chat && chat.initDraggableChat) chat.initDraggableChat();
         if (cart && cart.loadCartState) cart.loadCartState();
-        if (liveTracker && liveTracker.checkAndInitLiveGpsPortal) liveTracker.checkAndInitLiveGpsPortal();
 
+        // CHECK IF VISITOR IS OPENING A PUBLIC TRACKING LINK (?livegps=, ?track=, ?mapcalc=)
+        const urlParams = new URLSearchParams(window.location.search);
+        const isPublicPortalLink = urlParams.has('livegps') || urlParams.has('track') || urlParams.has('mapcalc');
+
+        if (isPublicPortalLink) {
+            // HIDE LOGIN VIEW COMPLETELY FOR PUBLIC GUESTS
+            const loginView = document.getElementById('view-login');
+            if (loginView) loginView.classList.add('hidden');
+
+            // INITIALIZE PUBLIC GPS TRACKING PORTAL
+            if (liveTracker && liveTracker.checkAndInitLiveGpsPortal) liveTracker.checkAndInitLiveGpsPortal();
+            if (maps && maps.startMapCalcLocationSharing) maps.startMapCalcLocationSharing();
+
+            // CONNECT FIREBASE REAL-TIME LISTENERS WITHOUT LOGIN
+            initRealtimeFirebaseListeners();
+            return;
+        }
+
+        // RIDER APP NAVIGATION
         if (appState.telegramId) {
             history.replaceState({ view: 'view-home' }, '', '#view-home');
             router.renderViewUI('view-home');
@@ -60,9 +78,6 @@ function bootApp() {
         }
     } catch (err) {
         console.error("Booting Error caught:", err);
-        if (router && router.renderViewUI) {
-            router.renderViewUI(appState.telegramId ? 'view-home' : 'view-login');
-        }
     }
 }
 
