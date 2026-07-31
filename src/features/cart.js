@@ -1,478 +1,312 @@
 // src/features/cart.js
-import { multiCarts, activeCartSlot, setActiveCartSlot, wizState, appState, globalState } from '../store/state.js';
-import { escapeHtml } from '../utils/helpers.js';
+import { appState, globalState } from '../store/state.js';
+import { db } from '../config/firebase.js';
 import { showToast } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
-import { openSlideDeleteModal, closeBulkModal, closeEditItemModal } from '../ui/modals.js';
-import { initWizardForCart } from './wizard.js';
-
-let editItemIndex = -1;
-
-// --- STATE PERSISTENCE ---
-export function saveCartState() {
-    try {
-        const serializable = {};
-        Object.keys(multiCarts).forEach(s => {
-            serializable[s] = {
-                items: multiCarts[s].items || [],
-                selectedIds: Array.from(multiCarts[s].selectedIds || []),
-                customerName: multiCarts[s].customerName || "",
-                isManual: multiCarts[s].isManual || false,
-                txId: multiCarts[s].txId || ""
-            };
-        });
-        localStorage.setItem('lokalex_carts', JSON.stringify(serializable));
-    } catch(e) {}
-}
+import { escapeHtml } from '../utils/helpers.js';
 
 export function loadCartState() {
-    const saved = localStorage.getItem('lokalex_carts');
-    if (saved) {
-        try {
-            const parsed = JSON.parse(saved);
-            const slots = Object.keys(parsed);
-            if (slots.length > 0) {
-                // Clear initial default keys
-                Object.keys(multiCarts).forEach(k => delete multiCarts[k]);
-                
-                slots.forEach(s => {
-                    multiCarts[s] = {
-                        items: parsed[s].items || [],
-                        selectedIds: new Set(parsed[s].selectedIds || []),
-                        customerName: parsed[s].customerName || "",
-                        isManual: parsed[s].isManual || false,
-                        txId: parsed[s].txId || ""
-                    };
-                });
-            }
-        } catch(e) {}
-    }
-}
-
-export function getCurrentCart() { 
-    return multiCarts[activeCartSlot] || multiCarts[1]; 
-}
-
-// --- DYNAMIC CART ADD / REMOVE ---
-export function addNewCartSlot() {
-    const existingSlots = Object.keys(multiCarts).map(Number);
-    const newSlot = existingSlots.length > 0 ? Math.max(...existingSlots) + 1 : 1;
-
-    multiCarts[newSlot] = {
-        items: [],
-        selectedIds: new Set(),
-        customerName: "",
-        isManual: false,
-        txId: ""
-    };
-
-    setActiveCartSlot(newSlot);
-    autoAssignCateringCustomersToCarts();
-    saveCartState();
-    renderCartTabs();
-    renderCartCustomerSelector();
-    renderCart();
-    showToast(`Added Cart ${newSlot}`);
-}
-
-export function removeCartSlot(slotNum, event) {
-    if (event) event.stopPropagation();
-    const slots = Object.keys(multiCarts).map(Number);
-    if (slots.length <= 1) {
-        showToast("Maximum of 1 cart required.");
-        return;
-    }
-
-    openSlideDeleteModal(`Burahin ang Cart ${slotNum}?`, () => {
-        delete multiCarts[slotNum];
-        
-        // If active slot was deleted, switch to lowest available slot
-        if (activeCartSlot === Number(slotNum)) {
-            const remaining = Object.keys(multiCarts).map(Number);
-            setActiveCartSlot(Math.min(...remaining));
+    try {
+        const saved = localStorage.getItem('lokalex_carts');
+        if (saved) {
+            globalState.carts = JSON.parse(saved);
+        } else {
+            globalState.carts = [[], [], [], []];
         }
-
-        autoAssignCateringCustomersToCarts();
-        saveCartState();
-        renderCartTabs();
-        renderCartCustomerSelector();
-        renderCart();
-        showToast(`Cart ${slotNum} removed`);
-    });
-}
-
-// --- RIDER ROSTER DATA & AUTO-ASSIGNMENT QUEUE ---
-export function getActiveCateringCustomersWithTimes() {
-    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
-    if (!myRecord || myRecord.status !== 'Catering' || !myRecord.customerName) return [];
-
-    const custs = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-    const times = myRecord.startTime ? myRecord.startTime.split(', ').map(t => t.trim()) : [];
-
-    return custs.map((c, idx) => ({
-        name: c,
-        startTime: times[idx] || times[0] || ""
-    }));
-}
-
-export function autoAssignCateringCustomersToCarts() {
-    const activeCustList = getActiveCateringCustomersWithTimes();
-    const slots = Object.keys(multiCarts).map(Number);
-
-    if (activeCustList.length > 0) {
-        const assignedNames = new Set();
-
-        // Pass 1: Retain valid customer assignments
-        slots.forEach(s => {
-            const curr = multiCarts[s].customerName;
-            const isManual = multiCarts[s].isManual;
-
-            if (curr && curr !== "Sample") {
-                const isStillActive = activeCustList.some(i => i.name === curr);
-                if ((isStillActive || isManual) && !assignedNames.has(curr)) {
-                    assignedNames.add(curr);
-                } else if (!isManual) {
-                    multiCarts[s].customerName = "";
-                }
-            }
-        });
-
-        // Pass 2: Auto-assign remaining roster customers to unassigned carts
-        slots.forEach(s => {
-            if (!multiCarts[s].customerName && !multiCarts[s].isManual) {
-                const nextAvail = activeCustList.find(i => !assignedNames.has(i.name));
-                if (nextAvail) {
-                    multiCarts[s].customerName = nextAvail.name;
-                    assignedNames.add(nextAvail.name);
-                } else {
-                    // Fallback to Sample if all active clients are distributed
-                    multiCarts[s].customerName = "Sample";
-                }
-            }
-        });
-    } else {
-        // No active catering clients on roster: set default to "Sample" for non-manual carts
-        slots.forEach(s => {
-            if (!multiCarts[s].isManual && (!multiCarts[s].customerName || multiCarts[s].customerName !== "Sample")) {
-                multiCarts[s].customerName = "Sample";
-            }
-        });
+    } catch(e) {
+        console.error("Failed to load cart state", e);
     }
-    saveCartState();
-}
-
-// --- CART CLEARING & QUEUE REPLACEMENT ---
-export function clearCartSlot(slot = activeCartSlot) {
-    if (multiCarts[slot]) {
-        multiCarts[slot].items = [];
-        multiCarts[slot].selectedIds = new Set();
-        multiCarts[slot].customerName = "";
-        multiCarts[slot].isManual = false;
-        multiCarts[slot].txId = "";
+    
+    if (globalState.activeCartIndex === undefined) {
+        globalState.activeCartIndex = 0;
     }
-    saveCartState();
-    autoAssignCateringCustomersToCarts(); // Automatically fills cart with next unassigned client or "Sample"
+    
     renderCartTabs();
-    renderCartCustomerSelector();
-    renderCart();
+    renderCartItems();
 }
 
-// --- UI RENDERING & SELECTOR CONTROL ---
-export function switchCartSlot(slotNum) {
-    setActiveCartSlot(slotNum);
-    autoAssignCateringCustomersToCarts();
+export function saveCartState() {
+    try {
+        localStorage.setItem('lokalex_carts', JSON.stringify(globalState.carts));
+    } catch(e) {
+        console.error("Failed to save cart state", e);
+    }
+}
+
+export function switchCartTab(index) {
+    globalState.activeCartIndex = index;
     renderCartTabs();
-    renderCartCustomerSelector();
-    renderCart();
+    renderCartItems();
 }
 
 export function renderCartTabs() {
-    const header = document.getElementById('cart-tabs-header');
-    if (!header) return;
-
-    // Convert container to smooth scrollable flex bar
-    header.className = "bg-cardBg border-b border-gray-800 p-2 flex items-center gap-1.5 overflow-x-auto shrink-0";
-
-    const slots = Object.keys(multiCarts).map(Number).sort((a, b) => a - b);
-    let html = "";
-
-    slots.forEach(s => {
-        const cart = multiCarts[s];
-        const isActive = s === activeCartSlot;
-        const itemCount = cart.items.length;
-        let badgeTxt = cart.customerName ? cart.customerName : (itemCount > 0 ? `${itemCount} items` : "Empty");
-
-        html += `
-        <div class="relative group shrink-0">
-            <button onclick="switchCartSlot(${s})" class="flex flex-col items-center justify-center px-4 py-2 rounded-xl transition min-w-[80px] ${isActive ? 'bg-emerald-600 text-white shadow-lg ring-2 ring-emerald-400' : 'bg-inputBg text-gray-400 hover:text-white hover:bg-gray-800'} active:scale-95">
-                <span class="text-xs font-black">Cart ${s}</span>
-                <span class="text-[9px] truncate max-w-[70px] font-semibold mt-0.5 ${isActive ? 'text-emerald-100' : 'text-gray-400'}">${escapeHtml(badgeTxt)}</span>
-            </button>
-            ${slots.length > 1 ? `
-                <button onclick="removeCartSlot(${s}, event)" class="absolute -top-1 -right-1 w-4 h-4 bg-red-600 text-white text-[9px] font-bold rounded-full flex items-center justify-center opacity-80 hover:opacity-100 shadow transition" title="Remove Cart">×</button>
-            ` : ''}
-        </div>`;
-    });
-
-    // Add Cart (+) Button
-    html += `
-    <button onclick="addNewCartSlot()" class="flex items-center justify-center gap-1 px-3 py-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/40 text-xs font-bold shrink-0 transition active:scale-95" title="Add New Cart">
-        <i class="fa-solid fa-plus"></i> <span class="text-[10px]">Add Cart</span>
-    </button>`;
-
-    header.innerHTML = html;
-    document.getElementById('cart-slot-label').innerText = `Cart ${activeCartSlot}`;
-    document.getElementById('btn-cart-slot-label').innerText = `Cart ${activeCartSlot}`;
-}
-
-export function toggleCartManualInput(isManual) {
-    const currentCart = getCurrentCart();
-    if (currentCart) {
-        currentCart.isManual = isManual;
-        if (!isManual) {
-            currentCart.customerName = "";
-            autoAssignCateringCustomersToCarts();
-        } else if (!currentCart.customerName || currentCart.customerName === "Sample") {
-            currentCart.customerName = "";
-        }
-        saveCartState();
-        renderCartTabs();
-        renderCartCustomerSelector();
-    }
-}
-
-export function renderCartCustomerSelector() {
-    const container = document.getElementById('cart-customer-selector-container');
+    const container = document.getElementById('cart-tabs-header');
     if (!container) return;
-
-    const currentCart = getCurrentCart();
-    const isManual = currentCart.isManual || false;
-    const activeCustList = getActiveCateringCustomersWithTimes();
-
-    let controlHtml = "";
-
-    if (isManual) {
-        // Manual Text Mode
-        controlHtml = `
-            <input type="text" id="cart-customer-text-input" placeholder="Type Client Name..." 
-                oninput="multiCarts[activeCartSlot].customerName = this.value; saveCartState(); renderCartTabs();" 
-                class="flex-1 bg-darkBg text-xs rounded-lg p-2 outline-none border border-amber-500/50 text-white font-semibold" 
-                value="${escapeHtml(currentCart.customerName === 'Sample' ? '' : (currentCart.customerName || ''))}">
-        `;
-    } else if (activeCustList.length > 0) {
-        // Dropdown Auto-Assign Mode from Catering Roster
-        const assignedInOtherCarts = Object.keys(multiCarts)
-            .map(Number)
-            .filter(s => s !== activeCartSlot)
-            .map(s => multiCarts[s].customerName)
-            .filter(n => n && n !== "Sample");
-
-        const availableCusts = activeCustList.filter(i => !assignedInOtherCarts.includes(i.name));
-        let currentAssigned = currentCart.customerName;
-
-        let optionsHtml = "";
-        availableCusts.forEach(item => {
-            const isSelected = item.name === currentAssigned;
-            optionsHtml += `<option value="${escapeHtml(item.name)}" ${isSelected ? 'selected' : ''}>${escapeHtml(item.name)}</option>`;
-        });
-
-        if (currentAssigned && !availableCusts.some(i => i.name === currentAssigned)) {
-            optionsHtml += `<option value="${escapeHtml(currentAssigned)}" selected>${escapeHtml(currentAssigned)}</option>`;
-        }
-
-        controlHtml = `
-            <select id="cart-customer-select" onchange="assignCustomerToCurrentCart(this.value)" class="flex-1 bg-darkBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white font-semibold">
-                ${optionsHtml || `<option value="Sample" selected>Sample (No active client available)</option>`}
-            </select>
-        `;
-    } else {
-        // No Active Catering Customers on Roster -> Default to "Sample"
-        controlHtml = `
-            <div class="flex items-center justify-between flex-1 bg-darkBg/80 px-3 py-1.5 rounded-lg border border-gray-700/60">
-                <span class="text-xs font-bold text-gray-300">Sample <span class="text-[9px] text-amber-400 font-normal">(No active catering client)</span></span>
-                <span class="text-[9px] text-gray-500 italic">Not recorded in commission</span>
-            </div>
-        `;
-    }
-
-    container.innerHTML = `
-        <div class="flex items-center gap-2 flex-1">
-            <label class="flex items-center gap-1.5 cursor-pointer shrink-0 bg-darkBg px-2.5 py-1.5 rounded-lg border border-gray-700 hover:border-amber-500/50 transition">
-                <input type="checkbox" onchange="toggleCartManualInput(this.checked)" ${isManual ? 'checked' : ''} class="w-4 h-4 accent-amber-500 cursor-pointer">
-                <span class="text-xs text-amber-400 font-bold">Manual Name</span>
-            </label>
-            ${controlHtml}
-        </div>
-    `;
-}
-
-export function assignCustomerToCurrentCart(custName) {
-    multiCarts[activeCartSlot].customerName = custName.trim();
-    saveCartState();
-    renderCartTabs();
-    renderCartCustomerSelector();
-    if (custName) showToast(`Cart ${activeCartSlot} assigned to: ${custName}`);
-}
-
-// --- CART ITEM ACTIONS ---
-export function processBulkAdd() {
-    const raw = document.getElementById('bulk-input').value.trim();
-    if(!raw) return closeBulkModal();
-
-    const currentCart = getCurrentCart();
-    raw.split('\n').forEach(line => {
-        line = line.trim(); if(!line) return;
-        let price = 0.0; let name = line;
-        const match = line.match(/[\s\-:]+([\d\.,]+)$/);
-        if(match) { price = parseFloat(match[1].replace(/,/g, '')) || 0.0; name = line.substring(0, match.index).trim(); }
-        currentCart.items.push({ id: Math.random().toString(36).substr(2,9), item: name, price: price, category: null });
-    });
-    saveCartState();
-    closeBulkModal(); 
-    renderCartTabs();
-    renderCart();
-}
-
-export function handleCartActionBtn() {
-    const currentCart = getCurrentCart();
-    if (currentCart.selectedIds.size > 0) {
-        openSlideDeleteModal(`Burahin ang ${currentCart.selectedIds.size} na napiling item(s) sa Cart ${activeCartSlot}?`, () => {
-            currentCart.items = currentCart.items.filter(i => !currentCart.selectedIds.has(i.id));
-            currentCart.selectedIds.clear();
-            saveCartState();
-            renderCartTabs();
-            renderCart();
-        });
-    } else {
-        if (currentCart.items.length === 0) return;
-        openSlideDeleteModal(`Sigurado ka bang gusto mong i-clear ang Cart ${activeCartSlot}?`, () => {
-            clearCartSlot(activeCartSlot);
-        });
-    }
-}
-
-export function toggleSelectCartItem(id) {
-    const currentCart = getCurrentCart();
-    if (currentCart.selectedIds.has(id)) {
-        currentCart.selectedIds.delete(id);
-    } else {
-        currentCart.selectedIds.add(id);
-    }
-    saveCartState();
-    renderCartActionBtnState();
-}
-
-export function removeCartItem(id) {
-    openSlideDeleteModal("Tanggalin ang item na ito?", () => {
-        const currentCart = getCurrentCart();
-        currentCart.items = currentCart.items.filter(i => i.id !== id);
-        currentCart.selectedIds.delete(id);
-        saveCartState();
-        renderCartTabs();
-        renderCart();
-    });
-}
-
-export function setItemCategory(id, cat) { 
-    const currentCart = getCurrentCart();
-    const item = currentCart.items.find(i => i.id === id); 
-    if(item && item.price > 0) { 
-        item.category = cat; 
-        saveCartState(); 
-        renderCart(); 
-    } else if(item && item.price === 0) { 
-        showToast("Set price before categorizing!"); 
-    } 
-}
-
-export function promptEditItem(id) {
-    const currentCart = getCurrentCart();
-    editItemIndex = currentCart.items.findIndex(i => i.id === id);
-    if(editItemIndex === -1) return;
-    document.getElementById('edit-name-input').value = currentCart.items[editItemIndex].item || "";
-    document.getElementById('edit-price-input').value = currentCart.items[editItemIndex].price || "";
-    document.getElementById('edit-item-modal').classList.remove('hidden'); 
-    document.getElementById('edit-name-input').focus();
-}
-
-export function saveItemEdit() {
-    const newName = document.getElementById('edit-name-input').value.trim();
-    const newPrice = parseFloat(document.getElementById('edit-price-input').value) || 0.0;
-    if (!newName) return showToast("Item name cannot be empty!");
     
-    const currentCart = getCurrentCart();
-    if(editItemIndex !== -1 && currentCart.items[editItemIndex]) { 
-        currentCart.items[editItemIndex].item = newName;
-        currentCart.items[editItemIndex].price = newPrice; 
-        saveCartState();
-    }
-    closeEditItemModal(); 
-    renderCart();
+    const cartIdx = globalState.activeCartIndex || 0;
+
+    container.innerHTML = [0, 1, 2, 3].map(i => {
+        const isActive = cartIdx === i;
+        const itemCount = (globalState.carts[i] || []).length;
+        const activeClass = isActive 
+            ? "bg-blue-600 text-white font-black shadow-lg border-blue-500" 
+            : "bg-cardBg text-gray-400 hover:text-white border-gray-800";
+
+        return `
+            <button onclick="switchCartTab(${i})" class="${activeClass} py-2 px-1 rounded-xl border text-xs font-bold transition flex flex-col items-center justify-center gap-0.5 active:scale-95">
+                <span>Cart ${i + 1}</span>
+                <span class="text-[9px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-blue-500/40 text-white' : 'bg-black/30 text-gray-400'}">${itemCount} items</span>
+            </button>
+        `;
+    }).join('');
+
+    const label = `Cart ${cartIdx + 1}`;
+    const slotLabelEl = document.getElementById('cart-slot-label');
+    const btnSlotLabelEl = document.getElementById('btn-cart-slot-label');
+    if (slotLabelEl) slotLabelEl.innerText = label;
+    if (btnSlotLabelEl) btnSlotLabelEl.innerText = label;
 }
 
-export function renderCartActionBtnState() {
-    const btn = document.getElementById('cart-action-btn');
-    if (!btn) return;
-    const currentCart = getCurrentCart();
-    if (currentCart.selectedIds.size > 0) {
-        btn.innerHTML = `<i class="fa-solid fa-trash-can"></i> Delete Selected (${currentCart.selectedIds.size})`;
-        btn.className = "flex-1 bg-red-600 text-white text-xs font-bold py-2 rounded-lg border border-red-500 transition active:scale-95";
-    } else {
-        btn.innerHTML = `<i class="fa-solid fa-trash-can"></i> Clear Cart ${activeCartSlot}`;
-        btn.className = "flex-1 bg-red-600/20 text-red-400 text-xs font-bold py-2 rounded-lg border border-red-600/30 transition active:scale-95";
-    }
-}
-
-export function renderCart() {
+export function renderCartItems() {
     const container = document.getElementById('cart-items-list');
     if (!container) return;
 
-    const currentCart = getCurrentCart();
+    const cartIdx = globalState.activeCartIndex || 0;
+    const items = globalState.carts[cartIdx] || [];
+    renderCartClientSelector();
+
+    if (items.length === 0) {
+        container.innerHTML = `
+            <div class="text-center text-gray-500 italic py-16 text-xs flex flex-col items-center gap-2">
+                <i class="fa-solid fa-cart-shopping text-3xl opacity-30"></i>
+                <span>Walang laman ang Cart ${cartIdx + 1}.</span>
+            </div>`;
+        updateCartSubtotal(0);
+        return;
+    }
+
     let subtotal = 0;
 
-    if (currentCart.items.length === 0) {
-        container.innerHTML = `<div class="text-center py-10 text-gray-500">Cart ${activeCartSlot} is empty. Paste a list!</div>`;
-        currentCart.selectedIds.clear();
-    } else {
-        container.innerHTML = currentCart.items.map((item, index) => {
-            subtotal += item.price;
-            const isTask = item.price === 0.0;
-            const catM = item.category === 'Market';
-            const catS = item.category === 'Store';
-            const isChecked = currentCart.selectedIds.has(item.id);
+    container.innerHTML = items.map((item, index) => {
+        const price = parseFloat(item.price) || 0;
+        subtotal += price;
 
-            return `
-            <div class="bg-cardBg border ${isTask ? 'border-orange-500/50' : 'border-gray-800'} p-3 rounded-xl shadow-sm flex items-center gap-3 relative">
-                <input type="checkbox" onchange="toggleSelectCartItem('${item.id}')" ${isChecked ? 'checked' : ''} class="w-4 h-4 accent-blue-500 cursor-pointer">
-                <div class="flex-1 flex flex-col gap-1">
-                    <div class="font-bold text-sm ${isTask ? 'text-orange-400' : 'text-white'}">${index + 1}. ${escapeHtml(item.item)}</div>
-                    <div class="flex justify-between items-end">
-                        <div class="flex gap-2">
-                            <button onclick="setItemCategory('${item.id}', 'Market')" class="text-[10px] px-2.5 py-0.5 rounded-full font-bold border transition ${catM ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-600 text-gray-400'}">Market</button>
-                            <button onclick="setItemCategory('${item.id}', 'Store')" class="text-[10px] px-2.5 py-0.5 rounded-full font-bold border transition ${catS ? 'bg-orange-600 border-orange-600 text-white' : 'border-gray-600 text-gray-400'}">Store</button>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-xs font-bold ${isTask ? 'text-orange-400' : 'text-green-400'} mb-0.5">${isTask ? 'Kulang Presyo' : '₱'+item.price.toFixed(2)}</div>
-                        </div>
+        const isStore = item.type === 'store';
+        const isMarket = item.type === 'market';
+
+        return `
+            <div class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col gap-2 text-xs shadow-sm">
+                <div class="flex justify-between items-center">
+                    <span class="font-bold text-white flex items-center gap-1.5">
+                        <span class="text-gray-500 text-[10px]">#${index + 1}</span> ${escapeHtml(item.name)}
+                    </span>
+                    <span class="font-black text-green-400 text-sm">₱${price.toFixed(2)}</span>
+                </div>
+
+                <div class="flex justify-between items-center pt-2 border-t border-gray-800/80">
+                    <div class="flex gap-1.5">
+                        <button onclick="setItemType(${index}, 'store')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isStore ? 'bg-orange-600 text-white border-orange-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
+                            <i class="fa-solid fa-store"></i> Store
+                        </button>
+                        <button onclick="setItemType(${index}, 'market')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isMarket ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
+                            <i class="fa-solid fa-basket-shopping"></i> Market
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button onclick="openEditItemModal(${index})" class="text-blue-400 hover:text-blue-300 p-1" title="Edit Item"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="removeCartItem(${index})" class="text-red-400 hover:text-red-300 p-1" title="Delete Item"><i class="fa-solid fa-trash"></i></button>
                     </div>
                 </div>
-                <div class="flex flex-col gap-2 items-end pl-2 border-l border-gray-800">
-                    <button onclick="removeCartItem('${item.id}')" class="text-red-400 hover:text-red-500 p-1 text-xs"><i class="fa-solid fa-trash"></i></button>
-                    <button onclick="promptEditItem('${item.id}')" class="text-blue-400 hover:text-blue-300 p-1 text-xs"><i class="fa-solid fa-pen"></i></button>
-                </div>
-            </div>`;
-        }).join('');
-    }
-    document.getElementById('cart-subtotal-display').innerText = subtotal.toFixed(2);
-    renderCartActionBtnState();
+            </div>
+        `;
+    }).join('');
+
+    updateCartSubtotal(subtotal);
 }
 
-export function proceedToWizard() {
-    const currentCart = getCurrentCart();
-    if (!currentCart || currentCart.items.length === 0) return showToast(`Cart ${activeCartSlot} is empty!`);
-    if (currentCart.items.some(i => i.price === 0.0 || (i.price > 0 && !i.category))) return showToast("Fix prices and categories first!");
+function updateCartSubtotal(subtotal) {
+    const display = document.getElementById('cart-subtotal-display');
+    if (display) display.innerText = subtotal.toFixed(2);
+}
 
-    document.getElementById('header-title').innerText = `Fee Wizard (Cart ${activeCartSlot})`;
-    initWizardForCart();
-    switchView('view-wizard');
+export function setItemType(index, type) {
+    const cartIdx = globalState.activeCartIndex || 0;
+    const items = globalState.carts[cartIdx];
+    if (items && items[index]) {
+        items[index].type = type;
+        saveCartState();
+        renderCartItems();
+    }
+}
+
+export function removeCartItem(index) {
+    const cartIdx = globalState.activeCartIndex || 0;
+    const items = globalState.carts[cartIdx];
+    if (items) {
+        items.splice(index, 1);
+        saveCartState();
+        renderCartItems();
+        showToast("Item removed from cart");
+    }
+}
+
+export function handleCartActionBtn() {
+    const cartIdx = globalState.activeCartIndex || 0;
+    if (!globalState.carts[cartIdx] || globalState.carts[cartIdx].length === 0) return;
+
+    if (confirm(`Sigurado ka bang nais burahin ang lahat ng laman ng Cart ${cartIdx + 1}?`)) {
+        globalState.carts[cartIdx] = [];
+        saveCartState();
+        renderCartItems();
+        showToast(`Cart ${cartIdx + 1} cleared.`);
+    }
+}
+
+function renderCartClientSelector() {
+    const container = document.getElementById('cart-customer-selector-container');
+    if (!container) return;
+
+    const rosterList = globalState.rosterMembers || [];
+    const activeCatered = rosterList.filter(r => (r.status || "").toLowerCase() === 'catering');
+
+    if (activeCatered.length === 0) {
+        container.innerHTML = `<span class="text-[11px] text-gray-500 italic">Walang active catering client sa roster.</span>`;
+        return;
+    }
+
+    let options = `<option value="">-- Piliin ang Customer --</option>`;
+    activeCatered.forEach(c => {
+        const name = c.customerName ? c.customerName.split(',')[0] : "Customer";
+        options += `<option value="${escapeHtml(name)}">${escapeHtml(name)} (${escapeHtml(c.name)})</option>`;
+    });
+
+    container.innerHTML = `
+        <select onchange="assignClientToCart(this.value)" class="w-full bg-darkBg text-xs text-amber-300 font-bold rounded-lg p-1.5 outline-none border border-gray-700">
+            ${options}
+        </select>
+    `;
+}
+
+export function assignClientToCart(clientName) {
+    if (!clientName) return;
+    appState.selectedCateringClient = clientName;
+    const cartIdx = globalState.activeCartIndex || 0;
+    showToast(`🛒 Cart ${cartIdx + 1} assigned to ${clientName}`);
+}
+
+// ============================================================================
+// RESTORED: EDIT ITEM MODAL LOGIC
+// ============================================================================
+export function openEditItemModal(index) {
+    const cartIdx = globalState.activeCartIndex || 0;
+    const item = globalState.carts[cartIdx][index];
+    if (!item) return;
+
+    globalState.editItemIndex = index;
+    document.getElementById('edit-name-input').value = item.name;
+    document.getElementById('edit-price-input').value = item.price;
+    document.getElementById('edit-item-modal').classList.remove('hidden');
+}
+
+export function closeEditItemModal() {
+    document.getElementById('edit-item-modal').classList.add('hidden');
+    globalState.editItemIndex = null;
+}
+
+export function saveItemEdit() {
+    if (globalState.editItemIndex === null || globalState.editItemIndex === undefined) return;
+    
+    const cartIdx = globalState.activeCartIndex || 0;
+    const name = document.getElementById('edit-name-input').value.trim();
+    const price = parseFloat(document.getElementById('edit-price-input').value) || 0;
+
+    if (!name) return showToast("Item name is required.");
+
+    globalState.carts[cartIdx][globalState.editItemIndex].name = name;
+    globalState.carts[cartIdx][globalState.editItemIndex].price = price;
+
+    saveCartState();
+    renderCartItems();
+    closeEditItemModal();
+    showToast("Item updated successfully.");
+}
+
+// ============================================================================
+// RESTORED: BULK ADD LOGIC
+// ============================================================================
+export function showBulkAddModal() {
+    document.getElementById('bulk-input').value = "";
+    document.getElementById('bulk-modal').classList.remove('hidden');
+}
+
+export function closeBulkModal() {
+    document.getElementById('bulk-modal').classList.add('hidden');
+}
+
+export function processBulkAdd() {
+    const input = document.getElementById('bulk-input').value.trim();
+    if (!input) return closeBulkModal();
+
+    const cartIdx = globalState.activeCartIndex || 0;
+    const lines = input.split('\n');
+    let addedCount = 0;
+
+    lines.forEach(line => {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length === 0 || parts[0] === "") return;
+
+        let price = 0;
+        let name = line.trim();
+
+        // Check if the last word is a number (the price)
+        const lastPart = parts[parts.length - 1];
+        if (!isNaN(parseFloat(lastPart))) {
+            price = parseFloat(lastPart);
+            name = parts.slice(0, -1).join(' '); // Rejoin the name without the price
+        }
+
+        if (name) {
+            globalState.carts[cartIdx].push({
+                name: name,
+                price: price,
+                type: 'uncategorized'
+            });
+            addedCount++;
+        }
+    });
+
+    if (addedCount > 0) {
+        saveCartState();
+        renderCartItems();
+        showToast(`${addedCount} items added to Cart ${cartIdx + 1}`);
+    }
+    closeBulkModal();
+}
+
+// ============================================================================
+// STRICT VALIDATION: Blocks Uncategorized Items
+// ============================================================================
+export function validateAndProceedToWizard() {
+    const cartIdx = globalState.activeCartIndex || 0;
+    const cartItems = globalState.carts[cartIdx] || [];
+    
+    if (cartItems.length === 0) {
+        showToast("⚠️ Walang laman ang cart!");
+        return;
+    }
+
+    const hasUncategorized = cartItems.some(item => !item.type || (item.type !== 'store' && item.type !== 'market'));
+    
+    if (hasUncategorized) {
+        showToast("⚠️ Paki-kategorya (Store o Market) ang lahat ng items bago mag-resibo!");
+        return;
+    }
+
+    // Call the original proceedToWizard from wizard.js
+    if (typeof window.proceedToWizard === 'function') {
+        window.proceedToWizard();
+    } else {
+        switchView('view-wizard');
+    }
 }
