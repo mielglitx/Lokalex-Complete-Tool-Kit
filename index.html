@@ -177,8 +177,12 @@
             </div>
 
             <div class="text-[11px] text-gray-300 font-bold flex justify-center gap-4 mt-1 bg-black/40 py-2 rounded-xl border border-gray-800">
-                <span class="flex items-center gap-1.5"><img src="https://maps.gstatic.com/mapfiles/ms2/micons/motorcycle.png" class="w-4 h-4"> Rider</span>
-                <span class="flex items-center gap-1.5"><img src="http://maps.google.com/mapfiles/ms/icons/red-dot.png" class="w-4 h-4"> Customer</span>
+                <span class="flex items-center gap-1.5">
+                    <img src="https://img.icons8.com/color/48/motorcycle.png" class="w-5 h-5"> Rider
+                </span>
+                <span class="flex items-center gap-1.5">
+                    <img src="http://maps.google.com/mapfiles/ms/icons/red-dot.png" class="w-4 h-4"> Customer
+                </span>
             </div>
             <div class="text-[10px] text-indigo-400 font-semibold mb-1">Maps auto-refresh every 15 seconds</div>
 
@@ -228,6 +232,35 @@
             <div class="text-[11px] text-gray-500 bg-black/40 p-3 rounded-xl border border-gray-800/60 w-full mt-2">
                 Naihatid na ang iyong order. Maraming salamat po!
             </div>
+        </div>
+    </div>
+
+    <!-- RIDER LIVE GPS SESSION MANAGEMENT MODAL -->
+    <div id="livegps-manage-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-indigo-500/40 p-6 rounded-3xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-4">
+            <div class="w-12 h-12 bg-indigo-500/20 text-indigo-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+                <i class="fa-solid fa-satellite-dish animate-pulse"></i>
+            </div>
+            <div>
+                <h3 class="font-bold text-base text-indigo-300">Active Live Tracking</h3>
+            </div>
+
+            <div id="livegps-manage-status-box" class="bg-darkBg p-3 rounded-xl border border-gray-800"></div>
+
+            <div class="grid grid-cols-2 gap-2 mt-1">
+                <button onclick="copyLiveGpsLink()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl text-xs transition active:scale-95 flex flex-col items-center justify-center gap-1 shadow-lg">
+                    <i class="fa-solid fa-link text-lg"></i> Copy Link
+                </button>
+                <button onclick="showRiderLiveMap()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl text-xs transition active:scale-95 flex flex-col items-center justify-center gap-1 shadow-lg">
+                    <i class="fa-solid fa-map-location-dot text-lg"></i> Show Map
+                </button>
+            </div>
+
+            <button onclick="promptEndLiveGpsSession()" class="w-full bg-red-600/20 border border-red-600/50 hover:bg-red-600 text-red-400 hover:text-white font-bold py-3.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-2 mt-1">
+                <i class="fa-solid fa-power-off"></i> End Session
+            </button>
+
+            <button onclick="closeLiveGpsManageModal()" class="text-xs text-gray-500 py-1 font-bold mt-1 uppercase tracking-wider">Close Window</button>
         </div>
     </div>
 

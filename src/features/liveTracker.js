@@ -242,7 +242,8 @@ function renderMutualLiveMap(usersData) {
                 map: liveMapObj,
                 title: `Rider: ${riderData.name || 'Rider'}`,
                 icon: { 
-                    url: "https://maps.gstatic.com/mapfiles/ms2/micons/motorcycle.png" // Google's default motorcycle map pin
+                    url: "https://img.icons8.com/color/48/motorcycle.png", 
+                    scaledSize: new google.maps.Size(36, 36) // Keeps the icon perfectly sized on the map
                 }
             });
         } else {
