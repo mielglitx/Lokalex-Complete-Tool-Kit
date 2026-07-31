@@ -596,7 +596,7 @@
             </div>
         </section>
 
-        <!-- DAILY / WEEKLY / MONTHLY COMMISSION VIEW -->
+ <!-- DAILY / WEEKLY / MONTHLY COMMISSION VIEW -->
         <section id="view-commission" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
             
             <!-- CONTROLS & FILTERS -->
@@ -624,11 +624,8 @@
                 <!-- Dynamic Date Inputs -->
                 <div class="flex justify-between items-center">
                     <span class="text-xs text-gray-400 font-bold" id="comm-date-label">Select Date:</span>
-                    <!-- Daily -->
                     <input type="date" id="comm-input-daily" onchange="refreshCommissionView()" class="bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
-                    <!-- Weekly -->
                     <input type="week" id="comm-input-weekly" onchange="refreshCommissionView()" class="hidden bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
-                    <!-- Monthly -->
                     <input type="month" id="comm-input-monthly" onchange="refreshCommissionView()" class="hidden bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
                 </div>
             </div>
@@ -643,7 +640,10 @@
                 
                 <div class="flex flex-col items-center justify-center py-2">
                     <div class="text-[10px] text-gray-400 font-bold uppercase" id="comm-main-label">Total Earnings</div>
-                    <div class="text-4xl font-black text-emerald-400 drop-shadow-md">₱<span id="comm-main-amount">0.00</span></div>
+                    <!-- Wrapper updated here to color the P and the Number together -->
+                    <div id="comm-main-wrapper" class="text-4xl font-black text-emerald-400 drop-shadow-md">
+                        <span id="comm-main-currency">₱</span><span id="comm-main-amount">0.00</span>
+                    </div>
                     <div class="text-[10px] text-gray-500 mt-1">Gross Total: ₱<span id="comm-gross-amount">0.00</span></div>
                 </div>
 
@@ -657,8 +657,8 @@
                 <i class="fa-solid fa-file-lines"></i> Generate Text Report
             </button>
 
-            <div class="text-[10px] text-gray-500 uppercase tracking-wider font-bold mt-2 border-b border-gray-800 pb-1">Transaction Breakdown</div>
-            <div id="commission-receipts-list" class="flex flex-col gap-3 pb-20"></div>
+            <div class="text-[10px] text-gray-500 uppercase tracking-wider font-bold mt-2 border-b border-gray-800 pb-1">Rider Summary</div>
+            <div id="commission-rider-list" class="flex flex-col gap-3 pb-20"></div>
         </section>
 
         <!-- DIRECTORY VIEW -->

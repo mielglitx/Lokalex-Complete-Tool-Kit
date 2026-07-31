@@ -35,17 +35,25 @@ function setupAdminControls() {
         filterBox.classList.remove('hidden');
         filterBox.classList.add('flex');
         
-        // Populate rider dropdown
-        let options = `<option value="ALL">All Riders (Combined)</option>`;
-        const uniqueRiders = [...new Set(globalState.globalCateredHistory.map(h => h.riderId).filter(Boolean))];
+        // 1. Smart merge of riders from Roster AND History
+        let uniqueRiderMap = {};
         
-        uniqueRiders.forEach(id => {
-            const historyItem = globalState.globalCateredHistory.find(h => h.riderId === id);
-            const name = historyItem ? historyItem.riderName : id;
-            options += `<option value="${id}">${name}</option>`;
+        (globalState.rosterMembers || []).forEach(r => {
+            if(r.telegramId) uniqueRiderMap[r.telegramId] = r.name || r.telegramId;
         });
         
-        if (select.innerHTML === "") select.innerHTML = options;
+        (globalState.globalCateredHistory || []).forEach(h => {
+            if(h.riderId) uniqueRiderMap[h.riderId] = h.riderName || uniqueRiderMap[h.riderId] || h.riderId;
+        });
+        
+        let options = `<option value="ALL">All Riders (Combined)</option>`;
+        for(let id in uniqueRiderMap) {
+            // Keep selection if it was already selected
+            const isSelected = select.value === id ? "selected" : "";
+            options += `<option value="${id}" ${isSelected}>${uniqueRiderMap[id]}</option>`;
+        }
+        
+        select.innerHTML = options;
     } else {
         filterBox.classList.add('hidden');
         filterBox.classList.remove('flex');
@@ -55,7 +63,6 @@ function setupAdminControls() {
 export function setCommissionMode(mode) {
     viewSettings.mode = mode;
     
-    // UI Button toggles
     const btnEarned = document.getElementById('comm-mode-earned');
     const btnCompany = document.getElementById('comm-mode-company');
     
@@ -73,7 +80,6 @@ export function setCommissionMode(mode) {
 export function setCommissionPeriod(period) {
     viewSettings.period = period;
     
-    // UI Button toggles
     ['daily', 'weekly', 'monthly'].forEach(p => {
         const btn = document.getElementById(`comm-period-${p}`);
         const input = document.getElementById(`comm-input-${p}`);
@@ -92,15 +98,13 @@ export function setCommissionPeriod(period) {
 export function refreshCommissionView() {
     const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
     let targetRiderId = isAdmin ? document.getElementById('admin-rider-select').value : appState.telegramId;
-    if (targetRiderId === "ALL") targetRiderId = null; // Admin viewing everyone
+    if (targetRiderId === "ALL") targetRiderId = null; 
 
     viewSettings.dateValue = document.getElementById(`comm-input-${viewSettings.period}`).value;
     if (!viewSettings.dateValue) return;
 
-    // 1. Filter Data
+    // 1. Filter Data by Date/Week/Month
     let filteredHistory = globalState.globalCateredHistory.filter(record => {
-        if (targetRiderId && record.riderId !== targetRiderId.toString()) return false;
-
         const recordTs = record.timestamp || Date.now();
         if (viewSettings.period === 'daily') return getDateString(recordTs) === viewSettings.dateValue;
         if (viewSettings.period === 'weekly') return getWeekString(recordTs) === viewSettings.dateValue;
@@ -108,46 +112,73 @@ export function refreshCommissionView() {
         return false;
     });
 
-    // 2. Calculate Totals
-    let grossTotal = 0;
-    let companyShare = 0;
-    let riderNet = 0;
+    // 2. Group Totals by Rider
+    let riderTotals = {}; 
 
     filteredHistory.forEach(r => {
-        const hf = parseFloat(r.fees?.handling) || 0;
-        const mf = parseFloat(r.fees?.market) || 0;
-        const ms = parseFloat(r.fees?.multistop) || 0;
-        const rdf = parseFloat(r.fees?.delivery) || 0;
-        const disc = parseFloat(r.fees?.discount) || 0;
-        const epay = parseFloat(r.fees?.epaymentFee) || 0;
+        let rId = r.riderId || "unknown";
+        
+        let gross = parseFloat(r.totalFees);
+        if (isNaN(gross)) {
+            const hf = parseFloat(r.fees?.handling) || 0;
+            const mf = parseFloat(r.fees?.market) || 0;
+            const ms = parseFloat(r.fees?.multistop) || 0;
+            const rdf = parseFloat(r.fees?.delivery) || 0;
+            const epay = parseFloat(r.fees?.epaymentFee) || 0;
+            const disc = parseFloat(r.fees?.discount) || 0;
+            gross = hf + mf + ms + rdf + epay - disc;
+        }
 
-        const recordGross = hf + mf + ms + rdf + epay - disc;
-        grossTotal += recordGross;
-        companyShare += (recordGross * 0.20);
-        riderNet += (recordGross * 0.80);
+        if (!riderTotals[rId]) {
+            let rName = r.riderName || "Unknown Rider";
+            const rosterRec = globalState.rosterMembers?.find(mem => mem.telegramId == rId);
+            if (rosterRec) rName = rosterRec.name;
+
+            riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0 };
+        }
+        
+        riderTotals[rId].gross += gross;
+        riderTotals[rId].earned += (gross * 0.80);
+        riderTotals[rId].company += (gross * 0.20);
     });
 
-    // 3. Update UI Text
-    const mainAmountEl = document.getElementById('comm-main-amount');
+    // 3. Filter down to Target Rider (if specific rider selected) & Calculate Grand Totals
+    let finalRiderList = [];
+    let grandGross = 0;
+    let grandEarned = 0;
+    let grandCompany = 0;
+
+    for (let rId in riderTotals) {
+        if (targetRiderId && rId !== targetRiderId.toString()) continue; 
+        
+        finalRiderList.push({ id: rId, ...riderTotals[rId] });
+        grandGross += riderTotals[rId].gross;
+        grandEarned += riderTotals[rId].earned;
+        grandCompany += riderTotals[rId].company;
+    }
+
+    // 4. Update UI Text
+    const mainWrapperEl = document.getElementById('comm-main-wrapper');
     const mainLabelEl = document.getElementById('comm-main-label');
-    document.getElementById('comm-gross-amount').innerText = grossTotal.toFixed(2);
+    
+    document.getElementById('comm-gross-amount').innerText = grandGross.toFixed(2);
     document.getElementById('comm-summary-title').innerText = `${viewSettings.period.toUpperCase()} SUMMARY`;
 
     if (viewSettings.mode === 'earned') {
         mainLabelEl.innerText = "YOUR EARNINGS (80%)";
         mainLabelEl.className = "text-[10px] text-emerald-400 font-bold uppercase";
-        mainAmountEl.className = "text-4xl font-black text-emerald-400 drop-shadow-md";
-        mainAmountEl.innerText = riderNet.toFixed(2);
+        mainWrapperEl.className = "text-4xl font-black text-emerald-400 drop-shadow-md";
+        document.getElementById('comm-main-amount').innerText = grandEarned.toFixed(2);
     } else {
         mainLabelEl.innerText = "TO PAY COMPANY (20%)";
         mainLabelEl.className = "text-[10px] text-red-400 font-bold uppercase";
-        mainAmountEl.className = "text-4xl font-black text-red-400 drop-shadow-md";
-        mainAmountEl.innerText = companyShare.toFixed(2);
+        mainWrapperEl.className = "text-4xl font-black text-red-400 drop-shadow-md";
+        document.getElementById('comm-main-amount').innerText = grandCompany.toFixed(2);
     }
 
-    renderReceiptsList(filteredHistory);
+    renderRiderSummaryList(finalRiderList);
 
-    // 4. Fetch Settlement Status from Firebase
+    // 5. Fetch Settlement Status
     checkSettlementStatus(targetRiderId, viewSettings.period, viewSettings.dateValue, isAdmin);
 }
 
@@ -155,7 +186,6 @@ function checkSettlementStatus(riderId, period, dateVal, isAdmin) {
     const badge = document.getElementById('comm-status-badge');
     const adminBtn = document.getElementById('admin-mark-paid-btn');
     
-    // If Admin is viewing "ALL", we don't allow marking as paid (must be done per rider)
     if (!riderId) {
         badge.classList.add('hidden');
         adminBtn.classList.add('hidden');
@@ -173,7 +203,7 @@ function checkSettlementStatus(riderId, period, dateVal, isAdmin) {
             badge.innerText = "PAID";
             if (isAdmin) {
                 adminBtn.classList.remove('hidden');
-                adminBtn.innerHTML = `<i class="fa-solid fa-rotate-left"></i> MARK AS UNPAID`;
+                adminBtn.innerHTML = `<i class="fa-solid fa-rotate-left"></i> REVERT TO UNPAID`;
                 adminBtn.className = "w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-black py-3 rounded-xl text-xs transition active:scale-95 shadow mt-1 border border-gray-700";
             } else {
                 adminBtn.classList.add('hidden');
@@ -189,10 +219,9 @@ function checkSettlementStatus(riderId, period, dateVal, isAdmin) {
                 adminBtn.classList.add('hidden');
             }
         }
-    }); // <-- Missing closing brace was right here!
+    });
 }
 
-// Exposed to window for Admin button
 export function toggleSettlementStatus() {
     const riderId = document.getElementById('admin-rider-select').value;
     const settlementKey = `${riderId}_${viewSettings.period}_${viewSettings.dateValue}`;
@@ -201,7 +230,7 @@ export function toggleSettlementStatus() {
         const isPaid = snapshot.val() && snapshot.val().status === 'paid';
         
         if (isPaid) {
-            db.ref(`commissionSettlements/${settlementKey}`).remove(); // Revert to unpaid
+            db.ref(`commissionSettlements/${settlementKey}`).remove(); 
             showToast("Marked as Unpaid.");
         } else {
             db.ref(`commissionSettlements/${settlementKey}`).set({
@@ -215,36 +244,25 @@ export function toggleSettlementStatus() {
     });
 }
 
-function renderReceiptsList(historyArray) {
-    const container = document.getElementById('commission-receipts-list');
+function renderRiderSummaryList(riderListArray) {
+    const container = document.getElementById('commission-rider-list');
     
-    if (historyArray.length === 0) {
+    if (riderListArray.length === 0) {
         container.innerHTML = `<div class="text-center text-gray-500 italic text-xs py-10">No records found for this period.</div>`;
         return;
     }
 
-    container.innerHTML = historyArray.slice().reverse().map(record => {
-        const gross = parseFloat(record.totalFees) || 0;
-        const cShare = gross * 0.20;
-        const rNet = gross * 0.80;
-
-        let displayAmount = viewSettings.mode === 'earned' 
-            ? `<span class="text-emerald-400 font-bold">+ ₱${rNet.toFixed(2)}</span>`
-            : `<span class="text-red-400 font-bold">- ₱${cShare.toFixed(2)}</span>`;
-
-        const timeStr = new Date(record.timestamp || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        const dateStr = new Date(record.timestamp || Date.now()).toLocaleDateString([], {month: 'short', day:'numeric'});
+    container.innerHTML = riderListArray.map(rider => {
+        let amountLabel = viewSettings.mode === 'earned' 
+            ? `+ ₱${rider.earned.toFixed(2)}` 
+            : `- ₱${rider.company.toFixed(2)}`;
+            
+        let colorClass = viewSettings.mode === 'earned' ? 'text-emerald-400' : 'text-red-400';
 
         return `
-            <div class="bg-cardBg p-3 rounded-xl border border-gray-800 shadow-sm flex flex-col gap-1 text-xs">
-                <div class="flex justify-between items-center border-b border-gray-800 pb-1 mb-1">
-                    <span class="font-bold text-blue-300 truncate max-w-[180px]"><i class="fa-solid fa-receipt"></i> ${escapeHtml(record.customerName.split(',')[0])}</span>
-                    <span class="text-[10px] text-gray-500">${dateStr} ${timeStr}</span>
-                </div>
-                <div class="flex justify-between items-center text-gray-300">
-                    <span>Gross Fee: ₱${gross.toFixed(2)}</span>
-                    ${displayAmount}
-                </div>
+            <div class="bg-cardBg p-3.5 rounded-xl border border-gray-800 shadow-sm flex justify-between items-center text-sm">
+                <span class="font-bold text-blue-300"><i class="fa-solid fa-motorcycle text-gray-500 mr-1.5"></i> ${escapeHtml(rider.name)}</span>
+                <span class="font-black ${colorClass}">${amountLabel}</span>
             </div>
         `;
     }).join('');
@@ -253,17 +271,9 @@ function renderReceiptsList(historyArray) {
 export function generateDailyReportText() {
     const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
     let targetRiderId = isAdmin ? document.getElementById('admin-rider-select').value : appState.telegramId;
-    
-    let riderName = "Rider";
-    if (targetRiderId === "ALL") {
-        riderName = "ALL RIDERS (COMBINED)";
-    } else {
-        const rosterRec = globalState.rosterMembers?.find(r => r.telegramId && r.telegramId.toString() === targetRiderId.toString());
-        riderName = rosterRec ? rosterRec.name : (appState.riderName || "Rider");
-    }
+    if (targetRiderId === "ALL") targetRiderId = null;
 
     let filteredHistory = globalState.globalCateredHistory.filter(record => {
-        if (targetRiderId && targetRiderId !== "ALL" && record.riderId !== targetRiderId.toString()) return false;
         const recordTs = record.timestamp || Date.now();
         if (viewSettings.period === 'daily') return getDateString(recordTs) === viewSettings.dateValue;
         if (viewSettings.period === 'weekly') return getWeekString(recordTs) === viewSettings.dateValue;
@@ -271,30 +281,57 @@ export function generateDailyReportText() {
         return false;
     });
 
-    let grossTotal = 0;
-    let companyShare = 0;
-    let riderNet = 0;
-    let listText = "";
+    let riderTotals = {}; 
+    filteredHistory.forEach(r => {
+        let rId = r.riderId || "unknown";
+        let gross = parseFloat(r.totalFees);
+        if (isNaN(gross)) {
+            const hf = parseFloat(r.fees?.handling) || 0;
+            const mf = parseFloat(r.fees?.market) || 0;
+            const ms = parseFloat(r.fees?.multistop) || 0;
+            const rdf = parseFloat(r.fees?.delivery) || 0;
+            const epay = parseFloat(r.fees?.epaymentFee) || 0;
+            const disc = parseFloat(r.fees?.discount) || 0;
+            gross = hf + mf + ms + rdf + epay - disc;
+        }
 
-    filteredHistory.slice().reverse().forEach((r, index) => {
-        const gross = parseFloat(r.totalFees) || 0;
-        grossTotal += gross;
-        companyShare += (gross * 0.20);
-        riderNet += (gross * 0.80);
-        const cName = (r.customerName || "Customer").split(',')[0];
-        listText += `${index + 1}. ${cName} - ₱${gross.toFixed(2)}\n`;
+        if (!riderTotals[rId]) {
+            let rName = r.riderName || "Unknown";
+            const rosterRec = globalState.rosterMembers?.find(mem => mem.telegramId == rId);
+            if (rosterRec) rName = rosterRec.name;
+            riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0 };
+        }
+        riderTotals[rId].gross += gross;
+        riderTotals[rId].earned += (gross * 0.80);
+        riderTotals[rId].company += (gross * 0.20);
     });
 
+    let grandGross = 0; let grandEarned = 0; let grandCompany = 0;
+    let listText = "";
+
+    for (let rId in riderTotals) {
+        if (targetRiderId && rId !== targetRiderId.toString()) continue;
+        
+        grandGross += riderTotals[rId].gross;
+        grandEarned += riderTotals[rId].earned;
+        grandCompany += riderTotals[rId].company;
+
+        let displayAmount = viewSettings.mode === 'earned' ? `₱${riderTotals[rId].earned.toFixed(2)}` : `₱${riderTotals[rId].company.toFixed(2)}`;
+        listText += `• ${riderTotals[rId].name}: ${displayAmount}\n`;
+    }
+
     const periodLabel = viewSettings.period.toUpperCase();
+    const modeLabel = viewSettings.mode === 'earned' ? "RIDER EARNINGS" : "TO PAY COMPANY";
     
-    let report = `📊 LOKALEX COMMISSION REPORT\n`;
-    report += `Rider: ${riderName}\n`;
-    report += `Period: ${periodLabel} (${viewSettings.dateValue})\n\n`;
-    report += `💰 Gross Total: ₱${grossTotal.toFixed(2)}\n`;
-    report += `🟢 Rider Earned (80%): ₱${riderNet.toFixed(2)}\n`;
-    report += `🔴 To Pay Company (20%): ₱${companyShare.toFixed(2)}\n\n`;
-    report += `📋 TRANSACTIONS:\n${listText || "No transactions found."}`;
+    let report = `📊 LOKALEX SETTLEMENT REPORT\n`;
+    report += `Scope: ${targetRiderId ? riderTotals[targetRiderId]?.name : "ALL RIDERS"}\n`;
+    report += `Period: ${periodLabel} (${viewSettings.dateValue})\n`;
+    report += `Mode: ${modeLabel}\n\n`;
+    report += `💰 Gross Total: ₱${grandGross.toFixed(2)}\n`;
+    report += `🟢 Rider Earned (80%): ₱${grandEarned.toFixed(2)}\n`;
+    report += `🔴 To Pay Company (20%): ₱${grandCompany.toFixed(2)}\n\n`;
+    report += `📋 RIDER BREAKDOWN:\n${listText || "No records found."}`;
 
     copyText(report);
-    showToast("📄 Text report copied to clipboard!");
+    showToast("📄 Settlement text report copied!");
 }
