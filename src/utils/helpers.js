@@ -1,4 +1,5 @@
 // src/utils/helpers.js
+
 export function escapeHtml(str) {
     if (!str) return "";
     return String(str)
@@ -27,6 +28,16 @@ export function getLocalTodayStr() {
     const tzOffsetMs = d.getTimezoneOffset() * 60000;
     const localISOTime = (new Date(Date.now() - tzOffsetMs)).toISOString().slice(0, 10);
     return localISOTime;
+}
+
+// RESTORED: Required by roster.js to check daily shifts
+export function isSameDate(date1, date2) {
+    if (!date1 || !date2) return false;
+    const d1 = new Date(date1);
+    const d2 = new Date(date2);
+    return d1.getFullYear() === d2.getFullYear() &&
+           d1.getMonth() === d2.getMonth() &&
+           d1.getDate() === d2.getDate();
 }
 
 // Get the YYYY-W## format for a given timestamp
