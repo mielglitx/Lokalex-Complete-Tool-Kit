@@ -157,25 +157,68 @@
     </div>
 
     <!-- 3. MUTUAL LIVE GPS TRACKER PORTAL (?livegps=KEY) -->
-    <div id="livegps-portal" class="hidden fixed inset-0 bg-darkBg z-[99999] flex flex-col">
-        <header class="bg-cardBg px-4 py-3 flex items-center justify-between border-b border-gray-800 shrink-0">
-            <h1 class="text-sm font-bold text-indigo-400 flex items-center gap-2">
-                <i class="fa-solid fa-satellite-dish animate-pulse"></i> Lokalex Live GPS Session
-            </h1>
-            <span class="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">🟢 Active</span>
-        </header>
+    <div id="livegps-portal" class="hidden fixed inset-0 bg-darkBg z-[99999] flex flex-col items-center justify-center p-4 text-center overflow-y-auto">
+        <div class="bg-cardBg border border-indigo-500/40 p-5 rounded-3xl max-w-sm w-full shadow-2xl flex flex-col gap-3 my-auto relative">
+            
+            <div class="w-14 h-12 bg-indigo-600/20 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto text-2xl shrink-0">
+                <i class="fa-solid fa-satellite-dish animate-pulse"></i>
+            </div>
+            <h2 class="text-xl font-black text-white">L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Live Tracker</h2>
 
-        <!-- FLOATING MESSENGER GUIDELINE BANNER ON TOP OF MAP -->
-        <div class="bg-amber-500/90 text-black px-3 py-2 text-[11px] font-bold flex items-center justify-between shadow-lg shrink-0">
-            <span class="flex items-center gap-1.5"><i class="fa-solid fa-triangle-exclamation"></i> Messenger Browser? Open in Chrome/Safari if map is blank.</span>
-            <span class="text-[10px] bg-black/20 px-1.5 py-0.5 rounded uppercase">3 Dots ↗️</span>
-        </div>
+            <!-- STEP 1: MESSENGER BROWSER INSTRUCTION CARD -->
+            <div class="bg-amber-500/10 border border-amber-500/30 p-3 rounded-2xl text-left flex flex-col gap-1.5 shadow-inner">
+                <div class="flex items-center justify-between text-xs font-bold text-amber-400">
+                    <span><i class="fa-solid fa-compass"></i> STEP 1: Messenger User?</span>
+                    <span class="flex items-center gap-1 text-[10px] bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
+                        Top-Right <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                    </span>
+                </div>
+                <p class="text-[11px] text-gray-300 leading-tight">
+                    Pindutin ang <strong>3 Dots (...)</strong> sa itaas at piliin ang <strong>"Open in Chrome / Safari"</strong> para sa GPS access.
+                </p>
+            </div>
 
-        <div class="flex-1 relative w-full">
-            <div id="livegps-map-container" class="w-full h-full"></div>
+            <div id="livegps-map-container-box" class="hidden w-full h-48 rounded-2xl overflow-hidden border border-indigo-500/50 relative my-1 shadow-inner">
+                <div id="livegps-map-container" class="w-full h-full"></div>
+            </div>
+
+            <div id="livegps-status" class="text-xs font-bold text-amber-400 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
+                Pindutin ang blue button sa ibaba para sumali sa Live Tracking.
+            </div>
+
+            <!-- STEP 2: ANIMATED DIRECTIONAL POINTER -->
+            <div id="livegps-step2-pointer" class="flex flex-col items-center gap-1 my-0.5 text-indigo-400 animate-bounce">
+                <span class="text-[10px] font-black uppercase tracking-wider">STEP 2: Pindutin ang Button sa Ibaba</span>
+                <i class="fa-solid fa-chevron-down text-base"></i>
+            </div>
+
+            <!-- TARGET ACTION BUTTON -->
+            <button id="livegps-share-btn" onclick="startMutualCustomerLocationSharing()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 text-sm flex justify-center items-center gap-2 ring-2 ring-indigo-400/50">
+                <i class="fa-solid fa-satellite-dish text-base"></i> JOIN LIVE TRACKING
+            </button>
+            
+            <div class="text-[10px] text-gray-400 font-semibold flex justify-center gap-4 mt-1">
+                <span>🔴 Rider (Red Pin)</span>
+                <span>🔵 Customer (Blue Pin)</span>
+            </div>
         </div>
-        <div class="p-3 bg-cardBg border-t border-gray-800 text-center text-xs text-gray-300 font-semibold shrink-0">
-            🔴 Rider (Red Pin) • 🔵 Customer (Blue Pin) — Updates every 6s
+    </div>
+
+    <!-- EXPIRED / ENDED SESSION PORTAL -->
+    <div id="livegps-expired-portal" class="hidden fixed inset-0 bg-darkBg z-[99999] flex flex-col items-center justify-center p-6 text-center">
+        <div class="bg-cardBg border border-red-500/30 p-8 rounded-3xl max-w-sm w-full shadow-2xl flex flex-col items-center gap-4">
+            <div class="w-16 h-16 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center text-3xl">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+            </div>
+            <div>
+                <h2 class="text-lg font-black text-white">Session Ended</h2>
+                <p class="text-xs text-gray-400 mt-1 leading-relaxed">
+                    The live GPS tracking session has already ended or expired.
+                </p>
+            </div>
+            <div class="text-[11px] text-gray-500 bg-black/40 p-3 rounded-xl border border-gray-800/60">
+                Tapos na po ang live tracking session para sa order na ito.
+            </div>
         </div>
     </div>
 
@@ -661,6 +704,31 @@
                 <button onclick="closeMapCalcNameModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
                 <button onclick="confirmGenerateMapCalcLink()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Finalize Link</button>
             </div>
+        </div>
+    </div>
+
+    <!-- RIDER LIVE GPS SESSION MANAGEMENT MODAL -->
+    <div id="livegps-manage-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-indigo-500/40 p-6 rounded-2xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-4">
+            <div class="w-12 h-12 bg-indigo-500/20 text-indigo-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+                <i class="fa-solid fa-satellite-dish animate-pulse"></i>
+            </div>
+            <div>
+                <h3 class="font-bold text-base text-indigo-300">Active Live GPS Tracking</h3>
+                <p class="text-xs text-gray-400 mt-0.5">Share link with customer</p>
+            </div>
+
+            <div id="livegps-manage-status-box" class="bg-darkBg p-3 rounded-xl border border-gray-800"></div>
+
+            <button onclick="copyLiveGpsLink()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-copy"></i> Copy Link & Greeting
+            </button>
+
+            <button onclick="promptEndLiveGpsSession()" class="w-full bg-red-600/20 border border-red-600/50 hover:bg-red-600 text-red-400 hover:text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-power-off"></i> End Live Session
+            </button>
+
+            <button onclick="closeLiveGpsManageModal()" class="text-xs text-gray-500 py-1">Close</button>
         </div>
     </div>
 

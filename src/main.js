@@ -54,9 +54,13 @@ function bootApp() {
         // GUEST / CUSTOMER PUBLIC PORTAL ROUTING
         // ---------------------------------------------------------
         if (urlParams.has('livegps') || urlParams.has('track') || urlParams.has('mapcalc')) {
-            // Hide the app / login screen for customers
+            // 1. Hide Login Screen
             const loginView = document.getElementById('view-login');
             if (loginView) loginView.classList.add('hidden');
+
+            // 2. HIDE CHAT WIDGET FOR CUSTOMERS
+            const chatWidget = document.getElementById('floating-chat-container');
+            if (chatWidget) chatWidget.classList.add('hidden');
 
             // Route to the correct GPS portal
             if (urlParams.has('livegps')) {
@@ -67,7 +71,6 @@ function bootApp() {
                 if (maps && maps.checkAndInitMapCalcPortal) maps.checkAndInitMapCalcPortal();
             }
 
-            // Init listeners so map locations can sync
             initRealtimeFirebaseListeners();
             return; 
         }

@@ -153,18 +153,33 @@ export function checkAndInitLiveGpsPortal() {
         expiredPortal.classList.add('hidden');
         portal.classList.remove('hidden');
 
-        const isRider = appState.riderName && data.riderName === appState.riderName;
-
-        if (!isRider && !customerGpsWatchId) {
-            startCustomerGpsTracking(sessionKey);
-        }
-
+        // Only render the map with existing data (rider data) if the container is visible
         renderMutualLiveMap(data.users);
     });
 }
 
-function startCustomerGpsTracking(sessionKey) {
-    if (!navigator.geolocation) return;
+// Triggered via HTML onclick
+export function startMutualCustomerLocationSharing() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionKey = urlParams.get('livegps');
+    if (!sessionKey) return;
+
+    const btn = document.getElementById('livegps-share-btn');
+    const statusEl = document.getElementById('livegps-status');
+    const mapBox = document.getElementById('livegps-map-container-box');
+    const step2Pointer = document.getElementById('livegps-step2-pointer');
+
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Kumukuha ng GPS...`;
+
+    if (!navigator.geolocation) {
+        statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
+        statusEl.innerText = "❌ Hindi suportado ang GPS sa browser na ito.";
+        return;
+    }
+
+    mapBox.classList.remove('hidden');
+    if (step2Pointer) step2Pointer.classList.add('hidden'); // Hide bouncing pointer
 
     customerGpsWatchId = navigator.geolocation.watchPosition(
         (pos) => {
@@ -178,18 +193,27 @@ function startCustomerGpsTracking(sessionKey) {
                     updatedAt: now
                 });
             }
+
+            statusEl.className = "text-xs font-bold text-indigo-400 bg-indigo-500/10 p-2.5 rounded-xl border border-indigo-500/20";
+            statusEl.innerHTML = "📡 <strong>Live Tracking Active</strong><br><span class=\"text-gray-300 font-normal\">Updating map every 6 seconds...</span>";
+            btn.innerHTML = `<i class="fa-solid fa-check-double"></i> TRACKING ACTIVE`;
         },
-        (err) => {},
+        (err) => {
+            statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
+            statusEl.innerText = "⚠️ Paki-allow ang GPS Location permission sa iyong browser.";
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-satellite-dish"></i> RETRY JOIN LIVE TRACKING`;
+        },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
     );
 }
 
 function renderMutualLiveMap(usersData) {
-    // Safety Guard: Don't run map rendering if Google Maps script hasn't loaded yet
     if (typeof google === 'undefined' || !google.maps) return;
 
     const container = document.getElementById('livegps-map-container');
-    if (!container) return;
+    const mapBox = document.getElementById('livegps-map-container-box');
+    if (!container || (mapBox && mapBox.classList.contains('hidden'))) return; // Don't render until box is unhidden
 
     const riderData = usersData && usersData.rider;
     const custData = usersData && usersData.customer;
