@@ -310,3 +310,18 @@ export function validateAndProceedToWizard() {
         switchView('view-wizard');
     }
 }
+
+// ============================================================================
+// RESTORED: MISSING EXPORTS REQUIRED BY WIZARD.JS
+// ============================================================================
+export function getCurrentCart() {
+    const cartIdx = globalState.activeCartIndex || 0;
+    return globalState.carts[cartIdx] || [];
+}
+
+export function clearCartSlot() {
+    const cartIdx = globalState.activeCartIndex || 0;
+    globalState.carts[cartIdx] = [];
+    saveCartState();
+    renderCartItems();
+}
