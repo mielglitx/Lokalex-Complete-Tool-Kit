@@ -9,15 +9,22 @@ export function loadCartState() {
     try {
         const saved = localStorage.getItem('lokalex_carts');
         if (saved) {
-            globalState.carts = JSON.parse(saved);
+            const parsed = JSON.parse(saved);
+            // FAILSAFE: Ensure it's a valid 2D array of 4 carts
+            if (Array.isArray(parsed) && parsed.length === 4 && Array.isArray(parsed[0])) {
+                globalState.carts = parsed;
+            } else {
+                globalState.carts = [[], [], [], []];
+            }
         } else {
             globalState.carts = [[], [], [], []];
         }
     } catch(e) {
         console.error("Failed to load cart state", e);
+        globalState.carts = [[], [], [], []];
     }
     
-    if (globalState.activeCartIndex === undefined) {
+    if (globalState.activeCartIndex === undefined || globalState.activeCartIndex === null) {
         globalState.activeCartIndex = 0;
     }
     
@@ -27,6 +34,10 @@ export function loadCartState() {
 
 export function saveCartState() {
     try {
+        // FAILSAFE: Ensure carts exist before saving
+        if (!Array.isArray(globalState.carts)) {
+            globalState.carts = [[], [], [], []];
+        }
         localStorage.setItem('lokalex_carts', JSON.stringify(globalState.carts));
     } catch(e) {
         console.error("Failed to save cart state", e);
@@ -43,11 +54,11 @@ export function renderCartTabs() {
     const container = document.getElementById('cart-tabs-header');
     if (!container) return;
     
-    const cartIdx = globalState.activeCartIndex || 0;
+    const cartIdx = globalState.activeCartIndex ?? 0;
 
     container.innerHTML = [0, 1, 2, 3].map(i => {
         const isActive = cartIdx === i;
-        const itemCount = (globalState.carts[i] || []).length;
+        const itemCount = (globalState.carts && globalState.carts[i]) ? globalState.carts[i].length : 0;
         const activeClass = isActive 
             ? "bg-blue-600 text-white font-black shadow-lg border-blue-500" 
             : "bg-cardBg text-gray-400 hover:text-white border-gray-800";
@@ -71,8 +82,8 @@ export function renderCartItems() {
     const container = document.getElementById('cart-items-list');
     if (!container) return;
 
-    const cartIdx = globalState.activeCartIndex || 0;
-    const items = globalState.carts[cartIdx] || [];
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    const items = (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
     renderCartClientSelector();
 
     if (items.length === 0) {
@@ -131,20 +142,18 @@ function updateCartSubtotal(subtotal) {
 }
 
 export function setItemType(index, type) {
-    const cartIdx = globalState.activeCartIndex || 0;
-    const items = globalState.carts[cartIdx];
-    if (items && items[index]) {
-        items[index].type = type;
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    if (globalState.carts && globalState.carts[cartIdx] && globalState.carts[cartIdx][index]) {
+        globalState.carts[cartIdx][index].type = type;
         saveCartState();
         renderCartItems();
     }
 }
 
 export function removeCartItem(index) {
-    const cartIdx = globalState.activeCartIndex || 0;
-    const items = globalState.carts[cartIdx];
-    if (items) {
-        items.splice(index, 1);
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    if (globalState.carts && globalState.carts[cartIdx]) {
+        globalState.carts[cartIdx].splice(index, 1);
         saveCartState();
         renderCartItems();
         showToast("Item removed from cart");
@@ -152,8 +161,8 @@ export function removeCartItem(index) {
 }
 
 export function handleCartActionBtn() {
-    const cartIdx = globalState.activeCartIndex || 0;
-    if (!globalState.carts[cartIdx] || globalState.carts[cartIdx].length === 0) return;
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    if (!globalState.carts || !globalState.carts[cartIdx] || globalState.carts[cartIdx].length === 0) return;
 
     if (confirm(`Sigurado ka bang nais burahin ang lahat ng laman ng Cart ${cartIdx + 1}?`)) {
         globalState.carts[cartIdx] = [];
@@ -171,7 +180,7 @@ function renderCartClientSelector() {
     const activeCatered = rosterList.filter(r => (r.status || "").toLowerCase() === 'catering');
 
     if (activeCatered.length === 0) {
-        container.innerHTML = `<span class="text-[11px] text-gray-500 italic">Walang active catering client sa roster.</span>`;
+        container.innerHTML = `<span class="text-[11px] text-gray-500 italic">Walang active catering client.</span>`;
         return;
     }
 
@@ -191,15 +200,15 @@ function renderCartClientSelector() {
 export function assignClientToCart(clientName) {
     if (!clientName) return;
     appState.selectedCateringClient = clientName;
-    const cartIdx = globalState.activeCartIndex || 0;
+    const cartIdx = globalState.activeCartIndex ?? 0;
     showToast(`🛒 Cart ${cartIdx + 1} assigned to ${clientName}`);
 }
 
 // ============================================================================
-// RESTORED: EDIT ITEM MODAL LOGIC
+// EDIT ITEM MODAL LOGIC
 // ============================================================================
 export function openEditItemModal(index) {
-    const cartIdx = globalState.activeCartIndex || 0;
+    const cartIdx = globalState.activeCartIndex ?? 0;
     const item = globalState.carts[cartIdx][index];
     if (!item) return;
 
@@ -217,7 +226,7 @@ export function closeEditItemModal() {
 export function saveItemEdit() {
     if (globalState.editItemIndex === null || globalState.editItemIndex === undefined) return;
     
-    const cartIdx = globalState.activeCartIndex || 0;
+    const cartIdx = globalState.activeCartIndex ?? 0;
     const name = document.getElementById('edit-name-input').value.trim();
     const price = parseFloat(document.getElementById('edit-price-input').value) || 0;
 
@@ -233,7 +242,7 @@ export function saveItemEdit() {
 }
 
 // ============================================================================
-// RESTORED: BULK ADD LOGIC
+// BULK ADD LOGIC (With Failsafes)
 // ============================================================================
 export function showBulkAddModal() {
     document.getElementById('bulk-input').value = "";
@@ -248,22 +257,34 @@ export function processBulkAdd() {
     const input = document.getElementById('bulk-input').value.trim();
     if (!input) return closeBulkModal();
 
-    const cartIdx = globalState.activeCartIndex || 0;
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    
+    // FAILSAFE: Hard array repair before pushing
+    if (!Array.isArray(globalState.carts)) globalState.carts = [[], [], [], []];
+    if (!Array.isArray(globalState.carts[cartIdx])) globalState.carts[cartIdx] = [];
+
     const lines = input.split('\n');
     let addedCount = 0;
 
     lines.forEach(line => {
-        const parts = line.trim().split(/\s+/);
-        if (parts.length === 0 || parts[0] === "") return;
+        const cleanLine = line.trim();
+        if (!cleanLine) return;
 
+        const parts = cleanLine.split(/\s+/);
         let price = 0;
-        let name = line.trim();
+        let name = cleanLine;
 
-        // Check if the last word is a number (the price)
-        const lastPart = parts[parts.length - 1];
-        if (!isNaN(parseFloat(lastPart))) {
-            price = parseFloat(lastPart);
-            name = parts.slice(0, -1).join(' '); // Rejoin the name without the price
+        // Check if the last part is a number (handles commas like 1,500)
+        const lastPartRaw = parts[parts.length - 1];
+        const lastPartClean = lastPartRaw.replace(/,/g, '');
+        
+        if (!isNaN(lastPartClean) && lastPartClean !== "") {
+            price = parseFloat(lastPartClean);
+            if (parts.length > 1) {
+                name = parts.slice(0, -1).join(' '); // Extract name without price
+            } else {
+                name = "Item"; // Edge case if user typed ONLY a number
+            }
         }
 
         if (name) {
@@ -288,8 +309,8 @@ export function processBulkAdd() {
 // STRICT VALIDATION: Blocks Uncategorized Items
 // ============================================================================
 export function validateAndProceedToWizard() {
-    const cartIdx = globalState.activeCartIndex || 0;
-    const cartItems = globalState.carts[cartIdx] || [];
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    const cartItems = (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
     
     if (cartItems.length === 0) {
         showToast("⚠️ Walang laman ang cart!");
@@ -303,7 +324,7 @@ export function validateAndProceedToWizard() {
         return;
     }
 
-    // Call the original proceedToWizard from wizard.js
+    // Hand off to wizard.js
     if (typeof window.proceedToWizard === 'function') {
         window.proceedToWizard();
     } else {
@@ -312,15 +333,16 @@ export function validateAndProceedToWizard() {
 }
 
 // ============================================================================
-// RESTORED: MISSING EXPORTS REQUIRED BY WIZARD.JS
+// EXPORTS REQUIRED BY WIZARD.JS
 // ============================================================================
 export function getCurrentCart() {
-    const cartIdx = globalState.activeCartIndex || 0;
-    return globalState.carts[cartIdx] || [];
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    return (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
 }
 
 export function clearCartSlot() {
-    const cartIdx = globalState.activeCartIndex || 0;
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    if (!Array.isArray(globalState.carts)) globalState.carts = [[], [], [], []];
     globalState.carts[cartIdx] = [];
     saveCartState();
     renderCartItems();
