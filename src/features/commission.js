@@ -108,13 +108,25 @@ export function refreshCommissionView() {
     if (dateInput) viewSettings.dateValue = dateInput.value;
     if (!viewSettings.dateValue) return;
 
-    // 1. Read from Firebase receipts or catered history fallback
-    const receiptList = (globalState.globalDailyReceipts && globalState.globalDailyReceipts.length > 0)
-        ? globalState.globalDailyReceipts
-        : globalState.globalCateredHistory;
+    // 1. Intelligently merge Receipts and Catered History
+    const mergedList = [];
+    const processedKeys = new Set();
 
-    // 2. Filter Data by Date/Week/Month string matching
-    let filteredHistory = receiptList.filter(record => {
+    (globalState.globalDailyReceipts || []).forEach(rc => {
+        mergedList.push(rc);
+        const key = `${(rc.riderName||'').toLowerCase()}_${(rc.customerName||'').toLowerCase()}_${rc.date||rc.completedDate}`;
+        processedKeys.add(key);
+    });
+
+    (globalState.globalCateredHistory || []).forEach(ch => {
+        const key = `${(ch.riderName||'').toLowerCase()}_${(ch.customerName||'').toLowerCase()}_${ch.completedDate||ch.date}`;
+        if (!processedKeys.has(key)) {
+            mergedList.push(ch);
+        }
+    });
+
+    // 2. Filter Data by Date/Week/Month
+    let filteredHistory = mergedList.filter(record => {
         let rDate = record.date || record.completedDate || getLocalTodayStr();
         
         if (viewSettings.period === 'daily') {
@@ -144,14 +156,22 @@ export function refreshCommissionView() {
         }
 
         let gross = parseFloat(r.totalFees);
-        if (isNaN(gross)) {
-            const hf = parseFloat(r.fees?.handling) || 0;
-            const mf = parseFloat(r.fees?.market) || 0;
-            const ms = parseFloat(r.fees?.multistore || r.fees?.multistop) || 0;
-            const rdf = parseFloat(r.fees?.delivery) || 0;
-            const epay = parseFloat(r.fees?.epaymentFee) || 0;
-            const disc = parseFloat(r.fees?.discount) || 0;
-            gross = hf + mf + ms + rdf + epay - disc;
+        if (isNaN(gross) || gross === 0) {
+            let f = r.fees;
+            if (typeof f === 'string') {
+                try { f = JSON.parse(f); } catch(e) { f = null; }
+            }
+            if (f) {
+                const hf = parseFloat(f.handling) || 0;
+                const mf = parseFloat(f.market) || 0;
+                const ms = parseFloat(f.multistore || f.multistop) || 0;
+                const rdf = parseFloat(f.delivery) || 0;
+                const epay = parseFloat(f.epaymentFee) || 0;
+                const disc = parseFloat(f.discount) || 0;
+                gross = hf + mf + ms + rdf + epay - disc;
+            } else {
+                gross = 0;
+            }
         }
 
         if (!riderTotals[rId]) {
@@ -186,10 +206,9 @@ export function refreshCommissionView() {
         grandCompany += riderTotals[rId].company;
     }
 
-    // 5. Update UI Text
+    // 5. Update UI Display
     const mainWrapperEl = document.getElementById('comm-main-wrapper');
     const mainLabelEl = document.getElementById('comm-main-label');
-    
     const grossEl = document.getElementById('comm-gross-amount');
     const summaryTitleEl = document.getElementById('comm-summary-title');
     const mainAmountEl = document.getElementById('comm-main-amount');
@@ -214,8 +233,6 @@ export function refreshCommissionView() {
     }
 
     renderRiderSummaryList(finalRiderList);
-
-    // 6. Fetch Settlement Status
     checkSettlementStatus(targetRiderId, viewSettings.period, viewSettings.dateValue, isAdmin);
 }
 
@@ -225,7 +242,8 @@ function checkSettlementStatus(riderId, period, dateVal, isAdmin) {
     
     if (!badge || !adminBtn) return;
 
-    if (!riderId) {
+    // FIXED: Only show settlement badge and "Mark as Paid" button when viewing "To Pay (Company)" mode
+    if (viewSettings.mode !== 'company' || !riderId) {
         badge.classList.add('hidden');
         adminBtn.classList.add('hidden');
         return;
