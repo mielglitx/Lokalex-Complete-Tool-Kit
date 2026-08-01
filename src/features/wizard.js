@@ -189,6 +189,8 @@ export function confirmSampleReceiptProceed() {
     executeGenerateFinalReceipt("Sample");
 }
 
+// src/features/wizard.js
+
 export async function executeGenerateFinalReceipt(customerName) {
     calculateGrandTotal();
 
@@ -210,15 +212,79 @@ export async function executeGenerateFinalReceipt(customerName) {
         showSideNotification("SAVING RECEIPT", `Updating receipt for ${customerName}`, "fa-receipt", "text-emerald-400", "border-emerald-500");
     }
 
-    await saveReceiptToDatabase(customerName);
+    // GUARANTEE SCREEN TRANSITION: Wrap DB save in try/catch
+    try {
+        await saveReceiptToDatabase(customerName);
+    } catch (err) {
+        console.error("Error saving receipt to database:", err);
+    }
 
     switchView('view-receipt-final');
     renderFinalReceiptText();
 }
 
-// src/features/wizard.js
+async function saveReceiptToDatabase(customerName) {
+    if (!customerName || customerName.trim().toLowerCase() === "sample") {
+        showToast("ℹ️ Sample Receipt generated (Not saved to commission/catered list).");
+        return;
+    }
 
-// src/features/wizard.js
+    const cName = customerName.trim().toLowerCase();
+    const rName = (appState.riderName || "").trim().toLowerCase();
+    const todayStr = getLocalTodayStr();
+
+    const activeCustList = getActiveCateringCustomersWithTimes();
+    const match = activeCustList.find(i => i.name.trim().toLowerCase() === cName);
+    const sTime = match ? match.startTime.trim() : "";
+
+    const sessionKey = `receipt_done_${rName}_${cName}_${sTime}_${todayStr}`;
+    localStorage.setItem(sessionKey, 'true');
+
+    const totalFees = Math.max(0, (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0));
+
+    // Ensure Transaction ID exists
+    if (!currentReceiptTransactionId) {
+        currentReceiptTransactionId = getDailyRiderId() + "-" + Date.now().toString(36).toUpperCase();
+    }
+
+    const payload = {
+        type: "receipts",
+        transactionId: currentReceiptTransactionId,
+        telegramId: appState.telegramId || "",
+        riderName: appState.riderName || "",
+        customerName: customerName,
+        cateringStartTime: sTime,
+        fees: {
+            handling: wizState.finalHFee || 0,
+            market: wizState.finalMFee || 0,
+            multistore: wizState.finalMulti || 0,
+            delivery: wizState.deliveryFee || 0,
+            discount: wizState.discount || 0
+        },
+        totalFees: totalFees,
+        date: todayStr
+    };
+
+    // Safe Firebase Writes
+    try {
+        if (currentReceiptTransactionId) {
+            db.ref('receipts/' + currentReceiptTransactionId).set(payload);
+        }
+        if (appState.telegramId) {
+            db.ref('roster/' + appState.telegramId).update({
+                lastReceiptFees: payload.fees,
+                lastReceiptTotalFees: totalFees
+            });
+        }
+    } catch (e) {
+        console.error("Firebase write error:", e);
+    }
+
+    // Google Sheets Async Fetch
+    try {
+        fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+    } catch (e) {}
+}
 
 // src/features/wizard.js
 
