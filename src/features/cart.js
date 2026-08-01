@@ -317,6 +317,8 @@ export function handleCartActionBtn() {
 // ============================================================================
 // STRICT RIDER PRIVACY & CLIENT ASSIGNMENT LOGIC
 // ============================================================================
+// src/features/cart.js
+
 export function getRiderActiveCateringClients() {
     const myId = (appState.telegramId || "").toString().trim();
     const myName = (appState.riderName || "").toString().trim().toLowerCase();
@@ -324,6 +326,7 @@ export function getRiderActiveCateringClients() {
 
     const myRecord = roster.find(r => {
         const rId = (r.telegramId || "").toString().trim();
+        // FIXED: Check r.riderName (property key used in Firebase and Google Sheets) alongside r.name
         const rName = (r.riderName || r.name || "").toString().trim().toLowerCase();
         const isMatch = (myId && rId === myId) || (myName && rName === myName);
         return isMatch && (r.status || "").toLowerCase() === 'catering';
@@ -335,6 +338,24 @@ export function getRiderActiveCateringClients() {
         .map(s => s.trim())
         .filter(Boolean);
 }
+
+// ... (keep all existing exports and cart functions unchanged) ...
+
+// ============================================================================
+// REACTIVE UI LISTENERS FOR CART VIEW & ROSTER UPDATES
+// ============================================================================
+window.addEventListener('rosterUpdated', () => {
+    const cartSection = document.getElementById('view-cart');
+    if (cartSection && !cartSection.classList.contains('hidden')) {
+        renderCartItems();
+    }
+});
+
+window.addEventListener('viewChanged', (e) => {
+    if (e.detail === 'view-cart') {
+        renderCartItems();
+    }
+});
 
 export function getEffectiveCartClient(cartIndex) {
     if (!globalState.cartClients || !Array.isArray(globalState.cartClients)) {
