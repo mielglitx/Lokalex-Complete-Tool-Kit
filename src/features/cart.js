@@ -102,9 +102,10 @@ export function renderCartItems() {
         const price = parseFloat(item.price) || 0;
         subtotal += price;
 
-        // Check for Store/Market using Capitalized format for wizard.js compatibility
-        const isStore = item.category === 'Store' || item.type === 'Store' || item.type === 'store';
-        const isMarket = item.category === 'Market' || item.type === 'Market' || item.type === 'market';
+        // STRICT LOWERCASE CHECK FOR UI RENDERING
+        const cat = item.type || item.category || '';
+        const isStore = cat.toLowerCase() === 'store';
+        const isMarket = cat.toLowerCase() === 'market';
 
         return `
             <div class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col gap-2 text-xs shadow-sm">
@@ -117,10 +118,10 @@ export function renderCartItems() {
 
                 <div class="flex justify-between items-center pt-2 border-t border-gray-800/80">
                     <div class="flex gap-1.5">
-                        <button onclick="setItemCategory(${index}, 'Store')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isStore ? 'bg-orange-600 text-white border-orange-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
+                        <button onclick="setItemType(${index}, 'store')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isStore ? 'bg-orange-600 text-white border-orange-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
                             <i class="fa-solid fa-store"></i> Store
                         </button>
-                        <button onclick="setItemCategory(${index}, 'Market')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isMarket ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
+                        <button onclick="setItemType(${index}, 'market')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isMarket ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
                             <i class="fa-solid fa-basket-shopping"></i> Market
                         </button>
                     </div>
@@ -142,20 +143,21 @@ function updateCartSubtotal(subtotal) {
     if (display) display.innerText = subtotal.toFixed(2);
 }
 
-// CRITICAL: Feeds exactly what wizard.js expects ('category', and Capitalized string)
-export function setItemCategory(index, category) {
+export function setItemType(index, type) {
     const cartIdx = globalState.activeCartIndex ?? 0;
     if (globalState.carts && globalState.carts[cartIdx] && globalState.carts[cartIdx][index]) {
-        globalState.carts[cartIdx][index].category = category;
-        globalState.carts[cartIdx][index].type = category; // Set type as a fallback 
+        // Force lowercase to perfectly match wizard.js expectations
+        const strictType = type.toLowerCase();
+        globalState.carts[cartIdx][index].type = strictType;
+        globalState.carts[cartIdx][index].category = strictType;
         saveCartState();
         renderCartItems();
     }
 }
 
-// Exported just in case an old window binder looks for setItemType instead of setItemCategory
-export function setItemType(index, type) {
-    setItemCategory(index, type);
+// Fallback for previous function name
+export function setItemCategory(index, category) {
+    setItemType(index, category);
 }
 
 export function removeCartItem(index) {
@@ -289,9 +291,9 @@ export function processBulkAdd() {
         if (!isNaN(lastPartClean) && lastPartClean !== "") {
             price = parseFloat(lastPartClean);
             if (parts.length > 1) {
-                name = parts.slice(0, -1).join(' '); 
+                name = parts.slice(0, -1).join(' '); // Extract name without price
             } else {
-                name = "Item"; 
+                name = "Item"; // Edge case if user typed ONLY a number
             }
         }
 
@@ -299,8 +301,8 @@ export function processBulkAdd() {
             globalState.carts[cartIdx].push({
                 name: name,
                 price: price,
-                category: '', // Explicitly blank so it fails the validation check until categorized
-                type: ''
+                type: '', // Blank so it forces categorization
+                category: ''
             });
             addedCount++;
         }
@@ -328,7 +330,7 @@ export function validateAndProceedToWizard() {
 
     const hasUncategorized = cartItems.some(item => {
         const cat = item.category || item.type || '';
-        return cat !== 'Store' && cat !== 'Market' && cat.toLowerCase() !== 'store' && cat.toLowerCase() !== 'market';
+        return cat.toLowerCase() !== 'store' && cat.toLowerCase() !== 'market';
     });
     
     if (hasUncategorized) {
@@ -336,11 +338,19 @@ export function validateAndProceedToWizard() {
         return;
     }
 
-    // Pass workflow smoothly to the wizard
+    // NORMALIZER: Force everything to strict lowercase right before passing to wizard.js
+    // This absolutely guarantees that wizard.js will recognize the items.
+    cartItems.forEach(item => {
+        const currentCat = item.category || item.type || '';
+        item.type = currentCat.toLowerCase();
+        item.category = currentCat.toLowerCase();
+    });
+    saveCartState();
+
+    // Hand off to wizard.js
     if (typeof window.proceedToWizard === 'function') {
         window.proceedToWizard();
     } else {
-        console.warn("proceedToWizard not found on window, falling back");
         switchView('view-wizard');
     }
 }
