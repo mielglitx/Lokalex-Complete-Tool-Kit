@@ -216,6 +216,12 @@ export async function executeGenerateFinalReceipt(customerName) {
     renderFinalReceiptText();
 }
 
+// src/features/wizard.js
+
+// src/features/wizard.js
+
+// src/features/wizard.js
+
 async function saveReceiptToDatabase(customerName) {
     if (!customerName || customerName.trim().toLowerCase() === "sample") {
         showToast("ℹ️ Sample Receipt generated (Not saved to commission/catered list).");
@@ -252,6 +258,16 @@ async function saveReceiptToDatabase(customerName) {
         totalFees: totalFees,
         date: todayStr
     };
+
+    // Save to Firebase Receipts node
+    db.ref('receipts/' + currentReceiptTransactionId).set(payload);
+
+    // Also attach fee info to active roster item so completed history carries fee details
+    db.ref('roster/' + appState.telegramId).update({
+        lastReceiptFees: payload.fees,
+        lastReceiptTotalFees: totalFees
+    });
+
     try {
         fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
     } catch(e) {}
