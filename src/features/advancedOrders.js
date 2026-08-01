@@ -3,29 +3,27 @@ import { db } from '../config/firebase.js';
 import { API_URL } from '../config/constants.js';
 import { appState, globalState } from '../store/state.js';
 import { showToast, unlockAudioContext } from '../ui/notifications.js';
-import { escapeHtml } from '../utils/helpers.js';
+import { escapeHtml, getLocalTodayStr } from '../utils/helpers.js';
 import { updateRosterStatusData, parseQueueTime } from './roster.js';
 
 let alarmInterval = null;
 let alarmTimeout = null;
-const triggeredAlerts = new Set(); // Tracks orders + thresholds already alerted to prevent re-triggering
+const triggeredAlerts = new Set();
 
 // --- 30-SECOND REMINDER ALARM AUDIO ---
 function playReminderAlarm() {
     unlockAudioContext();
-    stopReminderAlarm(); // Clear any existing playing alarm
+    stopReminderAlarm();
 
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) return;
     const audioCtx = new AudioContext();
 
-    // Rhythmic 30-second melody pattern
     alarmInterval = setInterval(() => {
         try {
             if (audioCtx.state === 'suspended') audioCtx.resume();
             const now = audioCtx.currentTime;
 
-            // Two-tone chime (E5 & A5)
             [659.25, 880].forEach((freq, i) => {
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
@@ -45,7 +43,6 @@ function playReminderAlarm() {
         } catch (e) {}
     }, 1200);
 
-    // Auto-stop alarm music after exactly 30 seconds
     alarmTimeout = setTimeout(() => {
         stopReminderAlarm();
     }, 30000);
@@ -77,16 +74,23 @@ export function checkScheduledDeliveryAlerts() {
         pendingCount++;
         if (!ord.timeToReceive) return;
 
+        const dateStr = ord.dateToReceive || getLocalTodayStr();
+        const dateParts = dateStr.split('-');
         const timeParts = ord.timeToReceive.split(':');
-        if (timeParts.length < 2) return;
+        if (timeParts.length < 2 || dateParts.length < 3) return;
 
-        const targetDate = new Date();
-        targetDate.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]), 0, 0);
+        const targetDate = new Date(
+            parseInt(dateParts[0]),
+            parseInt(dateParts[1]) - 1,
+            parseInt(dateParts[2]),
+            parseInt(timeParts[0]),
+            parseInt(timeParts[1]),
+            0, 0
+        );
 
         const diffMins = Math.round((targetDate - now) / 60000);
-        const orderKey = `${ord.custName}_${ord.timeToReceive}`;
+        const orderKey = `${ord.custName}_${dateStr}_${ord.timeToReceive}`;
 
-        // 5 Mins, 15 Mins, and 30 Mins Reminder Thresholds
         if (diffMins >= -10 && diffMins <= 30) {
             if (diffMins <= 5 && urgentLevel < 3) {
                 alertOrder = ord; urgentLevel = 3;
@@ -127,17 +131,16 @@ export function checkScheduledDeliveryAlerts() {
 
         if (urgentLevel === 3) {
             if (titleEl) titleEl.innerText = "🚨 URGENT: 5 MINS LEFT FOR SCHEDULED DELIVERY!";
-            if (msgEl) msgEl.innerText = `${alertOrder.custName} — ${alertOrder.timeToReceive}`;
+            if (msgEl) msgEl.innerText = `${alertOrder.custName} — ${alertOrder.dateToReceive || ''} ${alertOrder.timeToReceive}`;
         } else if (urgentLevel === 2) {
             if (titleEl) titleEl.innerText = "⚠️ 15 MINS REMAINING FOR SCHEDULED ORDER";
-            if (msgEl) msgEl.innerText = `${alertOrder.custName} — Due at ${alertOrder.timeToReceive}`;
+            if (msgEl) msgEl.innerText = `${alertOrder.custName} — Due at ${alertOrder.dateToReceive || ''} ${alertOrder.timeToReceive}`;
         } else {
             if (titleEl) titleEl.innerText = "🔔 30 MINS UPCOMING SCHEDULED DELIVERY";
-            if (msgEl) msgEl.innerText = `${alertOrder.custName} — Scheduled at ${alertOrder.timeToReceive}`;
+            if (msgEl) msgEl.innerText = `${alertOrder.custName} — Scheduled at ${alertOrder.dateToReceive || ''} ${alertOrder.timeToReceive}`;
         }
         banner.classList.remove('hidden');
 
-        // Play 30-second alarm music on new threshold entry
         if (shouldPlayAlarm) {
             playReminderAlarm();
         }
@@ -163,6 +166,12 @@ export function switchAdvTab(tab) {
         if (listBtn) listBtn.className = "flex-1 py-1.5 rounded-lg text-gray-400 transition";
         if (addContent) addContent.classList.remove('hidden'); 
         if (listContent) listContent.classList.add('hidden');
+
+        // Set default date to current date
+        const dateInput = document.getElementById('adv-receive-date');
+        if (dateInput && !dateInput.value) {
+            dateInput.value = getLocalTodayStr();
+        }
     }
 }
 
@@ -179,11 +188,13 @@ export function renderAdvancedOrdersList() {
         const status = ord.status || "Pending";
         let statusBadge = ""; let actionBtns = "";
 
+        const displayDate = ord.dateToReceive || getLocalTodayStr();
+
         if (status === 'Pending') {
             statusBadge = `<span class="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-500/30">⏳ Pending</span>`;
             actionBtns = `
                 <div class="flex gap-1 items-center">
-                    <button onclick="addOrderToPhoneCalendar('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', '${escapeHtml(ord.address || '')}')" class="bg-blue-600/30 border border-blue-500/50 text-blue-300 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-bell"></i> Alarm</button>
+                    <button onclick="addOrderToPhoneCalendar('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', '${escapeHtml(ord.address || '')}', '${escapeHtml(displayDate)}')" class="bg-blue-600/30 border border-blue-500/50 text-blue-300 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-bell"></i> Alarm</button>
                     <button onclick="takeAdvancedOrder('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}')" class="bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-motorcycle"></i> Cater Order</button>
                     <button onclick="changeAdvOrderStatus('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', 'Cancelled')" class="bg-red-900/40 border border-red-700/50 text-red-400 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-ban"></i> Cancel</button>
                 </div>`;
@@ -206,7 +217,7 @@ export function renderAdvancedOrdersList() {
         <div class="bg-cardBg border ${status === 'Pending' ? 'border-purple-500/40' : status === 'Catering' ? 'border-orange-500/50' : 'border-gray-800 opacity-70'} p-3 rounded-xl flex flex-col gap-1.5 text-xs">
             <div class="flex justify-between items-center font-bold">
                 <span class="text-purple-300"><i class="fa-solid fa-user"></i> ${escapeHtml(ord.custName)}</span>
-                <span class="text-emerald-400 font-mono"><i class="fa-solid fa-clock"></i> ${escapeHtml(ord.timeToReceive)}</span>
+                <span class="text-emerald-400 font-mono"><i class="fa-solid fa-calendar-day"></i> ${escapeHtml(displayDate)} <i class="fa-solid fa-clock ml-1"></i> ${escapeHtml(ord.timeToReceive)}</span>
             </div>
             ${ord.receiver ? `<div class="text-[10px] text-gray-400">Receiver: ${escapeHtml(ord.receiver)}</div>` : ''}
             ${ord.address ? `<div class="text-[10px] text-gray-300"><i class="fa-solid fa-location-dot text-red-500"></i> ${escapeHtml(ord.address)}</div>` : ''}
@@ -222,6 +233,7 @@ export async function submitNewAdvancedOrder() {
     const receiver = document.getElementById('adv-receiver').value.trim();
     const address = document.getElementById('adv-address').value.trim();
     const contactNum = document.getElementById('adv-contact').value.trim();
+    const dateToReceive = document.getElementById('adv-receive-date').value || getLocalTodayStr();
     const timeToReceive = document.getElementById('adv-receive-time').value.trim();
 
     if (!custName) return showToast("Please enter Customer Name!");
@@ -230,8 +242,13 @@ export async function submitNewAdvancedOrder() {
     const newOrd = {
         custName: custName,
         timeOrdered: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        receiver: receiver, address: address, contactNum: contactNum,
-        timeToReceive: timeToReceive, status: "Pending", cateredBy: ""
+        receiver: receiver, 
+        address: address, 
+        contactNum: contactNum,
+        dateToReceive: dateToReceive,
+        timeToReceive: timeToReceive, 
+        status: "Pending", 
+        cateredBy: ""
     };
 
     db.ref('advancedOrders').push(newOrd);
@@ -241,12 +258,13 @@ export async function submitNewAdvancedOrder() {
 
     document.getElementById('adv-cust-name').value = "";
     document.getElementById('adv-receive-time').value = "";
-    showToast(`✅ Scheduled order created for ${custName}!`);
+    document.getElementById('adv-receive-date').value = getLocalTodayStr();
+    showToast(`✅ Scheduled order created for ${custName} on ${dateToReceive}!`);
     switchAdvTab('list');
 }
 
 export async function takeAdvancedOrder(custName, timeToReceive) {
-    stopReminderAlarm(); // Stop music when rider takes the order
+    stopReminderAlarm();
     const targetOrd = globalState.globalAdvancedOrders.find(o => o.custName === custName && o.timeToReceive === timeToReceive);
     if (targetOrd && targetOrd.status !== 'Pending') return showToast("⚠️ Order was already taken!");
 
@@ -258,8 +276,8 @@ export async function takeAdvancedOrder(custName, timeToReceive) {
     if (targetOrd) { targetOrd.status = "Catering"; targetOrd.cateredBy = appState.riderName; }
     changeAdvOrderStatus(custName, timeToReceive, "Catering");
 
-    let existingCusts = (myRecord && myRecord.status === 'Catering' && myRecord.customerName) ? myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean) : [];
-    let existingTimes = (myRecord && myRecord.status === 'Catering' && myRecord.startTime) ? myRecord.startTime.split(', ').map(t => t.trim()).filter(Boolean) : [];
+    let existingCusts = (myRecord && myRecord.status === 'Catering' && myRecord.customerName) ? myRecord.customerName.split(', ').map(c=>c.trim()).filter(Boolean) : [];
+    let existingTimes = (myRecord && myRecord.status === 'Catering' && myRecord.startTime) ? myRecord.startTime.split(', ').map(t=>t.trim()).filter(Boolean) : [];
 
     if (!existingCusts.includes(custName)) {
         existingCusts.push(custName);
@@ -290,17 +308,26 @@ export async function changeAdvOrderStatus(custName, timeToReceive, newStatus) {
     });
 }
 
-export function addOrderToPhoneCalendar(custName, timeToReceive, address) {
+export function addOrderToPhoneCalendar(custName, timeToReceive, address, dateToReceive) {
     const timeParts = timeToReceive.split(':');
-    const eventDate = new Date();
-    eventDate.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]), 0, 0);
+    const dateStr = dateToReceive || getLocalTodayStr();
+    const dateParts = dateStr.split('-');
+
+    const eventDate = new Date(
+        parseInt(dateParts[0]),
+        parseInt(dateParts[1]) - 1,
+        parseInt(dateParts[2]),
+        parseInt(timeParts[0]),
+        parseInt(timeParts[1]),
+        0, 0
+    );
 
     const startTimeIso = eventDate.toISOString().replace(/-|:|\.\d\d\d/g, "");
     const endDate = new Date(eventDate.getTime() + 30 * 60000);
     const endTimeIso = endDate.toISOString().replace(/-|:|\.\d\d\d/g, "");
 
     const title = encodeURIComponent(`🛵 Lokalex Delivery: ${custName}`);
-    const details = encodeURIComponent(`Scheduled Lokalex Order for ${custName} at ${timeToReceive}.`);
+    const details = encodeURIComponent(`Scheduled Lokalex Order for ${custName} on ${dateStr} at ${timeToReceive}.`);
     const loc = encodeURIComponent(address || "");
 
     window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startTimeIso}/${endTimeIso}&details=${details}&location=${loc}`, '_blank');

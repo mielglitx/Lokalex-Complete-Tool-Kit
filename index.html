@@ -896,19 +896,29 @@
                 <div class="text-center text-gray-500 italic py-8 text-xs">Loading advanced orders...</div>
             </div>
 
-            <div id="adv-tab-add-content" class="hidden flex flex-col gap-2 overflow-y-auto">
-                <input type="text" id="adv-cust-name" placeholder="Customer Name *" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
-                <input type="text" id="adv-receiver" placeholder="Receiver Name / Alternate" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
-                <input type="text" id="adv-address" placeholder="Delivery Address" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
-                <input type="text" id="adv-contact" placeholder="Contact Number" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
-                <div class="flex flex-col gap-1">
-                    <label class="text-[10px] text-gray-400 font-bold uppercase">Time to Receive (Scheduled):</label>
-                    <input type="time" id="adv-receive-time" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
-                </div>
-                <button onclick="submitNewAdvancedOrder()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl mt-2 text-xs transition active:scale-95">
-                    Save Scheduled Order
-                </button>
-            </div>
+            <!-- Inside index.html -> #adv-tab-add-content -->
+<div id="adv-tab-add-content" class="hidden flex flex-col gap-2 overflow-y-auto">
+    <input type="text" id="adv-cust-name" placeholder="Customer Name *" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
+    <input type="text" id="adv-receiver" placeholder="Receiver Name / Alternate" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
+    <input type="text" id="adv-address" placeholder="Delivery Address" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
+    <input type="text" id="adv-contact" placeholder="Contact Number" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
+    
+    <!-- DATE & TIME SELECTOR GRID -->
+    <div class="grid grid-cols-2 gap-2">
+        <div class="flex flex-col gap-1">
+            <label class="text-[10px] text-gray-400 font-bold uppercase">Date to Receive:</label>
+            <input type="date" id="adv-receive-date" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
+        </div>
+        <div class="flex flex-col gap-1">
+            <label class="text-[10px] text-gray-400 font-bold uppercase">Time to Receive:</label>
+            <input type="time" id="adv-receive-time" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
+        </div>
+    </div>
+
+    <button onclick="submitNewAdvancedOrder()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl mt-2 text-xs transition active:scale-95">
+        Save Scheduled Order
+    </button>
+</div>
         </div>
     </div>
 
