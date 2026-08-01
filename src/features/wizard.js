@@ -1,5 +1,6 @@
 // src/features/wizard.js
 import { appState, globalState, wizState } from '../store/state.js';
+import { db } from '../config/firebase.js';
 import { getLocalTodayStr, copyText, escapeHtml } from '../utils/helpers.js';
 import { showToast, showSideNotification } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
@@ -32,7 +33,6 @@ export function initWizardForCart() {
 
     currentReceiptTransactionId = getDailyRiderId() + "-" + Date.now().toString(36).toUpperCase();
 
-    // Sum costs of non-paid items only (negative amounts/paid items count as 0)
     const marketSum = currentCart
         .filter(i => (i.category || i.type || '').toLowerCase() === 'market' && !i.isPaid)
         .reduce((s, i) => s + Math.max(0, parseFloat(i.price) || 0), 0);
@@ -189,8 +189,6 @@ export function confirmSampleReceiptProceed() {
     executeGenerateFinalReceipt("Sample");
 }
 
-// src/features/wizard.js
-
 export async function executeGenerateFinalReceipt(customerName) {
     calculateGrandTotal();
 
@@ -212,7 +210,6 @@ export async function executeGenerateFinalReceipt(customerName) {
         showSideNotification("SAVING RECEIPT", `Updating receipt for ${customerName}`, "fa-receipt", "text-emerald-400", "border-emerald-500");
     }
 
-    // GUARANTEE SCREEN TRANSITION: Wrap DB save in try/catch
     try {
         await saveReceiptToDatabase(customerName);
     } catch (err) {
@@ -242,7 +239,6 @@ async function saveReceiptToDatabase(customerName) {
 
     const totalFees = Math.max(0, (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0));
 
-    // Ensure Transaction ID exists
     if (!currentReceiptTransactionId) {
         currentReceiptTransactionId = getDailyRiderId() + "-" + Date.now().toString(36).toUpperCase();
     }
@@ -265,7 +261,6 @@ async function saveReceiptToDatabase(customerName) {
         date: todayStr
     };
 
-    // Safe Firebase Writes
     try {
         if (currentReceiptTransactionId) {
             db.ref('receipts/' + currentReceiptTransactionId).set(payload);
@@ -280,63 +275,9 @@ async function saveReceiptToDatabase(customerName) {
         console.error("Firebase write error:", e);
     }
 
-    // Google Sheets Async Fetch
     try {
         fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
     } catch (e) {}
-}
-
-// src/features/wizard.js
-
-async function saveReceiptToDatabase(customerName) {
-    if (!customerName || customerName.trim().toLowerCase() === "sample") {
-        showToast("ℹ️ Sample Receipt generated (Not saved to commission/catered list).");
-        return;
-    }
-
-    const cName = customerName.trim().toLowerCase();
-    const rName = (appState.riderName || "").trim().toLowerCase();
-    const todayStr = getLocalTodayStr();
-
-    const activeCustList = getActiveCateringCustomersWithTimes();
-    const match = activeCustList.find(i => i.name.trim().toLowerCase() === cName);
-    const sTime = match ? match.startTime.trim() : "";
-
-    const sessionKey = `receipt_done_${rName}_${cName}_${sTime}_${todayStr}`;
-    localStorage.setItem(sessionKey, 'true');
-
-    const totalFees = Math.max(0, (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0));
-
-    const payload = {
-        type: "receipts",
-        transactionId: currentReceiptTransactionId,
-        telegramId: appState.telegramId,
-        riderName: appState.riderName,
-        customerName: customerName,
-        cateringStartTime: sTime,
-        fees: {
-            handling: wizState.finalHFee || 0,
-            market: wizState.finalMFee || 0,
-            multistore: wizState.finalMulti || 0,
-            delivery: wizState.deliveryFee || 0,
-            discount: wizState.discount || 0
-        },
-        totalFees: totalFees,
-        date: todayStr
-    };
-
-    // Save to Firebase Receipts node
-    db.ref('receipts/' + currentReceiptTransactionId).set(payload);
-
-    // Also attach fee info to active roster item so completed history carries fee details
-    db.ref('roster/' + appState.telegramId).update({
-        lastReceiptFees: payload.fees,
-        lastReceiptTotalFees: totalFees
-    });
-
-    try {
-        fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-    } catch(e) {}
 }
 
 export function renderFinalReceiptText() {
