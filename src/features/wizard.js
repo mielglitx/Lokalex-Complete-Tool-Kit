@@ -1,5 +1,5 @@
 // src/features/wizard.js
-import { appState, activeCartSlot, wizState, multiCarts } from '../store/state.js';
+import { appState, globalState, wizState } from '../store/state.js';
 import { getLocalTodayStr, copyText, escapeHtml } from '../utils/helpers.js';
 import { showToast, showSideNotification } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
@@ -21,18 +21,20 @@ export function getDailyRiderId() {
     return `RID-${code}`;
 }
 
+export function proceedToWizard() {
+    switchView('view-wizard');
+    initWizardForCart();
+}
+
 export function initWizardForCart() {
-    const currentCart = getCurrentCart();
-    if (!currentCart) return;
+    const currentCart = getCurrentCart(); // Returns the raw items array
+    if (!currentCart || currentCart.length === 0) return;
 
-    if (!currentCart.txId) {
-        currentCart.txId = getDailyRiderId() + "-" + Date.now().toString(36).toUpperCase();
-        saveCartState();
-    }
-    currentReceiptTransactionId = currentCart.txId;
+    currentReceiptTransactionId = getDailyRiderId() + "-" + Date.now().toString(36).toUpperCase();
 
-    const marketSum = currentCart.items.filter(i => i.category === 'Market').reduce((s, i) => s + (parseFloat(i.price) || 0), 0);
-    const storeSum = currentCart.items.filter(i => i.category === 'Store').reduce((s, i) => s + (parseFloat(i.price) || 0), 0);
+    // Map through array and calculate sums, ensuring case-insensitivity
+    const marketSum = currentCart.filter(i => (i.category || i.type || '').toLowerCase() === 'market').reduce((s, i) => s + (parseFloat(i.price) || 0), 0);
+    const storeSum = currentCart.filter(i => (i.category || i.type || '').toLowerCase() === 'store').reduce((s, i) => s + (parseFloat(i.price) || 0), 0);
 
     wizState.subtotal = marketSum + storeSum;
     const autoMarket = marketSum > 0 ? Math.ceil(marketSum / 500) * 15 : 0;
@@ -44,8 +46,8 @@ export function initWizardForCart() {
     const marketEl = document.getElementById('wiz-market');
     const multistopEl = document.getElementById('wiz-multistop');
 
-    if (handlingEl && (!handlingEl.value || handlingEl.value === "0")) handlingEl.value = autoHandling;
-    if (marketEl && (!marketEl.value || marketEl.value === "0")) marketEl.value = autoMarket;
+    if (handlingEl) handlingEl.value = autoHandling;
+    if (marketEl) marketEl.value = autoMarket;
     if (multistopEl && !multistopEl.value) multistopEl.value = 0;
 
     setupWizardClientDetails();
@@ -53,21 +55,22 @@ export function initWizardForCart() {
 }
 
 function setupWizardClientDetails() {
-    const currentCart = getCurrentCart();
     const btnBox = document.getElementById('catered-client-buttons');
     const rcptInput = document.getElementById('rcpt-name');
     const toggleManual = document.getElementById('manual-client-toggle');
 
     if (!rcptInput || !btnBox || !toggleManual) return;
 
-    if (currentCart.customerName) {
-        rcptInput.value = currentCart.customerName;
-        rcptInput.disabled = !currentCart.isManual;
-        toggleManual.checked = currentCart.isManual || false;
+    // Use appState.selectedCateringClient which was set in the Cart UI
+    if (appState.selectedCateringClient && appState.selectedCateringClient !== "") {
+        rcptInput.value = appState.selectedCateringClient;
+        rcptInput.disabled = true;
+        toggleManual.checked = false;
         
+        const cartSlotDisplay = (globalState.activeCartIndex || 0) + 1;
         btnBox.innerHTML = `
-            <button onclick="selectCateredClientName('${escapeHtml(currentCart.customerName)}')" class="bg-blue-600 border border-blue-400 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition active:scale-95">
-                <i class="fa-solid fa-user"></i> ${escapeHtml(currentCart.customerName)} (Cart ${activeCartSlot})
+            <button onclick="selectCateredClientName('${escapeHtml(appState.selectedCateringClient)}')" class="bg-blue-600 border border-blue-400 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition active:scale-95">
+                <i class="fa-solid fa-user"></i> ${escapeHtml(appState.selectedCateringClient)} (Cart ${cartSlotDisplay})
             </button>`;
     } else {
         const activeCustList = getActiveCateringCustomersWithTimes();
@@ -77,28 +80,14 @@ function setupWizardClientDetails() {
             toggleManual.checked = true;
             btnBox.innerHTML = `<span class="text-amber-400 text-xs font-semibold"><i class="fa-solid fa-user-pen"></i> Type customer name manually below or leave empty for Sample.</span>`;
         } else {
-            const assignedInOtherCarts = [1, 2, 3, 4]
-                .filter(s => s !== activeCartSlot && multiCarts[s])
-                .map(s => multiCarts[s].customerName)
-                .filter(Boolean);
-            const availableForWizard = activeCustList.filter(i => !assignedInOtherCarts.includes(i.name));
-
-            if (availableForWizard.length > 0) {
-                btnBox.innerHTML = availableForWizard.map(i => `
-                    <button onclick="selectCateredClientName('${escapeHtml(i.name)}')" class="bg-blue-600/30 border border-blue-500 text-blue-300 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition active:scale-95">
-                        <i class="fa-solid fa-user"></i> ${escapeHtml(i.name)}
-                    </button>
-                `).join('');
-                rcptInput.value = availableForWizard[0].name || "";
-                rcptInput.disabled = true;
-                currentCart.customerName = availableForWizard[0].name || "";
-                saveCartState();
-            } else {
-                btnBox.innerHTML = `<span class="text-gray-500 italic text-xs">All active catering clients are assigned.</span>`;
-                rcptInput.value = "Sample";
-                rcptInput.disabled = false;
-                toggleManual.checked = true;
-            }
+            btnBox.innerHTML = activeCustList.map(i => `
+                <button onclick="selectCateredClientName('${escapeHtml(i.name)}')" class="bg-blue-600/30 border border-blue-500 text-blue-300 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition active:scale-95">
+                    <i class="fa-solid fa-user"></i> ${escapeHtml(i.name)}
+                </button>
+            `).join('');
+            rcptInput.value = activeCustList[0].name || "";
+            rcptInput.disabled = true;
+            appState.selectedCateringClient = activeCustList[0].name || "";
         }
     }
 }
@@ -112,10 +101,7 @@ export function selectCateredClientName(cName) {
     const manualToggle = document.getElementById('manual-client-toggle');
     if (manualToggle) manualToggle.checked = false;
     
-    const cart = getCurrentCart();
-    cart.customerName = cName;
-    cart.isManual = false;
-    saveCartState();
+    appState.selectedCateringClient = cName;
     showToast(`Selected: ${cName}`);
 }
 
@@ -123,11 +109,11 @@ export function toggleManualClientInput(isManual) {
     const rcptInput = document.getElementById('rcpt-name');
     if (rcptInput) {
         rcptInput.disabled = !isManual;
-        if (isManual) rcptInput.focus();
+        if (isManual) {
+            rcptInput.focus();
+            appState.selectedCateringClient = ""; // Clear state if user wants to type
+        }
     }
-    const cart = getCurrentCart();
-    if (cart) cart.isManual = isManual;
-    saveCartState();
 }
 
 export function adjustStoreCount(delta) {
@@ -204,8 +190,7 @@ export function confirmSampleReceiptProceed() {
     const rcptNameInput = document.getElementById('rcpt-name');
     if (rcptNameInput) rcptNameInput.value = "Sample";
 
-    getCurrentCart().customerName = "Sample";
-    saveCartState();
+    appState.selectedCateringClient = "Sample";
     executeGenerateFinalReceipt("Sample");
 }
 
@@ -246,7 +231,6 @@ async function saveReceiptToDatabase(customerName) {
     const rName = (appState.riderName || "").trim().toLowerCase();
     const todayStr = getLocalTodayStr();
 
-    // Lock receipt to the specific active catering start time & date
     const activeCustList = getActiveCateringCustomersWithTimes();
     const match = activeCustList.find(i => i.name.trim().toLowerCase() === cName);
     const sTime = match ? match.startTime.trim() : "";
@@ -284,7 +268,7 @@ export function renderFinalReceiptText() {
         hour: '2-digit', minute: '2-digit'
     });
 
-    const currentCart = getCurrentCart() || { items: [] };
+    const currentCart = getCurrentCart() || [];
     const dailyRiderId = getDailyRiderId();
 
     const subtotal = (wizState.subtotal !== undefined ? wizState.subtotal : 0);
@@ -296,8 +280,9 @@ export function renderFinalReceiptText() {
     const discount = wizState.discount || 0;
     const finalTotal = (wizState.finalTotal !== undefined ? wizState.finalTotal : 0);
 
-    let itemsTxt = (currentCart.items && currentCart.items.length > 0)
-        ? currentCart.items.map(i => `🔸 ${i.item || 'Item'} - ₱${(parseFloat(i.price) || 0).toFixed(2)}`).join("\n")
+    // FIX: Using i.name instead of i.item so the actual items print out properly
+    let itemsTxt = (currentCart.length > 0)
+        ? currentCart.map(i => `🔸 ${i.name || 'Item'} - ₱${(parseFloat(i.price) || 0).toFixed(2)}`).join("\n")
         : "🔸 (Walang items)";
 
     let feesTxt = "";
@@ -333,10 +318,31 @@ ${feesTxt}➖➖➖➖➖➖➖➖➖➖➖➖
 }
 
 export function completeReceiptDone() {
-    clearCartSlot(activeCartSlot);
+    clearCartSlot();
     currentReceiptTransactionId = "";
     showToast("✅ Cart cleared and final receipt accepted!");
     switchView('view-home');
+    
+    // Reset all wizState variables and UI so the next cart starts fresh
+    wizState.subtotal = 0;
+    wizState.storeCount = 1;
+    appState.selectedCateringClient = "";
+
+    const handlingEl = document.getElementById('wiz-handling');
+    const marketEl = document.getElementById('wiz-market');
+    const multistopEl = document.getElementById('wiz-multistop');
+    const deliveryEl = document.getElementById('wiz-delivery');
+    const discountEl = document.getElementById('wiz-discount');
+    const epaymentEl = document.getElementById('wiz-epayment');
+    const freeDelivEl = document.getElementById('wiz-free-delivery');
+
+    if(handlingEl) handlingEl.value = "";
+    if(marketEl) marketEl.value = "";
+    if(multistopEl) multistopEl.value = "0";
+    if(deliveryEl) deliveryEl.value = "";
+    if(discountEl) discountEl.value = "";
+    if(epaymentEl) epaymentEl.checked = false;
+    if(freeDelivEl) freeDelivEl.checked = false;
 }
 
 export function copyFinalReceipt() {
