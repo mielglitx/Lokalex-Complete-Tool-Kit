@@ -26,8 +26,6 @@ export function openCommissionScreen() {
     refreshCommissionView();
 }
 
-// src/features/commission.js
-
 function setupAdminControls() {
     const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId); 
     const filterBox = document.getElementById('admin-commission-filter-box');
@@ -37,17 +35,20 @@ function setupAdminControls() {
         filterBox.classList.remove('hidden');
         filterBox.classList.add('flex');
         
-        // 1. Smart merge of riders from Roster AND History
         let uniqueRiderMap = {};
         
         (globalState.rosterMembers || []).forEach(r => {
-            // FIXED: Look up r.riderName first before falling back to r.name or r.telegramId
             if (r.telegramId) uniqueRiderMap[r.telegramId] = r.riderName || r.name || r.telegramId;
         });
         
         (globalState.globalCateredHistory || []).forEach(h => {
             const hId = h.riderId || h.telegramId;
             if (hId) uniqueRiderMap[hId] = h.riderName || uniqueRiderMap[hId] || hId;
+        });
+
+        (globalState.globalDailyReceipts || []).forEach(rc => {
+            const rId = rc.telegramId || rc.riderId;
+            if (rId) uniqueRiderMap[rId] = rc.riderName || uniqueRiderMap[rId] || rId;
         });
         
         let options = `<option value="ALL">All Riders (Combined)</option>`;
@@ -63,34 +64,90 @@ function setupAdminControls() {
     }
 }
 
+export function setCommissionMode(mode) {
+    viewSettings.mode = mode;
+    
+    const btnEarned = document.getElementById('comm-mode-earned');
+    const btnCompany = document.getElementById('comm-mode-company');
+    
+    if (mode === 'earned') {
+        btnEarned.className = "flex-1 py-2 rounded-md bg-emerald-600/20 text-emerald-400 border border-emerald-500/50 transition";
+        btnCompany.className = "flex-1 py-2 rounded-md text-gray-400 hover:text-white transition";
+    } else {
+        btnCompany.className = "flex-1 py-2 rounded-md bg-red-600/20 text-red-400 border border-red-500/50 transition";
+        btnEarned.className = "flex-1 py-2 rounded-md text-gray-400 hover:text-white transition";
+    }
+    
+    refreshCommissionView();
+}
+
+export function setCommissionPeriod(period) {
+    viewSettings.period = period;
+    
+    ['daily', 'weekly', 'monthly'].forEach(p => {
+        const btn = document.getElementById(`comm-period-${p}`);
+        const input = document.getElementById(`comm-input-${p}`);
+        if (p === period) {
+            btn.className = "py-1.5 rounded bg-blue-600 text-white transition shadow";
+            input.classList.remove('hidden');
+        } else {
+            btn.className = "py-1.5 rounded text-gray-400 hover:text-white transition";
+            input.classList.add('hidden');
+        }
+    });
+
+    refreshCommissionView();
+}
+
 export function refreshCommissionView() {
     const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
-    let targetRiderId = isAdmin ? document.getElementById('admin-rider-select').value : appState.telegramId;
+    let targetRiderId = isAdmin ? document.getElementById('admin-rider-select')?.value : appState.telegramId;
     if (targetRiderId === "ALL") targetRiderId = null; 
 
-    viewSettings.dateValue = document.getElementById(`comm-input-${viewSettings.period}`).value;
+    const dateInput = document.getElementById(`comm-input-${viewSettings.period}`);
+    if (dateInput) viewSettings.dateValue = dateInput.value;
     if (!viewSettings.dateValue) return;
 
-    // 1. Filter Data by Date/Week/Month
-    let filteredHistory = globalState.globalCateredHistory.filter(record => {
-        const recordTs = record.timestamp || Date.now();
-        if (viewSettings.period === 'daily') return getDateString(recordTs) === viewSettings.dateValue;
-        if (viewSettings.period === 'weekly') return getWeekString(recordTs) === viewSettings.dateValue;
-        if (viewSettings.period === 'monthly') return getMonthString(recordTs) === viewSettings.dateValue;
+    // 1. Read from Firebase receipts or catered history fallback
+    const receiptList = (globalState.globalDailyReceipts && globalState.globalDailyReceipts.length > 0)
+        ? globalState.globalDailyReceipts
+        : globalState.globalCateredHistory;
+
+    // 2. Filter Data by Date/Week/Month string matching
+    let filteredHistory = receiptList.filter(record => {
+        let rDate = record.date || record.completedDate || getLocalTodayStr();
+        
+        if (viewSettings.period === 'daily') {
+            return rDate === viewSettings.dateValue;
+        }
+        if (viewSettings.period === 'weekly') {
+            const d = new Date(rDate + "T00:00:00");
+            return getWeekString(d.getTime()) === viewSettings.dateValue;
+        }
+        if (viewSettings.period === 'monthly') {
+            return rDate.substring(0, 7) === viewSettings.dateValue;
+        }
         return false;
     });
 
-    // 2. Group Totals by Rider
+    // 3. Group Totals by Rider
     let riderTotals = {}; 
 
     filteredHistory.forEach(r => {
-        let rId = r.riderId || r.telegramId || "unknown";
-        
+        let rId = (r.telegramId || r.riderId || "").toString();
+        let rName = r.riderName || "Unknown Rider";
+
+        if (!rId) {
+            const rosterRec = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").toLowerCase() === rName.toLowerCase());
+            if (rosterRec && rosterRec.telegramId) rId = rosterRec.telegramId.toString();
+            else rId = rName.toLowerCase();
+        }
+
         let gross = parseFloat(r.totalFees);
         if (isNaN(gross)) {
             const hf = parseFloat(r.fees?.handling) || 0;
             const mf = parseFloat(r.fees?.market) || 0;
-            const ms = parseFloat(r.fees?.multistop) || 0;
+            const ms = parseFloat(r.fees?.multistore || r.fees?.multistop) || 0;
             const rdf = parseFloat(r.fees?.delivery) || 0;
             const epay = parseFloat(r.fees?.epaymentFee) || 0;
             const disc = parseFloat(r.fees?.discount) || 0;
@@ -98,11 +155,6 @@ export function refreshCommissionView() {
         }
 
         if (!riderTotals[rId]) {
-            let rName = r.riderName || "Unknown Rider";
-            const rosterRec = globalState.rosterMembers?.find(mem => (mem.telegramId || "").toString() === rId.toString());
-            // FIXED: Look up rosterRec.riderName
-            if (rosterRec) rName = rosterRec.riderName || rosterRec.name || rName;
-
             riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0 };
         }
         
@@ -111,14 +163,22 @@ export function refreshCommissionView() {
         riderTotals[rId].company += (gross * 0.20);
     });
 
-    // 3. Filter down to Target Rider & Calculate Grand Totals
+    // 4. Filter down to Target Rider & Calculate Grand Totals
     let finalRiderList = [];
     let grandGross = 0;
     let grandEarned = 0;
     let grandCompany = 0;
 
     for (let rId in riderTotals) {
-        if (targetRiderId && rId !== targetRiderId.toString()) continue; 
+        if (targetRiderId && targetRiderId !== "ALL") {
+            const myRoster = globalState.rosterMembers?.find(m => (m.telegramId || "").toString() === targetRiderId.toString());
+            const targetName = myRoster ? (myRoster.riderName || myRoster.name || "").toLowerCase() : "";
+            
+            const isIdMatch = rId.toString() === targetRiderId.toString();
+            const isNameMatch = targetName && riderTotals[rId].name.toLowerCase() === targetName;
+
+            if (!isIdMatch && !isNameMatch) continue;
+        }
         
         finalRiderList.push({ id: rId, ...riderTotals[rId] });
         grandGross += riderTotals[rId].gross;
@@ -126,102 +186,84 @@ export function refreshCommissionView() {
         grandCompany += riderTotals[rId].company;
     }
 
-    // 4. Update UI Text
+    // 5. Update UI Text
     const mainWrapperEl = document.getElementById('comm-main-wrapper');
     const mainLabelEl = document.getElementById('comm-main-label');
     
-    document.getElementById('comm-gross-amount').innerText = grandGross.toFixed(2);
-    document.getElementById('comm-summary-title').innerText = `${viewSettings.period.toUpperCase()} SUMMARY`;
+    const grossEl = document.getElementById('comm-gross-amount');
+    const summaryTitleEl = document.getElementById('comm-summary-title');
+    const mainAmountEl = document.getElementById('comm-main-amount');
+
+    if (grossEl) grossEl.innerText = grandGross.toFixed(2);
+    if (summaryTitleEl) summaryTitleEl.innerText = `${viewSettings.period.toUpperCase()} SUMMARY`;
 
     if (viewSettings.mode === 'earned') {
-        mainLabelEl.innerText = "YOUR EARNINGS (80%)";
-        mainLabelEl.className = "text-[10px] text-emerald-400 font-bold uppercase";
-        mainWrapperEl.className = "text-4xl font-black text-emerald-400 drop-shadow-md";
-        document.getElementById('comm-main-amount').innerText = grandEarned.toFixed(2);
+        if (mainLabelEl) {
+            mainLabelEl.innerText = "YOUR EARNINGS (80%)";
+            mainLabelEl.className = "text-[10px] text-emerald-400 font-bold uppercase";
+        }
+        if (mainWrapperEl) mainWrapperEl.className = "text-4xl font-black text-emerald-400 drop-shadow-md";
+        if (mainAmountEl) mainAmountEl.innerText = grandEarned.toFixed(2);
     } else {
-        mainLabelEl.innerText = "TO PAY COMPANY (20%)";
-        mainLabelEl.className = "text-[10px] text-red-400 font-bold uppercase";
-        mainWrapperEl.className = "text-4xl font-black text-red-400 drop-shadow-md";
-        document.getElementById('comm-main-amount').innerText = grandCompany.toFixed(2);
+        if (mainLabelEl) {
+            mainLabelEl.innerText = "TO PAY COMPANY (20%)";
+            mainLabelEl.className = "text-[10px] text-red-400 font-bold uppercase";
+        }
+        if (mainWrapperEl) mainWrapperEl.className = "text-4xl font-black text-red-400 drop-shadow-md";
+        if (mainAmountEl) mainAmountEl.innerText = grandCompany.toFixed(2);
     }
 
     renderRiderSummaryList(finalRiderList);
 
-    // 5. Fetch Settlement Status
+    // 6. Fetch Settlement Status
     checkSettlementStatus(targetRiderId, viewSettings.period, viewSettings.dateValue, isAdmin);
 }
 
-export function generateDailyReportText() {
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
-    let targetRiderId = isAdmin ? document.getElementById('admin-rider-select').value : appState.telegramId;
-    if (targetRiderId === "ALL") targetRiderId = null;
+function checkSettlementStatus(riderId, period, dateVal, isAdmin) {
+    const badge = document.getElementById('comm-status-badge');
+    const adminBtn = document.getElementById('admin-mark-paid-btn');
+    
+    if (!badge || !adminBtn) return;
 
-    let filteredHistory = globalState.globalCateredHistory.filter(record => {
-        const recordTs = record.timestamp || Date.now();
-        if (viewSettings.period === 'daily') return getDateString(recordTs) === viewSettings.dateValue;
-        if (viewSettings.period === 'weekly') return getWeekString(recordTs) === viewSettings.dateValue;
-        if (viewSettings.period === 'monthly') return getMonthString(recordTs) === viewSettings.dateValue;
-        return false;
-    });
-
-    let riderTotals = {}; 
-    filteredHistory.forEach(r => {
-        let rId = r.riderId || r.telegramId || "unknown";
-        let gross = parseFloat(r.totalFees);
-        if (isNaN(gross)) {
-            const hf = parseFloat(r.fees?.handling) || 0;
-            const mf = parseFloat(r.fees?.market) || 0;
-            const ms = parseFloat(r.fees?.multistop) || 0;
-            const rdf = parseFloat(r.fees?.delivery) || 0;
-            const epay = parseFloat(r.fees?.epaymentFee) || 0;
-            const disc = parseFloat(r.fees?.discount) || 0;
-            gross = hf + mf + ms + rdf + epay - disc;
-        }
-
-        if (!riderTotals[rId]) {
-            let rName = r.riderName || "Unknown";
-            const rosterRec = globalState.rosterMembers?.find(mem => (mem.telegramId || "").toString() === rId.toString());
-            // FIXED: Look up rosterRec.riderName
-            if (rosterRec) rName = rosterRec.riderName || rosterRec.name || rName;
-            riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0 };
-        }
-        riderTotals[rId].gross += gross;
-        riderTotals[rId].earned += (gross * 0.80);
-        riderTotals[rId].company += (gross * 0.20);
-    });
-
-    let grandGross = 0; let grandEarned = 0; let grandCompany = 0;
-    let listText = "";
-
-    for (let rId in riderTotals) {
-        if (targetRiderId && rId !== targetRiderId.toString()) continue;
-        
-        grandGross += riderTotals[rId].gross;
-        grandEarned += riderTotals[rId].earned;
-        grandCompany += riderTotals[rId].company;
-
-        let displayAmount = viewSettings.mode === 'earned' ? `₱${riderTotals[rId].earned.toFixed(2)}` : `₱${riderTotals[rId].company.toFixed(2)}`;
-        listText += `• ${riderTotals[rId].name}: ${displayAmount}\n`;
+    if (!riderId) {
+        badge.classList.add('hidden');
+        adminBtn.classList.add('hidden');
+        return;
     }
 
-    const periodLabel = viewSettings.period.toUpperCase();
-    const modeLabel = viewSettings.mode === 'earned' ? "RIDER EARNINGS" : "TO PAY COMPANY";
+    const settlementKey = `${riderId}_${period}_${dateVal}`;
     
-    let report = `📊 LOKALEX SETTLEMENT REPORT\n`;
-    report += `Scope: ${targetRiderId ? riderTotals[targetRiderId]?.name : "ALL RIDERS"}\n`;
-    report += `Period: ${periodLabel} (${viewSettings.dateValue})\n`;
-    report += `Mode: ${modeLabel}\n\n`;
-    report += `💰 Gross Total: ₱${grandGross.toFixed(2)}\n`;
-    report += `🟢 Rider Earned (80%): ₱${grandEarned.toFixed(2)}\n`;
-    report += `🔴 To Pay Company (20%): ₱${grandCompany.toFixed(2)}\n\n`;
-    report += `📋 RIDER BREAKDOWN:\n${listText || "No records found."}`;
+    db.ref(`commissionSettlements/${settlementKey}`).once('value').then(snapshot => {
+        const data = snapshot.val();
+        badge.classList.remove('hidden');
 
-    copyText(report);
-    showToast("📄 Settlement text report copied!");
+        if (data && data.status === 'paid') {
+            badge.className = "absolute top-0 right-0 bg-emerald-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest shadow-md";
+            badge.innerText = "PAID";
+            if (isAdmin) {
+                adminBtn.classList.remove('hidden');
+                adminBtn.innerHTML = `<i class="fa-solid fa-rotate-left"></i> REVERT TO UNPAID`;
+                adminBtn.className = "w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-black py-3 rounded-xl text-xs transition active:scale-95 shadow mt-1 border border-gray-700";
+            } else {
+                adminBtn.classList.add('hidden');
+            }
+        } else {
+            badge.className = "absolute top-0 right-0 bg-red-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest shadow-md";
+            badge.innerText = "UNPAID";
+            if (isAdmin) {
+                adminBtn.classList.remove('hidden');
+                adminBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> MARK AS PAID`;
+                adminBtn.className = "w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl text-xs transition active:scale-95 shadow-lg mt-1 border border-emerald-400/50";
+            } else {
+                adminBtn.classList.add('hidden');
+            }
+        }
+    });
 }
 
 export function toggleSettlementStatus() {
-    const riderId = document.getElementById('admin-rider-select').value;
+    const select = document.getElementById('admin-rider-select');
+    const riderId = select ? select.value : appState.telegramId;
     const settlementKey = `${riderId}_${viewSettings.period}_${viewSettings.dateValue}`;
     
     db.ref(`commissionSettlements/${settlementKey}`).once('value').then(snapshot => {
@@ -244,6 +286,7 @@ export function toggleSettlementStatus() {
 
 function renderRiderSummaryList(riderListArray) {
     const container = document.getElementById('commission-rider-list');
+    if (!container) return;
     
     if (riderListArray.length === 0) {
         container.innerHTML = `<div class="text-center text-gray-500 italic text-xs py-10">No records found for this period.</div>`;
@@ -268,25 +311,40 @@ function renderRiderSummaryList(riderListArray) {
 
 export function generateDailyReportText() {
     const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
-    let targetRiderId = isAdmin ? document.getElementById('admin-rider-select').value : appState.telegramId;
+    let targetRiderId = isAdmin ? document.getElementById('admin-rider-select')?.value : appState.telegramId;
     if (targetRiderId === "ALL") targetRiderId = null;
 
-    let filteredHistory = globalState.globalCateredHistory.filter(record => {
-        const recordTs = record.timestamp || Date.now();
-        if (viewSettings.period === 'daily') return getDateString(recordTs) === viewSettings.dateValue;
-        if (viewSettings.period === 'weekly') return getWeekString(recordTs) === viewSettings.dateValue;
-        if (viewSettings.period === 'monthly') return getMonthString(recordTs) === viewSettings.dateValue;
+    const receiptList = (globalState.globalDailyReceipts && globalState.globalDailyReceipts.length > 0)
+        ? globalState.globalDailyReceipts
+        : globalState.globalCateredHistory;
+
+    let filteredHistory = receiptList.filter(record => {
+        let rDate = record.date || record.completedDate || getLocalTodayStr();
+        if (viewSettings.period === 'daily') return rDate === viewSettings.dateValue;
+        if (viewSettings.period === 'weekly') {
+            const d = new Date(rDate + "T00:00:00");
+            return getWeekString(d.getTime()) === viewSettings.dateValue;
+        }
+        if (viewSettings.period === 'monthly') return rDate.substring(0, 7) === viewSettings.dateValue;
         return false;
     });
 
     let riderTotals = {}; 
     filteredHistory.forEach(r => {
-        let rId = r.riderId || "unknown";
+        let rId = (r.telegramId || r.riderId || "").toString();
+        let rName = r.riderName || "Unknown";
+
+        if (!rId) {
+            const rosterRec = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").toLowerCase() === rName.toLowerCase());
+            if (rosterRec && rosterRec.telegramId) rId = rosterRec.telegramId.toString();
+            else rId = rName.toLowerCase();
+        }
+
         let gross = parseFloat(r.totalFees);
         if (isNaN(gross)) {
             const hf = parseFloat(r.fees?.handling) || 0;
             const mf = parseFloat(r.fees?.market) || 0;
-            const ms = parseFloat(r.fees?.multistop) || 0;
+            const ms = parseFloat(r.fees?.multistore || r.fees?.multistop) || 0;
             const rdf = parseFloat(r.fees?.delivery) || 0;
             const epay = parseFloat(r.fees?.epaymentFee) || 0;
             const disc = parseFloat(r.fees?.discount) || 0;
@@ -294,9 +352,6 @@ export function generateDailyReportText() {
         }
 
         if (!riderTotals[rId]) {
-            let rName = r.riderName || "Unknown";
-            const rosterRec = globalState.rosterMembers?.find(mem => mem.telegramId == rId);
-            if (rosterRec) rName = rosterRec.name;
             riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0 };
         }
         riderTotals[rId].gross += gross;
@@ -308,7 +363,15 @@ export function generateDailyReportText() {
     let listText = "";
 
     for (let rId in riderTotals) {
-        if (targetRiderId && rId !== targetRiderId.toString()) continue;
+        if (targetRiderId && targetRiderId !== "ALL") {
+            const myRoster = globalState.rosterMembers?.find(m => (m.telegramId || "").toString() === targetRiderId.toString());
+            const targetName = myRoster ? (myRoster.riderName || myRoster.name || "").toLowerCase() : "";
+            
+            const isIdMatch = rId.toString() === targetRiderId.toString();
+            const isNameMatch = targetName && riderTotals[rId].name.toLowerCase() === targetName;
+
+            if (!isIdMatch && !isNameMatch) continue;
+        }
         
         grandGross += riderTotals[rId].gross;
         grandEarned += riderTotals[rId].earned;
@@ -322,7 +385,7 @@ export function generateDailyReportText() {
     const modeLabel = viewSettings.mode === 'earned' ? "RIDER EARNINGS" : "TO PAY COMPANY";
     
     let report = `📊 LOKALEX SETTLEMENT REPORT\n`;
-    report += `Scope: ${targetRiderId ? riderTotals[targetRiderId]?.name : "ALL RIDERS"}\n`;
+    report += `Scope: ${targetRiderId && riderTotals[targetRiderId] ? riderTotals[targetRiderId]?.name : "ALL RIDERS"}\n`;
     report += `Period: ${periodLabel} (${viewSettings.dateValue})\n`;
     report += `Mode: ${modeLabel}\n\n`;
     report += `💰 Gross Total: ₱${grandGross.toFixed(2)}\n`;
@@ -333,3 +396,7 @@ export function generateDailyReportText() {
     copyText(report);
     showToast("📄 Settlement text report copied!");
 }
+
+// Reactive UI updates
+window.addEventListener('receiptsUpdated', refreshCommissionView);
+window.addEventListener('cateredUpdated', refreshCommissionView);
