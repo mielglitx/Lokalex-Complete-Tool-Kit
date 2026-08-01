@@ -404,14 +404,22 @@ export function getEffectiveCartClient(cartIndex) {
     return "Sample";
 }
 
+// src/features/cart.js
+
 function renderCartClientSelector() {
     const container = document.getElementById('cart-customer-selector-container');
     if (!container) return;
 
     const cartIdx = globalState.activeCartIndex ?? 0;
     const isManual = (globalState.cartManualFlags && globalState.cartManualFlags[cartIdx]) || false;
-    const currentClient = getEffectiveCartClient(cartIdx);
 
+    // PREVENT KEYBOARD CLOSING: Skip re-rendering DOM if user is actively typing in the input field
+    const existingInput = document.getElementById('cart-manual-client-input');
+    if (existingInput && document.activeElement === existingInput) {
+        return;
+    }
+
+    const currentClient = getEffectiveCartClient(cartIdx);
     appState.selectedCateringClient = currentClient;
 
     const activeClients = getRiderActiveCateringClients();
@@ -442,6 +450,8 @@ function renderCartClientSelector() {
         return `<option value="${escapeHtml(opt)}" ${isSelected ? 'selected' : ''}>${escapeHtml(opt)}</option>`;
     }).join('');
 
+    const inputValue = (currentClient === 'Sample' || !currentClient) ? '' : currentClient;
+
     container.innerHTML = `
         <div class="flex items-center gap-2 w-full text-xs">
             <label class="flex items-center gap-1 cursor-pointer shrink-0 text-[10px] text-gray-400 hover:text-white bg-black/30 px-2 py-1 rounded-lg border border-gray-800">
@@ -450,7 +460,7 @@ function renderCartClientSelector() {
             </label>
 
             ${isManual ? `
-                <input type="text" value="${escapeHtml(currentClient === 'Sample' ? '' : currentClient)}" placeholder="Type Client Name (or leave for Sample)" oninput="updateCartClientName(this.value)" class="w-full bg-darkBg text-xs text-amber-300 font-bold rounded-lg p-1.5 outline-none border border-gray-700 focus:border-amber-500">
+                <input type="text" id="cart-manual-client-input" value="${escapeHtml(inputValue)}" placeholder="Type Client Name (or leave for Sample)" oninput="updateCartClientName(this.value)" class="w-full bg-darkBg text-xs text-amber-300 font-bold rounded-lg p-1.5 outline-none border border-gray-700 focus:border-amber-500">
             ` : `
                 <select onchange="updateCartClientName(this.value)" class="w-full bg-darkBg text-xs text-amber-300 font-bold rounded-lg p-1.5 outline-none border border-gray-700 focus:border-amber-500">
                     ${optionsHtml}
@@ -459,6 +469,8 @@ function renderCartClientSelector() {
         </div>
     `;
 }
+
+
 
 export function toggleCartManualClient(isManual) {
     const cartIdx = globalState.activeCartIndex ?? 0;
@@ -477,12 +489,11 @@ export function updateCartClientName(val) {
     const cartIdx = globalState.activeCartIndex ?? 0;
     if (!globalState.cartClients) globalState.cartClients = ["", "", "", ""];
     
-    const cleanVal = val.trim() || "Sample";
-    globalState.cartClients[cartIdx] = cleanVal;
-    appState.selectedCateringClient = cleanVal;
+    // Store exact text input without stripping spaces or re-rendering DOM while typing
+    globalState.cartClients[cartIdx] = val;
+    appState.selectedCateringClient = val.trim() || "Sample";
 
     saveCartClientsState();
-    renderCartClientSelector();
 }
 
 export function assignClientToCart(clientName) {
