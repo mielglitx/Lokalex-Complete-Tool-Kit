@@ -26,9 +26,12 @@ import { unlockAudioContext } from './ui/notifications.js';
 const allModules = [
     auth, cart, chat, roster, directory, commission, 
     advancedOrders, maps, wizard, liveTracker, modals, router, helpers
+    
 ];
 
 allModules.forEach(mod => {
+    window.openFindRidersModal = maps.openFindRidersModal;
+window.closeFindRidersModal = maps.closeFindRidersModal;
     if (mod) {
         Object.keys(mod).forEach(funcName => {
             if (typeof mod[funcName] === 'function') {
@@ -118,6 +121,43 @@ function initRealtimeFirebaseListeners() {
             globalState.globalCateredHistory = snapshot.val() ? Object.values(snapshot.val()) : [];
             window.dispatchEvent(new Event('cateredUpdated'));
         });
+        db.ref('chat').on('value', (snapshot) => {
+            globalState.chatMessages = snapshot.val() ? Object.values(snapshot.val()) : [];
+            window.dispatchEvent(new Event('chatUpdated'));
+        });
+        db.ref('advancedOrders').on('value', (snapshot) => {
+            globalState.globalAdvancedOrders = snapshot.val() ? Object.values(snapshot.val()) : [];
+            if (advancedOrders.checkScheduledDeliveryAlerts) advancedOrders.checkScheduledDeliveryAlerts();
+            if (advancedOrders.renderAdvancedOrdersList) advancedOrders.renderAdvancedOrdersList();
+        });
+        db.ref('mapCalculations').on('value', (snapshot) => {
+            globalState.globalMapCalculations = snapshot.val() ? Object.values(snapshot.val()) : [];
+            if (maps.renderMapCalcBoardList) maps.renderMapCalcBoardList();
+        });
+    } catch(e) {
+        console.error("Firebase listener setup error:", e);
+    }
+
+    /// -------------------------------------------------------------
+    // Receipts
+    /// -------------------------------------------------------------
+    // src/main.js
+
+function initRealtimeFirebaseListeners() {
+    try {
+        db.ref('roster').on('value', (snapshot) => {
+            globalState.rosterMembers = snapshot.val() ? Object.values(snapshot.val()) : [];
+            window.dispatchEvent(new Event('rosterUpdated'));
+        });
+        db.ref('logins').on('value', (snapshot) => {
+            globalState.globalLogins = snapshot.val() ? Object.values(snapshot.val()) : [];
+            window.dispatchEvent(new Event('loginsUpdated'));
+        });
+        db.ref('cateredHistory').on('value', (snapshot) => {
+            globalState.globalCateredHistory = snapshot.val() ? Object.values(snapshot.val()) : [];
+            window.dispatchEvent(new Event('cateredUpdated'));
+        });
+        // FIXED: Added real-time receipts listener
         db.ref('receipts').on('value', (snapshot) => {
             globalState.globalDailyReceipts = snapshot.val() ? Object.values(snapshot.val()) : [];
             window.dispatchEvent(new Event('receiptsUpdated'));
@@ -138,4 +178,5 @@ function initRealtimeFirebaseListeners() {
     } catch(e) {
         console.error("Firebase listener setup error:", e);
     }
+}
 }
