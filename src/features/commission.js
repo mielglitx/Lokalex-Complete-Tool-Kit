@@ -26,6 +26,8 @@ export function openCommissionScreen() {
     refreshCommissionView();
 }
 
+// src/features/commission.js
+
 function setupAdminControls() {
     const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId); 
     const filterBox = document.getElementById('admin-commission-filter-box');
@@ -39,18 +41,19 @@ function setupAdminControls() {
         let uniqueRiderMap = {};
         
         (globalState.rosterMembers || []).forEach(r => {
-            if(r.telegramId) uniqueRiderMap[r.telegramId] = r.name || r.telegramId;
+            // FIXED: Look up r.riderName first before falling back to r.name or r.telegramId
+            if (r.telegramId) uniqueRiderMap[r.telegramId] = r.riderName || r.name || r.telegramId;
         });
         
         (globalState.globalCateredHistory || []).forEach(h => {
-            if(h.riderId) uniqueRiderMap[h.riderId] = h.riderName || uniqueRiderMap[h.riderId] || h.riderId;
+            const hId = h.riderId || h.telegramId;
+            if (hId) uniqueRiderMap[hId] = h.riderName || uniqueRiderMap[hId] || hId;
         });
         
         let options = `<option value="ALL">All Riders (Combined)</option>`;
-        for(let id in uniqueRiderMap) {
-            // Keep selection if it was already selected
+        for (let id in uniqueRiderMap) {
             const isSelected = select.value === id ? "selected" : "";
-            options += `<option value="${id}" ${isSelected}>${uniqueRiderMap[id]}</option>`;
+            options += `<option value="${id}" ${isSelected}>${escapeHtml(uniqueRiderMap[id])}</option>`;
         }
         
         select.innerHTML = options;
@@ -58,41 +61,6 @@ function setupAdminControls() {
         filterBox.classList.add('hidden');
         filterBox.classList.remove('flex');
     }
-}
-
-export function setCommissionMode(mode) {
-    viewSettings.mode = mode;
-    
-    const btnEarned = document.getElementById('comm-mode-earned');
-    const btnCompany = document.getElementById('comm-mode-company');
-    
-    if (mode === 'earned') {
-        btnEarned.className = "flex-1 py-2 rounded-md bg-emerald-600/20 text-emerald-400 border border-emerald-500/50 transition";
-        btnCompany.className = "flex-1 py-2 rounded-md text-gray-400 hover:text-white transition";
-    } else {
-        btnCompany.className = "flex-1 py-2 rounded-md bg-red-600/20 text-red-400 border border-red-500/50 transition";
-        btnEarned.className = "flex-1 py-2 rounded-md text-gray-400 hover:text-white transition";
-    }
-    
-    refreshCommissionView();
-}
-
-export function setCommissionPeriod(period) {
-    viewSettings.period = period;
-    
-    ['daily', 'weekly', 'monthly'].forEach(p => {
-        const btn = document.getElementById(`comm-period-${p}`);
-        const input = document.getElementById(`comm-input-${p}`);
-        if (p === period) {
-            btn.className = "py-1.5 rounded bg-blue-600 text-white transition shadow";
-            input.classList.remove('hidden');
-        } else {
-            btn.className = "py-1.5 rounded text-gray-400 hover:text-white transition";
-            input.classList.add('hidden');
-        }
-    });
-
-    refreshCommissionView();
 }
 
 export function refreshCommissionView() {
@@ -116,7 +84,7 @@ export function refreshCommissionView() {
     let riderTotals = {}; 
 
     filteredHistory.forEach(r => {
-        let rId = r.riderId || "unknown";
+        let rId = r.riderId || r.telegramId || "unknown";
         
         let gross = parseFloat(r.totalFees);
         if (isNaN(gross)) {
@@ -131,8 +99,9 @@ export function refreshCommissionView() {
 
         if (!riderTotals[rId]) {
             let rName = r.riderName || "Unknown Rider";
-            const rosterRec = globalState.rosterMembers?.find(mem => mem.telegramId == rId);
-            if (rosterRec) rName = rosterRec.name;
+            const rosterRec = globalState.rosterMembers?.find(mem => (mem.telegramId || "").toString() === rId.toString());
+            // FIXED: Look up rosterRec.riderName
+            if (rosterRec) rName = rosterRec.riderName || rosterRec.name || rName;
 
             riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0 };
         }
@@ -142,7 +111,7 @@ export function refreshCommissionView() {
         riderTotals[rId].company += (gross * 0.20);
     });
 
-    // 3. Filter down to Target Rider (if specific rider selected) & Calculate Grand Totals
+    // 3. Filter down to Target Rider & Calculate Grand Totals
     let finalRiderList = [];
     let grandGross = 0;
     let grandEarned = 0;
@@ -182,44 +151,73 @@ export function refreshCommissionView() {
     checkSettlementStatus(targetRiderId, viewSettings.period, viewSettings.dateValue, isAdmin);
 }
 
-function checkSettlementStatus(riderId, period, dateVal, isAdmin) {
-    const badge = document.getElementById('comm-status-badge');
-    const adminBtn = document.getElementById('admin-mark-paid-btn');
-    
-    if (!riderId) {
-        badge.classList.add('hidden');
-        adminBtn.classList.add('hidden');
-        return;
+export function generateDailyReportText() {
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
+    let targetRiderId = isAdmin ? document.getElementById('admin-rider-select').value : appState.telegramId;
+    if (targetRiderId === "ALL") targetRiderId = null;
+
+    let filteredHistory = globalState.globalCateredHistory.filter(record => {
+        const recordTs = record.timestamp || Date.now();
+        if (viewSettings.period === 'daily') return getDateString(recordTs) === viewSettings.dateValue;
+        if (viewSettings.period === 'weekly') return getWeekString(recordTs) === viewSettings.dateValue;
+        if (viewSettings.period === 'monthly') return getMonthString(recordTs) === viewSettings.dateValue;
+        return false;
+    });
+
+    let riderTotals = {}; 
+    filteredHistory.forEach(r => {
+        let rId = r.riderId || r.telegramId || "unknown";
+        let gross = parseFloat(r.totalFees);
+        if (isNaN(gross)) {
+            const hf = parseFloat(r.fees?.handling) || 0;
+            const mf = parseFloat(r.fees?.market) || 0;
+            const ms = parseFloat(r.fees?.multistop) || 0;
+            const rdf = parseFloat(r.fees?.delivery) || 0;
+            const epay = parseFloat(r.fees?.epaymentFee) || 0;
+            const disc = parseFloat(r.fees?.discount) || 0;
+            gross = hf + mf + ms + rdf + epay - disc;
+        }
+
+        if (!riderTotals[rId]) {
+            let rName = r.riderName || "Unknown";
+            const rosterRec = globalState.rosterMembers?.find(mem => (mem.telegramId || "").toString() === rId.toString());
+            // FIXED: Look up rosterRec.riderName
+            if (rosterRec) rName = rosterRec.riderName || rosterRec.name || rName;
+            riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0 };
+        }
+        riderTotals[rId].gross += gross;
+        riderTotals[rId].earned += (gross * 0.80);
+        riderTotals[rId].company += (gross * 0.20);
+    });
+
+    let grandGross = 0; let grandEarned = 0; let grandCompany = 0;
+    let listText = "";
+
+    for (let rId in riderTotals) {
+        if (targetRiderId && rId !== targetRiderId.toString()) continue;
+        
+        grandGross += riderTotals[rId].gross;
+        grandEarned += riderTotals[rId].earned;
+        grandCompany += riderTotals[rId].company;
+
+        let displayAmount = viewSettings.mode === 'earned' ? `₱${riderTotals[rId].earned.toFixed(2)}` : `₱${riderTotals[rId].company.toFixed(2)}`;
+        listText += `• ${riderTotals[rId].name}: ${displayAmount}\n`;
     }
 
-    const settlementKey = `${riderId}_${period}_${dateVal}`;
+    const periodLabel = viewSettings.period.toUpperCase();
+    const modeLabel = viewSettings.mode === 'earned' ? "RIDER EARNINGS" : "TO PAY COMPANY";
     
-    db.ref(`commissionSettlements/${settlementKey}`).once('value').then(snapshot => {
-        const data = snapshot.val();
-        badge.classList.remove('hidden');
+    let report = `📊 LOKALEX SETTLEMENT REPORT\n`;
+    report += `Scope: ${targetRiderId ? riderTotals[targetRiderId]?.name : "ALL RIDERS"}\n`;
+    report += `Period: ${periodLabel} (${viewSettings.dateValue})\n`;
+    report += `Mode: ${modeLabel}\n\n`;
+    report += `💰 Gross Total: ₱${grandGross.toFixed(2)}\n`;
+    report += `🟢 Rider Earned (80%): ₱${grandEarned.toFixed(2)}\n`;
+    report += `🔴 To Pay Company (20%): ₱${grandCompany.toFixed(2)}\n\n`;
+    report += `📋 RIDER BREAKDOWN:\n${listText || "No records found."}`;
 
-        if (data && data.status === 'paid') {
-            badge.className = "absolute top-0 right-0 bg-emerald-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest shadow-md";
-            badge.innerText = "PAID";
-            if (isAdmin) {
-                adminBtn.classList.remove('hidden');
-                adminBtn.innerHTML = `<i class="fa-solid fa-rotate-left"></i> REVERT TO UNPAID`;
-                adminBtn.className = "w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-black py-3 rounded-xl text-xs transition active:scale-95 shadow mt-1 border border-gray-700";
-            } else {
-                adminBtn.classList.add('hidden');
-            }
-        } else {
-            badge.className = "absolute top-0 right-0 bg-red-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest shadow-md";
-            badge.innerText = "UNPAID";
-            if (isAdmin) {
-                adminBtn.classList.remove('hidden');
-                adminBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> MARK AS PAID`;
-                adminBtn.className = "w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl text-xs transition active:scale-95 shadow-lg mt-1 border border-emerald-400/50";
-            } else {
-                adminBtn.classList.add('hidden');
-            }
-        }
-    });
+    copyText(report);
+    showToast("📄 Settlement text report copied!");
 }
 
 export function toggleSettlementStatus() {
