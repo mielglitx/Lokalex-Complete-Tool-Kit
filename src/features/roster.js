@@ -444,22 +444,27 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === tId.toString());
 
-    if (status !== 'Catering' && targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
-        const custs = targetRecord.customerName.split(', ');
-        const times = targetRecord.startTime ? targetRecord.startTime.split(', ') : [];
+    // src/features/roster.js (Inside updateRosterStatus function)
 
-        for (let i = 0; i < custs.length; i++) {
-            const cName = custs[i].trim();
-            const hItem = {
-                riderName: tName,
-                customerName: cName,
-                startTime: times[i] || 'N/A',
-                completedDate: getLocalTodayStr()
-            };
-            completedHistory.push(hItem);
-            db.ref('cateredHistory').push(hItem);
-        }
+if (status !== 'Catering' && targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
+    const custs = targetRecord.customerName.split(', ');
+    const times = targetRecord.startTime ? targetRecord.startTime.split(', ') : [];
+
+    for (let i = 0; i < custs.length; i++) {
+        const cName = custs[i].trim();
+        const hItem = {
+            riderName: tName,
+            telegramId: tId.toString(),
+            customerName: cName,
+            startTime: times[i] || 'N/A',
+            completedDate: getLocalTodayStr(),
+            totalFees: targetRecord.lastReceiptTotalFees || 0,
+            fees: targetRecord.lastReceiptFees || null
+        };
+        completedHistory.push(hItem);
+        db.ref('cateredHistory').push(hItem);
     }
+}
 
     if (status === 'Available') recordLogin = true;
 
