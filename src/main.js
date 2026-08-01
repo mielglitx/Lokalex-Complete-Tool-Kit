@@ -19,16 +19,19 @@ import * as modals from './ui/modals.js';
 import * as router from './ui/router.js';
 import * as helpers from './utils/helpers.js';
 import { unlockAudioContext } from './ui/notifications.js';
-
+import * as maps from './features/maps.js';
 // -------------------------------------------------------------
 // 1. GLOBAL WINDOW BINDER (Fixes HTML `onclick` handlers)
 // -------------------------------------------------------------
 const allModules = [
     auth, cart, chat, roster, directory, commission, 
     advancedOrders, maps, wizard, liveTracker, modals, router, helpers
+    
 ];
 
 allModules.forEach(mod => {
+    window.openFindRidersModal = maps.openFindRidersModal;
+window.closeFindRidersModal = maps.closeFindRidersModal;
     if (mod) {
         Object.keys(mod).forEach(funcName => {
             if (typeof mod[funcName] === 'function') {

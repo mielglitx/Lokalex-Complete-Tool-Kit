@@ -68,7 +68,6 @@ export function hasReceiptForActiveSession(custName, custStartTime) {
     const sTime = (custStartTime || "").trim();
     const todayStr = getLocalTodayStr();
 
-    // Unique session key locked to rider + customer + catering start time + date
     const sessionKey = `receipt_done_${rName}_${cName}_${sTime}_${todayStr}`;
     return localStorage.getItem(sessionKey) === 'true';
 }
@@ -154,6 +153,12 @@ export function updateRosterUI() {
         else adminToggleWrapper.classList.add('hidden');
     }
 
+    const findRidersBtn = document.getElementById('admin-find-riders-btn');
+    if (findRidersBtn) {
+        if (isAdmin()) findRidersBtn.classList.remove('hidden');
+        else findRidersBtn.classList.add('hidden');
+    }
+
     const myRecord = rosterMembers.find(m => (m.telegramId || "").toString() === myId);
     const isEnded = myRecord && myRecord.status === 'End';
     const isOnBreak = myRecord && myRecord.status === 'Break';
@@ -183,21 +188,19 @@ export function updateRosterUI() {
     let availHtml = [], busyHtml = [], brkHtml = [], cdHtml = [];
     let availCounter = 1;
 
-    const firstEligibleOrdinaryIdx = availableRiders.findIndex(m => canForceCaterTarget(m.userType || ""));
-
     availableRiders.forEach((m, idx) => {
         const mId = (m.telegramId || "").toString();
-        const mName = m.riderName || "Rider";
+        const mName = m.riderName || m.name || "Rider";
         let nameStr = escapeHtml(mName);
 
         if (globalState.adminControlsEnabled && canManageRoster()) {
+            if (canForceCaterTarget(m.userType || "")) {
+                nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
+            }
+
             if (isAdmin()) {
                 const forceAllBtn = document.getElementById('admin-force-all-btn');
                 if (forceAllBtn) forceAllBtn.classList.remove('hidden');
-
-                if (canForceCaterTarget(m.userType || "")) {
-                    nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
-                }
 
                 nameStr += `
                 <div class="inline-flex gap-1 ml-2 text-[10px] align-middle">
@@ -206,10 +209,6 @@ export function updateRosterUI() {
                     <button onclick="adminShiftRiderQueue('${mId}', 'move_down')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Down (-1)">▼</button>
                     <button onclick="adminShiftRiderQueue('${mId}', 'move_bottom')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Bottom">⬇️</button>
                 </div>`;
-            } else if (isTL()) {
-                if (idx === firstEligibleOrdinaryIdx && firstEligibleOrdinaryIdx !== -1) {
-                    nameStr += ` <button onclick="openAdminCateringModal('${mId}', '${escapeHtml(mName)}')" class="bg-yellow-600/30 hover:bg-yellow-600 text-yellow-300 hover:text-black text-[10px] font-bold px-1.5 py-0.5 rounded ml-1 transition">Force Cater</button>`;
-                }
             }
         }
 
@@ -218,17 +217,16 @@ export function updateRosterUI() {
 
     cateringRiders.forEach(m => {
         const mId = (m.telegramId || "").toString();
-        const mName = m.riderName || "Rider";
+        const mName = m.riderName || m.name || "Rider";
         let nameStr = escapeHtml(mName);
 
         if (m.customerName) {
             nameStr += ` <span class="text-orange-300 text-[10px]">(${escapeHtml(m.customerName)})</span>`;
         }
 
+        // PRIVACY FIX: Only let riders see THEIR OWN GPS link and map buttons
         const isMyLine = mId === myId;
-        const canSeeTrack = isMyLine || (globalState.adminControlsEnabled && isAdmin());
-
-        if (canSeeTrack) {
+        if (isMyLine) {
             nameStr += `
             <div class="inline-flex gap-1 ml-2 text-[10px] align-middle">
                 <button onclick="copyCustomerTrackingLink('${escapeHtml(m.customerName || 'Customer')}')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1.5 py-0.5 rounded font-bold" title="Send Track Link">🔗 Link</button>
@@ -237,7 +235,7 @@ export function updateRosterUI() {
             </div>`;
         }
 
-        if (globalState.adminControlsEnabled && isAdmin() && canForceCaterTarget(m.userType || "")) {
+        if (globalState.adminControlsEnabled && canManageRoster() && canForceCaterTarget(m.userType || "")) {
             nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
         }
         busyHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
@@ -245,10 +243,10 @@ export function updateRosterUI() {
 
     breakRiders.forEach(m => {
         const mId = (m.telegramId || "").toString();
-        const mName = m.riderName || "Rider";
+        const mName = m.riderName || m.name || "Rider";
         let nameStr = escapeHtml(mName);
 
-        if (globalState.adminControlsEnabled && isAdmin() && canForceCaterTarget(m.userType || "")) {
+        if (globalState.adminControlsEnabled && canManageRoster() && canForceCaterTarget(m.userType || "")) {
             nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
         }
         brkHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
@@ -256,7 +254,7 @@ export function updateRosterUI() {
 
     cooldownRiders.forEach(m => {
         const mId = (m.telegramId || "").toString();
-        const mName = m.riderName || "Rider";
+        const mName = m.riderName || m.name || "Rider";
         let nameStr = escapeHtml(mName);
 
         let remSecs = m.cooldownUntil ? Math.max(0, Math.ceil((m.cooldownUntil - Date.now()) / 1000)) : 0;
@@ -265,7 +263,7 @@ export function updateRosterUI() {
 
         nameStr += ` <span class="text-yellow-400 font-mono text-[10px]">(${mins}:${secs} remaining)</span>`;
 
-        if (globalState.adminControlsEnabled && isAdmin()) {
+        if (globalState.adminControlsEnabled && canManageRoster() && canForceCaterTarget(m.userType || "")) {
             nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
         }
         cdHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
@@ -317,7 +315,6 @@ export async function triggerStatusWithSlide(targetStatus) {
             return;
         }
 
-        // --- ENFORCE RECEIPT CHECK BEFORE MARKING AVAILABLE ---
         const activeCustList = getActiveCateringCustomersWithTimes();
         if (activeCustList.length > 0) {
             let missingReceiptCust = null;
@@ -444,27 +441,25 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === tId.toString());
 
-    // src/features/roster.js (Inside updateRosterStatus function)
+    if (status !== 'Catering' && targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
+        const custs = targetRecord.customerName.split(', ');
+        const times = targetRecord.startTime ? targetRecord.startTime.split(', ') : [];
 
-if (status !== 'Catering' && targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
-    const custs = targetRecord.customerName.split(', ');
-    const times = targetRecord.startTime ? targetRecord.startTime.split(', ') : [];
-
-    for (let i = 0; i < custs.length; i++) {
-        const cName = custs[i].trim();
-        const hItem = {
-            riderName: tName,
-            telegramId: tId.toString(),
-            customerName: cName,
-            startTime: times[i] || 'N/A',
-            completedDate: getLocalTodayStr(),
-            totalFees: targetRecord.lastReceiptTotalFees || 0,
-            fees: targetRecord.lastReceiptFees || null
-        };
-        completedHistory.push(hItem);
-        db.ref('cateredHistory').push(hItem);
+        for (let i = 0; i < custs.length; i++) {
+            const cName = custs[i].trim();
+            const hItem = {
+                riderName: tName,
+                telegramId: tId.toString(),
+                customerName: cName,
+                startTime: times[i] || 'N/A',
+                completedDate: getLocalTodayStr(),
+                totalFees: targetRecord.lastReceiptTotalFees || 0,
+                fees: targetRecord.lastReceiptFees || null
+            };
+            completedHistory.push(hItem);
+            db.ref('cateredHistory').push(hItem);
+        }
     }
-}
 
     if (status === 'Available') recordLogin = true;
 
@@ -499,7 +494,9 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         customerName: customerName || "",
         startTime: startTime || "",
         queueTime: queueTime || new Date().getTime(),
-        lastUpdated: new Date().toLocaleTimeString()
+        lastUpdated: new Date().toLocaleTimeString(),
+        lat: appState.lat || 0,
+        lng: appState.lon || 0
     };
 
     db.ref('roster/' + tId).set(rosterData);
@@ -691,7 +688,8 @@ export function loadGlobalCateredList() {
 
     feed.innerHTML = todayHistory.slice().reverse().map(h => {
         let voidBtn = "";
-        if (isAdmin()) {
+        // PERMISSION FIX: Admin and TL can both void catered customers
+        if (canManageRoster()) {
             voidBtn = `<button onclick="promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate)}')" class="bg-red-900/40 text-red-400 hover:bg-red-800 text-[10px] font-bold px-2 py-1 rounded border border-red-700/50 transition active:scale-95"><i class="fa-solid fa-ban"></i> Void</button>`;
         }
         return `
