@@ -1,241 +1,307 @@
 // src/features/advancedOrders.js
-import { appState, globalState } from '../store/state.js';
 import { db } from '../config/firebase.js';
-import { showToast } from '../ui/notifications.js';
-import { escapeHtml, getLocalTodayStr } from '../utils/helpers.js';
+import { API_URL } from '../config/constants.js';
+import { appState, globalState } from '../store/state.js';
+import { showToast, unlockAudioContext } from '../ui/notifications.js';
+import { escapeHtml } from '../utils/helpers.js';
+import { updateRosterStatusData, parseQueueTime } from './roster.js';
 
-let activeAdvTab = 'list';
+let alarmInterval = null;
+let alarmTimeout = null;
+const triggeredAlerts = new Set(); // Tracks orders + thresholds already alerted to prevent re-triggering
 
-export function openAdvancedOrdersModal() {
-    const modal = document.getElementById('adv-orders-modal');
-    if (modal) modal.classList.remove('hidden');
-    switchAdvTab('list');
-    loadAdvancedOrders();
+// --- 30-SECOND REMINDER ALARM AUDIO ---
+function playReminderAlarm() {
+    unlockAudioContext();
+    stopReminderAlarm(); // Clear any existing playing alarm
+
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const audioCtx = new AudioContext();
+
+    // Rhythmic 30-second melody pattern
+    alarmInterval = setInterval(() => {
+        try {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const now = audioCtx.currentTime;
+
+            // Two-tone chime (E5 & A5)
+            [659.25, 880].forEach((freq, i) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now + (i * 0.15));
+
+                gain.gain.setValueAtTime(0.3, now + (i * 0.15));
+                gain.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.15) + 0.3);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start(now + (i * 0.15));
+                osc.stop(now + (i * 0.15) + 0.3);
+            });
+        } catch (e) {}
+    }, 1200);
+
+    // Auto-stop alarm music after exactly 30 seconds
+    alarmTimeout = setTimeout(() => {
+        stopReminderAlarm();
+    }, 30000);
 }
 
-export function closeAdvancedOrdersModal() {
-    const modal = document.getElementById('adv-orders-modal');
-    if (modal) modal.classList.add('hidden');
-}
-
-export function switchAdvTab(tab) {
-    activeAdvTab = tab;
-    const btnList = document.getElementById('adv-tab-btn-list');
-    const btnAdd = document.getElementById('adv-tab-btn-add');
-    const contentList = document.getElementById('adv-tab-list-content');
-    const contentAdd = document.getElementById('adv-tab-add-content');
-
-    if (tab === 'list') {
-        if (btnList) btnList.className = "flex-1 py-1.5 rounded-lg bg-purple-600 text-white transition font-bold";
-        if (btnAdd) btnAdd.className = "flex-1 py-1.5 rounded-lg text-gray-400 hover:text-white transition font-bold";
-        if (contentList) contentList.classList.remove('hidden');
-        if (contentAdd) contentAdd.classList.add('hidden');
-        loadAdvancedOrders();
-    } else {
-        if (btnAdd) btnAdd.className = "flex-1 py-1.5 rounded-lg bg-purple-600 text-white transition font-bold";
-        if (btnList) btnList.className = "flex-1 py-1.5 rounded-lg text-gray-400 hover:text-white transition font-bold";
-        if (contentAdd) contentAdd.classList.remove('hidden');
-        if (contentList) contentList.classList.add('hidden');
+export function stopReminderAlarm() {
+    if (alarmInterval) {
+        clearInterval(alarmInterval);
+        alarmInterval = null;
+    }
+    if (alarmTimeout) {
+        clearTimeout(alarmTimeout);
+        alarmTimeout = null;
     }
 }
 
-export function loadAdvancedOrders() {
-    const container = document.getElementById('adv-tab-list-content');
-    if (!container) return;
+// --- SCHEDULED ALERTS CHECKER (30m, 15m, 5m) ---
+export function checkScheduledDeliveryAlerts() {
+    if (!globalState.globalAdvancedOrders || globalState.globalAdvancedOrders.length === 0) return;
 
-    db.ref('advancedOrders').once('value').then(snapshot => {
-        const data = snapshot.val();
-        if (!data) {
-            container.innerHTML = `<div class="text-center text-gray-500 italic py-8 text-xs">Walang naka-schedule na advanced orders.</div>`;
-            updateAdvBadgeCount(0);
-            checkScheduledOrdersAlert([]);
-            return;
+    const now = new Date();
+    let alertOrder = null;
+    let urgentLevel = 0;
+    let pendingCount = 0;
+    let shouldPlayAlarm = false;
+
+    globalState.globalAdvancedOrders.forEach(ord => {
+        if (ord.status && ord.status !== 'Pending') return;
+        pendingCount++;
+        if (!ord.timeToReceive) return;
+
+        const timeParts = ord.timeToReceive.split(':');
+        if (timeParts.length < 2) return;
+
+        const targetDate = new Date();
+        targetDate.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]), 0, 0);
+
+        const diffMins = Math.round((targetDate - now) / 60000);
+        const orderKey = `${ord.custName}_${ord.timeToReceive}`;
+
+        // 5 Mins, 15 Mins, and 30 Mins Reminder Thresholds
+        if (diffMins >= -10 && diffMins <= 30) {
+            if (diffMins <= 5 && urgentLevel < 3) {
+                alertOrder = ord; urgentLevel = 3;
+                if (!triggeredAlerts.has(`${orderKey}_5m`)) {
+                    triggeredAlerts.add(`${orderKey}_5m`);
+                    shouldPlayAlarm = true;
+                }
+            } else if (diffMins <= 15 && urgentLevel < 2) {
+                alertOrder = ord; urgentLevel = 2;
+                if (!triggeredAlerts.has(`${orderKey}_15m`)) {
+                    triggeredAlerts.add(`${orderKey}_15m`);
+                    shouldPlayAlarm = true;
+                }
+            } else if (diffMins <= 30 && urgentLevel < 1) {
+                alertOrder = ord; urgentLevel = 1;
+                if (!triggeredAlerts.has(`${orderKey}_30m`)) {
+                    triggeredAlerts.add(`${orderKey}_30m`);
+                    shouldPlayAlarm = true;
+                }
+            }
         }
-
-        const ordersList = [];
-        for (let key in data) {
-            ordersList.push({ id: key, ...data[key] });
-        }
-
-        const activeOrders = ordersList.filter(o => !o.status || o.status === 'pending' || o.status === 'catered');
-        updateAdvBadgeCount(activeOrders.length);
-        checkScheduledOrdersAlert(activeOrders);
-
-        if (activeOrders.length === 0) {
-            container.innerHTML = `<div class="text-center text-gray-500 italic py-8 text-xs">Walang active advanced orders.</div>`;
-            return;
-        }
-
-        container.innerHTML = activeOrders.map(order => {
-            const isCatered = order.status === 'catered';
-            const customerName = order.custName || order.customerName || "Customer";
-
-            return `
-                <div class="bg-darkBg p-3 rounded-xl border border-gray-800 flex flex-col gap-2 text-xs shadow-sm">
-                    <div class="flex justify-between items-start border-b border-gray-800 pb-1.5">
-                        <div>
-                            <span class="font-bold text-purple-300 text-sm"><i class="fa-solid fa-user"></i> ${escapeHtml(customerName)}</span>
-                            ${order.receiver ? `<div class="text-[10px] text-gray-400">Receiver: ${escapeHtml(order.receiver)}</div>` : ''}
-                        </div>
-                        <span class="bg-purple-950/60 text-purple-300 border border-purple-800/60 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                            <i class="fa-solid fa-clock"></i> ${escapeHtml(order.receiveTime || "Anytime")}
-                        </span>
-                    </div>
-
-                    ${order.address ? `<div class="text-[11px] text-gray-300"><i class="fa-solid fa-location-dot text-red-400 mr-1"></i> ${escapeHtml(order.address)}</div>` : ''}
-                    ${order.contact ? `<div class="text-[11px] text-gray-400"><i class="fa-solid fa-phone text-emerald-400 mr-1"></i> ${escapeHtml(order.contact)}</div>` : ''}
-
-                    <div class="flex justify-between items-center pt-1.5 border-t border-gray-800/60 mt-1">
-                        ${isCatered ? `
-                            <span class="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
-                                <i class="fa-solid fa-check-circle"></i> Catered by ${escapeHtml(order.cateredByRiderName || "Rider")}
-                            </span>
-                        ` : `
-                            <button onclick="caterAdvancedOrder('${order.id}', '${escapeHtml(customerName)}')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-lg text-xs transition active:scale-95 flex items-center justify-center gap-1.5 shadow">
-                                <i class="fa-solid fa-motorcycle"></i> CATER THIS ORDER NOW
-                            </button>
-                        `}
-                    </div>
-                </div>
-            `;
-        }).join('');
     });
-}
 
-function updateAdvBadgeCount(count) {
     const badge = document.getElementById('adv-count-badge');
     if (badge) {
-        if (count > 0) {
-            badge.innerText = count;
+        if (pendingCount > 0) {
+            badge.innerText = pendingCount; 
             badge.classList.remove('hidden');
         } else {
             badge.classList.add('hidden');
         }
     }
-}
 
-function checkScheduledOrdersAlert(activeOrders) {
     const banner = document.getElementById('adv-order-banner');
-    const msgEl = document.getElementById('adv-banner-msg');
-    if (!banner || !msgEl) return;
+    if (alertOrder && banner) {
+        const titleEl = document.getElementById('adv-banner-title');
+        const msgEl = document.getElementById('adv-banner-msg');
 
-    const pendingOrders = activeOrders.filter(o => o.status === 'pending');
-    if (pendingOrders.length > 0) {
-        msgEl.innerText = `May ${pendingOrders.length} active scheduled order(s) na kailangang i-deliver!`;
+        if (urgentLevel === 3) {
+            if (titleEl) titleEl.innerText = "🚨 URGENT: 5 MINS LEFT FOR SCHEDULED DELIVERY!";
+            if (msgEl) msgEl.innerText = `${alertOrder.custName} — ${alertOrder.timeToReceive}`;
+        } else if (urgentLevel === 2) {
+            if (titleEl) titleEl.innerText = "⚠️ 15 MINS REMAINING FOR SCHEDULED ORDER";
+            if (msgEl) msgEl.innerText = `${alertOrder.custName} — Due at ${alertOrder.timeToReceive}`;
+        } else {
+            if (titleEl) titleEl.innerText = "🔔 30 MINS UPCOMING SCHEDULED DELIVERY";
+            if (msgEl) msgEl.innerText = `${alertOrder.custName} — Scheduled at ${alertOrder.timeToReceive}`;
+        }
         banner.classList.remove('hidden');
-    } else {
+
+        // Play 30-second alarm music on new threshold entry
+        if (shouldPlayAlarm) {
+            playReminderAlarm();
+        }
+    } else if (banner) {
         banner.classList.add('hidden');
     }
 }
 
-export function submitNewAdvancedOrder() {
-    const custName = document.getElementById('adv-cust-name')?.value.trim();
-    const receiver = document.getElementById('adv-receiver')?.value.trim();
-    const address = document.getElementById('adv-address')?.value.trim();
-    const contact = document.getElementById('adv-contact')?.value.trim();
-    const receiveTime = document.getElementById('adv-receive-time')?.value;
+export function switchAdvTab(tab) {
+    const listBtn = document.getElementById('adv-tab-btn-list');
+    const addBtn = document.getElementById('adv-tab-btn-add');
+    const listContent = document.getElementById('adv-tab-list-content');
+    const addContent = document.getElementById('adv-tab-add-content');
 
-    if (!custName) {
-        showToast("⚠️ Paki-lagay ang Customer Name!");
+    if (tab === 'list') {
+        if (listBtn) listBtn.className = "flex-1 py-1.5 rounded-lg bg-purple-600 text-white transition";
+        if (addBtn) addBtn.className = "flex-1 py-1.5 rounded-lg text-gray-400 transition";
+        if (listContent) listContent.classList.remove('hidden'); 
+        if (addContent) addContent.classList.add('hidden');
+        renderAdvancedOrdersList();
+    } else {
+        if (addBtn) addBtn.className = "flex-1 py-1.5 rounded-lg bg-purple-600 text-white transition";
+        if (listBtn) listBtn.className = "flex-1 py-1.5 rounded-lg text-gray-400 transition";
+        if (addContent) addContent.classList.remove('hidden'); 
+        if (listContent) listContent.classList.add('hidden');
+    }
+}
+
+export function renderAdvancedOrdersList() {
+    const container = document.getElementById('adv-tab-list-content');
+    if (!container) return;
+
+    if (!globalState.globalAdvancedOrders || globalState.globalAdvancedOrders.length === 0) {
+        container.innerHTML = `<div class="text-center text-gray-500 italic py-8 text-xs">No scheduled advanced orders found.</div>`;
         return;
     }
 
-    const newOrder = {
-        customerName: custName,
+    container.innerHTML = globalState.globalAdvancedOrders.slice().reverse().map(ord => {
+        const status = ord.status || "Pending";
+        let statusBadge = ""; let actionBtns = "";
+
+        if (status === 'Pending') {
+            statusBadge = `<span class="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-500/30">⏳ Pending</span>`;
+            actionBtns = `
+                <div class="flex gap-1 items-center">
+                    <button onclick="addOrderToPhoneCalendar('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', '${escapeHtml(ord.address || '')}')" class="bg-blue-600/30 border border-blue-500/50 text-blue-300 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-bell"></i> Alarm</button>
+                    <button onclick="takeAdvancedOrder('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}')" class="bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-motorcycle"></i> Cater Order</button>
+                    <button onclick="changeAdvOrderStatus('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', 'Cancelled')" class="bg-red-900/40 border border-red-700/50 text-red-400 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-ban"></i> Cancel</button>
+                </div>`;
+        } else if (status === 'Catering') {
+            statusBadge = `<span class="bg-orange-500/20 text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded border border-orange-500/30 animate-pulse">🛵 Catering by ${escapeHtml(ord.cateredBy)}</span>`;
+            actionBtns = `
+                <div class="flex gap-1">
+                    <button onclick="changeAdvOrderStatus('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', 'Catered')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-check"></i> Complete</button>
+                    <button onclick="changeAdvOrderStatus('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', 'Cancelled')" class="bg-red-900/40 border border-red-700/50 text-red-400 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-ban"></i> Cancel</button>
+                </div>`;
+        } else if (status === 'Catered') {
+            statusBadge = `<span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-500/30"><i class="fa-solid fa-check-double"></i> Catered by ${escapeHtml(ord.cateredBy)}</span>`;
+            actionBtns = `<span class="text-[10px] text-gray-400 font-bold">Done</span>`;
+        } else if (status === 'Cancelled') {
+            statusBadge = `<span class="bg-red-500/20 text-red-400 text-[10px] font-bold px-2 py-0.5 rounded border border-red-500/30"><i class="fa-solid fa-xmark"></i> Cancelled</span>`;
+            actionBtns = `<span class="text-[10px] text-gray-500 italic">Order Cancelled</span>`;
+        }
+
+        return `
+        <div class="bg-cardBg border ${status === 'Pending' ? 'border-purple-500/40' : status === 'Catering' ? 'border-orange-500/50' : 'border-gray-800 opacity-70'} p-3 rounded-xl flex flex-col gap-1.5 text-xs">
+            <div class="flex justify-between items-center font-bold">
+                <span class="text-purple-300"><i class="fa-solid fa-user"></i> ${escapeHtml(ord.custName)}</span>
+                <span class="text-emerald-400 font-mono"><i class="fa-solid fa-clock"></i> ${escapeHtml(ord.timeToReceive)}</span>
+            </div>
+            ${ord.receiver ? `<div class="text-[10px] text-gray-400">Receiver: ${escapeHtml(ord.receiver)}</div>` : ''}
+            ${ord.address ? `<div class="text-[10px] text-gray-300"><i class="fa-solid fa-location-dot text-red-500"></i> ${escapeHtml(ord.address)}</div>` : ''}
+            <div class="flex justify-between items-center mt-1 pt-1.5 border-t border-gray-800">
+                ${statusBadge} ${actionBtns}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+export async function submitNewAdvancedOrder() {
+    const custName = document.getElementById('adv-cust-name').value.trim();
+    const receiver = document.getElementById('adv-receiver').value.trim();
+    const address = document.getElementById('adv-address').value.trim();
+    const contactNum = document.getElementById('adv-contact').value.trim();
+    const timeToReceive = document.getElementById('adv-receive-time').value.trim();
+
+    if (!custName) return showToast("Please enter Customer Name!");
+    if (!timeToReceive) return showToast("Please select Scheduled Time!");
+
+    const newOrd = {
         custName: custName,
-        receiver: receiver || "",
-        address: address || "",
-        contact: contact || "",
-        receiveTime: receiveTime || "",
-        status: "pending",
-        createdAt: Date.now(),
-        date: getLocalTodayStr()
+        timeOrdered: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        receiver: receiver, address: address, contactNum: contactNum,
+        timeToReceive: timeToReceive, status: "Pending", cateredBy: ""
     };
 
-    db.ref('advancedOrders').push(newOrder).then(() => {
-        showToast("✅ Advanced Order Scheduled!");
-        if (document.getElementById('adv-cust-name')) document.getElementById('adv-cust-name').value = "";
-        if (document.getElementById('adv-receiver')) document.getElementById('adv-receiver').value = "";
-        if (document.getElementById('adv-address')) document.getElementById('adv-address').value = "";
-        if (document.getElementById('adv-contact')) document.getElementById('adv-contact').value = "";
-        if (document.getElementById('adv-receive-time')) document.getElementById('adv-receive-time').value = "";
-        switchAdvTab('list');
-    });
+    db.ref('advancedOrders').push(newOrd);
+    try {
+        fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: "add_advanced_order", ...newOrd }) });
+    } catch(e) {}
+
+    document.getElementById('adv-cust-name').value = "";
+    document.getElementById('adv-receive-time').value = "";
+    showToast(`✅ Scheduled order created for ${custName}!`);
+    switchAdvTab('list');
 }
 
-// ============================================================================
-// CATER ADVANCED ORDER (SAFE DE-DUPLICATION & CUSTOMER ATTACHMENT)
-// ============================================================================
-export function caterAdvancedOrder(orderId, customerName) {
-    const myId = (appState.telegramId || "").toString().trim();
-    const myName = appState.riderName || "Rider";
+export async function takeAdvancedOrder(custName, timeToReceive) {
+    stopReminderAlarm(); // Stop music when rider takes the order
+    const targetOrd = globalState.globalAdvancedOrders.find(o => o.custName === custName && o.timeToReceive === timeToReceive);
+    if (targetOrd && targetOrd.status !== 'Pending') return showToast("⚠️ Order was already taken!");
 
-    if (!myId) {
-        showToast("⚠️ Paki-login muna bago mag-cater ng order!");
-        return;
+    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
+    if (myRecord && (myRecord.status === 'End' || myRecord.status === 'Break' || myRecord.status === 'Cooldown')) {
+        return showToast(`⚠️ You are currently in ${myRecord.status} mode. Please mark as Available first.`);
     }
 
-    // 1. Mark Order as Catered in Database
-    db.ref(`advancedOrders/${orderId}`).update({
-        status: 'catered',
-        cateredByRiderId: myId,
-        cateredByRiderName: myName,
-        cateredAt: Date.now()
-    });
+    if (targetOrd) { targetOrd.status = "Catering"; targetOrd.cateredBy = appState.riderName; }
+    changeAdvOrderStatus(custName, timeToReceive, "Catering");
 
-    // 2. Fetch active roster to safely move rider from Available -> Catering without duplicates
-    db.ref('roster').once('value').then(snapshot => {
-        const rosterData = snapshot.val() || {};
-        let targetKey = null;
-        let currentCustNames = [];
+    let existingCusts = (myRecord && myRecord.status === 'Catering' && myRecord.customerName) ? myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean) : [];
+    let existingTimes = (myRecord && myRecord.status === 'Catering' && myRecord.startTime) ? myRecord.startTime.split(', ').map(t => t.trim()).filter(Boolean) : [];
 
-        for (let key in rosterData) {
-            const rec = rosterData[key];
-            const recId = (rec.telegramId || "").toString().trim();
-            const recName = (rec.name || "").trim().toLowerCase();
+    if (!existingCusts.includes(custName)) {
+        existingCusts.push(custName);
+        const startTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        existingTimes.push(startTime);
 
-            if ((myId && recId === myId) || (myName && recName === myName.toLowerCase())) {
-                if (!targetKey) {
-                    targetKey = key;
-                } else {
-                    // Remove duplicate database keys if found
-                    db.ref(`roster/${key}`).remove();
-                }
-                if (rec.customerName && (rec.status || "").toLowerCase() === 'catering') {
-                    const existing = rec.customerName.split(',').map(s => s.trim()).filter(Boolean);
-                    existing.forEach(n => {
-                        if (!currentCustNames.includes(n)) currentCustNames.push(n);
+        await updateRosterStatusData(
+            'Catering', 
+            existingCusts.join(', '), 
+            existingTimes.join(', '), 
+            myRecord ? parseQueueTime(myRecord.queueTime) : 0
+        );
+    }
+}
+
+export async function changeAdvOrderStatus(custName, timeToReceive, newStatus) {
+    db.ref('advancedOrders').once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            Object.keys(data).forEach(key => {
+                if (data[key].custName === custName && data[key].timeToReceive === timeToReceive) {
+                    db.ref('advancedOrders/' + key).update({
+                        status: newStatus, cateredBy: (newStatus === 'Pending') ? "" : appState.riderName
                     });
                 }
-            }
+            });
         }
-
-        if (!currentCustNames.includes(customerName)) {
-            currentCustNames.push(customerName);
-        }
-        const combinedCustomerName = currentCustNames.join(', ');
-
-        const updatedPayload = {
-            telegramId: myId,
-            name: myName,
-            status: 'Catering',
-            customerName: combinedCustomerName,
-            timestamp: Date.now()
-        };
-
-        if (targetKey) {
-            db.ref(`roster/${targetKey}`).set(updatedPayload);
-        } else {
-            db.ref('roster').push(updatedPayload);
-        }
-
-        closeAdvancedOrdersModal();
-        showToast(`🛵 Catering Advanced Order for ${customerName}!`);
     });
 }
 
-window.openAdvancedOrdersModal = openAdvancedOrdersModal;
-window.closeAdvancedOrdersModal = closeAdvancedOrdersModal;
-window.switchAdvTab = switchAdvTab;
-window.submitNewAdvancedOrder = submitNewAdvancedOrder;
-window.caterAdvancedOrder = caterAdvancedOrder;
+export function addOrderToPhoneCalendar(custName, timeToReceive, address) {
+    const timeParts = timeToReceive.split(':');
+    const eventDate = new Date();
+    eventDate.setHours(parseInt(timeParts[0]), parseInt(timeParts[1]), 0, 0);
+
+    const startTimeIso = eventDate.toISOString().replace(/-|:|\.\d\d\d/g, "");
+    const endDate = new Date(eventDate.getTime() + 30 * 60000);
+    const endTimeIso = endDate.toISOString().replace(/-|:|\.\d\d\d/g, "");
+
+    const title = encodeURIComponent(`🛵 Lokalex Delivery: ${custName}`);
+    const details = encodeURIComponent(`Scheduled Lokalex Order for ${custName} at ${timeToReceive}.`);
+    const loc = encodeURIComponent(address || "");
+
+    window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startTimeIso}/${endTimeIso}&details=${details}&location=${loc}`, '_blank');
+}

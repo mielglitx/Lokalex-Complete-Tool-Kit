@@ -115,6 +115,7 @@ export function renderCartItems() {
     let subtotal = 0;
 
     container.innerHTML = items.map((item, index) => {
+        // FAILSAFE: Convert negative prices directly to Paid
         let price = parseFloat(item.price) || 0;
         if (price < 0) {
             price = 0;
@@ -314,7 +315,7 @@ export function handleCartActionBtn() {
 }
 
 // ============================================================================
-// STRICT RIDER PRIVACY & CLIENT AUTO-FILL ASSIGNMENT LOGIC
+// STRICT RIDER PRIVACY & CLIENT ASSIGNMENT LOGIC
 // ============================================================================
 export function getRiderActiveCateringClients() {
     const myId = (appState.telegramId || "").toString().trim();
@@ -323,7 +324,7 @@ export function getRiderActiveCateringClients() {
 
     const myRecord = roster.find(r => {
         const rId = (r.telegramId || "").toString().trim();
-        const rName = (r.name || "").toString().trim().toLowerCase();
+        const rName = (r.riderName || r.name || "").toString().trim().toLowerCase();
         const isMatch = (myId && rId === myId) || (myName && rName === myName);
         return isMatch && (r.status || "").toLowerCase() === 'catering';
     });
@@ -352,7 +353,6 @@ export function getEffectiveCartClient(cartIndex) {
 
     const activeClients = getRiderActiveCateringClients();
 
-    // Exclude clients taken by OTHER carts
     const takenByOthers = globalState.cartClients
         .map((c, idx) => ({ client: (c || "").trim(), idx }))
         .filter(item => item.idx !== cartIndex && item.client && item.client.toLowerCase() !== 'sample')
