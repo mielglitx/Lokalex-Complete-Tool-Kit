@@ -102,8 +102,9 @@ export function renderCartItems() {
         const price = parseFloat(item.price) || 0;
         subtotal += price;
 
-        const isStore = item.type === 'store';
-        const isMarket = item.type === 'market';
+        // Check for Store/Market using Capitalized format for wizard.js compatibility
+        const isStore = item.category === 'Store' || item.type === 'Store' || item.type === 'store';
+        const isMarket = item.category === 'Market' || item.type === 'Market' || item.type === 'market';
 
         return `
             <div class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col gap-2 text-xs shadow-sm">
@@ -116,10 +117,10 @@ export function renderCartItems() {
 
                 <div class="flex justify-between items-center pt-2 border-t border-gray-800/80">
                     <div class="flex gap-1.5">
-                        <button onclick="setItemType(${index}, 'store')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isStore ? 'bg-orange-600 text-white border-orange-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
+                        <button onclick="setItemCategory(${index}, 'Store')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isStore ? 'bg-orange-600 text-white border-orange-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
                             <i class="fa-solid fa-store"></i> Store
                         </button>
-                        <button onclick="setItemType(${index}, 'market')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isMarket ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
+                        <button onclick="setItemCategory(${index}, 'Market')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isMarket ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
                             <i class="fa-solid fa-basket-shopping"></i> Market
                         </button>
                     </div>
@@ -141,13 +142,20 @@ function updateCartSubtotal(subtotal) {
     if (display) display.innerText = subtotal.toFixed(2);
 }
 
-export function setItemType(index, type) {
+// CRITICAL: Feeds exactly what wizard.js expects ('category', and Capitalized string)
+export function setItemCategory(index, category) {
     const cartIdx = globalState.activeCartIndex ?? 0;
     if (globalState.carts && globalState.carts[cartIdx] && globalState.carts[cartIdx][index]) {
-        globalState.carts[cartIdx][index].type = type;
+        globalState.carts[cartIdx][index].category = category;
+        globalState.carts[cartIdx][index].type = category; // Set type as a fallback 
         saveCartState();
         renderCartItems();
     }
+}
+
+// Exported just in case an old window binder looks for setItemType instead of setItemCategory
+export function setItemType(index, type) {
+    setItemCategory(index, type);
 }
 
 export function removeCartItem(index) {
@@ -281,9 +289,9 @@ export function processBulkAdd() {
         if (!isNaN(lastPartClean) && lastPartClean !== "") {
             price = parseFloat(lastPartClean);
             if (parts.length > 1) {
-                name = parts.slice(0, -1).join(' '); // Extract name without price
+                name = parts.slice(0, -1).join(' '); 
             } else {
-                name = "Item"; // Edge case if user typed ONLY a number
+                name = "Item"; 
             }
         }
 
@@ -291,7 +299,8 @@ export function processBulkAdd() {
             globalState.carts[cartIdx].push({
                 name: name,
                 price: price,
-                type: 'uncategorized'
+                category: '', // Explicitly blank so it fails the validation check until categorized
+                type: ''
             });
             addedCount++;
         }
@@ -317,17 +326,21 @@ export function validateAndProceedToWizard() {
         return;
     }
 
-    const hasUncategorized = cartItems.some(item => !item.type || (item.type !== 'store' && item.type !== 'market'));
+    const hasUncategorized = cartItems.some(item => {
+        const cat = item.category || item.type || '';
+        return cat !== 'Store' && cat !== 'Market' && cat.toLowerCase() !== 'store' && cat.toLowerCase() !== 'market';
+    });
     
     if (hasUncategorized) {
         showToast("⚠️ Paki-kategorya (Store o Market) ang lahat ng items bago mag-resibo!");
         return;
     }
 
-    // Hand off to wizard.js
+    // Pass workflow smoothly to the wizard
     if (typeof window.proceedToWizard === 'function') {
         window.proceedToWizard();
     } else {
+        console.warn("proceedToWizard not found on window, falling back");
         switchView('view-wizard');
     }
 }
