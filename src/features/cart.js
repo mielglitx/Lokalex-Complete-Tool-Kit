@@ -4,6 +4,7 @@ import { db } from '../config/firebase.js';
 import { showToast } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
 import { escapeHtml } from '../utils/helpers.js';
+import { openSlideDeleteModal } from '../ui/modals.js';
 
 export function loadCartState() {
     try {
@@ -99,6 +100,7 @@ export function renderCartItems() {
     const cartIdx = globalState.activeCartIndex ?? 0;
     const items = (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
     renderCartClientSelector();
+    renderCartActionsToolbar();
 
     if (items.length === 0) {
         container.innerHTML = `
@@ -113,35 +115,67 @@ export function renderCartItems() {
     let subtotal = 0;
 
     container.innerHTML = items.map((item, index) => {
-        const price = parseFloat(item.price) || 0;
-        subtotal += price;
+        // FAILSAFE: Convert negative prices directly to Paid
+        let price = parseFloat(item.price) || 0;
+        if (price < 0) {
+            price = 0;
+            item.price = 0;
+            item.isPaid = true;
+        }
+
+        const isPaid = !!item.isPaid;
+        const itemCost = isPaid ? 0 : Math.max(0, price);
+        subtotal += itemCost;
 
         const cat = item.type || item.category || '';
         const isStore = cat.toLowerCase() === 'store';
         const isMarket = cat.toLowerCase() === 'market';
+        const isSelected = !!item.selectedForDelete;
 
         return `
-            <div class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col gap-2 text-xs shadow-sm">
-                <div class="flex justify-between items-center">
-                    <span class="font-bold text-white flex items-center gap-1.5">
-                        <span class="text-gray-500 text-[10px]">#${index + 1}</span> ${escapeHtml(item.name)}
-                    </span>
-                    <span class="font-black text-green-400 text-sm">₱${price.toFixed(2)}</span>
-                </div>
+            <div class="bg-cardBg border ${isSelected ? 'border-red-500/60 bg-red-950/10' : 'border-gray-800'} p-3 rounded-xl flex items-center gap-2.5 text-xs shadow-sm transition">
+                
+                <!-- SELECTION CHECKBOX FOR MULTI-DELETE -->
+                <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleItemSelectForDelete(${index}, this.checked)" class="accent-red-500 w-4 h-4 cursor-pointer my-auto shrink-0" title="Select to delete">
 
-                <div class="flex justify-between items-center pt-2 border-t border-gray-800/80">
-                    <div class="flex gap-1.5">
-                        <button onclick="setItemType(${index}, 'store')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isStore ? 'bg-orange-600 text-white border-orange-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
-                            <i class="fa-solid fa-store"></i> Store
-                        </button>
-                        <button onclick="setItemType(${index}, 'market')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isMarket ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
-                            <i class="fa-solid fa-basket-shopping"></i> Market
-                        </button>
+                <div class="flex-1 flex flex-col gap-2 min-w-0">
+                    <div class="flex justify-between items-center gap-2">
+                        <span class="font-bold text-white flex items-center gap-1.5 truncate">
+                            <span class="text-gray-500 text-[10px]">#${index + 1}</span> ${escapeHtml(item.name)}
+                        </span>
+                        
+                        ${isPaid ? `
+                            <span class="font-black text-emerald-400 text-xs bg-emerald-500/20 px-2 py-0.5 rounded-md border border-emerald-500/40 shrink-0">
+                                <i class="fa-solid fa-check"></i> PAID (₱0.00)
+                            </span>
+                        ` : `
+                            <span class="font-black text-green-400 text-sm shrink-0">₱${itemCost.toFixed(2)}</span>
+                        `}
                     </div>
 
-                    <div class="flex items-center gap-2">
-                        <button onclick="openEditItemModal(${index})" class="text-blue-400 hover:text-blue-300 p-1" title="Edit Item"><i class="fa-solid fa-pen"></i></button>
-                        <button onclick="removeCartItem(${index})" class="text-red-400 hover:text-red-300 p-1" title="Delete Item"><i class="fa-solid fa-trash"></i></button>
+                    <div class="flex justify-between items-center pt-2 border-t border-gray-800/80 flex-wrap gap-2">
+                        <!-- STORE / MARKET CATEGORY BUTTONS -->
+                        <div class="flex gap-1.5">
+                            <button onclick="setItemType(${index}, 'store')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isStore ? 'bg-orange-600 text-white border-orange-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
+                                <i class="fa-solid fa-store"></i> Store
+                            </button>
+                            <button onclick="setItemType(${index}, 'market')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isMarket ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
+                                <i class="fa-solid fa-basket-shopping"></i> Market
+                            </button>
+                        </div>
+
+                        <div class="flex items-center gap-3">
+                            <!-- PAID CHECKBOX TOGGLE -->
+                            <label class="flex items-center gap-1 cursor-pointer text-[10px] font-bold ${isPaid ? 'text-emerald-400' : 'text-gray-400'} bg-black/40 px-2 py-1 rounded-lg border border-gray-800">
+                                <input type="checkbox" ${isPaid ? 'checked' : ''} onchange="toggleItemPaid(${index}, this.checked)" class="accent-emerald-500 w-3.5 h-3.5">
+                                <span>Paid</span>
+                            </label>
+
+                            <div class="flex items-center gap-2">
+                                <button onclick="openEditItemModal(${index})" class="text-blue-400 hover:text-blue-300 p-1" title="Edit Item"><i class="fa-solid fa-pen"></i></button>
+                                <button onclick="promptRemoveCartItem(${index})" class="text-red-400 hover:text-red-300 p-1" title="Delete Item"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -151,9 +185,92 @@ export function renderCartItems() {
     updateCartSubtotal(subtotal);
 }
 
+function renderCartActionsToolbar() {
+    const container = document.getElementById('delete-selected-btn-container');
+    if (!container) return;
+
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    const items = (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
+    const selectedCount = items.filter(i => !!i.selectedForDelete).length;
+
+    if (selectedCount > 0) {
+        container.innerHTML = `
+            <button onclick="promptDeleteSelectedItems()" class="flex-1 bg-red-600 hover:bg-red-500 text-white text-xs font-bold py-2 rounded-lg border border-red-500 transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md">
+                <i class="fa-solid fa-trash-can"></i> Delete Selected (${selectedCount})
+            </button>
+        `;
+    } else {
+        container.innerHTML = '';
+    }
+}
+
 function updateCartSubtotal(subtotal) {
     const display = document.getElementById('cart-subtotal-display');
-    if (display) display.innerText = subtotal.toFixed(2);
+    const safeSubtotal = Math.max(0, subtotal || 0);
+    if (display) display.innerText = safeSubtotal.toFixed(2);
+}
+
+export function toggleItemPaid(index, isPaid) {
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    if (globalState.carts && globalState.carts[cartIdx] && globalState.carts[cartIdx][index]) {
+        globalState.carts[cartIdx][index].isPaid = isPaid;
+        if (isPaid) {
+            globalState.carts[cartIdx][index].price = 0;
+        }
+        saveCartState();
+        renderCartItems();
+    }
+}
+
+export function toggleItemSelectForDelete(index, isChecked) {
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    if (globalState.carts && globalState.carts[cartIdx] && globalState.carts[cartIdx][index]) {
+        globalState.carts[cartIdx][index].selectedForDelete = isChecked;
+        renderCartActionsToolbar();
+    }
+}
+
+export function promptDeleteSelectedItems() {
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    const items = (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
+    const selectedCount = items.filter(i => !!i.selectedForDelete).length;
+
+    if (selectedCount === 0) {
+        showToast("⚠️ Walang napiling item na buburahin!");
+        return;
+    }
+
+    openSlideDeleteModal(
+        `Delete ${selectedCount} Item(s)?`,
+        `I-drag pakanan para burahin ang ${selectedCount} na napiling item.`,
+        () => {
+            deleteSelectedItems();
+        }
+    );
+}
+
+function deleteSelectedItems() {
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    if (globalState.carts && globalState.carts[cartIdx]) {
+        globalState.carts[cartIdx] = globalState.carts[cartIdx].filter(i => !i.selectedForDelete);
+        saveCartState();
+        renderCartItems();
+        showToast("✅ Napiling items ay nabura na!");
+    }
+}
+
+export function promptRemoveCartItem(index) {
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    const item = globalState.carts?.[cartIdx]?.[index];
+    const itemName = item ? item.name : "item";
+
+    openSlideDeleteModal(
+        "Delete Item?",
+        `I-drag pakanan para burahin ang "${itemName}".`,
+        () => {
+            removeCartItem(index);
+        }
+    );
 }
 
 export function setItemType(index, type) {
@@ -185,12 +302,16 @@ export function handleCartActionBtn() {
     const cartIdx = globalState.activeCartIndex ?? 0;
     if (!globalState.carts || !globalState.carts[cartIdx] || globalState.carts[cartIdx].length === 0) return;
 
-    if (confirm(`Sigurado ka bang nais burahin ang lahat ng laman ng Cart ${cartIdx + 1}?`)) {
-        globalState.carts[cartIdx] = [];
-        saveCartState();
-        renderCartItems();
-        showToast(`Cart ${cartIdx + 1} cleared.`);
-    }
+    openSlideDeleteModal(
+        `Clear Cart ${cartIdx + 1}?`,
+        `I-drag pakanan para burahin ang lahat ng laman ng Cart ${cartIdx + 1}.`,
+        () => {
+            globalState.carts[cartIdx] = [];
+            saveCartState();
+            renderCartItems();
+            showToast(`Cart ${cartIdx + 1} cleared.`);
+        }
+    );
 }
 
 // ============================================================================
@@ -201,7 +322,6 @@ export function getRiderActiveCateringClients() {
     const myName = (appState.riderName || "").toString().trim().toLowerCase();
     const roster = globalState.rosterMembers || [];
 
-    // STRICT MATCH: Only return customers belonging to THIS specific rider
     const myRecord = roster.find(r => {
         const rId = (r.telegramId || "").toString().trim();
         const rName = (r.name || "").toString().trim().toLowerCase();
@@ -233,7 +353,6 @@ export function getEffectiveCartClient(cartIndex) {
 
     const activeClients = getRiderActiveCateringClients();
 
-    // Clients taken by OTHER carts
     const takenByOthers = globalState.cartClients
         .map((c, idx) => ({ client: (c || "").trim(), idx }))
         .filter(item => item.idx !== cartIndex && item.client && item.client.toLowerCase() !== 'sample')
@@ -360,6 +479,9 @@ export function openEditItemModal(index) {
     globalState.editItemIndex = index;
     document.getElementById('edit-name-input').value = item.name;
     document.getElementById('edit-price-input').value = item.price;
+    const paidInput = document.getElementById('edit-paid-input');
+    if (paidInput) paidInput.checked = !!item.isPaid;
+
     document.getElementById('edit-item-modal').classList.remove('hidden');
 }
 
@@ -373,12 +495,19 @@ export function saveItemEdit() {
     
     const cartIdx = globalState.activeCartIndex ?? 0;
     const name = document.getElementById('edit-name-input').value.trim();
-    const price = parseFloat(document.getElementById('edit-price-input').value) || 0;
+    let price = parseFloat(document.getElementById('edit-price-input').value) || 0;
+    let isPaid = document.getElementById('edit-paid-input')?.checked || false;
+
+    if (price < 0) {
+        price = 0;
+        isPaid = true;
+    }
 
     if (!name) return showToast("Item name is required.");
 
     globalState.carts[cartIdx][globalState.editItemIndex].name = name;
     globalState.carts[cartIdx][globalState.editItemIndex].price = price;
+    globalState.carts[cartIdx][globalState.editItemIndex].isPaid = isPaid;
 
     saveCartState();
     renderCartItems();
@@ -416,13 +545,21 @@ export function processBulkAdd() {
 
         const parts = cleanLine.split(/\s+/);
         let price = 0;
+        let isPaid = false;
         let name = cleanLine;
 
         const lastPartRaw = parts[parts.length - 1];
         const lastPartClean = lastPartRaw.replace(/,/g, '');
         
         if (!isNaN(lastPartClean) && lastPartClean !== "") {
-            price = parseFloat(lastPartClean);
+            let parsedPrice = parseFloat(lastPartClean);
+            if (parsedPrice < 0) {
+                price = 0;
+                isPaid = true;
+            } else {
+                price = parsedPrice;
+            }
+
             if (parts.length > 1) {
                 name = parts.slice(0, -1).join(' ');
             } else {
@@ -434,8 +571,10 @@ export function processBulkAdd() {
             globalState.carts[cartIdx].push({
                 name: name,
                 price: price,
+                isPaid: isPaid,
                 type: '',
-                category: ''
+                category: '',
+                selectedForDelete: false
             });
             addedCount++;
         }
@@ -450,7 +589,7 @@ export function processBulkAdd() {
 }
 
 // ============================================================================
-// STRICT VALIDATION
+// STRICT VALIDATION & PAID CONFIRMATION MODAL
 // ============================================================================
 export function validateAndProceedToWizard() {
     const cartIdx = globalState.activeCartIndex ?? 0;
@@ -475,15 +614,52 @@ export function validateAndProceedToWizard() {
         const currentCat = item.category || item.type || '';
         item.type = currentCat.toLowerCase();
         item.category = currentCat.toLowerCase();
+        
+        if ((item.price || 0) < 0) {
+            item.price = 0;
+            item.isPaid = true;
+        }
     });
     saveCartState();
 
+    const hasPaidItems = cartItems.some(i => !!i.isPaid || (i.price || 0) <= 0);
+
+    if (hasPaidItems) {
+        const paidModal = document.getElementById('paid-item-confirm-modal');
+        if (paidModal) {
+            paidModal.classList.remove('hidden');
+            return;
+        }
+    }
+
+    executeProceedToWizard();
+}
+
+export function closePaidItemModal() {
+    const paidModal = document.getElementById('paid-item-confirm-modal');
+    if (paidModal) paidModal.classList.add('hidden');
+}
+
+export function confirmPaidItemProceed() {
+    closePaidItemModal();
+    executeProceedToWizard();
+}
+
+function executeProceedToWizard() {
     if (typeof window.proceedToWizard === 'function') {
         window.proceedToWizard();
     } else {
         switchView('view-wizard');
     }
 }
+
+// Global window bindings for HTML modals
+window.closePaidItemModal = closePaidItemModal;
+window.confirmPaidItemProceed = confirmPaidItemProceed;
+window.toggleItemPaid = toggleItemPaid;
+window.toggleItemSelectForDelete = toggleItemSelectForDelete;
+window.promptDeleteSelectedItems = promptDeleteSelectedItems;
+window.promptRemoveCartItem = promptRemoveCartItem;
 
 // ============================================================================
 // EXPORTS REQUIRED BY WIZARD.JS

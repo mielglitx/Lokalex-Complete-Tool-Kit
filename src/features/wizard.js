@@ -3,7 +3,7 @@ import { appState, globalState, wizState } from '../store/state.js';
 import { getLocalTodayStr, copyText, escapeHtml } from '../utils/helpers.js';
 import { showToast, showSideNotification } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
-import { saveCartState, getCurrentCart, clearCartSlot } from './cart.js';
+import { saveCartState, getCurrentCart, clearCartSlot, getEffectiveCartClient } from './cart.js';
 import { getActiveCateringCustomersWithTimes } from './roster.js';
 import { API_URL } from '../config/constants.js';
 
@@ -27,16 +27,21 @@ export function proceedToWizard() {
 }
 
 export function initWizardForCart() {
-    const currentCart = getCurrentCart(); // Returns the raw items array
+    const currentCart = getCurrentCart();
     if (!currentCart || currentCart.length === 0) return;
 
     currentReceiptTransactionId = getDailyRiderId() + "-" + Date.now().toString(36).toUpperCase();
 
-    // Map through array and calculate sums, ensuring case-insensitivity
-    const marketSum = currentCart.filter(i => (i.category || i.type || '').toLowerCase() === 'market').reduce((s, i) => s + (parseFloat(i.price) || 0), 0);
-    const storeSum = currentCart.filter(i => (i.category || i.type || '').toLowerCase() === 'store').reduce((s, i) => s + (parseFloat(i.price) || 0), 0);
+    // Sum costs of non-paid items only (negative amounts/paid items count as 0)
+    const marketSum = currentCart
+        .filter(i => (i.category || i.type || '').toLowerCase() === 'market' && !i.isPaid)
+        .reduce((s, i) => s + Math.max(0, parseFloat(i.price) || 0), 0);
 
-    wizState.subtotal = marketSum + storeSum;
+    const storeSum = currentCart
+        .filter(i => (i.category || i.type || '').toLowerCase() === 'store' && !i.isPaid)
+        .reduce((s, i) => s + Math.max(0, parseFloat(i.price) || 0), 0);
+
+    wizState.subtotal = Math.max(0, marketSum + storeSum);
     const autoMarket = marketSum > 0 ? Math.ceil(marketSum / 500) * 15 : 0;
     const autoHandling = storeSum > 0 ? Math.ceil(storeSum / 500) * 10 : 0;
     
@@ -61,35 +66,25 @@ function setupWizardClientDetails() {
 
     if (!rcptInput || !btnBox || !toggleManual) return;
 
-    // Use appState.selectedCateringClient which was set in the Cart UI
-    if (appState.selectedCateringClient && appState.selectedCateringClient !== "") {
-        rcptInput.value = appState.selectedCateringClient;
+    const activeCartIdx = globalState.activeCartIndex || 0;
+    const currentClient = getEffectiveCartClient(activeCartIdx);
+    appState.selectedCateringClient = currentClient;
+
+    rcptInput.value = currentClient;
+
+    if (currentClient.toLowerCase() === 'sample') {
+        rcptInput.disabled = false;
+        toggleManual.checked = true;
+    } else {
         rcptInput.disabled = true;
         toggleManual.checked = false;
-        
-        const cartSlotDisplay = (globalState.activeCartIndex || 0) + 1;
-        btnBox.innerHTML = `
-            <button onclick="selectCateredClientName('${escapeHtml(appState.selectedCateringClient)}')" class="bg-blue-600 border border-blue-400 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition active:scale-95">
-                <i class="fa-solid fa-user"></i> ${escapeHtml(appState.selectedCateringClient)} (Cart ${cartSlotDisplay})
-            </button>`;
-    } else {
-        const activeCustList = getActiveCateringCustomersWithTimes();
-        if (activeCustList.length === 0) {
-            rcptInput.value = "Sample";
-            rcptInput.disabled = false;
-            toggleManual.checked = true;
-            btnBox.innerHTML = `<span class="text-amber-400 text-xs font-semibold"><i class="fa-solid fa-user-pen"></i> Type customer name manually below or leave empty for Sample.</span>`;
-        } else {
-            btnBox.innerHTML = activeCustList.map(i => `
-                <button onclick="selectCateredClientName('${escapeHtml(i.name)}')" class="bg-blue-600/30 border border-blue-500 text-blue-300 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-600 hover:text-white transition active:scale-95">
-                    <i class="fa-solid fa-user"></i> ${escapeHtml(i.name)}
-                </button>
-            `).join('');
-            rcptInput.value = activeCustList[0].name || "";
-            rcptInput.disabled = true;
-            appState.selectedCateringClient = activeCustList[0].name || "";
-        }
     }
+
+    const cartSlotDisplay = activeCartIdx + 1;
+    btnBox.innerHTML = `
+        <button onclick="selectCateredClientName('${escapeHtml(currentClient)}')" class="bg-blue-600 border border-blue-400 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow transition active:scale-95">
+            <i class="fa-solid fa-user"></i> ${escapeHtml(currentClient)} (Cart ${cartSlotDisplay})
+        </button>`;
 }
 
 export function selectCateredClientName(cName) {
@@ -111,7 +106,7 @@ export function toggleManualClientInput(isManual) {
         rcptInput.disabled = !isManual;
         if (isManual) {
             rcptInput.focus();
-            appState.selectedCateringClient = ""; // Clear state if user wants to type
+            appState.selectedCateringClient = "";
         }
     }
 }
@@ -134,18 +129,18 @@ export function calculateGrandTotal() {
     const isFree = freeDeliveryEl ? freeDeliveryEl.checked : false;
     const isEpay = epaymentEl ? epaymentEl.checked : false;
 
-    let hFee = parseFloat(document.getElementById('wiz-handling')?.value) || 0;
-    let mFee = parseFloat(document.getElementById('wiz-market')?.value) || 0;
-    let multistop = parseFloat(document.getElementById('wiz-multistop')?.value) || 0;
-    let dFee = parseFloat(document.getElementById('wiz-delivery')?.value) || 0;
-    let disc = parseFloat(document.getElementById('wiz-discount')?.value) || 0;
+    let hFee = Math.max(0, parseFloat(document.getElementById('wiz-handling')?.value) || 0);
+    let mFee = Math.max(0, parseFloat(document.getElementById('wiz-market')?.value) || 0);
+    let multistop = Math.max(0, parseFloat(document.getElementById('wiz-multistop')?.value) || 0);
+    let dFee = Math.max(0, parseFloat(document.getElementById('wiz-delivery')?.value) || 0);
+    let disc = Math.max(0, parseFloat(document.getElementById('wiz-discount')?.value) || 0);
 
     if (isFree) {
         hFee = 0; mFee = 0; multistop = 0; dFee = 0;
     }
 
-    const subtotal = wizState.subtotal || 0;
-    let total = subtotal + hFee + mFee + multistop + dFee - disc;
+    const subtotal = Math.max(0, wizState.subtotal || 0);
+    let total = Math.max(0, subtotal + hFee + mFee + multistop + dFee - disc);
 
     let epayFee = 0;
     if (isEpay && total > 0) {
@@ -223,7 +218,7 @@ export async function executeGenerateFinalReceipt(customerName) {
 
 async function saveReceiptToDatabase(customerName) {
     if (!customerName || customerName.trim().toLowerCase() === "sample") {
-        showToast("ℹ️ Sample Receipt generated (Not saved to commission).");
+        showToast("ℹ️ Sample Receipt generated (Not saved to commission/catered list).");
         return;
     }
 
@@ -238,7 +233,7 @@ async function saveReceiptToDatabase(customerName) {
     const sessionKey = `receipt_done_${rName}_${cName}_${sTime}_${todayStr}`;
     localStorage.setItem(sessionKey, 'true');
 
-    const totalFees = (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0);
+    const totalFees = Math.max(0, (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0));
 
     const payload = {
         type: "receipts",
@@ -271,18 +266,23 @@ export function renderFinalReceiptText() {
     const currentCart = getCurrentCart() || [];
     const dailyRiderId = getDailyRiderId();
 
-    const subtotal = (wizState.subtotal !== undefined ? wizState.subtotal : 0);
+    const subtotal = Math.max(0, wizState.subtotal || 0);
     const finalHFee = wizState.finalHFee || 0;
     const finalMFee = wizState.finalMFee || 0;
     const finalMulti = wizState.finalMulti || 0;
     const deliveryFee = wizState.deliveryFee || 0;
     const finalEpay = wizState.finalEpay || 0;
     const discount = wizState.discount || 0;
-    const finalTotal = (wizState.finalTotal !== undefined ? wizState.finalTotal : 0);
+    const finalTotal = Math.max(0, wizState.finalTotal || 0);
 
-    // FIX: Using i.name instead of i.item so the actual items print out properly
     let itemsTxt = (currentCart.length > 0)
-        ? currentCart.map(i => `🔸 ${i.name || 'Item'} - ₱${(parseFloat(i.price) || 0).toFixed(2)}`).join("\n")
+        ? currentCart.map(i => {
+            const isPaid = !!i.isPaid || (parseFloat(i.price) || 0) <= 0;
+            if (isPaid) {
+                return `🔸 ${i.name || 'Item'} - PAID (₱0.00)`;
+            }
+            return `🔸 ${i.name || 'Item'} - ₱${Math.max(0, parseFloat(i.price) || 0).toFixed(2)}`;
+        }).join("\n")
         : "🔸 (Walang items)";
 
     let feesTxt = "";
@@ -323,7 +323,6 @@ export function completeReceiptDone() {
     showToast("✅ Cart cleared and final receipt accepted!");
     switchView('view-home');
     
-    // Reset all wizState variables and UI so the next cart starts fresh
     wizState.subtotal = 0;
     wizState.storeCount = 1;
     appState.selectedCateringClient = "";

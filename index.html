@@ -482,10 +482,11 @@
                 <span class="text-lg font-bold text-green-400">₱<span id="cart-subtotal-display">0.00</span></span>
             </div>
             
-            <div class="p-3 flex justify-between gap-2 shrink-0">
+            <div class="p-3 flex justify-between gap-2 shrink-0 flex-wrap" id="cart-actions-toolbar">
                 <button onclick="showBulkAddModal()" class="flex-1 bg-blue-600/20 text-blue-400 text-xs font-bold py-2 rounded-lg border border-blue-600/30 transition active:scale-95">
                     <i class="fa-solid fa-list-check"></i> Paste List
                 </button>
+                <div id="delete-selected-btn-container" class="contents"></div>
                 <button id="cart-action-btn" onclick="handleCartActionBtn()" class="flex-1 bg-red-600/20 text-red-400 text-xs font-bold py-2 rounded-lg border border-red-600/30 transition active:scale-95">
                     <i class="fa-solid fa-trash-can"></i> Clear Cart 1
                 </button>
@@ -494,7 +495,6 @@
             <div id="cart-items-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 pb-20"></div>
 
             <div class="p-4 bg-darkBg border-t border-gray-800 shrink-0">
-                <!-- UPDATED: Now calls validation function to ensure items are categorized -->
                 <button onclick="validateAndProceedToWizard()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold p-3.5 rounded-xl shadow-lg transition active:scale-95">
                     Create Receipt (<span id="btn-cart-slot-label">Cart 1</span>)
                 </button>
@@ -732,6 +732,27 @@
         </section>
 
     </main>
+
+    <!-- PAID ITEM CONFIRMATION MODAL -->
+    <div id="paid-item-confirm-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-emerald-500/50 p-6 rounded-2xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-3">
+            <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+                <i class="fa-solid fa-hand-holding-dollar"></i>
+            </div>
+            <h3 class="font-bold text-base text-emerald-400">May Nakamarkang PAID Item</h3>
+            <p class="text-xs text-gray-300 leading-relaxed">
+                Mayroong item sa cart na nakamarka bilang <strong>PAID (₱0.00)</strong>. Sigurado ka bang nais magpatuloy sa resibo?
+            </p>
+            <div class="flex gap-2 mt-2">
+                <button onclick="closePaidItemModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 rounded-xl text-xs transition active:scale-95">
+                    Go Back & Edit
+                </button>
+                <button onclick="confirmPaidItemProceed()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95">
+                    Proceed
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- MODAL 1: MAP CALCULATION BOARD MODAL -->
     <div id="mapcalc-board-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1007,6 +1028,10 @@
             <div class="flex flex-col gap-1 text-left">
                 <label class="text-[10px] text-gray-400 font-bold">Price (₱)</label>
                 <input type="number" id="edit-price-input" placeholder="0.00" class="w-full bg-inputBg text-sm rounded-xl p-2.5 outline-none border border-gray-700 focus:border-blue-500">
+            </div>
+            <div class="flex items-center gap-2 mt-1 text-left">
+                <input type="checkbox" id="edit-paid-input" class="w-4 h-4 accent-emerald-500 cursor-pointer">
+                <label for="edit-paid-input" class="text-xs text-gray-300 font-bold cursor-pointer">Mark as Paid (₱0.00)</label>
             </div>
             <div class="flex gap-2 mt-2">
                 <button onclick="closeEditItemModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
