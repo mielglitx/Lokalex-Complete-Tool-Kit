@@ -7,10 +7,9 @@ import { escapeHtml } from '../utils/helpers.js';
 
 export function loadCartState() {
     try {
-        const saved = localStorage.getItem('lokalex_carts');
-        if (saved) {
-            const parsed = JSON.parse(saved);
-            // FAILSAFE: Ensure it's a valid 2D array of 4 carts
+        const savedCarts = localStorage.getItem('lokalex_carts');
+        if (savedCarts) {
+            const parsed = JSON.parse(savedCarts);
             if (Array.isArray(parsed) && parsed.length === 4 && Array.isArray(parsed[0])) {
                 globalState.carts = parsed;
             } else {
@@ -19,9 +18,18 @@ export function loadCartState() {
         } else {
             globalState.carts = [[], [], [], []];
         }
+
+        const savedClients = localStorage.getItem('lokalex_cart_clients');
+        globalState.cartClients = savedClients ? JSON.parse(savedClients) : ["", "", "", ""];
+
+        const savedManuals = localStorage.getItem('lokalex_cart_manuals');
+        globalState.cartManualFlags = savedManuals ? JSON.parse(savedManuals) : [false, false, false, false];
+
     } catch(e) {
         console.error("Failed to load cart state", e);
         globalState.carts = [[], [], [], []];
+        globalState.cartClients = ["", "", "", ""];
+        globalState.cartManualFlags = [false, false, false, false];
     }
     
     if (globalState.activeCartIndex === undefined || globalState.activeCartIndex === null) {
@@ -34,7 +42,6 @@ export function loadCartState() {
 
 export function saveCartState() {
     try {
-        // FAILSAFE: Ensure carts exist before saving
         if (!Array.isArray(globalState.carts)) {
             globalState.carts = [[], [], [], []];
         }
@@ -42,6 +49,13 @@ export function saveCartState() {
     } catch(e) {
         console.error("Failed to save cart state", e);
     }
+}
+
+export function saveCartClientsState() {
+    try {
+        localStorage.setItem('lokalex_cart_clients', JSON.stringify(globalState.cartClients || ["", "", "", ""]));
+        localStorage.setItem('lokalex_cart_manuals', JSON.stringify(globalState.cartManualFlags || [false, false, false, false]));
+    } catch(e) {}
 }
 
 export function switchCartTab(index) {
@@ -102,7 +116,6 @@ export function renderCartItems() {
         const price = parseFloat(item.price) || 0;
         subtotal += price;
 
-        // STRICT LOWERCASE CHECK FOR UI RENDERING
         const cat = item.type || item.category || '';
         const isStore = cat.toLowerCase() === 'store';
         const isMarket = cat.toLowerCase() === 'market';
@@ -146,7 +159,6 @@ function updateCartSubtotal(subtotal) {
 export function setItemType(index, type) {
     const cartIdx = globalState.activeCartIndex ?? 0;
     if (globalState.carts && globalState.carts[cartIdx] && globalState.carts[cartIdx][index]) {
-        // Force lowercase to perfectly match wizard.js expectations
         const strictType = type.toLowerCase();
         globalState.carts[cartIdx][index].type = strictType;
         globalState.carts[cartIdx][index].category = strictType;
@@ -155,7 +167,6 @@ export function setItemType(index, type) {
     }
 }
 
-// Fallback for previous function name
 export function setItemCategory(index, category) {
     setItemType(index, category);
 }
@@ -182,36 +193,160 @@ export function handleCartActionBtn() {
     }
 }
 
+// ============================================================================
+// STRICT RIDER PRIVACY & CLIENT ASSIGNMENT LOGIC
+// ============================================================================
+export function getRiderActiveCateringClients() {
+    const myId = (appState.telegramId || "").toString().trim();
+    const myName = (appState.riderName || "").toString().trim().toLowerCase();
+    const roster = globalState.rosterMembers || [];
+
+    // STRICT MATCH: Only return customers belonging to THIS specific rider
+    const myRecord = roster.find(r => {
+        const rId = (r.telegramId || "").toString().trim();
+        const rName = (r.name || "").toString().trim().toLowerCase();
+        const isMatch = (myId && rId === myId) || (myName && rName === myName);
+        return isMatch && (r.status || "").toLowerCase() === 'catering';
+    });
+
+    if (!myRecord || !myRecord.customerName) return [];
+
+    return myRecord.customerName.split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+}
+
+export function getEffectiveCartClient(cartIndex) {
+    if (!globalState.cartClients || !Array.isArray(globalState.cartClients)) {
+        globalState.cartClients = ["", "", "", ""];
+    }
+    if (!globalState.cartManualFlags || !Array.isArray(globalState.cartManualFlags)) {
+        globalState.cartManualFlags = [false, false, false, false];
+    }
+
+    const isManual = globalState.cartManualFlags[cartIndex];
+    let val = (globalState.cartClients[cartIndex] || "").trim();
+
+    if (isManual) {
+        return val || "Sample";
+    }
+
+    const activeClients = getRiderActiveCateringClients();
+
+    // Clients taken by OTHER carts
+    const takenByOthers = globalState.cartClients
+        .map((c, idx) => ({ client: (c || "").trim(), idx }))
+        .filter(item => item.idx !== cartIndex && item.client && item.client.toLowerCase() !== 'sample')
+        .map(item => item.client.toLowerCase());
+
+    if (val && val.toLowerCase() !== 'sample' && !takenByOthers.includes(val.toLowerCase())) {
+        const existsInActive = activeClients.some(c => c.toLowerCase() === val.toLowerCase());
+        if (existsInActive) return val;
+    }
+
+    const availableAuto = activeClients.filter(c => !takenByOthers.includes(c.toLowerCase()));
+
+    if (availableAuto.length > 0) {
+        const preferred = activeClients[cartIndex];
+        if (preferred && !takenByOthers.includes(preferred.toLowerCase())) {
+            globalState.cartClients[cartIndex] = preferred;
+            saveCartClientsState();
+            return preferred;
+        } else {
+            globalState.cartClients[cartIndex] = availableAuto[0];
+            saveCartClientsState();
+            return availableAuto[0];
+        }
+    }
+
+    globalState.cartClients[cartIndex] = "Sample";
+    saveCartClientsState();
+    return "Sample";
+}
+
 function renderCartClientSelector() {
     const container = document.getElementById('cart-customer-selector-container');
     if (!container) return;
 
-    const rosterList = globalState.rosterMembers || [];
-    const activeCatered = rosterList.filter(r => (r.status || "").toLowerCase() === 'catering');
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    const isManual = (globalState.cartManualFlags && globalState.cartManualFlags[cartIdx]) || false;
+    const currentClient = getEffectiveCartClient(cartIdx);
 
-    if (activeCatered.length === 0) {
-        container.innerHTML = `<span class="text-[11px] text-gray-500 italic">Walang active catering client.</span>`;
-        return;
-    }
+    appState.selectedCateringClient = currentClient;
 
-    let options = `<option value="">-- Piliin ang Customer --</option>`;
-    activeCatered.forEach(c => {
-        const name = c.customerName ? c.customerName.split(',')[0] : "Customer";
-        options += `<option value="${escapeHtml(name)}">${escapeHtml(name)} (${escapeHtml(c.name)})</option>`;
+    const activeClients = getRiderActiveCateringClients();
+
+    const takenByOthers = (globalState.cartClients || [])
+        .map((c, idx) => ({ client: (c || "").trim(), idx }))
+        .filter(item => item.idx !== cartIdx && item.client && item.client.toLowerCase() !== 'sample')
+        .map(item => item.client.toLowerCase());
+
+    let availableOptions = ["Sample"];
+
+    activeClients.forEach(c => {
+        if (!takenByOthers.includes(c.toLowerCase())) {
+            if (!availableOptions.map(o => o.toLowerCase()).includes(c.toLowerCase())) {
+                availableOptions.push(c);
+            }
+        }
     });
 
+    if (!isManual && currentClient && currentClient.toLowerCase() !== 'sample') {
+        if (!availableOptions.map(o => o.toLowerCase()).includes(currentClient.toLowerCase())) {
+            availableOptions.push(currentClient);
+        }
+    }
+
+    let optionsHtml = availableOptions.map(opt => {
+        const isSelected = opt.toLowerCase() === currentClient.toLowerCase();
+        return `<option value="${escapeHtml(opt)}" ${isSelected ? 'selected' : ''}>${escapeHtml(opt)}</option>`;
+    }).join('');
+
     container.innerHTML = `
-        <select onchange="assignClientToCart(this.value)" class="w-full bg-darkBg text-xs text-amber-300 font-bold rounded-lg p-1.5 outline-none border border-gray-700">
-            ${options}
-        </select>
+        <div class="flex items-center gap-2 w-full text-xs">
+            <label class="flex items-center gap-1 cursor-pointer shrink-0 text-[10px] text-gray-400 hover:text-white bg-black/30 px-2 py-1 rounded-lg border border-gray-800">
+                <input type="checkbox" ${isManual ? 'checked' : ''} onchange="toggleCartManualClient(this.checked)" class="accent-amber-500 w-3.5 h-3.5">
+                <span>Manual</span>
+            </label>
+
+            ${isManual ? `
+                <input type="text" value="${escapeHtml(currentClient === 'Sample' ? '' : currentClient)}" placeholder="Type Client Name (or leave for Sample)" oninput="updateCartClientName(this.value)" class="w-full bg-darkBg text-xs text-amber-300 font-bold rounded-lg p-1.5 outline-none border border-gray-700 focus:border-amber-500">
+            ` : `
+                <select onchange="updateCartClientName(this.value)" class="w-full bg-darkBg text-xs text-amber-300 font-bold rounded-lg p-1.5 outline-none border border-gray-700 focus:border-amber-500">
+                    ${optionsHtml}
+                </select>
+            `}
+        </div>
     `;
 }
 
-export function assignClientToCart(clientName) {
-    if (!clientName) return;
-    appState.selectedCateringClient = clientName;
+export function toggleCartManualClient(isManual) {
     const cartIdx = globalState.activeCartIndex ?? 0;
-    showToast(`🛒 Cart ${cartIdx + 1} assigned to ${clientName}`);
+    if (!globalState.cartManualFlags) globalState.cartManualFlags = [false, false, false, false];
+    globalState.cartManualFlags[cartIdx] = isManual;
+
+    if (!isManual) {
+        globalState.cartClients[cartIdx] = "";
+    }
+    
+    saveCartClientsState();
+    renderCartItems();
+}
+
+export function updateCartClientName(val) {
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    if (!globalState.cartClients) globalState.cartClients = ["", "", "", ""];
+    
+    const cleanVal = val.trim() || "Sample";
+    globalState.cartClients[cartIdx] = cleanVal;
+    appState.selectedCateringClient = cleanVal;
+
+    saveCartClientsState();
+    renderCartClientSelector();
+}
+
+export function assignClientToCart(clientName) {
+    updateCartClientName(clientName);
 }
 
 // ============================================================================
@@ -252,7 +387,7 @@ export function saveItemEdit() {
 }
 
 // ============================================================================
-// BULK ADD LOGIC (With Failsafes)
+// BULK ADD LOGIC
 // ============================================================================
 export function showBulkAddModal() {
     document.getElementById('bulk-input').value = "";
@@ -269,7 +404,6 @@ export function processBulkAdd() {
 
     const cartIdx = globalState.activeCartIndex ?? 0;
     
-    // FAILSAFE: Hard array repair before pushing
     if (!Array.isArray(globalState.carts)) globalState.carts = [[], [], [], []];
     if (!Array.isArray(globalState.carts[cartIdx])) globalState.carts[cartIdx] = [];
 
@@ -284,16 +418,15 @@ export function processBulkAdd() {
         let price = 0;
         let name = cleanLine;
 
-        // Check if the last part is a number (handles commas like 1,500)
         const lastPartRaw = parts[parts.length - 1];
         const lastPartClean = lastPartRaw.replace(/,/g, '');
         
         if (!isNaN(lastPartClean) && lastPartClean !== "") {
             price = parseFloat(lastPartClean);
             if (parts.length > 1) {
-                name = parts.slice(0, -1).join(' '); // Extract name without price
+                name = parts.slice(0, -1).join(' ');
             } else {
-                name = "Item"; // Edge case if user typed ONLY a number
+                name = "Item";
             }
         }
 
@@ -301,7 +434,7 @@ export function processBulkAdd() {
             globalState.carts[cartIdx].push({
                 name: name,
                 price: price,
-                type: '', // Blank so it forces categorization
+                type: '',
                 category: ''
             });
             addedCount++;
@@ -317,7 +450,7 @@ export function processBulkAdd() {
 }
 
 // ============================================================================
-// STRICT VALIDATION: Blocks Uncategorized Items
+// STRICT VALIDATION
 // ============================================================================
 export function validateAndProceedToWizard() {
     const cartIdx = globalState.activeCartIndex ?? 0;
@@ -338,8 +471,6 @@ export function validateAndProceedToWizard() {
         return;
     }
 
-    // NORMALIZER: Force everything to strict lowercase right before passing to wizard.js
-    // This absolutely guarantees that wizard.js will recognize the items.
     cartItems.forEach(item => {
         const currentCat = item.category || item.type || '';
         item.type = currentCat.toLowerCase();
@@ -347,7 +478,6 @@ export function validateAndProceedToWizard() {
     });
     saveCartState();
 
-    // Hand off to wizard.js
     if (typeof window.proceedToWizard === 'function') {
         window.proceedToWizard();
     } else {
@@ -367,6 +497,11 @@ export function clearCartSlot() {
     const cartIdx = globalState.activeCartIndex ?? 0;
     if (!Array.isArray(globalState.carts)) globalState.carts = [[], [], [], []];
     globalState.carts[cartIdx] = [];
+    
+    if (globalState.cartClients) globalState.cartClients[cartIdx] = "";
+    if (globalState.cartManualFlags) globalState.cartManualFlags[cartIdx] = false;
+    
     saveCartState();
+    saveCartClientsState();
     renderCartItems();
 }
