@@ -989,19 +989,22 @@
     </div>
 
     <!-- UNIVERSAL SLIDE CONFIRMATION MODAL -->
-    <div id="slide-delete-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
-        <div class="bg-[#1E1A1A] border border-red-500/30 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl flex flex-col gap-4">
-            <i id="slide-modal-icon" class="fa-solid fa-triangle-exclamation text-red-500 text-3xl mx-auto"></i>
-            <h3 id="slide-delete-title" class="font-bold text-base">Confirm Action</h3>
-            <p id="slide-delete-sub" class="text-xs text-gray-400">I-drag pakanan ang slider para kumpirmahin.</p>
-            
-            <div class="relative h-12 bg-black/40 rounded-full border border-red-500/30 flex items-center px-2 overflow-hidden mt-2">
-                <span class="absolute inset-0 flex items-center justify-center text-[10px] text-white/30 font-bold tracking-widest pointer-events-none">&gt;&gt;&gt;&gt; SLIDE TO CONFIRM &gt;&gt;&gt;&gt;</span>
-                <input type="range" id="slide-delete-range" min="0" max="100" value="0" oninput="onSlideProgress(this.value)" onmouseup="onSlideEnd()" ontouchend="onSlideEnd()" class="w-full accent-red-500 cursor-pointer z-10 opacity-80 h-10">
-            </div>
-            <button onclick="closeSlideDeleteModal()" class="text-xs text-gray-400 py-1">Cancel</button>
+    <!-- index.html -->
+
+<!-- UNIVERSAL SLIDE CONFIRMATION MODAL -->
+<div id="slide-delete-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[99999] flex items-end sm:items-center justify-center p-4">
+    <div class="bg-[#1E1A1A] border border-red-500/30 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl flex flex-col gap-4">
+        <i id="slide-modal-icon" class="fa-solid fa-triangle-exclamation text-red-500 text-3xl mx-auto"></i>
+        <h3 id="slide-delete-title" class="font-bold text-base">Confirm Action</h3>
+        <p id="slide-delete-sub" class="text-xs text-gray-400">I-drag pakanan ang slider para kumpirmahin.</p>
+        
+        <div class="relative h-12 bg-black/40 rounded-full border border-red-500/30 flex items-center px-2 overflow-hidden mt-2">
+            <span class="absolute inset-0 flex items-center justify-center text-[10px] text-white/30 font-bold tracking-widest pointer-events-none">&gt;&gt;&gt;&gt; SLIDE TO CONFIRM &gt;&gt;&gt;&gt;</span>
+            <input type="range" id="slide-delete-range" min="0" max="100" value="0" oninput="onSlideProgress(this.value)" onmouseup="onSlideEnd()" ontouchend="onSlideEnd()" class="w-full accent-red-500 cursor-pointer z-10 opacity-80 h-10">
         </div>
+        <button onclick="closeSlideDeleteModal()" class="text-xs text-gray-400 py-1">Cancel</button>
     </div>
+</div>
 
     <!-- UNIVERSAL PASSWORD MODAL -->
     <div id="password-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
