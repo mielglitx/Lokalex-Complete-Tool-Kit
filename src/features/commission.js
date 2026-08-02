@@ -12,7 +12,6 @@ let viewSettings = {
     dateValue: getLocalTodayStr()
 };
 
-// DYNAMIC HELPER: Calculates commission rates based on individual rider settings and Sunday promo
 function getCommissionRates(dateStr, riderName = "") {
     const d = new Date((dateStr || getLocalTodayStr()) + "T00:00:00");
     const isSunday = d.getDay() === 0;
@@ -42,7 +41,6 @@ function getCommissionRates(dateStr, riderName = "") {
     };
 }
 
-// FETCH COMMISSION SETTINGS FROM GOOGLE APPS SCRIPT / FIREBASE
 export async function fetchCommissionSettings() {
     try {
         const res = await fetch(`${API_URL}?type=all`);
@@ -174,6 +172,25 @@ export function setCommissionPeriod(period) {
     refreshCommissionView();
 }
 
+// HELPER: FUZZY MATCH CUSTOMER RECEIPTS TO CATERED HISTORY
+function findReceiptFeeForCustomer(rName, cName, rDate) {
+    const cleanRider = (rName || "").toLowerCase().trim();
+    const cleanCust = (cName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const receipts = globalState.globalDailyReceipts || [];
+    for (let rc of receipts) {
+        const rcRider = (rc.riderName || "").toLowerCase().trim();
+        const rcCust = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const rcDate = rc.date || rc.completedDate;
+
+        if (rcRider === cleanRider && rcCust === cleanCust && rcDate === rDate) {
+            let gross = parseFloat(rc.totalFees);
+            if (!isNaN(gross) && gross > 0) return gross;
+        }
+    }
+    return 0;
+}
+
 export function refreshCommissionView() {
     const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
     let targetRiderId = isAdmin ? document.getElementById('admin-rider-select')?.value : appState.telegramId;
@@ -189,12 +206,12 @@ export function refreshCommissionView() {
 
     (globalState.globalDailyReceipts || []).forEach(rc => {
         mergedList.push(rc);
-        const key = `${(rc.riderName||'').toLowerCase()}_${(rc.customerName||'').toLowerCase()}_${rc.date||rc.completedDate}`;
+        const key = `${(rc.riderName||'').toLowerCase()}_${(rc.customerName||'').toLowerCase().replace(/[^a-z0-9]/g, '')}_${rc.date||rc.completedDate}`;
         processedKeys.add(key);
     });
 
     (globalState.globalCateredHistory || []).forEach(ch => {
-        const key = `${(ch.riderName||'').toLowerCase()}_${(ch.customerName||'').toLowerCase()}_${ch.completedDate||ch.date}`;
+        const key = `${(ch.riderName||'').toLowerCase()}_${(ch.customerName||'').toLowerCase().replace(/[^a-z0-9]/g, '')}_${ch.completedDate||ch.date}`;
         if (!processedKeys.has(key)) {
             mergedList.push(ch);
         }
@@ -223,6 +240,8 @@ export function refreshCommissionView() {
     filteredHistory.forEach(r => {
         let rId = (r.telegramId || r.riderId || "").toString();
         let rName = r.riderName || "Unknown Rider";
+        let cName = r.customerName || "Customer";
+        let rDate = r.date || r.completedDate || getLocalTodayStr();
 
         if (!rId) {
             const rosterRec = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").toLowerCase() === rName.toLowerCase());
@@ -245,11 +264,11 @@ export function refreshCommissionView() {
                 const disc = parseFloat(f.discount) || 0;
                 gross = hf + mf + ms + rdf + epay - disc;
             } else {
-                gross = 0;
+                // FALLBACK FUZZY LOOKUP TO RECEIPTS
+                gross = findReceiptFeeForCustomer(rName, cName, rDate);
             }
         }
 
-        let rDate = r.date || r.completedDate || getLocalTodayStr();
         const rates = getCommissionRates(rDate, rName);
 
         const earnedAmt = gross * rates.riderRate;
@@ -265,12 +284,13 @@ export function refreshCommissionView() {
         riderTotals[rId].lastRates = rates;
 
         riderTotals[rId].customers.push({
-            customerName: r.customerName || "Customer",
+            customerName: cName,
             date: rDate,
             time: r.cateringStartTime || r.startTime || r.completedTime || "",
             gross: gross,
             earned: earnedAmt,
-            company: companyAmt
+            company: companyAmt,
+            transactionId: r.transactionId || ""
         });
     });
 
@@ -409,7 +429,6 @@ export function toggleSettlementStatus() {
     });
 }
 
-// TOGGLE ACCORDION FOR RIDER CUSTOMER BREAKDOWN
 export function toggleRiderCustomerBreakdown(uid) {
     const box = document.getElementById(`box-${uid}`);
     const icon = document.getElementById(`icon-${uid}`);
@@ -417,6 +436,52 @@ export function toggleRiderCustomerBreakdown(uid) {
     if (icon) {
         icon.style.transform = box.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
     }
+}
+
+// ADMIN QUICK FIX MANUAL FEE OVERRIDE MODAL
+export function promptAdminEditCustomerFee(riderName, customerName, dateVal, currentGross) {
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
+    if (!isAdmin) return showToast("⚠️ Admin access required to update fees.");
+
+    const newFeeInput = prompt(`Update Gross Fee for [${customerName}] (${riderName}):`, currentGross || "0.00");
+    if (newFeeInput === null) return;
+
+    const parsedFee = parseFloat(newFeeInput);
+    if (isNaN(parsedFee) || parsedFee < 0) return showToast("⚠️ Invalid fee amount entered.");
+
+    const cleanCustKey = customerName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // 1. Update Firebase receipts & cateredHistory
+    db.ref('receipts').once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            Object.keys(data).forEach(key => {
+                const item = data[key];
+                const matchRider = (item.riderName || "").toLowerCase().trim() === riderName.toLowerCase().trim();
+                const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
+                if (matchRider && matchCust) {
+                    db.ref('receipts/' + key).update({ totalFees: parsedFee });
+                }
+            });
+        }
+    });
+
+    db.ref('cateredHistory').once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            Object.keys(data).forEach(key => {
+                const item = data[key];
+                const matchRider = (item.riderName || "").toLowerCase().trim() === riderName.toLowerCase().trim();
+                const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
+                if (matchRider && matchCust) {
+                    db.ref('cateredHistory/' + key).update({ totalFees: parsedFee });
+                }
+            });
+        }
+    });
+
+    showToast(`✅ Fee updated to ₱${parsedFee.toFixed(2)} for ${customerName}!`);
+    setTimeout(() => { refreshCommissionView(); }, 500);
 }
 
 function renderRiderSummaryList(riderListArray) {
@@ -427,6 +492,8 @@ function renderRiderSummaryList(riderListArray) {
         container.innerHTML = `<div class="text-center text-gray-500 italic text-xs py-10">No records found for this period.</div>`;
         return;
     }
+
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
 
     container.innerHTML = riderListArray.map((rider, idx) => {
         let amountLabel = viewSettings.mode === 'earned' 
@@ -446,11 +513,15 @@ function renderRiderSummaryList(riderListArray) {
                 let dateTimeStr = c.date;
                 if (c.time) dateTimeStr += ` • ${c.time}`;
 
+                const editBtn = isAdmin 
+                    ? `<button onclick="event.stopPropagation(); promptAdminEditCustomerFee('${escapeHtml(rider.name)}', '${escapeHtml(c.customerName)}', '${c.date}', ${c.gross})" class="text-amber-400 hover:text-amber-300 ml-1.5 p-0.5" title="Edit Fee"><i class="fa-solid fa-pen text-[10px]"></i></button>` 
+                    : ``;
+
                 return `
                 <div class="bg-black/40 p-2.5 rounded-lg border border-gray-800/80 flex justify-between items-center text-xs">
                     <div class="flex flex-col gap-0.5">
                         <span class="font-bold text-orange-300 flex items-center gap-1.5">
-                            <i class="fa-solid fa-user text-[10px]"></i> ${escapeHtml(c.customerName)}
+                            <i class="fa-solid fa-user text-[10px]"></i> ${escapeHtml(c.customerName)} ${editBtn}
                         </span>
                         <span class="text-[10px] text-gray-400 font-mono">${escapeHtml(dateTimeStr)}</span>
                     </div>
@@ -498,18 +569,17 @@ export function generateDailyReportText() {
     let targetRiderId = isAdmin ? document.getElementById('admin-rider-select')?.value : appState.telegramId;
     if (targetRiderId === "ALL") targetRiderId = null;
 
-    // 1. Merge Receipts and Catered History (EXACT SAME COMBINING LOGIC AS VIEW)
     const mergedList = [];
     const processedKeys = new Set();
 
     (globalState.globalDailyReceipts || []).forEach(rc => {
         mergedList.push(rc);
-        const key = `${(rc.riderName||'').toLowerCase()}_${(rc.customerName||'').toLowerCase()}_${rc.date||rc.completedDate}`;
+        const key = `${(rc.riderName||'').toLowerCase()}_${(rc.customerName||'').toLowerCase().replace(/[^a-z0-9]/g, '')}_${rc.date||rc.completedDate}`;
         processedKeys.add(key);
     });
 
     (globalState.globalCateredHistory || []).forEach(ch => {
-        const key = `${(ch.riderName||'').toLowerCase()}_${(ch.customerName||'').toLowerCase()}_${ch.completedDate||ch.date}`;
+        const key = `${(ch.riderName||'').toLowerCase()}_${(ch.customerName||'').toLowerCase().replace(/[^a-z0-9]/g, '')}_${ch.completedDate||ch.date}`;
         if (!processedKeys.has(key)) {
             mergedList.push(ch);
         }
@@ -530,6 +600,8 @@ export function generateDailyReportText() {
     filteredHistory.forEach(r => {
         let rId = (r.telegramId || r.riderId || "").toString();
         let rName = r.riderName || "Unknown";
+        let cName = r.customerName || "Customer";
+        let rDate = r.date || r.completedDate || getLocalTodayStr();
 
         if (!rId) {
             const rosterRec = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").toLowerCase() === rName.toLowerCase());
@@ -552,11 +624,10 @@ export function generateDailyReportText() {
                 const disc = parseFloat(f.discount) || 0;
                 gross = hf + mf + ms + rdf + epay - disc;
             } else {
-                gross = 0;
+                gross = findReceiptFeeForCustomer(rName, cName, rDate);
             }
         }
 
-        let rDate = r.date || r.completedDate || getLocalTodayStr();
         const rates = getCommissionRates(rDate, rName);
 
         if (!riderTotals[rId]) {
@@ -623,6 +694,7 @@ if (typeof window !== 'undefined') {
     window.toggleSettlementStatus = toggleSettlementStatus;
     window.generateDailyReportText = generateDailyReportText;
     window.toggleRiderCustomerBreakdown = toggleRiderCustomerBreakdown;
+    window.promptAdminEditCustomerFee = promptAdminEditCustomerFee;
 }
 
 // Reactive UI updates

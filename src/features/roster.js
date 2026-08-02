@@ -49,7 +49,6 @@ export function parseQueueTime(val) {
     return parseFloat(clean) || 0;
 }
 
-// --- HELPER: PARSE TIME TO MINUTES ---
 function parseTimeToMinutes(timeStr) {
     if (!timeStr) return null;
     const clean = timeStr.trim();
@@ -66,7 +65,6 @@ function parseTimeToMinutes(timeStr) {
     return hours * 60 + minutes;
 }
 
-// --- HELPER: CALCULATE SPLIT CATERING DURATION ---
 export function calculateSplitDuration(startTimeStr, completedTimeStr, customerCount = 1) {
     const startMins = parseTimeToMinutes(startTimeStr);
     const endMins = parseTimeToMinutes(completedTimeStr);
@@ -74,7 +72,7 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     if (startMins === null || endMins === null) return "";
 
     let totalMins = endMins - startMins;
-    if (totalMins < 0) totalMins += 24 * 60; // Handle midnight crossing
+    if (totalMins < 0) totalMins += 24 * 60;
 
     const count = Math.max(1, customerCount);
     const splitMins = Math.round(totalMins / count);
@@ -96,7 +94,6 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     return durationText;
 }
 
-// --- HELPER: CALCULATE ELAPSED CATERING DURATION (LIVE ROSTER) ---
 function getElapsedCateringTime(startTimeStr) {
     if (!startTimeStr) return "";
     
@@ -135,7 +132,6 @@ function getElapsedCateringTime(startTimeStr) {
     return ` • ${firstTime} [${durationStr}]`;
 }
 
-// --- CATERING SESSION & RECEIPT VALIDATION HELPERS ---
 export function getActiveCateringCustomersWithTimes() {
     const myId = (appState.telegramId || "").toString();
     const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === myId) : null;
@@ -179,14 +175,12 @@ export function hasReceiptForActiveSession(custName, custStartTime) {
     return false;
 }
 
-// --- ADMIN SAFETY TOGGLE ---
 export function toggleAdminControls(enabled) {
     globalState.adminControlsEnabled = !!enabled;
     showToast(`Admin Safety Controls: ${enabled ? 'ENABLED' : 'DISABLED'}`);
     updateRosterUI();
 }
 
-// --- FIRST IN LINE ALARM & SOUND ---
 export function checkFirstInLineAlarm(availableRiders) {
     const myId = (appState.telegramId || "").toString();
     const firstRiderId = (availableRiders[0]?.telegramId || "").toString();
@@ -249,7 +243,6 @@ function playLineBeep() {
     } catch(e) {}
 }
 
-// --- MAIN ROSTER UI RENDERER & AUTO LIVE GPS TRIGGER ---
 export function updateRosterUI() {
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
@@ -400,7 +393,6 @@ export function updateRosterUI() {
     if (elCooldown) elCooldown.innerHTML = cdHtml.length ? cdHtml.join('') : '(Walang naka-cooldown)';
 }
 
-// --- STATUS TRIGGER ACTION BUTTONS ---
 export async function triggerStatusWithSlide(targetStatus) {
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
@@ -556,7 +548,7 @@ export async function confirmCateringStatus() {
     await updateRosterStatusData('Catering', existingCustomers.join(', '), existingTimes.join(', '), myRecord ? parseQueueTime(myRecord.queueTime) : 0);
 }
 
-// --- ROSTER DATA PERSISTENCE WITH EVEN TIME-SPLITTING ---
+// --- ROSTER DATA PERSISTENCE WITH EVEN TIME-SPLITTING & PER-CUSTOMER FEE LOOKUP ---
 export async function updateRosterStatus(status, targetId = null, targetName = null) {
     const tId = targetId || appState.telegramId;
     const tName = targetName || appState.riderName;
@@ -575,8 +567,17 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
         for (let i = 0; i < custs.length; i++) {
             const cName = custs[i];
+            const cleanCustKey = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
             const sTime = times[i] || times[0] || 'N/A';
             const splitDuration = calculateSplitDuration(sTime, completedTimeStr, custCount);
+
+            // Pull specific customer fee object if recorded under targetRecord.customerFees
+            const custFeeObj = (targetRecord.customerFees && cleanCustKey && targetRecord.customerFees[cleanCustKey]) 
+                ? targetRecord.customerFees[cleanCustKey] 
+                : null;
+
+            const finalFees = custFeeObj ? custFeeObj.totalFees : (targetRecord.lastReceiptTotalFees || 0);
+            const finalFeeDetails = custFeeObj ? custFeeObj.fees : (targetRecord.lastReceiptFees || null);
 
             const hItem = {
                 riderName: tName,
@@ -587,8 +588,8 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
                 completedDate: getLocalTodayStr(),
                 customerCount: custCount,
                 duration: splitDuration,
-                totalFees: targetRecord.lastReceiptTotalFees || 0,
-                fees: targetRecord.lastReceiptFees || null
+                totalFees: finalFees,
+                fees: finalFeeDetails
             };
             completedHistory.push(hItem);
             db.ref('cateredHistory').push(hItem);
@@ -822,7 +823,6 @@ export function loadGlobalCateredList() {
 
     feed.innerHTML = todayHistory.slice().reverse().map(h => {
         let voidBtn = "";
-        // RESTRICTED TO ADMIN ONLY: TLs cannot void completed catered customers anymore
         if (isAdmin()) {
             voidBtn = `<button onclick="promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate)}')" class="bg-red-900/40 text-red-400 hover:bg-red-800 text-[10px] font-bold px-2 py-1 rounded border border-red-700/50 transition active:scale-95"><i class="fa-solid fa-ban"></i> Void</button>`;
         }
@@ -866,7 +866,6 @@ export function promptVoidCustomer(riderName, customerName, completedDate) {
     });
 }
 
-// VOID CUSTOMER AND SYNCHRONOUSLY DELETE EXACT MATCHING RECEIPT FROM COMMISSION SYSTEM
 export async function executeVoidCustomer(riderName, customerName, completedDate) {
     if (!isAdmin()) {
         showToast("⚠️ Admin access required to void customers.");
@@ -875,7 +874,6 @@ export async function executeVoidCustomer(riderName, customerName, completedDate
 
     showSideNotification("CUSTOMER VOIDED", `Voiding customer ${customerName} for ${riderName}...`, "fa-ban", "text-red-400", "border-red-500");
     
-    // 1. Delete from cateredHistory in Firebase
     db.ref('cateredHistory').once('value', (snapshot) => {
         const data = snapshot.val();
         if (data) {
@@ -888,7 +886,6 @@ export async function executeVoidCustomer(riderName, customerName, completedDate
         }
     });
 
-    // 2. ALSO Delete matching receipt from receipts/ in Firebase to void commission earnings
     db.ref('receipts').once('value', (snapshot) => {
         const data = snapshot.val();
         if (data) {
@@ -905,7 +902,6 @@ export async function executeVoidCustomer(riderName, customerName, completedDate
         }
     });
 
-    // 3. Post void instruction to Google Apps Script
     try {
         await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: "void_history", riderName, customerName, completedDate }) });
     } catch(e) {}
@@ -946,7 +942,6 @@ export function loadGlobalLoginList() {
     }).join('');
 }
 
-// --- EVENT LISTENERS ---
 window.addEventListener('rosterUpdated', updateRosterUI);
 window.addEventListener('cateredUpdated', loadGlobalCateredList);
 window.addEventListener('loginsUpdated', loadGlobalLoginList);

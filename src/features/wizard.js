@@ -241,6 +241,7 @@ async function saveReceiptToDatabase(customerName) {
     }
 
     const cName = customerName.trim().toLowerCase();
+    const cleanCustKey = cName.replace(/[^a-z0-9]/g, '');
     const rName = (appState.riderName || "").trim().toLowerCase();
     const todayStr = getLocalTodayStr();
 
@@ -292,6 +293,16 @@ async function saveReceiptToDatabase(customerName) {
                 lastReceiptFees: payload.fees,
                 lastReceiptTotalFees: totalFees
             });
+
+            // Store customer-specific fee mapping to prevent overwriting in multi-catering
+            if (cleanCustKey) {
+                db.ref(`roster/${appState.telegramId}/customerFees/${cleanCustKey}`).set({
+                    customerName: customerName,
+                    totalFees: totalFees,
+                    fees: payload.fees,
+                    transactionId: currentReceiptTransactionId
+                });
+            }
         }
     } catch (e) {
         console.error("Firebase write error:", e);
@@ -340,7 +351,6 @@ export function renderFinalReceiptText() {
 
     if (!feesTxt) feesTxt = "🔹 Wala pong karagdagang fees.\n";
 
-    // RETRIEVE GCASH DETAILS FROM OFFLINE LOCALSTORAGE OR STATE
     const gcashName = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || "";
     const gcashNo = appState.gcashNo || localStorage.getItem('lokalex_gcash_no') || "";
 
