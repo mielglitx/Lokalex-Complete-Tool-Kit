@@ -20,17 +20,14 @@ function getCommissionRates(dateStr, riderName = "") {
     const cleanName = (riderName || "").toLowerCase().trim();
     const setting = globalState.globalRiderRates ? globalState.globalRiderRates[cleanName] : null;
 
-    // Default base company percentage is 20% if no custom rate is specified for a rider
     let baseCompanyPerc = 20;
     if (setting) {
         if (setting.percentage !== undefined) baseCompanyPerc = parseFloat(setting.percentage);
         else if (setting.basePercentage !== undefined) baseCompanyPerc = parseFloat(setting.basePercentage);
     }
 
-    // Sunday Promo deducts 5 percentage points from company rate
     let sundayDiscount = isSunday ? 5 : 0;
 
-    // Calculate final percentages
     let finalCompanyPerc = Math.max(0, baseCompanyPerc - sundayDiscount);
     let companyRate = finalCompanyPerc / 100;
     let riderRate = (100 - finalCompanyPerc) / 100;
@@ -48,7 +45,6 @@ function getCommissionRates(dateStr, riderName = "") {
 // FETCH COMMISSION SETTINGS FROM GOOGLE APPS SCRIPT / FIREBASE
 export async function fetchCommissionSettings() {
     try {
-        // 1. Fetch live commission settings from Apps Script
         const res = await fetch(`${API_URL}?type=all`);
         if (res.ok) {
             const data = await res.json();
@@ -69,7 +65,6 @@ export async function fetchCommissionSettings() {
         console.warn("Could not fetch live commission settings from Google Sheets, checking Firebase...", e);
     }
 
-    // 2. Firebase Fallback listener
     if (db) {
         db.ref('commissionSettings').once('value', (snapshot) => {
             const val = snapshot.val();
@@ -94,7 +89,6 @@ export async function fetchCommissionSettings() {
 export async function openCommissionScreen() {
     switchView('view-commission');
     
-    // Set default dates if empty
     if (!document.getElementById('comm-input-daily').value) {
         const today = new Date();
         document.getElementById('comm-input-daily').value = getLocalTodayStr();
@@ -189,7 +183,7 @@ export function refreshCommissionView() {
     if (dateInput) viewSettings.dateValue = dateInput.value;
     if (!viewSettings.dateValue) return;
 
-    // 1. Intelligently merge Receipts and Catered History
+    // 1. Merge Receipts and Catered History
     const mergedList = [];
     const processedKeys = new Set();
 
@@ -223,7 +217,7 @@ export function refreshCommissionView() {
         return false;
     });
 
-    // 3. Group Totals by Rider using Dynamic Rider Rates
+    // 3. Group Totals and Customer Lists by Rider
     let riderTotals = {}; 
 
     filteredHistory.forEach(r => {
@@ -256,17 +250,28 @@ export function refreshCommissionView() {
         }
 
         let rDate = r.date || r.completedDate || getLocalTodayStr();
-        // Pass rider name dynamically into rate calculator
         const rates = getCommissionRates(rDate, rName);
 
+        const earnedAmt = gross * rates.riderRate;
+        const companyAmt = gross * rates.companyRate;
+
         if (!riderTotals[rId]) {
-            riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0, lastRates: rates };
+            riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0, lastRates: rates, customers: [] };
         }
         
         riderTotals[rId].gross += gross;
-        riderTotals[rId].earned += (gross * rates.riderRate);
-        riderTotals[rId].company += (gross * rates.companyRate);
+        riderTotals[rId].earned += earnedAmt;
+        riderTotals[rId].company += companyAmt;
         riderTotals[rId].lastRates = rates;
+
+        riderTotals[rId].customers.push({
+            customerName: r.customerName || "Customer",
+            date: rDate,
+            time: r.cateringStartTime || r.startTime || r.completedTime || "",
+            gross: gross,
+            earned: earnedAmt,
+            company: companyAmt
+        });
     });
 
     // 4. Filter down to Target Rider & Calculate Grand Totals
@@ -294,7 +299,6 @@ export function refreshCommissionView() {
         grandCompany += riderTotals[rId].company;
     }
 
-    // Fallback if target rider selected but has no history records today
     if (targetRiderId && targetRiderId !== "ALL" && !selectedRiderRates) {
         const myRoster = globalState.rosterMembers?.find(m => (m.telegramId || "").toString() === targetRiderId.toString());
         const rName = myRoster ? (myRoster.riderName || myRoster.name || "") : appState.riderName;
@@ -405,6 +409,16 @@ export function toggleSettlementStatus() {
     });
 }
 
+// TOGGLE ACCORDION FOR RIDER CUSTOMER BREAKDOWN
+export function toggleRiderCustomerBreakdown(uid) {
+    const box = document.getElementById(`box-${uid}`);
+    const icon = document.getElementById(`icon-${uid}`);
+    if (box) box.classList.toggle('hidden');
+    if (icon) {
+        icon.style.transform = box.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+    }
+}
+
 function renderRiderSummaryList(riderListArray) {
     const container = document.getElementById('commission-rider-list');
     if (!container) return;
@@ -414,17 +428,66 @@ function renderRiderSummaryList(riderListArray) {
         return;
     }
 
-    container.innerHTML = riderListArray.map(rider => {
+    container.innerHTML = riderListArray.map((rider, idx) => {
         let amountLabel = viewSettings.mode === 'earned' 
             ? `+ ₱${rider.earned.toFixed(2)}` 
             : `- ₱${rider.company.toFixed(2)}`;
             
         let colorClass = viewSettings.mode === 'earned' ? 'text-emerald-400' : 'text-red-400';
+        const uid = `comm-rider-cust-${idx}`;
+        const customerCount = rider.customers ? rider.customers.length : 0;
+
+        let customerItemsHtml = "";
+        if (customerCount > 0) {
+            customerItemsHtml = rider.customers.map(c => {
+                let cAmt = viewSettings.mode === 'earned' 
+                    ? `+ ₱${c.earned.toFixed(2)}` 
+                    : `- ₱${c.company.toFixed(2)}`;
+                let dateTimeStr = c.date;
+                if (c.time) dateTimeStr += ` • ${c.time}`;
+
+                return `
+                <div class="bg-black/40 p-2.5 rounded-lg border border-gray-800/80 flex justify-between items-center text-xs">
+                    <div class="flex flex-col gap-0.5">
+                        <span class="font-bold text-orange-300 flex items-center gap-1.5">
+                            <i class="fa-solid fa-user text-[10px]"></i> ${escapeHtml(c.customerName)}
+                        </span>
+                        <span class="text-[10px] text-gray-400 font-mono">${escapeHtml(dateTimeStr)}</span>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-bold ${colorClass}">${cAmt}</div>
+                        <div class="text-[9px] text-gray-500 font-mono">Paid: ₱${c.gross.toFixed(2)}</div>
+                    </div>
+                </div>`;
+            }).join('');
+        } else {
+            customerItemsHtml = `<div class="text-gray-500 italic text-[11px] py-2 text-center">No individual orders recorded.</div>`;
+        }
 
         return `
-            <div class="bg-cardBg p-3.5 rounded-xl border border-gray-800 shadow-sm flex justify-between items-center text-sm">
-                <span class="font-bold text-blue-300"><i class="fa-solid fa-motorcycle text-gray-500 mr-1.5"></i> ${escapeHtml(rider.name)}</span>
-                <span class="font-black ${colorClass}">${amountLabel}</span>
+            <div class="bg-cardBg rounded-xl border border-gray-800 shadow-sm flex flex-col overflow-hidden">
+                <div onclick="toggleRiderCustomerBreakdown('${uid}')" class="p-3.5 flex justify-between items-center text-sm cursor-pointer hover:bg-white/5 transition active:scale-[0.99] select-none">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-blue-300 flex items-center gap-1.5">
+                            <i class="fa-solid fa-motorcycle text-gray-500"></i> ${escapeHtml(rider.name)}
+                        </span>
+                        <span class="bg-blue-600/20 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-500/30">
+                            ${customerCount} ${customerCount === 1 ? 'customer' : 'customers'}
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-black ${colorClass}">${amountLabel}</span>
+                        <i id="icon-${uid}" class="fa-solid fa-chevron-down text-gray-400 text-xs transition-transform duration-300"></i>
+                    </div>
+                </div>
+
+                <div id="box-${uid}" class="hidden bg-darkBg/60 p-3 border-t border-gray-800/80 flex flex-col gap-2">
+                    <div class="text-[10px] text-amber-400 font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
+                        <span><i class="fa-solid fa-list-check"></i> Customer Breakdown (${viewSettings.period.toUpperCase()})</span>
+                        <span class="text-gray-400">Total Paid: ₱${rider.gross.toFixed(2)}</span>
+                    </div>
+                    ${customerItemsHtml}
+                </div>
             </div>
         `;
     }).join('');
@@ -531,6 +594,7 @@ if (typeof window !== 'undefined') {
     window.refreshCommissionView = refreshCommissionView;
     window.toggleSettlementStatus = toggleSettlementStatus;
     window.generateDailyReportText = generateDailyReportText;
+    window.toggleRiderCustomerBreakdown = toggleRiderCustomerBreakdown;
 }
 
 // Reactive UI updates

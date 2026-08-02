@@ -13,23 +13,34 @@ let lineAlarmInterval = null;
 let lineAlarmConfirmed = false;
 let pendingAdminTarget = null;
 
-// --- USER ROLE HELPERS ---
+// --- FLEXIBLE & ROBUST USER ROLE HELPERS ---
 export function getUserType() {
-    return (appState.userType || localStorage.getItem('userType') || "").trim();
+    return (appState.userType || localStorage.getItem('userType') || "").toString().trim().toLowerCase();
 }
 
 export function isAdmin() {
-    const t = getUserType().toLowerCase();
-    const myId = (appState.telegramId || "").toString();
-    return t === "admin" || ADMIN_IDS.includes(myId);
+    const t = getUserType();
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    return t.includes("admin") || t.includes("owner") || t.includes("manager") || ADMIN_IDS.includes(myId);
 }
 
 export function isTL() {
-    return getUserType().toLowerCase() === "tl";
+    const t = getUserType();
+    return t.includes("tl") || t.includes("lead") || t.includes("leader");
 }
 
 export function canManageRoster() {
-    return isAdmin() || isTL();
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    return isAdmin() || isTL() || ADMIN_IDS.includes(myId);
+}
+
+export function canForceCaterTarget(targetType) {
+    if (isAdmin()) return true;
+    if (isTL()) {
+        const t = (targetType || "").toString().toLowerCase().trim();
+        return !t.includes("admin");
+    }
+    return false;
 }
 
 export function parseQueueTime(val) {
@@ -38,7 +49,6 @@ export function parseQueueTime(val) {
     return parseFloat(clean) || 0;
 }
 
-// --- HELPER: PARSE TIME TO MINUTES ---
 function parseTimeToMinutes(timeStr) {
     if (!timeStr) return null;
     const clean = timeStr.trim();
@@ -55,7 +65,6 @@ function parseTimeToMinutes(timeStr) {
     return hours * 60 + minutes;
 }
 
-// --- HELPER: CALCULATE SPLIT CATERING DURATION ---
 export function calculateSplitDuration(startTimeStr, completedTimeStr, customerCount = 1) {
     const startMins = parseTimeToMinutes(startTimeStr);
     const endMins = parseTimeToMinutes(completedTimeStr);
@@ -63,7 +72,7 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     if (startMins === null || endMins === null) return "";
 
     let totalMins = endMins - startMins;
-    if (totalMins < 0) totalMins += 24 * 60; // Handle midnight crossing
+    if (totalMins < 0) totalMins += 24 * 60;
 
     const count = Math.max(1, customerCount);
     const splitMins = Math.round(totalMins / count);
@@ -85,7 +94,6 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     return durationText;
 }
 
-// --- HELPER: CALCULATE ELAPSED CATERING DURATION (LIVE ROSTER) ---
 function getElapsedCateringTime(startTimeStr) {
     if (!startTimeStr) return "";
     
@@ -124,7 +132,6 @@ function getElapsedCateringTime(startTimeStr) {
     return ` • ${firstTime} [${durationStr}]`;
 }
 
-// --- CATERING SESSION & RECEIPT VALIDATION HELPERS ---
 export function getActiveCateringCustomersWithTimes() {
     const myId = (appState.telegramId || "").toString();
     const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === myId) : null;
@@ -139,6 +146,7 @@ export function getActiveCateringCustomersWithTimes() {
     }));
 }
 
+// ENHANCED FAIL-SAFE RECEIPT VALIDATION
 export function hasReceiptForActiveSession(custName, custStartTime) {
     if (!custName || custName.toLowerCase() === 'sample') return true;
     const rName = (appState.riderName || "").trim().toLowerCase();
@@ -146,18 +154,35 @@ export function hasReceiptForActiveSession(custName, custStartTime) {
     const sTime = (custStartTime || "").trim();
     const todayStr = getLocalTodayStr();
 
-    const sessionKey = `receipt_done_${rName}_${cName}_${sTime}_${todayStr}`;
-    return localStorage.getItem(sessionKey) === 'true';
+    const keyWithTime = `receipt_done_${rName}_${cName}_${sTime}_${todayStr}`;
+    const keyTypo = `receipt_done_${rName}_${cName}__${todayStr}`;
+    const keyWithoutTime = `receipt_done_${rName}_${cName}_${todayStr}`;
+
+    if (localStorage.getItem(keyWithTime) === 'true' ||
+        localStorage.getItem(keyTypo) === 'true' ||
+        localStorage.getItem(keyWithoutTime) === 'true') {
+        return true;
+    }
+
+    // Direct check: If any cart slot is currently assigned to this client AND locked by the barrier
+    if (globalState.cartClients && globalState.cartLocked) {
+        for (let i = 0; i < 4; i++) {
+            const client = (globalState.cartClients[i] || "").trim().toLowerCase();
+            if (client === cName && globalState.cartLocked[i]) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
-// --- ADMIN SAFETY TOGGLE ---
 export function toggleAdminControls(enabled) {
-    globalState.adminControlsEnabled = enabled;
+    globalState.adminControlsEnabled = !!enabled;
     showToast(`Admin Safety Controls: ${enabled ? 'ENABLED' : 'DISABLED'}`);
     updateRosterUI();
 }
 
-// --- FIRST IN LINE ALARM & SOUND ---
 export function checkFirstInLineAlarm(availableRiders) {
     const myId = (appState.telegramId || "").toString();
     const firstRiderId = (availableRiders[0]?.telegramId || "").toString();
@@ -220,12 +245,17 @@ function playLineBeep() {
     } catch(e) {}
 }
 
-// --- MAIN ROSTER UI RENDERER & AUTO LIVE GPS TRIGGER ---
 export function updateRosterUI() {
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
 
-    // AUTOMATED LIVE GPS BACKGROUND MONITORING FOR THIS RIDER
+    const adminToggle = document.getElementById('admin-controls-toggle');
+    if (adminToggle) {
+        globalState.adminControlsEnabled = adminToggle.checked;
+    }
+
+    const showControls = globalState.adminControlsEnabled && canManageRoster();
+
     const myRecord = rosterMembers.find(m => (m.telegramId || "").toString() === myId);
     if (myRecord) {
         if (myRecord.status === 'Catering') {
@@ -245,7 +275,7 @@ export function updateRosterUI() {
 
     const findRidersBtn = document.getElementById('admin-find-riders-btn');
     if (findRidersBtn) {
-        if (isAdmin()) findRidersBtn.classList.remove('hidden');
+        if (canManageRoster()) findRidersBtn.classList.remove('hidden');
         else findRidersBtn.classList.add('hidden');
     }
 
@@ -282,23 +312,19 @@ export function updateRosterUI() {
         const mName = m.riderName || m.name || "Rider";
         let nameStr = escapeHtml(mName);
 
-        if (globalState.adminControlsEnabled && canManageRoster()) {
-            if (canForceCaterTarget(m.userType || "")) {
-                nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
-            }
+        if (showControls) {
+            nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
 
-            if (isAdmin()) {
-                const forceAllBtn = document.getElementById('admin-force-all-btn');
-                if (forceAllBtn) forceAllBtn.classList.remove('hidden');
+            const forceAllBtn = document.getElementById('admin-force-all-btn');
+            if (forceAllBtn) forceAllBtn.classList.remove('hidden');
 
-                nameStr += `
-                <div class="inline-flex gap-1 ml-2 text-[10px] align-middle">
-                    <button onclick="adminShiftRiderQueue('${mId}', 'move_top')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Top">⬆️</button>
-                    <button onclick="adminShiftRiderQueue('${mId}', 'move_up')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Up (+1)">▲</button>
-                    <button onclick="adminShiftRiderQueue('${mId}', 'move_down')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Down (-1)">▼</button>
-                    <button onclick="adminShiftRiderQueue('${mId}', 'move_bottom')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Bottom">⬇️</button>
-                </div>`;
-            }
+            nameStr += `
+            <div class="inline-flex gap-1 ml-2 text-[10px] align-middle">
+                <button onclick="adminShiftRiderQueue('${mId}', 'move_top')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Top">⬆️</button>
+                <button onclick="adminShiftRiderQueue('${mId}', 'move_up')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Up (+1)">▲</button>
+                <button onclick="adminShiftRiderQueue('${mId}', 'move_down')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Down (-1)">▼</button>
+                <button onclick="adminShiftRiderQueue('${mId}', 'move_bottom')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Bottom">⬇️</button>
+            </div>`;
         }
 
         availHtml.push(`<div class="flex items-center justify-between py-1"><span class="font-bold text-green-400 mr-2">${availCounter++}.</span><span class="flex-1">${nameStr}</span></div>`);
@@ -324,8 +350,8 @@ export function updateRosterUI() {
             </div>`;
         }
 
-        if (globalState.adminControlsEnabled && canManageRoster() && canForceCaterTarget(m.userType || "")) {
-            nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
+        if (showControls) {
+            nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
         }
         busyHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
     });
@@ -335,8 +361,8 @@ export function updateRosterUI() {
         const mName = m.riderName || m.name || "Rider";
         let nameStr = escapeHtml(mName);
 
-        if (globalState.adminControlsEnabled && canManageRoster() && canForceCaterTarget(m.userType || "")) {
-            nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
+        if (showControls) {
+            nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
         }
         brkHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
     });
@@ -352,8 +378,8 @@ export function updateRosterUI() {
 
         nameStr += ` <span class="text-yellow-400 font-mono text-[10px]">(${mins}:${secs} remaining)</span>`;
 
-        if (globalState.adminControlsEnabled && canManageRoster() && canForceCaterTarget(m.userType || "")) {
-            nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
+        if (showControls) {
+            nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
         }
         cdHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
     });
@@ -369,7 +395,6 @@ export function updateRosterUI() {
     if (elCooldown) elCooldown.innerHTML = cdHtml.length ? cdHtml.join('') : '(Walang naka-cooldown)';
 }
 
-// --- STATUS TRIGGER ACTION BUTTONS ---
 export async function triggerStatusWithSlide(targetStatus) {
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
@@ -520,13 +545,11 @@ export async function confirmCateringStatus() {
 
     showSideNotification("RECORDING CATERING", `Moving to Catering — adding customer ${custName} to ${appState.riderName}`, "fa-motorcycle", "text-red-400", "border-red-500");
     
-    // Auto-start background Live GPS streaming
     autoStartLiveGpsSession(existingCustomers.join(', '));
 
     await updateRosterStatusData('Catering', existingCustomers.join(', '), existingTimes.join(', '), myRecord ? parseQueueTime(myRecord.queueTime) : 0);
 }
 
-// --- ROSTER DATA PERSISTENCE WITH EVEN TIME-SPLITTING ---
 export async function updateRosterStatus(status, targetId = null, targetName = null) {
     const tId = targetId || appState.telegramId;
     const tName = targetName || appState.riderName;
@@ -537,7 +560,6 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === tId.toString());
 
-    // RECORD COMPLETED CATERED HISTORY & EVENLY SPLIT CATERING TIME FOR MULTIPLE CUSTOMERS
     if (status !== 'Catering' && targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
         const custs = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
         const times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
@@ -648,7 +670,6 @@ async function clockOutRider() {
     try { fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) }); } catch(e) {}
 }
 
-// --- ADMIN / TL CONTROLS ---
 export function openAdminCateringModal(id, name) {
     pendingAdminTarget = { id, name };
     const nameInput = document.getElementById('admin-catering-customer-name');
@@ -775,7 +796,6 @@ export async function forceAllEndShift() {
     });
 }
 
-// --- GLOBAL CATERED HISTORY LIST DISPLAY WITH DURATION ---
 export function loadGlobalCateredList() {
     const feed = document.getElementById('catered-customers-feed');
     const badge = document.getElementById('catered-count-badge');
@@ -797,7 +817,6 @@ export function loadGlobalCateredList() {
             voidBtn = `<button onclick="promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate)}')" class="bg-red-900/40 text-red-400 hover:bg-red-800 text-[10px] font-bold px-2 py-1 rounded border border-red-700/50 transition active:scale-95"><i class="fa-solid fa-ban"></i> Void</button>`;
         }
 
-        // Calculate or retrieve catering duration
         let durationStr = h.duration || "";
         if (!durationStr && h.startTime && h.completedTime) {
             durationStr = calculateSplitDuration(h.startTime, h.completedTime, h.customerCount || 1);
@@ -888,7 +907,6 @@ export function loadGlobalLoginList() {
     }).join('');
 }
 
-// --- EVENT LISTENERS ---
 window.addEventListener('rosterUpdated', updateRosterUI);
 window.addEventListener('cateredUpdated', loadGlobalCateredList);
 window.addEventListener('loginsUpdated', loadGlobalLoginList);
