@@ -49,7 +49,6 @@ export function parseQueueTime(val) {
     return parseFloat(clean) || 0;
 }
 
-// --- HELPER: PARSE TIME TO MINUTES ---
 function parseTimeToMinutes(timeStr) {
     if (!timeStr) return null;
     const clean = timeStr.trim();
@@ -66,7 +65,6 @@ function parseTimeToMinutes(timeStr) {
     return hours * 60 + minutes;
 }
 
-// --- HELPER: CALCULATE SPLIT CATERING DURATION ---
 export function calculateSplitDuration(startTimeStr, completedTimeStr, customerCount = 1) {
     const startMins = parseTimeToMinutes(startTimeStr);
     const endMins = parseTimeToMinutes(completedTimeStr);
@@ -74,7 +72,7 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     if (startMins === null || endMins === null) return "";
 
     let totalMins = endMins - startMins;
-    if (totalMins < 0) totalMins += 24 * 60; // Handle midnight crossing
+    if (totalMins < 0) totalMins += 24 * 60;
 
     const count = Math.max(1, customerCount);
     const splitMins = Math.round(totalMins / count);
@@ -96,7 +94,6 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     return durationText;
 }
 
-// --- HELPER: CALCULATE ELAPSED CATERING DURATION (LIVE ROSTER) ---
 function getElapsedCateringTime(startTimeStr) {
     if (!startTimeStr) return "";
     
@@ -135,7 +132,6 @@ function getElapsedCateringTime(startTimeStr) {
     return ` • ${firstTime} [${durationStr}]`;
 }
 
-// --- CATERING SESSION & RECEIPT VALIDATION HELPERS ---
 export function getActiveCateringCustomersWithTimes() {
     const myId = (appState.telegramId || "").toString();
     const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === myId) : null;
@@ -150,6 +146,7 @@ export function getActiveCateringCustomersWithTimes() {
     }));
 }
 
+// ENHANCED FAIL-SAFE RECEIPT VALIDATION
 export function hasReceiptForActiveSession(custName, custStartTime) {
     if (!custName || custName.toLowerCase() === 'sample') return true;
     const rName = (appState.riderName || "").trim().toLowerCase();
@@ -157,18 +154,35 @@ export function hasReceiptForActiveSession(custName, custStartTime) {
     const sTime = (custStartTime || "").trim();
     const todayStr = getLocalTodayStr();
 
-    const sessionKey = `receipt_done_${rName}_${cName}_${sTime}_${todayStr}`;
-    return localStorage.getItem(sessionKey) === 'true';
+    const keyWithTime = `receipt_done_${rName}_${cName}_${sTime}_${todayStr}`;
+    const keyTypo = `receipt_done_${rName}_${cName}__${todayStr}`;
+    const keyWithoutTime = `receipt_done_${rName}_${cName}_${todayStr}`;
+
+    if (localStorage.getItem(keyWithTime) === 'true' ||
+        localStorage.getItem(keyTypo) === 'true' ||
+        localStorage.getItem(keyWithoutTime) === 'true') {
+        return true;
+    }
+
+    // Direct check: If any cart slot is currently assigned to this client AND locked by the barrier
+    if (globalState.cartClients && globalState.cartLocked) {
+        for (let i = 0; i < 4; i++) {
+            const client = (globalState.cartClients[i] || "").trim().toLowerCase();
+            if (client === cName && globalState.cartLocked[i]) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
-// --- ADMIN SAFETY TOGGLE ---
 export function toggleAdminControls(enabled) {
     globalState.adminControlsEnabled = !!enabled;
     showToast(`Admin Safety Controls: ${enabled ? 'ENABLED' : 'DISABLED'}`);
     updateRosterUI();
 }
 
-// --- FIRST IN LINE ALARM & SOUND ---
 export function checkFirstInLineAlarm(availableRiders) {
     const myId = (appState.telegramId || "").toString();
     const firstRiderId = (availableRiders[0]?.telegramId || "").toString();
@@ -231,12 +245,10 @@ function playLineBeep() {
     } catch(e) {}
 }
 
-// --- MAIN ROSTER UI RENDERER & AUTO LIVE GPS TRIGGER ---
 export function updateRosterUI() {
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
 
-    // Direct DOM sync for checkbox toggle state
     const adminToggle = document.getElementById('admin-controls-toggle');
     if (adminToggle) {
         globalState.adminControlsEnabled = adminToggle.checked;
@@ -244,7 +256,6 @@ export function updateRosterUI() {
 
     const showControls = globalState.adminControlsEnabled && canManageRoster();
 
-    // AUTOMATED LIVE GPS BACKGROUND MONITORING FOR THIS RIDER
     const myRecord = rosterMembers.find(m => (m.telegramId || "").toString() === myId);
     if (myRecord) {
         if (myRecord.status === 'Catering') {
@@ -384,7 +395,6 @@ export function updateRosterUI() {
     if (elCooldown) elCooldown.innerHTML = cdHtml.length ? cdHtml.join('') : '(Walang naka-cooldown)';
 }
 
-// --- STATUS TRIGGER ACTION BUTTONS ---
 export async function triggerStatusWithSlide(targetStatus) {
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
@@ -535,13 +545,11 @@ export async function confirmCateringStatus() {
 
     showSideNotification("RECORDING CATERING", `Moving to Catering — adding customer ${custName} to ${appState.riderName}`, "fa-motorcycle", "text-red-400", "border-red-500");
     
-    // Auto-start background Live GPS streaming
     autoStartLiveGpsSession(existingCustomers.join(', '));
 
     await updateRosterStatusData('Catering', existingCustomers.join(', '), existingTimes.join(', '), myRecord ? parseQueueTime(myRecord.queueTime) : 0);
 }
 
-// --- ROSTER DATA PERSISTENCE WITH EVEN TIME-SPLITTING ---
 export async function updateRosterStatus(status, targetId = null, targetName = null) {
     const tId = targetId || appState.telegramId;
     const tName = targetName || appState.riderName;
@@ -552,7 +560,6 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === tId.toString());
 
-    // RECORD COMPLETED CATERED HISTORY & EVENLY SPLIT CATERING TIME FOR MULTIPLE CUSTOMERS
     if (status !== 'Catering' && targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
         const custs = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
         const times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
@@ -663,7 +670,6 @@ async function clockOutRider() {
     try { fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) }); } catch(e) {}
 }
 
-// --- ADMIN / TL CONTROLS ---
 export function openAdminCateringModal(id, name) {
     pendingAdminTarget = { id, name };
     const nameInput = document.getElementById('admin-catering-customer-name');
@@ -790,7 +796,6 @@ export async function forceAllEndShift() {
     });
 }
 
-// --- GLOBAL CATERED HISTORY LIST DISPLAY WITH DURATION & SPLIT TIME ---
 export function loadGlobalCateredList() {
     const feed = document.getElementById('catered-customers-feed');
     const badge = document.getElementById('catered-count-badge');
@@ -812,7 +817,6 @@ export function loadGlobalCateredList() {
             voidBtn = `<button onclick="promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate)}')" class="bg-red-900/40 text-red-400 hover:bg-red-800 text-[10px] font-bold px-2 py-1 rounded border border-red-700/50 transition active:scale-95"><i class="fa-solid fa-ban"></i> Void</button>`;
         }
 
-        // Calculate or retrieve catering duration
         let durationStr = h.duration || "";
         if (!durationStr && h.startTime && h.completedTime) {
             durationStr = calculateSplitDuration(h.startTime, h.completedTime, h.customerCount || 1);
@@ -903,7 +907,6 @@ export function loadGlobalLoginList() {
     }).join('');
 }
 
-// --- EVENT LISTENERS ---
 window.addEventListener('rosterUpdated', updateRosterUI);
 window.addEventListener('cateredUpdated', loadGlobalCateredList);
 window.addEventListener('loginsUpdated', loadGlobalLoginList);
