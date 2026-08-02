@@ -13,23 +13,34 @@ let lineAlarmInterval = null;
 let lineAlarmConfirmed = false;
 let pendingAdminTarget = null;
 
-// --- USER ROLE HELPERS ---
+// --- FLEXIBLE & ROBUST USER ROLE HELPERS ---
 export function getUserType() {
-    return (appState.userType || localStorage.getItem('userType') || "").trim();
+    return (appState.userType || localStorage.getItem('userType') || "").toString().trim().toLowerCase();
 }
 
 export function isAdmin() {
-    const t = getUserType().toLowerCase();
-    const myId = (appState.telegramId || "").toString();
-    return t === "admin" || ADMIN_IDS.includes(myId);
+    const t = getUserType();
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    return t.includes("admin") || t.includes("owner") || t.includes("manager") || ADMIN_IDS.includes(myId);
 }
 
 export function isTL() {
-    return getUserType().toLowerCase() === "tl";
+    const t = getUserType();
+    return t.includes("tl") || t.includes("lead") || t.includes("leader");
 }
 
 export function canManageRoster() {
-    return isAdmin() || isTL();
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    return isAdmin() || isTL() || ADMIN_IDS.includes(myId);
+}
+
+export function canForceCaterTarget(targetType) {
+    if (isAdmin()) return true;
+    if (isTL()) {
+        const t = (targetType || "").toString().toLowerCase().trim();
+        return !t.includes("admin");
+    }
+    return false;
 }
 
 export function parseQueueTime(val) {
@@ -152,7 +163,7 @@ export function hasReceiptForActiveSession(custName, custStartTime) {
 
 // --- ADMIN SAFETY TOGGLE ---
 export function toggleAdminControls(enabled) {
-    globalState.adminControlsEnabled = enabled;
+    globalState.adminControlsEnabled = !!enabled;
     showToast(`Admin Safety Controls: ${enabled ? 'ENABLED' : 'DISABLED'}`);
     updateRosterUI();
 }
@@ -225,6 +236,14 @@ export function updateRosterUI() {
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
 
+    // Direct DOM sync for checkbox toggle state
+    const adminToggle = document.getElementById('admin-controls-toggle');
+    if (adminToggle) {
+        globalState.adminControlsEnabled = adminToggle.checked;
+    }
+
+    const showControls = globalState.adminControlsEnabled && canManageRoster();
+
     // AUTOMATED LIVE GPS BACKGROUND MONITORING FOR THIS RIDER
     const myRecord = rosterMembers.find(m => (m.telegramId || "").toString() === myId);
     if (myRecord) {
@@ -245,7 +264,7 @@ export function updateRosterUI() {
 
     const findRidersBtn = document.getElementById('admin-find-riders-btn');
     if (findRidersBtn) {
-        if (isAdmin()) findRidersBtn.classList.remove('hidden');
+        if (canManageRoster()) findRidersBtn.classList.remove('hidden');
         else findRidersBtn.classList.add('hidden');
     }
 
@@ -282,23 +301,19 @@ export function updateRosterUI() {
         const mName = m.riderName || m.name || "Rider";
         let nameStr = escapeHtml(mName);
 
-        if (globalState.adminControlsEnabled && canManageRoster()) {
-            if (canForceCaterTarget(m.userType || "")) {
-                nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
-            }
+        if (showControls) {
+            nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
 
-            if (isAdmin()) {
-                const forceAllBtn = document.getElementById('admin-force-all-btn');
-                if (forceAllBtn) forceAllBtn.classList.remove('hidden');
+            const forceAllBtn = document.getElementById('admin-force-all-btn');
+            if (forceAllBtn) forceAllBtn.classList.remove('hidden');
 
-                nameStr += `
-                <div class="inline-flex gap-1 ml-2 text-[10px] align-middle">
-                    <button onclick="adminShiftRiderQueue('${mId}', 'move_top')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Top">⬆️</button>
-                    <button onclick="adminShiftRiderQueue('${mId}', 'move_up')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Up (+1)">▲</button>
-                    <button onclick="adminShiftRiderQueue('${mId}', 'move_down')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Down (-1)">▼</button>
-                    <button onclick="adminShiftRiderQueue('${mId}', 'move_bottom')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Bottom">⬇️</button>
-                </div>`;
-            }
+            nameStr += `
+            <div class="inline-flex gap-1 ml-2 text-[10px] align-middle">
+                <button onclick="adminShiftRiderQueue('${mId}', 'move_top')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Top">⬆️</button>
+                <button onclick="adminShiftRiderQueue('${mId}', 'move_up')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Up (+1)">▲</button>
+                <button onclick="adminShiftRiderQueue('${mId}', 'move_down')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Down (-1)">▼</button>
+                <button onclick="adminShiftRiderQueue('${mId}', 'move_bottom')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Bottom">⬇️</button>
+            </div>`;
         }
 
         availHtml.push(`<div class="flex items-center justify-between py-1"><span class="font-bold text-green-400 mr-2">${availCounter++}.</span><span class="flex-1">${nameStr}</span></div>`);
@@ -324,8 +339,8 @@ export function updateRosterUI() {
             </div>`;
         }
 
-        if (globalState.adminControlsEnabled && canManageRoster() && canForceCaterTarget(m.userType || "")) {
-            nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
+        if (showControls) {
+            nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
         }
         busyHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
     });
@@ -335,8 +350,8 @@ export function updateRosterUI() {
         const mName = m.riderName || m.name || "Rider";
         let nameStr = escapeHtml(mName);
 
-        if (globalState.adminControlsEnabled && canManageRoster() && canForceCaterTarget(m.userType || "")) {
-            nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
+        if (showControls) {
+            nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
         }
         brkHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
     });
@@ -352,8 +367,8 @@ export function updateRosterUI() {
 
         nameStr += ` <span class="text-yellow-400 font-mono text-[10px]">(${mins}:${secs} remaining)</span>`;
 
-        if (globalState.adminControlsEnabled && canManageRoster() && canForceCaterTarget(m.userType || "")) {
-            nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
+        if (showControls) {
+            nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
         }
         cdHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
     });
@@ -775,7 +790,7 @@ export async function forceAllEndShift() {
     });
 }
 
-// --- GLOBAL CATERED HISTORY LIST DISPLAY WITH DURATION ---
+// --- GLOBAL CATERED HISTORY LIST DISPLAY WITH DURATION & SPLIT TIME ---
 export function loadGlobalCateredList() {
     const feed = document.getElementById('catered-customers-feed');
     const badge = document.getElementById('catered-count-badge');
