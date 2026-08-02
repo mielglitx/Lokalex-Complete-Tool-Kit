@@ -32,19 +32,96 @@ export function canManageRoster() {
     return isAdmin() || isTL();
 }
 
-export function canForceCaterTarget(targetType) {
-    if (isAdmin()) return true;
-    if (isTL()) {
-        const t = (targetType || "").toLowerCase();
-        return t !== "admin" && t !== "tl";
-    }
-    return false;
-}
-
 export function parseQueueTime(val) {
     if (!val) return 0;
     const clean = val.toString().replace(/,/g, '').trim();
     return parseFloat(clean) || 0;
+}
+
+// --- HELPER: PARSE TIME TO MINUTES ---
+function parseTimeToMinutes(timeStr) {
+    if (!timeStr) return null;
+    const clean = timeStr.trim();
+    const match = clean.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+    if (!match) return null;
+
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const ampm = match[3] ? match[3].toUpperCase() : null;
+
+    if (ampm === "PM" && hours < 12) hours += 12;
+    if (ampm === "AM" && hours === 12) hours = 0;
+
+    return hours * 60 + minutes;
+}
+
+// --- HELPER: CALCULATE SPLIT CATERING DURATION ---
+export function calculateSplitDuration(startTimeStr, completedTimeStr, customerCount = 1) {
+    const startMins = parseTimeToMinutes(startTimeStr);
+    const endMins = parseTimeToMinutes(completedTimeStr);
+
+    if (startMins === null || endMins === null) return "";
+
+    let totalMins = endMins - startMins;
+    if (totalMins < 0) totalMins += 24 * 60; // Handle midnight crossing
+
+    const count = Math.max(1, customerCount);
+    const splitMins = Math.round(totalMins / count);
+
+    const hrs = Math.floor(splitMins / 60);
+    const mins = splitMins % 60;
+
+    let durationText = "";
+    if (hrs > 0) {
+        durationText = `${hrs}h ${mins}m`;
+    } else {
+        durationText = `${mins}m`;
+    }
+
+    if (count > 1) {
+        durationText += ` (${totalMins}m ÷ ${count})`;
+    }
+
+    return durationText;
+}
+
+// --- HELPER: CALCULATE ELAPSED CATERING DURATION (LIVE ROSTER) ---
+function getElapsedCateringTime(startTimeStr) {
+    if (!startTimeStr) return "";
+    
+    const firstTime = startTimeStr.split(',')[0].trim();
+    if (!firstTime) return "";
+
+    const match = firstTime.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+    if (!match) return ` • ${firstTime}`;
+
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const ampm = match[3] ? match[3].toUpperCase() : null;
+
+    if (ampm === "PM" && hours < 12) hours += 12;
+    if (ampm === "AM" && hours === 12) hours = 0;
+
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0);
+
+    let diffMs = now - start;
+    if (diffMs < 0) {
+        diffMs += 24 * 60 * 60 * 1000;
+    }
+
+    const totalMins = Math.floor(diffMs / 60000);
+    const hrs = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+
+    let durationStr = "";
+    if (hrs > 0) {
+        durationStr = `${hrs}h ${mins}m`;
+    } else {
+        durationStr = `${mins}m`;
+    }
+
+    return ` • ${firstTime} [${durationStr}]`;
 }
 
 // --- CATERING SESSION & RECEIPT VALIDATION HELPERS ---
@@ -152,10 +229,8 @@ export function updateRosterUI() {
     const myRecord = rosterMembers.find(m => (m.telegramId || "").toString() === myId);
     if (myRecord) {
         if (myRecord.status === 'Catering') {
-            // Auto-start Live GPS session on rider's phone if in Catering
             autoStartLiveGpsSession(myRecord.customerName || "Customer");
         } else {
-            // Auto-end Live GPS session if rider left Catering
             if (localStorage.getItem('lokalex_active_live_session')) {
                 endLiveGpsSession();
             }
@@ -235,7 +310,8 @@ export function updateRosterUI() {
         let nameStr = escapeHtml(mName);
 
         if (m.customerName) {
-            nameStr += ` <span class="text-orange-300 text-[10px]">(${escapeHtml(m.customerName)})</span>`;
+            const timeDetails = getElapsedCateringTime(m.startTime);
+            nameStr += ` <span class="text-orange-300 text-[10px]">(${escapeHtml(m.customerName)}${timeDetails})</span>`;
         }
 
         const isMyLine = mId === myId;
@@ -450,7 +526,7 @@ export async function confirmCateringStatus() {
     await updateRosterStatusData('Catering', existingCustomers.join(', '), existingTimes.join(', '), myRecord ? parseQueueTime(myRecord.queueTime) : 0);
 }
 
-// --- ROSTER DATA PERSISTENCE ---
+// --- ROSTER DATA PERSISTENCE WITH EVEN TIME-SPLITTING ---
 export async function updateRosterStatus(status, targetId = null, targetName = null) {
     const tId = targetId || appState.telegramId;
     const tName = targetName || appState.riderName;
@@ -461,18 +537,27 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === tId.toString());
 
+    // RECORD COMPLETED CATERED HISTORY & EVENLY SPLIT CATERING TIME FOR MULTIPLE CUSTOMERS
     if (status !== 'Catering' && targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
-        const custs = targetRecord.customerName.split(', ');
-        const times = targetRecord.startTime ? targetRecord.startTime.split(', ') : [];
+        const custs = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+        const times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
+        const custCount = custs.length || 1;
+        const completedTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         for (let i = 0; i < custs.length; i++) {
-            const cName = custs[i].trim();
+            const cName = custs[i];
+            const sTime = times[i] || times[0] || 'N/A';
+            const splitDuration = calculateSplitDuration(sTime, completedTimeStr, custCount);
+
             const hItem = {
                 riderName: tName,
                 telegramId: tId.toString(),
                 customerName: cName,
-                startTime: times[i] || 'N/A',
+                startTime: sTime,
+                completedTime: completedTimeStr,
                 completedDate: getLocalTodayStr(),
+                customerCount: custCount,
+                duration: splitDuration,
                 totalFees: targetRecord.lastReceiptTotalFees || 0,
                 fees: targetRecord.lastReceiptFees || null
             };
@@ -690,7 +775,7 @@ export async function forceAllEndShift() {
     });
 }
 
-// --- GLOBAL CATERED HISTORY & LOGIN FEEDS ---
+// --- GLOBAL CATERED HISTORY LIST DISPLAY WITH DURATION ---
 export function loadGlobalCateredList() {
     const feed = document.getElementById('catered-customers-feed');
     const badge = document.getElementById('catered-count-badge');
@@ -711,6 +796,21 @@ export function loadGlobalCateredList() {
         if (canManageRoster()) {
             voidBtn = `<button onclick="promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate)}')" class="bg-red-900/40 text-red-400 hover:bg-red-800 text-[10px] font-bold px-2 py-1 rounded border border-red-700/50 transition active:scale-95"><i class="fa-solid fa-ban"></i> Void</button>`;
         }
+
+        // Calculate or retrieve catering duration
+        let durationStr = h.duration || "";
+        if (!durationStr && h.startTime && h.completedTime) {
+            durationStr = calculateSplitDuration(h.startTime, h.completedTime, h.customerCount || 1);
+        }
+
+        let timeInfo = `Started: ${escapeHtml(h.startTime)}`;
+        if (h.completedTime) {
+            timeInfo += ` → ${escapeHtml(h.completedTime)}`;
+        }
+        if (durationStr) {
+            timeInfo += ` <span class="text-emerald-400 font-bold">[${escapeHtml(durationStr)}]</span>`;
+        }
+
         return `
         <div class="bg-gray-800/40 border border-gray-700/60 p-2.5 rounded-lg flex justify-between items-center">
             <div>
@@ -718,7 +818,9 @@ export function loadGlobalCateredList() {
                 <div class="text-[10px] text-gray-400">Rider: <span class="text-blue-400">${escapeHtml(h.riderName)}</span></div>
             </div>
             <div class="flex items-center gap-3">
-                <div class="text-[10px] text-gray-400 font-mono text-right">Started: ${escapeHtml(h.startTime)}</div>
+                <div class="text-[10px] text-gray-400 font-mono text-right">
+                    ${timeInfo}
+                </div>
                 ${voidBtn}
             </div>
         </div>`;
