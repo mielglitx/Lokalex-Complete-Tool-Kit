@@ -248,8 +248,10 @@ async function saveReceiptToDatabase(customerName) {
     const match = activeCustList.find(i => i.name.trim().toLowerCase() === cName);
     const sTime = match ? match.startTime.trim() : "";
 
-    const sessionKey = `receipt_done_${rName}_${cName}__${todayStr}`;
+    // FIXED KEY MATCHING FOR ROSTER VALIDATION
+    const sessionKey = `receipt_done_${rName}_${cName}_${sTime}_${todayStr}`;
     localStorage.setItem(sessionKey, 'true');
+    localStorage.setItem(`receipt_done_${rName}_${cName}_${todayStr}`, 'true');
 
     const totalFees = Math.max(0, (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0));
 
@@ -364,7 +366,6 @@ ${feesTxt}➖➖➖➖➖➖➖➖➖➖➖➖
 export function completeReceiptDone() {
     const activeCartIdx = globalState.activeCartIndex || 0;
 
-    // Apply Barrier Protection Overlay to current completed cart slot
     if (!globalState.cartLocked) globalState.cartLocked = [false, false, false, false];
     globalState.cartLocked[activeCartIdx] = true;
 
@@ -375,7 +376,6 @@ export function completeReceiptDone() {
 
     currentReceiptTransactionId = "";
     
-    // UPDATED: Return to Home / Main Menu Screen
     switchView('view-home');
     
     renderCartTabs();
@@ -411,7 +411,6 @@ export function copyFinalReceipt() {
     }
 }
 
-// Global window bindings
 if (typeof window !== 'undefined') {
     window.proceedToWizard = proceedToWizard;
     window.selectCateredClientName = selectCateredClientName;
