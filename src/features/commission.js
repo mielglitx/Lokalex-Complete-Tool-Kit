@@ -498,11 +498,24 @@ export function generateDailyReportText() {
     let targetRiderId = isAdmin ? document.getElementById('admin-rider-select')?.value : appState.telegramId;
     if (targetRiderId === "ALL") targetRiderId = null;
 
-    const receiptList = (globalState.globalDailyReceipts && globalState.globalDailyReceipts.length > 0)
-        ? globalState.globalDailyReceipts
-        : globalState.globalCateredHistory;
+    // 1. Merge Receipts and Catered History (EXACT SAME COMBINING LOGIC AS VIEW)
+    const mergedList = [];
+    const processedKeys = new Set();
 
-    let filteredHistory = receiptList.filter(record => {
+    (globalState.globalDailyReceipts || []).forEach(rc => {
+        mergedList.push(rc);
+        const key = `${(rc.riderName||'').toLowerCase()}_${(rc.customerName||'').toLowerCase()}_${rc.date||rc.completedDate}`;
+        processedKeys.add(key);
+    });
+
+    (globalState.globalCateredHistory || []).forEach(ch => {
+        const key = `${(ch.riderName||'').toLowerCase()}_${(ch.customerName||'').toLowerCase()}_${ch.completedDate||ch.date}`;
+        if (!processedKeys.has(key)) {
+            mergedList.push(ch);
+        }
+    });
+
+    let filteredHistory = mergedList.filter(record => {
         let rDate = record.date || record.completedDate || getLocalTodayStr();
         if (viewSettings.period === 'daily') return rDate === viewSettings.dateValue;
         if (viewSettings.period === 'weekly') {
@@ -525,29 +538,39 @@ export function generateDailyReportText() {
         }
 
         let gross = parseFloat(r.totalFees);
-        if (isNaN(gross)) {
-            const hf = parseFloat(r.fees?.handling) || 0;
-            const mf = parseFloat(r.fees?.market) || 0;
-            const ms = parseFloat(r.fees?.multistore || r.fees?.multistop) || 0;
-            const rdf = parseFloat(r.fees?.delivery) || 0;
-            const epay = parseFloat(r.fees?.epaymentFee) || 0;
-            const disc = parseFloat(r.fees?.discount) || 0;
-            gross = hf + mf + ms + rdf + epay - disc;
+        if (isNaN(gross) || gross === 0) {
+            let f = r.fees;
+            if (typeof f === 'string') {
+                try { f = JSON.parse(f); } catch(e) { f = null; }
+            }
+            if (f) {
+                const hf = parseFloat(f.handling) || 0;
+                const mf = parseFloat(f.market) || 0;
+                const ms = parseFloat(f.multistore || f.multistop) || 0;
+                const rdf = parseFloat(f.delivery) || 0;
+                const epay = parseFloat(f.epaymentFee) || 0;
+                const disc = parseFloat(f.discount) || 0;
+                gross = hf + mf + ms + rdf + epay - disc;
+            } else {
+                gross = 0;
+            }
         }
 
         let rDate = r.date || r.completedDate || getLocalTodayStr();
         const rates = getCommissionRates(rDate, rName);
 
         if (!riderTotals[rId]) {
-            riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0 };
+            riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0, lastRates: rates };
         }
         riderTotals[rId].gross += gross;
         riderTotals[rId].earned += (gross * rates.riderRate);
         riderTotals[rId].company += (gross * rates.companyRate);
+        riderTotals[rId].lastRates = rates;
     });
 
     let grandGross = 0; let grandEarned = 0; let grandCompany = 0;
     let listText = "";
+    let selectedRiderRates = null;
 
     for (let rId in riderTotals) {
         if (targetRiderId && targetRiderId !== "ALL") {
@@ -558,6 +581,7 @@ export function generateDailyReportText() {
             const isNameMatch = targetName && riderTotals[rId].name.toLowerCase() === targetName;
 
             if (!isIdMatch && !isNameMatch) continue;
+            selectedRiderRates = riderTotals[rId].lastRates;
         }
         
         grandGross += riderTotals[rId].gross;
@@ -569,13 +593,17 @@ export function generateDailyReportText() {
     }
 
     const periodLabel = viewSettings.period.toUpperCase();
-    const modeLabel = viewSettings.mode === 'earned' ? "RIDER EARNINGS" : "TO PAY COMPANY";
     const repDate = new Date(viewSettings.dateValue + "T00:00:00");
     const isRepSunday = viewSettings.period === 'daily' && repDate.getDay() === 0;
-    
+    const displayRates = selectedRiderRates || getCommissionRates(viewSettings.dateValue, appState.riderName);
+
+    const modeLabel = viewSettings.mode === 'earned' 
+        ? `RIDER EARNINGS (${displayRates.riderPerc}%${isRepSunday ? ' SUNDAY PROMO' : ''})` 
+        : `TO PAY COMPANY (${displayRates.companyPerc}%${isRepSunday ? ' SUNDAY PROMO' : ''})`;
+
     let report = `📊 LOKALEX SETTLEMENT REPORT\n`;
     report += `Scope: ${targetRiderId && riderTotals[targetRiderId] ? riderTotals[targetRiderId]?.name : "ALL RIDERS"}\n`;
-    report += `Period: ${periodLabel} (${viewSettings.dateValue})${isRepSunday ? ' 🎁 [SUNDAY 5% COMMISSION DISCOUNT]' : ''}\n`;
+    report += `Period: ${periodLabel} (${viewSettings.dateValue})\n`;
     report += `Mode: ${modeLabel}\n\n`;
     report += `💰 Gross Total: ₱${grandGross.toFixed(2)}\n`;
     report += `🟢 Rider Earned: ₱${grandEarned.toFixed(2)}\n`;
