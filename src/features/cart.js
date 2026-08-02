@@ -26,11 +26,19 @@ export function loadCartState() {
         const savedManuals = localStorage.getItem('lokalex_cart_manuals');
         globalState.cartManualFlags = savedManuals ? JSON.parse(savedManuals) : [false, false, false, false];
 
+        const savedLocked = localStorage.getItem('lokalex_cart_locked');
+        globalState.cartLocked = savedLocked ? JSON.parse(savedLocked) : [false, false, false, false];
+
+        const savedTxIds = localStorage.getItem('lokalex_cart_txids');
+        globalState.cartTxIds = savedTxIds ? JSON.parse(savedTxIds) : ["", "", "", ""];
+
     } catch(e) {
         console.error("Failed to load cart state", e);
         globalState.carts = [[], [], [], []];
         globalState.cartClients = ["", "", "", ""];
         globalState.cartManualFlags = [false, false, false, false];
+        globalState.cartLocked = [false, false, false, false];
+        globalState.cartTxIds = ["", "", "", ""];
     }
     
     if (globalState.activeCartIndex === undefined || globalState.activeCartIndex === null) {
@@ -47,6 +55,8 @@ export function saveCartState() {
             globalState.carts = [[], [], [], []];
         }
         localStorage.setItem('lokalex_carts', JSON.stringify(globalState.carts));
+        localStorage.setItem('lokalex_cart_locked', JSON.stringify(globalState.cartLocked || [false, false, false, false]));
+        localStorage.setItem('lokalex_cart_txids', JSON.stringify(globalState.cartTxIds || ["", "", "", ""]));
     } catch(e) {
         console.error("Failed to save cart state", e);
     }
@@ -68,19 +78,25 @@ export function switchCartTab(index) {
 export function renderCartTabs() {
     const container = document.getElementById('cart-tabs-header');
     if (!container) return;
-    
+
     const cartIdx = globalState.activeCartIndex ?? 0;
 
     container.innerHTML = [0, 1, 2, 3].map(i => {
         const isActive = cartIdx === i;
         const itemCount = (globalState.carts && globalState.carts[i]) ? globalState.carts[i].length : 0;
-        const activeClass = isActive 
+        const isLocked = !!(globalState.cartLocked && globalState.cartLocked[i]);
+        
+        let activeClass = isActive 
             ? "bg-blue-600 text-white font-black shadow-lg border-blue-500" 
             : "bg-cardBg text-gray-400 hover:text-white border-gray-800";
 
+        if (isLocked) {
+            activeClass += " ring-1 ring-emerald-500/80";
+        }
+
         return `
             <button onclick="switchCartTab(${i})" class="${activeClass} py-2 px-1 rounded-xl border text-xs font-bold transition flex flex-col items-center justify-center gap-0.5 active:scale-95">
-                <span>Cart ${i + 1}</span>
+                <span class="flex items-center gap-1">Cart ${i + 1} ${isLocked ? '<i class="fa-solid fa-lock text-[10px] text-emerald-400"></i>' : ''}</span>
                 <span class="text-[9px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-blue-500/40 text-white' : 'bg-black/30 text-gray-400'}">${itemCount} items</span>
             </button>
         `;
@@ -98,91 +114,157 @@ export function renderCartItems() {
     if (!container) return;
 
     const cartIdx = globalState.activeCartIndex ?? 0;
-    const items = (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
+    const isLocked = !!(globalState.cartLocked && globalState.cartLocked[cartIdx]);
+
     renderCartClientSelector();
     renderCartActionsToolbar();
 
+    const items = (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
+    let subtotal = 0;
+
+    let itemsHtml = "";
     if (items.length === 0) {
-        container.innerHTML = `
+        itemsHtml = `
             <div class="text-center text-gray-500 italic py-16 text-xs flex flex-col items-center gap-2">
                 <i class="fa-solid fa-cart-shopping text-3xl opacity-30"></i>
                 <span>Walang laman ang Cart ${cartIdx + 1}.</span>
             </div>`;
-        updateCartSubtotal(0);
-        return;
-    }
+    } else {
+        itemsHtml = items.map((item, index) => {
+            let price = parseFloat(item.price) || 0;
+            if (price < 0) {
+                price = 0;
+                item.price = 0;
+                item.isPaid = true;
+            }
 
-    let subtotal = 0;
+            const isPaid = !!item.isPaid;
+            const itemCost = isPaid ? 0 : Math.max(0, price);
+            subtotal += itemCost;
 
-    container.innerHTML = items.map((item, index) => {
-        // FAILSAFE: Convert negative prices directly to Paid
-        let price = parseFloat(item.price) || 0;
-        if (price < 0) {
-            price = 0;
-            item.price = 0;
-            item.isPaid = true;
-        }
+            const cat = item.type || item.category || '';
+            const isStore = cat.toLowerCase() === 'store';
+            const isMarket = cat.toLowerCase() === 'market';
+            const isSelected = !!item.selectedForDelete;
 
-        const isPaid = !!item.isPaid;
-        const itemCost = isPaid ? 0 : Math.max(0, price);
-        subtotal += itemCost;
+            return `
+                <div class="bg-cardBg border ${isSelected ? 'border-red-500/60 bg-red-950/10' : 'border-gray-800'} p-3 rounded-xl flex items-center gap-2.5 text-xs shadow-sm transition ${isLocked ? 'pointer-events-none' : ''}">
+                    
+                    <input type="checkbox" ${isSelected ? 'checked' : ''} ${isLocked ? 'disabled' : ''} onchange="toggleItemSelectForDelete(${index}, this.checked)" class="accent-red-500 w-4 h-4 cursor-pointer my-auto shrink-0" title="Select to delete">
 
-        const cat = item.type || item.category || '';
-        const isStore = cat.toLowerCase() === 'store';
-        const isMarket = cat.toLowerCase() === 'market';
-        const isSelected = !!item.selectedForDelete;
-
-        return `
-            <div class="bg-cardBg border ${isSelected ? 'border-red-500/60 bg-red-950/10' : 'border-gray-800'} p-3 rounded-xl flex items-center gap-2.5 text-xs shadow-sm transition">
-                
-                <!-- SELECTION CHECKBOX FOR MULTI-DELETE -->
-                <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleItemSelectForDelete(${index}, this.checked)" class="accent-red-500 w-4 h-4 cursor-pointer my-auto shrink-0" title="Select to delete">
-
-                <div class="flex-1 flex flex-col gap-2 min-w-0">
-                    <div class="flex justify-between items-center gap-2">
-                        <span class="font-bold text-white flex items-center gap-1.5 truncate">
-                            <span class="text-gray-500 text-[10px]">#${index + 1}</span> ${escapeHtml(item.name)}
-                        </span>
-                        
-                        ${isPaid ? `
-                            <span class="font-black text-emerald-400 text-xs bg-emerald-500/20 px-2 py-0.5 rounded-md border border-emerald-500/40 shrink-0">
-                                <i class="fa-solid fa-check"></i> PAID (₱0.00)
+                    <div class="flex-1 flex flex-col gap-2 min-w-0">
+                        <div class="flex justify-between items-center gap-2">
+                            <span class="font-bold text-white flex items-center gap-1.5 truncate">
+                                <span class="text-gray-500 text-[10px]">#${index + 1}</span> ${escapeHtml(item.name)}
                             </span>
-                        ` : `
-                            <span class="font-black text-green-400 text-sm shrink-0">₱${itemCost.toFixed(2)}</span>
-                        `}
-                    </div>
-
-                    <div class="flex justify-between items-center pt-2 border-t border-gray-800/80 flex-wrap gap-2">
-                        <!-- STORE / MARKET CATEGORY BUTTONS -->
-                        <div class="flex gap-1.5">
-                            <button onclick="setItemType(${index}, 'store')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isStore ? 'bg-orange-600 text-white border-orange-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
-                                <i class="fa-solid fa-store"></i> Store
-                            </button>
-                            <button onclick="setItemType(${index}, 'market')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isMarket ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
-                                <i class="fa-solid fa-basket-shopping"></i> Market
-                            </button>
+                            
+                            ${isPaid ? `
+                                <span class="font-black text-emerald-400 text-xs bg-emerald-500/20 px-2 py-0.5 rounded-md border border-emerald-500/40 shrink-0">
+                                    <i class="fa-solid fa-check"></i> PAID (₱0.00)
+                                </span>
+                            ` : `
+                                <span class="font-black text-green-400 text-sm shrink-0">₱${itemCost.toFixed(2)}</span>
+                            `}
                         </div>
 
-                        <div class="flex items-center gap-3">
-                            <!-- PAID CHECKBOX TOGGLE -->
-                            <label class="flex items-center gap-1 cursor-pointer text-[10px] font-bold ${isPaid ? 'text-emerald-400' : 'text-gray-400'} bg-black/40 px-2 py-1 rounded-lg border border-gray-800">
-                                <input type="checkbox" ${isPaid ? 'checked' : ''} onchange="toggleItemPaid(${index}, this.checked)" class="accent-emerald-500 w-3.5 h-3.5">
-                                <span>Paid</span>
-                            </label>
+                        <div class="flex justify-between items-center pt-2 border-t border-gray-800/80 flex-wrap gap-2">
+                            <div class="flex gap-1.5">
+                                <button ${isLocked ? 'disabled' : ''} onclick="setItemType(${index}, 'store')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isStore ? 'bg-orange-600 text-white border-orange-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
+                                    <i class="fa-solid fa-store"></i> Store
+                                </button>
+                                <button ${isLocked ? 'disabled' : ''} onclick="setItemType(${index}, 'market')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isMarket ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
+                                    <i class="fa-solid fa-basket-shopping"></i> Market
+                                </button>
+                            </div>
 
-                            <div class="flex items-center gap-2">
-                                <button onclick="openEditItemModal(${index})" class="text-blue-400 hover:text-blue-300 p-1" title="Edit Item"><i class="fa-solid fa-pen"></i></button>
-                                <button onclick="promptRemoveCartItem(${index})" class="text-red-400 hover:text-red-300 p-1" title="Delete Item"><i class="fa-solid fa-trash"></i></button>
+                            <div class="flex items-center gap-3">
+                                <label class="flex items-center gap-1 cursor-pointer text-[10px] font-bold ${isPaid ? 'text-emerald-400' : 'text-gray-400'} bg-black/40 px-2 py-1 rounded-lg border border-gray-800">
+                                    <input type="checkbox" ${isPaid ? 'checked' : ''} ${isLocked ? 'disabled' : ''} onchange="toggleItemPaid(${index}, this.checked)" class="accent-emerald-500 w-3.5 h-3.5">
+                                    <span>Paid</span>
+                                </label>
+
+                                <div class="flex items-center gap-2">
+                                    <button ${isLocked ? 'disabled' : ''} onclick="openEditItemModal(${index})" class="text-blue-400 hover:text-blue-300 p-1" title="Edit Item"><i class="fa-solid fa-pen"></i></button>
+                                    <button ${isLocked ? 'disabled' : ''} onclick="promptRemoveCartItem(${index})" class="text-red-400 hover:text-red-300 p-1" title="Delete Item"><i class="fa-solid fa-trash"></i></button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        `;
-    }).join('');
+            `;
+        }).join('');
+    }
 
     updateCartSubtotal(subtotal);
+
+    // RENDER ABSOLUTE OVERLAY BARRIER OVER BLURRED CART ITEMS WHEN LOCKED
+    if (isLocked) {
+        const clientName = globalState.cartClients?.[cartIdx] || "Customer";
+        
+        container.innerHTML = `
+            <div class="relative w-full min-h-[280px] flex flex-col gap-2 rounded-2xl overflow-hidden">
+                
+                <!-- ABSOLUTE OVERLAY BARRIER SCREEN -->
+                <div class="absolute inset-0 z-20 bg-darkBg/85 backdrop-blur-md border border-emerald-500/50 p-5 rounded-2xl flex flex-col items-center justify-center text-center gap-3 shadow-2xl animate-fade-in">
+                    <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-2xl">
+                        <i class="fa-solid fa-file-circle-check"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-black text-emerald-400 uppercase tracking-wide">Receipt Already Recorded</h3>
+                        <p class="text-[11px] text-gray-300 mt-1 leading-relaxed">
+                            Ang resibo para kay <strong>"${escapeHtml(clientName)}"</strong> ay naitala na. I-slide ang bar sa ibaba para ma-unlock at ma-edit.
+                        </p>
+                    </div>
+
+                    <!-- SLIDE TO UNLOCK PROTECTION BARRIER -->
+                    <div class="w-full max-w-xs relative h-12 bg-black/60 rounded-full border border-emerald-500/40 flex items-center px-2 overflow-hidden mt-1 shadow-inner">
+                        <span class="absolute inset-0 flex items-center justify-center text-[10px] text-emerald-400/80 font-bold tracking-widest pointer-events-none">
+                            &gt;&gt;&gt;&gt; SLIDE TO UNLOCK & EDIT &gt;&gt;&gt;&gt;
+                        </span>
+                        <input type="range" min="0" max="100" value="0"
+                               oninput="handleCartBarrierProgress(this.value)"
+                               onmouseup="handleCartBarrierEnd(this)"
+                               ontouchend="handleCartBarrierEnd(this)"
+                               class="w-full accent-emerald-500 cursor-pointer z-10 opacity-80 h-10">
+                    </div>
+                </div>
+
+                <!-- BLURRED CART ITEMS BEHIND OVERLAY -->
+                <div class="flex flex-col gap-2 blur-[4px] pointer-events-none select-none opacity-40">
+                    ${itemsHtml}
+                </div>
+            </div>
+        `;
+
+        const createBtn = document.querySelector('#view-cart button[onclick="validateAndProceedToWizard()"]');
+        if (createBtn) createBtn.classList.add('hidden');
+        return;
+    }
+
+    // Normal Unlocked View
+    container.innerHTML = itemsHtml;
+
+    const createBtn = document.querySelector('#view-cart button[onclick="validateAndProceedToWizard()"]');
+    if (createBtn) createBtn.classList.remove('hidden');
+}
+
+export function handleCartBarrierProgress(val) {
+    if (val >= 90) {
+        const cartIdx = globalState.activeCartIndex ?? 0;
+        if (!globalState.cartLocked) globalState.cartLocked = [false, false, false, false];
+        globalState.cartLocked[cartIdx] = false;
+        
+        saveCartState();
+        renderCartTabs();
+        renderCartItems();
+        showToast("🔓 Cart unlocked! Maaari mo nang baguhin ang mga items.");
+    }
+}
+
+export function handleCartBarrierEnd(rangeEl) {
+    if (rangeEl && rangeEl.value < 90) {
+        rangeEl.value = 0;
+    }
 }
 
 function renderCartActionsToolbar() {
@@ -190,6 +272,12 @@ function renderCartActionsToolbar() {
     if (!container) return;
 
     const cartIdx = globalState.activeCartIndex ?? 0;
+    const isLocked = !!(globalState.cartLocked && globalState.cartLocked[cartIdx]);
+    if (isLocked) {
+        container.innerHTML = '';
+        return;
+    }
+
     const items = (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
     const selectedCount = items.filter(i => !!i.selectedForDelete).length;
 
@@ -249,7 +337,7 @@ export function promptDeleteSelectedItems() {
     );
 }
 
-function deleteSelectedItems() {
+export function deleteSelectedItems() {
     const cartIdx = globalState.activeCartIndex ?? 0;
     if (globalState.carts && globalState.carts[cartIdx]) {
         globalState.carts[cartIdx] = globalState.carts[cartIdx].filter(i => !i.selectedForDelete);
@@ -273,6 +361,16 @@ export function promptRemoveCartItem(index) {
     );
 }
 
+export function removeCartItem(index) {
+    const cartIdx = globalState.activeCartIndex ?? 0;
+    if (globalState.carts && globalState.carts[cartIdx]) {
+        globalState.carts[cartIdx].splice(index, 1);
+        saveCartState();
+        renderCartItems();
+        showToast("Item removed from cart");
+    }
+}
+
 export function setItemType(index, type) {
     const cartIdx = globalState.activeCartIndex ?? 0;
     if (globalState.carts && globalState.carts[cartIdx] && globalState.carts[cartIdx][index]) {
@@ -286,16 +384,6 @@ export function setItemType(index, type) {
 
 export function setItemCategory(index, category) {
     setItemType(index, category);
-}
-
-export function removeCartItem(index) {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    if (globalState.carts && globalState.carts[cartIdx]) {
-        globalState.carts[cartIdx].splice(index, 1);
-        saveCartState();
-        renderCartItems();
-        showToast("Item removed from cart");
-    }
 }
 
 export function handleCartActionBtn() {
@@ -314,11 +402,6 @@ export function handleCartActionBtn() {
     );
 }
 
-// ============================================================================
-// STRICT RIDER PRIVACY & CLIENT ASSIGNMENT LOGIC
-// ============================================================================
-// src/features/cart.js
-
 export function getRiderActiveCateringClients() {
     const myId = (appState.telegramId || "").toString().trim();
     const myName = (appState.riderName || "").toString().trim().toLowerCase();
@@ -326,7 +409,6 @@ export function getRiderActiveCateringClients() {
 
     const myRecord = roster.find(r => {
         const rId = (r.telegramId || "").toString().trim();
-        // FIXED: Check r.riderName (property key used in Firebase and Google Sheets) alongside r.name
         const rName = (r.riderName || r.name || "").toString().trim().toLowerCase();
         const isMatch = (myId && rId === myId) || (myName && rName === myName);
         return isMatch && (r.status || "").toLowerCase() === 'catering';
@@ -339,11 +421,6 @@ export function getRiderActiveCateringClients() {
         .filter(Boolean);
 }
 
-// ... (keep all existing exports and cart functions unchanged) ...
-
-// ============================================================================
-// REACTIVE UI LISTENERS FOR CART VIEW & ROSTER UPDATES
-// ============================================================================
 window.addEventListener('rosterUpdated', () => {
     const cartSection = document.getElementById('view-cart');
     if (cartSection && !cartSection.classList.contains('hidden')) {
@@ -404,8 +481,6 @@ export function getEffectiveCartClient(cartIndex) {
     return "Sample";
 }
 
-// src/features/cart.js
-
 function renderCartClientSelector() {
     const container = document.getElementById('cart-customer-selector-container');
     if (!container) return;
@@ -413,7 +488,6 @@ function renderCartClientSelector() {
     const cartIdx = globalState.activeCartIndex ?? 0;
     const isManual = (globalState.cartManualFlags && globalState.cartManualFlags[cartIdx]) || false;
 
-    // PREVENT KEYBOARD CLOSING: Skip re-rendering DOM if user is actively typing in the input field
     const existingInput = document.getElementById('cart-manual-client-input');
     if (existingInput && document.activeElement === existingInput) {
         return;
@@ -470,8 +544,6 @@ function renderCartClientSelector() {
     `;
 }
 
-
-
 export function toggleCartManualClient(isManual) {
     const cartIdx = globalState.activeCartIndex ?? 0;
     if (!globalState.cartManualFlags) globalState.cartManualFlags = [false, false, false, false];
@@ -489,7 +561,6 @@ export function updateCartClientName(val) {
     const cartIdx = globalState.activeCartIndex ?? 0;
     if (!globalState.cartClients) globalState.cartClients = ["", "", "", ""];
     
-    // Store exact text input without stripping spaces or re-rendering DOM while typing
     globalState.cartClients[cartIdx] = val;
     appState.selectedCateringClient = val.trim() || "Sample";
 
@@ -500,9 +571,6 @@ export function assignClientToCart(clientName) {
     updateCartClientName(clientName);
 }
 
-// ============================================================================
-// EDIT ITEM MODAL LOGIC
-// ============================================================================
 export function openEditItemModal(index) {
     const cartIdx = globalState.activeCartIndex ?? 0;
     const item = globalState.carts[cartIdx][index];
@@ -547,9 +615,6 @@ export function saveItemEdit() {
     showToast("Item updated successfully.");
 }
 
-// ============================================================================
-// BULK ADD LOGIC
-// ============================================================================
 export function showBulkAddModal() {
     document.getElementById('bulk-input').value = "";
     document.getElementById('bulk-modal').classList.remove('hidden');
@@ -620,9 +685,6 @@ export function processBulkAdd() {
     closeBulkModal();
 }
 
-// ============================================================================
-// STRICT VALIDATION & PAID CONFIRMATION MODAL
-// ============================================================================
 export function validateAndProceedToWizard() {
     const cartIdx = globalState.activeCartIndex ?? 0;
     const cartItems = (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
@@ -685,17 +747,29 @@ function executeProceedToWizard() {
     }
 }
 
-// Global window bindings for HTML modals
-window.closePaidItemModal = closePaidItemModal;
-window.confirmPaidItemProceed = confirmPaidItemProceed;
-window.toggleItemPaid = toggleItemPaid;
-window.toggleItemSelectForDelete = toggleItemSelectForDelete;
-window.promptDeleteSelectedItems = promptDeleteSelectedItems;
-window.promptRemoveCartItem = promptRemoveCartItem;
+if (typeof window !== 'undefined') {
+    window.closePaidItemModal = closePaidItemModal;
+    window.confirmPaidItemProceed = confirmPaidItemProceed;
+    window.toggleItemPaid = toggleItemPaid;
+    window.toggleItemSelectForDelete = toggleItemSelectForDelete;
+    window.promptDeleteSelectedItems = promptDeleteSelectedItems;
+    window.promptRemoveCartItem = promptRemoveCartItem;
+    window.handleCartActionBtn = handleCartActionBtn;
+    window.setItemType = setItemType;
+    window.openEditItemModal = openEditItemModal;
+    window.closeEditItemModal = closeEditItemModal;
+    window.saveItemEdit = saveItemEdit;
+    window.showBulkAddModal = showBulkAddModal;
+    window.closeBulkModal = closeBulkModal;
+    window.processBulkAdd = processBulkAdd;
+    window.switchCartTab = switchCartTab;
+    window.validateAndProceedToWizard = validateAndProceedToWizard;
+    window.toggleCartManualClient = toggleCartManualClient;
+    window.updateCartClientName = updateCartClientName;
+    window.handleCartBarrierProgress = handleCartBarrierProgress;
+    window.handleCartBarrierEnd = handleCartBarrierEnd;
+}
 
-// ============================================================================
-// EXPORTS REQUIRED BY WIZARD.JS
-// ============================================================================
 export function getCurrentCart() {
     const cartIdx = globalState.activeCartIndex ?? 0;
     return (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
@@ -708,6 +782,8 @@ export function clearCartSlot() {
     
     if (globalState.cartClients) globalState.cartClients[cartIdx] = "";
     if (globalState.cartManualFlags) globalState.cartManualFlags[cartIdx] = false;
+    if (globalState.cartLocked) globalState.cartLocked[cartIdx] = false;
+    if (globalState.cartTxIds) globalState.cartTxIds[cartIdx] = "";
     
     saveCartState();
     saveCartClientsState();

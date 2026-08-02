@@ -4,11 +4,17 @@ import { db } from '../config/firebase.js';
 import { getLocalTodayStr, copyText, escapeHtml } from '../utils/helpers.js';
 import { showToast, showSideNotification } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
-import { saveCartState, getCurrentCart, clearCartSlot, getEffectiveCartClient } from './cart.js';
+import { saveCartState, getCurrentCart, clearCartSlot, getEffectiveCartClient, renderCartItems, renderCartTabs } from './cart.js';
 import { getActiveCateringCustomersWithTimes } from './roster.js';
 import { API_URL } from '../config/constants.js';
 
 let currentReceiptTransactionId = "";
+
+function isRiderActivelyCatering() {
+    const myId = (appState.telegramId || "").toString();
+    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === myId) : null;
+    return myRecord && myRecord.status === 'Catering';
+}
 
 export function getDailyRiderId() {
     const rName = (appState.riderName || appState.telegramId || "RIDER").replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -31,7 +37,15 @@ export function initWizardForCart() {
     const currentCart = getCurrentCart();
     if (!currentCart || currentCart.length === 0) return;
 
-    currentReceiptTransactionId = getDailyRiderId() + "-" + Date.now().toString(36).toUpperCase();
+    const activeCartIdx = globalState.activeCartIndex || 0;
+
+    if (globalState.cartTxIds && globalState.cartTxIds[activeCartIdx]) {
+        currentReceiptTransactionId = globalState.cartTxIds[activeCartIdx];
+    } else {
+        currentReceiptTransactionId = getDailyRiderId() + "-" + Date.now().toString(36).toUpperCase();
+        if (!globalState.cartTxIds) globalState.cartTxIds = ["", "", "", ""];
+        globalState.cartTxIds[activeCartIdx] = currentReceiptTransactionId;
+    }
 
     const marketSum = currentCart
         .filter(i => (i.category || i.type || '').toLowerCase() === 'market' && !i.isPaid)
@@ -234,13 +248,20 @@ async function saveReceiptToDatabase(customerName) {
     const match = activeCustList.find(i => i.name.trim().toLowerCase() === cName);
     const sTime = match ? match.startTime.trim() : "";
 
-    const sessionKey = `receipt_done_${rName}_${cName}_${sTime}_${todayStr}`;
+    const sessionKey = `receipt_done_${rName}_${cName}__${todayStr}`;
     localStorage.setItem(sessionKey, 'true');
 
     const totalFees = Math.max(0, (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0));
 
+    const activeCartIdx = globalState.activeCartIndex || 0;
     if (!currentReceiptTransactionId) {
-        currentReceiptTransactionId = getDailyRiderId() + "-" + Date.now().toString(36).toUpperCase();
+        if (globalState.cartTxIds && globalState.cartTxIds[activeCartIdx]) {
+            currentReceiptTransactionId = globalState.cartTxIds[activeCartIdx];
+        } else {
+            currentReceiptTransactionId = getDailyRiderId() + "-" + Date.now().toString(36).toUpperCase();
+            if (!globalState.cartTxIds) globalState.cartTxIds = ["", "", "", ""];
+            globalState.cartTxIds[activeCartIdx] = currentReceiptTransactionId;
+        }
     }
 
     const payload = {
@@ -341,11 +362,27 @@ ${feesTxt}➖➖➖➖➖➖➖➖➖➖➖➖
 }
 
 export function completeReceiptDone() {
-    clearCartSlot();
+    const activeCartIdx = globalState.activeCartIndex || 0;
+
+    // Apply Barrier Protection Overlay to current completed cart slot
+    if (!globalState.cartLocked) globalState.cartLocked = [false, false, false, false];
+    globalState.cartLocked[activeCartIdx] = true;
+
+    if (!globalState.cartTxIds) globalState.cartTxIds = ["", "", "", ""];
+    globalState.cartTxIds[activeCartIdx] = currentReceiptTransactionId;
+
+    saveCartState();
+
     currentReceiptTransactionId = "";
-    showToast("✅ Cart cleared and final receipt accepted!");
+    
+    // UPDATED: Return to Home / Main Menu Screen
     switchView('view-home');
     
+    renderCartTabs();
+    renderCartItems();
+
+    showToast("✅ Resibo naisumite na! Naka-lock ang Cart barrier protection.");
+
     wizState.subtotal = 0;
     wizState.storeCount = 1;
     appState.selectedCateringClient = "";
@@ -372,4 +409,17 @@ export function copyFinalReceipt() {
     if (textEl && textEl.innerText) {
         copyText(textEl.innerText);
     }
+}
+
+// Global window bindings
+if (typeof window !== 'undefined') {
+    window.proceedToWizard = proceedToWizard;
+    window.selectCateredClientName = selectCateredClientName;
+    window.toggleManualClientInput = toggleManualClientInput;
+    window.adjustStoreCount = adjustStoreCount;
+    window.calculateGrandTotal = calculateGrandTotal;
+    window.generateFinalReceipt = generateFinalReceipt;
+    window.confirmSampleReceiptProceed = confirmSampleReceiptProceed;
+    window.completeReceiptDone = completeReceiptDone;
+    window.copyFinalReceipt = copyFinalReceipt;
 }

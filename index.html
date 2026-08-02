@@ -317,11 +317,6 @@
         <h1 id="header-title" class="text-lg font-bold tracking-wide mx-auto">
             L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub
         </h1>
-        
-        <!-- MESSENGER QUICK LINK FOR RIDERS -->
-        <a href="https://m.me/lokalex" target="_blank" class="text-[#0084FF] hover:text-white p-1 text-lg transition active:scale-90" title="Open Facebook Messenger">
-            <i class="fa-brands fa-facebook-messenger"></i>
-        </a>
     </header>
 
     <!-- CONTAINER -->
@@ -619,7 +614,7 @@
                     <i class="fa-solid fa-copy"></i> Copy
                 </button>
                 <button onclick="completeReceiptDone()" class="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center items-center gap-2 transition active:scale-95">
-                    <i class="fa-solid fa-check-double"></i> Done & Clear
+                    <i class="fa-solid fa-check"></i> Done
                 </button>
             </div>
         </section>
@@ -990,7 +985,7 @@
         <div class="bg-[#1E1A1A] border border-red-500/30 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl flex flex-col gap-4">
             <i id="slide-modal-icon" class="fa-solid fa-triangle-exclamation text-red-500 text-3xl mx-auto"></i>
             <h3 id="slide-delete-title" class="font-bold text-base">Confirm Action</h3>
-            <p id="slide-delete-sub" class="text-xs text-gray-400">I-drag pakanan ang slider para kumpirmahin.</p>
+            <p id="slide-delete-sub" class="text-xs text-gray-400 whitespace-pre-line">I-drag pakanan ang slider para kumpirmahin.</p>
             
             <div class="relative h-12 bg-black/40 rounded-full border border-red-500/30 flex items-center px-2 overflow-hidden mt-2">
                 <span class="absolute inset-0 flex items-center justify-center text-[10px] text-white/30 font-bold tracking-widest pointer-events-none">&gt;&gt;&gt;&gt; SLIDE TO CONFIRM &gt;&gt;&gt;&gt;</span>
@@ -1054,7 +1049,13 @@
                 <h3 class="font-bold text-sm text-indigo-300 flex items-center gap-2">
                     <i class="fa-solid fa-map-location-dot text-indigo-400"></i> Find My Riders (Active)
                 </h3>
-                <button onclick="closeFindRidersModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+                <div class="flex items-center gap-2">
+                    <!-- REFRESH BUTTON -->
+                    <button onclick="refreshFindRidersMap()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/50 px-2.5 py-1 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5" title="Refresh Rider Positions">
+                        <i id="find-riders-refresh-icon" class="fa-solid fa-rotate"></i> Refresh
+                    </button>
+                    <button onclick="closeFindRidersModal()" class="text-gray-400 hover:text-white text-sm ml-1"><i class="fa-solid fa-xmark"></i></button>
+                </div>
             </div>
             
             <div id="find-riders-map-container" class="w-full h-80 rounded-2xl overflow-hidden border border-indigo-500/50 relative shadow-inner">

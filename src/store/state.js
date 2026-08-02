@@ -26,5 +26,7 @@ export const globalState = {
     globalDailyReceipts: [],
     adminControlsEnabled: false,
     records: [],
-    currentType: 'customers'
+    currentType: 'customers',
+    cartLocked: [false, false, false, false],
+    cartTxIds: ["", "", "", ""]
 };

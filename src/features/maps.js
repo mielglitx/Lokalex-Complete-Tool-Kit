@@ -108,7 +108,6 @@ export function startCustomerLocationSharing() {
                 custMarkerObj.setPosition(custLoc);
             }
 
-            // Save pin to tracking database
             db.ref('liveTracking/' + trackKey).set({
                 lat: lat, lng: lng, capturedAt: Date.now()
             });
@@ -167,7 +166,6 @@ export async function openLiveCustomerMap(custName) {
     if (!mapDirectionsService) mapDirectionsService = new google.maps.DirectionsService();
     if (!mapDirectionsRenderer) mapDirectionsRenderer = new google.maps.DirectionsRenderer({ map: googleMapObj, suppressMarkers: false });
 
-    // Listen for customer's captured GPS Pin
     db.ref('liveTracking/' + trackKey).on('value', (snapshot) => {
         const data = snapshot.val();
         if (data && data.lat && data.lng) {
@@ -299,7 +297,6 @@ export function startMapCalcLocationSharing() {
 
             const mapPinUrl = `https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lng.toFixed(6)}`;
 
-            // Save pin to Calculation database
             db.ref('mapCalculations/' + calcKey).update({
                 lat: lat, lng: lng, custMapPin: mapPinUrl, pinCaptured: true, capturedAt: Date.now()
             });
@@ -473,14 +470,14 @@ export function confirmGoogleMapPin() {
 let findRidersMapObj = null;
 let findRidersMarkers = [];
 
-export function openFindRidersModal() {
+export async function openFindRidersModal() {
     const modal = document.getElementById('find-riders-modal');
     if (!modal) {
         showToast("⚠️ find-riders-modal missing from index.html");
         return;
     }
     modal.classList.remove('hidden');
-    renderFindRidersMap();
+    await fetchLatestRiderPositions();
 }
 
 export function closeFindRidersModal() {
@@ -488,20 +485,64 @@ export function closeFindRidersModal() {
     if (modal) modal.classList.add('hidden');
 }
 
-export function renderFindRidersMap() {
+export async function refreshFindRidersMap() {
+    const icon = document.getElementById('find-riders-refresh-icon');
+    if (icon) icon.classList.add('fa-spin');
+
+    await fetchLatestRiderPositions();
+    showToast("🔄 Rider locations updated!");
+
+    setTimeout(() => {
+        if (icon) icon.classList.remove('fa-spin');
+    }, 600);
+}
+
+export async function fetchLatestRiderPositions() {
+    try {
+        // 1. Query Firebase roster node for latest position data
+        const rosterSnap = await db.ref('roster').once('value');
+        if (rosterSnap.exists()) {
+            globalState.rosterMembers = Object.values(rosterSnap.val());
+        }
+
+        // 2. Query Firebase liveSessions node to prioritize live GPS streams
+        const sessionSnap = await db.ref('liveSessions').once('value');
+        let activeLiveRiders = {};
+        if (sessionSnap.exists()) {
+            const sessions = sessionSnap.val();
+            Object.values(sessions).forEach(sess => {
+                if (sess.status === 'active' && sess.users && sess.users.rider) {
+                    const rData = sess.users.rider;
+                    if (rData.lat && rData.lng) {
+                        activeLiveRiders[(rData.name || '').toLowerCase()] = {
+                            lat: rData.lat,
+                            lng: rData.lng,
+                            updatedAt: rData.updatedAt
+                        };
+                    }
+                }
+            });
+        }
+        
+        renderFindRidersMap(activeLiveRiders);
+    } catch(e) {
+        console.error("Error fetching fresh rider positions:", e);
+        renderFindRidersMap({});
+    }
+}
+
+export function renderFindRidersMap(activeLiveRiders = {}) {
     if (typeof google === 'undefined' || !google.maps) return;
 
     const container = document.getElementById('find-riders-google-map');
     if (!container) return;
 
-    // Clear previous markers
     findRidersMarkers.forEach(m => m.setMap(null));
     findRidersMarkers = [];
 
     const roster = globalState.rosterMembers || [];
     const logins = globalState.globalLogins || [];
 
-    // Filter ONLY active riders: Available, Catering, Break
     const activeRiders = roster.filter(m => ['Available', 'Catering', 'Break'].includes(m.status));
 
     let countAvail = 0, countCater = 0, countBreak = 0;
@@ -513,15 +554,22 @@ export function renderFindRidersMap() {
         else if (r.status === 'Catering') countCater++;
         else if (r.status === 'Break') countBreak++;
 
+        const rNameKey = (r.riderName || r.name || "").toLowerCase();
         let lat = parseFloat(r.lat);
         let lng = parseFloat(r.lng);
+        let locationSource = "Roster Update";
 
-        // Fallback: parse location link from logins if coordinates aren't directly in roster
-        if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
-            const rName = (r.riderName || r.name || "").toLowerCase();
+        // OVERRIDE WITH REALTIME LIVE GPS SESSION IF ACTIVE
+        if (activeLiveRiders[rNameKey]) {
+            lat = parseFloat(activeLiveRiders[rNameKey].lat);
+            lng = parseFloat(activeLiveRiders[rNameKey].lng);
+            locationSource = "📡 Live GPS Session";
+        } 
+        // FALLBACK TO LOGIN COORDS ONLY IF NO ROSTER/LIVE COORDS EXIST
+        else if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
             const userLogin = logins.slice().reverse().find(l => {
                 const lName = (l.riderName || "").toLowerCase();
-                return (lName && lName === rName) && l.location;
+                return (lName && lName === rNameKey) && l.location;
             });
 
             if (userLogin && userLogin.location) {
@@ -529,6 +577,7 @@ export function renderFindRidersMap() {
                 if (match) {
                     lat = parseFloat(match[1]);
                     lng = parseFloat(match[2]);
+                    locationSource = "⚠️ Initial Shift Login";
                 }
             }
         }
@@ -555,6 +604,7 @@ export function renderFindRidersMap() {
                 content: `<div style="color:black; font-weight:bold; font-size:12px; padding:2px;">
                     <div>🛵 ${escapeHtml(rNameDisplay)}</div>
                     <div style="font-size:10px; color:#555;">Status: ${escapeHtml(r.status)}${escapeHtml(custInfo)}</div>
+                    <div style="font-size:9px; color:#0084FF; margin-top:2px;">${locationSource}</div>
                 </div>`
             });
 
@@ -600,5 +650,8 @@ export function renderFindRidersMap() {
 }
 
 // EXPLICIT WINDOW BINDINGS
-window.openFindRidersModal = openFindRidersModal;
-window.closeFindRidersModal = closeFindRidersModal;
+if (typeof window !== 'undefined') {
+    window.openFindRidersModal = openFindRidersModal;
+    window.closeFindRidersModal = closeFindRidersModal;
+    window.refreshFindRidersMap = refreshFindRidersMap;
+}

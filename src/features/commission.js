@@ -1,6 +1,7 @@
 // src/features/commission.js
 import { appState, globalState } from '../store/state.js';
 import { db } from '../config/firebase.js';
+import { API_URL } from '../config/constants.js';
 import { getLocalTodayStr, copyText, getWeekString, getMonthString, getDateString, escapeHtml } from '../utils/helpers.js';
 import { showToast } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
@@ -11,18 +12,86 @@ let viewSettings = {
     dateValue: getLocalTodayStr()
 };
 
-// HELPER: Calculates commission rates based on whether the transaction date falls on a Sunday
-function getCommissionRates(dateStr) {
+// DYNAMIC HELPER: Calculates commission rates based on individual rider settings and Sunday promo
+function getCommissionRates(dateStr, riderName = "") {
     const d = new Date((dateStr || getLocalTodayStr()) + "T00:00:00");
     const isSunday = d.getDay() === 0;
+
+    const cleanName = (riderName || "").toLowerCase().trim();
+    const setting = globalState.globalRiderRates ? globalState.globalRiderRates[cleanName] : null;
+
+    // Default base company percentage is 20% if no custom rate is specified for a rider
+    let baseCompanyPerc = 20;
+    if (setting) {
+        if (setting.percentage !== undefined) baseCompanyPerc = parseFloat(setting.percentage);
+        else if (setting.basePercentage !== undefined) baseCompanyPerc = parseFloat(setting.basePercentage);
+    }
+
+    // Sunday Promo deducts 5 percentage points from company rate
+    let sundayDiscount = isSunday ? 5 : 0;
+
+    // Calculate final percentages
+    let finalCompanyPerc = Math.max(0, baseCompanyPerc - sundayDiscount);
+    let companyRate = finalCompanyPerc / 100;
+    let riderRate = (100 - finalCompanyPerc) / 100;
+
     return {
-        companyRate: isSunday ? 0.15 : 0.20,
-        riderRate: isSunday ? 0.85 : 0.80,
-        isSunday: isSunday
+        companyRate: companyRate,
+        riderRate: riderRate,
+        isSunday: isSunday,
+        companyPerc: finalCompanyPerc,
+        riderPerc: 100 - finalCompanyPerc,
+        baseCompanyPerc: baseCompanyPerc
     };
 }
 
-export function openCommissionScreen() {
+// FETCH COMMISSION SETTINGS FROM GOOGLE APPS SCRIPT / FIREBASE
+export async function fetchCommissionSettings() {
+    try {
+        // 1. Fetch live commission settings from Apps Script
+        const res = await fetch(`${API_URL}?type=all`);
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.riderRates) {
+                let ratesMap = {};
+                for (let name in data.riderRates) {
+                    const cleanName = name.toLowerCase().trim();
+                    const item = data.riderRates[name];
+                    ratesMap[cleanName] = {
+                        percentage: item.basePercentage !== undefined ? item.basePercentage : (item.percentage || 20),
+                        promoLess: item.promoLess || 0
+                    };
+                }
+                globalState.globalRiderRates = ratesMap;
+            }
+        }
+    } catch(e) {
+        console.warn("Could not fetch live commission settings from Google Sheets, checking Firebase...", e);
+    }
+
+    // 2. Firebase Fallback listener
+    if (db) {
+        db.ref('commissionSettings').once('value', (snapshot) => {
+            const val = snapshot.val();
+            if (val) {
+                let ratesMap = globalState.globalRiderRates || {};
+                Object.values(val).forEach(item => {
+                    const name = (item.rider || item.Rider || "").toLowerCase().trim();
+                    if (name) {
+                        ratesMap[name] = {
+                            percentage: parseFloat(item.percentage || item.Percentage || item.basePercentage) || 20,
+                            promoLess: parseFloat(item.isPromoLessPerc || item.IsPromoLessPerc || item.promoLess) || 0
+                        };
+                    }
+                });
+                globalState.globalRiderRates = ratesMap;
+                refreshCommissionView();
+            }
+        });
+    }
+}
+
+export async function openCommissionScreen() {
     switchView('view-commission');
     
     // Set default dates if empty
@@ -34,6 +103,7 @@ export function openCommissionScreen() {
     }
 
     setupAdminControls();
+    await fetchCommissionSettings();
     refreshCommissionView();
 }
 
@@ -153,7 +223,7 @@ export function refreshCommissionView() {
         return false;
     });
 
-    // 3. Group Totals by Rider
+    // 3. Group Totals by Rider using Dynamic Rider Rates
     let riderTotals = {}; 
 
     filteredHistory.forEach(r => {
@@ -186,15 +256,17 @@ export function refreshCommissionView() {
         }
 
         let rDate = r.date || r.completedDate || getLocalTodayStr();
-        const rates = getCommissionRates(rDate);
+        // Pass rider name dynamically into rate calculator
+        const rates = getCommissionRates(rDate, rName);
 
         if (!riderTotals[rId]) {
-            riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0 };
+            riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0, lastRates: rates };
         }
         
         riderTotals[rId].gross += gross;
         riderTotals[rId].earned += (gross * rates.riderRate);
         riderTotals[rId].company += (gross * rates.companyRate);
+        riderTotals[rId].lastRates = rates;
     });
 
     // 4. Filter down to Target Rider & Calculate Grand Totals
@@ -202,6 +274,7 @@ export function refreshCommissionView() {
     let grandGross = 0;
     let grandEarned = 0;
     let grandCompany = 0;
+    let selectedRiderRates = null;
 
     for (let rId in riderTotals) {
         if (targetRiderId && targetRiderId !== "ALL") {
@@ -212,6 +285,7 @@ export function refreshCommissionView() {
             const isNameMatch = targetName && riderTotals[rId].name.toLowerCase() === targetName;
 
             if (!isIdMatch && !isNameMatch) continue;
+            selectedRiderRates = riderTotals[rId].lastRates;
         }
         
         finalRiderList.push({ id: rId, ...riderTotals[rId] });
@@ -220,7 +294,14 @@ export function refreshCommissionView() {
         grandCompany += riderTotals[rId].company;
     }
 
-    // 5. Update UI Display
+    // Fallback if target rider selected but has no history records today
+    if (targetRiderId && targetRiderId !== "ALL" && !selectedRiderRates) {
+        const myRoster = globalState.rosterMembers?.find(m => (m.telegramId || "").toString() === targetRiderId.toString());
+        const rName = myRoster ? (myRoster.riderName || myRoster.name || "") : appState.riderName;
+        selectedRiderRates = getCommissionRates(viewSettings.dateValue, rName);
+    }
+
+    // 5. Update UI Display with Dynamic Percentages
     const mainWrapperEl = document.getElementById('comm-main-wrapper');
     const mainLabelEl = document.getElementById('comm-main-label');
     const grossEl = document.getElementById('comm-gross-amount');
@@ -233,16 +314,22 @@ export function refreshCommissionView() {
     const selDate = new Date(viewSettings.dateValue + "T00:00:00");
     const isSelSunday = viewSettings.period === 'daily' && selDate.getDay() === 0;
 
+    const displayRates = selectedRiderRates || getCommissionRates(viewSettings.dateValue, appState.riderName);
+
     if (viewSettings.mode === 'earned') {
         if (mainLabelEl) {
-            mainLabelEl.innerText = isSelSunday ? "YOUR EARNINGS (85% SUNDAY PROMO)" : "YOUR EARNINGS (80%)";
+            mainLabelEl.innerText = isSelSunday 
+                ? `YOUR EARNINGS (${displayRates.riderPerc}% SUNDAY PROMO)` 
+                : `YOUR EARNINGS (${displayRates.riderPerc}%)`;
             mainLabelEl.className = "text-[10px] text-emerald-400 font-bold uppercase";
         }
         if (mainWrapperEl) mainWrapperEl.className = "text-4xl font-black text-emerald-400 drop-shadow-md";
         if (mainAmountEl) mainAmountEl.innerText = grandEarned.toFixed(2);
     } else {
         if (mainLabelEl) {
-            mainLabelEl.innerText = isSelSunday ? "TO PAY COMPANY (15% SUNDAY PROMO)" : "TO PAY COMPANY (20%)";
+            mainLabelEl.innerText = isSelSunday 
+                ? `TO PAY COMPANY (${displayRates.companyPerc}% SUNDAY PROMO)` 
+                : `TO PAY COMPANY (${displayRates.companyPerc}%)`;
             mainLabelEl.className = "text-[10px] text-red-400 font-bold uppercase";
         }
         if (mainWrapperEl) mainWrapperEl.className = "text-4xl font-black text-red-400 drop-shadow-md";
@@ -386,7 +473,7 @@ export function generateDailyReportText() {
         }
 
         let rDate = r.date || r.completedDate || getLocalTodayStr();
-        const rates = getCommissionRates(rDate);
+        const rates = getCommissionRates(rDate, rName);
 
         if (!riderTotals[rId]) {
             riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0 };
@@ -434,6 +521,16 @@ export function generateDailyReportText() {
 
     copyText(report);
     showToast("📄 Settlement text report copied!");
+}
+
+// Global window bindings
+if (typeof window !== 'undefined') {
+    window.openCommissionScreen = openCommissionScreen;
+    window.setCommissionMode = setCommissionMode;
+    window.setCommissionPeriod = setCommissionPeriod;
+    window.refreshCommissionView = refreshCommissionView;
+    window.toggleSettlementStatus = toggleSettlementStatus;
+    window.generateDailyReportText = generateDailyReportText;
 }
 
 // Reactive UI updates

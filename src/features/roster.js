@@ -7,6 +7,7 @@ import { openSlideDeleteModal, closeCateringModal, closeAdminCateringModal } fro
 import { getDeviceLocation } from './auth.js';
 import { getLocalTodayStr, isSameDate, escapeHtml } from '../utils/helpers.js';
 import { switchView } from '../ui/router.js';
+import { autoStartLiveGpsSession, endLiveGpsSession } from './liveTracker.js';
 
 let lineAlarmInterval = null;
 let lineAlarmConfirmed = false;
@@ -142,10 +143,24 @@ function playLineBeep() {
     } catch(e) {}
 }
 
-// --- MAIN ROSTER UI RENDERER ---
+// --- MAIN ROSTER UI RENDERER & AUTO LIVE GPS TRIGGER ---
 export function updateRosterUI() {
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
+
+    // AUTOMATED LIVE GPS BACKGROUND MONITORING FOR THIS RIDER
+    const myRecord = rosterMembers.find(m => (m.telegramId || "").toString() === myId);
+    if (myRecord) {
+        if (myRecord.status === 'Catering') {
+            // Auto-start Live GPS session on rider's phone if in Catering
+            autoStartLiveGpsSession(myRecord.customerName || "Customer");
+        } else {
+            // Auto-end Live GPS session if rider left Catering
+            if (localStorage.getItem('lokalex_active_live_session')) {
+                endLiveGpsSession();
+            }
+        }
+    }
 
     const adminToggleWrapper = document.getElementById('admin-toggle-wrapper');
     if (adminToggleWrapper) {
@@ -159,7 +174,6 @@ export function updateRosterUI() {
         else findRidersBtn.classList.add('hidden');
     }
 
-    const myRecord = rosterMembers.find(m => (m.telegramId || "").toString() === myId);
     const isEnded = myRecord && myRecord.status === 'End';
     const isOnBreak = myRecord && myRecord.status === 'Break';
 
@@ -188,7 +202,7 @@ export function updateRosterUI() {
     let availHtml = [], busyHtml = [], brkHtml = [], cdHtml = [];
     let availCounter = 1;
 
-    availableRiders.forEach((m, idx) => {
+    availableRiders.forEach((m) => {
         const mId = (m.telegramId || "").toString();
         const mName = m.riderName || m.name || "Rider";
         let nameStr = escapeHtml(mName);
@@ -224,7 +238,6 @@ export function updateRosterUI() {
             nameStr += ` <span class="text-orange-300 text-[10px]">(${escapeHtml(m.customerName)})</span>`;
         }
 
-        // PRIVACY FIX: Only let riders see THEIR OWN GPS link and map buttons
         const isMyLine = mId === myId;
         if (isMyLine) {
             nameStr += `
@@ -350,6 +363,7 @@ export async function triggerStatusWithSlide(targetStatus) {
         appState.lon = coords.lon;
         showSideNotification("RECORDING STATUS", `Marking ${appState.riderName} Available — placing at end of line`, "fa-user-check", "text-green-400", "border-green-500");
 
+        endLiveGpsSession();
         await updateRosterStatus('Available');
         
         if (window.clearCartSlot) {
@@ -361,6 +375,7 @@ export async function triggerStatusWithSlide(targetStatus) {
             stopLineAlarm();
             lineAlarmConfirmed = false;
             showSideNotification("CLOCK OUT", `Clocking out ${appState.riderName}...`, "fa-power-off", "text-red-400", "border-red-500");
+            endLiveGpsSession();
             await clockOutRider();
             updateRosterStatus('End');
         });
@@ -369,6 +384,7 @@ export async function triggerStatusWithSlide(targetStatus) {
             stopLineAlarm();
             lineAlarmConfirmed = false;
             showSideNotification("RECORDING STATUS", `Setting status to ${targetStatus} for ${appState.riderName}...`, "fa-user-clock", "text-amber-400", "border-amber-500");
+            if (targetStatus === 'Break') endLiveGpsSession();
             updateRosterStatus(targetStatus);
         });
     }
@@ -427,6 +443,10 @@ export async function confirmCateringStatus() {
     existingTimes.push(startTime);
 
     showSideNotification("RECORDING CATERING", `Moving to Catering — adding customer ${custName} to ${appState.riderName}`, "fa-motorcycle", "text-red-400", "border-red-500");
+    
+    // Auto-start background Live GPS streaming
+    autoStartLiveGpsSession(existingCustomers.join(', '));
+
     await updateRosterStatusData('Catering', existingCustomers.join(', '), existingTimes.join(', '), myRecord ? parseQueueTime(myRecord.queueTime) : 0);
 }
 
@@ -688,7 +708,6 @@ export function loadGlobalCateredList() {
 
     feed.innerHTML = todayHistory.slice().reverse().map(h => {
         let voidBtn = "";
-        // PERMISSION FIX: Admin and TL can both void catered customers
         if (canManageRoster()) {
             voidBtn = `<button onclick="promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate)}')" class="bg-red-900/40 text-red-400 hover:bg-red-800 text-[10px] font-bold px-2 py-1 rounded border border-red-700/50 transition active:scale-95"><i class="fa-solid fa-ban"></i> Void</button>`;
         }

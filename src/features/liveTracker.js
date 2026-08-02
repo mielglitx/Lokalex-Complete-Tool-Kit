@@ -15,9 +15,15 @@ let customerMarker = null;
 let lastPushTime = 0;
 const PUSH_TICK_INTERVAL_MS = 15000; // 15 seconds throttled tick for both Rider & Customer
 
-export async function promptStartLiveGpsSession() {
-    const activeCustRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === (appState.telegramId || "").toString()) : null;
-    const currentCust = (activeCustRecord && activeCustRecord.customerName) ? activeCustRecord.customerName.split(', ')[0] : "Customer";
+// --- AUTOMATED BACKGROUND LIVE GPS INITIATOR ---
+export async function autoStartLiveGpsSession(custName = "Customer") {
+    let existingKey = localStorage.getItem('lokalex_active_live_session');
+    
+    if (existingKey) {
+        activeSessionKey = existingKey;
+        startRiderGpsTracking(existingKey);
+        return existingKey;
+    }
 
     const sessionKey = `LIVE_${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).substring(2,6).toUpperCase()}`;
     activeSessionKey = sessionKey;
@@ -26,14 +32,27 @@ export async function promptStartLiveGpsSession() {
     const initialData = {
         status: "active",
         riderName: appState.riderName || "Rider",
-        customerName: currentCust,
+        customerName: custName,
         createdAt: Date.now(),
         users: {}
     };
 
-    await db.ref('liveSessions/' + sessionKey).set(initialData);
+    try {
+        await db.ref('liveSessions/' + sessionKey).set(initialData);
+        startRiderGpsTracking(sessionKey);
+    } catch(e) {
+        console.error("Auto Live GPS initialization error:", e);
+    }
+
+    return sessionKey;
+}
+
+export async function promptStartLiveGpsSession() {
+    const activeCustRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === (appState.telegramId || "").toString()) : null;
+    const currentCust = (activeCustRecord && activeCustRecord.customerName) ? activeCustRecord.customerName.split(', ')[0] : "Customer";
+
+    const sessionKey = await autoStartLiveGpsSession(currentCust);
     copyLiveGpsLink(currentCust, sessionKey);
-    startRiderGpsTracking(sessionKey);
     openLiveGpsManageModal();
 }
 
@@ -47,9 +66,22 @@ export function copyLiveGpsLink(custName = "Customer", sessionKey = activeSessio
     showToast("🔗 Live GPS message & link copied!");
 }
 
-function startRiderGpsTracking(sessionKey) {
+export function startRiderGpsTracking(sessionKey) {
+    if (!sessionKey) return;
     if (riderGpsWatchId) navigator.geolocation.clearWatch(riderGpsWatchId);
     if (!navigator.geolocation) return;
+
+    // Immediately record initial position
+    navigator.geolocation.getCurrentPosition((pos) => {
+        const now = Date.now();
+        lastPushTime = now;
+        db.ref(`liveSessions/${sessionKey}/users/rider`).set({
+            name: appState.riderName || "Rider",
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            updatedAt: now
+        });
+    }, () => {}, { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
 
     riderGpsWatchId = navigator.geolocation.watchPosition(
         (pos) => {
@@ -110,7 +142,6 @@ export function showRiderLiveMap() {
     if (!activeSessionKey) return showToast("No active session.");
     closeLiveGpsManageModal();
 
-    // Configure UI for Rider view
     document.getElementById('livegps-rider-close-btn').classList.remove('hidden');
     document.getElementById('livegps-customer-controls').classList.add('hidden');
 
@@ -120,7 +151,7 @@ export function showRiderLiveMap() {
 export function closeRiderLiveMap() {
     const portal = document.getElementById('livegps-portal');
     if (portal) portal.classList.add('hidden');
-    openLiveGpsManageModal(); // Return to the control modal
+    openLiveGpsManageModal();
 }
 
 // --- CUSTOMER: INITIALIZE PORTAL ---
@@ -129,7 +160,6 @@ export function checkAndInitLiveGpsPortal() {
     const sessionKey = urlParams.get('livegps');
     if (!sessionKey) return;
 
-    // Configure UI for Customer view
     document.getElementById('livegps-rider-close-btn').classList.add('hidden');
     document.getElementById('livegps-customer-controls').classList.remove('hidden');
 
@@ -216,7 +246,6 @@ function renderMutualLiveMap(usersData) {
     const container = document.getElementById('livegps-map-container');
     const mapBox = document.getElementById('livegps-map-container-box');
     
-    // Safety: ensure map container is unhidden before creating the map instance
     if (!container || (mapBox && mapBox.classList.contains('hidden') && document.getElementById('livegps-customer-controls').classList.contains('hidden') === false)) return;
 
     const riderData = usersData && usersData.rider;
@@ -233,7 +262,6 @@ function renderMutualLiveMap(usersData) {
         });
     }
 
-    // 1. Rider Marker (Motorcycle Icon)
     if (riderData && riderData.lat && riderData.lng) {
         const pos = { lat: riderData.lat, lng: riderData.lng };
         if (!riderMarker) {
@@ -243,7 +271,7 @@ function renderMutualLiveMap(usersData) {
                 title: `Rider: ${riderData.name || 'Rider'}`,
                 icon: { 
                     url: "https://img.icons8.com/color/48/motorcycle.png", 
-                    scaledSize: new google.maps.Size(36, 36) // Keeps the icon perfectly sized on the map
+                    scaledSize: new google.maps.Size(36, 36)
                 }
             });
         } else {
@@ -251,7 +279,6 @@ function renderMutualLiveMap(usersData) {
         }
     }
 
-    // 2. Customer Marker (Red Dot Icon)
     if (custData && custData.lat && custData.lng) {
         const pos = { lat: custData.lat, lng: custData.lng };
         if (!customerMarker) {
@@ -283,8 +310,9 @@ export function promptEndLiveGpsSession() {
 }
 
 export async function endLiveGpsSession() {
-    if (activeSessionKey) {
-        await db.ref('liveSessions/' + activeSessionKey).update({
+    let currentKey = activeSessionKey || localStorage.getItem('lokalex_active_live_session');
+    if (currentKey) {
+        await db.ref('liveSessions/' + currentKey).update({
             status: "ended",
             endedAt: Date.now()
         });
@@ -299,5 +327,15 @@ export async function endLiveGpsSession() {
     localStorage.removeItem('lokalex_active_live_session');
     closeLiveGpsManageModal();
     showSideNotification("GPS SESSION ENDED", "Live GPS session has been closed", "fa-power-off", "text-red-400", "border-red-500");
-    showToast("🔴 Live GPS Session ended.");
+}
+
+if (typeof window !== 'undefined') {
+    window.autoStartLiveGpsSession = autoStartLiveGpsSession;
+    window.promptStartLiveGpsSession = promptStartLiveGpsSession;
+    window.copyLiveGpsLink = copyLiveGpsLink;
+    window.showRiderLiveMap = showRiderLiveMap;
+    window.closeRiderLiveMap = closeRiderLiveMap;
+    window.startMutualCustomerLocationSharing = startMutualCustomerLocationSharing;
+    window.promptEndLiveGpsSession = promptEndLiveGpsSession;
+    window.endLiveGpsSession = endLiveGpsSession;
 }
