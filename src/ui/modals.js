@@ -6,7 +6,7 @@ import { showToast } from './notifications.js';
 
 let slideDeleteCallback = null;
 
-// GCASH REGISTRATION MODAL LOGIC
+// GCASH REGISTRATION MODAL LOGIC WITH SLIDE CONFIRMATION
 export function openGCashModal() {
     const modal = document.getElementById('gcash-modal');
     if (modal) {
@@ -37,6 +37,17 @@ export function saveGCashDetails() {
         return;
     }
 
+    // SLIDE CONFIRMATION BARRIER BEFORE SAVING GCASH DETAILS
+    openSlideDeleteModal(
+        "Confirm GCash Details?",
+        `I-drag pakanan para kumpirmahin ang pag-update ng iyong GCash details:\n👤 Name: ${gName}\n📱 Number: ${gNo}`,
+        () => {
+            executeSaveGCashDetails(gName, gNo);
+        }
+    );
+}
+
+export function executeSaveGCashDetails(gName, gNo) {
     appState.gcashName = gName;
     appState.gcashNo = gNo;
 
@@ -219,6 +230,7 @@ if (typeof window !== 'undefined') {
     window.openGCashModal = openGCashModal;
     window.closeGCashModal = closeGCashModal;
     window.saveGCashDetails = saveGCashDetails;
+    window.executeSaveGCashDetails = executeSaveGCashDetails;
     window.openMapCalcBoardModal = openMapCalcBoardModal;
     window.closeMapCalcBoardModal = closeMapCalcBoardModal;
     window.promptMapCalcCustomerName = promptMapCalcCustomerName;
