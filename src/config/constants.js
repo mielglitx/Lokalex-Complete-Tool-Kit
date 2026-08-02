@@ -3,6 +3,11 @@ export const API_URL = "https://script.google.com/macros/s/AKfycbyIz6OEd7dZh2gx1
 export const CSV_AUTH_URL = "https://docs.google.com/spreadsheets/d/1lc-1os3xTnAuE0dsm6UmEle7vxuRyewBnuBlSrfPSWk/export?format=csv&gid=0";
 export const HUB_LOCATION = { lat: 15.6881, lng: 120.4144, mapUrl: "https://maps.app.goo.gl/sCBrMSjP9FEjB43C7" };
 export const ADMIN_IDS = ["4547425", "5548562"];
+
+// 🔹 FACEBOOK PAGE LINK CONFIGURATION
+export const FB_PAGE_USERNAME = "lokaledeliverygroup"; 
+export const FB_PAGE_URL = `https://m.me/${FB_PAGE_USERNAME}`;
+
 export const BARANGAY_DATA = [
     { name: "Anoling 1st", km: "5.5", fee: 95 }, { name: "Anoling 2nd", km: "6.7", fee: 110 },
     { name: "Anoling 3rd", km: "7.6", fee: 125 }, { name: "Bacabac", km: "5.4", fee: 95 },
