@@ -11,6 +11,17 @@ let viewSettings = {
     dateValue: getLocalTodayStr()
 };
 
+// HELPER: Calculates commission rates based on whether the transaction date falls on a Sunday
+function getCommissionRates(dateStr) {
+    const d = new Date((dateStr || getLocalTodayStr()) + "T00:00:00");
+    const isSunday = d.getDay() === 0;
+    return {
+        companyRate: isSunday ? 0.15 : 0.20,
+        riderRate: isSunday ? 0.85 : 0.80,
+        isSunday: isSunday
+    };
+}
+
 export function openCommissionScreen() {
     switchView('view-commission');
     
@@ -174,13 +185,16 @@ export function refreshCommissionView() {
             }
         }
 
+        let rDate = r.date || r.completedDate || getLocalTodayStr();
+        const rates = getCommissionRates(rDate);
+
         if (!riderTotals[rId]) {
             riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0 };
         }
         
         riderTotals[rId].gross += gross;
-        riderTotals[rId].earned += (gross * 0.80);
-        riderTotals[rId].company += (gross * 0.20);
+        riderTotals[rId].earned += (gross * rates.riderRate);
+        riderTotals[rId].company += (gross * rates.companyRate);
     });
 
     // 4. Filter down to Target Rider & Calculate Grand Totals
@@ -216,16 +230,19 @@ export function refreshCommissionView() {
     if (grossEl) grossEl.innerText = grandGross.toFixed(2);
     if (summaryTitleEl) summaryTitleEl.innerText = `${viewSettings.period.toUpperCase()} SUMMARY`;
 
+    const selDate = new Date(viewSettings.dateValue + "T00:00:00");
+    const isSelSunday = viewSettings.period === 'daily' && selDate.getDay() === 0;
+
     if (viewSettings.mode === 'earned') {
         if (mainLabelEl) {
-            mainLabelEl.innerText = "YOUR EARNINGS (80%)";
+            mainLabelEl.innerText = isSelSunday ? "YOUR EARNINGS (85% SUNDAY PROMO)" : "YOUR EARNINGS (80%)";
             mainLabelEl.className = "text-[10px] text-emerald-400 font-bold uppercase";
         }
         if (mainWrapperEl) mainWrapperEl.className = "text-4xl font-black text-emerald-400 drop-shadow-md";
         if (mainAmountEl) mainAmountEl.innerText = grandEarned.toFixed(2);
     } else {
         if (mainLabelEl) {
-            mainLabelEl.innerText = "TO PAY COMPANY (20%)";
+            mainLabelEl.innerText = isSelSunday ? "TO PAY COMPANY (15% SUNDAY PROMO)" : "TO PAY COMPANY (20%)";
             mainLabelEl.className = "text-[10px] text-red-400 font-bold uppercase";
         }
         if (mainWrapperEl) mainWrapperEl.className = "text-4xl font-black text-red-400 drop-shadow-md";
@@ -242,7 +259,6 @@ function checkSettlementStatus(riderId, period, dateVal, isAdmin) {
     
     if (!badge || !adminBtn) return;
 
-    // FIXED: Only show settlement badge and "Mark as Paid" button when viewing "To Pay (Company)" mode
     if (viewSettings.mode !== 'company' || !riderId) {
         badge.classList.add('hidden');
         adminBtn.classList.add('hidden');
@@ -369,12 +385,15 @@ export function generateDailyReportText() {
             gross = hf + mf + ms + rdf + epay - disc;
         }
 
+        let rDate = r.date || r.completedDate || getLocalTodayStr();
+        const rates = getCommissionRates(rDate);
+
         if (!riderTotals[rId]) {
             riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0 };
         }
         riderTotals[rId].gross += gross;
-        riderTotals[rId].earned += (gross * 0.80);
-        riderTotals[rId].company += (gross * 0.20);
+        riderTotals[rId].earned += (gross * rates.riderRate);
+        riderTotals[rId].company += (gross * rates.companyRate);
     });
 
     let grandGross = 0; let grandEarned = 0; let grandCompany = 0;
@@ -401,14 +420,16 @@ export function generateDailyReportText() {
 
     const periodLabel = viewSettings.period.toUpperCase();
     const modeLabel = viewSettings.mode === 'earned' ? "RIDER EARNINGS" : "TO PAY COMPANY";
+    const repDate = new Date(viewSettings.dateValue + "T00:00:00");
+    const isRepSunday = viewSettings.period === 'daily' && repDate.getDay() === 0;
     
     let report = `📊 LOKALEX SETTLEMENT REPORT\n`;
     report += `Scope: ${targetRiderId && riderTotals[targetRiderId] ? riderTotals[targetRiderId]?.name : "ALL RIDERS"}\n`;
-    report += `Period: ${periodLabel} (${viewSettings.dateValue})\n`;
+    report += `Period: ${periodLabel} (${viewSettings.dateValue})${isRepSunday ? ' 🎁 [SUNDAY 5% COMMISSION DISCOUNT]' : ''}\n`;
     report += `Mode: ${modeLabel}\n\n`;
     report += `💰 Gross Total: ₱${grandGross.toFixed(2)}\n`;
-    report += `🟢 Rider Earned (80%): ₱${grandEarned.toFixed(2)}\n`;
-    report += `🔴 To Pay Company (20%): ₱${grandCompany.toFixed(2)}\n\n`;
+    report += `🟢 Rider Earned: ₱${grandEarned.toFixed(2)}\n`;
+    report += `🔴 To Pay Company: ₱${grandCompany.toFixed(2)}\n\n`;
     report += `📋 RIDER BREAKDOWN:\n${listText || "No records found."}`;
 
     copyText(report);
