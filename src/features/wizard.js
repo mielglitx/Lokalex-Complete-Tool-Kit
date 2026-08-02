@@ -248,7 +248,6 @@ async function saveReceiptToDatabase(customerName) {
     const match = activeCustList.find(i => i.name.trim().toLowerCase() === cName);
     const sTime = match ? match.startTime.trim() : "";
 
-    // FIXED KEY MATCHING FOR ROSTER VALIDATION
     const sessionKey = `receipt_done_${rName}_${cName}_${sTime}_${todayStr}`;
     localStorage.setItem(sessionKey, 'true');
     localStorage.setItem(`receipt_done_${rName}_${cName}_${todayStr}`, 'true');
@@ -341,6 +340,19 @@ export function renderFinalReceiptText() {
 
     if (!feesTxt) feesTxt = "🔹 Wala pong karagdagang fees.\n";
 
+    // RETRIEVE GCASH DETAILS FROM OFFLINE LOCALSTORAGE OR STATE
+    const gcashName = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || "";
+    const gcashNo = appState.gcashNo || localStorage.getItem('lokalex_gcash_no') || "";
+
+    let gcashTxt = "";
+    if (gcashName || gcashNo) {
+        gcashTxt = 
+`\n📱 **GCASH PAYMENT DETAILS:**
+👤 Account Name: ${gcashName || 'N/A'}
+📱 GCash Number: \`${gcashNo || 'N/A'}\`
+➖➖➖➖➖➖➖➖➖➖➖➖\n`;
+    }
+
     const receiptEl = document.getElementById('final-receipt-text');
     if (receiptEl) {
         receiptEl.innerText = 
@@ -358,7 +370,7 @@ ${itemsTxt}
 📋 **FEES:**
 ${feesTxt}➖➖➖➖➖➖➖➖➖➖➖➖
 🔥 **GRAND TOTAL: ₱${finalTotal.toFixed(2)}** 🔥
-
+${gcashTxt}
 💙 Salamat sa pagtitiwala sa Lokalex!`;
     }
 }

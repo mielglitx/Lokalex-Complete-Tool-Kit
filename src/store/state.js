@@ -3,6 +3,8 @@ export const appState = {
     telegramId: localStorage.getItem('telegramId') || "",
     riderName: localStorage.getItem('riderName') || "",
     userType: localStorage.getItem('userType') || "",
+    gcashNo: localStorage.getItem('lokalex_gcash_no') || "",
+    gcashName: localStorage.getItem('lokalex_gcash_name') || "",
     lat: 0, lon: 0
 };
 

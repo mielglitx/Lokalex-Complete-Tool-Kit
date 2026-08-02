@@ -76,7 +76,6 @@
             </div>
             <h2 class="text-xl font-black text-white">L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Distance Calc</h2>
             
-            <!-- STEP 1: MESSENGER BROWSER INSTRUCTION CARD -->
             <div class="bg-amber-500/10 border border-amber-500/30 p-3 rounded-2xl text-left flex flex-col gap-1.5 shadow-inner">
                 <div class="flex items-center justify-between text-xs font-bold text-amber-400">
                     <span><i class="fa-solid fa-compass"></i> STEP 1: Messenger User?</span>
@@ -89,12 +88,10 @@
                 </p>
             </div>
 
-            <!-- MESSENGER DIRECT SUPPORT BUTTON -->
             <a href="https://m.me/lokalex" target="_blank" class="w-full bg-[#0084FF]/20 hover:bg-[#0084FF]/30 text-[#0084FF] border border-[#0084FF]/40 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 transition active:scale-95 my-1">
                 <i class="fa-brands fa-facebook-messenger text-base"></i> Message Us on Facebook
             </a>
 
-            <!-- LIVE MAP PREVIEW -->
             <div id="mapcalc-cust-map-box" class="hidden w-full h-40 rounded-2xl overflow-hidden border border-emerald-500/50 relative my-1 shadow-inner">
                 <div id="mapcalc-cust-google-map" class="w-full h-full"></div>
             </div>
@@ -103,13 +100,11 @@
                 Pindutin ang green button sa ibaba para ma-pin ang iyong lokasyon.
             </div>
 
-            <!-- STEP 2: ANIMATED DIRECTIONAL POINTER -->
             <div class="flex flex-col items-center gap-1 my-0.5 text-emerald-400 animate-bounce">
                 <span class="text-[10px] font-black uppercase tracking-wider">STEP 2: Pindutin ang Button sa Ibaba</span>
                 <i class="fa-solid fa-chevron-down text-base"></i>
             </div>
 
-            <!-- TARGET ACTION BUTTON -->
             <button id="mapcalc-cust-btn" onclick="startMapCalcLocationSharing()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 text-sm flex justify-center items-center gap-2 ring-2 ring-emerald-400/50">
                 <i class="fa-solid fa-location-arrow text-base"></i> SHARE LOCATION FOR DISTANCE CALC
             </button>
@@ -126,7 +121,6 @@
             </div>
             <h2 class="text-xl font-black text-white">L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Delivery Tracking</h2>
 
-            <!-- STEP 1: MESSENGER BROWSER INSTRUCTION CARD -->
             <div class="bg-amber-500/10 border border-amber-500/30 p-3 rounded-2xl text-left flex flex-col gap-1.5 shadow-inner">
                 <div class="flex items-center justify-between text-xs font-bold text-amber-400">
                     <span><i class="fa-solid fa-compass"></i> STEP 1: Messenger User?</span>
@@ -139,7 +133,6 @@
                 </p>
             </div>
 
-            <!-- MESSENGER DIRECT SUPPORT BUTTON -->
             <a href="https://m.me/lokalex" target="_blank" class="w-full bg-[#0084FF]/20 hover:bg-[#0084FF]/30 text-[#0084FF] border border-[#0084FF]/40 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 transition active:scale-95 my-1">
                 <i class="fa-brands fa-facebook-messenger text-base"></i> Need Help? Chat on Messenger
             </a>
@@ -152,13 +145,11 @@
                 Pindutin ang blue button sa ibaba para i-pin ang iyong kinaroroonan.
             </div>
 
-            <!-- STEP 2: ANIMATED DIRECTIONAL POINTER -->
             <div class="flex flex-col items-center gap-1 my-0.5 text-blue-400 animate-bounce">
                 <span class="text-[10px] font-black uppercase tracking-wider">STEP 2: Pindutin ang Button sa Ibaba</span>
                 <i class="fa-solid fa-chevron-down text-base"></i>
             </div>
 
-            <!-- TARGET ACTION BUTTON -->
             <button id="cust-share-btn" onclick="startCustomerLocationSharing()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 text-sm flex justify-center items-center gap-2 ring-2 ring-blue-400/50">
                 <i class="fa-solid fa-paper-plane text-base"></i> SHARE MY LOCATION
             </button>
@@ -170,7 +161,6 @@
     <div id="livegps-portal" class="hidden fixed inset-0 bg-darkBg z-[99999] flex flex-col items-center justify-center p-4 text-center overflow-y-auto">
         <div class="bg-cardBg border border-indigo-500/40 p-5 rounded-3xl max-w-sm w-full shadow-2xl flex flex-col gap-3 my-auto relative">
             
-            <!-- Rider Header Close Button -->
             <div class="absolute top-4 left-4">
                 <button id="livegps-rider-close-btn" onclick="closeRiderLiveMap()" class="hidden bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5">
                     <i class="fa-solid fa-arrow-left"></i> Back
@@ -196,9 +186,7 @@
             </div>
             <div class="text-[10px] text-indigo-400 font-semibold mb-1">Maps auto-refresh every 15 seconds</div>
 
-            <!-- CUSTOMER CONTROLS (Hidden when Rider views map) -->
             <div id="livegps-customer-controls" class="w-full flex flex-col gap-3 mt-1">
-                <!-- STEP 1: MESSENGER BROWSER INSTRUCTION CARD -->
                 <div class="bg-amber-500/10 border border-amber-500/30 p-3 rounded-2xl text-left flex flex-col gap-1.5 shadow-inner">
                     <div class="flex items-center justify-between text-xs font-bold text-amber-400">
                         <span><i class="fa-solid fa-compass"></i> Messenger User?</span>
@@ -211,7 +199,6 @@
                     </p>
                 </div>
 
-                <!-- MESSENGER DIRECT SUPPORT BUTTON -->
                 <a href="https://m.me/lokalex" target="_blank" class="w-full bg-[#0084FF]/20 hover:bg-[#0084FF]/30 text-[#0084FF] border border-[#0084FF]/40 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 transition active:scale-95 my-1">
                     <i class="fa-brands fa-facebook-messenger text-base"></i> Contact Lokalex Messenger
                 </a>
@@ -383,20 +370,26 @@
                     </button>
                 </div>
 
-                <div class="grid grid-cols-3 gap-2">
-                    <button onclick="openDirectory('customers')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1.5 transition active:scale-95">
-                        <i class="fa-solid fa-users text-xl text-blue-400"></i>
-                        <div class="text-xs font-bold">Customers</div>
+                <!-- DASHBOARD QUICK DIRECTORY GRID WITH GCASH BUTTON -->
+                <div class="grid grid-cols-4 gap-2">
+                    <button onclick="openDirectory('customers')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
+                        <i class="fa-solid fa-users text-lg text-blue-400"></i>
+                        <div class="text-[11px] font-bold">Customers</div>
                     </button>
 
-                    <button onclick="openDirectory('stores')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1.5 transition active:scale-95">
-                        <i class="fa-solid fa-store text-xl text-orange-400"></i>
-                        <div class="text-xs font-bold">Stores</div>
+                    <button onclick="openDirectory('stores')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
+                        <i class="fa-solid fa-store text-lg text-orange-400"></i>
+                        <div class="text-[11px] font-bold">Stores</div>
                     </button>
 
-                    <button onclick="openDirectory('barangays')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1.5 transition active:scale-95">
-                        <i class="fa-solid fa-map-location-dot text-xl text-emerald-400"></i>
-                        <div class="text-xs font-bold">Rates</div>
+                    <button onclick="openDirectory('barangays')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
+                        <i class="fa-solid fa-map-location-dot text-lg text-emerald-400"></i>
+                        <div class="text-[11px] font-bold">Rates</div>
+                    </button>
+
+                    <button onclick="openGCashModal()" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
+                        <i class="fa-solid fa-mobile-screen-button text-lg text-blue-500"></i>
+                        <div class="text-[11px] font-bold">GCash</div>
                     </button>
                 </div>
             </div>
@@ -407,12 +400,10 @@
                     <h3 class="text-sm font-bold tracking-wide">🛵 LOKALEX RIDER ROTATION</h3>
                     
                     <div class="flex items-center gap-2">
-                        <!-- FIND MY RIDERS BUTTON (ADMIN ONLY) -->
                         <button id="admin-find-riders-btn" onclick="openFindRidersModal()" class="hidden bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 border border-indigo-500/50 text-[10px] px-2 py-1 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
                             <i class="fa-solid fa-map-location-dot"></i> Find My Riders
                         </button>
 
-                        <!-- ADMIN CONTROLS SAFETY TOGGLE -->
                         <div id="admin-toggle-wrapper" class="hidden">
                             <label class="inline-flex items-center gap-1.5 cursor-pointer text-[10px] text-amber-400 font-bold bg-black/40 px-2 py-1 rounded-lg border border-amber-500/30">
                                 <input type="checkbox" id="admin-controls-toggle" onchange="toggleAdminControls(this.checked)" class="accent-amber-500 w-3.5 h-3.5">
@@ -622,29 +613,23 @@
         <!-- DAILY / WEEKLY / MONTHLY COMMISSION VIEW -->
         <section id="view-commission" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
             
-            <!-- CONTROLS & FILTERS -->
             <div class="bg-cardBg p-3 rounded-xl border border-gray-800 flex flex-col gap-3 shadow-md">
-                
-                <!-- Admin Rider Selector (Hidden for standard riders) -->
                 <div id="admin-commission-filter-box" class="hidden flex-col gap-1 border-b border-gray-800 pb-3">
                     <span class="text-[10px] text-amber-400 font-bold uppercase tracking-wider"><i class="fa-solid fa-user-shield"></i> Admin View: Select Rider</span>
                     <select id="admin-rider-select" onchange="refreshCommissionView()" class="w-full bg-inputBg text-sm text-white rounded-lg p-2.5 outline-none border border-gray-700 focus:border-amber-500 transition"></select>
                 </div>
 
-                <!-- View Mode Toggle (Earned vs To Pay) -->
                 <div class="flex bg-darkBg rounded-lg p-1 text-xs font-bold border border-gray-800">
                     <button id="comm-mode-earned" onclick="setCommissionMode('earned')" class="flex-1 py-2 rounded-md bg-emerald-600/20 text-emerald-400 border border-emerald-500/50 transition">My Earnings</button>
                     <button id="comm-mode-company" onclick="setCommissionMode('company')" class="flex-1 py-2 rounded-md text-gray-400 hover:text-white transition">To Pay (Company)</button>
                 </div>
 
-                <!-- Period Type Selector -->
                 <div class="grid grid-cols-3 gap-1 bg-darkBg rounded-lg p-1 text-[10px] font-bold border border-gray-800">
                     <button id="comm-period-daily" onclick="setCommissionPeriod('daily')" class="py-1.5 rounded bg-blue-600 text-white transition">Daily</button>
                     <button id="comm-period-weekly" onclick="setCommissionPeriod('weekly')" class="py-1.5 rounded text-gray-400 hover:text-white transition">Weekly</button>
                     <button id="comm-period-monthly" onclick="setCommissionPeriod('monthly')" class="py-1.5 rounded text-gray-400 hover:text-white transition">Monthly</button>
                 </div>
 
-                <!-- Dynamic Date Inputs -->
                 <div class="flex justify-between items-center">
                     <span class="text-xs text-gray-400 font-bold" id="comm-date-label">Select Date:</span>
                     <input type="date" id="comm-input-daily" onchange="refreshCommissionView()" class="bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
@@ -653,10 +638,7 @@
                 </div>
             </div>
 
-            <!-- FINANCIAL SUMMARY CARD -->
             <div class="bg-cardBg p-4 rounded-xl border border-gray-800 shadow-sm flex flex-col gap-3 relative overflow-hidden">
-                
-                <!-- Status Badge -->
                 <div id="comm-status-badge" class="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest shadow-md">UNPAID</div>
 
                 <div class="text-xs text-gray-400 uppercase tracking-widest font-bold text-center mt-2" id="comm-summary-title">Daily Summary</div>
@@ -669,7 +651,6 @@
                     <div class="text-[10px] text-gray-500 mt-1">Gross Total: ₱<span id="comm-gross-amount">0.00</span></div>
                 </div>
 
-                <!-- Admin Action Button -->
                 <button id="admin-mark-paid-btn" onclick="toggleSettlementStatus()" class="hidden w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl text-xs transition active:scale-95 shadow-lg mt-1 border border-emerald-400/50">
                     <i class="fa-solid fa-check-double"></i> MARK AS PAID
                 </button>
@@ -754,6 +735,30 @@
         </section>
 
     </main>
+
+    <!-- GCASH REGISTRATION MODAL -->
+    <div id="gcash-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-blue-500/40 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
+            <div class="w-12 h-12 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+                <i class="fa-solid fa-mobile-screen-button"></i>
+            </div>
+            <h3 class="font-bold text-base text-center text-blue-400">Rider GCash Details</h3>
+            <p class="text-[11px] text-gray-300 text-center leading-relaxed">
+                I-register ang iyong GCash details. Lalabas ito sa iyong opisyal na resibo kahit offline.
+            </p>
+            <div class="flex flex-col gap-2 text-left">
+                <label class="text-[10px] text-gray-400 font-bold uppercase">GCash Account Name</label>
+                <input type="text" id="gcash-name-input" placeholder="e.g. JUAN DELA CRUZ" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold">
+                
+                <label class="text-[10px] text-gray-400 font-bold uppercase mt-1">GCash Number</label>
+                <input type="text" id="gcash-no-input" placeholder="e.g. 09123456789" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold font-mono">
+            </div>
+            <div class="flex gap-2 mt-2">
+                <button onclick="closeGCashModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="saveGCashDetails()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save Details</button>
+            </div>
+        </div>
+    </div>
 
     <!-- PAID ITEM CONFIRMATION MODAL -->
     <div id="paid-item-confirm-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
@@ -895,7 +900,6 @@
                 <input type="text" id="adv-address" placeholder="Delivery Address" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
                 <input type="text" id="adv-contact" placeholder="Contact Number" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
                 
-                <!-- DATE & TIME SELECTOR GRID -->
                 <div class="grid grid-cols-2 gap-2">
                     <div class="flex flex-col gap-1">
                         <label class="text-[10px] text-gray-400 font-bold uppercase">Date to Receive:</label>
@@ -954,7 +958,6 @@
                 <input type="text" id="admin-catering-customer-name" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
             </div>
 
-            <!-- PENALTY SELECTION -->
             <div class="flex flex-col gap-2 border-t border-gray-800 pt-3 text-left">
                 <label class="text-[10px] text-gray-400 font-bold uppercase">Penalty Cooldown On Available</label>
                 <div class="flex items-center gap-3 text-xs">
@@ -1050,7 +1053,6 @@
                     <i class="fa-solid fa-map-location-dot text-indigo-400"></i> Find My Riders (Active)
                 </h3>
                 <div class="flex items-center gap-2">
-                    <!-- REFRESH BUTTON -->
                     <button onclick="refreshFindRidersMap()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/50 px-2.5 py-1 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5" title="Refresh Rider Positions">
                         <i id="find-riders-refresh-icon" class="fa-solid fa-rotate"></i> Refresh
                     </button>
@@ -1063,7 +1065,6 @@
             </div>
 
             <div id="find-riders-status-summary" class="text-xs text-gray-300 bg-darkBg p-2.5 rounded-xl border border-gray-800 flex justify-around text-center">
-                <!-- Dynamically populated with active counts -->
             </div>
 
             <button onclick="closeFindRidersModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">

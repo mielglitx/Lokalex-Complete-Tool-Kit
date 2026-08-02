@@ -1,6 +1,78 @@
 // src/ui/modals.js
+import { appState } from '../store/state.js';
+import { db } from '../config/firebase.js';
+import { API_URL } from '../config/constants.js';
+import { showToast } from './notifications.js';
 
 let slideDeleteCallback = null;
+
+// GCASH REGISTRATION MODAL LOGIC
+export function openGCashModal() {
+    const modal = document.getElementById('gcash-modal');
+    if (modal) {
+        const nameInput = document.getElementById('gcash-name-input');
+        const noInput = document.getElementById('gcash-no-input');
+        
+        if (nameInput) nameInput.value = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || "";
+        if (noInput) noInput.value = appState.gcashNo || localStorage.getItem('lokalex_gcash_no') || "";
+        
+        modal.classList.remove('hidden');
+    }
+}
+
+export function closeGCashModal() {
+    const modal = document.getElementById('gcash-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export function saveGCashDetails() {
+    const nameInput = document.getElementById('gcash-name-input');
+    const noInput = document.getElementById('gcash-no-input');
+    
+    const gName = nameInput ? nameInput.value.trim() : "";
+    const gNo = noInput ? noInput.value.trim() : "";
+
+    if (!gName || !gNo) {
+        showToast("⚠️ Paki-kumpleto ang GCash Name at Number!");
+        return;
+    }
+
+    appState.gcashName = gName;
+    appState.gcashNo = gNo;
+
+    // Save locally for offline accessibility
+    localStorage.setItem('lokalex_gcash_name', gName);
+    localStorage.setItem('lokalex_gcash_no', gNo);
+
+    // Save to Firebase
+    if (db && appState.telegramId) {
+        db.ref('gcash/' + appState.telegramId).set({
+            riderName: appState.riderName,
+            telegramId: appState.telegramId,
+            gcashName: gName,
+            gcashNo: gNo,
+            updatedAt: Date.now()
+        });
+    }
+
+    // Save to Google Sheets
+    try {
+        fetch(API_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({
+                type: "gcash",
+                telegramId: appState.telegramId,
+                riderName: appState.riderName,
+                gcashName: gName,
+                gcashNo: gNo
+            })
+        });
+    } catch(e) {}
+
+    closeGCashModal();
+    showToast("✅ Na-save na ang iyong GCash Details!");
+}
 
 export function openMapCalcBoardModal() {
     document.getElementById('mapcalc-board-modal').classList.remove('hidden');
@@ -144,6 +216,9 @@ export function onSlideEnd() {
 
 // EXPLICIT WINDOW BINDINGS FOR INLINE HTML TRIGGERS
 if (typeof window !== 'undefined') {
+    window.openGCashModal = openGCashModal;
+    window.closeGCashModal = closeGCashModal;
+    window.saveGCashDetails = saveGCashDetails;
     window.openMapCalcBoardModal = openMapCalcBoardModal;
     window.closeMapCalcBoardModal = closeMapCalcBoardModal;
     window.promptMapCalcCustomerName = promptMapCalcCustomerName;
