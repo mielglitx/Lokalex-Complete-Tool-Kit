@@ -7,7 +7,6 @@ import { switchView } from '../ui/router.js';
 import { saveCartState, getCurrentCart, clearCartSlot, getEffectiveCartClient, renderCartItems, renderCartTabs } from './cart.js';
 import { getActiveCateringCustomersWithTimes } from './roster.js';
 import { API_URL } from '../config/constants.js';
-import { fetchGCashDetails } from '../ui/modals.js';
 
 let currentReceiptTransactionId = "";
 
@@ -204,7 +203,7 @@ export function confirmSampleReceiptProceed() {
     executeGenerateFinalReceipt("Sample");
 }
 
-export async function executeGenerateFinalReceipt(customerName) {
+export function executeGenerateFinalReceipt(customerName) {
     calculateGrandTotal();
 
     const freeDeliveryEl = document.getElementById('wiz-free-delivery');
@@ -225,14 +224,8 @@ export async function executeGenerateFinalReceipt(customerName) {
         showSideNotification("SAVING RECEIPT", `Updating receipt for ${customerName}`, "fa-receipt", "text-emerald-400", "border-emerald-500");
     }
 
-    // Ensure online GCash records are synced before displaying receipt
-    await fetchGCashDetails();
-
-    try {
-        await saveReceiptToDatabase(customerName);
-    } catch (err) {
-        console.error("Error saving receipt to database:", err);
-    }
+    // INSTANT GENERATION: Fire-and-forget background save without blocking UI rendering
+    saveReceiptToDatabase(customerName);
 
     switchView('view-receipt-final');
     renderFinalReceiptText();
