@@ -224,7 +224,6 @@ export function executeGenerateFinalReceipt(customerName) {
         showSideNotification("SAVING RECEIPT", `Updating receipt for ${customerName}`, "fa-receipt", "text-emerald-400", "border-emerald-500");
     }
 
-    // INSTANT GENERATION: Fire-and-forget background save without blocking UI rendering
     saveReceiptToDatabase(customerName);
 
     switchView('view-receipt-final');
@@ -240,11 +239,14 @@ async function saveReceiptToDatabase(customerName) {
     const cName = customerName.trim().toLowerCase();
     const cleanCustKey = cName.replace(/[^a-z0-9]/g, '');
     const rName = (appState.riderName || "").trim().toLowerCase();
+    const cleanRiderKey = rName.replace(/[^a-z0-9]/g, '');
     const todayStr = getLocalTodayStr();
+    const todayClean = todayStr.replace(/-/g, '');
 
     const activeCustList = getActiveCateringCustomersWithTimes();
     const match = activeCustList.find(i => i.name.trim().toLowerCase() === cName);
     const sTime = match ? match.startTime.trim() : "";
+    const cleanTimeKey = sTime.replace(/[^a-z0-9]/gi, '');
 
     const sessionKey = `receipt_done_${rName}_${cName}_${sTime}_${todayStr}`;
     localStorage.setItem(sessionKey, 'true');
@@ -252,16 +254,12 @@ async function saveReceiptToDatabase(customerName) {
 
     const totalFees = Math.max(0, (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0));
 
+    // DETERMINISTIC TRANSACTION ID: Prevents creating duplicate records when regenerating receipts
+    currentReceiptTransactionId = `RCPT_${cleanRiderKey}_${cleanCustKey}_${todayClean}_${cleanTimeKey || '1'}`;
+
     const activeCartIdx = globalState.activeCartIndex || 0;
-    if (!currentReceiptTransactionId) {
-        if (globalState.cartTxIds && globalState.cartTxIds[activeCartIdx]) {
-            currentReceiptTransactionId = globalState.cartTxIds[activeCartIdx];
-        } else {
-            currentReceiptTransactionId = getDailyRiderId() + "-" + Date.now().toString(36).toUpperCase();
-            if (!globalState.cartTxIds) globalState.cartTxIds = ["", "", "", ""];
-            globalState.cartTxIds[activeCartIdx] = currentReceiptTransactionId;
-        }
-    }
+    if (!globalState.cartTxIds) globalState.cartTxIds = ["", "", "", ""];
+    globalState.cartTxIds[activeCartIdx] = currentReceiptTransactionId;
 
     const payload = {
         type: "receipts",
