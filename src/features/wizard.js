@@ -7,6 +7,7 @@ import { switchView } from '../ui/router.js';
 import { saveCartState, getCurrentCart, clearCartSlot, getEffectiveCartClient, renderCartItems, renderCartTabs } from './cart.js';
 import { getActiveCateringCustomersWithTimes } from './roster.js';
 import { API_URL } from '../config/constants.js';
+import { fetchGCashDetails } from '../ui/modals.js';
 
 let currentReceiptTransactionId = "";
 
@@ -224,6 +225,9 @@ export async function executeGenerateFinalReceipt(customerName) {
         showSideNotification("SAVING RECEIPT", `Updating receipt for ${customerName}`, "fa-receipt", "text-emerald-400", "border-emerald-500");
     }
 
+    // Ensure online GCash records are synced before displaying receipt
+    await fetchGCashDetails();
+
     try {
         await saveReceiptToDatabase(customerName);
     } catch (err) {
@@ -294,7 +298,6 @@ async function saveReceiptToDatabase(customerName) {
                 lastReceiptTotalFees: totalFees
             });
 
-            // Store customer-specific fee mapping to prevent overwriting in multi-catering
             if (cleanCustKey) {
                 db.ref(`roster/${appState.telegramId}/customerFees/${cleanCustKey}`).set({
                     customerName: customerName,
