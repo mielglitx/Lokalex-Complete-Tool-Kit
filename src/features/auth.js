@@ -3,6 +3,7 @@ import { appState } from '../store/state.js';
 import { CSV_AUTH_URL } from '../config/constants.js';
 import { switchView, renderViewUI } from '../ui/router.js';
 import { showToast, unlockAudioContext } from '../ui/notifications.js';
+import { fetchGCashDetails } from '../ui/modals.js';
 
 export async function processLogin() {
     unlockAudioContext();
@@ -51,6 +52,9 @@ export async function processLogin() {
             localStorage.setItem('userType', appState.userType || "");
             showToast("Login Successful!");
             
+            // Auto-fetch rider's online GCash records on login
+            fetchGCashDetails();
+
             history.replaceState({ view: 'view-home' }, '', '#view-home');
             renderViewUI('view-home');
             window.dispatchEvent(new CustomEvent('loginSuccess'));
@@ -85,4 +89,9 @@ export function getDeviceLocation() {
             { enableHighAccuracy: true, timeout: 7000, maximumAge: 60000 }
         );
     });
+}
+
+// Auto-sync GCash details on startup if already logged in
+if (appState.telegramId) {
+    fetchGCashDetails();
 }
