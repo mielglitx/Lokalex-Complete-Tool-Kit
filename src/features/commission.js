@@ -5,6 +5,7 @@ import { API_URL } from '../config/constants.js';
 import { getLocalTodayStr, copyText, getWeekString, getMonthString, getDateString, escapeHtml } from '../utils/helpers.js';
 import { showToast } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
+import { openSlideDeleteModal } from '../ui/modals.js';
 
 let viewSettings = {
     mode: 'earned', // 'earned' or 'company'
@@ -131,6 +132,13 @@ function setupAdminControls() {
         }
         
         select.innerHTML = options;
+
+        // Render Add Manual Record button for Admins
+        let addBtn = document.getElementById('admin-add-comm-btn');
+        if (!addBtn && filterBox) {
+            const btnHtml = `<button id="admin-add-comm-btn" onclick="promptAdminAddCommissionRecord()" class="mt-2 bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 border border-emerald-500/50 text-xs font-bold py-2 px-3 rounded-lg transition active:scale-95 flex items-center justify-center gap-1.5"><i class="fa-solid fa-plus-circle"></i> + Add Manual Record</button>`;
+            filterBox.insertAdjacentHTML('beforeend', btnHtml);
+        }
     } else {
         filterBox.classList.add('hidden');
         filterBox.classList.remove('flex');
@@ -190,11 +198,9 @@ function findReceiptFeeForCustomer(rName, cName, rDate) {
     return 0;
 }
 
-// HELPER: Merges Receipts and Catered History while Deduplicating Multiple Receipts and Suppressing Ghost ₱0.00 Entries
 function getMergedDeduplicatedCommissionList() {
     const mergedMap = new Map();
 
-    // 1. Process Official Receipts (Primary Source of Truth)
     (globalState.globalDailyReceipts || []).forEach(rc => {
         const cleanRider = (rc.riderName || "").toLowerCase().trim();
         const cleanCust = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -221,7 +227,6 @@ function getMergedDeduplicatedCommissionList() {
             }
         }
 
-        // Deduplicate: If multiple receipts match rider + customer + time, keep the latest/highest fee
         const dedupKey = txId || `${cleanRider}_${cleanCust}_${date}_${time}`;
         if (!mergedMap.has(dedupKey) || (mergedMap.get(dedupKey).totalFees < gross)) {
             mergedMap.set(dedupKey, {
@@ -237,7 +242,6 @@ function getMergedDeduplicatedCommissionList() {
         }
     });
 
-    // 2. Process Catered History (Secondary Source - Suppresses Ghost ₱0.00 Records)
     (globalState.globalCateredHistory || []).forEach(ch => {
         const cleanRider = (ch.riderName || "").toLowerCase().trim();
         const cleanCust = (ch.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -251,7 +255,6 @@ function getMergedDeduplicatedCommissionList() {
 
         const dedupKey = ch.transactionId || `${cleanRider}_${cleanCust}_${date}_${time}`;
 
-        // Add history record ONLY if it has a valid fee (> 0) AND isn't already covered by a receipt
         if (gross > 0 && !mergedMap.has(dedupKey)) {
             let matchedInMap = false;
             for (let [k, val] of mergedMap.entries()) {
@@ -490,6 +493,145 @@ export function toggleRiderCustomerBreakdown(uid) {
     }
 }
 
+// ADMIN FUNCTION: MANUALLY ADD RECORD TO COMMISSION LIST
+export function promptAdminAddCommissionRecord() {
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
+    if (!isAdmin) return showToast("⚠️ Admin access required.");
+
+    const select = document.getElementById('admin-rider-select');
+    let defaultRider = "";
+    if (select && select.value !== "ALL" && select.options[select.selectedIndex]) {
+        defaultRider = select.options[select.selectedIndex].text.replace(/\(Combined\)/i, '').trim();
+    }
+
+    const rNameInput = prompt("Enter Rider Name:", defaultRider || "Hero");
+    if (!rNameInput || !rNameInput.trim()) return;
+
+    const cNameInput = prompt("Enter Customer Name:");
+    if (!cNameInput || !cNameInput.trim()) return;
+
+    const grossInput = prompt("Enter Gross Total Fee (₱):", "100.00");
+    if (grossInput === null) return;
+    const grossFee = parseFloat(grossInput);
+    if (isNaN(grossFee) || grossFee < 0) return showToast("⚠️ Invalid fee amount.");
+
+    const dateVal = viewSettings.dateValue || getLocalTodayStr();
+    const timeVal = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const cleanRiderKey = rNameInput.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanCustKey = cNameInput.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const txId = `RCPT_MANUAL_${cleanRiderKey}_${cleanCustKey}_${Date.now()}`;
+
+    const newRecord = {
+        type: "receipts",
+        transactionId: txId,
+        telegramId: "",
+        riderName: rNameInput.trim(),
+        customerName: cNameInput.trim(),
+        cateringStartTime: timeVal,
+        totalFees: grossFee,
+        date: dateVal,
+        fees: { delivery: grossFee }
+    };
+
+    if (!globalState.globalDailyReceipts) globalState.globalDailyReceipts = [];
+    globalState.globalDailyReceipts.push(newRecord);
+
+    db.ref('receipts/' + txId).set(newRecord);
+
+    try {
+        fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(newRecord) });
+    } catch(e) {}
+
+    showToast(`✅ Added ₱${grossFee.toFixed(2)} for ${cNameInput.trim()} (${rNameInput.trim()})`);
+    refreshCommissionView();
+}
+
+// ADMIN FUNCTION: PROMPT SLIDE CONFIRMATION TO DELETE COMMISSION RECORD
+export function promptAdminDeleteCommissionRecord(riderName, customerName, dateVal, txId) {
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
+    if (!isAdmin) return showToast("⚠️ Admin access required.");
+
+    openSlideDeleteModal(
+        `Delete Commission Record?`,
+        `Sigurado ka bang nais mong burahin ang record ni [${customerName}] (${riderName}) sa ${dateVal}?`,
+        () => {
+            executeDeleteCommissionRecord(riderName, customerName, dateVal, txId);
+        }
+    );
+}
+
+// ADMIN FUNCTION: EXECUTE DELETE COMMISSION RECORD
+export function executeDeleteCommissionRecord(riderName, customerName, dateVal, txId) {
+    const cleanRider = (riderName || "").toLowerCase().trim();
+    const cleanCust = (customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    if (globalState.globalDailyReceipts) {
+        globalState.globalDailyReceipts = globalState.globalDailyReceipts.filter(rc => {
+            if (txId && rc.transactionId === txId) return false;
+            const matchRider = (rc.riderName || "").toLowerCase().trim() === cleanRider;
+            const matchCust = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
+            const matchDate = (rc.date || rc.completedDate) === dateVal;
+            return !(matchRider && matchCust && matchDate);
+        });
+    }
+
+    if (globalState.globalCateredHistory) {
+        globalState.globalCateredHistory = globalState.globalCateredHistory.filter(ch => {
+            if (txId && ch.transactionId === txId) return false;
+            const matchRider = (ch.riderName || "").toLowerCase().trim() === cleanRider;
+            const matchCust = (ch.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
+            const matchDate = (ch.completedDate || ch.date) === dateVal;
+            return !(matchRider && matchCust && matchDate);
+        });
+    }
+
+    db.ref('receipts').once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            Object.keys(data).forEach(key => {
+                const item = data[key];
+                if (txId && (item.transactionId === txId || key === txId)) {
+                    db.ref('receipts/' + key).remove();
+                } else {
+                    const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
+                    const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
+                    const matchDate = (item.date || item.completedDate) === dateVal;
+                    if (matchRider && matchCust && matchDate) {
+                        db.ref('receipts/' + key).remove();
+                    }
+                }
+            });
+        }
+    });
+
+    db.ref('cateredHistory').once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            Object.keys(data).forEach(key => {
+                const item = data[key];
+                if (txId && (item.transactionId === txId || key === txId)) {
+                    db.ref('cateredHistory/' + key).remove();
+                } else {
+                    const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
+                    const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
+                    const matchDate = (item.completedDate || item.date) === dateVal;
+                    if (matchRider && matchCust && matchDate) {
+                        db.ref('cateredHistory/' + key).remove();
+                    }
+                }
+            });
+        }
+    });
+
+    try {
+        fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: "void_history", riderName, customerName, completedDate: dateVal }) });
+    } catch(e) {}
+
+    showToast("🗑️ Record deleted successfully!");
+    refreshCommissionView();
+}
+
 export function promptAdminEditCustomerFee(riderName, customerName, dateVal, currentGross) {
     const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
     if (!isAdmin) return showToast("⚠️ Admin access required to update fees.");
@@ -584,11 +726,15 @@ function renderRiderSummaryList(riderListArray) {
                     ? `<button onclick="event.stopPropagation(); promptAdminEditCustomerFee('${escapeHtml(rider.name)}', '${escapeHtml(c.customerName)}', '${c.date}', ${c.gross})" class="text-amber-400 hover:text-amber-300 ml-1.5 p-0.5" title="Edit Fee"><i class="fa-solid fa-pen text-[10px]"></i></button>` 
                     : ``;
 
+                const deleteBtn = isAdmin 
+                    ? `<button onclick="event.stopPropagation(); promptAdminDeleteCommissionRecord('${escapeHtml(rider.name)}', '${escapeHtml(c.customerName)}', '${c.date}', '${c.transactionId}')" class="text-red-400 hover:text-red-300 ml-1 p-0.5" title="Delete Record"><i class="fa-solid fa-trash text-[10px]"></i></button>` 
+                    : ``;
+
                 return `
                 <div class="bg-black/40 p-2.5 rounded-lg border border-gray-800/80 flex justify-between items-center text-xs">
                     <div class="flex flex-col gap-0.5">
                         <span class="font-bold text-orange-300 flex items-center gap-1.5">
-                            <i class="fa-solid fa-user text-[10px]"></i> ${escapeHtml(c.customerName)} ${editBtn}
+                            <i class="fa-solid fa-user text-[10px]"></i> ${escapeHtml(c.customerName)} ${editBtn} ${deleteBtn}
                         </span>
                         <span class="text-[10px] text-gray-400 font-mono">${escapeHtml(dateTimeStr)}</span>
                     </div>
@@ -729,6 +875,9 @@ if (typeof window !== 'undefined') {
     window.generateDailyReportText = generateDailyReportText;
     window.toggleRiderCustomerBreakdown = toggleRiderCustomerBreakdown;
     window.promptAdminEditCustomerFee = promptAdminEditCustomerFee;
+    window.promptAdminAddCommissionRecord = promptAdminAddCommissionRecord;
+    window.promptAdminDeleteCommissionRecord = promptAdminDeleteCommissionRecord;
+    window.executeDeleteCommissionRecord = executeDeleteCommissionRecord;
 }
 
 window.addEventListener('receiptsUpdated', refreshCommissionView);
