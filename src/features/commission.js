@@ -172,7 +172,6 @@ export function setCommissionPeriod(period) {
     refreshCommissionView();
 }
 
-// HELPER: FUZZY MATCH CUSTOMER RECEIPTS TO CATERED HISTORY
 function findReceiptFeeForCustomer(rName, cName, rDate) {
     const cleanRider = (rName || "").toLowerCase().trim();
     const cleanCust = (cName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -200,7 +199,6 @@ export function refreshCommissionView() {
     if (dateInput) viewSettings.dateValue = dateInput.value;
     if (!viewSettings.dateValue) return;
 
-    // 1. Merge Receipts and Catered History
     const mergedList = [];
     const processedKeys = new Set();
 
@@ -217,7 +215,6 @@ export function refreshCommissionView() {
         }
     });
 
-    // 2. Filter Data by Date/Week/Month
     let filteredHistory = mergedList.filter(record => {
         let rDate = record.date || record.completedDate || getLocalTodayStr();
         
@@ -234,7 +231,6 @@ export function refreshCommissionView() {
         return false;
     });
 
-    // 3. Group Totals and Customer Lists by Rider
     let riderTotals = {}; 
 
     filteredHistory.forEach(r => {
@@ -264,7 +260,6 @@ export function refreshCommissionView() {
                 const disc = parseFloat(f.discount) || 0;
                 gross = hf + mf + ms + rdf + epay - disc;
             } else {
-                // FALLBACK FUZZY LOOKUP TO RECEIPTS
                 gross = findReceiptFeeForCustomer(rName, cName, rDate);
             }
         }
@@ -294,7 +289,6 @@ export function refreshCommissionView() {
         });
     });
 
-    // 4. Filter down to Target Rider & Calculate Grand Totals
     let finalRiderList = [];
     let grandGross = 0;
     let grandEarned = 0;
@@ -325,7 +319,6 @@ export function refreshCommissionView() {
         selectedRiderRates = getCommissionRates(viewSettings.dateValue, rName);
     }
 
-    // 5. Update UI Display with Dynamic Percentages
     const mainWrapperEl = document.getElementById('comm-main-wrapper');
     const mainLabelEl = document.getElementById('comm-main-label');
     const grossEl = document.getElementById('comm-gross-amount');
@@ -438,7 +431,7 @@ export function toggleRiderCustomerBreakdown(uid) {
     }
 }
 
-// ADMIN QUICK FIX MANUAL FEE OVERRIDE MODAL
+// ADMIN QUICK-FIX MANUAL FEE OVERRIDE (UPDATES IN-MEMORY STATE INSTANTLY)
 export function promptAdminEditCustomerFee(riderName, customerName, dateVal, currentGross) {
     const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
     if (!isAdmin) return showToast("⚠️ Admin access required to update fees.");
@@ -450,14 +443,32 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
     if (isNaN(parsedFee) || parsedFee < 0) return showToast("⚠️ Invalid fee amount entered.");
 
     const cleanCustKey = customerName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanRider = riderName.toLowerCase().trim();
 
-    // 1. Update Firebase receipts & cateredHistory
+    // 1. MUTATE IN-MEMORY STATE IMMEDIATELY
+    (globalState.globalDailyReceipts || []).forEach(rc => {
+        const matchRider = (rc.riderName || "").toLowerCase().trim() === cleanRider;
+        const matchCust = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
+        if (matchRider && matchCust) {
+            rc.totalFees = parsedFee;
+        }
+    });
+
+    (globalState.globalCateredHistory || []).forEach(ch => {
+        const matchRider = (ch.riderName || "").toLowerCase().trim() === cleanRider;
+        const matchCust = (ch.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
+        if (matchRider && matchCust) {
+            ch.totalFees = parsedFee;
+        }
+    });
+
+    // 2. PERSIST TO FIREBASE
     db.ref('receipts').once('value', (snapshot) => {
         const data = snapshot.val();
         if (data) {
             Object.keys(data).forEach(key => {
                 const item = data[key];
-                const matchRider = (item.riderName || "").toLowerCase().trim() === riderName.toLowerCase().trim();
+                const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
                 const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
                 if (matchRider && matchCust) {
                     db.ref('receipts/' + key).update({ totalFees: parsedFee });
@@ -471,7 +482,7 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
         if (data) {
             Object.keys(data).forEach(key => {
                 const item = data[key];
-                const matchRider = (item.riderName || "").toLowerCase().trim() === riderName.toLowerCase().trim();
+                const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
                 const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
                 if (matchRider && matchCust) {
                     db.ref('cateredHistory/' + key).update({ totalFees: parsedFee });
@@ -481,7 +492,7 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
     });
 
     showToast(`✅ Fee updated to ₱${parsedFee.toFixed(2)} for ${customerName}!`);
-    setTimeout(() => { refreshCommissionView(); }, 500);
+    refreshCommissionView();
 }
 
 function renderRiderSummaryList(riderListArray) {
@@ -685,7 +696,6 @@ export function generateDailyReportText() {
     showToast("📄 Settlement text report copied!");
 }
 
-// Global window bindings
 if (typeof window !== 'undefined') {
     window.openCommissionScreen = openCommissionScreen;
     window.setCommissionMode = setCommissionMode;
@@ -697,6 +707,5 @@ if (typeof window !== 'undefined') {
     window.promptAdminEditCustomerFee = promptAdminEditCustomerFee;
 }
 
-// Reactive UI updates
 window.addEventListener('receiptsUpdated', refreshCommissionView);
 window.addEventListener('cateredUpdated', refreshCommissionView);
