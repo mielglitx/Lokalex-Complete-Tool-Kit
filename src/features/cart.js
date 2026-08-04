@@ -32,6 +32,7 @@ export function getCurrentCart() {
     return multiCarts[activeCartSlot].items;
 }
 
+// PERSIST CART & LOCK STATE TO LOCALSTORAGE
 export function saveCartState() {
     try {
         const serializable = {};
@@ -45,13 +46,19 @@ export function saveCartState() {
         }
         localStorage.setItem('lokalex_multi_carts_v2', JSON.stringify(serializable));
         localStorage.setItem('lokalex_active_cart_slot', activeCartSlot.toString());
+        localStorage.setItem('lokalex_cart_locked_state', JSON.stringify(globalState.cartLocked || [false, false, false, false]));
     } catch(e) {}
 }
 
+// LOAD CART & RESTORE LOCK STATE FROM LOCALSTORAGE
 export function loadCartState() {
     try {
         const savedSlot = localStorage.getItem('lokalex_active_cart_slot');
-        if (savedSlot) setActiveCartSlot(parseInt(savedSlot) || 1);
+        if (savedSlot) {
+            const slotNum = parseInt(savedSlot) || 1;
+            setActiveCartSlot(slotNum);
+            globalState.activeCartIndex = slotNum - 1;
+        }
 
         const savedData = localStorage.getItem('lokalex_multi_carts_v2');
         if (savedData) {
@@ -66,17 +73,25 @@ export function loadCartState() {
                 };
             }
         }
+
+        const savedLocks = localStorage.getItem('lokalex_cart_locked_state');
+        if (savedLocks) {
+            globalState.cartLocked = JSON.parse(savedLocks);
+        } else if (!globalState.cartLocked) {
+            globalState.cartLocked = [false, false, false, false];
+        }
     } catch(e) {}
 }
 
 export function switchCartTab(slot) {
     setActiveCartSlot(slot);
+    globalState.activeCartIndex = slot - 1;
     saveCartState();
     renderCartTabs();
     renderCartItems();
 }
 
-// RENDER CART TABS (CART 1, 2, 3, 4)
+// RENDER CART TABS (CART 1, 2, 3, 4) WITH LOCK INDICATOR
 export function renderCartTabs() {
     const container = document.getElementById('cart-tabs-header');
     if (!container) return;
@@ -121,7 +136,7 @@ export function renderCartCustomerSelector() {
 
     const currentCartObj = multiCarts[activeCartSlot];
     const myCustomers = getMyCateringCustomers();
-    const slotIdx = activeCartSlot - 1; // 0 for Cart 1, 1 for Cart 2, etc.
+    const slotIdx = activeCartSlot - 1;
 
     const assignedCustomerForSlot = myCustomers[slotIdx];
 
@@ -171,7 +186,24 @@ export function getEffectiveCartClient(slotIdx) {
     return "Sample";
 }
 
-// RENDER CART ITEMS WITH UNPRICED & UNPAID AMBER HIGHLIGHT
+// SLIDE-TO-UNLOCK ACTION FOR LOCKED CARTS
+export function unlockCartWithSlide() {
+    const currentClient = getEffectiveCartClient(activeCartSlot - 1);
+    openSlideDeleteModal(
+        `Naka-Lock ang Cart ${activeCartSlot}`,
+        `Nagawaan na ng resibo ang order na ito.\n\nI-slide pakanan upang i-unlock at i-edit muli ang resibo ni [${currentClient}]:`,
+        () => {
+            if (!globalState.cartLocked) globalState.cartLocked = [false, false, false, false];
+            globalState.cartLocked[activeCartSlot - 1] = false;
+            saveCartState();
+            renderCartTabs();
+            renderCartItems();
+            showToast(`🔓 Unlocked Cart ${activeCartSlot} for editing.`);
+        }
+    );
+}
+
+// RENDER CART ITEMS WITH LOCKED OVERLAY BANNER & UNPRICED AMBER HIGHLIGHT
 export function renderCartItems() {
     const container = document.getElementById('cart-items-list');
     const subtotalDisplay = document.getElementById('cart-subtotal-display');
@@ -183,18 +215,36 @@ export function renderCartItems() {
 
     const currentCart = getCurrentCart();
     const currentCartObj = multiCarts[activeCartSlot];
+    const isLocked = globalState.cartLocked && globalState.cartLocked[activeCartSlot - 1];
 
     let subtotal = 0;
     let selectedCount = currentCartObj.selectedIds ? currentCartObj.selectedIds.size : 0;
 
+    // LOCKED OVERLAY BANNER
+    let lockedBannerHtml = "";
+    if (isLocked) {
+        const clientName = getEffectiveCartClient(activeCartSlot - 1);
+        lockedBannerHtml = `
+            <div class="bg-emerald-950/40 border border-emerald-500/60 rounded-2xl p-3.5 mb-2 text-center flex flex-col items-center gap-1.5 shadow-lg">
+                <div class="flex items-center gap-2 text-emerald-400 font-bold text-xs">
+                    <i class="fa-solid fa-lock text-sm"></i>
+                    <span>Naka-Lock ang Cart ${activeCartSlot} (${escapeHtml(clientName)})</span>
+                </div>
+                <p class="text-[11px] text-gray-300">Nagawaan na ng resibo ang order na ito. Kumpirmahin muna bago mag-edit.</p>
+                <button onclick="unlockCartWithSlide()" class="mt-1 bg-amber-600/30 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/50 text-xs font-bold py-2 px-3.5 rounded-xl transition active:scale-95 flex items-center gap-1.5">
+                    <i class="fa-solid fa-sliders"></i> Slide to Unlock / Edit Receipt
+                </button>
+            </div>`;
+    }
+
     if (currentCart.length === 0) {
-        container.innerHTML = `<div class="text-center text-gray-500 italic py-16 text-xs">Empty Cart ${activeCartSlot}. Click "Paste List" or add items.</div>`;
+        container.innerHTML = lockedBannerHtml + `<div class="text-center text-gray-500 italic py-16 text-xs">Empty Cart ${activeCartSlot}. Click "Paste List" or add items.</div>`;
         if (subtotalDisplay) subtotalDisplay.innerText = "0.00";
         if (deleteBtnContainer) deleteBtnContainer.innerHTML = "";
         return;
     }
 
-    container.innerHTML = currentCart.map((item, index) => {
+    const itemsHtml = currentCart.map((item, index) => {
         const itemPrice = parseFloat(item.price) || 0;
         const isPaid = !!item.isPaid;
         const isSelected = currentCartObj.selectedIds && currentCartObj.selectedIds.has(index);
@@ -271,6 +321,8 @@ export function renderCartItems() {
         </div>`;
     }).join('');
 
+    container.innerHTML = lockedBannerHtml + itemsHtml;
+
     if (subtotalDisplay) subtotalDisplay.innerText = subtotal.toFixed(2);
 
     if (deleteBtnContainer) {
@@ -291,19 +343,7 @@ export function handleCartActionBtn() {
 
     const isLocked = globalState.cartLocked && globalState.cartLocked[activeCartSlot - 1];
     if (isLocked) {
-        openSlideDeleteModal(
-            `Linisin ang Locked Cart ${activeCartSlot}?`,
-            `Nagawaan na ng resibo ang order na ito.\n\nI-slide pakanan upang kumpirmahing nais mong linisin ang Cart ${activeCartSlot}:`,
-            () => {
-                if (globalState.cartLocked) globalState.cartLocked[activeCartSlot - 1] = false;
-                multiCarts[activeCartSlot].items = [];
-                multiCarts[activeCartSlot].selectedIds.clear();
-                saveCartState();
-                renderCartItems();
-                renderCartTabs();
-                showToast(`Cart ${activeCartSlot} cleared.`);
-            }
-        );
+        unlockCartWithSlide();
         return;
     }
 
@@ -492,18 +532,7 @@ export function validateAndProceedToWizard() {
     // STRICT CHECK 2: SLIDE CONFIRMATION BARRIER FOR ALREADY LOCKED/FINISHED RECEIPT CARTS
     const isLocked = globalState.cartLocked && globalState.cartLocked[activeCartSlot - 1];
     if (isLocked) {
-        const currentClient = getEffectiveCartClient(activeCartSlot - 1);
-        openSlideDeleteModal(
-            `Naka-Lock ang Cart ${activeCartSlot}`,
-            `Nagawaan na ng resibo ang order na ito.\n\nI-slide pakanan upang kumpirmahing nais mong baguhin o i-edit muli ang resibo ni ${currentClient}:`,
-            () => {
-                // Unlock cart slot upon sliding confirmation
-                if (globalState.cartLocked) globalState.cartLocked[activeCartSlot - 1] = false;
-                saveCartState();
-                renderCartTabs();
-                proceedToWizard();
-            }
-        );
+        unlockCartWithSlide();
         return;
     }
 
@@ -543,6 +572,24 @@ export function clearCartSlot() {
     }
 }
 
+// CLEAR ALL 4 CARTS AND UNLOCK ALL SLOTS WHEN MARKING AVAILABLE
+export function clearAllCartSlots() {
+    for (let slot = 1; slot <= 4; slot++) {
+        multiCarts[slot] = {
+            items: [],
+            selectedIds: new Set(),
+            customerName: "",
+            isManual: false,
+            txId: ""
+        };
+    }
+    globalState.cartLocked = [false, false, false, false];
+    if (globalState.cartTxIds) globalState.cartTxIds = ["", "", "", ""];
+    saveCartState();
+    renderCartTabs();
+    renderCartItems();
+}
+
 // AUTO-INITIALIZE SMART CART ON LOAD & VIEW LOAD
 loadCartState();
 setTimeout(() => {
@@ -566,6 +613,8 @@ if (typeof window !== 'undefined') {
     window.confirmPaidItemProceed = confirmPaidItemProceed;
     window.closePaidItemModal = closePaidItemModal;
     window.clearCartSlot = clearCartSlot;
+    window.clearAllCartSlots = clearAllCartSlots;
+    window.unlockCartWithSlide = unlockCartWithSlide;
 }
 
 window.addEventListener('rosterUpdated', renderCartCustomerSelector);
