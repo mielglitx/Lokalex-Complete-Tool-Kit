@@ -6,14 +6,13 @@ import { showToast, showSideNotification } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
 import { openPasswordModal, closePasswordModal } from '../ui/modals.js';
 import { calibrateGPS } from './auth.js';
-import { escapeHtml } from '../utils/helpers.js';
+import { escapeHtml, copyText } from '../utils/helpers.js';
 
 let editingRecord = null;
 let mapInstance = null;
 let selectedMapLat = 0;
 let selectedMapLng = 0;
 
-// OPEN DIRECTORY & AUTO-SYNC IF EMPTY
 export async function openDirectory(type) {
     globalState.currentType = type || 'customers';
     switchView('view-directory');
@@ -27,14 +26,12 @@ export async function openDirectory(type) {
 
     renderDirectoryList();
 
-    // Auto-fetch if no records exist for this directory type yet
     const existingCount = (globalState.records || []).filter(r => (r.type || 'customers') === globalState.currentType).length;
     if (existingCount === 0) {
         await syncData();
     }
 }
 
-// SYNC DIRECTORY DATA FROM GOOGLE SHEETS & FIREBASE
 export async function syncData() {
     const type = globalState.currentType || 'customers';
     const listEl = document.getElementById('record-list');
@@ -49,22 +46,25 @@ export async function syncData() {
 
     let fetchedRecords = [];
 
-    // 1. Fetch from Google Apps Script API
     try {
         const res = await fetch(`${API_URL}?type=${type}`);
         if (res.ok) {
             const data = await res.json();
             if (Array.isArray(data)) {
                 fetchedRecords = data.map(item => {
-                    const name = item.name || item.customer_name || item.store_name || item.barangay || item.title || "";
+                    const barangayName = item.barangay || item.barangay_name || item.name || item.title || "";
+                    const rateVal = item.rate || item.delivery_rate || item.fee || item.price || item.amount || item.address || item.general_address || "";
                     const contact = item.contact || item.contact_number || item.phone || item.mobile || "";
                     const address = item.address || item.general_address || item.location || "";
                     const lat_lon_link = item.lat_lon_link || item.lat_lon || item.coordinates || item.map || item.map_link || "";
 
+                    const finalName = (type === 'barangays' ? barangayName : (item.name || item.customer_name || item.store_name || barangayName)).trim();
+
                     return {
-                        name: name.trim(),
+                        name: finalName,
                         contact: contact.trim(),
                         address: address.trim(),
+                        rate: rateVal.toString().trim(),
                         lat_lon_link: lat_lon_link.trim(),
                         type: item.type || type,
                         recorded_by: item.recorded_by || item.recordedby || "Amiel"
@@ -76,7 +76,6 @@ export async function syncData() {
         console.warn("Could not sync directory from Google Sheets API, checking Firebase...", err);
     }
 
-    // 2. Fallback / Merge with Firebase Directory Data
     if (db) {
         try {
             const snap = await db.ref(`directory/${type}`).once('value');
@@ -86,6 +85,7 @@ export async function syncData() {
                     name: (item.name || "").trim(),
                     contact: (item.contact || "").trim(),
                     address: (item.address || "").trim(),
+                    rate: (item.rate || item.address || "").toString().trim(),
                     lat_lon_link: (item.lat_lon_link || "").trim(),
                     type: item.type || type,
                     recorded_by: item.recorded_by || "Amiel"
@@ -99,7 +99,6 @@ export async function syncData() {
         } catch(e) {}
     }
 
-    // 3. Update global state and re-render
     const otherTypeRecords = (globalState.records || []).filter(r => r.type !== type);
     globalState.records = [...otherTypeRecords, ...fetchedRecords];
 
@@ -109,6 +108,17 @@ export async function syncData() {
 
 export function filterDirectoryRecords() {
     renderDirectoryList();
+}
+
+// COPY BARANGAY RATE WITH CUSTOMER FEE TEMPLATE & CLEAN SPACING
+export function copyBarangayRate(barangayName, rawRate) {
+    let rateNum = parseFloat((rawRate || "").replace(/[^0-9.]/g, ''));
+    let amountStr = !isNaN(rateNum) ? rateNum.toFixed(0) : (rawRate || '0').replace(/[^0-9.]/g, '');
+
+    const formattedMessage = `The delivery fee at ${barangayName} starts at ₱${amountStr}\n\n(Note: Other fees may apply for additional stores or extra services!)\n\nWould you like to see our fee guidelines po?`;
+
+    copyText(formattedMessage);
+    showToast(`📋 Copied rate message for ${barangayName}!`);
 }
 
 export function renderDirectoryList() {
@@ -122,6 +132,7 @@ export function renderDirectoryList() {
         records = records.filter(r => 
             (r.name || '').toLowerCase().includes(searchVal) ||
             (r.address || '').toLowerCase().includes(searchVal) ||
+            (r.rate || '').toLowerCase().includes(searchVal) ||
             (r.contact || '').toLowerCase().includes(searchVal)
         );
     }
@@ -133,10 +144,36 @@ export function renderDirectoryList() {
 
     records.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
+    const isBarangay = globalState.currentType === 'barangays';
+
     listEl.innerHTML = records.map(r => {
         let mapBtn = '';
         if (r.lat_lon_link) {
             mapBtn = `<a href="${escapeHtml(r.lat_lon_link)}" target="_blank" class="text-xs text-blue-400 font-bold underline flex items-center gap-1 mt-1"><i class="fa-solid fa-map-location-dot"></i> View Location</a>`;
+        }
+
+        if (isBarangay) {
+            let rateNum = parseFloat((r.rate || r.address || "").replace(/[^0-9.]/g, ''));
+            let displayRate = !isNaN(rateNum) ? `₱${rateNum.toFixed(2)}` : (r.rate || r.address || '₱0.00');
+
+            return `
+            <div class="bg-cardBg border border-gray-800 p-3.5 rounded-xl flex justify-between items-center gap-2 shadow-sm">
+                <div class="flex-1 min-w-0">
+                    <div class="font-bold text-sm text-white truncate"><i class="fa-solid fa-map-location-dot text-emerald-400 mr-1.5"></i> ${escapeHtml(r.name)}</div>
+                    <div class="text-xs font-mono text-emerald-400 font-bold mt-1">Delivery Rate: ${escapeHtml(displayRate)}</div>
+                </div>
+                <div class="flex gap-1.5 shrink-0">
+                    <button onclick="copyBarangayRate('${escapeHtml(r.name)}', '${escapeHtml(displayRate)}')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1" title="Copy Rate Message">
+                        <i class="fa-solid fa-copy"></i> Copy
+                    </button>
+                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-red-400 p-2 rounded-lg text-xs transition active:scale-90" title="Delete">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>`;
         }
 
         return `
@@ -179,7 +216,7 @@ export function openForm(record = null) {
 
         if (nameInput) nameInput.value = record.name || "";
         if (contactInput) contactInput.value = record.contact || "";
-        if (addressInput) addressInput.value = record.address || "";
+        if (addressInput) addressInput.value = record.address || record.rate || "";
         if (latlonInput) latlonInput.value = record.lat_lon_link || "";
     } else {
         if (warningEl) warningEl.classList.add('hidden');
@@ -220,18 +257,15 @@ export function verifyPassword() {
 export function executeDeleteDirectoryRecord(name) {
     const type = globalState.currentType || 'customers';
     
-    // Remove from in-memory state
     if (globalState.records) {
         globalState.records = globalState.records.filter(r => !(r.name === name && r.type === type));
     }
 
-    // Delete from Firebase
     if (db) {
         const cleanKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
         db.ref(`directory/${type}/${cleanKey}`).remove();
     }
 
-    // Post delete request to Google Sheets
     try {
         fetch(API_URL, {
             method: 'POST',
@@ -259,12 +293,12 @@ export async function submitForm() {
     const address = addressInput ? addressInput.value.trim() : "";
     const lat_lon_link = latlonInput ? latlonInput.value.trim() : "";
 
-    if (!name) return showToast("⚠️ Name / Store Name is required!");
+    if (!name) return showToast("⚠️ Name / Store Name / Barangay is required!");
 
     const type = globalState.currentType || 'customers';
 
     const recordData = {
-        name, contact, address, lat_lon_link,
+        name, contact, address, rate: address, lat_lon_link,
         type: type,
         recorded_by: appState.riderName || "Amiel",
         originalName: editingRecord ? editingRecord.name : name
@@ -278,7 +312,6 @@ export async function submitForm() {
         globalState.records.push(recordData);
     }
 
-    // Persist to Firebase
     if (db) {
         const cleanKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
         db.ref(`directory/${type}/${cleanKey}`).set(recordData);
@@ -302,7 +335,6 @@ export async function submitForm() {
     showToast(`✅ Record ${editingRecord ? 'updated' : 'saved'} successfully!`);
 }
 
-// OPEN MAP PICKER WITH AUTO GPS CALIBRATION
 export async function openMapPicker() {
     switchView('view-map');
 
@@ -364,4 +396,5 @@ if (typeof window !== 'undefined') {
     window.submitForm = submitForm;
     window.openMapPicker = openMapPicker;
     window.confirmGoogleMapPin = confirmGoogleMapPin;
+    window.copyBarangayRate = copyBarangayRate;
 }
