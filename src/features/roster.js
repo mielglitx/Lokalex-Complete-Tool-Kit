@@ -471,7 +471,10 @@ export async function triggerStatusWithSlide(targetStatus) {
         endLiveGpsSession();
         await updateRosterStatus('Available');
         
-        if (window.clearCartSlot) {
+        // CLEAR ALL CARTS AND UNLOCK ALL SLOTS WHEN MARKING AVAILABLE
+        if (window.clearAllCartSlots) {
+            window.clearAllCartSlots();
+        } else if (window.clearCartSlot) {
             window.clearCartSlot();
         }
 
