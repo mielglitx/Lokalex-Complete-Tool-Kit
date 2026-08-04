@@ -57,6 +57,7 @@ export function switchCartTab(slot) {
     renderCartItems();
 }
 
+// RENDER CART TABS (CART 1, 2, 3, 4)
 export function renderCartTabs() {
     const container = document.getElementById('cart-tabs-header');
     if (!container) return;
@@ -90,6 +91,7 @@ export function renderCartTabs() {
     renderCartCustomerSelector();
 }
 
+// RENDER CLIENT SELECTION DROPDOWN
 export function renderCartCustomerSelector() {
     const container = document.getElementById('cart-customer-selector-container');
     if (!container) return;
@@ -158,6 +160,9 @@ export function renderCartItems() {
     const subtotalDisplay = document.getElementById('cart-subtotal-display');
     const deleteBtnContainer = document.getElementById('delete-selected-btn-container');
 
+    // Ensure cart header and client dropdown are rendered
+    renderCartTabs();
+
     if (!container) return;
 
     const currentCart = getCurrentCart();
@@ -197,7 +202,6 @@ export function renderCartItems() {
             ? "bg-emerald-600/30 text-emerald-400 border border-emerald-500/50" 
             : "bg-gray-800 text-gray-400 hover:text-white";
 
-        // CARD HIGHLIGHT STYLING FOR UNPRICED ITEMS
         let cardStyleClass = "bg-cardBg border-gray-800";
         if (isUnpricedUnpaid) {
             cardStyleClass = "bg-amber-950/30 border-amber-500/80 ring-1 ring-amber-500/50 shadow-lg shadow-amber-950/30";
@@ -443,7 +447,6 @@ export function validateAndProceedToWizard() {
         return showToast("⚠️ Empty cart! Add items first.");
     }
 
-    // STRICT CHECK: Block if any item has price <= 0 and is NOT marked as paid
     const unpricedUnpaidItems = currentCart.filter(i => (parseFloat(i.price) || 0) <= 0 && !i.isPaid);
 
     if (unpricedUnpaidItems.length > 0) {
@@ -452,7 +455,6 @@ export function validateAndProceedToWizard() {
         return;
     }
 
-    // Optional confirmation for items marked as paid
     const paidItems = currentCart.filter(i => i.isPaid);
     if (paidItems.length > 0) {
         const paidModal = document.getElementById('paid-item-confirm-modal');
@@ -488,6 +490,13 @@ export function clearCartSlot() {
     }
 }
 
+// AUTO-INITIALIZE SMART CART ON LOAD & VIEW LOAD
+loadCartState();
+setTimeout(() => {
+    renderCartTabs();
+    renderCartItems();
+}, 50);
+
 if (typeof window !== 'undefined') {
     window.switchCartTab = switchCartTab;
     window.onCartCustomerSelected = onCartCustomerSelected;
@@ -505,3 +514,5 @@ if (typeof window !== 'undefined') {
     window.closePaidItemModal = closePaidItemModal;
     window.clearCartSlot = clearCartSlot;
 }
+
+window.addEventListener('rosterUpdated', renderCartCustomerSelector);
