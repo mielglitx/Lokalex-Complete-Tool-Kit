@@ -5,17 +5,90 @@ import { switchView, renderViewUI } from '../ui/router.js';
 import { showToast, unlockAudioContext } from '../ui/notifications.js';
 import { fetchGCashDetails } from '../ui/modals.js';
 
+// HIGH-PRECISION AUTO-GPS CALIBRATION HELPER
+export function calibrateGPS(onProgress) {
+    return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+            return resolve({ lat: 0, lon: 0, accuracy: 999 });
+        }
+
+        let bestFix = null;
+        let sampleCount = 0;
+        const maxSamples = 4;
+        const timeoutDuration = 6000;
+
+        const timeoutTimer = setTimeout(() => {
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+            if (bestFix) {
+                resolve({
+                    lat: bestFix.coords.latitude,
+                    lon: bestFix.coords.longitude,
+                    accuracy: bestFix.coords.accuracy
+                });
+            } else {
+                resolve({ lat: 0, lon: 0, accuracy: 999 });
+            }
+        }, timeoutDuration);
+
+        const watchId = navigator.geolocation.watchPosition(
+            (position) => {
+                sampleCount++;
+                const acc = position.coords.accuracy;
+
+                if (!bestFix || acc < bestFix.coords.accuracy) {
+                    bestFix = position;
+                }
+
+                if (onProgress && typeof onProgress === 'function') {
+                    onProgress(acc, sampleCount);
+                }
+
+                // If accuracy is 15 meters or better, or max samples reached, resolve immediately
+                if (acc <= 15 || sampleCount >= maxSamples) {
+                    clearTimeout(timeoutTimer);
+                    navigator.geolocation.clearWatch(watchId);
+                    resolve({
+                        lat: bestFix.coords.latitude,
+                        lon: bestFix.coords.longitude,
+                        accuracy: bestFix.coords.accuracy
+                    });
+                }
+            },
+            (err) => {
+                // Fallback attempt with low accuracy if high accuracy fails
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        );
+    });
+}
+
+export function getDeviceLocation() {
+    return calibrateGPS();
+}
+
 export async function processLogin() {
     unlockAudioContext();
     const idInput = document.getElementById('login-id').value.trim();
     if (!idInput) return showToast("Please enter a valid ID");
+    
     const btn = document.getElementById('login-btn');
-    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Checking GPS & Auth...`; 
+    btn.innerHTML = `<i class="fa-solid fa-satellite-dish fa-spin"></i> Calibrating GPS...`; 
     btn.disabled = true;
 
     try {
-        const coords = await getDeviceLocation();
-        appState.lat = coords.lat; appState.lon = coords.lon;
+        showToast("📡 Calibrating GPS location...");
+        const coords = await calibrateGPS((accuracy) => {
+            showToast(`📡 Calibrating GPS: ±${Math.round(accuracy)}m`);
+        });
+
+        if (coords.lat === 0 && coords.lon === 0) {
+            showToast("⚠️ GPS Signal weak. Turn on location services.");
+        } else {
+            showToast(`✅ GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
+        }
+
+        appState.lat = coords.lat; 
+        appState.lon = coords.lon;
 
         const res = await fetch(CSV_AUTH_URL);
         if (!res.ok) throw new Error("Cannot reach authorization sheet");
@@ -52,7 +125,6 @@ export async function processLogin() {
             localStorage.setItem('userType', appState.userType || "");
             showToast("Login Successful!");
             
-            // Auto-fetch rider's online GCash records on login
             fetchGCashDetails();
 
             history.replaceState({ view: 'view-home' }, '', '#view-home');
@@ -74,24 +146,6 @@ export function logout() {
     location.reload(); 
 }
 
-export function getDeviceLocation() {
-    return new Promise((resolve) => {
-        if (!navigator.geolocation) return resolve({ lat: 0, lon: 0 });
-        navigator.geolocation.getCurrentPosition(
-            (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
-            (err) => {
-                navigator.geolocation.getCurrentPosition(
-                    (fPos) => resolve({ lat: fPos.coords.latitude, lon: fPos.coords.longitude }),
-                    () => resolve({ lat: 0, lon: 0 }),
-                    { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
-                );
-            },
-            { enableHighAccuracy: true, timeout: 7000, maximumAge: 60000 }
-        );
-    });
-}
-
-// Auto-sync GCash details on startup if already logged in
 if (appState.telegramId) {
     fetchGCashDetails();
 }
