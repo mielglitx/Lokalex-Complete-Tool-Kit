@@ -1,6 +1,7 @@
 // src/features/cart.js
 import { appState, globalState, multiCarts, activeCartSlot, setActiveCartSlot } from '../store/state.js';
 import { showToast } from '../ui/notifications.js';
+import { openSlideDeleteModal } from '../ui/modals.js';
 import { proceedToWizard } from './wizard.js';
 import { escapeHtml } from '../utils/helpers.js';
 
@@ -124,9 +125,6 @@ export function renderCartCustomerSelector() {
 
     const assignedCustomerForSlot = myCustomers[slotIdx];
 
-    // AUTO-FILL CORRECTION:
-    // If rider has an active catering customer for this cart slot (e.g. Cafe Rafaelo for Cart 1),
-    // and current selection is 'Sample', empty, or an old customer name, force auto-fill it!
     if (assignedCustomerForSlot && !currentCartObj.isManual) {
         if (!currentCartObj.customerName || currentCartObj.customerName === "Sample" || !myCustomers.includes(currentCartObj.customerName)) {
             currentCartObj.customerName = assignedCustomerForSlot;
@@ -290,6 +288,24 @@ export function renderCartItems() {
 export function handleCartActionBtn() {
     const currentCart = getCurrentCart();
     if (currentCart.length === 0) return;
+
+    const isLocked = globalState.cartLocked && globalState.cartLocked[activeCartSlot - 1];
+    if (isLocked) {
+        openSlideDeleteModal(
+            `Linisin ang Locked Cart ${activeCartSlot}?`,
+            `Nagawaan na ng resibo ang order na ito.\n\nI-slide pakanan upang kumpirmahing nais mong linisin ang Cart ${activeCartSlot}:`,
+            () => {
+                if (globalState.cartLocked) globalState.cartLocked[activeCartSlot - 1] = false;
+                multiCarts[activeCartSlot].items = [];
+                multiCarts[activeCartSlot].selectedIds.clear();
+                saveCartState();
+                renderCartItems();
+                renderCartTabs();
+                showToast(`Cart ${activeCartSlot} cleared.`);
+            }
+        );
+        return;
+    }
 
     if (confirm(`Sigurado ka bang nais mong linisin ang Cart ${activeCartSlot}?`)) {
         multiCarts[activeCartSlot].items = [];
@@ -457,13 +473,14 @@ export function processBulkAdd() {
     }
 }
 
-// VALIDATE CART WITH STRICT UNPRICED UNPAID GUARDRAIL
+// VALIDATE CART WITH STRICT UNPRICED UNPAID GUARDRAIL & SLIDE CONFIRMATION FOR LOCKED CARTS
 export function validateAndProceedToWizard() {
     const currentCart = getCurrentCart();
     if (!currentCart || currentCart.length === 0) {
         return showToast("⚠️ Empty cart! Add items first.");
     }
 
+    // STRICT CHECK 1: Block if any item has price <= 0 and is NOT marked as paid
     const unpricedUnpaidItems = currentCart.filter(i => (parseFloat(i.price) || 0) <= 0 && !i.isPaid);
 
     if (unpricedUnpaidItems.length > 0) {
@@ -472,6 +489,25 @@ export function validateAndProceedToWizard() {
         return;
     }
 
+    // STRICT CHECK 2: SLIDE CONFIRMATION BARRIER FOR ALREADY LOCKED/FINISHED RECEIPT CARTS
+    const isLocked = globalState.cartLocked && globalState.cartLocked[activeCartSlot - 1];
+    if (isLocked) {
+        const currentClient = getEffectiveCartClient(activeCartSlot - 1);
+        openSlideDeleteModal(
+            `Naka-Lock ang Cart ${activeCartSlot}`,
+            `Nagawaan na ng resibo ang order na ito.\n\nI-slide pakanan upang kumpirmahing nais mong baguhin o i-edit muli ang resibo ni ${currentClient}:`,
+            () => {
+                // Unlock cart slot upon sliding confirmation
+                if (globalState.cartLocked) globalState.cartLocked[activeCartSlot - 1] = false;
+                saveCartState();
+                renderCartTabs();
+                proceedToWizard();
+            }
+        );
+        return;
+    }
+
+    // CHECK 3: Optional confirmation for items marked as paid
     const paidItems = currentCart.filter(i => i.isPaid);
     if (paidItems.length > 0) {
         const paidModal = document.getElementById('paid-item-confirm-modal');
