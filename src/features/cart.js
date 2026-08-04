@@ -6,10 +6,10 @@ import { escapeHtml } from '../utils/helpers.js';
 
 let editingItemIndex = null;
 
-// HELPER: GET ONLY THE CURRENTLY LOGGED-IN RIDER'S CATERING CUSTOMERS
+// HELPER: GET ONLY THE CURRENTLY LOGGED-IN RIDER'S ACTIVE CATERING CUSTOMERS
 export function getMyCateringCustomers() {
-    const myId = (appState.telegramId || "").toString().trim();
-    const myName = (appState.riderName || "").toString().trim().toLowerCase();
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
     const rosterMembers = globalState.rosterMembers || [];
 
     const myRecord = rosterMembers.find(m => 
@@ -109,7 +109,7 @@ export function renderCartTabs() {
     renderCartCustomerSelector();
 }
 
-// RENDER CLIENT SELECTION DROPDOWN WITH AUTO-FILL AND RIDER ISOLATION
+// RENDER CLIENT SELECTION DROPDOWN WITH DYNAMIC AUTO-FILL CORRECTION
 export function renderCartCustomerSelector() {
     const container = document.getElementById('cart-customer-selector-container');
     if (!container) return;
@@ -122,14 +122,19 @@ export function renderCartCustomerSelector() {
     const myCustomers = getMyCateringCustomers();
     const slotIdx = activeCartSlot - 1; // 0 for Cart 1, 1 for Cart 2, etc.
 
-    // AUTO-FILL: If no customer is assigned yet to this cart slot, auto-assign from rider's catering list
-    if (!currentCartObj.customerName && myCustomers[slotIdx]) {
-        currentCartObj.customerName = myCustomers[slotIdx];
-        currentCartObj.isManual = false;
-        saveCartState();
+    const assignedCustomerForSlot = myCustomers[slotIdx];
+
+    // AUTO-FILL CORRECTION:
+    // If rider has an active catering customer for this cart slot (e.g. Cafe Rafaelo for Cart 1),
+    // and current selection is 'Sample', empty, or an old customer name, force auto-fill it!
+    if (assignedCustomerForSlot && !currentCartObj.isManual) {
+        if (!currentCartObj.customerName || currentCartObj.customerName === "Sample" || !myCustomers.includes(currentCartObj.customerName)) {
+            currentCartObj.customerName = assignedCustomerForSlot;
+            saveCartState();
+        }
     }
 
-    const selectedVal = currentCartObj.customerName || (myCustomers[slotIdx] ? myCustomers[slotIdx] : "Sample");
+    const selectedVal = currentCartObj.customerName || (assignedCustomerForSlot ? assignedCustomerForSlot : "Sample");
 
     let optionsHtml = `<option value="Sample" ${selectedVal === "Sample" ? "selected" : ""}>Sample Receipt</option>`;
 
@@ -528,3 +533,4 @@ if (typeof window !== 'undefined') {
 }
 
 window.addEventListener('rosterUpdated', renderCartCustomerSelector);
+window.addEventListener('cateredUpdated', renderCartCustomerSelector);
