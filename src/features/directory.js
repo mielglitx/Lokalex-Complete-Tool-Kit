@@ -12,6 +12,7 @@ let editingRecord = null;
 let mapInstance = null;
 let selectedMapLat = 0;
 let selectedMapLng = 0;
+let lastJumpLetter = "";
 
 export async function openDirectory(type) {
     globalState.currentType = type || 'customers';
@@ -121,6 +122,21 @@ export function copyBarangayRate(barangayName, rawRate) {
     showToast(`📋 Copied rate message for ${barangayName}!`);
 }
 
+// HELPER: GET SECTION LETTER (STANDARD A-Z VS SPECIAL CHARACTERS / FOREIGN LETTERS)
+function getSectionLetter(name) {
+    if (!name) return "#";
+    const firstChar = name.trim().charAt(0).toUpperCase();
+    
+    // Standard Latin A-Z letters get their own letter group
+    if (/^[A-Z]$/.test(firstChar)) {
+        return firstChar;
+    }
+    
+    // Numbers, Symbols, Non-Latin & Foreign Characters (e.g. 日本語, Ñ, É, @, #, etc.) go to '#'
+    return "#";
+}
+
+// RENDER DIRECTORY LIST WITH SPECIAL CHARACTERS / FOREIGN SYMBOLS & CONTINUOUS SCROLL
 export function renderDirectoryList() {
     const listEl = document.getElementById('record-list');
     const searchVal = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
@@ -139,14 +155,42 @@ export function renderDirectoryList() {
 
     if (records.length === 0) {
         listEl.innerHTML = `<div class="text-center text-gray-500 italic py-16 text-xs">No records found. Click + to add or tap 🔄 to refresh.</div>`;
+        setupAlphabetScrubber([]);
         return;
     }
 
-    records.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    // Sort: Special/Foreign characters (#) first, followed by A-Z
+    records.sort((a, b) => {
+        const secA = getSectionLetter(a.name);
+        const secB = getSectionLetter(b.name);
+
+        if (secA === "#" && secB !== "#") return -1;
+        if (secA !== "#" && secB === "#") return 1;
+
+        return (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' });
+    });
 
     const isBarangay = globalState.currentType === 'barangays';
+    let currentLetterGroup = "";
+    let htmlBuilder = "";
+    let availableLetters = new Set();
 
-    listEl.innerHTML = records.map(r => {
+    records.forEach(r => {
+        const letterHeader = getSectionLetter(r.name);
+        availableLetters.add(letterHeader);
+
+        // Append Alphabet / Special Symbol Section Header
+        if (letterHeader !== currentLetterGroup) {
+            currentLetterGroup = letterHeader;
+            const headerLabel = letterHeader === "#" ? "# (Special & Foreign)" : letterHeader;
+
+            htmlBuilder += `
+            <div id="dir-section-${letterHeader === "#" ? "SPECIAL" : letterHeader}" data-section="${letterHeader}" class="sticky top-0 z-10 bg-darkBg/95 backdrop-blur-md text-amber-400 font-black text-xs px-2 py-1.5 border-b border-gray-800/80 my-1 flex items-center justify-between">
+                <span>${headerLabel}</span>
+                <span class="text-[9px] text-gray-500 font-normal">Section Header</span>
+            </div>`;
+        }
+
         let mapBtn = '';
         if (r.lat_lon_link) {
             mapBtn = `<a href="${escapeHtml(r.lat_lon_link)}" target="_blank" class="text-xs text-blue-400 font-bold underline flex items-center gap-1 mt-1"><i class="fa-solid fa-map-location-dot"></i> View Location</a>`;
@@ -156,8 +200,8 @@ export function renderDirectoryList() {
             let rateNum = parseFloat((r.rate || r.address || "").replace(/[^0-9.]/g, ''));
             let displayRate = !isNaN(rateNum) ? `₱${rateNum.toFixed(2)}` : (r.rate || r.address || '₱0.00');
 
-            return `
-            <div class="bg-cardBg border border-gray-800 p-3.5 rounded-xl flex justify-between items-center gap-2 shadow-sm">
+            htmlBuilder += `
+            <div class="bg-cardBg border border-gray-800 p-3.5 rounded-xl flex justify-between items-center gap-2 shadow-sm my-1">
                 <div class="flex-1 min-w-0">
                     <div class="font-bold text-sm text-white truncate"><i class="fa-solid fa-map-location-dot text-emerald-400 mr-1.5"></i> ${escapeHtml(r.name)}</div>
                     <div class="text-xs font-mono text-emerald-400 font-bold mt-1">Delivery Rate: ${escapeHtml(displayRate)}</div>
@@ -174,26 +218,142 @@ export function renderDirectoryList() {
                     </button>
                 </div>
             </div>`;
+        } else {
+            htmlBuilder += `
+            <div class="bg-cardBg border border-gray-800 p-3.5 rounded-xl flex justify-between items-start gap-2 shadow-sm my-1">
+                <div class="flex-1 min-w-0">
+                    <div class="font-bold text-sm text-white truncate">${escapeHtml(r.name)}</div>
+                    ${r.contact ? `<div class="text-xs text-gray-400 mt-0.5"><i class="fa-solid fa-phone text-[10px]"></i> ${escapeHtml(r.contact)}</div>` : ''}
+                    ${r.address ? `<div class="text-xs text-gray-400 mt-0.5"><i class="fa-solid fa-location-dot text-[10px]"></i> ${escapeHtml(r.address)}</div>` : ''}
+                    ${mapBtn}
+                </div>
+                <div class="flex gap-1 shrink-0">
+                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-red-400 p-2 rounded-lg text-xs transition active:scale-90" title="Delete">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>`;
+        }
+    });
+
+    listEl.innerHTML = htmlBuilder;
+    setupAlphabetScrubber(Array.from(availableLetters));
+}
+
+// ELASTIC ALPHABET SCRUBBER WITH SPECIAL CHARACTER & FOREIGN LETTER SUPPORT
+export function setupAlphabetScrubber(availableLetters) {
+    const scrubberContainer = document.getElementById('alphabet-scrubber');
+    if (!scrubberContainer) return;
+
+    const alphabet = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
+
+    // Inject Floating Scrubber Preview Bubble if not present
+    let bubbleEl = document.getElementById('scrubber-bubble');
+    if (!bubbleEl) {
+        bubbleEl = document.createElement('div');
+        bubbleEl.id = 'scrubber-bubble';
+        bubbleEl.className = 'fixed right-12 z-50 w-12 h-12 rounded-full bg-blue-600 text-white font-black text-xl flex items-center justify-center shadow-2xl border-2 border-white pointer-events-none transition-opacity duration-150 opacity-0 transform -translate-y-1/2';
+        document.body.appendChild(bubbleEl);
+    }
+
+    scrubberContainer.innerHTML = alphabet.map(char => {
+        const hasRecords = availableLetters.includes(char);
+        const opacityClass = hasRecords ? "text-blue-400 font-black" : "text-gray-600 opacity-40 font-semibold";
+        return `<span data-letter="${char}" class="scrubber-letter py-0.5 px-1 cursor-pointer transition-transform duration-75 text-[10px] select-none block text-center ${opacityClass}">${char}</span>`;
+    }).join('');
+
+    const letterNodes = Array.from(scrubberContainer.querySelectorAll('.scrubber-letter'));
+
+    const jumpToSectionLetter = (letter) => {
+        if (!letter || letter === lastJumpLetter) return;
+        lastJumpLetter = letter;
+
+        const sectionId = letter === "#" ? "dir-section-SPECIAL" : `dir-section-${letter}`;
+        let targetEl = document.getElementById(sectionId);
+
+        if (!targetEl) {
+            const allSections = Array.from(document.querySelectorAll('[data-section]'));
+            targetEl = allSections.find(sec => sec.dataset.section.localeCompare(letter) >= 0) || allSections[allSections.length - 1];
         }
 
-        return `
-        <div class="bg-cardBg border border-gray-800 p-3.5 rounded-xl flex justify-between items-start gap-2 shadow-sm">
-            <div class="flex-1 min-w-0">
-                <div class="font-bold text-sm text-white truncate">${escapeHtml(r.name)}</div>
-                ${r.contact ? `<div class="text-xs text-gray-400 mt-0.5"><i class="fa-solid fa-phone text-[10px]"></i> ${escapeHtml(r.contact)}</div>` : ''}
-                ${r.address ? `<div class="text-xs text-gray-400 mt-0.5"><i class="fa-solid fa-location-dot text-[10px]"></i> ${escapeHtml(r.address)}</div>` : ''}
-                ${mapBtn}
-            </div>
-            <div class="flex gap-1 shrink-0">
-                <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
-                    <i class="fa-solid fa-pen"></i>
-                </button>
-                <button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-red-400 p-2 rounded-lg text-xs transition active:scale-90" title="Delete">
-                    <i class="fa-solid fa-trash"></i>
-                </button>
-            </div>
-        </div>`;
-    }).join('');
+        if (targetEl) {
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    };
+
+    const updateElasticDistortion = (clientY) => {
+        let activeChar = "";
+        let activeY = clientY;
+
+        letterNodes.forEach((node) => {
+            const rect = node.getBoundingClientRect();
+            const nodeCenterY = rect.top + rect.height / 2;
+            const dist = Math.abs(clientY - nodeCenterY);
+
+            // Elastic Touch Physics Curve
+            if (dist < 50) {
+                const factor = 1 - (dist / 50);
+                const scale = 1 + (factor * 1.3);
+                const translateX = -(factor * 16);
+
+                node.style.transform = `scale(${scale}) translateX(${translateX}px)`;
+                node.style.color = '#38bdf8';
+
+                if (dist < 15) {
+                    activeChar = node.dataset.letter;
+                    activeY = nodeCenterY;
+                }
+            } else {
+                node.style.transform = 'scale(1) translateX(0px)';
+                node.style.color = '';
+            }
+        });
+
+        if (activeChar && bubbleEl) {
+            bubbleEl.innerText = activeChar;
+            bubbleEl.style.top = `${activeY}px`;
+            bubbleEl.style.opacity = '1';
+            jumpToSectionLetter(activeChar);
+        }
+    };
+
+    const resetElasticDistortion = () => {
+        lastJumpLetter = "";
+        letterNodes.forEach(node => {
+            node.style.transform = 'scale(1) translateX(0px)';
+            node.style.color = '';
+        });
+        if (bubbleEl) bubbleEl.style.opacity = '0';
+    };
+
+    // Touch & Mouse Event Listeners
+    scrubberContainer.ontouchstart = (e) => {
+        e.preventDefault();
+        if (e.touches[0]) updateElasticDistortion(e.touches[0].clientY);
+    };
+
+    scrubberContainer.ontouchmove = (e) => {
+        e.preventDefault();
+        if (e.touches[0]) updateElasticDistortion(e.touches[0].clientY);
+    };
+
+    scrubberContainer.ontouchend = () => resetElasticDistortion();
+    scrubberContainer.ontouchcancel = () => resetElasticDistortion();
+
+    scrubberContainer.onmousedown = (e) => {
+        const onMouseMove = (moveEvt) => updateElasticDistortion(moveEvt.clientY);
+        const onMouseUp = () => {
+            resetElasticDistortion();
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        };
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        updateElasticDistortion(e.clientY);
+    };
 }
 
 export function openForm(record = null) {
