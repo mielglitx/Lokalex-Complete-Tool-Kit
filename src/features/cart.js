@@ -6,6 +6,24 @@ import { escapeHtml } from '../utils/helpers.js';
 
 let editingItemIndex = null;
 
+// HELPER: GET ONLY THE CURRENTLY LOGGED-IN RIDER'S CATERING CUSTOMERS
+export function getMyCateringCustomers() {
+    const myId = (appState.telegramId || "").toString().trim();
+    const myName = (appState.riderName || "").toString().trim().toLowerCase();
+    const rosterMembers = globalState.rosterMembers || [];
+
+    const myRecord = rosterMembers.find(m => 
+        (myId && m.telegramId && m.telegramId.toString().trim() === myId) ||
+        (myName && m.riderName && m.riderName.toString().trim().toLowerCase() === myName)
+    );
+
+    if (!myRecord || !myRecord.customerName || myRecord.status !== 'Catering') {
+        return [];
+    }
+
+    return myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+}
+
 export function getCurrentCart() {
     if (!multiCarts[activeCartSlot]) {
         multiCarts[activeCartSlot] = { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "" };
@@ -91,33 +109,37 @@ export function renderCartTabs() {
     renderCartCustomerSelector();
 }
 
-// RENDER CLIENT SELECTION DROPDOWN
+// RENDER CLIENT SELECTION DROPDOWN WITH AUTO-FILL AND RIDER ISOLATION
 export function renderCartCustomerSelector() {
     const container = document.getElementById('cart-customer-selector-container');
     if (!container) return;
 
-    const currentCartObj = multiCarts[activeCartSlot] || { customerName: "", isManual: false };
-    const rosterMembers = globalState.rosterMembers || [];
+    if (!multiCarts[activeCartSlot]) {
+        multiCarts[activeCartSlot] = { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "" };
+    }
 
-    let optionsHtml = `<option value="Sample" ${currentCartObj.customerName === "Sample" ? "selected" : ""}>Sample Receipt</option>`;
+    const currentCartObj = multiCarts[activeCartSlot];
+    const myCustomers = getMyCateringCustomers();
+    const slotIdx = activeCartSlot - 1; // 0 for Cart 1, 1 for Cart 2, etc.
 
-    let activeClients = [];
-    rosterMembers.forEach(m => {
-        if (m.customerName) {
-            const custs = m.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-            custs.forEach(c => {
-                if (!activeClients.includes(c)) activeClients.push(c);
-            });
-        }
-    });
+    // AUTO-FILL: If no customer is assigned yet to this cart slot, auto-assign from rider's catering list
+    if (!currentCartObj.customerName && myCustomers[slotIdx]) {
+        currentCartObj.customerName = myCustomers[slotIdx];
+        currentCartObj.isManual = false;
+        saveCartState();
+    }
 
-    activeClients.forEach(clientName => {
-        const isSel = currentCartObj.customerName === clientName ? "selected" : "";
+    const selectedVal = currentCartObj.customerName || (myCustomers[slotIdx] ? myCustomers[slotIdx] : "Sample");
+
+    let optionsHtml = `<option value="Sample" ${selectedVal === "Sample" ? "selected" : ""}>Sample Receipt</option>`;
+
+    myCustomers.forEach(clientName => {
+        const isSel = selectedVal === clientName ? "selected" : "";
         optionsHtml += `<option value="${escapeHtml(clientName)}" ${isSel}>${escapeHtml(clientName)}</option>`;
     });
 
-    if (currentCartObj.isManual && currentCartObj.customerName && !activeClients.includes(currentCartObj.customerName) && currentCartObj.customerName !== "Sample") {
-        optionsHtml += `<option value="${escapeHtml(currentCartObj.customerName)}" selected>${escapeHtml(currentCartObj.customerName)} (Manual)</option>`;
+    if (currentCartObj.isManual && selectedVal && !myCustomers.includes(selectedVal) && selectedVal !== "Sample") {
+        optionsHtml += `<option value="${escapeHtml(selectedVal)}" selected>${escapeHtml(selectedVal)} (Manual)</option>`;
     }
 
     container.innerHTML = `
@@ -128,8 +150,10 @@ export function renderCartCustomerSelector() {
 
 export function onCartCustomerSelected(val) {
     if (!multiCarts[activeCartSlot]) multiCarts[activeCartSlot] = { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "" };
+    
+    const myCustomers = getMyCateringCustomers();
     multiCarts[activeCartSlot].customerName = val;
-    multiCarts[activeCartSlot].isManual = (val !== "Sample" && !globalState.rosterMembers?.some(m => m.customerName?.includes(val)));
+    multiCarts[activeCartSlot].isManual = (val !== "Sample" && !myCustomers.includes(val));
     saveCartState();
 }
 
@@ -138,19 +162,9 @@ export function getEffectiveCartClient(slotIdx) {
     const cartObj = multiCarts[slotNum];
     if (cartObj && cartObj.customerName) return cartObj.customerName;
 
-    const rosterMembers = globalState.rosterMembers || [];
-    let allCateringClients = [];
+    const myCustomers = getMyCateringCustomers();
+    if (myCustomers[slotIdx]) return myCustomers[slotIdx];
 
-    rosterMembers.forEach(m => {
-        if (m.customerName) {
-            const custs = m.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-            custs.forEach(c => {
-                if (!allCateringClients.includes(c)) allCateringClients.push(c);
-            });
-        }
-    });
-
-    if (allCateringClients[slotIdx]) return allCateringClients[slotIdx];
     return "Sample";
 }
 
@@ -160,7 +174,6 @@ export function renderCartItems() {
     const subtotalDisplay = document.getElementById('cart-subtotal-display');
     const deleteBtnContainer = document.getElementById('delete-selected-btn-container');
 
-    // Ensure cart header and client dropdown are rendered
     renderCartTabs();
 
     if (!container) return;
@@ -183,7 +196,6 @@ export function renderCartItems() {
         const isPaid = !!item.isPaid;
         const isSelected = currentCartObj.selectedIds && currentCartObj.selectedIds.has(index);
         
-        // UNPRICED & UNPAID CHECK
         const isUnpricedUnpaid = itemPrice <= 0 && !isPaid;
 
         if (!isPaid) subtotal += itemPrice;
