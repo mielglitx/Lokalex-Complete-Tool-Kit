@@ -139,9 +139,7 @@ export function adjustStoreCount(delta) {
 
 export function calculateGrandTotal() {
     const freeDeliveryEl = document.getElementById('wiz-free-delivery');
-    const epaymentEl = document.getElementById('wiz-epayment');
     const isFree = freeDeliveryEl ? freeDeliveryEl.checked : false;
-    const isEpay = epaymentEl ? epaymentEl.checked : false;
 
     let hFee = Math.max(0, parseFloat(document.getElementById('wiz-handling')?.value) || 0);
     let mFee = Math.max(0, parseFloat(document.getElementById('wiz-market')?.value) || 0);
@@ -154,21 +152,20 @@ export function calculateGrandTotal() {
     }
 
     const subtotal = Math.max(0, wizState.subtotal || 0);
-    let total = Math.max(0, subtotal + hFee + mFee + multistop + dFee - disc);
+    let codTotal = Math.max(0, subtotal + hFee + mFee + multistop + dFee - disc);
 
+    // Auto-calculate ePayment processing fee
     let epayFee = 0;
-    if (isEpay && total > 0) {
-        epayFee = total <= 1000 ? 15 : 15 + Math.ceil((total - 1000) / 500) * 5;
-        total += epayFee;
+    if (codTotal > 0) {
+        epayFee = codTotal <= 1000 ? 15 : 15 + Math.ceil((codTotal - 1000) / 500) * 5;
     }
+    let gcashTotal = codTotal + epayFee;
 
     const storeCountEl = document.getElementById('wiz-store-count');
-    const epayDisplayEl = document.getElementById('epayment-fee-display');
     const grandTotalEl = document.getElementById('wiz-grand-total');
 
     if (storeCountEl) storeCountEl.innerText = isFree ? "0" : (wizState.storeCount || 1);
-    if (epayDisplayEl) epayDisplayEl.innerText = isEpay ? `Added: ₱${epayFee.toFixed(2)}` : "Magbabayad ng Cash";
-    if (grandTotalEl) grandTotalEl.innerText = total.toFixed(2);
+    if (grandTotalEl) grandTotalEl.innerText = codTotal.toFixed(2);
 
     wizState.finalHFee = hFee;
     wizState.finalMFee = mFee;
@@ -176,7 +173,9 @@ export function calculateGrandTotal() {
     wizState.deliveryFee = dFee;
     wizState.discount = disc;
     wizState.finalEpay = epayFee;
-    wizState.finalTotal = total;
+    wizState.codTotal = codTotal;
+    wizState.gcashTotal = gcashTotal;
+    wizState.finalTotal = codTotal;
 }
 
 export function generateFinalReceipt() {
@@ -254,7 +253,6 @@ async function saveReceiptToDatabase(customerName) {
 
     const totalFees = Math.max(0, (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0));
 
-    // DETERMINISTIC TRANSACTION ID: Prevents creating duplicate records when regenerating receipts
     currentReceiptTransactionId = `RCPT_${cleanRiderKey}_${cleanCustKey}_${todayClean}_${cleanTimeKey || '1'}`;
 
     const activeCartIdx = globalState.activeCartIndex || 0;
@@ -321,9 +319,11 @@ export function renderFinalReceiptText() {
     const finalMFee = wizState.finalMFee || 0;
     const finalMulti = wizState.finalMulti || 0;
     const deliveryFee = wizState.deliveryFee || 0;
-    const finalEpay = wizState.finalEpay || 0;
     const discount = wizState.discount || 0;
-    const finalTotal = Math.max(0, wizState.finalTotal || 0);
+
+    const codTotal = Math.max(0, wizState.codTotal || wizState.finalTotal || 0);
+    const epayFee = wizState.finalEpay || (codTotal <= 1000 ? 15 : 15 + Math.ceil((codTotal - 1000) / 500) * 5);
+    const gcashTotal = codTotal + epayFee;
 
     let itemsTxt = (currentCart.length > 0)
         ? currentCart.map(i => {
@@ -340,7 +340,6 @@ export function renderFinalReceiptText() {
     if (finalMFee > 0) feesTxt += `🔹 Market Fee: ₱${finalMFee.toFixed(2)}\n`;
     if (finalMulti > 0) feesTxt += `🔹 Multistore Fee: ₱${finalMulti.toFixed(2)}\n`;
     if (deliveryFee > 0) feesTxt += `🔹 Delivery Fee: ₱${deliveryFee.toFixed(2)}\n`;
-    if (finalEpay > 0) feesTxt += `🔹 ePayment Processing Fee: ₱${finalEpay.toFixed(2)}\n`;
     if (discount > 0) feesTxt += `🔻 Discount: -₱${discount.toFixed(2)}\n`;
 
     if (!feesTxt) feesTxt = "🔹 Wala pong karagdagang fees.\n";
@@ -373,8 +372,9 @@ ${itemsTxt}
 ➖➖➖➖➖➖➖➖➖➖➖➖
 📋 **FEES:**
 ${feesTxt}➖➖➖➖➖➖➖➖➖➖➖➖
-🔥 **GRAND TOTAL: ₱${finalTotal.toFixed(2)}** 🔥
-${gcashTxt}
+💰 **COD TOTAL (Cash): ₱${codTotal.toFixed(2)}**
+📱 **GCASH TOTAL (+₱${epayFee.toFixed(2)} Fee): ₱${gcashTotal.toFixed(2)}**
+➖➖➖➖➖➖➖➖➖➖➖➖${gcashTxt}
 💙 Salamat sa pagtitiwala sa Lokalex!`;
     }
 }
@@ -408,7 +408,6 @@ export function completeReceiptDone() {
     const multistopEl = document.getElementById('wiz-multistop');
     const deliveryEl = document.getElementById('wiz-delivery');
     const discountEl = document.getElementById('wiz-discount');
-    const epaymentEl = document.getElementById('wiz-epayment');
     const freeDelivEl = document.getElementById('wiz-free-delivery');
 
     if(handlingEl) handlingEl.value = "";
@@ -416,7 +415,6 @@ export function completeReceiptDone() {
     if(multistopEl) multistopEl.value = "0";
     if(deliveryEl) deliveryEl.value = "";
     if(discountEl) discountEl.value = "";
-    if(epaymentEl) epaymentEl.checked = false;
     if(freeDelivEl) freeDelivEl.checked = false;
 }
 
