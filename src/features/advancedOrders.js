@@ -167,7 +167,6 @@ export function switchAdvTab(tab) {
         if (addContent) addContent.classList.remove('hidden'); 
         if (listContent) listContent.classList.add('hidden');
 
-        // Set default date to current date
         const dateInput = document.getElementById('adv-receive-date');
         if (dateInput && !dateInput.value) {
             dateInput.value = getLocalTodayStr();
@@ -308,6 +307,50 @@ export async function changeAdvOrderStatus(custName, timeToReceive, newStatus) {
     });
 }
 
+// AUTOMATICALLY MARK CLAIMED ADVANCED ORDERS AS COMPLETED (CATERED) WHEN RIDER BECOMES AVAILABLE
+export function autoCompleteAdvancedOrdersForRider(riderName, customerNameStr = "") {
+    if (!riderName) return;
+    const cleanRider = riderName.toLowerCase().trim();
+
+    db.ref('advancedOrders').once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (!data) return;
+        Object.keys(data).forEach(key => {
+            const ord = data[key];
+            const ordRider = (ord.cateredBy || "").toLowerCase().trim();
+            const isCatering = ord.status === 'Catering';
+
+            if (ordRider === cleanRider && isCatering) {
+                db.ref(`advancedOrders/${key}`).update({
+                    status: 'Catered'
+                });
+            }
+        });
+    });
+}
+
+// AUTOMATICALLY MARK CLAIMED ADVANCED ORDERS AS CANCELLED WHEN ACTIVE CATERING IS VOIDED
+export function autoCancelAdvancedOrdersForRider(riderName, customerNameStr = "") {
+    if (!riderName) return;
+    const cleanRider = riderName.toLowerCase().trim();
+
+    db.ref('advancedOrders').once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (!data) return;
+        Object.keys(data).forEach(key => {
+            const ord = data[key];
+            const ordRider = (ord.cateredBy || "").toLowerCase().trim();
+            const isCatering = ord.status === 'Catering';
+
+            if (ordRider === cleanRider && isCatering) {
+                db.ref(`advancedOrders/${key}`).update({
+                    status: 'Cancelled'
+                });
+            }
+        });
+    });
+}
+
 export function addOrderToPhoneCalendar(custName, timeToReceive, address, dateToReceive) {
     const timeParts = timeToReceive.split(':');
     const dateStr = dateToReceive || getLocalTodayStr();
@@ -331,4 +374,9 @@ export function addOrderToPhoneCalendar(custName, timeToReceive, address, dateTo
     const loc = encodeURIComponent(address || "");
 
     window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startTimeIso}/${endTimeIso}&details=${details}&location=${loc}`, '_blank');
+}
+
+if (typeof window !== 'undefined') {
+    window.autoCompleteAdvancedOrdersForRider = autoCompleteAdvancedOrdersForRider;
+    window.autoCancelAdvancedOrdersForRider = autoCancelAdvancedOrdersForRider;
 }

@@ -241,9 +241,12 @@ export async function confirmGenerateMapCalcLink() {
 }
 
 export function copyMapCalcCustomerMessage(custName, calcKey) {
+    if (!custName) custName = "Customer";
     const fullUrl = `${window.location.origin}${window.location.pathname}?mapcalc=${calcKey}`;
-    const message = `Magandang araw po ${custName}! 👋\n\nPara ma-calculate po namin ang eksaktong distansya mula sa aming Hub papunta sa inyong lugar, paki-pindot lang po ang link na ito para ma-pin ang inyong lokasyon:\n\n${fullUrl}\n\n⚠️ PAALALA:\nKung binuksan nyo po sa Messenger, paki-pindot ang 3 dots (...) at piliin ang "Open in Chrome / Safari". Maraming salamat po! 🛵💙`;
+    const message = `Magandang araw po ${custName}! 👋\n\nIn order for us to calculate your accurate location and delivery fee please click on the link and follow the instructions on the next screen, you can also copy the link below and use google chrome to open the link. please do not use safari:\n\n${fullUrl}\n\n⚠️ PAALALA:\nKung binuksan nyo po sa Messenger, paki-pindot ang 3 dots (...) sa itaas at piliin ang "Open in Chrome". Maraming salamat po! 🛵💙`;
+    
     copyText(message);
+    showToast(`🔗 Distance calc message & link copied for ${custName}!`);
 }
 
 // 2.A Customer Opening ?mapcalc=KEY Portal
@@ -654,4 +657,5 @@ if (typeof window !== 'undefined') {
     window.openFindRidersModal = openFindRidersModal;
     window.closeFindRidersModal = closeFindRidersModal;
     window.refreshFindRidersMap = refreshFindRidersMap;
+    window.copyMapCalcCustomerMessage = copyMapCalcCustomerMessage;
 }

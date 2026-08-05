@@ -41,12 +41,41 @@ allModules.forEach(mod => {
 window.unlockAudioContext = unlockAudioContext;
 
 // -------------------------------------------------------------
-// 2. APPLICATION BOOTSTRAPPER & PORTAL ROUTER
+// 2. NETWORK STATUS MONITORING (ONLINE / OFFLINE PILL)
+// -------------------------------------------------------------
+export function updateNetworkStatus() {
+    const pill = document.getElementById('network-status-pill');
+    if (!pill) return;
+
+    if (navigator.onLine) {
+        pill.className = "flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300";
+        pill.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span id="network-status-text">ONLINE</span>`;
+    } else {
+        pill.className = "flex items-center gap-1.5 bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300";
+        pill.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span><span id="network-status-text">OFFLINE</span>`;
+    }
+}
+
+window.addEventListener('online', updateNetworkStatus);
+window.addEventListener('offline', updateNetworkStatus);
+
+// -------------------------------------------------------------
+// 3. APPLICATION BOOTSTRAPPER & PORTAL ROUTER
 // -------------------------------------------------------------
 function bootApp() {
     try {
+        updateNetworkStatus();
+
         if (chat && chat.initDraggableChat) chat.initDraggableChat();
         if (cart && cart.loadCartState) cart.loadCartState();
+
+        // LOAD LOCAL ROSTER CACHE INSTANTLY FOR OFFLINE FRONTPAGE
+        if (roster && roster.loadRosterCache) roster.loadRosterCache();
+
+        // INSTANT OFFLINE DIRECTORY LOAD & SILENT BACKGROUND SYNC ON STARTUP
+        if (directory && directory.silentSyncDirectory) {
+            directory.silentSyncDirectory();
+        }
 
         const urlParams = new URLSearchParams(window.location.search);
         
@@ -54,15 +83,12 @@ function bootApp() {
         // GUEST / CUSTOMER PUBLIC PORTAL ROUTING
         // ---------------------------------------------------------
         if (urlParams.has('livegps') || urlParams.has('track') || urlParams.has('mapcalc')) {
-            // 1. Hide Login Screen
             const loginView = document.getElementById('view-login');
             if (loginView) loginView.classList.add('hidden');
 
-            // 2. HIDE CHAT WIDGET FOR CUSTOMERS
             const chatWidget = document.getElementById('floating-chat-container');
             if (chatWidget) chatWidget.classList.add('hidden');
 
-            // Route to the correct GPS portal
             if (urlParams.has('livegps')) {
                 if (liveTracker && liveTracker.checkAndInitLiveGpsPortal) liveTracker.checkAndInitLiveGpsPortal();
             } else if (urlParams.has('track')) {
@@ -102,20 +128,23 @@ window.addEventListener('loginSuccess', () => {
 });
 
 // -------------------------------------------------------------
-// 3. FIREBASE REALTIME LISTENERS
+// 4. FIREBASE REALTIME LISTENERS WITH LOCAL CACHING
 // -------------------------------------------------------------
 function initRealtimeFirebaseListeners() {
     try {
         db.ref('roster').on('value', (snapshot) => {
             globalState.rosterMembers = snapshot.val() ? Object.values(snapshot.val()) : [];
+            if (roster && roster.saveRosterCache) roster.saveRosterCache();
             window.dispatchEvent(new Event('rosterUpdated'));
         });
         db.ref('logins').on('value', (snapshot) => {
             globalState.globalLogins = snapshot.val() ? Object.values(snapshot.val()) : [];
+            if (roster && roster.saveRosterCache) roster.saveRosterCache();
             window.dispatchEvent(new Event('loginsUpdated'));
         });
         db.ref('cateredHistory').on('value', (snapshot) => {
             globalState.globalCateredHistory = snapshot.val() ? Object.values(snapshot.val()) : [];
+            if (roster && roster.saveRosterCache) roster.saveRosterCache();
             window.dispatchEvent(new Event('cateredUpdated'));
         });
         db.ref('receipts').on('value', (snapshot) => {

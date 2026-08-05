@@ -1,7 +1,7 @@
 // src/features/directory.js
 import { appState, globalState } from '../store/state.js';
 import { db } from '../config/firebase.js';
-import { API_URL } from '../config/constants.js';
+import { API_URL, BARANGAY_DATA } from '../config/constants.js';
 import { showToast, showSideNotification } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
 import { openPasswordModal, closePasswordModal } from '../ui/modals.js';
@@ -14,6 +14,42 @@ let selectedMapLat = 0;
 let selectedMapLng = 0;
 let lastJumpLetter = "";
 
+const CACHE_KEY = 'lokalex_directory_cache';
+
+// PERSIST DIRECTORY RECORDS TO LOCALSTORAGE
+export function saveDirectoryCache() {
+    try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(globalState.records || []));
+    } catch(e) {}
+}
+
+// LOAD DIRECTORY RECORDS FROM LOCALSTORAGE ON APP BOOT
+export function loadDirectoryCache() {
+    try {
+        const saved = localStorage.getItem(CACHE_KEY);
+        if (saved) {
+            globalState.records = JSON.parse(saved);
+        } else {
+            // Load default local Barangay data if cache is completely empty
+            if (!globalState.records || globalState.records.length === 0) {
+                globalState.records = BARANGAY_DATA.map(b => ({
+                    name: b.name,
+                    contact: "",
+                    address: `₱${b.fee.toFixed(2)}`,
+                    rate: `₱${b.fee.toFixed(2)}`,
+                    lat_lon_link: "",
+                    type: 'barangays',
+                    recorded_by: "System"
+                }));
+                saveDirectoryCache();
+            }
+        }
+    } catch(e) {
+        globalState.records = [];
+    }
+}
+
+// OPEN DIRECTORY (INSTANT RENDER FROM CACHE)
 export async function openDirectory(type) {
     globalState.currentType = type || 'customers';
     switchView('view-directory');
@@ -25,19 +61,30 @@ export async function openDirectory(type) {
         else headerTitle.innerText = "Rates & Barangays";
     }
 
-    renderDirectoryList();
-
-    const existingCount = (globalState.records || []).filter(r => (r.type || 'customers') === globalState.currentType).length;
-    if (existingCount === 0) {
-        await syncData();
+    // Always ensure cache is loaded before rendering
+    if (!globalState.records || globalState.records.length === 0) {
+        loadDirectoryCache();
     }
+
+    renderDirectoryList();
 }
 
-export async function syncData() {
+// SILENT BACKGROUND SYNC ON APP STARTUP
+export async function silentSyncDirectory() {
+    loadDirectoryCache();
+    try {
+        await syncData(true);
+    } catch(e) {}
+}
+
+// DUAL-SOURCE DATA SYNC WITH OFFLINE MERGE
+export async function syncData(isSilent = false) {
     const type = globalState.currentType || 'customers';
     const listEl = document.getElementById('record-list');
     
-    if (listEl) {
+    const hasExistingLocal = (globalState.records || []).some(r => (r.type || 'customers') === type);
+
+    if (!isSilent && !hasExistingLocal && listEl) {
         listEl.innerHTML = `
         <div class="text-center text-blue-400 font-bold py-16 text-xs flex flex-col items-center justify-center gap-2">
             <i class="fa-solid fa-rotate fa-spin text-2xl"></i>
@@ -47,6 +94,7 @@ export async function syncData() {
 
     let fetchedRecords = [];
 
+    // 1. Fetch from Google Sheets API
     try {
         const res = await fetch(`${API_URL}?type=${type}`);
         if (res.ok) {
@@ -74,9 +122,10 @@ export async function syncData() {
             }
         }
     } catch (err) {
-        console.warn("Could not sync directory from Google Sheets API, checking Firebase...", err);
+        console.warn("Offline/Network error syncing directory from Sheets, using local cache...", err);
     }
 
+    // 2. Fetch from Firebase Realtime Database
     if (db) {
         try {
             const snap = await db.ref(`directory/${type}`).once('value');
@@ -100,11 +149,20 @@ export async function syncData() {
         } catch(e) {}
     }
 
-    const otherTypeRecords = (globalState.records || []).filter(r => r.type !== type);
-    globalState.records = [...otherTypeRecords, ...fetchedRecords];
+    if (fetchedRecords.length > 0) {
+        const otherTypeRecords = (globalState.records || []).filter(r => r.type !== type);
+        globalState.records = [...otherTypeRecords, ...fetchedRecords];
+        saveDirectoryCache();
 
-    showToast(`✅ Synced ${fetchedRecords.length} ${type} records!`);
-    renderDirectoryList();
+        if (!isSilent) {
+            showToast(`✅ Synced ${fetchedRecords.length} ${type} records!`);
+        }
+    }
+
+    const currentViewEl = document.querySelector('main > section:not(.hidden)');
+    if (currentViewEl && currentViewEl.id === 'view-directory') {
+        renderDirectoryList();
+    }
 }
 
 export function filterDirectoryRecords() {
@@ -127,12 +185,10 @@ function getSectionLetter(name) {
     if (!name) return "#";
     const firstChar = name.trim().charAt(0).toUpperCase();
     
-    // Standard Latin A-Z letters get their own letter group
     if (/^[A-Z]$/.test(firstChar)) {
         return firstChar;
     }
     
-    // Numbers, Symbols, Non-Latin & Foreign Characters (e.g. 日本語, Ñ, É, @, #, etc.) go to '#'
     return "#";
 }
 
@@ -179,7 +235,6 @@ export function renderDirectoryList() {
         const letterHeader = getSectionLetter(r.name);
         availableLetters.add(letterHeader);
 
-        // Append Alphabet / Special Symbol Section Header
         if (letterHeader !== currentLetterGroup) {
             currentLetterGroup = letterHeader;
             const headerLabel = letterHeader === "#" ? "# (Special & Foreign)" : letterHeader;
@@ -250,7 +305,6 @@ export function setupAlphabetScrubber(availableLetters) {
 
     const alphabet = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
 
-    // Inject Floating Scrubber Preview Bubble if not present
     let bubbleEl = document.getElementById('scrubber-bubble');
     if (!bubbleEl) {
         bubbleEl = document.createElement('div');
@@ -293,7 +347,6 @@ export function setupAlphabetScrubber(availableLetters) {
             const nodeCenterY = rect.top + rect.height / 2;
             const dist = Math.abs(clientY - nodeCenterY);
 
-            // Elastic Touch Physics Curve
             if (dist < 50) {
                 const factor = 1 - (dist / 50);
                 const scale = 1 + (factor * 1.3);
@@ -329,7 +382,6 @@ export function setupAlphabetScrubber(availableLetters) {
         if (bubbleEl) bubbleEl.style.opacity = '0';
     };
 
-    // Touch & Mouse Event Listeners
     scrubberContainer.ontouchstart = (e) => {
         e.preventDefault();
         if (e.touches[0]) updateElasticDistortion(e.touches[0].clientY);
@@ -414,16 +466,24 @@ export function verifyPassword() {
     }
 }
 
+// INSTANT OFFLINE DELETE WITH BACKGROUND SYNC
 export function executeDeleteDirectoryRecord(name) {
     const type = globalState.currentType || 'customers';
     
+    // 1. Immediately update local state
     if (globalState.records) {
         globalState.records = globalState.records.filter(r => !(r.name === name && r.type === type));
     }
 
+    // 2. Immediately update local cache & UI
+    saveDirectoryCache();
+    renderDirectoryList();
+    showToast(`🗑️ Deleted record: ${name}`);
+
+    // 3. Background sync to Firebase & Google Sheets
     if (db) {
         const cleanKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        db.ref(`directory/${type}/${cleanKey}`).remove();
+        db.ref(`directory/${type}/${cleanKey}`).remove().catch(() => {});
     }
 
     try {
@@ -435,13 +495,11 @@ export function executeDeleteDirectoryRecord(name) {
                 action: 'delete',
                 data: { name: name }
             })
-        });
+        }).catch(() => {});
     } catch(e) {}
-
-    showToast(`🗑️ Deleted record: ${name}`);
-    renderDirectoryList();
 }
 
+// INSTANT OFFLINE SAVE & EDIT WITH BACKGROUND SYNC
 export async function submitForm() {
     const nameInput = document.getElementById('form-name');
     const contactInput = document.getElementById('form-contact');
@@ -464,6 +522,7 @@ export async function submitForm() {
         originalName: editingRecord ? editingRecord.name : name
     };
 
+    // 1. Immediately update local state
     if (editingRecord) {
         const idx = globalState.records.findIndex(r => r.name === editingRecord.name && r.type === type);
         if (idx !== -1) globalState.records[idx] = recordData;
@@ -472,13 +531,20 @@ export async function submitForm() {
         globalState.records.push(recordData);
     }
 
+    // 2. Immediately update local cache & render
+    saveDirectoryCache();
+    openDirectory(type);
+    showToast(`✅ Record ${editingRecord ? 'updated' : 'saved'} successfully!`);
+
+    // 3. Background sync to Firebase
     if (db) {
         const cleanKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        db.ref(`directory/${type}/${cleanKey}`).set(recordData);
+        db.ref(`directory/${type}/${cleanKey}`).set(recordData).catch(() => {});
     }
 
-    showSideNotification("SAVING RECORD", `Saving ${name} to ${type}...`, "fa-floppy-disk", "text-emerald-400", "border-emerald-500");
+    showSideNotification("SAVING RECORD", `Syncing ${name} to ${type}...`, "fa-floppy-disk", "text-emerald-400", "border-emerald-500");
 
+    // 4. Background sync to Google Sheets API
     try {
         fetch(API_URL, {
             method: 'POST',
@@ -488,11 +554,8 @@ export async function submitForm() {
                 action: editingRecord ? 'edit' : 'add',
                 data: recordData
             })
-        });
+        }).catch(() => {});
     } catch(e) {}
-
-    openDirectory(type);
-    showToast(`✅ Record ${editingRecord ? 'updated' : 'saved'} successfully!`);
 }
 
 export async function openMapPicker() {
@@ -544,9 +607,13 @@ export function confirmGoogleMapPin() {
     showToast("📍 Map Pin location confirmed!");
 }
 
+// Auto-load cache on ESM module import
+loadDirectoryCache();
+
 if (typeof window !== 'undefined') {
     window.openDirectory = openDirectory;
     window.syncData = syncData;
+    window.silentSyncDirectory = silentSyncDirectory;
     window.filterDirectoryRecords = filterDirectoryRecords;
     window.openForm = openForm;
     window.editDirectoryRecord = editDirectoryRecord;
@@ -557,4 +624,6 @@ if (typeof window !== 'undefined') {
     window.openMapPicker = openMapPicker;
     window.confirmGoogleMapPin = confirmGoogleMapPin;
     window.copyBarangayRate = copyBarangayRate;
+    window.loadDirectoryCache = loadDirectoryCache;
+    window.saveDirectoryCache = saveDirectoryCache;
 }

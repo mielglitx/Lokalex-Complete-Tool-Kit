@@ -3,8 +3,12 @@ import { appState, globalState, multiCarts, activeCartSlot, setActiveCartSlot } 
 import { showToast } from '../ui/notifications.js';
 import { proceedToWizard } from './wizard.js';
 import { escapeHtml } from '../utils/helpers.js';
+import { openSlideDeleteModal } from '../ui/modals.js';
 
 let editingItemIndex = null;
+let touchStartX = 0;
+let touchCurrentX = 0;
+let activeSwipingCard = null;
 
 // HELPER: GET ONLY THE CURRENTLY LOGGED-IN RIDER'S ACTIVE CATERING CUSTOMERS
 export function getMyCateringCustomers() {
@@ -85,6 +89,15 @@ export function loadCartState() {
 export function switchCartTab(slot) {
     setActiveCartSlot(slot);
     globalState.activeCartIndex = slot - 1;
+    saveCartState();
+    renderCartTabs();
+    renderCartItems();
+}
+
+// RESET FOCUS TO CART 1
+export function resetToCartOne() {
+    setActiveCartSlot(1);
+    globalState.activeCartIndex = 0;
     saveCartState();
     renderCartTabs();
     renderCartItems();
@@ -200,6 +213,61 @@ export function handleOverlaySlideEnd(sliderEl) {
     }
 }
 
+// SWIPE-TO-DELETE TOUCH HANDLERS FOR ITEM CARDS
+export function handleCardTouchStart(e, cardEl) {
+    if (e.touches && e.touches[0]) {
+        touchStartX = e.touches[0].clientX;
+        touchCurrentX = touchStartX;
+        activeSwipingCard = cardEl;
+        cardEl.style.transition = 'none';
+    }
+}
+
+export function handleCardTouchMove(e, cardEl) {
+    if (!activeSwipingCard || activeSwipingCard !== cardEl || !e.touches || !e.touches[0]) return;
+    touchCurrentX = e.touches[0].clientX;
+    const diffX = touchCurrentX - touchStartX;
+
+    // Dampen resistance past -120px or +120px
+    let translateX = diffX;
+    if (Math.abs(diffX) > 120) {
+        const sign = diffX > 0 ? 1 : -1;
+        translateX = sign * (120 + (Math.abs(diffX) - 120) * 0.2);
+    }
+
+    cardEl.style.transform = `translateX(${translateX}px)`;
+    
+    // Visual feedback color changes when approaching deletion trigger
+    if (Math.abs(diffX) > 80) {
+        cardEl.style.borderColor = '#ef4444';
+    } else {
+        cardEl.style.borderColor = '';
+    }
+}
+
+export function handleCardTouchEnd(e, index) {
+    if (!activeSwipingCard) return;
+    const cardEl = activeSwipingCard;
+    const diffX = touchCurrentX - touchStartX;
+
+    cardEl.style.transition = 'transform 0.2s ease-out, border-color 0.2s ease-out';
+
+    if (Math.abs(diffX) >= 80) {
+        // Trigger Slide-to-Confirm Deletion Modal
+        deleteSingleCartItem(index);
+        cardEl.style.transform = 'translateX(0px)';
+        cardEl.style.borderColor = '';
+    } else {
+        // Reset card back to original position smoothly
+        cardEl.style.transform = 'translateX(0px)';
+        cardEl.style.borderColor = '';
+    }
+
+    activeSwipingCard = null;
+    touchStartX = 0;
+    touchCurrentX = 0;
+}
+
 // RENDER CART ITEMS OR EMBEDDED LOCK OVERLAY SCREEN
 export function renderCartItems() {
     const container = document.getElementById('cart-items-list');
@@ -293,16 +361,17 @@ export function renderCartItems() {
             : (isPaid ? "text-gray-500 line-through" : "text-green-400 font-bold");
 
         const unpricedWarningBadge = isUnpricedUnpaid 
-            ? `<span class="bg-amber-500/20 text-amber-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-amber-500/40 flex items-center gap-1"><i class="fa-solid fa-triangle-exclamation"></i> Set Price or Paid</span>` 
+            ? `<span class="bg-amber-500/20 text-amber-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-amber-500/40 flex items-center gap-1 shrink-0"><i class="fa-solid fa-triangle-exclamation"></i> Set Price or Paid</span>` 
             : '';
 
         return `
-        <div class="${cardStyleClass} border p-3 rounded-xl flex flex-col gap-2 transition-all">
-            <div class="flex items-center justify-between gap-2">
-                <div class="flex items-center gap-2 flex-1 min-w-0">
-                    <input type="checkbox" onchange="toggleItemSelect(${index})" ${isSelected ? "checked" : ""} class="w-4 h-4 accent-blue-500 rounded cursor-pointer shrink-0">
-                    <span class="text-[10px] text-gray-500 font-bold shrink-0">#${index + 1}</span>
-                    <span class="font-bold text-sm text-white truncate">${escapeHtml(item.name)}</span>
+        <div ontouchstart="handleCardTouchStart(event, this)" ontouchmove="handleCardTouchMove(event, this)" ontouchend="handleCardTouchEnd(event, ${index})" class="${cardStyleClass} border p-3 rounded-xl flex flex-col gap-2 transition-transform duration-75 relative select-none">
+            <div class="flex items-start justify-between gap-2">
+                <div class="flex items-start gap-2 flex-1 min-w-0">
+                    <input type="checkbox" onchange="toggleItemSelect(${index})" ${isSelected ? "checked" : ""} class="w-4 h-4 accent-blue-500 rounded cursor-pointer shrink-0 mt-0.5">
+                    <span class="text-[10px] text-gray-500 font-bold shrink-0 mt-0.5">#${index + 1}</span>
+                    <!-- FULL WORD WRAPPING FOR ITEM NAME - NO PERIODS OR TRUNCATION -->
+                    <span class="break-words text-wrap font-bold text-sm text-white flex-1 min-w-0">${escapeHtml(item.name)}</span>
                     ${unpricedWarningBadge}
                 </div>
                 <div class="text-right shrink-0">
@@ -312,7 +381,7 @@ export function renderCartItems() {
                 </div>
             </div>
 
-            <div class="flex justify-between items-center pt-1 border-t border-gray-800/60 text-xs">
+            <div class="flex justify-between items-center pt-2 border-t border-gray-800/60 text-xs">
                 <div class="flex gap-1">
                     <button onclick="toggleItemCategory(${index}, 'store')" class="px-2.5 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${catStoreClass}">
                         <i class="fa-solid fa-store"></i> Store
@@ -327,12 +396,13 @@ export function renderCartItems() {
                         <i class="fa-solid fa-check"></i> Paid
                     </button>
                     <button onclick="editCartItem(${index})" class="text-blue-400 hover:text-blue-300 p-1 text-xs active:scale-90" title="Edit Item">
-                        <i class="fa-solid fa-pen"></i>
-                    </button>
-                    <button onclick="deleteSingleCartItem(${index})" class="text-red-400 hover:text-red-300 p-1 text-xs active:scale-90" title="Delete Item">
-                        <i class="fa-solid fa-trash"></i>
+                        <i class="fa-solid fa-pen"></i> Edit
                     </button>
                 </div>
+            </div>
+            
+            <div class="text-[9px] text-gray-600 italic text-right -mt-1 select-none pointer-events-none">
+                <i class="fa-solid fa-arrows-left-right"></i> Slide left/right to delete
             </div>
         </div>`;
     }).join('');
@@ -360,14 +430,18 @@ export function handleCartActionBtn() {
         return showToast("⚠️ I-slide muna ang lock sa overlay screen upang i-unlock ang cart.");
     }
 
-    if (confirm(`Sigurado ka bang nais mong linisin ang Cart ${activeCartSlot}?`)) {
-        multiCarts[activeCartSlot].items = [];
-        multiCarts[activeCartSlot].selectedIds.clear();
-        saveCartState();
-        renderCartItems();
-        renderCartTabs();
-        showToast(`Cart ${activeCartSlot} cleared.`);
-    }
+    openSlideDeleteModal(
+        `Linisin ang Cart ${activeCartSlot}?`,
+        `Sigurado ka bang nais mong burahin ang lahat ng items sa Cart ${activeCartSlot}?`,
+        () => {
+            multiCarts[activeCartSlot].items = [];
+            multiCarts[activeCartSlot].selectedIds.clear();
+            saveCartState();
+            renderCartItems();
+            renderCartTabs();
+            showToast(`Cart ${activeCartSlot} cleared.`);
+        }
+    );
 }
 
 export function toggleItemCategory(index, category) {
@@ -406,27 +480,41 @@ export function deleteSelectedCartItems() {
     if (!cartObj || !cartObj.selectedIds || cartObj.selectedIds.size === 0) return;
 
     const count = cartObj.selectedIds.size;
-    cartObj.items = cartObj.items.filter((_, idx) => !cartObj.selectedIds.has(idx));
-    cartObj.selectedIds.clear();
+    
+    openSlideDeleteModal(
+        `Burahin ang ${count} napiling item(s)?`,
+        `Sigurado ka bang nais mong burahin ang ${count} na napiling item sa Cart ${activeCartSlot}?`,
+        () => {
+            cartObj.items = cartObj.items.filter((_, idx) => !cartObj.selectedIds.has(idx));
+            cartObj.selectedIds.clear();
 
-    saveCartState();
-    renderCartItems();
-    renderCartTabs();
-    showToast(`Deleted ${count} selected item(s).`);
+            saveCartState();
+            renderCartItems();
+            renderCartTabs();
+            showToast(`Deleted ${count} selected item(s).`);
+        }
+    );
 }
 
 export function deleteSingleCartItem(index) {
     const currentCart = getCurrentCart();
-    if (currentCart[index]) {
-        currentCart.splice(index, 1);
-        if (multiCarts[activeCartSlot].selectedIds) {
-            multiCarts[activeCartSlot].selectedIds.delete(index);
+    const item = currentCart[index];
+    if (!item) return;
+
+    openSlideDeleteModal(
+        `Burahin ang item?`,
+        `Sigurado ka bang nais mong burahin ang item na "${item.name}"?`,
+        () => {
+            currentCart.splice(index, 1);
+            if (multiCarts[activeCartSlot].selectedIds) {
+                multiCarts[activeCartSlot].selectedIds.delete(index);
+            }
+            saveCartState();
+            renderCartItems();
+            renderCartTabs();
+            showToast("Item deleted.");
         }
-        saveCartState();
-        renderCartItems();
-        renderCartTabs();
-        showToast("Item deleted.");
-    }
+    );
 }
 
 export function editCartItem(index) {
@@ -596,8 +684,7 @@ export function clearAllCartSlots() {
     globalState.cartLocked = [false, false, false, false];
     if (globalState.cartTxIds) globalState.cartTxIds = ["", "", "", ""];
     saveCartState();
-    renderCartTabs();
-    renderCartItems();
+    resetToCartOne();
 }
 
 // AUTO-INITIALIZE SMART CART ON LOAD & VIEW LOAD
@@ -625,6 +712,10 @@ if (typeof window !== 'undefined') {
     window.clearCartSlot = clearCartSlot;
     window.clearAllCartSlots = clearAllCartSlots;
     window.handleOverlaySlideEnd = handleOverlaySlideEnd;
+    window.resetToCartOne = resetToCartOne;
+    window.handleCardTouchStart = handleCardTouchStart;
+    window.handleCardTouchMove = handleCardTouchMove;
+    window.handleCardTouchEnd = handleCardTouchEnd;
 }
 
 window.addEventListener('rosterUpdated', renderCartCustomerSelector);

@@ -1,7 +1,7 @@
 // src/features/commission.js
 import { appState, globalState } from '../store/state.js';
 import { db } from '../config/firebase.js';
-import { API_URL } from '../config/constants.js';
+import { API_URL, CSV_AUTH_URL, ADMIN_IDS } from '../config/constants.js';
 import { getLocalTodayStr, copyText, getWeekString, getMonthString, getDateString, escapeHtml } from '../utils/helpers.js';
 import { showToast } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
@@ -13,9 +13,93 @@ let viewSettings = {
     dateValue: getLocalTodayStr()
 };
 
-function getCommissionRates(dateStr, riderName = "") {
+// FETCH LOGIN ID SHEET TO IDENTIFY RIDER TYPES (ADMIN, TL, ETC.)
+export async function fetchRiderUserTypes() {
+    try {
+        const res = await fetch(CSV_AUTH_URL);
+        if (res.ok) {
+            const csvText = await res.text();
+            const userTypes = {};
+            csvText.split('\n').forEach(line => {
+                const cols = line.split(',').map(c => c.replace(/['"\r\n]+/g, '').trim());
+                if (cols.length >= 3) {
+                    const cleanType = cols[0].toLowerCase();
+                    const cleanId = cols[1];
+                    const cleanName = cols[2].toLowerCase();
+                    if (cleanName) userTypes[cleanName] = cleanType;
+                    if (cleanId) userTypes[cleanId] = cleanType;
+                } else if (cols.length >= 2) {
+                    const cleanId = cols[0];
+                    const cleanName = cols[1].toLowerCase();
+                    if (cleanName) userTypes[cleanName] = "";
+                    if (cleanId) userTypes[cleanId] = "";
+                }
+            });
+            globalState.userTypesMap = userTypes;
+        }
+    } catch(e) {
+        console.warn("Could not fetch rider user types from CSV, using fallback roster state...", e);
+    }
+}
+
+// STRICT CHECK IF A RIDER IS AN ADMIN (EXCLUDES TL & TEAM LEADS)
+export function isRiderAdmin(riderName = "", telegramId = "") {
+    const cleanName = (riderName || "").toString().toLowerCase().trim();
+    const cleanId = (telegramId || "").toString().trim();
+
+    // 1. Explicit ID match in ADMIN_IDS
+    if (cleanId && ADMIN_IDS.includes(cleanId)) return true;
+
+    // 2. Explicit check against userTypesMap from Login ID Sheet
+    if (globalState.userTypesMap) {
+        const typeByName = cleanName ? globalState.userTypesMap[cleanName] : "";
+        const typeById = cleanId ? globalState.userTypesMap[cleanId] : "";
+
+        // Strictly exclude TLs / Team Leads
+        if (typeByName === "tl" || typeById === "tl" || typeByName === "lead" || typeById === "lead") {
+            return false;
+        }
+
+        // Only return true if role is explicitly admin
+        if (typeByName === "admin" || typeById === "admin") {
+            return true;
+        }
+    }
+
+    // 3. Fallback to roster member userType
+    const rosterMem = (globalState.rosterMembers || []).find(m => 
+        (m.riderName || m.name || "").toLowerCase().trim() === cleanName ||
+        (m.telegramId || "").toString().trim() === cleanId
+    );
+
+    if (rosterMem) {
+        const uType = (rosterMem.userType || "").toLowerCase().trim();
+        if (uType === "tl" || uType.includes("lead")) return false;
+        if (uType === "admin" || uType === "owner" || uType === "manager") return true;
+    }
+
+    return false;
+}
+
+// GET DYNAMIC COMMISSION RATES PER RIDER BASED ON COMMISSIONSETTINGS & ADMIN STATUS
+function getCommissionRates(dateStr, riderName = "", telegramId = "") {
     const d = new Date((dateStr || getLocalTodayStr()) + "T00:00:00");
     const isSunday = d.getDay() === 0;
+
+    const isAdmin = isRiderAdmin(riderName, telegramId);
+
+    // ADMIN EXEMPTION: Only Admins do NOT pay company commission (0% Company Rate / 100% Rider Rate)
+    if (isAdmin) {
+        return {
+            companyRate: 0,
+            riderRate: 1.0,
+            isSunday: isSunday,
+            companyPerc: 0,
+            riderPerc: 100,
+            baseCompanyPerc: 0,
+            isAdmin: true
+        };
+    }
 
     const cleanName = (riderName || "").toLowerCase().trim();
     const setting = globalState.globalRiderRates ? globalState.globalRiderRates[cleanName] : null;
@@ -38,11 +122,14 @@ function getCommissionRates(dateStr, riderName = "") {
         isSunday: isSunday,
         companyPerc: finalCompanyPerc,
         riderPerc: 100 - finalCompanyPerc,
-        baseCompanyPerc: baseCompanyPerc
+        baseCompanyPerc: baseCompanyPerc,
+        isAdmin: false
     };
 }
 
 export async function fetchCommissionSettings() {
+    await fetchRiderUserTypes();
+
     try {
         const res = await fetch(`${API_URL}?type=all`);
         if (res.ok) {
@@ -100,7 +187,6 @@ export async function openCommissionScreen() {
     refreshCommissionView();
 }
 
-// HELPER: GET CLEAN, DEDUPLICATED RIDER LIST EXCLUDING TEST/SAMPLE NAMES
 function getCleanRiderList() {
     let riderMap = new Map();
 
@@ -125,7 +211,7 @@ function getCleanRiderList() {
 }
 
 function setupAdminControls() {
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId); 
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId); 
     const filterBox = document.getElementById('admin-commission-filter-box');
     const select = document.getElementById('admin-rider-select');
     
@@ -294,7 +380,7 @@ function getMergedDeduplicatedCommissionList() {
 }
 
 export function refreshCommissionView() {
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
     let targetRiderFilter = isAdmin ? document.getElementById('admin-rider-select')?.value : appState.telegramId;
     if (targetRiderFilter === "ALL") targetRiderFilter = null; 
 
@@ -335,7 +421,9 @@ export function refreshCommissionView() {
         }
 
         let gross = parseFloat(r.totalFees) || 0;
-        const rates = getCommissionRates(rDate, rName);
+        
+        // Dynamic rates calculated per rider (0% for Admins based on Login ID sheet, normal rates for TLs & Riders)
+        const rates = getCommissionRates(rDate, rName, rId);
 
         const earnedAmt = gross * rates.riderRate;
         const companyAmt = gross * rates.companyRate;
@@ -367,7 +455,6 @@ export function refreshCommissionView() {
     let selectedRiderRates = null;
 
     for (let rId in riderTotals) {
-        // EXCLUDE RIDERS WITH NO COMMISSION / ZERO GROSS ON SELECTED DAYS
         if (riderTotals[rId].gross <= 0 || riderTotals[rId].customers.length === 0) continue;
 
         if (targetRiderFilter && targetRiderFilter !== "ALL") {
@@ -390,7 +477,7 @@ export function refreshCommissionView() {
     if (targetRiderFilter && targetRiderFilter !== "ALL" && !selectedRiderRates) {
         const myRoster = globalState.rosterMembers?.find(m => (m.telegramId || "").toString() === targetRiderFilter.toString());
         const rName = myRoster ? (myRoster.riderName || myRoster.name || "") : appState.riderName;
-        selectedRiderRates = getCommissionRates(viewSettings.dateValue, rName);
+        selectedRiderRates = getCommissionRates(viewSettings.dateValue, rName, targetRiderFilter);
     }
 
     const mainWrapperEl = document.getElementById('comm-main-wrapper');
@@ -405,7 +492,7 @@ export function refreshCommissionView() {
     const selDate = new Date(viewSettings.dateValue + "T00:00:00");
     const isSelSunday = viewSettings.period === 'daily' && selDate.getDay() === 0;
 
-    const displayRates = selectedRiderRates || getCommissionRates(viewSettings.dateValue, appState.riderName);
+    const displayRates = selectedRiderRates || getCommissionRates(viewSettings.dateValue, appState.riderName, appState.telegramId);
 
     if (viewSettings.mode === 'earned') {
         if (mainLabelEl) {
@@ -418,9 +505,13 @@ export function refreshCommissionView() {
         if (mainAmountEl) mainAmountEl.innerText = grandEarned.toFixed(2);
     } else {
         if (mainLabelEl) {
-            mainLabelEl.innerText = isSelSunday 
-                ? `TO PAY COMPANY (${displayRates.companyPerc}% SUNDAY PROMO)` 
-                : `TO PAY COMPANY (${displayRates.companyPerc}%)`;
+            if (displayRates.isAdmin) {
+                mainLabelEl.innerText = `TO PAY COMPANY (ADMIN EXEMPT)`;
+            } else {
+                mainLabelEl.innerText = isSelSunday 
+                    ? `TO PAY COMPANY (${displayRates.companyPerc}% SUNDAY PROMO)` 
+                    : `TO PAY COMPANY (${displayRates.companyPerc}%)`;
+            }
             mainLabelEl.className = "text-[10px] text-red-400 font-bold uppercase";
         }
         if (mainWrapperEl) mainWrapperEl.className = "text-4xl font-black text-red-400 drop-shadow-md";
@@ -476,6 +567,7 @@ function checkSettlementStatus(riderId, period, dateVal, isAdmin) {
 export function toggleSettlementStatus() {
     const select = document.getElementById('admin-rider-select');
     const riderId = select ? select.value : appState.telegramId;
+    const dateVal = viewSettings.dateValue || getLocalTodayStr();
     const settlementKey = `${riderId}_${viewSettings.period}_${dateVal}`;
     
     db.ref(`commissionSettlements/${settlementKey}`).once('value').then(snapshot => {
@@ -505,9 +597,8 @@ export function toggleRiderCustomerBreakdown(uid) {
     }
 }
 
-// OPEN MANUAL COMMISSION RECORD MODAL WITH RIDER DROPDOWN
 export function promptAdminAddCommissionRecord() {
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
     if (!isAdmin) return showToast("⚠️ Admin access required.");
 
     const modal = document.getElementById('admin-add-comm-modal');
@@ -518,7 +609,6 @@ export function promptAdminAddCommissionRecord() {
 
     if (!modal || !riderSelect) return;
 
-    // Populate rider dropdown cleanly
     const cleanRiders = getCleanRiderList();
     let optionsHtml = "";
     cleanRiders.forEach(name => {
@@ -526,7 +616,6 @@ export function promptAdminAddCommissionRecord() {
     });
     riderSelect.innerHTML = optionsHtml;
 
-    // Pre-fill values
     if (custInput) custInput.value = "";
     if (feeInput) feeInput.value = "";
     if (dateInput) dateInput.value = viewSettings.dateValue || getLocalTodayStr();
@@ -539,7 +628,6 @@ export function closeAdminAddCommModal() {
     if (modal) modal.classList.add('hidden');
 }
 
-// SUBMIT MANUAL COMMISSION RECORD FROM MODAL
 export function submitAdminAddCommissionRecord() {
     const riderSelect = document.getElementById('manual-comm-rider-select');
     const custInput = document.getElementById('manual-comm-cust-input');
@@ -587,7 +675,7 @@ export function submitAdminAddCommissionRecord() {
 }
 
 export function promptAdminDeleteCommissionRecord(riderName, customerName, dateVal, txId) {
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
     if (!isAdmin) return showToast("⚠️ Admin access required.");
 
     openSlideDeleteModal(
@@ -670,7 +758,7 @@ export function executeDeleteCommissionRecord(riderName, customerName, dateVal, 
 }
 
 export function promptAdminEditCustomerFee(riderName, customerName, dateVal, currentGross) {
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
     if (!isAdmin) return showToast("⚠️ Admin access required to update fees.");
 
     const newFeeInput = prompt(`Update Gross Fee for [${customerName}] (${riderName}):`, currentGross || "0.00");
@@ -739,14 +827,28 @@ function renderRiderSummaryList(riderListArray) {
         return;
     }
 
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
 
     container.innerHTML = riderListArray.map((rider, idx) => {
-        let amountLabel = viewSettings.mode === 'earned' 
-            ? `+ ₱${rider.earned.toFixed(2)}` 
-            : `- ₱${rider.company.toFixed(2)}`;
-            
-        let colorClass = viewSettings.mode === 'earned' ? 'text-emerald-400' : 'text-red-400';
+        const rates = rider.lastRates || getCommissionRates(viewSettings.dateValue, rider.name, rider.id);
+        
+        let amountLabel = "";
+        let colorClass = "";
+
+        if (viewSettings.mode === 'earned') {
+            amountLabel = `+ ₱${rider.earned.toFixed(2)}`;
+            colorClass = "text-emerald-400";
+        } else {
+            // ADMIN EXEMPTION: Show ₱0.00 (Admin Exempt) ONLY for Admin riders in "To Pay" mode
+            if (rates.isAdmin) {
+                amountLabel = `- ₱0.00 (Admin Exempt)`;
+                colorClass = "text-gray-400";
+            } else {
+                amountLabel = `- ₱${rider.company.toFixed(2)}`;
+                colorClass = "text-red-400";
+            }
+        }
+
         const uid = `comm-rider-cust-${idx}`;
         const customerCount = rider.customers ? rider.customers.length : 0;
 
@@ -755,7 +857,8 @@ function renderRiderSummaryList(riderListArray) {
             customerItemsHtml = rider.customers.map(c => {
                 let cAmt = viewSettings.mode === 'earned' 
                     ? `+ ₱${c.earned.toFixed(2)}` 
-                    : `- ₱${c.company.toFixed(2)}`;
+                    : (rates.isAdmin ? `- ₱0.00 (Exempt)` : `- ₱${c.company.toFixed(2)}`);
+                    
                 let dateTimeStr = c.date;
                 if (c.time) dateTimeStr += ` • ${c.time}`;
 
@@ -785,12 +888,14 @@ function renderRiderSummaryList(riderListArray) {
             customerItemsHtml = `<div class="text-gray-500 italic text-[11px] py-2 text-center">No individual orders recorded.</div>`;
         }
 
+        const adminBadge = rates.isAdmin ? `<span class="bg-purple-600/20 text-purple-300 border border-purple-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded ml-1">ADMIN</span>` : '';
+
         return `
             <div class="bg-cardBg rounded-xl border border-gray-800 shadow-sm flex flex-col overflow-hidden">
                 <div onclick="toggleRiderCustomerBreakdown('${uid}')" class="p-3.5 flex justify-between items-center text-sm cursor-pointer hover:bg-white/5 transition active:scale-[0.99] select-none">
                     <div class="flex items-center gap-2">
                         <span class="font-bold text-blue-300 flex items-center gap-1.5">
-                            <i class="fa-solid fa-motorcycle text-gray-500"></i> ${escapeHtml(rider.name)}
+                            <i class="fa-solid fa-motorcycle text-gray-500"></i> ${escapeHtml(rider.name)} ${adminBadge}
                         </span>
                         <span class="bg-blue-600/20 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-500/30">
                             ${customerCount} ${customerCount === 1 ? 'customer' : 'customers'}
@@ -815,7 +920,7 @@ function renderRiderSummaryList(riderListArray) {
 }
 
 export function generateDailyReportText() {
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
     let targetRiderFilter = isAdmin ? document.getElementById('admin-rider-select')?.value : appState.telegramId;
     if (targetRiderFilter === "ALL") targetRiderFilter = null;
 
@@ -846,7 +951,9 @@ export function generateDailyReportText() {
         }
 
         let gross = parseFloat(r.totalFees) || 0;
-        const rates = getCommissionRates(rDate, rName);
+
+        // Dynamic rate per rider (checks CommissionSettings and Login ID sheet)
+        const rates = getCommissionRates(rDate, rName, rId);
 
         if (!riderTotals[rId]) {
             riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0, lastRates: rates };
@@ -859,7 +966,6 @@ export function generateDailyReportText() {
 
     let grandGross = 0; let grandEarned = 0; let grandCompany = 0;
     let listText = "";
-    let selectedRiderRates = null;
 
     for (let rId in riderTotals) {
         if (riderTotals[rId].gross <= 0) continue;
@@ -872,30 +978,33 @@ export function generateDailyReportText() {
             const isNameMatch = riderTotals[rId].name.toLowerCase() === targetName;
 
             if (!isIdMatch && !isNameMatch) continue;
-            selectedRiderRates = riderTotals[rId].lastRates;
         }
+
+        const rates = riderTotals[rId].lastRates || getCommissionRates(viewSettings.dateValue, riderTotals[rId].name, rId);
         
         grandGross += riderTotals[rId].gross;
         grandEarned += riderTotals[rId].earned;
         grandCompany += riderTotals[rId].company;
 
-        let displayAmount = viewSettings.mode === 'earned' ? `₱${riderTotals[rId].earned.toFixed(2)}` : `₱${riderTotals[rId].company.toFixed(2)}`;
+        let displayAmount = "";
+        if (viewSettings.mode === 'earned') {
+            displayAmount = `₱${riderTotals[rId].earned.toFixed(2)} (${rates.riderPerc}%)`;
+        } else {
+            if (rates.isAdmin) {
+                displayAmount = `₱0.00 (Admin Exempt)`;
+            } else {
+                displayAmount = `₱${riderTotals[rId].company.toFixed(2)} (${rates.companyPerc}%)`;
+            }
+        }
         listText += `• ${riderTotals[rId].name}: ${displayAmount}\n`;
     }
 
     const periodLabel = viewSettings.period.toUpperCase();
-    const repDate = new Date(viewSettings.dateValue + "T00:00:00");
-    const isRepSunday = viewSettings.period === 'daily' && repDate.getDay() === 0;
-    const displayRates = selectedRiderRates || getCommissionRates(viewSettings.dateValue, appState.riderName);
-
-    const modeLabel = viewSettings.mode === 'earned' 
-        ? `RIDER EARNINGS (${displayRates.riderPerc}%${isRepSunday ? ' SUNDAY PROMO' : ''})` 
-        : `TO PAY COMPANY (${displayRates.companyPerc}%${isRepSunday ? ' SUNDAY PROMO' : ''})`;
 
     let report = `📊 LOKALEX SETTLEMENT REPORT\n`;
     report += `Scope: ${targetRiderFilter && riderTotals[targetRiderFilter] ? riderTotals[targetRiderFilter]?.name : "ALL RIDERS"}\n`;
     report += `Period: ${periodLabel} (${viewSettings.dateValue})\n`;
-    report += `Mode: ${modeLabel}\n\n`;
+    report += `Mode: ${viewSettings.mode === 'earned' ? 'RIDER EARNINGS' : 'TO PAY COMPANY'}\n\n`;
     report += `💰 Gross Total: ₱${grandGross.toFixed(2)}\n`;
     report += `🟢 Rider Earned: ₱${grandEarned.toFixed(2)}\n`;
     report += `🔴 To Pay Company: ₱${grandCompany.toFixed(2)}\n\n`;
@@ -919,6 +1028,8 @@ if (typeof window !== 'undefined') {
     window.submitAdminAddCommissionRecord = submitAdminAddCommissionRecord;
     window.promptAdminDeleteCommissionRecord = promptAdminDeleteCommissionRecord;
     window.executeDeleteCommissionRecord = executeDeleteCommissionRecord;
+    window.fetchRiderUserTypes = fetchRiderUserTypes;
+    window.isRiderAdmin = isRiderAdmin;
 }
 
 window.addEventListener('receiptsUpdated', refreshCommissionView);

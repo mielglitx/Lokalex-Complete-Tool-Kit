@@ -8,10 +8,43 @@ import { calibrateGPS } from './auth.js';
 import { getLocalTodayStr, isSameDate, escapeHtml } from '../utils/helpers.js';
 import { switchView } from '../ui/router.js';
 import { autoStartLiveGpsSession, endLiveGpsSession } from './liveTracker.js';
+import { resetToCartOne } from './cart.js';
+import { autoCompleteAdvancedOrdersForRider, autoCancelAdvancedOrdersForRider } from './advancedOrders.js';
 
 let lineAlarmInterval = null;
 let lineAlarmConfirmed = false;
 let pendingAdminTarget = null;
+
+const ROSTER_CACHE_KEY = 'lokalex_roster_cache';
+const LOGINS_CACHE_KEY = 'lokalex_logins_cache';
+const CATERED_CACHE_KEY = 'lokalex_catered_cache';
+
+// PERSIST FRONTPAGE ROSTER DATA FOR INSTANT OFFLINE ACCESS
+export function saveRosterCache() {
+    try {
+        localStorage.setItem(ROSTER_CACHE_KEY, JSON.stringify(globalState.rosterMembers || []));
+        localStorage.setItem(LOGINS_CACHE_KEY, JSON.stringify(globalState.globalLogins || []));
+        localStorage.setItem(CATERED_CACHE_KEY, JSON.stringify(globalState.globalCateredHistory || []));
+    } catch(e) {}
+}
+
+// RESTORE FRONTPAGE ROSTER DATA FROM LOCAL STORAGE ON OFFLINE BOOT
+export function loadRosterCache() {
+    try {
+        const savedRoster = localStorage.getItem(ROSTER_CACHE_KEY);
+        if (savedRoster && (!globalState.rosterMembers || globalState.rosterMembers.length === 0)) {
+            globalState.rosterMembers = JSON.parse(savedRoster);
+        }
+        const savedLogins = localStorage.getItem(LOGINS_CACHE_KEY);
+        if (savedLogins && (!globalState.globalLogins || globalState.globalLogins.length === 0)) {
+            globalState.globalLogins = JSON.parse(savedLogins);
+        }
+        const savedCatered = localStorage.getItem(CATERED_CACHE_KEY);
+        if (savedCatered && (!globalState.globalCateredHistory || globalState.globalCateredHistory.length === 0)) {
+            globalState.globalCateredHistory = JSON.parse(savedCatered);
+        }
+    } catch(e) {}
+}
 
 export function getUserType() {
     return (appState.userType || localStorage.getItem('userType') || "").toString().trim().toLowerCase();
@@ -243,6 +276,10 @@ function playLineBeep() {
 }
 
 export function updateRosterUI() {
+    if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
+        loadRosterCache();
+    }
+
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
 
@@ -274,6 +311,12 @@ export function updateRosterUI() {
     if (findRidersBtn) {
         if (canManageRoster()) findRidersBtn.classList.remove('hidden');
         else findRidersBtn.classList.add('hidden');
+    }
+
+    const forceAllBtn = document.getElementById('admin-force-all-btn');
+    if (forceAllBtn) {
+        if (showControls) forceAllBtn.classList.remove('hidden');
+        else forceAllBtn.classList.add('hidden');
     }
 
     const isEnded = myRecord && myRecord.status === 'End';
@@ -311,9 +354,6 @@ export function updateRosterUI() {
 
         if (showControls) {
             nameStr += ` <select onchange="adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
-
-            const forceAllBtn = document.getElementById('admin-force-all-btn');
-            if (forceAllBtn) forceAllBtn.classList.remove('hidden');
 
             nameStr += `
             <div class="inline-flex gap-1 ml-2 text-[10px] align-middle">
@@ -471,12 +511,13 @@ export async function triggerStatusWithSlide(targetStatus) {
         endLiveGpsSession();
         await updateRosterStatus('Available');
         
-        // CLEAR ALL CARTS AND UNLOCK ALL SLOTS WHEN MARKING AVAILABLE
+        // CLEAR ALL CARTS AND RESET FOCUS BACK TO CART 1
         if (window.clearAllCartSlots) {
             window.clearAllCartSlots();
         } else if (window.clearCartSlot) {
             window.clearCartSlot();
         }
+        resetToCartOne();
 
     } else if (targetStatus === 'End') {
         openSlideDeleteModal(`Sigurado ka bang mag-End Shift?`, async () => {
@@ -567,6 +608,11 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === tId.toString());
 
+    // AUTOMATICALLY MARK ALL CLAIMED SCHEDULED ORDERS AS COMPLETED WHEN RIDER BECOMES AVAILABLE
+    if (status === 'Available') {
+        autoCompleteAdvancedOrdersForRider(tName, targetRecord ? targetRecord.customerName : "");
+    }
+
     if (status !== 'Catering' && targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
         const custs = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
         const times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
@@ -642,6 +688,7 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     };
 
     db.ref('roster/' + tId).set(rosterData);
+    saveRosterCache();
 
     if (recordLogin) {
         const loginEntry = {
@@ -670,7 +717,7 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     };
 
     try {
-        fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+        fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) }).catch(() => {});
     } catch(e) {}
 }
 
@@ -682,7 +729,7 @@ async function clockOutRider() {
         type: "roster", telegramId: appState.telegramId, riderName: appState.riderName,
         status: "End", clockOut: true, clockOutTime: timeStr
     };
-    try { fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) }); } catch(e) {}
+    try { fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) }).catch(() => {}); } catch(e) {}
 }
 
 export function openAdminCateringModal(id, name) {
@@ -761,6 +808,15 @@ export function adminForceStatus(id, name, actionValue) {
 }
 
 export async function adminVoidActiveCustomer(riderId, riderName) {
+    const targetRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === riderId.toString()) : null;
+    
+    // AUTOMATICALLY MARK CLAIMED SCHEDULED ORDERS AS CANCELLED WHEN ACTIVE CATERING IS VOIDED
+    if (targetRecord && targetRecord.customerName) {
+        autoCancelAdvancedOrdersForRider(riderName, targetRecord.customerName);
+    } else {
+        autoCancelAdvancedOrdersForRider(riderName);
+    }
+
     const availableRiders = globalState.rosterMembers ? globalState.rosterMembers.filter(m => m.status === 'Available').sort((a,b) => parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime)) : [];
     let topQueueTime = new Date().getTime();
     if (availableRiders.length > 0) {
@@ -806,7 +862,7 @@ export async function forceAllEndShift() {
         });
 
         try {
-            await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: "roster", action: "force_all_end" }) });
+            await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: "roster", action: "force_all_end" }) }).catch(() => {});
         } catch(e) {}
     });
 }
@@ -815,6 +871,10 @@ export function loadGlobalCateredList() {
     const feed = document.getElementById('catered-customers-feed');
     const badge = document.getElementById('catered-count-badge');
     if (!feed) return;
+
+    if (!globalState.globalCateredHistory || globalState.globalCateredHistory.length === 0) {
+        loadRosterCache();
+    }
 
     const todayStr = getLocalTodayStr();
     const todayHistory = globalState.globalCateredHistory ? globalState.globalCateredHistory.filter(h => isSameDate(h.completedDate, todayStr)) : [];
@@ -879,6 +939,9 @@ export async function executeVoidCustomer(riderName, customerName, completedDate
 
     showSideNotification("CUSTOMER VOIDED", `Voiding customer ${customerName} for ${riderName}...`, "fa-ban", "text-red-400", "border-red-500");
     
+    // Cancel any claimed advanced order matching rider and customer name
+    autoCancelAdvancedOrdersForRider(riderName, customerName);
+
     db.ref('cateredHistory').once('value', (snapshot) => {
         const data = snapshot.val();
         if (data) {
@@ -908,7 +971,7 @@ export async function executeVoidCustomer(riderName, customerName, completedDate
     });
 
     try {
-        await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: "void_history", riderName, customerName, completedDate }) });
+        await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: "void_history", riderName, customerName, completedDate }) }).catch(() => {});
     } catch(e) {}
 }
 
@@ -916,6 +979,10 @@ export function loadGlobalLoginList() {
     const feed = document.getElementById('login-list-feed');
     const badge = document.getElementById('login-count-badge');
     if (!feed) return;
+
+    if (!globalState.globalLogins || globalState.globalLogins.length === 0) {
+        loadRosterCache();
+    }
 
     const todayStr = getLocalTodayStr();
     const todayLogins = globalState.globalLogins ? globalState.globalLogins.filter(l => isSameDate(l.date, todayStr)) : [];
@@ -945,6 +1012,14 @@ export function loadGlobalLoginList() {
             </div>
         </div>`;
     }).join('');
+}
+
+// Auto-load cache on module import
+loadRosterCache();
+
+if (typeof window !== 'undefined') {
+    window.saveRosterCache = saveRosterCache;
+    window.loadRosterCache = loadRosterCache;
 }
 
 window.addEventListener('rosterUpdated', updateRosterUI);
