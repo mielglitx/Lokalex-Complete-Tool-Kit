@@ -4,7 +4,7 @@ import { appState, globalState, multiCarts, activeCartSlot } from '../store/stat
 import { API_URL, ADMIN_IDS } from '../config/constants.js';
 import { showToast, showSideNotification, unlockAudioContext } from '../ui/notifications.js';
 import { openSlideDeleteModal, closeCateringModal, closeAdminCateringModal } from '../ui/modals.js';
-import { getDeviceLocation } from './auth.js';
+import { calibrateGPS } from './auth.js';
 import { getLocalTodayStr, isSameDate, escapeHtml } from '../utils/helpers.js';
 import { switchView } from '../ui/router.js';
 import { autoStartLiveGpsSession, endLiveGpsSession } from './liveTracker.js';
@@ -13,7 +13,6 @@ let lineAlarmInterval = null;
 let lineAlarmConfirmed = false;
 let pendingAdminTarget = null;
 
-// --- FLEXIBLE & ROBUST USER ROLE HELPERS ---
 export function getUserType() {
     return (appState.userType || localStorage.getItem('userType') || "").toString().trim().toLowerCase();
 }
@@ -393,6 +392,7 @@ export function updateRosterUI() {
     if (elCooldown) elCooldown.innerHTML = cdHtml.length ? cdHtml.join('') : '(Walang naka-cooldown)';
 }
 
+// STATUS TRIGGER ACTION BUTTONS WITH AUTO GPS CALIBRATION
 export async function triggerStatusWithSlide(targetStatus) {
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
@@ -450,8 +450,12 @@ export async function triggerStatusWithSlide(targetStatus) {
             }
         }
 
-        showToast("Checking GPS location...");
-        const coords = await getDeviceLocation();
+        // AUTO-CALIBRATE GPS BEFORE MARKING AVAILABLE FROM END SHIFT OR ON DUTY
+        showToast("📡 Calibrating GPS location...");
+        const coords = await calibrateGPS((accuracy) => {
+            showToast(`📡 Calibrating GPS: ±${Math.round(accuracy)}m`);
+        });
+
         if (!coords || (coords.lat === 0 && coords.lon === 0)) {
             const modal = document.getElementById('gps-alert-modal');
             if (modal) modal.classList.remove('hidden');
@@ -460,12 +464,17 @@ export async function triggerStatusWithSlide(targetStatus) {
 
         appState.lat = coords.lat; 
         appState.lon = coords.lon;
+        showToast(`✅ GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
+
         showSideNotification("RECORDING STATUS", `Marking ${appState.riderName} Available — placing at end of line`, "fa-user-check", "text-green-400", "border-green-500");
 
         endLiveGpsSession();
         await updateRosterStatus('Available');
         
-        if (window.clearCartSlot) {
+        // CLEAR ALL CARTS AND UNLOCK ALL SLOTS WHEN MARKING AVAILABLE
+        if (window.clearAllCartSlots) {
+            window.clearAllCartSlots();
+        } else if (window.clearCartSlot) {
             window.clearCartSlot();
         }
 
@@ -548,7 +557,6 @@ export async function confirmCateringStatus() {
     await updateRosterStatusData('Catering', existingCustomers.join(', '), existingTimes.join(', '), myRecord ? parseQueueTime(myRecord.queueTime) : 0);
 }
 
-// --- ROSTER DATA PERSISTENCE WITH EVEN TIME-SPLITTING & PER-CUSTOMER FEE LOOKUP ---
 export async function updateRosterStatus(status, targetId = null, targetName = null) {
     const tId = targetId || appState.telegramId;
     const tName = targetName || appState.riderName;
@@ -571,7 +579,6 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
             const sTime = times[i] || times[0] || 'N/A';
             const splitDuration = calculateSplitDuration(sTime, completedTimeStr, custCount);
 
-            // Pull specific customer fee object if recorded under targetRecord.customerFees
             const custFeeObj = (targetRecord.customerFees && cleanCustKey && targetRecord.customerFees[cleanCustKey]) 
                 ? targetRecord.customerFees[cleanCustKey] 
                 : null;
@@ -678,7 +685,6 @@ async function clockOutRider() {
     try { fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) }); } catch(e) {}
 }
 
-// --- ADMIN / TL CONTROLS ---
 export function openAdminCateringModal(id, name) {
     pendingAdminTarget = { id, name };
     const nameInput = document.getElementById('admin-catering-customer-name');
@@ -805,7 +811,6 @@ export async function forceAllEndShift() {
     });
 }
 
-// --- GLOBAL CATERED HISTORY LIST DISPLAY WITH DURATION & RESTRICTED VOID ---
 export function loadGlobalCateredList() {
     const feed = document.getElementById('catered-customers-feed');
     const badge = document.getElementById('catered-count-badge');

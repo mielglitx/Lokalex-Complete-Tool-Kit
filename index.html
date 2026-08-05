@@ -576,14 +576,6 @@
                 <input type="checkbox" id="wiz-free-delivery" onchange="calculateGrandTotal()" class="w-5 h-5 accent-orange-500">
             </label>
 
-            <label class="bg-cardBg p-3 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer">
-                <div>
-                    <div class="text-sm font-bold text-blue-400"><i class="fa-solid fa-mobile-screen"></i> ePayment (G-Cash/Maya)</div>
-                    <div class="text-[10px] text-gray-400" id="epayment-fee-display">Auto-added processing fee</div>
-                </div>
-                <input type="checkbox" id="wiz-epayment" onchange="calculateGrandTotal()" class="w-5 h-5 accent-blue-500">
-            </label>
-
             <div class="mt-4 p-4 bg-emerald-900/20 border border-emerald-800/50 rounded-xl flex justify-between items-center">
                 <span class="text-gray-400 text-sm font-bold">GRAND TOTAL</span>
                 <span class="text-2xl font-black text-emerald-400">₱<span id="wiz-grand-total">0.00</span></span>
@@ -756,6 +748,45 @@
             <div class="flex gap-2 mt-2">
                 <button onclick="closeGCashModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
                 <button onclick="saveGCashDetails()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save Details</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADMIN MANUAL COMMISSION RECORD MODAL WITH RIDER DROPDOWN -->
+    <div id="admin-add-comm-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-emerald-500/40 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
+            <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+                <i class="fa-solid fa-file-circle-plus"></i>
+            </div>
+            <h3 class="font-bold text-base text-center text-emerald-400">Add Manual Commission Record</h3>
+            
+            <div class="flex flex-col gap-3 text-left">
+                <div>
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Select Rider *</label>
+                    <select id="manual-comm-rider-select" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-emerald-500 text-white font-bold mt-1">
+                        <!-- Dynamically populated with clean list of riders -->
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Customer Name *</label>
+                    <input type="text" id="manual-comm-cust-input" placeholder="e.g. Juan Dela Cruz" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-emerald-500 text-white font-bold mt-1">
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Gross Total Fee (₱) *</label>
+                    <input type="number" step="0.01" id="manual-comm-fee-input" placeholder="100.00" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-emerald-500 text-white font-bold font-mono mt-1">
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Transaction Date *</label>
+                    <input type="date" id="manual-comm-date-input" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-emerald-500 text-white font-bold mt-1">
+                </div>
+            </div>
+
+            <div class="flex gap-2 mt-2">
+                <button onclick="closeAdminAddCommModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="submitAdminAddCommissionRecord()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save Record</button>
             </div>
         </div>
     </div>

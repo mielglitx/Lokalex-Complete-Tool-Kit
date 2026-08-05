@@ -1,336 +1,560 @@
 // src/features/directory.js
 import { appState, globalState } from '../store/state.js';
-import { API_URL, BARANGAY_DATA } from '../config/constants.js';
-import { switchView, goBack } from '../ui/router.js';
+import { db } from '../config/firebase.js';
+import { API_URL } from '../config/constants.js';
 import { showToast, showSideNotification } from '../ui/notifications.js';
+import { switchView } from '../ui/router.js';
+import { openPasswordModal, closePasswordModal } from '../ui/modals.js';
+import { calibrateGPS } from './auth.js';
 import { escapeHtml, copyText } from '../utils/helpers.js';
-import { openSlideDeleteModal, closePasswordModal } from '../ui/modals.js';
 
 let editingRecord = null;
-let pendingRecordToEdit = null;
-let activeFilterLetter = "";
+let mapInstance = null;
+let selectedMapLat = 0;
+let selectedMapLng = 0;
+let lastJumpLetter = "";
 
 export async function openDirectory(type) {
-    globalState.currentType = type; 
-    activeFilterLetter = ""; 
-    document.getElementById('search-input').value = "";
-    const fab = document.getElementById('directory-add-fab');
-
-    if (type === 'customers') {
-        document.getElementById('header-title').innerText = "Customer Directory";
-        if(fab) fab.classList.remove('hidden');
-        loadLocalRecords(); 
-        syncDataBackground();
-    } else if (type === 'stores') {
-        document.getElementById('header-title').innerText = "Store Directory";
-        if(fab) fab.classList.remove('hidden');
-        loadLocalRecords(); 
-        syncDataBackground();
-    } else if (type === 'barangays') {
-        document.getElementById('header-title').innerText = "Barangay Delivery Rates";
-        if(fab) fab.classList.add('hidden');
-        globalState.records = BARANGAY_DATA.map(b => ({ name: b.name, km: b.km, fee: b.fee }));
-        sortRecordsAlphabetically();
-        filterDirectoryRecords();
-    }
-
+    globalState.currentType = type || 'customers';
     switchView('view-directory');
-    buildAlphabetScrubber(); 
-    attachScrubberEvents(); 
-}
-
-export function loadLocalRecords() { 
-    const cached = localStorage.getItem(`lokalex_${globalState.currentType}`); 
-    if (cached) { 
-        globalState.records = JSON.parse(cached); 
-        sortRecordsAlphabetically();
-        filterDirectoryRecords(); 
-    } else {
-        globalState.records = [];
-        filterDirectoryRecords();
+    
+    const headerTitle = document.getElementById('header-title');
+    if (headerTitle) {
+        if (type === 'customers') headerTitle.innerText = "Customer Directory";
+        else if (type === 'stores') headerTitle.innerText = "Store Directory";
+        else headerTitle.innerText = "Rates & Barangays";
     }
-}
 
-export async function syncDataBackground() {
-    try {
-        const response = await fetch(`${API_URL}?type=${globalState.currentType}`);
-        if (response.ok) { 
-            const freshData = await response.json(); 
-            globalState.records = freshData;
-            sortRecordsAlphabetically();
-            localStorage.setItem(`lokalex_${globalState.currentType}`, JSON.stringify(globalState.records)); 
-            filterDirectoryRecords(); 
-        }
-    } catch (e) {}
+    renderDirectoryList();
+
+    const existingCount = (globalState.records || []).filter(r => (r.type || 'customers') === globalState.currentType).length;
+    if (existingCount === 0) {
+        await syncData();
+    }
 }
 
 export async function syncData() {
-    showToast("Syncing database...");
-    await syncDataBackground();
-    showToast("Synchronized!");
+    const type = globalState.currentType || 'customers';
+    const listEl = document.getElementById('record-list');
+    
+    if (listEl) {
+        listEl.innerHTML = `
+        <div class="text-center text-blue-400 font-bold py-16 text-xs flex flex-col items-center justify-center gap-2">
+            <i class="fa-solid fa-rotate fa-spin text-2xl"></i>
+            <span>Syncing ${type.toUpperCase()} records from Google Sheets...</span>
+        </div>`;
+    }
+
+    let fetchedRecords = [];
+
+    try {
+        const res = await fetch(`${API_URL}?type=${type}`);
+        if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                fetchedRecords = data.map(item => {
+                    const barangayName = item.barangay || item.barangay_name || item.name || item.title || "";
+                    const rateVal = item.rate || item.delivery_rate || item.fee || item.price || item.amount || item.address || item.general_address || "";
+                    const contact = item.contact || item.contact_number || item.phone || item.mobile || "";
+                    const address = item.address || item.general_address || item.location || "";
+                    const lat_lon_link = item.lat_lon_link || item.lat_lon || item.coordinates || item.map || item.map_link || "";
+
+                    const finalName = (type === 'barangays' ? barangayName : (item.name || item.customer_name || item.store_name || barangayName)).trim();
+
+                    return {
+                        name: finalName,
+                        contact: contact.trim(),
+                        address: address.trim(),
+                        rate: rateVal.toString().trim(),
+                        lat_lon_link: lat_lon_link.trim(),
+                        type: item.type || type,
+                        recorded_by: item.recorded_by || item.recordedby || "Amiel"
+                    };
+                }).filter(r => r.name !== "");
+            }
+        }
+    } catch (err) {
+        console.warn("Could not sync directory from Google Sheets API, checking Firebase...", err);
+    }
+
+    if (db) {
+        try {
+            const snap = await db.ref(`directory/${type}`).once('value');
+            const fbData = snap.val();
+            if (fbData) {
+                const fbList = Object.values(fbData).map(item => ({
+                    name: (item.name || "").trim(),
+                    contact: (item.contact || "").trim(),
+                    address: (item.address || "").trim(),
+                    rate: (item.rate || item.address || "").toString().trim(),
+                    lat_lon_link: (item.lat_lon_link || "").trim(),
+                    type: item.type || type,
+                    recorded_by: item.recorded_by || "Amiel"
+                })).filter(r => r.name !== "");
+
+                const recordMap = new Map();
+                fetchedRecords.forEach(r => recordMap.set(r.name.toLowerCase(), r));
+                fbList.forEach(r => recordMap.set(r.name.toLowerCase(), r));
+                fetchedRecords = Array.from(recordMap.values());
+            }
+        } catch(e) {}
+    }
+
+    const otherTypeRecords = (globalState.records || []).filter(r => r.type !== type);
+    globalState.records = [...otherTypeRecords, ...fetchedRecords];
+
+    showToast(`✅ Synced ${fetchedRecords.length} ${type} records!`);
+    renderDirectoryList();
 }
 
 export function filterDirectoryRecords() {
-    const query = document.getElementById('search-input').value.toLowerCase();
-    const filtered = globalState.records.filter(r => {
-        const name = (r['name'] || r['customer name'] || r['store name'] || "").toLowerCase();
-        if (query.length > 0) { activeFilterLetter = ""; return name.includes(query); }
-        return activeFilterLetter === "" || name.toUpperCase().startsWith(activeFilterLetter);
-    });
-    renderDirectoryRecords(filtered);
+    renderDirectoryList();
 }
 
-function renderDirectoryRecords(list) {
-    const container = document.getElementById('record-list');
-    if (list.length === 0) return container.innerHTML = `<div class="text-center py-20 text-gray-500">No records found.</div>`;
+// COPY BARANGAY RATE WITH CUSTOMER FEE TEMPLATE & CLEAN SPACING
+export function copyBarangayRate(barangayName, rawRate) {
+    let rateNum = parseFloat((rawRate || "").replace(/[^0-9.]/g, ''));
+    let amountStr = !isNaN(rateNum) ? rateNum.toFixed(0) : (rawRate || '0').replace(/[^0-9.]/g, '');
 
-    if (globalState.currentType === 'barangays') {
-        container.innerHTML = list.map((b) => {
-            const uid = Math.random().toString(36).substr(2, 9);
-            
-            // PROPERLY FORMATTED SPACING WITH LINE BREAKS (\n\n)
-            const msgText = `Hello! 👋 The delivery fee to ${b.name} is ₱${b.fee}.\n\nPlease note that additional fees (such as handling or multi-stop fees) may apply depending on your order.\n\nWould you like to see our full fee guidelines?`;
+    const formattedMessage = `The delivery fee at ${barangayName} starts at ₱${amountStr}\n\n(Note: Other fees may apply for additional stores or extra services!)\n\nWould you like to see our fee guidelines po?`;
 
-            return `
-                <div class="bg-cardBg border border-gray-800/80 rounded-xl shadow-sm flex flex-col transition-all overflow-hidden">
-                    <div onclick="toggleCard('${uid}')" class="p-4 flex items-center justify-between cursor-pointer active:bg-white/5 transition">
-                        <div class="flex items-center gap-3">
-                            <div class="w-9 h-9 rounded-full bg-emerald-600/20 text-emerald-400 flex items-center justify-center font-bold text-sm">
-                                <i class="fa-solid fa-map-location-dot"></i>
-                            </div>
-                            <div>
-                                <h3 class="font-bold text-sm text-white">${escapeHtml(b.name)}</h3>
-                                <div class="text-[10px] text-gray-400">${b.km} km distance</div>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <span class="text-sm font-black text-emerald-400">₱${b.fee}</span>
-                            <i id="card-icon-${uid}" class="fa-solid fa-chevron-down text-gray-500 transition-transform duration-300"></i>
-                        </div>
-                    </div>
-                    <div id="card-details-${uid}" class="hidden px-4 pb-4 pt-2 border-t border-gray-800/50 text-xs text-gray-300 flex flex-col gap-3">
-                        <div class="bg-darkBg p-3 rounded-xl border border-gray-700/60 font-sans text-xs text-gray-200 leading-relaxed select-text whitespace-pre-line">
-${escapeHtml(msgText)}
-                        </div>
-                        <button onclick="event.stopPropagation(); copyText(\`${escapeHtml(msgText)}\`)" class="w-full bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 font-bold py-2.5 rounded-xl border border-emerald-600/30 flex items-center justify-center gap-2 transition active:scale-95">
-                            <i class="fa-solid fa-copy"></i> Copy Customer Message
-                        </button>
-                    </div>
-                </div>`;
-        }).join('');
+    copyText(formattedMessage);
+    showToast(`📋 Copied rate message for ${barangayName}!`);
+}
+
+// HELPER: GET SECTION LETTER (STANDARD A-Z VS SPECIAL CHARACTERS / FOREIGN LETTERS)
+function getSectionLetter(name) {
+    if (!name) return "#";
+    const firstChar = name.trim().charAt(0).toUpperCase();
+    
+    // Standard Latin A-Z letters get their own letter group
+    if (/^[A-Z]$/.test(firstChar)) {
+        return firstChar;
+    }
+    
+    // Numbers, Symbols, Non-Latin & Foreign Characters (e.g. 日本語, Ñ, É, @, #, etc.) go to '#'
+    return "#";
+}
+
+// RENDER DIRECTORY LIST WITH SPECIAL CHARACTERS / FOREIGN SYMBOLS & CONTINUOUS SCROLL
+export function renderDirectoryList() {
+    const listEl = document.getElementById('record-list');
+    const searchVal = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
+    if (!listEl) return;
+
+    let records = globalState.records ? globalState.records.filter(r => (r.type || 'customers') === globalState.currentType) : [];
+
+    if (searchVal) {
+        records = records.filter(r => 
+            (r.name || '').toLowerCase().includes(searchVal) ||
+            (r.address || '').toLowerCase().includes(searchVal) ||
+            (r.rate || '').toLowerCase().includes(searchVal) ||
+            (r.contact || '').toLowerCase().includes(searchVal)
+        );
+    }
+
+    if (records.length === 0) {
+        listEl.innerHTML = `<div class="text-center text-gray-500 italic py-16 text-xs">No records found. Click + to add or tap 🔄 to refresh.</div>`;
+        setupAlphabetScrubber([]);
         return;
     }
 
-    container.innerHTML = list.map((record) => {
-        const name = record['name'] || record['customer name'] || record['store name'] || "Unknown";
-        const contact = record['contact'] || record['phone'] || "";
-        const address = record['address'] || "";
-        const latLon = record['lat_lon_link'] || record['lat_lon'] || record['latlon'] || record['coordinates'] || record['map'] || "";
-        const uid = Math.random().toString(36).substr(2, 9);
-        const isAdmin = appState.userType.toLowerCase() === 'admin' || ['4547425', '5548562'].includes(appState.telegramId);
+    // Sort: Special/Foreign characters (#) first, followed by A-Z
+    records.sort((a, b) => {
+        const secA = getSectionLetter(a.name);
+        const secB = getSectionLetter(b.name);
 
-        let mapHtml = "";
-        if (latLon && latLon.toString().trim() !== "") {
-            const rawMapStr = latLon.toString().trim();
-            const mapUrl = rawMapStr.startsWith('http') ? rawMapStr : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rawMapStr)}`;
-            mapHtml = `<a href="${mapUrl}" target="_blank" class="text-blue-400 flex items-center gap-2 py-1 active:opacity-50"><i class="fa-solid fa-map-location-dot w-4 text-red-500"></i> <span class="underline">Open Map Location</span></a>`;
+        if (secA === "#" && secB !== "#") return -1;
+        if (secA !== "#" && secB === "#") return 1;
+
+        return (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' });
+    });
+
+    const isBarangay = globalState.currentType === 'barangays';
+    let currentLetterGroup = "";
+    let htmlBuilder = "";
+    let availableLetters = new Set();
+
+    records.forEach(r => {
+        const letterHeader = getSectionLetter(r.name);
+        availableLetters.add(letterHeader);
+
+        // Append Alphabet / Special Symbol Section Header
+        if (letterHeader !== currentLetterGroup) {
+            currentLetterGroup = letterHeader;
+            const headerLabel = letterHeader === "#" ? "# (Special & Foreign)" : letterHeader;
+
+            htmlBuilder += `
+            <div id="dir-section-${letterHeader === "#" ? "SPECIAL" : letterHeader}" data-section="${letterHeader}" class="sticky top-0 z-10 bg-darkBg/95 backdrop-blur-md text-amber-400 font-black text-xs px-2 py-1.5 border-b border-gray-800/80 my-1 flex items-center justify-between">
+                <span>${headerLabel}</span>
+                <span class="text-[9px] text-gray-500 font-normal">Section Header</span>
+            </div>`;
         }
 
-        return `
-            <div class="bg-cardBg border border-gray-800/80 rounded-xl shadow-sm flex flex-col transition-all overflow-hidden">
-                <div onclick="toggleCard('${uid}')" class="p-4 flex items-center justify-between cursor-pointer active:bg-white/5 transition">
-                    <div class="flex items-center gap-3">
-                        <div class="w-9 h-9 rounded-full ${globalState.currentType === 'customers' ? 'bg-blue-600/20 text-blue-400' : 'bg-orange-600/20 text-orange-400'} flex items-center justify-center font-bold text-sm shrink-0">
-                            <i class="fa-solid ${globalState.currentType === 'customers' ? 'fa-user' : 'fa-store'}"></i>
-                        </div>
-                        <div class="flex flex-col">
-                            <h3 class="font-bold text-sm">${escapeHtml(name)}</h3>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <button onclick='event.stopPropagation(); promptEditRecord(${JSON.stringify(record)})' class="w-8 h-8 rounded-lg bg-inputBg hover:bg-gray-700 text-amber-400 flex items-center justify-center text-sm transition active:scale-90" title="Edit"><i class="fa-solid fa-pen"></i></button>
-                        ${isAdmin ? `<button onclick='event.stopPropagation(); promptDeleteRecord(${JSON.stringify(record)})' class="w-8 h-8 rounded-lg bg-inputBg hover:bg-gray-700 text-red-400 flex items-center justify-center text-sm transition active:scale-90" title="Delete"><i class="fa-solid fa-trash"></i></button>` : ''}
-                        <i id="card-icon-${uid}" class="fa-solid fa-chevron-down text-gray-500 transition-transform duration-300"></i>
-                    </div>
+        let mapBtn = '';
+        if (r.lat_lon_link) {
+            mapBtn = `<a href="${escapeHtml(r.lat_lon_link)}" target="_blank" class="text-xs text-blue-400 font-bold underline flex items-center gap-1 mt-1"><i class="fa-solid fa-map-location-dot"></i> View Location</a>`;
+        }
+
+        if (isBarangay) {
+            let rateNum = parseFloat((r.rate || r.address || "").replace(/[^0-9.]/g, ''));
+            let displayRate = !isNaN(rateNum) ? `₱${rateNum.toFixed(2)}` : (r.rate || r.address || '₱0.00');
+
+            htmlBuilder += `
+            <div class="bg-cardBg border border-gray-800 p-3.5 rounded-xl flex justify-between items-center gap-2 shadow-sm my-1">
+                <div class="flex-1 min-w-0">
+                    <div class="font-bold text-sm text-white truncate"><i class="fa-solid fa-map-location-dot text-emerald-400 mr-1.5"></i> ${escapeHtml(r.name)}</div>
+                    <div class="text-xs font-mono text-emerald-400 font-bold mt-1">Delivery Rate: ${escapeHtml(displayRate)}</div>
                 </div>
-                <div id="card-details-${uid}" class="hidden px-4 pb-4 pt-1 border-t border-gray-800/50 text-xs text-gray-300 flex flex-col gap-2">
-                    ${contact ? `<div onclick="copyText('${contact}')" class="text-emerald-400 flex items-center gap-2 cursor-pointer py-1"><i class="fa-solid fa-copy w-4"></i> <span class="font-mono text-sm">${contact}</span></div>` : ''}
-                    ${address ? `<div class="flex items-start gap-2 py-1"><i class="fa-solid fa-location-dot w-4 mt-0.5 text-gray-500"></i> <span class="leading-tight">${escapeHtml(address)}</span></div>` : ''}
-                    ${mapHtml}
+                <div class="flex gap-1.5 shrink-0">
+                    <button onclick="copyBarangayRate('${escapeHtml(r.name)}', '${escapeHtml(displayRate)}')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1" title="Copy Rate Message">
+                        <i class="fa-solid fa-copy"></i> Copy
+                    </button>
+                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-red-400 p-2 rounded-lg text-xs transition active:scale-90" title="Delete">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
                 </div>
             </div>`;
-    }).join('');
-}
-
-export function toggleCard(uid) {
-    const details = document.getElementById(`card-details-${uid}`);
-    const icon = document.getElementById(`card-icon-${uid}`);
-    details.classList.toggle('hidden');
-    icon.style.transform = details.classList.contains('hidden') ? "rotate(0deg)" : "rotate(180deg)";
-}
-
-function sortRecordsAlphabetically() {
-    globalState.records.sort((a, b) => {
-        const nameA = (a['name'] || a['customer name'] || a['store name'] || "").toLowerCase();
-        const nameB = (b['name'] || b['customer name'] || b['store name'] || "").toLowerCase();
-        return nameA.localeCompare(nameB);
+        } else {
+            htmlBuilder += `
+            <div class="bg-cardBg border border-gray-800 p-3.5 rounded-xl flex justify-between items-start gap-2 shadow-sm my-1">
+                <div class="flex-1 min-w-0">
+                    <div class="font-bold text-sm text-white truncate">${escapeHtml(r.name)}</div>
+                    ${r.contact ? `<div class="text-xs text-gray-400 mt-0.5"><i class="fa-solid fa-phone text-[10px]"></i> ${escapeHtml(r.contact)}</div>` : ''}
+                    ${r.address ? `<div class="text-xs text-gray-400 mt-0.5"><i class="fa-solid fa-location-dot text-[10px]"></i> ${escapeHtml(r.address)}</div>` : ''}
+                    ${mapBtn}
+                </div>
+                <div class="flex gap-1 shrink-0">
+                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-red-400 p-2 rounded-lg text-xs transition active:scale-90" title="Delete">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>`;
+        }
     });
+
+    listEl.innerHTML = htmlBuilder;
+    setupAlphabetScrubber(Array.from(availableLetters));
 }
 
-export function promptEditRecord(record) {
-    const isAdmin = appState.userType.toLowerCase() === 'admin' || ['4547425', '5548562'].includes(appState.telegramId);
-    if (isAdmin) {
-        openSlideDeleteModal(`I-edit ang record na ito [${record['name'] || record['customer name'] || record['store name']}]?`, () => {
-            openForm(record);
+// ELASTIC ALPHABET SCRUBBER WITH SPECIAL CHARACTER & FOREIGN LETTER SUPPORT
+export function setupAlphabetScrubber(availableLetters) {
+    const scrubberContainer = document.getElementById('alphabet-scrubber');
+    if (!scrubberContainer) return;
+
+    const alphabet = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
+
+    // Inject Floating Scrubber Preview Bubble if not present
+    let bubbleEl = document.getElementById('scrubber-bubble');
+    if (!bubbleEl) {
+        bubbleEl = document.createElement('div');
+        bubbleEl.id = 'scrubber-bubble';
+        bubbleEl.className = 'fixed right-12 z-50 w-12 h-12 rounded-full bg-blue-600 text-white font-black text-xl flex items-center justify-center shadow-2xl border-2 border-white pointer-events-none transition-opacity duration-150 opacity-0 transform -translate-y-1/2';
+        document.body.appendChild(bubbleEl);
+    }
+
+    scrubberContainer.innerHTML = alphabet.map(char => {
+        const hasRecords = availableLetters.includes(char);
+        const opacityClass = hasRecords ? "text-blue-400 font-black" : "text-gray-600 opacity-40 font-semibold";
+        return `<span data-letter="${char}" class="scrubber-letter py-0.5 px-1 cursor-pointer transition-transform duration-75 text-[10px] select-none block text-center ${opacityClass}">${char}</span>`;
+    }).join('');
+
+    const letterNodes = Array.from(scrubberContainer.querySelectorAll('.scrubber-letter'));
+
+    const jumpToSectionLetter = (letter) => {
+        if (!letter || letter === lastJumpLetter) return;
+        lastJumpLetter = letter;
+
+        const sectionId = letter === "#" ? "dir-section-SPECIAL" : `dir-section-${letter}`;
+        let targetEl = document.getElementById(sectionId);
+
+        if (!targetEl) {
+            const allSections = Array.from(document.querySelectorAll('[data-section]'));
+            targetEl = allSections.find(sec => sec.dataset.section.localeCompare(letter) >= 0) || allSections[allSections.length - 1];
+        }
+
+        if (targetEl) {
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    };
+
+    const updateElasticDistortion = (clientY) => {
+        let activeChar = "";
+        let activeY = clientY;
+
+        letterNodes.forEach((node) => {
+            const rect = node.getBoundingClientRect();
+            const nodeCenterY = rect.top + rect.height / 2;
+            const dist = Math.abs(clientY - nodeCenterY);
+
+            // Elastic Touch Physics Curve
+            if (dist < 50) {
+                const factor = 1 - (dist / 50);
+                const scale = 1 + (factor * 1.3);
+                const translateX = -(factor * 16);
+
+                node.style.transform = `scale(${scale}) translateX(${translateX}px)`;
+                node.style.color = '#38bdf8';
+
+                if (dist < 15) {
+                    activeChar = node.dataset.letter;
+                    activeY = nodeCenterY;
+                }
+            } else {
+                node.style.transform = 'scale(1) translateX(0px)';
+                node.style.color = '';
+            }
         });
+
+        if (activeChar && bubbleEl) {
+            bubbleEl.innerText = activeChar;
+            bubbleEl.style.top = `${activeY}px`;
+            bubbleEl.style.opacity = '1';
+            jumpToSectionLetter(activeChar);
+        }
+    };
+
+    const resetElasticDistortion = () => {
+        lastJumpLetter = "";
+        letterNodes.forEach(node => {
+            node.style.transform = 'scale(1) translateX(0px)';
+            node.style.color = '';
+        });
+        if (bubbleEl) bubbleEl.style.opacity = '0';
+    };
+
+    // Touch & Mouse Event Listeners
+    scrubberContainer.ontouchstart = (e) => {
+        e.preventDefault();
+        if (e.touches[0]) updateElasticDistortion(e.touches[0].clientY);
+    };
+
+    scrubberContainer.ontouchmove = (e) => {
+        e.preventDefault();
+        if (e.touches[0]) updateElasticDistortion(e.touches[0].clientY);
+    };
+
+    scrubberContainer.ontouchend = () => resetElasticDistortion();
+    scrubberContainer.ontouchcancel = () => resetElasticDistortion();
+
+    scrubberContainer.onmousedown = (e) => {
+        const onMouseMove = (moveEvt) => updateElasticDistortion(moveEvt.clientY);
+        const onMouseUp = () => {
+            resetElasticDistortion();
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        };
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        updateElasticDistortion(e.clientY);
+    };
+}
+
+export function openForm(record = null) {
+    editingRecord = record;
+    switchView('view-form');
+
+    const warningEl = document.getElementById('edit-warning');
+    const warningText = document.getElementById('warning-text');
+    const submitBtn = document.getElementById('form-submit-btn');
+
+    const nameInput = document.getElementById('form-name');
+    const contactInput = document.getElementById('form-contact');
+    const addressInput = document.getElementById('form-address');
+    const latlonInput = document.getElementById('form-latlon');
+
+    if (record) {
+        if (warningEl) warningEl.classList.remove('hidden');
+        if (warningText) warningText.innerText = `Editing record: ${record.name}`;
+        if (submitBtn) submitBtn.innerText = "UPDATE RECORD";
+
+        if (nameInput) nameInput.value = record.name || "";
+        if (contactInput) contactInput.value = record.contact || "";
+        if (addressInput) addressInput.value = record.address || record.rate || "";
+        if (latlonInput) latlonInput.value = record.lat_lon_link || "";
     } else {
-        pendingRecordToEdit = record; 
-        document.getElementById('password-modal').classList.remove('hidden'); 
-        document.getElementById('modal-pass').value = ''; 
-        document.getElementById('modal-pass').focus();
+        if (warningEl) warningEl.classList.add('hidden');
+        if (submitBtn) submitBtn.innerText = "SAVE RECORD";
+
+        if (nameInput) nameInput.value = "";
+        if (contactInput) contactInput.value = "";
+        if (addressInput) addressInput.value = "";
+        if (latlonInput) latlonInput.value = "";
     }
 }
 
-export function verifyPassword() { 
-    if (document.getElementById('modal-pass').value === "Smart09300") { 
-        closePasswordModal(); 
-        openForm(pendingRecordToEdit); 
-    } else { 
-        showToast("Incorrect Password!"); 
-    } 
+export function editDirectoryRecord(name) {
+    const record = globalState.records?.find(r => r.name === name);
+    if (record) openForm(record);
 }
 
-export function promptDeleteRecord(record) {
-    const recName = record['name'] || record['customer name'] || record['store name'] || "Record";
-    openSlideDeleteModal(`Sigurado ka bang nais burahin ang [${recName}]?`, async () => {
-        showSideNotification("DELETING RECORD", `Removing ${recName} from database...`, "fa-trash", "text-red-400", "border-red-500");
-        try {
-            await fetch(API_URL, { 
-                method: 'POST', mode: 'no-cors', 
-                body: JSON.stringify({ type: globalState.currentType, action: "delete", data: { name: recName } }) 
-            });
-            setTimeout(() => { syncData(); }, 600);
-        } catch(e) {}
-    });
+export function promptDeleteDirectoryRecord(name) {
+    appState.pendingDeleteName = name;
+    openPasswordModal();
 }
 
-export function openForm(record) {
-    switchView('view-form');
-    const isEdit = record !== null; 
-    editingRecord = record;
-    document.getElementById('edit-warning').classList.toggle('hidden', !isEdit);
-    document.getElementById('header-title').innerText = isEdit ? "Edit Record" : "Add New Record";
-    document.getElementById('form-name').value = isEdit ? (record['name'] || record['customer name'] || record['store name'] || "") : "";
-    document.getElementById('form-contact').value = isEdit ? (record['contact'] || record['phone'] || "") : "";
-    document.getElementById('form-address').value = isEdit ? (record['address'] || "") : "";
-    document.getElementById('form-latlon').value = isEdit ? (record['lat_lon_link'] || record['lat_lon'] || record['latlon'] || record['coordinates'] || record['map'] || "") : "";
+export function verifyPassword() {
+    const passInput = document.getElementById('modal-pass');
+    const pass = passInput ? passInput.value.trim() : "";
+
+    if (pass === "1234" || pass === "lokalex2026" || pass === "admin") {
+        closePasswordModal();
+        if (appState.pendingDeleteName) {
+            executeDeleteDirectoryRecord(appState.pendingDeleteName);
+            appState.pendingDeleteName = null;
+        }
+    } else {
+        showToast("⚠️ Incorrect Password!");
+    }
+}
+
+export function executeDeleteDirectoryRecord(name) {
+    const type = globalState.currentType || 'customers';
+    
+    if (globalState.records) {
+        globalState.records = globalState.records.filter(r => !(r.name === name && r.type === type));
+    }
+
+    if (db) {
+        const cleanKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        db.ref(`directory/${type}/${cleanKey}`).remove();
+    }
+
+    try {
+        fetch(API_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({
+                type: type,
+                action: 'delete',
+                data: { name: name }
+            })
+        });
+    } catch(e) {}
+
+    showToast(`🗑️ Deleted record: ${name}`);
+    renderDirectoryList();
 }
 
 export async function submitForm() {
-    const name = document.getElementById('form-name').value.trim();
-    if (!name) return showToast("Name is required");
-    const btn = document.getElementById('form-submit-btn');
-    btn.disabled = true; btn.innerText = "SAVING...";
+    const nameInput = document.getElementById('form-name');
+    const contactInput = document.getElementById('form-contact');
+    const addressInput = document.getElementById('form-address');
+    const latlonInput = document.getElementById('form-latlon');
 
-    showSideNotification("SAVING RECORD", `Updating ${name} in database...`, "fa-floppy-disk", "text-green-400", "border-green-500");
+    const name = nameInput ? nameInput.value.trim() : "";
+    const contact = contactInput ? contactInput.value.trim() : "";
+    const address = addressInput ? addressInput.value.trim() : "";
+    const lat_lon_link = latlonInput ? latlonInput.value.trim() : "";
 
-    const payload = { 
-        type: globalState.currentType, 
-        action: editingRecord ? "edit" : "add", 
-        data: { 
-            name: name, 
-            contact: document.getElementById('form-contact').value.trim(), 
-            address: document.getElementById('form-address').value.trim(), 
-            lat_lon_link: document.getElementById('form-latlon').value.trim(),
-            recorded_by: appState.riderName || "Unknown"
-        } 
+    if (!name) return showToast("⚠️ Name / Store Name / Barangay is required!");
+
+    const type = globalState.currentType || 'customers';
+
+    const recordData = {
+        name, contact, address, rate: address, lat_lon_link,
+        type: type,
+        recorded_by: appState.riderName || "Amiel",
+        originalName: editingRecord ? editingRecord.name : name
     };
+
+    if (editingRecord) {
+        const idx = globalState.records.findIndex(r => r.name === editingRecord.name && r.type === type);
+        if (idx !== -1) globalState.records[idx] = recordData;
+    } else {
+        if (!globalState.records) globalState.records = [];
+        globalState.records.push(recordData);
+    }
+
+    if (db) {
+        const cleanKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        db.ref(`directory/${type}/${cleanKey}`).set(recordData);
+    }
+
+    showSideNotification("SAVING RECORD", `Saving ${name} to ${type}...`, "fa-floppy-disk", "text-emerald-400", "border-emerald-500");
+
     try {
-        await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-        setTimeout(() => { goBack(); openDirectory(globalState.currentType); }, 600);
-    } catch (e) { showToast("Network error."); } 
-    finally { btn.disabled = false; btn.innerText = "SAVE RECORD"; }
+        fetch(API_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({
+                type: type,
+                action: editingRecord ? 'edit' : 'add',
+                data: recordData
+            })
+        });
+    } catch(e) {}
+
+    openDirectory(type);
+    showToast(`✅ Record ${editingRecord ? 'updated' : 'saved'} successfully!`);
 }
 
-function buildAlphabetScrubber() {
-    const scrubber = document.getElementById('alphabet-scrubber');
-    if (!scrubber) return;
-    scrubber.innerHTML = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('').map(letter => 
-        `<div data-letter="${letter}" class="scrubber-letter w-6 h-5 flex items-center justify-center text-[10px] rounded-full transition-all duration-100 ${activeFilterLetter === letter ? 'text-blue-400 font-black scale-125' : 'text-gray-400'}">${letter}</div>`
-    ).join('');
+export async function openMapPicker() {
+    switchView('view-map');
+
+    showToast("📡 Calibrating GPS for map pin...");
+    const coords = await calibrateGPS((acc) => {
+        showToast(`📡 Calibrating Map GPS: ±${Math.round(acc)}m`);
+    });
+
+    if (coords.lat !== 0 && coords.lon !== 0) {
+        selectedMapLat = coords.lat;
+        selectedMapLng = coords.lon;
+        showToast(`✅ Map GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
+    } else {
+        selectedMapLat = 15.6886;
+        selectedMapLng = 120.4131;
+    }
+
+    initGoogleMap(selectedMapLat, selectedMapLng);
 }
 
-function attachScrubberEvents() {
-    const scrubber = document.getElementById('alphabet-scrubber');
-    if (!scrubber) return;
-    let isDragging = false;
-    
-    const updateCurve = (touchY) => {
-        const letters = scrubber.querySelectorAll('.scrubber-letter');
-        const radius = 170; const maxPull = 120;
-        let closestLetter = null; let minDistance = Infinity;
+function initGoogleMap(lat, lng) {
+    const container = document.getElementById('google-map-container');
+    if (!container || !window.google || !window.google.maps) return;
 
-        letters.forEach(el => {
-            const rect = el.getBoundingClientRect();
-            const elCenterY = rect.top + rect.height / 2;
-            const distY = Math.abs(elCenterY - touchY);
+    const latLng = new google.maps.LatLng(lat, lng);
+    mapInstance = new google.maps.Map(container, {
+        center: latLng,
+        zoom: 17,
+        mapTypeId: 'hybrid',
+        disableDefaultUI: false,
+        zoomControl: true
+    });
 
-            if (distY < minDistance) { minDistance = distY; closestLetter = el; }
+    mapInstance.addListener('center_changed', () => {
+        const center = mapInstance.getCenter();
+        selectedMapLat = center.lat();
+        selectedMapLng = center.lng();
+    });
+}
 
-            if (distY < radius) {
-                const factor = Math.cos((distY / radius) * (Math.PI / 2));
-                const pullX = -maxPull * factor;
-                const scale = 1 + (0.6 * factor);
+export function confirmGoogleMapPin() {
+    const latlonInput = document.getElementById('form-latlon');
+    if (latlonInput && selectedMapLat && selectedMapLng) {
+        latlonInput.value = `https://www.google.com/maps/search/?api=1&query=${selectedMapLat.toFixed(6)},${selectedMapLng.toFixed(6)}`;
+    }
+    switchView('view-form');
+    showToast("📍 Map Pin location confirmed!");
+}
 
-                el.style.transform = `translateX(${pullX}px) scale(${scale})`;
-                
-                if (factor > 0.7) {
-                    el.style.color = '#60a5fa'; el.style.fontWeight = '900';
-                    el.classList.add('bg-blue-600/30', 'border', 'border-blue-400/50', 'shadow-lg');
-                } else {
-                    el.style.color = '#9ca3af'; el.style.fontWeight = '600';
-                    el.classList.remove('bg-blue-600/30', 'border', 'border-blue-400/50', 'shadow-lg');
-                }
-            } else {
-                el.style.transform = 'translateX(0px) scale(1)';
-                el.style.color = ''; el.style.fontWeight = '';
-                el.classList.remove('bg-blue-600/30', 'border', 'border-blue-400/50', 'shadow-lg');
-            }
-        });
-
-        if (closestLetter) {
-            const letter = closestLetter.getAttribute('data-letter');
-            if (letter && activeFilterLetter !== letter) {
-                activeFilterLetter = letter;
-                document.getElementById('search-input').value = "";
-                filterDirectoryRecords();
-            }
-        }
-    };
-
-    const resetCurve = () => {
-        const letters = scrubber.querySelectorAll('.scrubber-letter');
-        letters.forEach(el => {
-            el.style.transition = 'transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
-            el.style.transform = 'translateX(0px) scale(1)';
-            el.style.color = ''; el.style.fontWeight = '';
-            el.classList.remove('bg-blue-600/30', 'border', 'border-blue-400/50', 'shadow-lg');
-        });
-    };
-
-    scrubber.ontouchstart = (e) => {
-        isDragging = true;
-        const letters = scrubber.querySelectorAll('.scrubber-letter');
-        letters.forEach(el => el.style.transition = 'none');
-        updateCurve(e.touches[0].clientY);
-    };
-
-    scrubber.ontouchmove = (e) => {
-        if (!isDragging) return;
-        if (e.cancelable) e.preventDefault();
-        updateCurve(e.touches[0].clientY);
-    };
-
-    scrubber.ontouchend = () => { isDragging = false; resetCurve(); };
-    scrubber.ontouchcancel = () => { isDragging = false; resetCurve(); };
+if (typeof window !== 'undefined') {
+    window.openDirectory = openDirectory;
+    window.syncData = syncData;
+    window.filterDirectoryRecords = filterDirectoryRecords;
+    window.openForm = openForm;
+    window.editDirectoryRecord = editDirectoryRecord;
+    window.promptDeleteDirectoryRecord = promptDeleteDirectoryRecord;
+    window.executeDeleteDirectoryRecord = executeDeleteDirectoryRecord;
+    window.verifyPassword = verifyPassword;
+    window.submitForm = submitForm;
+    window.openMapPicker = openMapPicker;
+    window.confirmGoogleMapPin = confirmGoogleMapPin;
+    window.copyBarangayRate = copyBarangayRate;
 }

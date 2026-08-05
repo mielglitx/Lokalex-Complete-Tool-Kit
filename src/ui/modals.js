@@ -6,17 +6,87 @@ import { showToast } from './notifications.js';
 
 let slideDeleteCallback = null;
 
+// FETCH AND RESTORE GCASH DETAILS FROM FIREBASE & GOOGLE SHEETS
+export async function fetchGCashDetails() {
+    const riderId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const riderName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+
+    if (!riderId && !riderName) return;
+
+    let foundName = "";
+    let foundNo = "";
+
+    // 1. Check Firebase first
+    if (db) {
+        try {
+            const snap = await db.ref('gcash').once('value');
+            const data = snap.val();
+            if (data) {
+                Object.values(data).forEach(item => {
+                    const itemTId = (item.telegramId || "").toString().trim();
+                    const itemRName = (item.riderName || "").toString().trim().toLowerCase();
+                    if ((riderId && itemTId === riderId) || (riderName && itemRName === riderName)) {
+                        if (item.gcashName) foundName = item.gcashName;
+                        if (item.gcashNo) foundNo = item.gcashNo;
+                    }
+                });
+            }
+        } catch(e) {}
+    }
+
+    // 2. Fallback check to Google Sheets API
+    if (!foundName || !foundNo) {
+        try {
+            const res = await fetch(`${API_URL}?type=all`);
+            if (res.ok) {
+                const json = await res.json();
+                if (json && json.gcash) {
+                    for (let key in json.gcash) {
+                        const rec = json.gcash[key];
+                        const recTId = (rec.telegramId || "").toString().trim();
+                        const recRName = (rec.riderName || "").toString().trim().toLowerCase();
+                        if ((riderId && recTId === riderId) || (riderName && recRName === riderName)) {
+                            if (rec.gcashName) foundName = rec.gcashName;
+                            if (rec.gcashNo) foundNo = rec.gcashNo;
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch(e) {}
+    }
+
+    // Restore details to state and local cache
+    if (foundName || foundNo) {
+        appState.gcashName = foundName;
+        appState.gcashNo = foundNo;
+        localStorage.setItem('lokalex_gcash_name', foundName);
+        localStorage.setItem('lokalex_gcash_no', foundNo);
+
+        const nameInput = document.getElementById('gcash-name-input');
+        const noInput = document.getElementById('gcash-no-input');
+        if (nameInput) nameInput.value = foundName;
+        if (noInput) noInput.value = foundNo;
+    }
+}
+
 // GCASH REGISTRATION MODAL LOGIC WITH SLIDE CONFIRMATION
-export function openGCashModal() {
+export async function openGCashModal() {
     const modal = document.getElementById('gcash-modal');
     if (modal) {
         const nameInput = document.getElementById('gcash-name-input');
         const noInput = document.getElementById('gcash-no-input');
         
-        if (nameInput) nameInput.value = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || "";
-        if (noInput) noInput.value = appState.gcashNo || localStorage.getItem('lokalex_gcash_no') || "";
+        const localName = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || "";
+        const localNo = appState.gcashNo || localStorage.getItem('lokalex_gcash_no') || "";
+
+        if (nameInput) nameInput.value = localName;
+        if (noInput) noInput.value = localNo;
         
         modal.classList.remove('hidden');
+
+        // Automatically fetch online records to ensure missing local values populate
+        await fetchGCashDetails();
     }
 }
 
@@ -37,7 +107,6 @@ export function saveGCashDetails() {
         return;
     }
 
-    // SLIDE CONFIRMATION BARRIER BEFORE SAVING GCASH DETAILS
     openSlideDeleteModal(
         "Confirm GCash Details?",
         `I-drag pakanan para kumpirmahin ang pag-update ng iyong GCash details:\n👤 Name: ${gName}\n📱 Number: ${gNo}`,
@@ -51,11 +120,9 @@ export function executeSaveGCashDetails(gName, gNo) {
     appState.gcashName = gName;
     appState.gcashNo = gNo;
 
-    // Save locally for offline accessibility
     localStorage.setItem('lokalex_gcash_name', gName);
     localStorage.setItem('lokalex_gcash_no', gNo);
 
-    // Save to Firebase
     if (db && appState.telegramId) {
         db.ref('gcash/' + appState.telegramId).set({
             riderName: appState.riderName,
@@ -66,7 +133,6 @@ export function executeSaveGCashDetails(gName, gNo) {
         });
     }
 
-    // Save to Google Sheets
     try {
         fetch(API_URL, {
             method: 'POST',
@@ -172,7 +238,6 @@ export function closeEditItemModal() {
     document.getElementById('edit-item-modal').classList.add('hidden'); 
 }
 
-// Universal Slide-To-Confirm Logic (Overloaded to support 2 or 3 parameters)
 export function openSlideDeleteModal(title, arg2, arg3) {
     let subtitle = "I-drag pakanan ang slider para kumpirmahin.";
     let callback = null;
@@ -225,8 +290,8 @@ export function onSlideEnd() {
     }
 }
 
-// EXPLICIT WINDOW BINDINGS FOR INLINE HTML TRIGGERS
 if (typeof window !== 'undefined') {
+    window.fetchGCashDetails = fetchGCashDetails;
     window.openGCashModal = openGCashModal;
     window.closeGCashModal = closeGCashModal;
     window.saveGCashDetails = saveGCashDetails;

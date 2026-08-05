@@ -1,724 +1,554 @@
 // src/features/cart.js
-import { appState, globalState } from '../store/state.js';
-import { db } from '../config/firebase.js';
+import { appState, globalState, multiCarts, activeCartSlot, setActiveCartSlot } from '../store/state.js';
 import { showToast } from '../ui/notifications.js';
-import { switchView } from '../ui/router.js';
+import { proceedToWizard } from './wizard.js';
 import { escapeHtml } from '../utils/helpers.js';
-import { openSlideDeleteModal } from '../ui/modals.js';
 
-export function loadCartState() {
-    try {
-        const savedCarts = localStorage.getItem('lokalex_carts');
-        if (savedCarts) {
-            const parsed = JSON.parse(savedCarts);
-            if (Array.isArray(parsed) && parsed.length === 4 && Array.isArray(parsed[0])) {
-                globalState.carts = parsed;
-            } else {
-                globalState.carts = [[], [], [], []];
-            }
-        } else {
-            globalState.carts = [[], [], [], []];
-        }
+let editingItemIndex = null;
 
-        const savedClients = localStorage.getItem('lokalex_cart_clients');
-        globalState.cartClients = savedClients ? JSON.parse(savedClients) : ["", "", "", ""];
+// HELPER: GET ONLY THE CURRENTLY LOGGED-IN RIDER'S ACTIVE CATERING CUSTOMERS
+export function getMyCateringCustomers() {
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+    const rosterMembers = globalState.rosterMembers || [];
 
-        const savedManuals = localStorage.getItem('lokalex_cart_manuals');
-        globalState.cartManualFlags = savedManuals ? JSON.parse(savedManuals) : [false, false, false, false];
+    const myRecord = rosterMembers.find(m => 
+        (myId && m.telegramId && m.telegramId.toString().trim() === myId) ||
+        (myName && m.riderName && m.riderName.toString().trim().toLowerCase() === myName)
+    );
 
-        const savedLocked = localStorage.getItem('lokalex_cart_locked');
-        globalState.cartLocked = savedLocked ? JSON.parse(savedLocked) : [false, false, false, false];
-
-        const savedTxIds = localStorage.getItem('lokalex_cart_txids');
-        globalState.cartTxIds = savedTxIds ? JSON.parse(savedTxIds) : ["", "", "", ""];
-
-    } catch(e) {
-        console.error("Failed to load cart state", e);
-        globalState.carts = [[], [], [], []];
-        globalState.cartClients = ["", "", "", ""];
-        globalState.cartManualFlags = [false, false, false, false];
-        globalState.cartLocked = [false, false, false, false];
-        globalState.cartTxIds = ["", "", "", ""];
+    if (!myRecord || !myRecord.customerName || myRecord.status !== 'Catering') {
+        return [];
     }
-    
-    if (globalState.activeCartIndex === undefined || globalState.activeCartIndex === null) {
-        globalState.activeCartIndex = 0;
-    }
-    
-    renderCartTabs();
-    renderCartItems();
+
+    return myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
 }
 
+export function getCurrentCart() {
+    if (!multiCarts[activeCartSlot]) {
+        multiCarts[activeCartSlot] = { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "" };
+    }
+    return multiCarts[activeCartSlot].items;
+}
+
+// PERSIST CART & LOCK STATE TO LOCALSTORAGE
 export function saveCartState() {
     try {
-        if (!Array.isArray(globalState.carts)) {
-            globalState.carts = [[], [], [], []];
+        const serializable = {};
+        for (let key in multiCarts) {
+            serializable[key] = {
+                items: multiCarts[key].items || [],
+                customerName: multiCarts[key].customerName || "",
+                isManual: !!multiCarts[key].isManual,
+                txId: multiCarts[key].txId || ""
+            };
         }
-        localStorage.setItem('lokalex_carts', JSON.stringify(globalState.carts));
-        localStorage.setItem('lokalex_cart_locked', JSON.stringify(globalState.cartLocked || [false, false, false, false]));
-        localStorage.setItem('lokalex_cart_txids', JSON.stringify(globalState.cartTxIds || ["", "", "", ""]));
-    } catch(e) {
-        console.error("Failed to save cart state", e);
-    }
-}
-
-export function saveCartClientsState() {
-    try {
-        localStorage.setItem('lokalex_cart_clients', JSON.stringify(globalState.cartClients || ["", "", "", ""]));
-        localStorage.setItem('lokalex_cart_manuals', JSON.stringify(globalState.cartManualFlags || [false, false, false, false]));
+        localStorage.setItem('lokalex_multi_carts_v2', JSON.stringify(serializable));
+        localStorage.setItem('lokalex_active_cart_slot', activeCartSlot.toString());
+        localStorage.setItem('lokalex_cart_locked_state', JSON.stringify(globalState.cartLocked || [false, false, false, false]));
     } catch(e) {}
 }
 
-export function switchCartTab(index) {
-    globalState.activeCartIndex = index;
+// LOAD CART & RESTORE LOCK STATE FROM LOCALSTORAGE
+export function loadCartState() {
+    try {
+        const savedSlot = localStorage.getItem('lokalex_active_cart_slot');
+        if (savedSlot) {
+            const slotNum = parseInt(savedSlot) || 1;
+            setActiveCartSlot(slotNum);
+            globalState.activeCartIndex = slotNum - 1;
+        }
+
+        const savedData = localStorage.getItem('lokalex_multi_carts_v2');
+        if (savedData) {
+            const parsed = JSON.parse(savedData);
+            for (let key in parsed) {
+                multiCarts[key] = {
+                    items: parsed[key].items || [],
+                    selectedIds: new Set(),
+                    customerName: parsed[key].customerName || "",
+                    isManual: !!parsed[key].isManual,
+                    txId: parsed[key].txId || ""
+                };
+            }
+        }
+
+        const savedLocks = localStorage.getItem('lokalex_cart_locked_state');
+        if (savedLocks) {
+            globalState.cartLocked = JSON.parse(savedLocks);
+        } else if (!globalState.cartLocked) {
+            globalState.cartLocked = [false, false, false, false];
+        }
+    } catch(e) {}
+}
+
+export function switchCartTab(slot) {
+    setActiveCartSlot(slot);
+    globalState.activeCartIndex = slot - 1;
+    saveCartState();
     renderCartTabs();
     renderCartItems();
 }
 
+// RENDER CART TABS (CART 1, 2, 3, 4) WITH LOCK INDICATOR
 export function renderCartTabs() {
     const container = document.getElementById('cart-tabs-header');
     if (!container) return;
 
-    const cartIdx = globalState.activeCartIndex ?? 0;
+    let html = "";
+    for (let slot = 1; slot <= 4; slot++) {
+        const cart = multiCarts[slot] || { items: [] };
+        const isActive = slot === activeCartSlot;
+        const count = cart.items ? cart.items.length : 0;
+        const isLocked = globalState.cartLocked && globalState.cartLocked[slot - 1];
 
-    container.innerHTML = [0, 1, 2, 3].map(i => {
-        const isActive = cartIdx === i;
-        const itemCount = (globalState.carts && globalState.carts[i]) ? globalState.carts[i].length : 0;
-        const isLocked = !!(globalState.cartLocked && globalState.cartLocked[i]);
-        
-        let activeClass = isActive 
-            ? "bg-blue-600 text-white font-black shadow-lg border-blue-500" 
-            : "bg-cardBg text-gray-400 hover:text-white border-gray-800";
+        let tabColor = isActive 
+            ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-950/50" 
+            : "bg-inputBg text-gray-400 border-gray-800 hover:text-white";
 
-        if (isLocked) {
-            activeClass += " ring-1 ring-emerald-500/80";
-        }
+        let lockBadge = isLocked ? `<i class="fa-solid fa-lock text-[10px] text-emerald-400 ml-1"></i>` : '';
 
-        return `
-            <button onclick="switchCartTab(${i})" class="${activeClass} py-2 px-1 rounded-xl border text-xs font-bold transition flex flex-col items-center justify-center gap-0.5 active:scale-95">
-                <span class="flex items-center gap-1">Cart ${i + 1} ${isLocked ? '<i class="fa-solid fa-lock text-[10px] text-emerald-400"></i>' : ''}</span>
-                <span class="text-[9px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-blue-500/40 text-white' : 'bg-black/30 text-gray-400'}">${itemCount} items</span>
-            </button>
-        `;
-    }).join('');
+        html += `
+            <button onclick="switchCartTab(${slot})" class="flex-1 py-2 px-1 rounded-xl border flex flex-col items-center justify-center transition active:scale-95 text-xs font-bold ${tabColor}">
+                <span>Cart ${slot}${lockBadge}</span>
+                <span class="text-[9px] font-normal opacity-80">${count} items</span>
+            </button>`;
+    }
+    container.innerHTML = html;
 
-    const label = `Cart ${cartIdx + 1}`;
-    const slotLabelEl = document.getElementById('cart-slot-label');
-    const btnSlotLabelEl = document.getElementById('btn-cart-slot-label');
-    if (slotLabelEl) slotLabelEl.innerText = label;
-    if (btnSlotLabelEl) btnSlotLabelEl.innerText = label;
+    const slotLabel = document.getElementById('cart-slot-label');
+    const btnSlotLabel = document.getElementById('btn-cart-slot-label');
+    if (slotLabel) slotLabel.innerText = `Cart ${activeCartSlot}`;
+    if (btnSlotLabel) btnSlotLabel.innerText = `Cart ${activeCartSlot}`;
+
+    renderCartCustomerSelector();
 }
 
-export function renderCartItems() {
-    const container = document.getElementById('cart-items-list');
-    if (!container) return;
-
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    const isLocked = !!(globalState.cartLocked && globalState.cartLocked[cartIdx]);
-
-    renderCartClientSelector();
-    renderCartActionsToolbar();
-
-    const items = (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
-    let subtotal = 0;
-
-    let itemsHtml = "";
-    if (items.length === 0) {
-        itemsHtml = `
-            <div class="text-center text-gray-500 italic py-16 text-xs flex flex-col items-center gap-2">
-                <i class="fa-solid fa-cart-shopping text-3xl opacity-30"></i>
-                <span>Walang laman ang Cart ${cartIdx + 1}.</span>
-            </div>`;
-    } else {
-        itemsHtml = items.map((item, index) => {
-            let price = parseFloat(item.price) || 0;
-            if (price < 0) {
-                price = 0;
-                item.price = 0;
-                item.isPaid = true;
-            }
-
-            const isPaid = !!item.isPaid;
-            const itemCost = isPaid ? 0 : Math.max(0, price);
-            subtotal += itemCost;
-
-            const cat = item.type || item.category || '';
-            const isStore = cat.toLowerCase() === 'store';
-            const isMarket = cat.toLowerCase() === 'market';
-            const isSelected = !!item.selectedForDelete;
-
-            return `
-                <div class="bg-cardBg border ${isSelected ? 'border-red-500/60 bg-red-950/10' : 'border-gray-800'} p-3 rounded-xl flex items-center gap-2.5 text-xs shadow-sm transition ${isLocked ? 'pointer-events-none' : ''}">
-                    
-                    <input type="checkbox" ${isSelected ? 'checked' : ''} ${isLocked ? 'disabled' : ''} onchange="toggleItemSelectForDelete(${index}, this.checked)" class="accent-red-500 w-4 h-4 cursor-pointer my-auto shrink-0" title="Select to delete">
-
-                    <div class="flex-1 flex flex-col gap-2 min-w-0">
-                        <div class="flex justify-between items-center gap-2">
-                            <span class="font-bold text-white flex items-center gap-1.5 truncate">
-                                <span class="text-gray-500 text-[10px]">#${index + 1}</span> ${escapeHtml(item.name)}
-                            </span>
-                            
-                            ${isPaid ? `
-                                <span class="font-black text-emerald-400 text-xs bg-emerald-500/20 px-2 py-0.5 rounded-md border border-emerald-500/40 shrink-0">
-                                    <i class="fa-solid fa-check"></i> PAID (₱0.00)
-                                </span>
-                            ` : `
-                                <span class="font-black text-green-400 text-sm shrink-0">₱${itemCost.toFixed(2)}</span>
-                            `}
-                        </div>
-
-                        <div class="flex justify-between items-center pt-2 border-t border-gray-800/80 flex-wrap gap-2">
-                            <div class="flex gap-1.5">
-                                <button ${isLocked ? 'disabled' : ''} onclick="setItemType(${index}, 'store')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isStore ? 'bg-orange-600 text-white border-orange-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
-                                    <i class="fa-solid fa-store"></i> Store
-                                </button>
-                                <button ${isLocked ? 'disabled' : ''} onclick="setItemType(${index}, 'market')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] border transition ${isMarket ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-black/30 text-gray-400 border-gray-800 hover:text-white'}">
-                                    <i class="fa-solid fa-basket-shopping"></i> Market
-                                </button>
-                            </div>
-
-                            <div class="flex items-center gap-3">
-                                <label class="flex items-center gap-1 cursor-pointer text-[10px] font-bold ${isPaid ? 'text-emerald-400' : 'text-gray-400'} bg-black/40 px-2 py-1 rounded-lg border border-gray-800">
-                                    <input type="checkbox" ${isPaid ? 'checked' : ''} ${isLocked ? 'disabled' : ''} onchange="toggleItemPaid(${index}, this.checked)" class="accent-emerald-500 w-3.5 h-3.5">
-                                    <span>Paid</span>
-                                </label>
-
-                                <div class="flex items-center gap-2">
-                                    <button ${isLocked ? 'disabled' : ''} onclick="openEditItemModal(${index})" class="text-blue-400 hover:text-blue-300 p-1" title="Edit Item"><i class="fa-solid fa-pen"></i></button>
-                                    <button ${isLocked ? 'disabled' : ''} onclick="promptRemoveCartItem(${index})" class="text-red-400 hover:text-red-300 p-1" title="Delete Item"><i class="fa-solid fa-trash"></i></button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
-
-    updateCartSubtotal(subtotal);
-
-    // RENDER ABSOLUTE OVERLAY BARRIER OVER BLURRED CART ITEMS WHEN LOCKED
-    if (isLocked) {
-        const clientName = globalState.cartClients?.[cartIdx] || "Customer";
-        
-        container.innerHTML = `
-            <div class="relative w-full min-h-[280px] flex flex-col gap-2 rounded-2xl overflow-hidden">
-                
-                <!-- ABSOLUTE OVERLAY BARRIER SCREEN -->
-                <div class="absolute inset-0 z-20 bg-darkBg/85 backdrop-blur-md border border-emerald-500/50 p-5 rounded-2xl flex flex-col items-center justify-center text-center gap-3 shadow-2xl animate-fade-in">
-                    <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-2xl">
-                        <i class="fa-solid fa-file-circle-check"></i>
-                    </div>
-                    <div>
-                        <h3 class="text-sm font-black text-emerald-400 uppercase tracking-wide">Receipt Already Recorded</h3>
-                        <p class="text-[11px] text-gray-300 mt-1 leading-relaxed">
-                            Ang resibo para kay <strong>"${escapeHtml(clientName)}"</strong> ay naitala na. I-slide ang bar sa ibaba para ma-unlock at ma-edit.
-                        </p>
-                    </div>
-
-                    <!-- SLIDE TO UNLOCK PROTECTION BARRIER -->
-                    <div class="w-full max-w-xs relative h-12 bg-black/60 rounded-full border border-emerald-500/40 flex items-center px-2 overflow-hidden mt-1 shadow-inner">
-                        <span class="absolute inset-0 flex items-center justify-center text-[10px] text-emerald-400/80 font-bold tracking-widest pointer-events-none">
-                            &gt;&gt;&gt;&gt; SLIDE TO UNLOCK & EDIT &gt;&gt;&gt;&gt;
-                        </span>
-                        <input type="range" min="0" max="100" value="0"
-                               oninput="handleCartBarrierProgress(this.value)"
-                               onmouseup="handleCartBarrierEnd(this)"
-                               ontouchend="handleCartBarrierEnd(this)"
-                               class="w-full accent-emerald-500 cursor-pointer z-10 opacity-80 h-10">
-                    </div>
-                </div>
-
-                <!-- BLURRED CART ITEMS BEHIND OVERLAY -->
-                <div class="flex flex-col gap-2 blur-[4px] pointer-events-none select-none opacity-40">
-                    ${itemsHtml}
-                </div>
-            </div>
-        `;
-
-        const createBtn = document.querySelector('#view-cart button[onclick="validateAndProceedToWizard()"]');
-        if (createBtn) createBtn.classList.add('hidden');
-        return;
-    }
-
-    // Normal Unlocked View
-    container.innerHTML = itemsHtml;
-
-    const createBtn = document.querySelector('#view-cart button[onclick="validateAndProceedToWizard()"]');
-    if (createBtn) createBtn.classList.remove('hidden');
-}
-
-export function handleCartBarrierProgress(val) {
-    if (val >= 90) {
-        const cartIdx = globalState.activeCartIndex ?? 0;
-        if (!globalState.cartLocked) globalState.cartLocked = [false, false, false, false];
-        globalState.cartLocked[cartIdx] = false;
-        
-        saveCartState();
-        renderCartTabs();
-        renderCartItems();
-        showToast("🔓 Cart unlocked! Maaari mo nang baguhin ang mga items.");
-    }
-}
-
-export function handleCartBarrierEnd(rangeEl) {
-    if (rangeEl && rangeEl.value < 90) {
-        rangeEl.value = 0;
-    }
-}
-
-function renderCartActionsToolbar() {
-    const container = document.getElementById('delete-selected-btn-container');
-    if (!container) return;
-
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    const isLocked = !!(globalState.cartLocked && globalState.cartLocked[cartIdx]);
-    if (isLocked) {
-        container.innerHTML = '';
-        return;
-    }
-
-    const items = (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
-    const selectedCount = items.filter(i => !!i.selectedForDelete).length;
-
-    if (selectedCount > 0) {
-        container.innerHTML = `
-            <button onclick="promptDeleteSelectedItems()" class="flex-1 bg-red-600 hover:bg-red-500 text-white text-xs font-bold py-2 rounded-lg border border-red-500 transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md">
-                <i class="fa-solid fa-trash-can"></i> Delete Selected (${selectedCount})
-            </button>
-        `;
-    } else {
-        container.innerHTML = '';
-    }
-}
-
-function updateCartSubtotal(subtotal) {
-    const display = document.getElementById('cart-subtotal-display');
-    const safeSubtotal = Math.max(0, subtotal || 0);
-    if (display) display.innerText = safeSubtotal.toFixed(2);
-}
-
-export function toggleItemPaid(index, isPaid) {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    if (globalState.carts && globalState.carts[cartIdx] && globalState.carts[cartIdx][index]) {
-        globalState.carts[cartIdx][index].isPaid = isPaid;
-        if (isPaid) {
-            globalState.carts[cartIdx][index].price = 0;
-        }
-        saveCartState();
-        renderCartItems();
-    }
-}
-
-export function toggleItemSelectForDelete(index, isChecked) {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    if (globalState.carts && globalState.carts[cartIdx] && globalState.carts[cartIdx][index]) {
-        globalState.carts[cartIdx][index].selectedForDelete = isChecked;
-        renderCartActionsToolbar();
-    }
-}
-
-export function promptDeleteSelectedItems() {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    const items = (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
-    const selectedCount = items.filter(i => !!i.selectedForDelete).length;
-
-    if (selectedCount === 0) {
-        showToast("⚠️ Walang napiling item na buburahin!");
-        return;
-    }
-
-    openSlideDeleteModal(
-        `Delete ${selectedCount} Item(s)?`,
-        `I-drag pakanan para burahin ang ${selectedCount} na napiling item.`,
-        () => {
-            deleteSelectedItems();
-        }
-    );
-}
-
-export function deleteSelectedItems() {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    if (globalState.carts && globalState.carts[cartIdx]) {
-        globalState.carts[cartIdx] = globalState.carts[cartIdx].filter(i => !i.selectedForDelete);
-        saveCartState();
-        renderCartItems();
-        showToast("✅ Napiling items ay nabura na!");
-    }
-}
-
-export function promptRemoveCartItem(index) {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    const item = globalState.carts?.[cartIdx]?.[index];
-    const itemName = item ? item.name : "item";
-
-    openSlideDeleteModal(
-        "Delete Item?",
-        `I-drag pakanan para burahin ang "${itemName}".`,
-        () => {
-            removeCartItem(index);
-        }
-    );
-}
-
-export function removeCartItem(index) {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    if (globalState.carts && globalState.carts[cartIdx]) {
-        globalState.carts[cartIdx].splice(index, 1);
-        saveCartState();
-        renderCartItems();
-        showToast("Item removed from cart");
-    }
-}
-
-export function setItemType(index, type) {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    if (globalState.carts && globalState.carts[cartIdx] && globalState.carts[cartIdx][index]) {
-        const strictType = type.toLowerCase();
-        globalState.carts[cartIdx][index].type = strictType;
-        globalState.carts[cartIdx][index].category = strictType;
-        saveCartState();
-        renderCartItems();
-    }
-}
-
-export function setItemCategory(index, category) {
-    setItemType(index, category);
-}
-
-export function handleCartActionBtn() {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    if (!globalState.carts || !globalState.carts[cartIdx] || globalState.carts[cartIdx].length === 0) return;
-
-    openSlideDeleteModal(
-        `Clear Cart ${cartIdx + 1}?`,
-        `I-drag pakanan para burahin ang lahat ng laman ng Cart ${cartIdx + 1}.`,
-        () => {
-            globalState.carts[cartIdx] = [];
-            saveCartState();
-            renderCartItems();
-            showToast(`Cart ${cartIdx + 1} cleared.`);
-        }
-    );
-}
-
-export function getRiderActiveCateringClients() {
-    const myId = (appState.telegramId || "").toString().trim();
-    const myName = (appState.riderName || "").toString().trim().toLowerCase();
-    const roster = globalState.rosterMembers || [];
-
-    const myRecord = roster.find(r => {
-        const rId = (r.telegramId || "").toString().trim();
-        const rName = (r.riderName || r.name || "").toString().trim().toLowerCase();
-        const isMatch = (myId && rId === myId) || (myName && rName === myName);
-        return isMatch && (r.status || "").toLowerCase() === 'catering';
-    });
-
-    if (!myRecord || !myRecord.customerName) return [];
-
-    return myRecord.customerName.split(',')
-        .map(s => s.trim())
-        .filter(Boolean);
-}
-
-window.addEventListener('rosterUpdated', () => {
-    const cartSection = document.getElementById('view-cart');
-    if (cartSection && !cartSection.classList.contains('hidden')) {
-        renderCartItems();
-    }
-});
-
-window.addEventListener('viewChanged', (e) => {
-    if (e.detail === 'view-cart') {
-        renderCartItems();
-    }
-});
-
-export function getEffectiveCartClient(cartIndex) {
-    if (!globalState.cartClients || !Array.isArray(globalState.cartClients)) {
-        globalState.cartClients = ["", "", "", ""];
-    }
-    if (!globalState.cartManualFlags || !Array.isArray(globalState.cartManualFlags)) {
-        globalState.cartManualFlags = [false, false, false, false];
-    }
-
-    const isManual = globalState.cartManualFlags[cartIndex];
-    let val = (globalState.cartClients[cartIndex] || "").trim();
-
-    if (isManual) {
-        return val || "Sample";
-    }
-
-    const activeClients = getRiderActiveCateringClients();
-
-    const takenByOthers = globalState.cartClients
-        .map((c, idx) => ({ client: (c || "").trim(), idx }))
-        .filter(item => item.idx !== cartIndex && item.client && item.client.toLowerCase() !== 'sample')
-        .map(item => item.client.toLowerCase());
-
-    if (val && val.toLowerCase() !== 'sample' && !takenByOthers.includes(val.toLowerCase())) {
-        const existsInActive = activeClients.some(c => c.toLowerCase() === val.toLowerCase());
-        if (existsInActive) return val;
-    }
-
-    const availableAuto = activeClients.filter(c => !takenByOthers.includes(c.toLowerCase()));
-
-    if (availableAuto.length > 0) {
-        const preferred = activeClients[cartIndex];
-        if (preferred && !takenByOthers.includes(preferred.toLowerCase())) {
-            globalState.cartClients[cartIndex] = preferred;
-            saveCartClientsState();
-            return preferred;
-        } else {
-            globalState.cartClients[cartIndex] = availableAuto[0];
-            saveCartClientsState();
-            return availableAuto[0];
-        }
-    }
-
-    globalState.cartClients[cartIndex] = "Sample";
-    saveCartClientsState();
-    return "Sample";
-}
-
-function renderCartClientSelector() {
+// RENDER CLIENT SELECTION DROPDOWN WITH DYNAMIC AUTO-FILL CORRECTION
+export function renderCartCustomerSelector() {
     const container = document.getElementById('cart-customer-selector-container');
     if (!container) return;
 
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    const isManual = (globalState.cartManualFlags && globalState.cartManualFlags[cartIdx]) || false;
+    if (!multiCarts[activeCartSlot]) {
+        multiCarts[activeCartSlot] = { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "" };
+    }
 
-    const existingInput = document.getElementById('cart-manual-client-input');
-    if (existingInput && document.activeElement === existingInput) {
+    const currentCartObj = multiCarts[activeCartSlot];
+    const myCustomers = getMyCateringCustomers();
+    const slotIdx = activeCartSlot - 1;
+
+    const assignedCustomerForSlot = myCustomers[slotIdx];
+
+    if (assignedCustomerForSlot && !currentCartObj.isManual) {
+        if (!currentCartObj.customerName || currentCartObj.customerName === "Sample" || !myCustomers.includes(currentCartObj.customerName)) {
+            currentCartObj.customerName = assignedCustomerForSlot;
+            saveCartState();
+        }
+    }
+
+    const selectedVal = currentCartObj.customerName || (assignedCustomerForSlot ? assignedCustomerForSlot : "Sample");
+
+    let optionsHtml = `<option value="Sample" ${selectedVal === "Sample" ? "selected" : ""}>Sample Receipt</option>`;
+
+    myCustomers.forEach(clientName => {
+        const isSel = selectedVal === clientName ? "selected" : "";
+        optionsHtml += `<option value="${escapeHtml(clientName)}" ${isSel}>${escapeHtml(clientName)}</option>`;
+    });
+
+    if (currentCartObj.isManual && selectedVal && !myCustomers.includes(selectedVal) && selectedVal !== "Sample") {
+        optionsHtml += `<option value="${escapeHtml(selectedVal)}" selected>${escapeHtml(selectedVal)} (Manual)</option>`;
+    }
+
+    container.innerHTML = `
+        <select onchange="onCartCustomerSelected(this.value)" class="w-full bg-inputBg text-xs text-amber-300 font-bold rounded-lg p-2 outline-none border border-gray-700 focus:border-amber-500">
+            ${optionsHtml}
+        </select>`;
+}
+
+export function onCartCustomerSelected(val) {
+    if (!multiCarts[activeCartSlot]) multiCarts[activeCartSlot] = { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "" };
+    
+    const myCustomers = getMyCateringCustomers();
+    multiCarts[activeCartSlot].customerName = val;
+    multiCarts[activeCartSlot].isManual = (val !== "Sample" && !myCustomers.includes(val));
+    saveCartState();
+}
+
+export function getEffectiveCartClient(slotIdx) {
+    const slotNum = slotIdx + 1;
+    const cartObj = multiCarts[slotNum];
+    if (cartObj && cartObj.customerName) return cartObj.customerName;
+
+    const myCustomers = getMyCateringCustomers();
+    if (myCustomers[slotIdx]) return myCustomers[slotIdx];
+
+    return "Sample";
+}
+
+// INLINE OVERLAY SLIDER END HANDLER
+export function handleOverlaySlideEnd(sliderEl) {
+    const val = parseInt(sliderEl.value) || 0;
+    if (val >= 90) {
+        if (!globalState.cartLocked) globalState.cartLocked = [false, false, false, false];
+        globalState.cartLocked[activeCartSlot - 1] = false;
+        saveCartState();
+        renderCartTabs();
+        renderCartItems();
+        showToast(`🔓 Unlocked Cart ${activeCartSlot} for editing!`);
+    } else {
+        sliderEl.value = 0;
+    }
+}
+
+// RENDER CART ITEMS OR EMBEDDED LOCK OVERLAY SCREEN
+export function renderCartItems() {
+    const container = document.getElementById('cart-items-list');
+    const subtotalDisplay = document.getElementById('cart-subtotal-display');
+    const deleteBtnContainer = document.getElementById('delete-selected-btn-container');
+
+    renderCartTabs();
+
+    if (!container) return;
+
+    const currentCart = getCurrentCart();
+    const currentCartObj = multiCarts[activeCartSlot];
+    const isLocked = globalState.cartLocked && globalState.cartLocked[activeCartSlot - 1];
+
+    let subtotal = 0;
+    let selectedCount = currentCartObj.selectedIds ? currentCartObj.selectedIds.size : 0;
+
+    // IF CART IS LOCKED: SHOW EMBEDDED OVERLAY SCREEN WITH SLIDE-TO-UNLOCK SLIDER
+    if (isLocked) {
+        const clientName = getEffectiveCartClient(activeCartSlot - 1);
+        
+        container.innerHTML = `
+            <div class="bg-cardBg border border-emerald-500/50 rounded-2xl p-6 my-auto text-center shadow-2xl flex flex-col items-center justify-center gap-4">
+                <div class="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-3xl">
+                    <i class="fa-solid fa-lock"></i>
+                </div>
+                <div>
+                    <h3 class="font-black text-lg text-emerald-400 uppercase tracking-wide">Naka-Lock ang Cart ${activeCartSlot}</h3>
+                    <p class="text-xs text-gray-300 mt-2 leading-relaxed">
+                        Nagawaan na ng resibo ang order na ito ni <strong>${escapeHtml(clientName)}</strong>.
+                        <br><br>
+                        Kung nais mong baguhin o i-edit muli ang resibo, i-slide ang lock pakanan:
+                    </p>
+                </div>
+
+                <!-- EMBEDDED SLIDE-TO-UNLOCK SLIDER -->
+                <div class="relative w-full max-w-xs h-12 bg-black/60 rounded-full border border-emerald-500/50 flex items-center px-2 overflow-hidden mt-3 shadow-inner">
+                    <span class="absolute inset-0 flex items-center justify-center text-[10px] text-emerald-400/60 font-black tracking-widest pointer-events-none select-none">&gt;&gt;&gt;&gt; SLIDE TO UNLOCK &gt;&gt;&gt;&gt;</span>
+                    <input type="range" min="0" max="100" value="0" 
+                        onmouseup="handleOverlaySlideEnd(this)" 
+                        ontouchend="handleOverlaySlideEnd(this)" 
+                        class="w-full accent-emerald-500 cursor-pointer z-10 opacity-80 h-10">
+                </div>
+            </div>`;
+
+        if (subtotalDisplay) {
+            const lockedSubtotal = currentCart.reduce((sum, item) => sum + (item.isPaid ? 0 : (parseFloat(item.price) || 0)), 0);
+            subtotalDisplay.innerText = lockedSubtotal.toFixed(2);
+        }
+        if (deleteBtnContainer) deleteBtnContainer.innerHTML = "";
         return;
     }
 
-    const currentClient = getEffectiveCartClient(cartIdx);
-    appState.selectedCateringClient = currentClient;
-
-    const activeClients = getRiderActiveCateringClients();
-
-    const takenByOthers = (globalState.cartClients || [])
-        .map((c, idx) => ({ client: (c || "").trim(), idx }))
-        .filter(item => item.idx !== cartIdx && item.client && item.client.toLowerCase() !== 'sample')
-        .map(item => item.client.toLowerCase());
-
-    let availableOptions = ["Sample"];
-
-    activeClients.forEach(c => {
-        if (!takenByOthers.includes(c.toLowerCase())) {
-            if (!availableOptions.map(o => o.toLowerCase()).includes(c.toLowerCase())) {
-                availableOptions.push(c);
-            }
-        }
-    });
-
-    if (!isManual && currentClient && currentClient.toLowerCase() !== 'sample') {
-        if (!availableOptions.map(o => o.toLowerCase()).includes(currentClient.toLowerCase())) {
-            availableOptions.push(currentClient);
-        }
+    if (currentCart.length === 0) {
+        container.innerHTML = `<div class="text-center text-gray-500 italic py-16 text-xs">Empty Cart ${activeCartSlot}. Click "Paste List" or add items.</div>`;
+        if (subtotalDisplay) subtotalDisplay.innerText = "0.00";
+        if (deleteBtnContainer) deleteBtnContainer.innerHTML = "";
+        return;
     }
 
-    let optionsHtml = availableOptions.map(opt => {
-        const isSelected = opt.toLowerCase() === currentClient.toLowerCase();
-        return `<option value="${escapeHtml(opt)}" ${isSelected ? 'selected' : ''}>${escapeHtml(opt)}</option>`;
+    container.innerHTML = currentCart.map((item, index) => {
+        const itemPrice = parseFloat(item.price) || 0;
+        const isPaid = !!item.isPaid;
+        const isSelected = currentCartObj.selectedIds && currentCartObj.selectedIds.has(index);
+        
+        const isUnpricedUnpaid = itemPrice <= 0 && !isPaid;
+
+        if (!isPaid) subtotal += itemPrice;
+
+        const isMarket = (item.category || item.type || '').toLowerCase() === 'market';
+        
+        const catStoreClass = !isMarket 
+            ? "bg-orange-600 text-white font-bold" 
+            : "bg-gray-800 text-gray-400 hover:text-white";
+
+        const catMarketClass = isMarket 
+            ? "bg-emerald-600 text-white font-bold" 
+            : "bg-gray-800 text-gray-400 hover:text-white";
+
+        const paidBtnClass = isPaid 
+            ? "bg-emerald-600/30 text-emerald-400 border border-emerald-500/50" 
+            : "bg-gray-800 text-gray-400 hover:text-white";
+
+        let cardStyleClass = "bg-cardBg border-gray-800";
+        if (isUnpricedUnpaid) {
+            cardStyleClass = "bg-amber-950/30 border-amber-500/80 ring-1 ring-amber-500/50 shadow-lg shadow-amber-950/30";
+        }
+
+        const priceDisplayClass = isUnpricedUnpaid 
+            ? "text-amber-400 font-black animate-pulse" 
+            : (isPaid ? "text-gray-500 line-through" : "text-green-400 font-bold");
+
+        const unpricedWarningBadge = isUnpricedUnpaid 
+            ? `<span class="bg-amber-500/20 text-amber-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-amber-500/40 flex items-center gap-1"><i class="fa-solid fa-triangle-exclamation"></i> Set Price or Paid</span>` 
+            : '';
+
+        return `
+        <div class="${cardStyleClass} border p-3 rounded-xl flex flex-col gap-2 transition-all">
+            <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 flex-1 min-w-0">
+                    <input type="checkbox" onchange="toggleItemSelect(${index})" ${isSelected ? "checked" : ""} class="w-4 h-4 accent-blue-500 rounded cursor-pointer shrink-0">
+                    <span class="text-[10px] text-gray-500 font-bold shrink-0">#${index + 1}</span>
+                    <span class="font-bold text-sm text-white truncate">${escapeHtml(item.name)}</span>
+                    ${unpricedWarningBadge}
+                </div>
+                <div class="text-right shrink-0">
+                    <span class="text-sm ${priceDisplayClass}">
+                        ${isPaid ? 'PAID (₱0.00)' : `₱${itemPrice.toFixed(2)}`}
+                    </span>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-center pt-1 border-t border-gray-800/60 text-xs">
+                <div class="flex gap-1">
+                    <button onclick="toggleItemCategory(${index}, 'store')" class="px-2.5 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${catStoreClass}">
+                        <i class="fa-solid fa-store"></i> Store
+                    </button>
+                    <button onclick="toggleItemCategory(${index}, 'market')" class="px-2.5 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${catMarketClass}">
+                        <i class="fa-solid fa-basket-shopping"></i> Market
+                    </button>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button onclick="toggleItemPaid(${index})" class="px-2.5 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${paidBtnClass}">
+                        <i class="fa-solid fa-check"></i> Paid
+                    </button>
+                    <button onclick="editCartItem(${index})" class="text-blue-400 hover:text-blue-300 p-1 text-xs active:scale-90" title="Edit Item">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button onclick="deleteSingleCartItem(${index})" class="text-red-400 hover:text-red-300 p-1 text-xs active:scale-90" title="Delete Item">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>`;
     }).join('');
 
-    const inputValue = (currentClient === 'Sample' || !currentClient) ? '' : currentClient;
+    if (subtotalDisplay) subtotalDisplay.innerText = subtotal.toFixed(2);
 
-    container.innerHTML = `
-        <div class="flex items-center gap-2 w-full text-xs">
-            <label class="flex items-center gap-1 cursor-pointer shrink-0 text-[10px] text-gray-400 hover:text-white bg-black/30 px-2 py-1 rounded-lg border border-gray-800">
-                <input type="checkbox" ${isManual ? 'checked' : ''} onchange="toggleCartManualClient(this.checked)" class="accent-amber-500 w-3.5 h-3.5">
-                <span>Manual</span>
-            </label>
-
-            ${isManual ? `
-                <input type="text" id="cart-manual-client-input" value="${escapeHtml(inputValue)}" placeholder="Type Client Name (or leave for Sample)" oninput="updateCartClientName(this.value)" class="w-full bg-darkBg text-xs text-amber-300 font-bold rounded-lg p-1.5 outline-none border border-gray-700 focus:border-amber-500">
-            ` : `
-                <select onchange="updateCartClientName(this.value)" class="w-full bg-darkBg text-xs text-amber-300 font-bold rounded-lg p-1.5 outline-none border border-gray-700 focus:border-amber-500">
-                    ${optionsHtml}
-                </select>
-            `}
-        </div>
-    `;
+    if (deleteBtnContainer) {
+        if (selectedCount > 0) {
+            deleteBtnContainer.innerHTML = `
+                <button onclick="deleteSelectedCartItems()" class="bg-red-600 text-white text-xs font-bold px-3 py-2 rounded-lg transition active:scale-95 flex items-center gap-1">
+                    <i class="fa-solid fa-trash"></i> Delete (${selectedCount})
+                </button>`;
+        } else {
+            deleteBtnContainer.innerHTML = "";
+        }
+    }
 }
 
-export function toggleCartManualClient(isManual) {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    if (!globalState.cartManualFlags) globalState.cartManualFlags = [false, false, false, false];
-    globalState.cartManualFlags[cartIdx] = isManual;
+export function handleCartActionBtn() {
+    const currentCart = getCurrentCart();
+    if (currentCart.length === 0) return;
 
-    if (!isManual) {
-        globalState.cartClients[cartIdx] = "";
+    const isLocked = globalState.cartLocked && globalState.cartLocked[activeCartSlot - 1];
+    if (isLocked) {
+        return showToast("⚠️ I-slide muna ang lock sa overlay screen upang i-unlock ang cart.");
     }
-    
-    saveCartClientsState();
+
+    if (confirm(`Sigurado ka bang nais mong linisin ang Cart ${activeCartSlot}?`)) {
+        multiCarts[activeCartSlot].items = [];
+        multiCarts[activeCartSlot].selectedIds.clear();
+        saveCartState();
+        renderCartItems();
+        renderCartTabs();
+        showToast(`Cart ${activeCartSlot} cleared.`);
+    }
+}
+
+export function toggleItemCategory(index, category) {
+    const currentCart = getCurrentCart();
+    if (currentCart[index]) {
+        currentCart[index].category = category;
+        currentCart[index].type = category;
+        saveCartState();
+        renderCartItems();
+    }
+}
+
+export function toggleItemPaid(index) {
+    const currentCart = getCurrentCart();
+    if (currentCart[index]) {
+        currentCart[index].isPaid = !currentCart[index].isPaid;
+        saveCartState();
+        renderCartItems();
+    }
+}
+
+export function toggleItemSelect(index) {
+    const cartObj = multiCarts[activeCartSlot];
+    if (!cartObj.selectedIds) cartObj.selectedIds = new Set();
+
+    if (cartObj.selectedIds.has(index)) {
+        cartObj.selectedIds.delete(index);
+    } else {
+        cartObj.selectedIds.add(index);
+    }
     renderCartItems();
 }
 
-export function updateCartClientName(val) {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    if (!globalState.cartClients) globalState.cartClients = ["", "", "", ""];
-    
-    globalState.cartClients[cartIdx] = val;
-    appState.selectedCateringClient = val.trim() || "Sample";
+export function deleteSelectedCartItems() {
+    const cartObj = multiCarts[activeCartSlot];
+    if (!cartObj || !cartObj.selectedIds || cartObj.selectedIds.size === 0) return;
 
-    saveCartClientsState();
+    const count = cartObj.selectedIds.size;
+    cartObj.items = cartObj.items.filter((_, idx) => !cartObj.selectedIds.has(idx));
+    cartObj.selectedIds.clear();
+
+    saveCartState();
+    renderCartItems();
+    renderCartTabs();
+    showToast(`Deleted ${count} selected item(s).`);
 }
 
-export function assignClientToCart(clientName) {
-    updateCartClientName(clientName);
+export function deleteSingleCartItem(index) {
+    const currentCart = getCurrentCart();
+    if (currentCart[index]) {
+        currentCart.splice(index, 1);
+        if (multiCarts[activeCartSlot].selectedIds) {
+            multiCarts[activeCartSlot].selectedIds.delete(index);
+        }
+        saveCartState();
+        renderCartItems();
+        renderCartTabs();
+        showToast("Item deleted.");
+    }
 }
 
-export function openEditItemModal(index) {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    const item = globalState.carts[cartIdx][index];
+export function editCartItem(index) {
+    const currentCart = getCurrentCart();
+    const item = currentCart[index];
     if (!item) return;
 
-    globalState.editItemIndex = index;
-    document.getElementById('edit-name-input').value = item.name;
-    document.getElementById('edit-price-input').value = item.price;
+    editingItemIndex = index;
+
+    const nameInput = document.getElementById('edit-name-input');
+    const priceInput = document.getElementById('edit-price-input');
     const paidInput = document.getElementById('edit-paid-input');
+
+    if (nameInput) nameInput.value = item.name || "";
+    if (priceInput) priceInput.value = item.price !== undefined ? item.price : "";
     if (paidInput) paidInput.checked = !!item.isPaid;
 
-    document.getElementById('edit-item-modal').classList.remove('hidden');
-}
-
-export function closeEditItemModal() {
-    document.getElementById('edit-item-modal').classList.add('hidden');
-    globalState.editItemIndex = null;
+    const modal = document.getElementById('edit-item-modal');
+    if (modal) modal.classList.remove('hidden');
 }
 
 export function saveItemEdit() {
-    if (globalState.editItemIndex === null || globalState.editItemIndex === undefined) return;
-    
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    const name = document.getElementById('edit-name-input').value.trim();
-    let price = parseFloat(document.getElementById('edit-price-input').value) || 0;
-    let isPaid = document.getElementById('edit-paid-input')?.checked || false;
+    if (editingItemIndex === null) return;
 
-    if (price < 0) {
-        price = 0;
-        isPaid = true;
+    const currentCart = getCurrentCart();
+    const item = currentCart[editingItemIndex];
+    if (!item) return;
+
+    const nameInput = document.getElementById('edit-name-input');
+    const priceInput = document.getElementById('edit-price-input');
+    const paidInput = document.getElementById('edit-paid-input');
+
+    const newName = nameInput ? nameInput.value.trim() : "";
+    const newPrice = priceInput ? parseFloat(priceInput.value) || 0 : 0;
+    const newPaid = paidInput ? paidInput.checked : false;
+
+    if (!newName) {
+        showToast("⚠️ Item name cannot be empty.");
+        return;
     }
 
-    if (!name) return showToast("Item name is required.");
-
-    globalState.carts[cartIdx][globalState.editItemIndex].name = name;
-    globalState.carts[cartIdx][globalState.editItemIndex].price = price;
-    globalState.carts[cartIdx][globalState.editItemIndex].isPaid = isPaid;
+    item.name = newName;
+    item.price = newPaid ? 0 : newPrice;
+    item.isPaid = newPaid;
 
     saveCartState();
     renderCartItems();
-    closeEditItemModal();
+
+    const modal = document.getElementById('edit-item-modal');
+    if (modal) modal.classList.add('hidden');
+    editingItemIndex = null;
     showToast("Item updated successfully.");
 }
 
-export function showBulkAddModal() {
-    document.getElementById('bulk-input').value = "";
-    document.getElementById('bulk-modal').classList.remove('hidden');
-}
-
-export function closeBulkModal() {
-    document.getElementById('bulk-modal').classList.add('hidden');
-}
-
 export function processBulkAdd() {
-    const input = document.getElementById('bulk-input').value.trim();
-    if (!input) return closeBulkModal();
+    const bulkInput = document.getElementById('bulk-input');
+    const rawText = bulkInput ? bulkInput.value.trim() : "";
+    if (!rawText) return showToast("Please paste items text");
 
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    
-    if (!Array.isArray(globalState.carts)) globalState.carts = [[], [], [], []];
-    if (!Array.isArray(globalState.carts[cartIdx])) globalState.carts[cartIdx] = [];
-
-    const lines = input.split('\n');
-    let addedCount = 0;
+    const lines = rawText.split('\n');
+    const newItems = [];
 
     lines.forEach(line => {
-        const cleanLine = line.trim();
-        if (!cleanLine) return;
+        const clean = line.trim();
+        if (!clean) return;
 
-        const parts = cleanLine.split(/\s+/);
-        let price = 0;
-        let isPaid = false;
-        let name = cleanLine;
-
-        const lastPartRaw = parts[parts.length - 1];
-        const lastPartClean = lastPartRaw.replace(/,/g, '');
-        
-        if (!isNaN(lastPartClean) && lastPartClean !== "") {
-            let parsedPrice = parseFloat(lastPartClean);
-            if (parsedPrice < 0) {
-                price = 0;
-                isPaid = true;
-            } else {
-                price = parsedPrice;
-            }
-
-            if (parts.length > 1) {
-                name = parts.slice(0, -1).join(' ');
-            } else {
-                name = "Item";
-            }
-        }
-
-        if (name) {
-            globalState.carts[cartIdx].push({
-                name: name,
-                price: price,
-                isPaid: isPaid,
-                type: '',
-                category: '',
-                selectedForDelete: false
+        const match = clean.match(/^(.*?)\s+(\d+(?:\.\d+)?)$/);
+        if (match) {
+            newItems.push({
+                name: match[1].trim(),
+                price: parseFloat(match[2]),
+                category: 'store',
+                type: 'store',
+                isPaid: false
             });
-            addedCount++;
+        } else {
+            newItems.push({
+                name: clean,
+                price: 0,
+                category: 'store',
+                type: 'store',
+                isPaid: false
+            });
         }
     });
 
-    if (addedCount > 0) {
+    if (newItems.length > 0) {
+        const currentCart = getCurrentCart();
+        currentCart.push(...newItems);
         saveCartState();
         renderCartItems();
-        showToast(`${addedCount} items added to Cart ${cartIdx + 1}`);
+        renderCartTabs();
+
+        const modal = document.getElementById('bulk-modal');
+        if (modal) modal.classList.add('hidden');
+        showToast(`Added ${newItems.length} items to Cart ${activeCartSlot}.`);
     }
-    closeBulkModal();
 }
 
+// VALIDATE CART WITH STRICT UNPRICED UNPAID GUARDRAIL
 export function validateAndProceedToWizard() {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    const cartItems = (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
-    
-    if (cartItems.length === 0) {
-        showToast("⚠️ Walang laman ang cart!");
+    const currentCart = getCurrentCart();
+    if (!currentCart || currentCart.length === 0) {
+        return showToast("⚠️ Empty cart! Add items first.");
+    }
+
+    const isLocked = globalState.cartLocked && globalState.cartLocked[activeCartSlot - 1];
+    if (isLocked) {
+        return showToast("⚠️ I-slide muna ang lock sa overlay screen upang i-unlock ang cart.");
+    }
+
+    // STRICT CHECK: Block if any item has price <= 0 and is NOT marked as paid
+    const unpricedUnpaidItems = currentCart.filter(i => (parseFloat(i.price) || 0) <= 0 && !i.isPaid);
+
+    if (unpricedUnpaidItems.length > 0) {
+        showToast(`⚠️ Paki-lagyan ng presyo o i-check ang Paid button sa ${unpricedUnpaidItems.length} item na ₱0.00!`);
+        renderCartItems();
         return;
     }
 
-    const hasUncategorized = cartItems.some(item => {
-        const cat = item.category || item.type || '';
-        return cat.toLowerCase() !== 'store' && cat.toLowerCase() !== 'market';
-    });
-    
-    if (hasUncategorized) {
-        showToast("⚠️ Paki-kategorya (Store o Market) ang lahat ng items bago mag-resibo!");
-        return;
-    }
-
-    cartItems.forEach(item => {
-        const currentCat = item.category || item.type || '';
-        item.type = currentCat.toLowerCase();
-        item.category = currentCat.toLowerCase();
-        
-        if ((item.price || 0) < 0) {
-            item.price = 0;
-            item.isPaid = true;
-        }
-    });
-    saveCartState();
-
-    const hasPaidItems = cartItems.some(i => !!i.isPaid || (i.price || 0) <= 0);
-
-    if (hasPaidItems) {
+    const paidItems = currentCart.filter(i => i.isPaid);
+    if (paidItems.length > 0) {
         const paidModal = document.getElementById('paid-item-confirm-modal');
         if (paidModal) {
             paidModal.classList.remove('hidden');
@@ -726,7 +556,13 @@ export function validateAndProceedToWizard() {
         }
     }
 
-    executeProceedToWizard();
+    proceedToWizard();
+}
+
+export function confirmPaidItemProceed() {
+    const paidModal = document.getElementById('paid-item-confirm-modal');
+    if (paidModal) paidModal.classList.add('hidden');
+    proceedToWizard();
 }
 
 export function closePaidItemModal() {
@@ -734,58 +570,62 @@ export function closePaidItemModal() {
     if (paidModal) paidModal.classList.add('hidden');
 }
 
-export function confirmPaidItemProceed() {
-    closePaidItemModal();
-    executeProceedToWizard();
-}
-
-function executeProceedToWizard() {
-    if (typeof window.proceedToWizard === 'function') {
-        window.proceedToWizard();
-    } else {
-        switchView('view-wizard');
+export function clearCartSlot() {
+    if (multiCarts[activeCartSlot]) {
+        multiCarts[activeCartSlot].items = [];
+        multiCarts[activeCartSlot].selectedIds.clear();
+        multiCarts[activeCartSlot].customerName = "";
+        multiCarts[activeCartSlot].isManual = false;
+        saveCartState();
+        renderCartItems();
+        renderCartTabs();
     }
 }
 
-if (typeof window !== 'undefined') {
-    window.closePaidItemModal = closePaidItemModal;
-    window.confirmPaidItemProceed = confirmPaidItemProceed;
-    window.toggleItemPaid = toggleItemPaid;
-    window.toggleItemSelectForDelete = toggleItemSelectForDelete;
-    window.promptDeleteSelectedItems = promptDeleteSelectedItems;
-    window.promptRemoveCartItem = promptRemoveCartItem;
-    window.handleCartActionBtn = handleCartActionBtn;
-    window.setItemType = setItemType;
-    window.openEditItemModal = openEditItemModal;
-    window.closeEditItemModal = closeEditItemModal;
-    window.saveItemEdit = saveItemEdit;
-    window.showBulkAddModal = showBulkAddModal;
-    window.closeBulkModal = closeBulkModal;
-    window.processBulkAdd = processBulkAdd;
-    window.switchCartTab = switchCartTab;
-    window.validateAndProceedToWizard = validateAndProceedToWizard;
-    window.toggleCartManualClient = toggleCartManualClient;
-    window.updateCartClientName = updateCartClientName;
-    window.handleCartBarrierProgress = handleCartBarrierProgress;
-    window.handleCartBarrierEnd = handleCartBarrierEnd;
-}
-
-export function getCurrentCart() {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    return (globalState.carts && globalState.carts[cartIdx]) ? globalState.carts[cartIdx] : [];
-}
-
-export function clearCartSlot() {
-    const cartIdx = globalState.activeCartIndex ?? 0;
-    if (!Array.isArray(globalState.carts)) globalState.carts = [[], [], [], []];
-    globalState.carts[cartIdx] = [];
-    
-    if (globalState.cartClients) globalState.cartClients[cartIdx] = "";
-    if (globalState.cartManualFlags) globalState.cartManualFlags[cartIdx] = false;
-    if (globalState.cartLocked) globalState.cartLocked[cartIdx] = false;
-    if (globalState.cartTxIds) globalState.cartTxIds[cartIdx] = "";
-    
+// CLEAR ALL 4 CARTS AND UNLOCK ALL SLOTS WHEN MARKING AVAILABLE
+export function clearAllCartSlots() {
+    for (let slot = 1; slot <= 4; slot++) {
+        multiCarts[slot] = {
+            items: [],
+            selectedIds: new Set(),
+            customerName: "",
+            isManual: false,
+            txId: ""
+        };
+    }
+    globalState.cartLocked = [false, false, false, false];
+    if (globalState.cartTxIds) globalState.cartTxIds = ["", "", "", ""];
     saveCartState();
-    saveCartClientsState();
+    renderCartTabs();
     renderCartItems();
 }
+
+// AUTO-INITIALIZE SMART CART ON LOAD & VIEW LOAD
+loadCartState();
+setTimeout(() => {
+    renderCartTabs();
+    renderCartItems();
+}, 50);
+
+if (typeof window !== 'undefined') {
+    window.switchCartTab = switchCartTab;
+    window.onCartCustomerSelected = onCartCustomerSelected;
+    window.toggleItemCategory = toggleItemCategory;
+    window.toggleItemPaid = toggleItemPaid;
+    window.toggleItemSelect = toggleItemSelect;
+    window.deleteSelectedCartItems = deleteSelectedCartItems;
+    window.deleteSingleCartItem = deleteSingleCartItem;
+    window.editCartItem = editCartItem;
+    window.saveItemEdit = saveItemEdit;
+    window.handleCartActionBtn = handleCartActionBtn;
+    window.processBulkAdd = processBulkAdd;
+    window.validateAndProceedToWizard = validateAndProceedToWizard;
+    window.confirmPaidItemProceed = confirmPaidItemProceed;
+    window.closePaidItemModal = closePaidItemModal;
+    window.clearCartSlot = clearCartSlot;
+    window.clearAllCartSlots = clearAllCartSlots;
+    window.handleOverlaySlideEnd = handleOverlaySlideEnd;
+}
+
+window.addEventListener('rosterUpdated', renderCartCustomerSelector);
+window.addEventListener('cateredUpdated', renderCartCustomerSelector);
