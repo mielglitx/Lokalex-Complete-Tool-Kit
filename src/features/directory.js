@@ -1,12 +1,13 @@
 // src/features/directory.js
 import { appState, globalState } from '../store/state.js';
 import { db } from '../config/firebase.js';
-import { API_URL, BARANGAY_DATA } from '../config/constants.js';
+import { API_URL, BARANGAY_DATA, ADMIN_IDS } from '../config/constants.js';
 import { showToast, showSideNotification } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
-import { openPasswordModal, closePasswordModal } from '../ui/modals.js';
+import { openSlideDeleteModal } from '../ui/modals.js';
 import { calibrateGPS } from './auth.js';
 import { escapeHtml, copyText } from '../utils/helpers.js';
+import { isRiderAdmin } from './commission.js';
 
 let editingRecord = null;
 let mapInstance = null;
@@ -15,6 +16,23 @@ let selectedMapLng = 0;
 let lastJumpLetter = "";
 
 const CACHE_KEY = 'lokalex_directory_cache';
+
+// CHECK IF CURRENT USER IS AN ADMIN
+export function checkAdminAccess() {
+    const uType = (appState.userType || localStorage.getItem('userType') || "").toString().trim().toLowerCase();
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
+
+    if (uType.includes("admin") || uType.includes("owner") || uType.includes("manager") || ADMIN_IDS.includes(myId)) {
+        return true;
+    }
+
+    if (typeof isRiderAdmin === 'function') {
+        return isRiderAdmin(myName, myId);
+    }
+
+    return false;
+}
 
 // PERSIST DIRECTORY RECORDS TO LOCALSTORAGE
 export function saveDirectoryCache() {
@@ -61,7 +79,6 @@ export async function openDirectory(type) {
         else headerTitle.innerText = "Rates & Barangays";
     }
 
-    // Always ensure cache is loaded before rendering
     if (!globalState.records || globalState.records.length === 0) {
         loadDirectoryCache();
     }
@@ -180,7 +197,6 @@ export function copyBarangayRate(barangayName, rawRate) {
     showToast(`📋 Copied rate message for ${barangayName}!`);
 }
 
-// HELPER: GET SECTION LETTER (STANDARD A-Z VS SPECIAL CHARACTERS / FOREIGN LETTERS)
 function getSectionLetter(name) {
     if (!name) return "#";
     const firstChar = name.trim().charAt(0).toUpperCase();
@@ -215,7 +231,6 @@ export function renderDirectoryList() {
         return;
     }
 
-    // Sort: Special/Foreign characters (#) first, followed by A-Z
     records.sort((a, b) => {
         const secA = getSectionLetter(a.name);
         const secB = getSectionLetter(b.name);
@@ -227,6 +242,8 @@ export function renderDirectoryList() {
     });
 
     const isBarangay = globalState.currentType === 'barangays';
+    const isAdminUser = checkAdminAccess();
+
     let currentLetterGroup = "";
     let htmlBuilder = "";
     let availableLetters = new Set();
@@ -251,6 +268,13 @@ export function renderDirectoryList() {
             mapBtn = `<a href="${escapeHtml(r.lat_lon_link)}" target="_blank" class="text-xs text-blue-400 font-bold underline flex items-center gap-1 mt-1"><i class="fa-solid fa-map-location-dot"></i> View Location</a>`;
         }
 
+        // DELETE BUTTON HTML ONLY RENDERED FOR ADMIN USERS
+        const deleteBtnHtml = isAdminUser 
+            ? `<button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-red-400 p-2 rounded-lg text-xs transition active:scale-90" title="Delete">
+                    <i class="fa-solid fa-trash"></i>
+               </button>`
+            : '';
+
         if (isBarangay) {
             let rateNum = parseFloat((r.rate || r.address || "").replace(/[^0-9.]/g, ''));
             let displayRate = !isNaN(rateNum) ? `₱${rateNum.toFixed(2)}` : (r.rate || r.address || '₱0.00');
@@ -268,9 +292,7 @@ export function renderDirectoryList() {
                     <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
-                    <button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-red-400 p-2 rounded-lg text-xs transition active:scale-90" title="Delete">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
+                    ${deleteBtnHtml}
                 </div>
             </div>`;
         } else {
@@ -286,9 +308,7 @@ export function renderDirectoryList() {
                     <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
-                    <button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-red-400 p-2 rounded-lg text-xs transition active:scale-90" title="Delete">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
+                    ${deleteBtnHtml}
                 </div>
             </div>`;
         }
@@ -298,7 +318,7 @@ export function renderDirectoryList() {
     setupAlphabetScrubber(Array.from(availableLetters));
 }
 
-// ELASTIC ALPHABET SCRUBBER WITH SPECIAL CHARACTER & FOREIGN LETTER SUPPORT
+// ELASTIC ALPHABET SCRUBBER
 export function setupAlphabetScrubber(availableLetters) {
     const scrubberContainer = document.getElementById('alphabet-scrubber');
     if (!scrubberContainer) return;
@@ -446,41 +466,33 @@ export function editDirectoryRecord(name) {
     if (record) openForm(record);
 }
 
+// SLIDE TO CONFIRM DIRECTORY DELETE FOR ADMINS
 export function promptDeleteDirectoryRecord(name) {
-    appState.pendingDeleteName = name;
-    openPasswordModal();
-}
-
-export function verifyPassword() {
-    const passInput = document.getElementById('modal-pass');
-    const pass = passInput ? passInput.value.trim() : "";
-
-    if (pass === "1234" || pass === "lokalex2026" || pass === "admin") {
-        closePasswordModal();
-        if (appState.pendingDeleteName) {
-            executeDeleteDirectoryRecord(appState.pendingDeleteName);
-            appState.pendingDeleteName = null;
-        }
-    } else {
-        showToast("⚠️ Incorrect Password!");
+    if (!checkAdminAccess()) {
+        return showToast("⚠️ Admin access required to delete directory records.");
     }
+
+    openSlideDeleteModal(
+        `Delete Directory Record?`,
+        `Sigurado ka bang nais mong burahin ang record na [${name}]?`,
+        () => {
+            executeDeleteDirectoryRecord(name);
+        }
+    );
 }
 
 // INSTANT OFFLINE DELETE WITH BACKGROUND SYNC
 export function executeDeleteDirectoryRecord(name) {
     const type = globalState.currentType || 'customers';
     
-    // 1. Immediately update local state
     if (globalState.records) {
         globalState.records = globalState.records.filter(r => !(r.name === name && r.type === type));
     }
 
-    // 2. Immediately update local cache & UI
     saveDirectoryCache();
     renderDirectoryList();
     showToast(`🗑️ Deleted record: ${name}`);
 
-    // 3. Background sync to Firebase & Google Sheets
     if (db) {
         const cleanKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
         db.ref(`directory/${type}/${cleanKey}`).remove().catch(() => {});
@@ -522,7 +534,6 @@ export async function submitForm() {
         originalName: editingRecord ? editingRecord.name : name
     };
 
-    // 1. Immediately update local state
     if (editingRecord) {
         const idx = globalState.records.findIndex(r => r.name === editingRecord.name && r.type === type);
         if (idx !== -1) globalState.records[idx] = recordData;
@@ -531,12 +542,10 @@ export async function submitForm() {
         globalState.records.push(recordData);
     }
 
-    // 2. Immediately update local cache & render
     saveDirectoryCache();
     openDirectory(type);
     showToast(`✅ Record ${editingRecord ? 'updated' : 'saved'} successfully!`);
 
-    // 3. Background sync to Firebase
     if (db) {
         const cleanKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
         db.ref(`directory/${type}/${cleanKey}`).set(recordData).catch(() => {});
@@ -544,7 +553,6 @@ export async function submitForm() {
 
     showSideNotification("SAVING RECORD", `Syncing ${name} to ${type}...`, "fa-floppy-disk", "text-emerald-400", "border-emerald-500");
 
-    // 4. Background sync to Google Sheets API
     try {
         fetch(API_URL, {
             method: 'POST',
@@ -607,7 +615,6 @@ export function confirmGoogleMapPin() {
     showToast("📍 Map Pin location confirmed!");
 }
 
-// Auto-load cache on ESM module import
 loadDirectoryCache();
 
 if (typeof window !== 'undefined') {
@@ -619,11 +626,11 @@ if (typeof window !== 'undefined') {
     window.editDirectoryRecord = editDirectoryRecord;
     window.promptDeleteDirectoryRecord = promptDeleteDirectoryRecord;
     window.executeDeleteDirectoryRecord = executeDeleteDirectoryRecord;
-    window.verifyPassword = verifyPassword;
     window.submitForm = submitForm;
     window.openMapPicker = openMapPicker;
     window.confirmGoogleMapPin = confirmGoogleMapPin;
     window.copyBarangayRate = copyBarangayRate;
     window.loadDirectoryCache = loadDirectoryCache;
     window.saveDirectoryCache = saveDirectoryCache;
+    window.checkAdminAccess = checkAdminAccess;
 }

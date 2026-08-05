@@ -47,26 +47,21 @@ export function isRiderAdmin(riderName = "", telegramId = "") {
     const cleanName = (riderName || "").toString().toLowerCase().trim();
     const cleanId = (telegramId || "").toString().trim();
 
-    // 1. Explicit ID match in ADMIN_IDS
     if (cleanId && ADMIN_IDS.includes(cleanId)) return true;
 
-    // 2. Explicit check against userTypesMap from Login ID Sheet
     if (globalState.userTypesMap) {
         const typeByName = cleanName ? globalState.userTypesMap[cleanName] : "";
         const typeById = cleanId ? globalState.userTypesMap[cleanId] : "";
 
-        // Strictly exclude TLs / Team Leads
         if (typeByName === "tl" || typeById === "tl" || typeByName === "lead" || typeById === "lead") {
             return false;
         }
 
-        // Only return true if role is explicitly admin
         if (typeByName === "admin" || typeById === "admin") {
             return true;
         }
     }
 
-    // 3. Fallback to roster member userType
     const rosterMem = (globalState.rosterMembers || []).find(m => 
         (m.riderName || m.name || "").toLowerCase().trim() === cleanName ||
         (m.telegramId || "").toString().trim() === cleanId
@@ -88,7 +83,6 @@ function getCommissionRates(dateStr, riderName = "", telegramId = "") {
 
     const isAdmin = isRiderAdmin(riderName, telegramId);
 
-    // ADMIN EXEMPTION: Only Admins do NOT pay company commission (0% Company Rate / 100% Rider Rate)
     if (isAdmin) {
         return {
             companyRate: 0,
@@ -293,7 +287,8 @@ function findReceiptFeeForCustomer(rName, cName, rDate) {
     return 0;
 }
 
-function getMergedDeduplicatedCommissionList() {
+// EXPORTED MERGED & DEDUPLICATED COMMISSION DATASET
+export function getMergedDeduplicatedCommissionList() {
     const mergedMap = new Map();
 
     (globalState.globalDailyReceipts || []).forEach(rc => {
@@ -369,6 +364,9 @@ function getMergedDeduplicatedCommissionList() {
                     customerName: ch.customerName || "Customer",
                     date: date,
                     time: time,
+                    startTime: ch.startTime || "",
+                    completedTime: ch.completedTime || "",
+                    duration: ch.duration || "",
                     totalFees: gross,
                     isReceipt: false
                 });
@@ -422,7 +420,6 @@ export function refreshCommissionView() {
 
         let gross = parseFloat(r.totalFees) || 0;
         
-        // Dynamic rates calculated per rider (0% for Admins based on Login ID sheet, normal rates for TLs & Riders)
         const rates = getCommissionRates(rDate, rName, rId);
 
         const earnedAmt = gross * rates.riderRate;
@@ -839,7 +836,6 @@ function renderRiderSummaryList(riderListArray) {
             amountLabel = `+ ₱${rider.earned.toFixed(2)}`;
             colorClass = "text-emerald-400";
         } else {
-            // ADMIN EXEMPTION: Show ₱0.00 (Admin Exempt) ONLY for Admin riders in "To Pay" mode
             if (rates.isAdmin) {
                 amountLabel = `- ₱0.00 (Admin Exempt)`;
                 colorClass = "text-gray-400";
@@ -952,7 +948,6 @@ export function generateDailyReportText() {
 
         let gross = parseFloat(r.totalFees) || 0;
 
-        // Dynamic rate per rider (checks CommissionSettings and Login ID sheet)
         const rates = getCommissionRates(rDate, rName, rId);
 
         if (!riderTotals[rId]) {
@@ -1030,6 +1025,7 @@ if (typeof window !== 'undefined') {
     window.executeDeleteCommissionRecord = executeDeleteCommissionRecord;
     window.fetchRiderUserTypes = fetchRiderUserTypes;
     window.isRiderAdmin = isRiderAdmin;
+    window.getMergedDeduplicatedCommissionList = getMergedDeduplicatedCommissionList;
 }
 
 window.addEventListener('receiptsUpdated', refreshCommissionView);

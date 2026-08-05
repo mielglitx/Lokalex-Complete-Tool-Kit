@@ -1,9 +1,14 @@
 // src/features/auth.js
-import { appState } from '../store/state.js';
+import { appState, globalState } from '../store/state.js';
 import { CSV_AUTH_URL } from '../config/constants.js';
 import { switchView, renderViewUI } from '../ui/router.js';
 import { showToast, unlockAudioContext } from '../ui/notifications.js';
 import { fetchGCashDetails } from '../ui/modals.js';
+import { db } from '../config/firebase.js';
+
+let backgroundGpsWatchId = null;
+let lastRosterGpsPushTime = 0;
+const GPS_ROSTER_PULSE_MS = 30000; // Update roster location every 30 seconds
 
 // HIGH-PRECISION AUTO-GPS CALIBRATION HELPER
 export function calibrateGPS(onProgress) {
@@ -20,6 +25,9 @@ export function calibrateGPS(onProgress) {
         const timeoutTimer = setTimeout(() => {
             if (watchId !== null) navigator.geolocation.clearWatch(watchId);
             if (bestFix) {
+                appState.lat = bestFix.coords.latitude;
+                appState.lon = bestFix.coords.longitude;
+                appState.gpsAccuracy = bestFix.coords.accuracy;
                 resolve({
                     lat: bestFix.coords.latitude,
                     lon: bestFix.coords.longitude,
@@ -43,10 +51,12 @@ export function calibrateGPS(onProgress) {
                     onProgress(acc, sampleCount);
                 }
 
-                // If accuracy is 15 meters or better, or max samples reached, resolve immediately
                 if (acc <= 15 || sampleCount >= maxSamples) {
                     clearTimeout(timeoutTimer);
                     navigator.geolocation.clearWatch(watchId);
+                    appState.lat = bestFix.coords.latitude;
+                    appState.lon = bestFix.coords.longitude;
+                    appState.gpsAccuracy = bestFix.coords.accuracy;
                     resolve({
                         lat: bestFix.coords.latitude,
                         lon: bestFix.coords.longitude,
@@ -54,12 +64,49 @@ export function calibrateGPS(onProgress) {
                     });
                 }
             },
-            (err) => {
-                // Fallback attempt with low accuracy if high accuracy fails
-            },
+            (err) => {},
             { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
         );
     });
+}
+
+// CONTINUOUS BACKGROUND GPS TRACKER FOR LOGGED-IN RIDERS
+export function startBackgroundRosterGpsTracker() {
+    if (!navigator.geolocation || !appState.telegramId) return;
+    if (backgroundGpsWatchId !== null) navigator.geolocation.clearWatch(backgroundGpsWatchId);
+
+    backgroundGpsWatchId = navigator.geolocation.watchPosition(
+        (pos) => {
+            const now = Date.now();
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const acc = pos.coords.accuracy;
+
+            appState.lat = lat;
+            appState.lon = lng;
+            appState.gpsAccuracy = acc;
+
+            // Throttle background roster updates to every 30 seconds
+            if (now - lastRosterGpsPushTime >= GPS_ROSTER_PULSE_MS && db && appState.telegramId) {
+                lastRosterGpsPushTime = now;
+                db.ref('roster/' + appState.telegramId).update({
+                    lat: lat,
+                    lng: lng,
+                    accuracy: acc,
+                    locationUpdatedAt: now
+                }).catch(() => {});
+            }
+        },
+        (err) => {},
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    );
+}
+
+export function stopBackgroundRosterGpsTracker() {
+    if (backgroundGpsWatchId !== null) {
+        navigator.geolocation.clearWatch(backgroundGpsWatchId);
+        backgroundGpsWatchId = null;
+    }
 }
 
 export function getDeviceLocation() {
@@ -89,6 +136,7 @@ export async function processLogin() {
 
         appState.lat = coords.lat; 
         appState.lon = coords.lon;
+        appState.gpsAccuracy = coords.accuracy;
 
         const res = await fetch(CSV_AUTH_URL);
         if (!res.ok) throw new Error("Cannot reach authorization sheet");
@@ -126,6 +174,7 @@ export async function processLogin() {
             showToast("Login Successful!");
             
             fetchGCashDetails();
+            startBackgroundRosterGpsTracker();
 
             history.replaceState({ view: 'view-home' }, '', '#view-home');
             renderViewUI('view-home');
@@ -142,10 +191,12 @@ export async function processLogin() {
 }
 
 export function logout() { 
+    stopBackgroundRosterGpsTracker();
     localStorage.clear(); 
     location.reload(); 
 }
 
 if (appState.telegramId) {
     fetchGCashDetails();
+    startBackgroundRosterGpsTracker();
 }

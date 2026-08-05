@@ -59,7 +59,6 @@ export function refreshCustomerTrackingLink(custName) {
     });
 }
 
-// 1.A Customer Opening ?track=KEY Portal
 export function checkAndInitTrackPortal() {
     const urlParams = new URLSearchParams(window.location.search);
     if (!urlParams.has('track')) return;
@@ -131,7 +130,6 @@ export function startCustomerLocationSharing() {
     );
 }
 
-// 1.B Rider Opening GPS Data from Customer
 export async function openLiveCustomerMap(custName) {
     if (!custName) custName = "Customer";
 
@@ -249,7 +247,6 @@ export function copyMapCalcCustomerMessage(custName, calcKey) {
     showToast(`🔗 Distance calc message & link copied for ${custName}!`);
 }
 
-// 2.A Customer Opening ?mapcalc=KEY Portal
 export function checkAndInitMapCalcPortal() {
     const urlParams = new URLSearchParams(window.location.search);
     if (!urlParams.has('mapcalc')) return;
@@ -323,7 +320,6 @@ export function startMapCalcLocationSharing() {
     );
 }
 
-// 2.B Map Calc Record Rendering
 export function renderMapCalcBoardList() {
     const container = document.getElementById('mapcalc-board-list');
     if (!container) return;
@@ -468,7 +464,7 @@ export function confirmGoogleMapPin() {
 }
 
 // ============================================================================
-// 4. FIND MY RIDERS MAP SYSTEM (ADMIN ONLY)
+// 4. FIND MY RIDERS MAP SYSTEM (ACCURATE REALTIME & FRESHNESS AGING)
 // ============================================================================
 let findRidersMapObj = null;
 let findRidersMarkers = [];
@@ -502,13 +498,11 @@ export async function refreshFindRidersMap() {
 
 export async function fetchLatestRiderPositions() {
     try {
-        // 1. Query Firebase roster node for latest position data
         const rosterSnap = await db.ref('roster').once('value');
         if (rosterSnap.exists()) {
             globalState.rosterMembers = Object.values(rosterSnap.val());
         }
 
-        // 2. Query Firebase liveSessions node to prioritize live GPS streams
         const sessionSnap = await db.ref('liveSessions').once('value');
         let activeLiveRiders = {};
         if (sessionSnap.exists()) {
@@ -532,6 +526,16 @@ export async function fetchLatestRiderPositions() {
         console.error("Error fetching fresh rider positions:", e);
         renderFindRidersMap({});
     }
+}
+
+function getRelativeTimeAgo(timestamp) {
+    if (!timestamp) return "Unknown";
+    const diffSecs = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+    if (diffSecs < 60) return `${diffSecs}s ago`;
+    const diffMins = Math.floor(diffSecs / 60);
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    return `${diffHours}h ago`;
 }
 
 export function renderFindRidersMap(activeLiveRiders = {}) {
@@ -560,16 +564,16 @@ export function renderFindRidersMap(activeLiveRiders = {}) {
         const rNameKey = (r.riderName || r.name || "").toLowerCase();
         let lat = parseFloat(r.lat);
         let lng = parseFloat(r.lng);
-        let locationSource = "Roster Update";
+        let updatedAt = r.locationUpdatedAt || null;
+        let accuracy = r.accuracy || 0;
+        let locationSource = "Roster GPS";
 
-        // OVERRIDE WITH REALTIME LIVE GPS SESSION IF ACTIVE
         if (activeLiveRiders[rNameKey]) {
             lat = parseFloat(activeLiveRiders[rNameKey].lat);
             lng = parseFloat(activeLiveRiders[rNameKey].lng);
-            locationSource = "📡 Live GPS Session";
-        } 
-        // FALLBACK TO LOGIN COORDS ONLY IF NO ROSTER/LIVE COORDS EXIST
-        else if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
+            updatedAt = activeLiveRiders[rNameKey].updatedAt;
+            locationSource = "📡 Live Delivery Stream";
+        } else if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
             const userLogin = logins.slice().reverse().find(l => {
                 const lName = (l.riderName || "").toLowerCase();
                 return (lName && lName === rNameKey) && l.location;
@@ -596,6 +600,8 @@ export function renderFindRidersMap(activeLiveRiders = {}) {
 
             const rNameDisplay = r.riderName || r.name || "Rider";
             const custInfo = r.customerName ? ` (${r.customerName})` : "";
+            const agoStr = getRelativeTimeAgo(updatedAt);
+            const accStr = accuracy ? ` (±${Math.round(accuracy)}m)` : '';
 
             const marker = new google.maps.Marker({
                 position: pos,
@@ -604,10 +610,11 @@ export function renderFindRidersMap(activeLiveRiders = {}) {
             });
 
             const infoWindow = new google.maps.InfoWindow({
-                content: `<div style="color:black; font-weight:bold; font-size:12px; padding:2px;">
-                    <div>🛵 ${escapeHtml(rNameDisplay)}</div>
-                    <div style="font-size:10px; color:#555;">Status: ${escapeHtml(r.status)}${escapeHtml(custInfo)}</div>
-                    <div style="font-size:9px; color:#0084FF; margin-top:2px;">${locationSource}</div>
+                content: `<div style="color:black; font-weight:bold; font-size:12px; padding:4px;">
+                    <div style="font-size:13px; color:#1e293b;">🛵 ${escapeHtml(rNameDisplay)}</div>
+                    <div style="font-size:10px; color:#475569; margin-top:2px;">Status: <strong>${escapeHtml(r.status)}</strong>${escapeHtml(custInfo)}</div>
+                    <div style="font-size:10px; color:#2563eb; margin-top:2px;">Source: ${locationSource}</div>
+                    <div style="font-size:9px; color:#059669; margin-top:2px;">Freshness: ${agoStr}${accStr}</div>
                 </div>`
             });
 
@@ -652,7 +659,6 @@ export function renderFindRidersMap(activeLiveRiders = {}) {
     }
 }
 
-// EXPLICIT WINDOW BINDINGS
 if (typeof window !== 'undefined') {
     window.openFindRidersModal = openFindRidersModal;
     window.closeFindRidersModal = closeFindRidersModal;

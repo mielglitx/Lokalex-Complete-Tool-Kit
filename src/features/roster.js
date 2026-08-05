@@ -10,6 +10,7 @@ import { switchView } from '../ui/router.js';
 import { autoStartLiveGpsSession, endLiveGpsSession } from './liveTracker.js';
 import { resetToCartOne } from './cart.js';
 import { autoCompleteAdvancedOrdersForRider, autoCancelAdvancedOrdersForRider } from './advancedOrders.js';
+import { getMergedDeduplicatedCommissionList } from './commission.js';
 
 let lineAlarmInterval = null;
 let lineAlarmConfirmed = false;
@@ -19,7 +20,6 @@ const ROSTER_CACHE_KEY = 'lokalex_roster_cache';
 const LOGINS_CACHE_KEY = 'lokalex_logins_cache';
 const CATERED_CACHE_KEY = 'lokalex_catered_cache';
 
-// PERSIST FRONTPAGE ROSTER DATA FOR INSTANT OFFLINE ACCESS
 export function saveRosterCache() {
     try {
         localStorage.setItem(ROSTER_CACHE_KEY, JSON.stringify(globalState.rosterMembers || []));
@@ -28,7 +28,6 @@ export function saveRosterCache() {
     } catch(e) {}
 }
 
-// RESTORE FRONTPAGE ROSTER DATA FROM LOCAL STORAGE ON OFFLINE BOOT
 export function loadRosterCache() {
     try {
         const savedRoster = localStorage.getItem(ROSTER_CACHE_KEY);
@@ -490,7 +489,6 @@ export async function triggerStatusWithSlide(targetStatus) {
             }
         }
 
-        // AUTO-CALIBRATE GPS BEFORE MARKING AVAILABLE FROM END SHIFT OR ON DUTY
         showToast("📡 Calibrating GPS location...");
         const coords = await calibrateGPS((accuracy) => {
             showToast(`📡 Calibrating GPS: ±${Math.round(accuracy)}m`);
@@ -504,6 +502,7 @@ export async function triggerStatusWithSlide(targetStatus) {
 
         appState.lat = coords.lat; 
         appState.lon = coords.lon;
+        appState.gpsAccuracy = coords.accuracy;
         showToast(`✅ GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
 
         showSideNotification("RECORDING STATUS", `Marking ${appState.riderName} Available — placing at end of line`, "fa-user-check", "text-green-400", "border-green-500");
@@ -511,7 +510,6 @@ export async function triggerStatusWithSlide(targetStatus) {
         endLiveGpsSession();
         await updateRosterStatus('Available');
         
-        // CLEAR ALL CARTS AND RESET FOCUS BACK TO CART 1
         if (window.clearAllCartSlots) {
             window.clearAllCartSlots();
         } else if (window.clearCartSlot) {
@@ -608,7 +606,6 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === tId.toString());
 
-    // AUTOMATICALLY MARK ALL CLAIMED SCHEDULED ORDERS AS COMPLETED WHEN RIDER BECOMES AVAILABLE
     if (status === 'Available') {
         autoCompleteAdvancedOrdersForRider(tName, targetRecord ? targetRecord.customerName : "");
     }
@@ -684,7 +681,9 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         queueTime: queueTime || new Date().getTime(),
         lastUpdated: new Date().toLocaleTimeString(),
         lat: appState.lat || 0,
-        lng: appState.lon || 0
+        lng: appState.lon || 0,
+        accuracy: appState.gpsAccuracy || 0,
+        locationUpdatedAt: Date.now()
     };
 
     db.ref('roster/' + tId).set(rosterData);
@@ -810,7 +809,6 @@ export function adminForceStatus(id, name, actionValue) {
 export async function adminVoidActiveCustomer(riderId, riderName) {
     const targetRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === riderId.toString()) : null;
     
-    // AUTOMATICALLY MARK CLAIMED SCHEDULED ORDERS AS CANCELLED WHEN ACTIVE CATERING IS VOIDED
     if (targetRecord && targetRecord.customerName) {
         autoCancelAdvancedOrdersForRider(riderName, targetRecord.customerName);
     } else {
@@ -867,17 +865,16 @@ export async function forceAllEndShift() {
     });
 }
 
+// SYNCHRONIZED COMPLETED CATERED CUSTOMERS LIST (MATCHES COMMISSION DATASET)
 export function loadGlobalCateredList() {
     const feed = document.getElementById('catered-customers-feed');
     const badge = document.getElementById('catered-count-badge');
     if (!feed) return;
 
-    if (!globalState.globalCateredHistory || globalState.globalCateredHistory.length === 0) {
-        loadRosterCache();
-    }
-
     const todayStr = getLocalTodayStr();
-    const todayHistory = globalState.globalCateredHistory ? globalState.globalCateredHistory.filter(h => isSameDate(h.completedDate, todayStr)) : [];
+    
+    const mergedList = getMergedDeduplicatedCommissionList ? getMergedDeduplicatedCommissionList() : (globalState.globalCateredHistory || []);
+    const todayHistory = mergedList.filter(h => isSameDate(h.date || h.completedDate, todayStr));
 
     if (badge) badge.innerText = `${todayHistory.length} recorded`;
 
@@ -889,7 +886,7 @@ export function loadGlobalCateredList() {
     feed.innerHTML = todayHistory.slice().reverse().map(h => {
         let voidBtn = "";
         if (isAdmin()) {
-            voidBtn = `<button onclick="promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate)}')" class="bg-red-900/40 text-red-400 hover:bg-red-800 text-[10px] font-bold px-2 py-1 rounded border border-red-700/50 transition active:scale-95"><i class="fa-solid fa-ban"></i> Void</button>`;
+            voidBtn = `<button onclick="promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.date || h.completedDate)}')" class="bg-red-900/40 text-red-400 hover:bg-red-800 text-[10px] font-bold px-2 py-1 rounded border border-red-700/50 transition active:scale-95"><i class="fa-solid fa-ban"></i> Void</button>`;
         }
 
         let durationStr = h.duration || "";
@@ -897,10 +894,13 @@ export function loadGlobalCateredList() {
             durationStr = calculateSplitDuration(h.startTime, h.completedTime, h.customerCount || 1);
         }
 
-        let timeInfo = `Started: ${escapeHtml(h.startTime)}`;
-        if (h.completedTime) {
-            timeInfo += ` → ${escapeHtml(h.completedTime)}`;
+        let timeInfo = "";
+        if (h.startTime && h.completedTime) {
+            timeInfo = `Started: ${escapeHtml(h.startTime)} → ${escapeHtml(h.completedTime)}`;
+        } else if (h.time || h.startTime) {
+            timeInfo = `Time: ${escapeHtml(h.time || h.startTime)}`;
         }
+
         if (durationStr) {
             timeInfo += ` <span class="text-emerald-400 font-bold">[${escapeHtml(durationStr)}]</span>`;
         }
@@ -939,7 +939,6 @@ export async function executeVoidCustomer(riderName, customerName, completedDate
 
     showSideNotification("CUSTOMER VOIDED", `Voiding customer ${customerName} for ${riderName}...`, "fa-ban", "text-red-400", "border-red-500");
     
-    // Cancel any claimed advanced order matching rider and customer name
     autoCancelAdvancedOrdersForRider(riderName, customerName);
 
     db.ref('cateredHistory').once('value', (snapshot) => {
@@ -1014,7 +1013,6 @@ export function loadGlobalLoginList() {
     }).join('');
 }
 
-// Auto-load cache on module import
 loadRosterCache();
 
 if (typeof window !== 'undefined') {
@@ -1024,4 +1022,5 @@ if (typeof window !== 'undefined') {
 
 window.addEventListener('rosterUpdated', updateRosterUI);
 window.addEventListener('cateredUpdated', loadGlobalCateredList);
+window.addEventListener('receiptsUpdated', loadGlobalCateredList);
 window.addEventListener('loginsUpdated', loadGlobalLoginList);
