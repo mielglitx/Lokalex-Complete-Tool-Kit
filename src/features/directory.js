@@ -3,10 +3,10 @@ import { appState, globalState } from '../store/state.js';
 import { db } from '../config/firebase.js';
 import { API_URL, BARANGAY_DATA, ADMIN_IDS } from '../config/constants.js';
 import { showToast, showSideNotification } from '../ui/notifications.js';
-import { switchView } from '../ui/router.js';
+import { switchView, goBack } from '../ui/router.js';
 import { openSlideDeleteModal } from '../ui/modals.js';
 import { calibrateGPS } from './auth.js';
-import { escapeHtml, copyText } from '../utils/helpers.js';
+import { escapeHtml, copyText, getLocalTodayStr } from '../utils/helpers.js';
 import { isRiderAdmin } from './commission.js';
 
 let editingRecord = null;
@@ -56,7 +56,8 @@ export function loadDirectoryCache() {
                     rate: `₱${b.fee.toFixed(2)}`,
                     lat_lon_link: "",
                     type: 'barangays',
-                    recorded_by: "System"
+                    recorded_by: "System",
+                    recorded_at: getLocalTodayStr()
                 }));
                 saveDirectoryCache();
             }
@@ -121,6 +122,7 @@ export async function syncData(isSilent = false) {
                     const contact = item.contact || item.contact_number || item.phone || item.mobile || "";
                     const address = item.address || item.general_address || item.location || "";
                     const lat_lon_link = item.lat_lon_link || item.lat_lon || item.coordinates || item.map || item.map_link || "";
+                    const recorded_at = item.recorded_at || item.recorded_date || item.date_added || item.date || "";
 
                     const finalName = (type === 'barangays' ? barangayName : (item.name || item.customer_name || item.store_name || barangayName)).trim();
 
@@ -131,7 +133,8 @@ export async function syncData(isSilent = false) {
                         rate: rateVal.toString().trim(),
                         lat_lon_link: lat_lon_link.trim(),
                         type: item.type || type,
-                        recorded_by: item.recorded_by || item.recordedby || "Amiel"
+                        recorded_by: item.recorded_by || item.recordedby || "Amiel",
+                        recorded_at: recorded_at.toString().trim()
                     };
                 }).filter(r => r.name !== "");
             }
@@ -152,7 +155,8 @@ export async function syncData(isSilent = false) {
                     rate: (item.rate || item.address || "").toString().trim(),
                     lat_lon_link: (item.lat_lon_link || "").trim(),
                     type: item.type || type,
-                    recorded_by: item.recorded_by || "Amiel"
+                    recorded_by: item.recorded_by || "Amiel",
+                    recorded_at: (item.recorded_at || item.recorded_date || item.date || "").toString().trim()
                 })).filter(r => r.name !== "");
 
                 const recordMap = new Map();
@@ -205,7 +209,7 @@ function getSectionLetter(name) {
     return "#";
 }
 
-// RENDER DIRECTORY LIST WITH SPECIAL CHARACTERS / FOREIGN SYMBOLS & CONTINUOUS SCROLL
+// RENDER DIRECTORY LIST WITH RECORDED BY & RECORDED DATE DETAILS
 export function renderDirectoryList() {
     const listEl = document.getElementById('record-list');
     const searchVal = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
@@ -271,6 +275,10 @@ export function renderDirectoryList() {
                </button>`
             : '';
 
+        const recordedByText = escapeHtml(r.recorded_by || "System");
+        const recordedAtText = r.recorded_at ? ` • ${escapeHtml(r.recorded_at)}` : '';
+        const metaInfoHtml = `<div class="text-[10px] text-gray-500 mt-1.5 flex items-center gap-1"><i class="fa-solid fa-user-pen text-[9px]"></i> Recorded by <span class="text-gray-300 font-semibold">${recordedByText}</span>${recordedAtText}</div>`;
+
         if (isBarangay) {
             let rateNum = parseFloat((r.rate || r.address || "").replace(/[^0-9.]/g, ''));
             let displayRate = !isNaN(rateNum) ? `₱${rateNum.toFixed(2)}` : (r.rate || r.address || '₱0.00');
@@ -280,6 +288,7 @@ export function renderDirectoryList() {
                 <div class="flex-1 min-w-0">
                     <div class="font-bold text-sm text-white truncate"><i class="fa-solid fa-map-location-dot text-emerald-400 mr-1.5"></i> ${escapeHtml(r.name)}</div>
                     <div class="text-xs font-mono text-emerald-400 font-bold mt-1">Delivery Rate: ${escapeHtml(displayRate)}</div>
+                    ${metaInfoHtml}
                 </div>
                 <div class="flex gap-1.5 shrink-0">
                     <button onclick="copyBarangayRate('${escapeHtml(r.name)}', '${escapeHtml(displayRate)}')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1" title="Copy Rate Message">
@@ -299,6 +308,7 @@ export function renderDirectoryList() {
                     ${r.contact ? `<div class="text-xs text-gray-400 mt-0.5"><i class="fa-solid fa-phone text-[10px]"></i> ${escapeHtml(r.contact)}</div>` : ''}
                     ${r.address ? `<div class="text-xs text-gray-400 mt-0.5"><i class="fa-solid fa-location-dot text-[10px]"></i> ${escapeHtml(r.address)}</div>` : ''}
                     ${mapBtn}
+                    ${metaInfoHtml}
                 </div>
                 <div class="flex gap-1 shrink-0">
                     <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
@@ -521,7 +531,6 @@ export async function submitForm() {
 
     if (!name) return showToast("⚠️ Name / Store Name / Barangay is required!");
 
-    // STRICT GPS SIGNAL CHECK BEFORE SAVING RECORD
     showToast("📡 Calibrating GPS location...");
     const coords = await calibrateGPS((acc) => {
         showToast(`📡 Checking GPS signal: ±${Math.round(acc)}m`);
@@ -535,11 +544,14 @@ export async function submitForm() {
     }
 
     const type = globalState.currentType || 'customers';
+    const isEdit = !!editingRecord;
+    const currentDate = getLocalTodayStr();
 
     const recordData = {
         name, contact, address, rate: address, lat_lon_link,
         type: type,
-        recorded_by: appState.riderName || "Amiel",
+        recorded_by: editingRecord ? (editingRecord.recorded_by || appState.riderName || "Amiel") : (appState.riderName || "Amiel"),
+        recorded_at: editingRecord ? (editingRecord.recorded_at || currentDate) : currentDate,
         originalName: editingRecord ? editingRecord.name : name
     };
 
@@ -552,8 +564,15 @@ export async function submitForm() {
     }
 
     saveDirectoryCache();
-    openDirectory(type);
-    showToast(`✅ Record ${editingRecord ? 'updated' : 'saved'} successfully!`);
+    editingRecord = null;
+
+    showToast(`✅ Record ${isEdit ? 'updated' : 'saved'} successfully!`);
+
+    if (window.history.state && window.history.state.view === 'view-form') {
+        goBack();
+    } else {
+        openDirectory(type);
+    }
 
     if (db) {
         const cleanKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -568,7 +587,7 @@ export async function submitForm() {
             mode: 'no-cors',
             body: JSON.stringify({
                 type: type,
-                action: editingRecord ? 'edit' : 'add',
+                action: isEdit ? 'edit' : 'add',
                 data: recordData
             })
         }).catch(() => {});
@@ -625,6 +644,12 @@ export function confirmGoogleMapPin() {
 }
 
 loadDirectoryCache();
+
+window.addEventListener('viewChanged', (e) => {
+    if (e.detail === 'view-directory') {
+        renderDirectoryList();
+    }
+});
 
 if (typeof window !== 'undefined') {
     window.openDirectory = openDirectory;
