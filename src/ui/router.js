@@ -4,8 +4,10 @@ import { showToast } from './notifications.js';
 let backPressCount = 0;
 let backPressTimer = null;
 
-export function switchView(targetViewId, isBackwards = false) {
-    if (!isBackwards) {
+export function switchView(targetViewId, isBackwards = false, replace = false) {
+    if (replace) {
+        history.replaceState({ view: targetViewId }, '', '#' + targetViewId);
+    } else if (!isBackwards) {
         history.pushState({ view: targetViewId }, '', '#' + targetViewId);
     }
     renderViewUI(targetViewId);
@@ -41,7 +43,6 @@ export function renderViewUI(targetViewId) {
 export function goBack() {
     const currentView = document.querySelector('main > section:not(.hidden)')?.id;
     
-    // ALLOW Going back from receipt screen to edit
     if (currentView === 'view-receipt-final') {
         switchView('view-wizard', true);
         return;
