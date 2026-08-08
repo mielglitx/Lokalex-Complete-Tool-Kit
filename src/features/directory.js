@@ -48,7 +48,6 @@ export function loadDirectoryCache() {
         if (saved) {
             globalState.records = JSON.parse(saved);
         } else {
-            // Load default local Barangay data if cache is completely empty
             if (!globalState.records || globalState.records.length === 0) {
                 globalState.records = BARANGAY_DATA.map(b => ({
                     name: b.name,
@@ -111,7 +110,6 @@ export async function syncData(isSilent = false) {
 
     let fetchedRecords = [];
 
-    // 1. Fetch from Google Sheets API
     try {
         const res = await fetch(`${API_URL}?type=${type}`);
         if (res.ok) {
@@ -142,7 +140,6 @@ export async function syncData(isSilent = false) {
         console.warn("Offline/Network error syncing directory from Sheets, using local cache...", err);
     }
 
-    // 2. Fetch from Firebase Realtime Database
     if (db) {
         try {
             const snap = await db.ref(`directory/${type}`).once('value');
@@ -268,7 +265,6 @@ export function renderDirectoryList() {
             mapBtn = `<a href="${escapeHtml(r.lat_lon_link)}" target="_blank" class="text-xs text-blue-400 font-bold underline flex items-center gap-1 mt-1"><i class="fa-solid fa-map-location-dot"></i> View Location</a>`;
         }
 
-        // DELETE BUTTON HTML ONLY RENDERED FOR ADMIN USERS
         const deleteBtnHtml = isAdminUser 
             ? `<button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-red-400 p-2 rounded-lg text-xs transition active:scale-90" title="Delete">
                     <i class="fa-solid fa-trash"></i>
@@ -511,7 +507,7 @@ export function executeDeleteDirectoryRecord(name) {
     } catch(e) {}
 }
 
-// INSTANT OFFLINE SAVE & EDIT WITH BACKGROUND SYNC
+// INSTANT OFFLINE SAVE & EDIT WITH STRICT GPS GUARDRAIL & BACKGROUND SYNC
 export async function submitForm() {
     const nameInput = document.getElementById('form-name');
     const contactInput = document.getElementById('form-contact');
@@ -524,6 +520,19 @@ export async function submitForm() {
     const lat_lon_link = latlonInput ? latlonInput.value.trim() : "";
 
     if (!name) return showToast("⚠️ Name / Store Name / Barangay is required!");
+
+    // STRICT GPS SIGNAL CHECK BEFORE SAVING RECORD
+    showToast("📡 Calibrating GPS location...");
+    const coords = await calibrateGPS((acc) => {
+        showToast(`📡 Checking GPS signal: ±${Math.round(acc)}m`);
+    });
+
+    if (!coords || (coords.lat === 0 && coords.lon === 0) || coords.accuracy > 50) {
+        const gpsModal = document.getElementById('gps-alert-modal');
+        if (gpsModal) gpsModal.classList.remove('hidden');
+        showToast(`⚠️ Cannot save record: Bad GPS signal (±${Math.round(coords ? coords.accuracy : 999)}m)! Move to an open area.`);
+        return;
+    }
 
     const type = globalState.currentType || 'customers';
 
@@ -574,14 +583,14 @@ export async function openMapPicker() {
         showToast(`📡 Calibrating Map GPS: ±${Math.round(acc)}m`);
     });
 
-    if (coords.lat !== 0 && coords.lon !== 0) {
-        selectedMapLat = coords.lat;
-        selectedMapLng = coords.lon;
-        showToast(`✅ Map GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
+    if (!coords || (coords.lat === 0 && coords.lon === 0) || coords.accuracy > 50) {
+        showToast(`⚠️ Weak GPS Signal (±${Math.round(coords ? coords.accuracy : 999)}m)! Move to an open area.`);
     } else {
-        selectedMapLat = 15.6886;
-        selectedMapLng = 120.4131;
+        showToast(`✅ Map GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
     }
+
+    selectedMapLat = coords.lat || 15.6886;
+    selectedMapLng = coords.lon || 120.4131;
 
     initGoogleMap(selectedMapLat, selectedMapLng);
 }
