@@ -13,6 +13,7 @@ import * as advancedOrders from './features/advancedOrders.js';
 import * as maps from './features/maps.js';
 import * as wizard from './features/wizard.js';
 import * as liveTracker from './features/liveTracker.js';
+import * as facebookMessages from './features/facebookMessages.js';
 
 // --- UI & HELPER IMPORTS ---
 import * as modals from './ui/modals.js';
@@ -21,11 +22,11 @@ import * as helpers from './utils/helpers.js';
 import { unlockAudioContext } from './ui/notifications.js';
 
 // -------------------------------------------------------------
-// 1. GLOBAL WINDOW BINDER (Fixes HTML `onclick` handlers)
+// 1. GLOBAL WINDOW BINDER (Modals first, features second)
 // -------------------------------------------------------------
 const allModules = [
-    auth, cart, chat, roster, directory, commission, 
-    advancedOrders, maps, wizard, liveTracker, modals, router, helpers
+    modals, auth, cart, chat, roster, directory, commission, 
+    advancedOrders, maps, wizard, liveTracker, facebookMessages, router, helpers
 ];
 
 allModules.forEach(mod => {
@@ -44,15 +45,16 @@ window.unlockAudioContext = unlockAudioContext;
 // 2. NETWORK STATUS MONITORING (ONLINE / OFFLINE PILL)
 // -------------------------------------------------------------
 export function updateNetworkStatus() {
-    const pill = document.getElementById('network-status-pill');
-    if (!pill) return;
+    const pill = document.getElementById('network-status-text');
+    const container = document.getElementById('network-status-pill');
+    if (!pill || !container) return;
 
     if (navigator.onLine) {
-        pill.className = "flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300";
-        pill.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span id="network-status-text">ONLINE</span>`;
+        container.className = "flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300";
+        container.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span id="network-status-text">ONLINE</span>`;
     } else {
-        pill.className = "flex items-center gap-1.5 bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300";
-        pill.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span><span id="network-status-text">OFFLINE</span>`;
+        container.className = "flex items-center gap-1.5 bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300";
+        container.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span><span id="network-status-text">OFFLINE</span>`;
     }
 }
 
@@ -69,19 +71,18 @@ function bootApp() {
         if (chat && chat.initDraggableChat) chat.initDraggableChat();
         if (cart && cart.loadCartState) cart.loadCartState();
 
-        // LOAD LOCAL ROSTER CACHE INSTANTLY FOR OFFLINE FRONTPAGE
+        if (commission && commission.fetchRiderUserTypes) {
+            commission.fetchRiderUserTypes();
+        }
+
         if (roster && roster.loadRosterCache) roster.loadRosterCache();
 
-        // INSTANT OFFLINE DIRECTORY LOAD & SILENT BACKGROUND SYNC ON STARTUP
         if (directory && directory.silentSyncDirectory) {
             directory.silentSyncDirectory();
         }
 
         const urlParams = new URLSearchParams(window.location.search);
         
-        // ---------------------------------------------------------
-        // GUEST / CUSTOMER PUBLIC PORTAL ROUTING
-        // ---------------------------------------------------------
         if (urlParams.has('livegps') || urlParams.has('track') || urlParams.has('mapcalc')) {
             const loginView = document.getElementById('view-login');
             if (loginView) loginView.classList.add('hidden');
@@ -101,9 +102,6 @@ function bootApp() {
             return; 
         }
 
-        // ---------------------------------------------------------
-        // RIDER APP ROUTING
-        // ---------------------------------------------------------
         if (appState.telegramId) {
             history.replaceState({ view: 'view-home' }, '', '#view-home');
             router.renderViewUI('view-home');
@@ -124,6 +122,9 @@ if (document.readyState === 'loading') {
 }
 
 window.addEventListener('loginSuccess', () => {
+    if (commission && commission.fetchRiderUserTypes) {
+        commission.fetchRiderUserTypes();
+    }
     initRealtimeFirebaseListeners();
 });
 

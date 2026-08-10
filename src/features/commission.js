@@ -42,26 +42,29 @@ export async function fetchRiderUserTypes() {
     }
 }
 
-// STRICT CHECK IF A RIDER IS AN ADMIN (EXCLUDES TL & TEAM LEADS)
+// STRICT CHECK IF A RIDER IS AN ADMIN (EXCLUDES TL & STANDARD RIDERS BASED ON GOOGLE SHEET LOGIN ID TAB)
 export function isRiderAdmin(riderName = "", telegramId = "") {
     const cleanName = (riderName || "").toString().toLowerCase().trim();
     const cleanId = (telegramId || "").toString().trim();
 
+    // 1. Explicit ID match in ADMIN_IDS constant
     if (cleanId && ADMIN_IDS.includes(cleanId)) return true;
 
+    // 2. Direct ground-truth check against Google Sheet 'Login ID' tab
     if (globalState.userTypesMap) {
-        const typeByName = cleanName ? globalState.userTypesMap[cleanName] : "";
-        const typeById = cleanId ? globalState.userTypesMap[cleanId] : "";
+        const hasName = cleanName && (cleanName in globalState.userTypesMap);
+        const hasId = cleanId && (cleanId in globalState.userTypesMap);
 
-        if (typeByName === "tl" || typeById === "tl" || typeByName === "lead" || typeById === "lead") {
-            return false;
-        }
+        if (hasName || hasId) {
+            const typeByName = hasName ? globalState.userTypesMap[cleanName] : "";
+            const typeById = hasId ? globalState.userTypesMap[cleanId] : "";
 
-        if (typeByName === "admin" || typeById === "admin") {
-            return true;
+            // Return true ONLY if explicitly defined as 'admin' in the Google Sheet
+            return typeByName === "admin" || typeById === "admin";
         }
     }
 
+    // 3. Fallback check ONLY if rider is not listed in Google Sheet 'Login ID' tab
     const rosterMem = (globalState.rosterMembers || []).find(m => 
         (m.riderName || m.name || "").toLowerCase().trim() === cleanName ||
         (m.telegramId || "").toString().trim() === cleanId
@@ -83,6 +86,7 @@ function getCommissionRates(dateStr, riderName = "", telegramId = "") {
 
     const isAdmin = isRiderAdmin(riderName, telegramId);
 
+    // ADMIN EXEMPTION: Only Admins do NOT pay company commission (0% Company Rate / 100% Rider Rate)
     if (isAdmin) {
         return {
             companyRate: 0,
@@ -420,6 +424,7 @@ export function refreshCommissionView() {
 
         let gross = parseFloat(r.totalFees) || 0;
         
+        // Dynamic rates calculated per rider (0% for Admins based on Login ID sheet, normal rates for TLs & Riders)
         const rates = getCommissionRates(rDate, rName, rId);
 
         const earnedAmt = gross * rates.riderRate;

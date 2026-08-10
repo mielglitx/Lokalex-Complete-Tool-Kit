@@ -85,7 +85,6 @@ export async function openGCashModal() {
         
         modal.classList.remove('hidden');
 
-        // Automatically fetch online records to ensure missing local values populate
         await fetchGCashDetails();
     }
 }
@@ -238,6 +237,28 @@ export function closeEditItemModal() {
     document.getElementById('edit-item-modal').classList.add('hidden'); 
 }
 
+export function openWebHubModal() {
+    const modal = document.getElementById('web-hub-modal');
+    if (modal) modal.classList.remove('hidden');
+}
+
+export function closeWebHubModal() {
+    const modal = document.getElementById('web-hub-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export function promptSaveFacebookPageToken() {
+    if (typeof window.refreshFacebookInbox === 'function') {
+        const currentToken = localStorage.getItem('lokalex_fb_page_token') || "";
+        const newToken = prompt("Enter your Facebook Page Access Token for direct messaging:", currentToken);
+        if (newToken !== null) {
+            localStorage.setItem('lokalex_fb_page_token', newToken.trim());
+            showToast("✅ Page Access Token saved!");
+            if (window.refreshFacebookInbox) window.refreshFacebookInbox();
+        }
+    }
+}
+
 export function openSlideDeleteModal(title, arg2, arg3) {
     let subtitle = "I-drag pakanan ang slider para kumpirmahin.";
     let callback = null;
@@ -291,6 +312,9 @@ export function onSlideEnd() {
 }
 
 if (typeof window !== 'undefined') {
+    window.openWebHubModal = openWebHubModal;
+    window.closeWebHubModal = closeWebHubModal;
+    window.promptSaveFacebookPageToken = promptSaveFacebookPageToken;
     window.fetchGCashDetails = fetchGCashDetails;
     window.openGCashModal = openGCashModal;
     window.closeGCashModal = closeGCashModal;

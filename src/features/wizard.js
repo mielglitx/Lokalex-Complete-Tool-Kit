@@ -418,21 +418,48 @@ export function completeReceiptDone() {
     if(freeDelivEl) freeDelivEl.checked = false;
 }
 
+// COPY RECEIPT WITH MULTI-LINE PRESERVATION & INSTANT CHAT REDIRECT
 export function copyFinalReceipt() {
     const textEl = document.getElementById('final-receipt-text');
-    if (textEl && textEl.innerText) {
-        copyText(textEl.innerText);
+    const rawReceiptText = textEl ? (textEl.innerText || textEl.textContent || "") : "";
+
+    if (!rawReceiptText) {
+        showToast("⚠️ No receipt available to copy.");
+        return;
     }
+
+    // Clean & preserve real multi-line breaks
+    const formattedReceipt = String(rawReceiptText)
+        .replace(/\\n/g, '\n')
+        .replace(/<br\s*[\/]?>/gi, '\n')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n');
+
+    copyText(formattedReceipt);
+    showToast("📋 Receipt copied! Switching to Meta Business chat...");
+
+    const custName = appState.receiptCustomerName || appState.selectedCateringClient || document.getElementById('rcpt-name')?.value || "";
+
+    setTimeout(() => {
+        if (window.openFacebookMessagesModal) {
+            window.openFacebookMessagesModal();
+            if (window.selectFacebookThreadByCustomerName && custName) {
+                window.selectFacebookThreadByCustomerName(custName, formattedReceipt);
+            }
+        }
+    }, 300);
 }
 
 if (typeof window !== 'undefined') {
     window.proceedToWizard = proceedToWizard;
+    window.initWizardForCart = initWizardForCart;
     window.selectCateredClientName = selectCateredClientName;
     window.toggleManualClientInput = toggleManualClientInput;
     window.adjustStoreCount = adjustStoreCount;
     window.calculateGrandTotal = calculateGrandTotal;
     window.generateFinalReceipt = generateFinalReceipt;
     window.confirmSampleReceiptProceed = confirmSampleReceiptProceed;
+    window.renderFinalReceiptText = renderFinalReceiptText;
     window.completeReceiptDone = completeReceiptDone;
     window.copyFinalReceipt = copyFinalReceipt;
 }
