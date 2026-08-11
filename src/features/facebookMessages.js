@@ -4,6 +4,7 @@ import { appState, globalState } from '../store/state.js';
 import { showToast } from '../ui/notifications.js';
 import { escapeHtml } from '../utils/helpers.js';
 import { isRiderAdmin } from './commission.js';
+import { openSlideDeleteModal } from '../ui/modals.js';
 
 let activeThreadId = null;
 let conversationsList = [];
@@ -57,7 +58,6 @@ function isValidThread(conv) {
     const cleanName = sanitizeText(conv.customerName || conv.name, "");
     const hasRealName = cleanName !== "" && cleanName !== "Facebook Customer";
 
-    // Reject phantom threads that have no real messages and no valid customer name
     if (!hasMessages && !hasValidLastMsg && !hasRealName) {
         return false;
     }
@@ -68,63 +68,9 @@ export function getPageToken() {
     return localStorage.getItem('lokalex_fb_page_token') || DIRECT_PAGE_ACCESS_TOKEN;
 }
 
-// UNIVERSAL SLIDE CONFIRMATION MODAL CONTROLLER (FOR ROSTER, SMART CART, CATERED LIST & BUSINESS SUITE)
-let isSlideConfirmed = false;
-
-export function closeSlideDeleteModal() {
-    const modal = document.getElementById('slide-delete-modal');
-    const rangeInput = document.getElementById('slide-delete-range');
-    if (modal) modal.classList.add('hidden');
-    if (rangeInput) rangeInput.value = "0";
-    window.onSlideConfirmAction = null;
-    isSlideConfirmed = false;
-}
-
-export function onSlideProgress(val) {
-    if (isSlideConfirmed) return;
-
-    if (Number(val) >= 90) {
-        isSlideConfirmed = true;
-        const modal = document.getElementById('slide-delete-modal');
-        const rangeInput = document.getElementById('slide-delete-range');
-        
-        if (modal) modal.classList.add('hidden');
-        if (rangeInput) rangeInput.value = "0";
-
-        if (typeof window.onSlideConfirmAction === 'function') {
-            const action = window.onSlideConfirmAction;
-            window.onSlideConfirmAction = null;
-            action();
-        }
-    }
-}
-
-export function onSlideEnd() {
-    if (!isSlideConfirmed) {
-        const rangeInput = document.getElementById('slide-delete-range');
-        if (rangeInput) rangeInput.value = "0";
-    }
-}
-
+// SLIDE CONFIRMATION WRAPPER
 export function requestSlideConfirmation(title, subtext, onConfirmCallback) {
-    const modal = document.getElementById('slide-delete-modal');
-    const titleEl = document.getElementById('slide-delete-title');
-    const subEl = document.getElementById('slide-delete-sub');
-    const rangeInput = document.getElementById('slide-delete-range');
-
-    if (modal && titleEl && subEl && rangeInput) {
-        titleEl.innerText = title || "Confirm Action";
-        subEl.innerText = subtext || "I-drag pakanan ang slider para kumpirmahin.";
-        rangeInput.value = "0";
-        isSlideConfirmed = false;
-
-        window.onSlideConfirmAction = onConfirmCallback;
-        modal.classList.remove('hidden');
-    } else {
-        if (confirm(`${title}\n\n${subtext}`)) {
-            if (typeof onConfirmCallback === 'function') onConfirmCallback();
-        }
-    }
+    openSlideDeleteModal(title, subtext, onConfirmCallback);
 }
 
 // SET ACTIVE FILTER TAB (All Messages, Unread, Assigned, Done)
@@ -167,7 +113,7 @@ async function markMetaConversationDone(threadId) {
     }
 }
 
-// WEB AUDIO API NEW MESSAGE CHIME (5-SECOND DURATION ALARM)
+// WEB AUDIO API NEW MESSAGE CHIME
 function playNewMessageAlarmSound() {
     try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -423,7 +369,6 @@ export async function fetchFacebookConversations(isSilent = false) {
                         const doneAt = typeof assignData === 'object' ? (assignData.doneAt || assignData.timestamp || 0) : 0;
                         const updatedTime = new Date(conv.updated_time).getTime();
 
-                        // SKIP IF LOCALLY COMPLETED/HIDDEN AND NO NEW MESSAGES ARRIVED SINCE
                         if ((threadStatus === 'done' || threadStatus === 'hidden') && updatedTime <= (doneAt + 500)) {
                             return;
                         }
@@ -506,7 +451,7 @@ export async function fetchFacebookConversations(isSilent = false) {
     }
 }
 
-// FETCH ALL DONE FOLDER CONVERSATIONS FROM GRAPH API WITH AUTOMATIC RECURSIVE PAGINATION
+// FETCH ALL DONE FOLDER CONVERSATIONS FROM GRAPH API
 export async function fetchMetaDoneConversations(isSilent = false) {
     const refreshIcon = document.getElementById('fb-refresh-icon');
     if (!isSilent && refreshIcon) refreshIcon.classList.add('fa-spin');
@@ -517,7 +462,7 @@ export async function fetchMetaDoneConversations(isSilent = false) {
         try {
             let doneUrl = `https://graph.facebook.com/v19.0/me/conversations?folder=done&limit=100&fields=id,updated_time,unread_count,senders{id,name,picture{data{url}}},messages.limit(20){id,message,from,created_time,attachments{id,mime_type,image_data,payload}}&access_token=${token}`;
             let fetchedCount = 0;
-            const maxPages = 5; // Fetch up to 500 historical threads in background
+            const maxPages = 5;
             const mergedMap = new Map();
 
             doneConversationsList.forEach(c => {
@@ -609,7 +554,6 @@ export async function fetchMetaDoneConversations(isSilent = false) {
     }
 }
 
-// PAGINATION: FETCH HUNDREDS OF HIDE/DONE OR INBOX CONVERSATIONS ON THREAD LIST SCROLL DOWN
 export async function loadOlderConversations() {
     if (isLoadingOlderThreads) return;
     const isDoneTab = activeInboxFilter === 'done';
@@ -687,12 +631,11 @@ export async function loadOlderConversations() {
         }
     } catch(e) {
         console.error("Error fetching older conversations page:", e);
-    } font-bold {
+    } finally {
         isLoadingOlderThreads = false;
     }
 }
 
-// PAGINATION: LOAD OLDER PAST MESSAGES ON CHAT SCROLL UP
 export async function loadOlderThreadMessages(threadId) {
     if (!threadId || isLoadingOlderMessages[threadId] || !nextPagingCursors[threadId]) return;
 
@@ -761,7 +704,7 @@ export function filterFacebookThreads() {
     renderThreadsList();
 }
 
-// RENDER ACTIVE THREADS LIST STRICTLY ACCORDING TO META INBOX FOLDERS & FILTERS
+// RENDER ACTIVE THREADS LIST
 export function renderThreadsList() {
     const container = document.getElementById('fb-threads-list');
     const searchVal = (document.getElementById('fb-thread-search')?.value || "").toLowerCase().trim();
@@ -800,11 +743,6 @@ export function renderThreadsList() {
         const threadStatus = typeof assignData === 'object' ? assignData.status : (cateringRider ? 'catering' : 'open');
         const myName = (appState.riderName || "").trim();
 
-<<<<<<< HEAD
-        // 1. ALL MESSAGES (STRICT ACTIVE INBOX ONLY - EXCLUDE DONE AND HIDDEN THREADS)
-=======
-        // 1. ALL MESSAGES (ACTIVE META INBOX FOLDER ONLY)
->>>>>>> 079e3a20f540bf60b0727ae8010bfb1dfa042f38
         if (activeInboxFilter === 'all') {
             if (threadStatus === 'done' || threadStatus === 'hidden' || conv.isMetaDone || conv.folder === 'done') {
                 return false;
@@ -812,17 +750,14 @@ export function renderThreadsList() {
             return true;
         }
 
-        // 2. UNREAD MESSAGES ONLY
         if (activeInboxFilter === 'unread') {
             return conv.unreadCount > 0;
         }
 
-        // 3. ASSIGNED MESSAGES (CURRENT RIDER CATERING ONLY)
         if (activeInboxFilter === 'assigned') {
             return cateringRider && cateringRider.toLowerCase() === myName.toLowerCase() && threadStatus === 'catering';
         }
 
-        // 4. DONE MESSAGES ONLY
         if (activeInboxFilter === 'done') {
             return true;
         }
@@ -992,7 +927,7 @@ export function selectFacebookThreadByCustomerName(customerName, receiptText = "
     }
 }
 
-// CATER BUTTON ACTION (WITH SLIDE CONFIRMATION MODAL)
+// CATER BUTTON ACTION
 export function caterFacebookCustomer(threadId) {
     const sourceList = conversationsList.concat(doneConversationsList);
     const thread = sourceList.find(c => c.id === threadId);
@@ -1065,7 +1000,7 @@ function executeCaterFacebookCustomer(threadId) {
     selectFacebookThread(threadId);
 }
 
-// CANCEL CATER BUTTON ACTION (WITH SLIDE CONFIRMATION MODAL)
+// CANCEL CATER BUTTON ACTION
 export function cancelCaterFacebookCustomer() {
     if (!activeThreadId) return showToast("⚠️ Please select a customer conversation first.");
 
@@ -1188,7 +1123,7 @@ export function createReceiptFromChat() {
     showToast(`🧾 Switched to Smart Cart for ${custName}`);
 }
 
-// HIDE BUTTON: MARKS THREAD DONE & MOVES TO META DONE FOLDER WITHOUT SENDING CLOSING MESSAGE
+// HIDE BUTTON
 export function hideFacebookCustomer(threadId) {
     const sourceList = conversationsList.concat(doneConversationsList);
     const thread = sourceList.find(c => c.id === threadId);
@@ -1255,7 +1190,7 @@ function executeHideFacebookCustomer(threadId) {
     checkAndUpdateRosterAutoAvailable(myName);
 }
 
-// DONE BUTTON: MARKS THREAD DONE, MOVES TO META DONE FOLDER, AND SENDS CLOSING MESSAGE
+// DONE BUTTON
 export function doneFacebookCustomer(threadId) {
     const sourceList = conversationsList.concat(doneConversationsList);
     const thread = sourceList.find(c => c.id === threadId);
@@ -1683,7 +1618,7 @@ export function showInboxThreadListMobile() {
     if (chatPanel) chatPanel.classList.add('hidden');
 }
 
-// RENDER STREAM MESSAGES (INCREMENTAL DOM PATCHING, SMART SCROLL POSITION LOCK & PASTAGE FETCH)
+// RENDER STREAM MESSAGES
 export function renderThreadMessages(threadId, forceScrollToBottom = false, isPaginationAppend = false) {
     const container = document.getElementById('fb-chat-messages');
     const headerName = document.getElementById('fb-[#0084FF]-cust-name');
@@ -1948,9 +1883,7 @@ if (typeof window !== 'undefined') {
     window.isCurrentRiderFirstAvailable = isCurrentRiderFirstAvailable;
     window.releaseRiderCateredCustomers = releaseRiderCateredCustomers;
     window.loadOlderConversations = loadOlderConversations;
-    window.closeSlideDeleteModal = closeSlideDeleteModal;
-    window.onSlideProgress = onSlideProgress;
-    window.onSlideEnd = onSlideEnd;
+    window.requestSlideConfirmation = requestSlideConfirmation;
     window.openImageViewer = openImageViewer;
     window.closeImageViewer = closeImageViewer;
     window.zoomImageViewer = zoomImageViewer;
