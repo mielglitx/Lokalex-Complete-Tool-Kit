@@ -428,7 +428,6 @@ export function copyFinalReceipt() {
         return;
     }
 
-    // Clean & preserve real multi-line breaks
     const formattedReceipt = String(rawReceiptText)
         .replace(/\\n/g, '\n')
         .replace(/<br\s*[\/]?>/gi, '\n')
