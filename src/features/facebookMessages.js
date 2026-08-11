@@ -68,17 +68,29 @@ export function getPageToken() {
     return localStorage.getItem('lokalex_fb_page_token') || DIRECT_PAGE_ACCESS_TOKEN;
 }
 
-// SLIDE CONFIRMATION HANDLERS
+// UNIVERSAL SLIDE CONFIRMATION MODAL CONTROLLER (FOR ROSTER, SMART CART, CATERED LIST & BUSINESS SUITE)
+let isSlideConfirmed = false;
+
 export function closeSlideDeleteModal() {
     const modal = document.getElementById('slide-delete-modal');
     const rangeInput = document.getElementById('slide-delete-range');
     if (modal) modal.classList.add('hidden');
     if (rangeInput) rangeInput.value = "0";
     window.onSlideConfirmAction = null;
+    isSlideConfirmed = false;
 }
 
 export function onSlideProgress(val) {
-    if (Number(val) >= 95) {
+    if (isSlideConfirmed) return;
+
+    if (Number(val) >= 90) {
+        isSlideConfirmed = true;
+        const modal = document.getElementById('slide-delete-modal');
+        const rangeInput = document.getElementById('slide-delete-range');
+        
+        if (modal) modal.classList.add('hidden');
+        if (rangeInput) rangeInput.value = "0";
+
         if (typeof window.onSlideConfirmAction === 'function') {
             const action = window.onSlideConfirmAction;
             window.onSlideConfirmAction = null;
@@ -88,41 +100,29 @@ export function onSlideProgress(val) {
 }
 
 export function onSlideEnd() {
-    const rangeInput = document.getElementById('slide-delete-range');
-    if (!rangeInput) return;
-    if (Number(rangeInput.value) >= 95) {
-        if (typeof window.onSlideConfirmAction === 'function') {
-            const action = window.onSlideConfirmAction;
-            window.onSlideConfirmAction = null;
-            action();
-        }
-    } else {
-        rangeInput.value = "0";
+    if (!isSlideConfirmed) {
+        const rangeInput = document.getElementById('slide-delete-range');
+        if (rangeInput) rangeInput.value = "0";
     }
 }
 
-function requestSlideConfirmation(title, subtext, onConfirmCallback) {
+export function requestSlideConfirmation(title, subtext, onConfirmCallback) {
     const modal = document.getElementById('slide-delete-modal');
     const titleEl = document.getElementById('slide-delete-title');
     const subEl = document.getElementById('slide-delete-sub');
     const rangeInput = document.getElementById('slide-delete-range');
 
     if (modal && titleEl && subEl && rangeInput) {
-        titleEl.innerText = title;
-        subEl.innerText = subtext;
+        titleEl.innerText = title || "Confirm Action";
+        subEl.innerText = subtext || "I-drag pakanan ang slider para kumpirmahin.";
         rangeInput.value = "0";
-        modal.classList.remove('hidden');
+        isSlideConfirmed = false;
 
-        window.onSlideConfirmAction = () => {
-            modal.classList.add('hidden');
-            rangeInput.value = "0";
-            if (typeof onConfirmCallback === 'function') {
-                onConfirmCallback();
-            }
-        };
+        window.onSlideConfirmAction = onConfirmCallback;
+        modal.classList.remove('hidden');
     } else {
         if (confirm(`${title}\n\n${subtext}`)) {
-            onConfirmCallback();
+            if (typeof onConfirmCallback === 'function') onConfirmCallback();
         }
     }
 }
@@ -687,7 +687,7 @@ export async function loadOlderConversations() {
         }
     } catch(e) {
         console.error("Error fetching older conversations page:", e);
-    } finally {
+    } font-bold {
         isLoadingOlderThreads = false;
     }
 }
@@ -800,7 +800,11 @@ export function renderThreadsList() {
         const threadStatus = typeof assignData === 'object' ? assignData.status : (cateringRider ? 'catering' : 'open');
         const myName = (appState.riderName || "").trim();
 
+<<<<<<< HEAD
         // 1. ALL MESSAGES (STRICT ACTIVE INBOX ONLY - EXCLUDE DONE AND HIDDEN THREADS)
+=======
+        // 1. ALL MESSAGES (ACTIVE META INBOX FOLDER ONLY)
+>>>>>>> 079e3a20f540bf60b0727ae8010bfb1dfa042f38
         if (activeInboxFilter === 'all') {
             if (threadStatus === 'done' || threadStatus === 'hidden' || conv.isMetaDone || conv.folder === 'done') {
                 return false;
