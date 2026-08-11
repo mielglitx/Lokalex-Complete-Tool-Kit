@@ -47,6 +47,23 @@ function sanitizeText(val, fallback = "") {
     return String(val).trim();
 }
 
+// STRICT VALIDATION TO REJECT PHANTOM / GHOST THREADS
+function isValidThread(conv) {
+    if (!conv || !conv.id) return false;
+    
+    const hasMessages = Array.isArray(conv.messages) && conv.messages.length > 0;
+    const cleanLastMsg = sanitizeText(conv.lastMessage, "");
+    const hasValidLastMsg = cleanLastMsg !== "" && cleanLastMsg !== "No messages yet";
+    const cleanName = sanitizeText(conv.customerName || conv.name, "");
+    const hasRealName = cleanName !== "" && cleanName !== "Facebook Customer";
+
+    // Reject phantom threads that have no real messages and no valid customer name
+    if (!hasMessages && !hasValidLastMsg && !hasRealName) {
+        return false;
+    }
+    return true;
+}
+
 export function getPageToken() {
     return localStorage.getItem('lokalex_fb_page_token') || DIRECT_PAGE_ACCESS_TOKEN;
 }
@@ -280,14 +297,14 @@ export function listenToFirebaseWebhookMessages() {
                     ...item,
                     lastMessage: rawLastMsg || "No messages yet"
                 };
-            }).filter(c => c && c.id);
+            }).filter(isValidThread);
 
             const map = new Map();
             conversationsList.forEach(c => {
-                if (c && c.id) map.set(c.id, c);
+                if (isValidThread(c)) map.set(c.id, c);
             });
             fbList.forEach(c => {
-                if (c && c.id) map.set(c.id, { ...map.get(c.id), ...c });
+                if (isValidThread(c)) map.set(c.id, { ...map.get(c.id), ...c });
             });
 
             conversationsList = Array.from(map.values());
@@ -406,6 +423,7 @@ export async function fetchFacebookConversations(isSilent = false) {
                         const doneAt = typeof assignData === 'object' ? (assignData.doneAt || assignData.timestamp || 0) : 0;
                         const updatedTime = new Date(conv.updated_time).getTime();
 
+                        // SKIP IF LOCALLY COMPLETED/HIDDEN AND NO NEW MESSAGES ARRIVED SINCE
                         if ((threadStatus === 'done' || threadStatus === 'hidden') && updatedTime <= (doneAt + 500)) {
                             return;
                         }
@@ -451,7 +469,7 @@ export async function fetchFacebookConversations(isSilent = false) {
                         const lastMsgObj = rawMsgs[rawMsgs.length - 1] || {};
                         const lastMsgText = lastMsgObj.imageUrl ? "📷 [Image]" : sanitizeText(lastMsgObj.text, "No messages yet");
 
-                        fetchedMap.set(conv.id, {
+                        const threadItem = {
                             id: conv.id,
                             customerName: senderName,
                             senderId: senderId,
@@ -462,7 +480,11 @@ export async function fetchFacebookConversations(isSilent = false) {
                             lastUpdated: updatedTime,
                             unreadCount: conv.unread_count || 0,
                             folder: 'inbox'
-                        });
+                        };
+
+                        if (isValidThread(threadItem)) {
+                            fetchedMap.set(conv.id, threadItem);
+                        }
                     });
 
                     conversationsList = Array.from(fetchedMap.values());
@@ -499,7 +521,7 @@ export async function fetchMetaDoneConversations(isSilent = false) {
             const mergedMap = new Map();
 
             doneConversationsList.forEach(c => {
-                if (c && c.id) mergedMap.set(c.id, c);
+                if (isValidThread(c)) mergedMap.set(c.id, c);
             });
 
             while (doneUrl && fetchedCount < maxPages) {
@@ -551,7 +573,7 @@ export async function fetchMetaDoneConversations(isSilent = false) {
                     const lastMsgObj = rawMsgs[rawMsgs.length - 1] || {};
                     const lastMsgText = lastMsgObj.imageUrl ? "📷 [Image]" : sanitizeText(lastMsgObj.text, "No messages yet");
 
-                    mergedMap.set(conv.id, {
+                    const threadObj = {
                         id: conv.id,
                         customerName: senderName,
                         senderId: senderId,
@@ -563,7 +585,11 @@ export async function fetchMetaDoneConversations(isSilent = false) {
                         unreadCount: conv.unread_count || 0,
                         folder: 'done',
                         isMetaDone: true
-                    });
+                    };
+
+                    if (isValidThread(threadObj)) {
+                        mergedMap.set(conv.id, threadObj);
+                    }
                 });
 
                 doneUrl = result.paging?.next || null;
@@ -638,7 +664,7 @@ export async function loadOlderConversations() {
                         folder: isDoneTab ? 'done' : 'inbox',
                         isMetaDone: isDoneTab
                     };
-                }).filter(c => c && c.id);
+                }).filter(isValidThread);
 
                 if (isDoneTab) {
                     nextDoneThreadsCursor = result.paging?.next || null;
@@ -754,12 +780,12 @@ export function renderThreadsList() {
     if (activeInboxFilter === 'done') {
         const doneMap = new Map();
         doneConversationsList.forEach(c => {
-            if (c && c.id) doneMap.set(c.id, c);
+            if (isValidThread(c)) doneMap.set(c.id, c);
         });
         conversationsList.forEach(c => {
             const assignData = assignedThreadsMap[c.id] || {};
             const status = typeof assignData === 'object' ? assignData.status : '';
-            if (status === 'done' || status === 'hidden' || c.isMetaDone || c.folder === 'done') {
+            if ((status === 'done' || status === 'hidden' || c.isMetaDone || c.folder === 'done') && isValidThread(c)) {
                 doneMap.set(c.id, c);
             }
         });
@@ -767,16 +793,19 @@ export function renderThreadsList() {
     }
 
     let activeConversations = sourceList.filter(conv => {
-        if (!conv || !conv.id) return false;
+        if (!isValidThread(conv)) return false;
 
         const assignData = assignedThreadsMap[conv.id] || {};
         const cateringRider = typeof assignData === 'object' ? assignData.riderName : assignData;
         const threadStatus = typeof assignData === 'object' ? assignData.status : (cateringRider ? 'catering' : 'open');
         const myName = (appState.riderName || "").trim();
 
-        // 1. ALL MESSAGES (ACTIVE META INBOX FOLDER)
+        // 1. ALL MESSAGES (STRICT ACTIVE INBOX ONLY - EXCLUDE DONE AND HIDDEN THREADS)
         if (activeInboxFilter === 'all') {
-            return conv.folder === 'inbox' || !conv.isMetaDone;
+            if (threadStatus === 'done' || threadStatus === 'hidden' || conv.isMetaDone || conv.folder === 'done') {
+                return false;
+            }
+            return true;
         }
 
         // 2. UNREAD MESSAGES ONLY
@@ -789,7 +818,7 @@ export function renderThreadsList() {
             return cateringRider && cateringRider.toLowerCase() === myName.toLowerCase() && threadStatus === 'catering';
         }
 
-        // 4. DONE MESSAGES ONLY (SHOW ALL THREADS IN META'S DONE FOLDER)
+        // 4. DONE MESSAGES ONLY
         if (activeInboxFilter === 'done') {
             return true;
         }
@@ -1349,7 +1378,42 @@ function checkAndUpdateRosterAutoAvailable(riderName) {
     }
 }
 
-// Quick Button 1: SEND IMAGE
+// IMAGE VIEWER LOGIC
+let currentZoom = 1;
+
+export function openImageViewer(url) {
+    const modal = document.getElementById('image-viewer-modal');
+    const img = document.getElementById('image-viewer-img');
+    if (modal && img) {
+        img.src = url;
+        currentZoom = 1;
+        img.style.transform = `scale(${currentZoom})`;
+        modal.classList.remove('hidden');
+    }
+}
+
+export function closeImageViewer() {
+    const modal = document.getElementById('image-viewer-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export function zoomImageViewer(delta) {
+    const img = document.getElementById('image-viewer-img');
+    if (img) {
+        currentZoom += delta;
+        if (currentZoom < 0.5) currentZoom = 0.5;
+        if (currentZoom > 5) currentZoom = 5;
+        img.style.transform = `scale(${currentZoom})`;
+    }
+}
+
+// IMAGE EDITOR LOGIC
+let editorCanvas, editorCtx, baseImage;
+let currentTool = 'draw';
+let isDrawing = false;
+let drawColor = '#ff0000';
+let textInputX = 0, textInputY = 0;
+
 export function triggerSendImage() {
     const input = document.getElementById('fb-image-file-input');
     if (input) input.click();
@@ -1358,46 +1422,173 @@ export function triggerSendImage() {
 export function handleSendImageFile(event) {
     const file = event.target?.files?.[0];
     if (!file) return;
-
     if (!activeThreadId) return showToast("⚠️ Please select a customer conversation first.");
 
-    showToast("📸 Processing image...");
-
     const reader = new FileReader();
-    reader.onload = async (e) => {
-        const imageDataUrl = e.target.result;
-        const sourceList = conversationsList.concat(doneConversationsList);
-        const thread = sourceList.find(c => c.id === activeThreadId);
-        const senderName = appState.riderName || "Lokalex Admin";
-
-        const newMsg = {
-            id: `MSG_${Date.now()}`,
-            text: `📷 [Sent Image]`,
-            imageUrl: imageDataUrl,
-            sender: senderName,
-            isRider: true,
-            isLocallySent: true,
-            timestamp: Date.now()
-        };
-
-        if (thread) {
-            if (!thread.messages) thread.messages = [];
-            thread.messages.push(newMsg);
-            thread.lastMessage = "📷 [Sent Image]";
-            thread.lastMessageIsRider = true;
-            thread.lastUpdated = Date.now();
-            renderThreadMessages(activeThreadId, true);
-            renderThreadsList();
-        }
-
-        if (db) {
-            db.ref(`facebook_inbox/${activeThreadId}/messages`).push(newMsg);
-        }
-
-        showToast("✅ Image sent!");
+    reader.onload = (e) => {
+        openImageEditor(e.target.result);
     };
     reader.readAsDataURL(file);
     event.target.value = "";
+}
+
+export function openImageEditor(dataUrl) {
+    const modal = document.getElementById('image-editor-modal');
+    editorCanvas = document.getElementById('image-editor-canvas');
+    const textInput = document.getElementById('editor-text-input');
+    
+    if (!modal || !editorCanvas) return;
+    
+    editorCtx = editorCanvas.getContext('2d');
+    baseImage = new Image();
+    
+    baseImage.onload = () => {
+        editorCanvas.width = baseImage.width;
+        editorCanvas.height = baseImage.height;
+        editorCtx.drawImage(baseImage, 0, 0);
+        modal.classList.remove('hidden');
+        initCanvasEvents();
+    };
+    baseImage.src = dataUrl;
+    if (textInput) textInput.classList.add('hidden');
+    setEditorTool('draw');
+}
+
+export function closeImageEditor() {
+    const modal = document.getElementById('image-editor-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export function setEditorTool(tool) {
+    currentTool = tool;
+    const drawBtn = document.getElementById('editor-tool-draw');
+    const textBtn = document.getElementById('editor-tool-text');
+    const textInput = document.getElementById('editor-text-input');
+    
+    if (drawBtn) drawBtn.className = tool === 'draw' ? "bg-blue-600 text-white px-3 py-2 rounded-xl text-xs font-bold border-2 border-blue-400" : "bg-gray-800 text-white px-3 py-2 rounded-xl text-xs font-bold border-2 border-transparent";
+    if (textBtn) textBtn.className = tool === 'text' ? "bg-blue-600 text-white px-3 py-2 rounded-xl text-xs font-bold border-2 border-blue-400" : "bg-gray-800 text-white px-3 py-2 rounded-xl text-xs font-bold border-2 border-transparent";
+    if (textInput) textInput.classList.add('hidden');
+}
+
+function getPointerPos(e) {
+    const rect = editorCanvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const scaleX = editorCanvas.width / rect.width;
+    const scaleY = editorCanvas.height / rect.height;
+    return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+    };
+}
+
+function initCanvasEvents() {
+    const colorPicker = document.getElementById('editor-color-picker');
+    if (colorPicker) {
+        colorPicker.oninput = (e) => drawColor = e.target.value;
+    }
+
+    editorCanvas.onmousedown = startPointer;
+    editorCanvas.ontouchstart = startPointer;
+    editorCanvas.onmousemove = movePointer;
+    editorCanvas.ontouchmove = movePointer;
+    editorCanvas.onmouseup = stopPointer;
+    editorCanvas.ontouchend = stopPointer;
+    editorCanvas.onmouseout = stopPointer;
+}
+
+function startPointer(e) {
+    if (currentTool === 'text') {
+        const pos = getPointerPos(e);
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+        textInputX = pos.x;
+        textInputY = pos.y;
+        
+        const textInput = document.getElementById('editor-text-input');
+        if (textInput) {
+            textInput.style.left = `${clientX}px`;
+            textInput.style.top = `${clientY}px`;
+            textInput.style.color = drawColor;
+            textInput.value = '';
+            textInput.classList.remove('hidden');
+            textInput.focus();
+
+            textInput.onkeydown = (ev) => {
+                if (ev.key === 'Enter') {
+                    editorCtx.font = `bold ${editorCanvas.width * 0.05}px sans-serif`;
+                    editorCtx.fillStyle = drawColor;
+                    editorCtx.fillText(textInput.value, textInputX, textInputY);
+                    textInput.classList.add('hidden');
+                }
+            };
+        }
+        return;
+    }
+
+    if (currentTool === 'draw') {
+        isDrawing = true;
+        const pos = getPointerPos(e);
+        editorCtx.beginPath();
+        editorCtx.moveTo(pos.x, pos.y);
+    }
+}
+
+function movePointer(e) {
+    if (!isDrawing || currentTool !== 'draw') return;
+    if (e.cancelable) e.preventDefault();
+    const pos = getPointerPos(e);
+    editorCtx.lineWidth = editorCanvas.width * 0.01;
+    editorCtx.lineCap = 'round';
+    editorCtx.strokeStyle = drawColor;
+    editorCtx.lineTo(pos.x, pos.y);
+    editorCtx.stroke();
+}
+
+function stopPointer() {
+    if (isDrawing) {
+        editorCtx.closePath();
+        isDrawing = false;
+    }
+}
+
+export async function sendEditedImage() {
+    if (!editorCanvas || !activeThreadId) return;
+    
+    showToast("📸 Processing image...");
+    closeImageEditor();
+
+    const imageDataUrl = editorCanvas.toDataURL('image/jpeg', 0.8);
+    const sourceList = conversationsList.concat(doneConversationsList);
+    const thread = sourceList.find(c => c.id === activeThreadId);
+    const senderName = appState.riderName || "Lokalex Admin";
+
+    const newMsg = {
+        id: `MSG_${Date.now()}`,
+        text: `📷 [Sent Image]`,
+        imageUrl: imageDataUrl,
+        sender: senderName,
+        isRider: true,
+        isLocallySent: true,
+        timestamp: Date.now()
+    };
+
+    if (thread) {
+        if (!thread.messages) thread.messages = [];
+        thread.messages.push(newMsg);
+        thread.lastMessage = "📷 [Sent Image]";
+        thread.lastMessageIsRider = true;
+        thread.lastUpdated = Date.now();
+        renderThreadMessages(activeThreadId, true);
+        renderThreadsList();
+    }
+
+    if (db) {
+        db.ref(`facebook_inbox/${activeThreadId}/messages`).push(newMsg);
+    }
+
+    showToast("✅ Image sent!");
 }
 
 // Quick Button 2: SEND COORDINATES
@@ -1468,7 +1659,6 @@ export function sendCurrentReceipt() {
             .replace(/\r\n/g, '\n')
             .replace(/\r/g, '\n');
 
-        const input = document.getElementById('fb-[#0084FF]-cust-name'); 
         const fbInput = document.getElementById('fb-message-input');
         if (fbInput) {
             fbInput.value = formattedReceipt;
@@ -1538,7 +1728,7 @@ export function renderThreadMessages(threadId, forceScrollToBottom = false, isPa
             timeStr = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         }
 
-        const imageMarkup = m.imageUrl ? `<img src="${m.imageUrl}" onerror="this.style.display='none'" class="max-w-[220px] sm:max-w-[280px] w-full min-h-[100px] bg-gray-800/50 rounded-xl mt-1 border border-black/20 object-cover shadow-sm block">` : '';
+        const imageMarkup = m.imageUrl ? `<img src="${m.imageUrl}" onerror="this.style.display='none'" class="max-w-[220px] sm:max-w-[280px] w-full min-h-[100px] bg-gray-800/50 rounded-xl mt-1 border border-black/20 object-cover shadow-sm block cursor-pointer active:opacity-75 transition" onclick="openImageViewer('${m.imageUrl}')">` : '';
         const cleanMsgText = sanitizeText(m.text, "");
         const textMarkup = cleanMsgText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${escapeHtml(cleanMsgText)}</div>` : '';
         const senderLabel = escapeHtml(sanitizeText(m.sender, isRider ? "Meta Business Suite" : displayName));
@@ -1757,4 +1947,10 @@ if (typeof window !== 'undefined') {
     window.closeSlideDeleteModal = closeSlideDeleteModal;
     window.onSlideProgress = onSlideProgress;
     window.onSlideEnd = onSlideEnd;
+    window.openImageViewer = openImageViewer;
+    window.closeImageViewer = closeImageViewer;
+    window.zoomImageViewer = zoomImageViewer;
+    window.closeImageEditor = closeImageEditor;
+    window.setEditorTool = setEditorTool;
+    window.sendEditedImage = sendEditedImage;
 }
