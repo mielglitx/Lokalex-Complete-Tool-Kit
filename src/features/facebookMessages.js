@@ -47,28 +47,11 @@ function sanitizeText(val, fallback = "") {
     return String(val).trim();
 }
 
-// STRICT VALIDATION TO REJECT PHANTOM / GHOST THREADS
-function isValidThread(conv) {
-    if (!conv || !conv.id) return false;
-    
-    const hasMessages = Array.isArray(conv.messages) && conv.messages.length > 0;
-    const cleanLastMsg = sanitizeText(conv.lastMessage, "");
-    const hasValidLastMsg = cleanLastMsg !== "" && cleanLastMsg !== "No messages yet";
-    const cleanName = sanitizeText(conv.customerName || conv.name, "");
-    const hasRealName = cleanName !== "" && cleanName !== "Facebook Customer";
-
-    // Reject phantom threads that have no real messages and no valid customer name
-    if (!hasMessages && !hasValidLastMsg && !hasRealName) {
-        return false;
-    }
-    return true;
-}
-
 export function getPageToken() {
     return localStorage.getItem('lokalex_fb_page_token') || DIRECT_PAGE_ACCESS_TOKEN;
 }
 
-// SLIDE CONFIRMATION HANDLERS
+// UNIVERSAL SLIDE CONFIRMATION MODAL LOGIC (SHARED ACROSS SMART CART, ROSTER & BUSINESS SUITE)
 export function closeSlideDeleteModal() {
     const modal = document.getElementById('slide-delete-modal');
     const rangeInput = document.getElementById('slide-delete-range');
@@ -78,10 +61,10 @@ export function closeSlideDeleteModal() {
 }
 
 export function onSlideProgress(val) {
-    if (Number(val) >= 95) {
+    if (Number(val) >= 90) {
         if (typeof window.onSlideConfirmAction === 'function') {
             const action = window.onSlideConfirmAction;
-            window.onSlideConfirmAction = null;
+            window.onSlideConfirmAction = null; // Re-entry guard
             action();
         }
     }
@@ -90,7 +73,7 @@ export function onSlideProgress(val) {
 export function onSlideEnd() {
     const rangeInput = document.getElementById('slide-delete-range');
     if (!rangeInput) return;
-    if (Number(rangeInput.value) >= 95) {
+    if (Number(rangeInput.value) >= 90) {
         if (typeof window.onSlideConfirmAction === 'function') {
             const action = window.onSlideConfirmAction;
             window.onSlideConfirmAction = null;
@@ -101,15 +84,18 @@ export function onSlideEnd() {
     }
 }
 
-function requestSlideConfirmation(title, subtext, onConfirmCallback) {
+export function requestSlideConfirmation(title, subtext, onConfirmCallback, iconClass = "fa-solid fa-triangle-exclamation text-red-500") {
     const modal = document.getElementById('slide-delete-modal');
     const titleEl = document.getElementById('slide-delete-title');
     const subEl = document.getElementById('slide-delete-sub');
     const rangeInput = document.getElementById('slide-delete-range');
+    const iconEl = document.getElementById('slide-modal-icon');
 
     if (modal && titleEl && subEl && rangeInput) {
-        titleEl.innerText = title;
-        subEl.innerText = subtext;
+        titleEl.innerText = title || "Confirm Action";
+        subEl.innerText = subtext || "I-drag pakanan ang slider para kumpirmahin.";
+        if (iconEl) iconEl.className = `${iconClass} text-3xl mx-auto`;
+        
         rangeInput.value = "0";
         modal.classList.remove('hidden');
 
@@ -122,7 +108,9 @@ function requestSlideConfirmation(title, subtext, onConfirmCallback) {
         };
     } else {
         if (confirm(`${title}\n\n${subtext}`)) {
-            onConfirmCallback();
+            if (typeof onConfirmCallback === 'function') {
+                onConfirmCallback();
+            }
         }
     }
 }
@@ -297,14 +285,14 @@ export function listenToFirebaseWebhookMessages() {
                     ...item,
                     lastMessage: rawLastMsg || "No messages yet"
                 };
-            }).filter(isValidThread);
+            }).filter(c => c && c.id);
 
             const map = new Map();
             conversationsList.forEach(c => {
-                if (isValidThread(c)) map.set(c.id, c);
+                if (c && c.id) map.set(c.id, c);
             });
             fbList.forEach(c => {
-                if (isValidThread(c)) map.set(c.id, { ...map.get(c.id), ...c });
+                if (c && c.id) map.set(c.id, { ...map.get(c.id), ...c });
             });
 
             conversationsList = Array.from(map.values());
@@ -423,7 +411,6 @@ export async function fetchFacebookConversations(isSilent = false) {
                         const doneAt = typeof assignData === 'object' ? (assignData.doneAt || assignData.timestamp || 0) : 0;
                         const updatedTime = new Date(conv.updated_time).getTime();
 
-                        // SKIP IF LOCALLY COMPLETED/HIDDEN AND NO NEW MESSAGES ARRIVED SINCE
                         if ((threadStatus === 'done' || threadStatus === 'hidden') && updatedTime <= (doneAt + 500)) {
                             return;
                         }
@@ -469,7 +456,7 @@ export async function fetchFacebookConversations(isSilent = false) {
                         const lastMsgObj = rawMsgs[rawMsgs.length - 1] || {};
                         const lastMsgText = lastMsgObj.imageUrl ? "📷 [Image]" : sanitizeText(lastMsgObj.text, "No messages yet");
 
-                        const threadItem = {
+                        fetchedMap.set(conv.id, {
                             id: conv.id,
                             customerName: senderName,
                             senderId: senderId,
@@ -480,11 +467,7 @@ export async function fetchFacebookConversations(isSilent = false) {
                             lastUpdated: updatedTime,
                             unreadCount: conv.unread_count || 0,
                             folder: 'inbox'
-                        };
-
-                        if (isValidThread(threadItem)) {
-                            fetchedMap.set(conv.id, threadItem);
-                        }
+                        });
                     });
 
                     conversationsList = Array.from(fetchedMap.values());
@@ -521,7 +504,7 @@ export async function fetchMetaDoneConversations(isSilent = false) {
             const mergedMap = new Map();
 
             doneConversationsList.forEach(c => {
-                if (isValidThread(c)) mergedMap.set(c.id, c);
+                if (c && c.id) mergedMap.set(c.id, c);
             });
 
             while (doneUrl && fetchedCount < maxPages) {
@@ -573,7 +556,7 @@ export async function fetchMetaDoneConversations(isSilent = false) {
                     const lastMsgObj = rawMsgs[rawMsgs.length - 1] || {};
                     const lastMsgText = lastMsgObj.imageUrl ? "📷 [Image]" : sanitizeText(lastMsgObj.text, "No messages yet");
 
-                    const threadObj = {
+                    mergedMap.set(conv.id, {
                         id: conv.id,
                         customerName: senderName,
                         senderId: senderId,
@@ -585,11 +568,7 @@ export async function fetchMetaDoneConversations(isSilent = false) {
                         unreadCount: conv.unread_count || 0,
                         folder: 'done',
                         isMetaDone: true
-                    };
-
-                    if (isValidThread(threadObj)) {
-                        mergedMap.set(conv.id, threadObj);
-                    }
+                    });
                 });
 
                 doneUrl = result.paging?.next || null;
@@ -664,7 +643,7 @@ export async function loadOlderConversations() {
                         folder: isDoneTab ? 'done' : 'inbox',
                         isMetaDone: isDoneTab
                     };
-                }).filter(isValidThread);
+                }).filter(c => c && c.id);
 
                 if (isDoneTab) {
                     nextDoneThreadsCursor = result.paging?.next || null;
@@ -687,7 +666,7 @@ export async function loadOlderConversations() {
         }
     } catch(e) {
         console.error("Error fetching older conversations page:", e);
-    } finally {
+    } fontally {
         isLoadingOlderThreads = false;
     }
 }
@@ -780,12 +759,12 @@ export function renderThreadsList() {
     if (activeInboxFilter === 'done') {
         const doneMap = new Map();
         doneConversationsList.forEach(c => {
-            if (isValidThread(c)) doneMap.set(c.id, c);
+            if (c && c.id) doneMap.set(c.id, c);
         });
         conversationsList.forEach(c => {
             const assignData = assignedThreadsMap[c.id] || {};
             const status = typeof assignData === 'object' ? assignData.status : '';
-            if ((status === 'done' || status === 'hidden' || c.isMetaDone || c.folder === 'done') && isValidThread(c)) {
+            if (status === 'done' || status === 'hidden' || c.isMetaDone || c.folder === 'done') {
                 doneMap.set(c.id, c);
             }
         });
@@ -793,14 +772,14 @@ export function renderThreadsList() {
     }
 
     let activeConversations = sourceList.filter(conv => {
-        if (!isValidThread(conv)) return false;
+        if (!conv || !conv.id) return false;
 
         const assignData = assignedThreadsMap[conv.id] || {};
         const cateringRider = typeof assignData === 'object' ? assignData.riderName : assignData;
         const threadStatus = typeof assignData === 'object' ? assignData.status : (cateringRider ? 'catering' : 'open');
         const myName = (appState.riderName || "").trim();
 
-        // 1. ALL MESSAGES (STRICT ACTIVE INBOX ONLY - EXCLUDE DONE AND HIDDEN THREADS)
+        // 1. ALL MESSAGES (ACTIVE META INBOX FOLDER)
         if (activeInboxFilter === 'all') {
             if (threadStatus === 'done' || threadStatus === 'hidden' || conv.isMetaDone || conv.folder === 'done') {
                 return false;
@@ -818,7 +797,7 @@ export function renderThreadsList() {
             return cateringRider && cateringRider.toLowerCase() === myName.toLowerCase() && threadStatus === 'catering';
         }
 
-        // 4. DONE MESSAGES ONLY
+        // 4. DONE MESSAGES ONLY (SHOW ALL THREADS IN META'S DONE FOLDER)
         if (activeInboxFilter === 'done') {
             return true;
         }
@@ -1947,6 +1926,7 @@ if (typeof window !== 'undefined') {
     window.closeSlideDeleteModal = closeSlideDeleteModal;
     window.onSlideProgress = onSlideProgress;
     window.onSlideEnd = onSlideEnd;
+    window.requestSlideConfirmation = requestSlideConfirmation;
     window.openImageViewer = openImageViewer;
     window.closeImageViewer = closeImageViewer;
     window.zoomImageViewer = zoomImageViewer;
