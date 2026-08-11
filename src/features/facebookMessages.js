@@ -15,6 +15,10 @@ let activeInboxFilter = 'all'; // 'all' | 'unread' | 'assigned' | 'done'
 let nextPagingCursors = {}; // Stores Graph API next cursors per thread for past messages
 let isLoadingOlderMessages = {}; // Guard flag for pagination requests
 
+let nextInboxThreadsCursor = null; // Graph API cursor for older main inbox threads
+let nextDoneThreadsCursor = null; // Graph API cursor for older done folder threads
+let isLoadingOlderThreads = false; // Guard flag for thread list pagination
+
 let isAlarmEnabled = localStorage.getItem('lokalex_fb_alarm_enabled') === 'true';
 let knownMessageCountMap = {};
 let isInitialFetchDone = false;
@@ -35,11 +39,51 @@ lokaledeliver@gmail.com
 
 Maraming salamat po! 🛵💛`;
 
+// SANITIZE UNDEFINED & NULL STRINGS TO PREVENT "undefined" PREVIEWS
+function sanitizeText(val, fallback = "") {
+    if (val === undefined || val === null || val === "undefined" || val === "null" || String(val).trim() === "") {
+        return fallback;
+    }
+    return String(val).trim();
+}
+
 export function getPageToken() {
     return localStorage.getItem('lokalex_fb_page_token') || DIRECT_PAGE_ACCESS_TOKEN;
 }
 
-// SLIDE TO CONFIRM MODAL HELPER FOR BUSINESS SUITE BUTTONS
+// SLIDE CONFIRMATION HANDLERS
+export function closeSlideDeleteModal() {
+    const modal = document.getElementById('slide-delete-modal');
+    const rangeInput = document.getElementById('slide-delete-range');
+    if (modal) modal.classList.add('hidden');
+    if (rangeInput) rangeInput.value = "0";
+    window.onSlideConfirmAction = null;
+}
+
+export function onSlideProgress(val) {
+    if (Number(val) >= 95) {
+        if (typeof window.onSlideConfirmAction === 'function') {
+            const action = window.onSlideConfirmAction;
+            window.onSlideConfirmAction = null;
+            action();
+        }
+    }
+}
+
+export function onSlideEnd() {
+    const rangeInput = document.getElementById('slide-delete-range');
+    if (!rangeInput) return;
+    if (Number(rangeInput.value) >= 95) {
+        if (typeof window.onSlideConfirmAction === 'function') {
+            const action = window.onSlideConfirmAction;
+            window.onSlideConfirmAction = null;
+            action();
+        }
+    } else {
+        rangeInput.value = "0";
+    }
+}
+
 function requestSlideConfirmation(title, subtext, onConfirmCallback) {
     const modal = document.getElementById('slide-delete-modal');
     const titleEl = document.getElementById('slide-delete-title');
@@ -54,6 +98,7 @@ function requestSlideConfirmation(title, subtext, onConfirmCallback) {
 
         window.onSlideConfirmAction = () => {
             modal.classList.add('hidden');
+            rangeInput.value = "0";
             if (typeof onConfirmCallback === 'function') {
                 onConfirmCallback();
             }
@@ -94,9 +139,7 @@ async function markMetaConversationDone(threadId) {
 
     try {
         const res = await fetch(`https://graph.facebook.com/v19.0/${threadId}?folder=done&access_token=${token}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ folder: "done" })
+            method: 'POST'
         });
         
         if (!res.ok) {
@@ -172,7 +215,6 @@ export function openFacebookMessagesModal() {
     const modal = document.getElementById('facebook-messages-modal');
     if (modal) modal.classList.remove('hidden');
 
-    // Prevent background page scrolling
     document.body.classList.add('overflow-hidden');
 
     if (window.closeWebHubModal) window.closeWebHubModal();
@@ -198,7 +240,6 @@ export function closeFacebookMessagesModal() {
     const modal = document.getElementById('facebook-messages-modal');
     if (modal) modal.classList.add('hidden');
 
-    // Restore background page scrolling
     document.body.classList.remove('overflow-hidden');
 
     if (liveSyncInterval) {
@@ -229,14 +270,25 @@ export function listenToFirebaseWebhookMessages() {
     db.ref('facebook_inbox').on('value', (snapshot) => {
         const data = snapshot.val();
         if (data) {
-            const fbList = Object.keys(data).map(key => ({
-                id: key,
-                ...data[key]
-            }));
+            const fbList = Object.keys(data).map(key => {
+                const item = data[key];
+                const custName = sanitizeText(item.customerName || item.name || item.senderName, "Facebook Customer");
+                const rawLastMsg = sanitizeText(item.lastMessage, "");
+                return {
+                    id: key,
+                    customerName: custName,
+                    ...item,
+                    lastMessage: rawLastMsg || "No messages yet"
+                };
+            }).filter(c => c && c.id);
 
             const map = new Map();
-            conversationsList.forEach(c => map.set(c.id, c));
-            fbList.forEach(c => map.set(c.id, { ...map.get(c.id), ...c }));
+            conversationsList.forEach(c => {
+                if (c && c.id) map.set(c.id, c);
+            });
+            fbList.forEach(c => {
+                if (c && c.id) map.set(c.id, { ...map.get(c.id), ...c });
+            });
 
             conversationsList = Array.from(map.values());
             checkNewIncomingMessages(conversationsList);
@@ -302,16 +354,17 @@ function checkNewIncomingMessages(threads) {
     threads.forEach(conv => {
         const msgCount = conv.messages ? conv.messages.length : 0;
         const prevCount = knownMessageCountMap[conv.id] || 0;
+        const cName = sanitizeText(conv.customerName || conv.name, "Facebook Customer");
 
         if (isInitialFetchDone) {
             if (prevCount === 0 && msgCount > 0) {
                 hasNewIncoming = true;
-                newCustomerName = conv.customerName;
+                newCustomerName = cName;
             } else if (msgCount > prevCount) {
                 const lastMsg = conv.messages[conv.messages.length - 1];
                 if (lastMsg && !lastMsg.isRider) {
                     hasNewIncoming = true;
-                    newCustomerName = conv.customerName;
+                    newCustomerName = cName;
                 }
             }
         }
@@ -339,15 +392,26 @@ export async function fetchFacebookConversations(isSilent = false) {
 
     if (token) {
         try {
-            const res = await fetch(`https://graph.facebook.com/v19.0/me/conversations?folder=inbox&fields=id,updated_time,unread_count,senders{id,name,picture{data{url}}},messages.limit(20){id,message,from,created_time,attachments{id,mime_type,image_data,payload}}&access_token=${token}`);
+            const res = await fetch(`https://graph.facebook.com/v19.0/me/conversations?folder=inbox&limit=50&fields=id,updated_time,unread_count,senders{id,name,picture{data{url}}},messages.limit(20){id,message,from,created_time,attachments{id,mime_type,image_data,payload}}&access_token=${token}`);
             if (res.ok) {
                 const result = await res.json();
                 if (result.data) {
+                    nextInboxThreadsCursor = result.paging?.next || null;
+
                     const fetchedMap = new Map();
 
                     result.data.forEach(conv => {
+                        const assignData = assignedThreadsMap[conv.id] || {};
+                        const threadStatus = typeof assignData === 'object' ? assignData.status : '';
+                        const doneAt = typeof assignData === 'object' ? (assignData.doneAt || assignData.timestamp || 0) : 0;
+                        const updatedTime = new Date(conv.updated_time).getTime();
+
+                        if ((threadStatus === 'done' || threadStatus === 'hidden') && updatedTime <= (doneAt + 500)) {
+                            return;
+                        }
+
                         const senderObj = conv.senders?.data?.[0] || {};
-                        const senderName = senderObj.name || "Facebook Customer";
+                        const senderName = sanitizeText(senderObj.name || conv.name || conv.customerName, "Facebook Customer");
                         const senderId = senderObj.id || conv.id;
                         const avatarUrl = senderObj.picture?.data?.url || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=0084FF&color=fff`;
 
@@ -369,13 +433,13 @@ export async function fetchFacebookConversations(isSilent = false) {
                                 if (existingMsg && existingMsg.isLocallySent && existingMsg.sender) {
                                     senderAttribution = existingMsg.sender;
                                 } else {
-                                    senderAttribution = m.from?.name || "Meta Business Suite";
+                                    senderAttribution = sanitizeText(m.from?.name, "Meta Business Suite");
                                 }
                             }
 
                             return {
                                 id: m.id,
-                                text: m.message || "",
+                                text: sanitizeText(m.message, ""),
                                 imageUrl: attachImg,
                                 sender: senderAttribution,
                                 isRider: isRider,
@@ -385,6 +449,7 @@ export async function fetchFacebookConversations(isSilent = false) {
                         }).reverse();
 
                         const lastMsgObj = rawMsgs[rawMsgs.length - 1] || {};
+                        const lastMsgText = lastMsgObj.imageUrl ? "📷 [Image]" : sanitizeText(lastMsgObj.text, "No messages yet");
 
                         fetchedMap.set(conv.id, {
                             id: conv.id,
@@ -392,35 +457,15 @@ export async function fetchFacebookConversations(isSilent = false) {
                             senderId: senderId,
                             avatarUrl: avatarUrl,
                             messages: rawMsgs,
-                            lastMessage: lastMsgObj.imageUrl ? "📷 [Image]" : (lastMsgObj.text || "No messages yet"),
+                            lastMessage: lastMsgText,
                             lastMessageIsRider: lastMsgObj.isRider || false,
-                            lastUpdated: new Date(conv.updated_time).getTime(),
+                            lastUpdated: updatedTime,
                             unreadCount: conv.unread_count || 0,
                             folder: 'inbox'
                         });
                     });
 
-                    const mergedMap = new Map();
-                    conversationsList.forEach(c => mergedMap.set(c.id, c));
-                    fetchedMap.forEach((c, id) => {
-                        const existing = mergedMap.get(id);
-                        if (existing && existing.messages) {
-                            const msgMap = new Map();
-                            existing.messages.forEach(m => msgMap.set(m.id, m));
-                            c.messages.forEach(m => msgMap.set(m.id, m));
-                            const mergedMsgs = Array.from(msgMap.values()).sort((a,b) => a.timestamp - b.timestamp);
-                            c.messages = mergedMsgs;
-                            const lastM = mergedMsgs[mergedMsgs.length - 1];
-                            if (lastM) {
-                                c.lastMessage = lastM.imageUrl ? "📷 [Image]" : (lastM.text || "No messages yet");
-                                c.lastMessageIsRider = lastM.isRider || false;
-                                c.lastUpdated = Math.max(c.lastUpdated, lastM.timestamp || 0);
-                            }
-                        }
-                        mergedMap.set(id, c);
-                    });
-
-                    conversationsList = Array.from(mergedMap.values());
+                    conversationsList = Array.from(fetchedMap.values());
                     checkNewIncomingMessages(conversationsList);
                 }
             }
@@ -439,7 +484,7 @@ export async function fetchFacebookConversations(isSilent = false) {
     }
 }
 
-// FETCH DONE FOLDER CONVERSATIONS FROM GRAPH API
+// FETCH ALL DONE FOLDER CONVERSATIONS FROM GRAPH API WITH AUTOMATIC RECURSIVE PAGINATION
 export async function fetchMetaDoneConversations(isSilent = false) {
     const refreshIcon = document.getElementById('fb-refresh-icon');
     if (!isSilent && refreshIcon) refreshIcon.classList.add('fa-spin');
@@ -448,67 +493,85 @@ export async function fetchMetaDoneConversations(isSilent = false) {
 
     if (token) {
         try {
-            const res = await fetch(`https://graph.facebook.com/v19.0/me/conversations?folder=done&fields=id,updated_time,unread_count,senders{id,name,picture{data{url}}},messages.limit(20){id,message,from,created_time,attachments{id,mime_type,image_data,payload}}&access_token=${token}`);
-            if (res.ok) {
-                const result = await res.json();
-                if (result.data) {
-                    doneConversationsList = result.data.map(conv => {
-                        const senderObj = conv.senders?.data?.[0] || {};
-                        const senderName = senderObj.name || "Facebook Customer";
-                        const senderId = senderObj.id || conv.id;
-                        const avatarUrl = senderObj.picture?.data?.url || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=0084FF&color=fff`;
+            let doneUrl = `https://graph.facebook.com/v19.0/me/conversations?folder=done&limit=100&fields=id,updated_time,unread_count,senders{id,name,picture{data{url}}},messages.limit(20){id,message,from,created_time,attachments{id,mime_type,image_data,payload}}&access_token=${token}`;
+            let fetchedCount = 0;
+            const maxPages = 5; // Fetch up to 500 historical threads in background
+            const mergedMap = new Map();
 
-                        if (conv.messages?.paging?.next) {
-                            nextPagingCursors[conv.id] = conv.messages.paging.next;
+            doneConversationsList.forEach(c => {
+                if (c && c.id) mergedMap.set(c.id, c);
+            });
+
+            while (doneUrl && fetchedCount < maxPages) {
+                const res = await fetch(doneUrl);
+                if (!res.ok) break;
+
+                const result = await res.json();
+                if (!result.data || result.data.length === 0) break;
+
+                result.data.forEach(conv => {
+                    const senderObj = conv.senders?.data?.[0] || {};
+                    const senderName = sanitizeText(senderObj.name || conv.name || conv.customerName, "Facebook Customer");
+                    const senderId = senderObj.id || conv.id;
+                    const avatarUrl = senderObj.picture?.data?.url || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=0084FF&color=fff`;
+
+                    if (conv.messages?.paging?.next) {
+                        nextPagingCursors[conv.id] = conv.messages.paging.next;
+                    }
+
+                    const existingThread = mergedMap.get(conv.id);
+
+                    const rawMsgs = (conv.messages?.data || []).map(m => {
+                        const isRider = m.from?.id !== senderId;
+                        const attach = m.attachments?.data?.[0];
+                        const attachImg = attach?.image_data?.url || attach?.payload?.url || attach?.payload?.src || null;
+
+                        const existingMsg = existingThread?.messages?.find(em => em.id === m.id);
+                        let senderAttribution = senderName;
+
+                        if (isRider) {
+                            if (existingMsg && existingMsg.isLocallySent && existingMsg.sender) {
+                                senderAttribution = existingMsg.sender;
+                            } else {
+                                senderAttribution = sanitizeText(m.from?.name, "Meta Business Suite");
+                            }
                         }
 
-                        const existingThread = doneConversationsList.find(c => c.id === conv.id);
-
-                        const rawMsgs = (conv.messages?.data || []).map(m => {
-                            const isRider = m.from?.id !== senderId;
-                            const attach = m.attachments?.data?.[0];
-                            const attachImg = attach?.image_data?.url || attach?.payload?.url || attach?.payload?.src || null;
-
-                            const existingMsg = existingThread?.messages?.find(em => em.id === m.id);
-                            let senderAttribution = senderName;
-
-                            if (isRider) {
-                                if (existingMsg && existingMsg.isLocallySent && existingMsg.sender) {
-                                    senderAttribution = existingMsg.sender;
-                                } else {
-                                    senderAttribution = m.from?.name || "Meta Business Suite";
-                                }
-                            }
-
-                            return {
-                                id: m.id,
-                                text: m.message || "",
-                                imageUrl: attachImg,
-                                sender: senderAttribution,
-                                isRider: isRider,
-                                isLocallySent: existingMsg?.isLocallySent || false,
-                                timestamp: new Date(m.created_time).getTime()
-                            };
-                        }).reverse();
-
-                        const lastMsgObj = rawMsgs[rawMsgs.length - 1] || {};
-
                         return {
-                            id: conv.id,
-                            customerName: senderName,
-                            senderId: senderId,
-                            avatarUrl: avatarUrl,
-                            messages: rawMsgs,
-                            lastMessage: lastMsgObj.imageUrl ? "📷 [Image]" : (lastMsgObj.text || "No messages yet"),
-                            lastMessageIsRider: lastMsgObj.isRider || false,
-                            lastUpdated: new Date(conv.updated_time).getTime(),
-                            unreadCount: conv.unread_count || 0,
-                            folder: 'done',
-                            isMetaDone: true
+                            id: m.id,
+                            text: sanitizeText(m.message, ""),
+                            imageUrl: attachImg,
+                            sender: senderAttribution,
+                            isRider: isRider,
+                            isLocallySent: existingMsg?.isLocallySent || false,
+                            timestamp: new Date(m.created_time).getTime()
                         };
+                    }).reverse();
+
+                    const lastMsgObj = rawMsgs[rawMsgs.length - 1] || {};
+                    const lastMsgText = lastMsgObj.imageUrl ? "📷 [Image]" : sanitizeText(lastMsgObj.text, "No messages yet");
+
+                    mergedMap.set(conv.id, {
+                        id: conv.id,
+                        customerName: senderName,
+                        senderId: senderId,
+                        avatarUrl: avatarUrl,
+                        messages: rawMsgs,
+                        lastMessage: lastMsgText,
+                        lastMessageIsRider: lastMsgObj.isRider || false,
+                        lastUpdated: new Date(conv.updated_time).getTime(),
+                        unreadCount: conv.unread_count || 0,
+                        folder: 'done',
+                        isMetaDone: true
                     });
-                }
+                });
+
+                doneUrl = result.paging?.next || null;
+                nextDoneThreadsCursor = doneUrl;
+                fetchedCount++;
             }
+
+            doneConversationsList = Array.from(mergedMap.values());
         } catch(e) {
             console.error("Done folder fetch error:", e);
         }
@@ -520,7 +583,90 @@ export async function fetchMetaDoneConversations(isSilent = false) {
     }
 }
 
-// PAGINATION: LOAD OLDER PAST MESSAGES ON SCROLL UP
+// PAGINATION: FETCH HUNDREDS OF HIDE/DONE OR INBOX CONVERSATIONS ON THREAD LIST SCROLL DOWN
+export async function loadOlderConversations() {
+    if (isLoadingOlderThreads) return;
+    const isDoneTab = activeInboxFilter === 'done';
+    const cursorUrl = isDoneTab ? nextDoneThreadsCursor : nextInboxThreadsCursor;
+    if (!cursorUrl) return;
+
+    isLoadingOlderThreads = true;
+
+    try {
+        const res = await fetch(cursorUrl);
+        if (res.ok) {
+            const result = await res.json();
+            if (result.data && result.data.length > 0) {
+                const newConvs = result.data.map(conv => {
+                    const senderObj = conv.senders?.data?.[0] || {};
+                    const senderName = sanitizeText(senderObj.name || conv.name || conv.customerName, "Facebook Customer");
+                    const senderId = senderObj.id || conv.id;
+                    const avatarUrl = senderObj.picture?.data?.url || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=0084FF&color=fff`;
+
+                    if (conv.messages?.paging?.next) {
+                        nextPagingCursors[conv.id] = conv.messages.paging.next;
+                    }
+
+                    const rawMsgs = (conv.messages?.data || []).map(m => {
+                        const isRider = m.from?.id !== senderId;
+                        const attach = m.attachments?.data?.[0];
+                        const attachImg = attach?.image_data?.url || attach?.payload?.url || attach?.payload?.src || null;
+
+                        return {
+                            id: m.id,
+                            text: sanitizeText(m.message, ""),
+                            imageUrl: attachImg,
+                            sender: isRider ? sanitizeText(m.from?.name, "Meta Business Suite") : senderName,
+                            isRider: isRider,
+                            timestamp: new Date(m.created_time).getTime()
+                        };
+                    }).reverse();
+
+                    const lastMsgObj = rawMsgs[rawMsgs.length - 1] || {};
+                    const lastMsgText = lastMsgObj.imageUrl ? "📷 [Image]" : sanitizeText(lastMsgObj.text, "No messages yet");
+
+                    return {
+                        id: conv.id,
+                        customerName: senderName,
+                        senderId: senderId,
+                        avatarUrl: avatarUrl,
+                        messages: rawMsgs,
+                        lastMessage: lastMsgText,
+                        lastMessageIsRider: lastMsgObj.isRider || false,
+                        lastUpdated: new Date(conv.updated_time).getTime(),
+                        unreadCount: conv.unread_count || 0,
+                        folder: isDoneTab ? 'done' : 'inbox',
+                        isMetaDone: isDoneTab
+                    };
+                }).filter(c => c && c.id);
+
+                if (isDoneTab) {
+                    nextDoneThreadsCursor = result.paging?.next || null;
+                    const existingIds = new Set(doneConversationsList.map(c => c.id));
+                    const uniqueNew = newConvs.filter(c => !existingIds.has(c.id));
+                    doneConversationsList = [...doneConversationsList, ...uniqueNew];
+                } else {
+                    nextInboxThreadsCursor = result.paging?.next || null;
+                    const existingIds = new Set(conversationsList.map(c => c.id));
+                    const uniqueNew = newConvs.filter(c => !existingIds.has(c.id));
+                    conversationsList = [...conversationsList, ...uniqueNew];
+                }
+
+                lastRenderedThreadsSignature = "";
+                renderThreadsList();
+            } else {
+                if (isDoneTab) nextDoneThreadsCursor = null;
+                else nextInboxThreadsCursor = null;
+            }
+        }
+    } catch(e) {
+        console.error("Error fetching older conversations page:", e);
+    } finally {
+        isLoadingOlderThreads = false;
+    }
+}
+
+// PAGINATION: LOAD OLDER PAST MESSAGES ON CHAT SCROLL UP
 export async function loadOlderThreadMessages(threadId) {
     if (!threadId || isLoadingOlderMessages[threadId] || !nextPagingCursors[threadId]) return;
 
@@ -539,7 +685,7 @@ export async function loadOlderThreadMessages(threadId) {
 
                 if (thread) {
                     const senderId = thread.senderId || thread.id;
-                    const customerName = thread.customerName || "Customer";
+                    const customerName = sanitizeText(thread.customerName || thread.name, "Customer");
 
                     const olderMsgs = result.data.map(m => {
                         const isRider = m.from?.id !== senderId;
@@ -548,12 +694,12 @@ export async function loadOlderThreadMessages(threadId) {
 
                         let senderAttribution = customerName;
                         if (isRider) {
-                            senderAttribution = m.from?.name || "Meta Business Suite";
+                            senderAttribution = sanitizeText(m.from?.name, "Meta Business Suite");
                         }
 
                         return {
                             id: m.id,
-                            text: m.message || "",
+                            text: sanitizeText(m.message, ""),
                             imageUrl: attachImg,
                             sender: senderAttribution,
                             isRider: isRider,
@@ -595,18 +741,40 @@ export function renderThreadsList() {
     const searchVal = (document.getElementById('fb-thread-search')?.value || "").toLowerCase().trim();
     if (!container) return;
 
+    if (!container.dataset.threadsScrollListenerAttached) {
+        container.dataset.threadsScrollListenerAttached = "true";
+        container.addEventListener('scroll', () => {
+            if (container.scrollTop + container.clientHeight >= container.scrollHeight - 80) {
+                loadOlderConversations();
+            }
+        });
+    }
+
     let sourceList = conversationsList;
     if (activeInboxFilter === 'done') {
-        sourceList = doneConversationsList;
+        const doneMap = new Map();
+        doneConversationsList.forEach(c => {
+            if (c && c.id) doneMap.set(c.id, c);
+        });
+        conversationsList.forEach(c => {
+            const assignData = assignedThreadsMap[c.id] || {};
+            const status = typeof assignData === 'object' ? assignData.status : '';
+            if (status === 'done' || status === 'hidden' || c.isMetaDone || c.folder === 'done') {
+                doneMap.set(c.id, c);
+            }
+        });
+        sourceList = Array.from(doneMap.values());
     }
 
     let activeConversations = sourceList.filter(conv => {
+        if (!conv || !conv.id) return false;
+
         const assignData = assignedThreadsMap[conv.id] || {};
         const cateringRider = typeof assignData === 'object' ? assignData.riderName : assignData;
         const threadStatus = typeof assignData === 'object' ? assignData.status : (cateringRider ? 'catering' : 'open');
         const myName = (appState.riderName || "").trim();
 
-        // 1. ALL MESSAGES (ONLY ACTIVE META INBOX MESSAGES)
+        // 1. ALL MESSAGES (ACTIVE META INBOX FOLDER)
         if (activeInboxFilter === 'all') {
             return conv.folder === 'inbox' || !conv.isMetaDone;
         }
@@ -621,19 +789,20 @@ export function renderThreadsList() {
             return cateringRider && cateringRider.toLowerCase() === myName.toLowerCase() && threadStatus === 'catering';
         }
 
-        // 4. DONE MESSAGES ONLY (META DONE FOLDER)
+        // 4. DONE MESSAGES ONLY (SHOW ALL THREADS IN META'S DONE FOLDER)
         if (activeInboxFilter === 'done') {
-            return conv.folder === 'done' || conv.isMetaDone;
+            return true;
         }
 
         return true;
     });
 
     if (searchVal) {
-        activeConversations = activeConversations.filter(c => 
-            (c.customerName || "").toLowerCase().includes(searchVal) ||
-            (c.lastMessage || "").toLowerCase().includes(searchVal)
-        );
+        activeConversations = activeConversations.filter(c => {
+            const nameToSearch = sanitizeText(c.customerName || c.name, "");
+            return nameToSearch.toLowerCase().includes(searchVal) ||
+                   sanitizeText(c.lastMessage, "").toLowerCase().includes(searchVal);
+        });
     }
 
     if (activeConversations.length === 0) {
@@ -651,7 +820,9 @@ export function renderThreadsList() {
         const assignData = assignedThreadsMap[c.id] || {};
         const rName = typeof assignData === 'object' ? assignData.riderName : assignData;
         const status = typeof assignData === 'object' ? assignData.status : '';
-        return `${c.id}_${c.lastUpdated}_${c.lastMessage}_${c.unreadCount}_${rName}_${status}_${c.avatarUrl}`;
+        const displayName = sanitizeText(c.customerName || c.name || c.senderName, 'Facebook Customer');
+        const cleanLastMsg = sanitizeText(c.lastMessage, 'No messages yet');
+        return `${c.id}_${c.lastUpdated}_${cleanLastMsg}_${c.unreadCount}_${rName}_${status}_${c.avatarUrl}_${displayName}`;
     }).join('|');
 
     if (lastRenderedThreadsSignature === currentSignature) return;
@@ -666,8 +837,10 @@ export function renderThreadsList() {
             timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
         }
 
+        const displayName = sanitizeText(conv.customerName || conv.name || conv.senderName, "Facebook Customer");
+        const cleanLastMsg = sanitizeText(conv.lastMessage, "No messages yet");
         const prefix = conv.lastMessageIsRider ? "You: " : "";
-        const avatar = conv.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.customerName || 'C')}&background=0084FF&color=fff`;
+        const avatar = conv.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0084FF&color=fff`;
 
         const assignData = assignedThreadsMap[conv.id] || {};
         const cateringRider = typeof assignData === 'object' ? assignData.riderName : assignData;
@@ -676,7 +849,7 @@ export function renderThreadsList() {
         let statusBadge = '';
         if (threadStatus === 'catering') {
             statusBadge = `<span class="text-[9px] bg-red-600/30 text-red-300 border border-red-500/40 px-1.5 py-0.5 rounded font-bold"><i class="fa-solid fa-lock text-[8px]"></i> ${escapeHtml(cateringRider)}</span>`;
-        } else if (conv.isMetaDone || threadStatus === 'done') {
+        } else if (conv.isMetaDone || conv.folder === 'done' || threadStatus === 'done') {
             statusBadge = `<span class="text-[9px] bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded font-bold"><i class="fa-solid fa-check-circle text-[8px]"></i> Done</span>`;
         }
 
@@ -684,17 +857,17 @@ export function renderThreadsList() {
         <div class="p-3 border-b border-gray-800/60 flex flex-col gap-2 transition ${activeClass}">
             <div onclick="selectFacebookThread('${conv.id}')" class="cursor-pointer flex items-center gap-3">
                 <div class="relative shrink-0">
-                    <img src="${avatar}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(conv.customerName || 'C')}&background=0084FF&color=fff'" class="w-11 h-11 rounded-full object-cover border border-gray-700 shadow-sm">
+                    <img src="${avatar}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0084FF&color=fff'" class="w-11 h-11 rounded-full object-cover border border-gray-700 shadow-sm">
                     <div class="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#0084FF] text-white flex items-center justify-center text-[9px] border-2 border-[#1c1e21]">
                         <i class="fa-brands fa-facebook-f"></i>
                     </div>
                 </div>
                 <div class="flex-1 min-w-0">
                     <div class="flex justify-between items-center mb-0.5">
-                        <span class="font-semibold text-xs text-white truncate">${escapeHtml(conv.customerName)}</span>
+                        <span class="font-semibold text-xs text-white truncate">${escapeHtml(displayName)}</span>
                         <span class="text-[10px] text-gray-400 font-mono shrink-0">${timeStr}</span>
                     </div>
-                    <div class="text-[11px] text-gray-400 truncate font-sans">${escapeHtml(prefix + conv.lastMessage)}</div>
+                    <div class="text-[11px] text-gray-400 truncate font-sans">${escapeHtml(prefix + cleanLastMsg)}</div>
                     <div class="mt-1 flex items-center gap-1.5">${statusBadge}</div>
                 </div>
             </div>
@@ -762,10 +935,10 @@ export function selectFacebookThreadByCustomerName(customerName, receiptText = "
     const target = (customerName || "").toLowerCase().trim();
 
     const sourceList = activeInboxFilter === 'done' ? doneConversationsList : conversationsList;
-    const match = sourceList.find(c => 
-        (c.customerName || "").toLowerCase().trim() === target || 
-        target.includes((c.customerName || "").toLowerCase().trim())
-    );
+    const match = sourceList.find(c => {
+        const nameToMatch = sanitizeText(c.customerName || c.name, "").toLowerCase();
+        return nameToMatch === target || target.includes(nameToMatch);
+    });
 
     if (match) {
         selectFacebookThread(match.id);
@@ -793,6 +966,7 @@ export function caterFacebookCustomer(threadId) {
     if (!thread) return;
 
     const myName = (appState.riderName || "Lokalex Rider").trim();
+    const displayName = sanitizeText(thread.customerName || thread.name, "Facebook Customer");
 
     const myCateredCount = Object.values(assignedThreadsMap).filter(item => {
         const rName = typeof item === 'object' ? item.riderName : item;
@@ -819,7 +993,7 @@ export function caterFacebookCustomer(threadId) {
 
     requestSlideConfirmation(
         "CONFIRM CATER",
-        `I-cater si ${thread.customerName}?`,
+        `I-cater si ${displayName}?`,
         () => executeCaterFacebookCustomer(threadId)
     );
 }
@@ -830,6 +1004,7 @@ function executeCaterFacebookCustomer(threadId) {
     if (!thread) return;
 
     const myName = (appState.riderName || "Lokalex Rider").trim();
+    const displayName = sanitizeText(thread.customerName || thread.name, "Facebook Customer");
 
     assignedThreadsMap[threadId] = {
         riderName: myName,
@@ -847,13 +1022,13 @@ function executeCaterFacebookCustomer(threadId) {
         if (appState.telegramId) {
             db.ref(`roster/${appState.telegramId}`).update({
                 status: 'Catering',
-                customerName: thread.customerName,
+                customerName: displayName,
                 cateringStartTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
         }
     }
 
-    showToast(`🛵 Catering ${thread.customerName}! Added to your active catering list.`);
+    showToast(`🛵 Catering ${displayName}! Added to your active catering list.`);
     selectFacebookThread(threadId);
 }
 
@@ -865,7 +1040,8 @@ export function cancelCaterFacebookCustomer() {
     const thread = sourceList.find(c => c.id === activeThreadId);
     if (!thread) return;
 
-    const custName = (thread.customerName || "").toLowerCase().trim();
+    const displayName = sanitizeText(thread.customerName || thread.name, "Facebook Customer");
+    const custName = displayName.toLowerCase().trim();
     const myName = (appState.riderName || "").trim();
 
     const assignData = assignedThreadsMap[activeThreadId] || {};
@@ -900,7 +1076,7 @@ export function cancelCaterFacebookCustomer() {
 
     requestSlideConfirmation(
         "CONFIRM CANCEL CATER",
-        `I-cancel ang catering para kay ${thread.customerName}?`,
+        `I-cancel ang catering para kay ${displayName}?`,
         () => executeCancelCaterFacebookCustomer(activeThreadId, cateringRider)
     );
 }
@@ -908,6 +1084,7 @@ export function cancelCaterFacebookCustomer() {
 function executeCancelCaterFacebookCustomer(threadId, cateringRider) {
     const sourceList = conversationsList.concat(doneConversationsList);
     const thread = sourceList.find(c => c.id === threadId);
+    const displayName = thread ? sanitizeText(thread.customerName || thread.name, 'Customer') : 'Customer';
 
     delete assignedThreadsMap[threadId];
 
@@ -915,7 +1092,7 @@ function executeCancelCaterFacebookCustomer(threadId, cateringRider) {
         db.ref(`facebook_assignments/${threadId}`).remove();
     }
 
-    showToast(`🔓 Catering cancelled for ${thread ? thread.customerName : 'Customer'}. Customer is now open again.`);
+    showToast(`🔓 Catering cancelled for ${displayName}. Customer is now open again.`);
     renderThreadsList();
     updateAssignmentBanner();
     updateCancelCaterButtonUI(threadId);
@@ -960,7 +1137,7 @@ export function createReceiptFromChat() {
     const thread = sourceList.find(c => c.id === activeThreadId);
     if (!thread) return;
 
-    const custName = thread.customerName;
+    const custName = sanitizeText(thread.customerName || thread.name, "Facebook Customer");
 
     closeFacebookMessagesModal();
 
@@ -984,6 +1161,7 @@ export function hideFacebookCustomer(threadId) {
     const thread = sourceList.find(c => c.id === threadId);
     if (!thread) return;
 
+    const displayName = sanitizeText(thread.customerName || thread.name, "Facebook Customer");
     const assignData = assignedThreadsMap[threadId] || {};
     const cateringRider = typeof assignData === 'object' ? assignData.riderName : assignData;
 
@@ -999,7 +1177,7 @@ export function hideFacebookCustomer(threadId) {
 
     requestSlideConfirmation(
         "CONFIRM HIDE / DONE",
-        `I-hide at ilipat sa Meta Business Done folder si ${thread.customerName}? (Walang ipapadalang message)`,
+        `I-hide at ilipat sa Meta Business Done folder si ${displayName}? (Walang ipapadalang message)`,
         () => executeHideFacebookCustomer(threadId)
     );
 }
@@ -1009,6 +1187,7 @@ function executeHideFacebookCustomer(threadId) {
     const thread = sourceList.find(c => c.id === threadId);
     if (!thread) return;
 
+    const displayName = sanitizeText(thread.customerName || thread.name, "Facebook Customer");
     const myName = (appState.riderName || "").trim();
     const doneTimestamp = Date.now();
 
@@ -1019,11 +1198,16 @@ function executeHideFacebookCustomer(threadId) {
         timestamp: doneTimestamp
     };
 
-    // Instantly remove thread from active inbox array
+    thread.folder = 'done';
+    thread.isMetaDone = true;
+
     conversationsList = conversationsList.filter(c => c.id !== threadId);
+    if (!doneConversationsList.some(c => c.id === threadId)) {
+        doneConversationsList.unshift(thread);
+    }
 
     renderThreadsList();
-    showToast(`✅ Customer ${thread.customerName} marked DONE (Moved to Meta Business Done folder without message).`);
+    showToast(`✅ Customer ${displayName} marked DONE (Moved to Meta Business Done folder without message).`);
 
     if (db) {
         db.ref(`facebook_assignments/${threadId}`).set({
@@ -1044,6 +1228,7 @@ export function doneFacebookCustomer(threadId) {
     const thread = sourceList.find(c => c.id === threadId);
     if (!thread) return;
 
+    const displayName = sanitizeText(thread.customerName || thread.name, "Facebook Customer");
     const assignData = assignedThreadsMap[threadId] || {};
     const cateringRider = typeof assignData === 'object' ? assignData.riderName : assignData;
     const threadStatus = typeof assignData === 'object' ? assignData.status : (cateringRider ? 'catering' : 'open');
@@ -1065,7 +1250,7 @@ export function doneFacebookCustomer(threadId) {
 
     requestSlideConfirmation(
         "CONFIRM COMPLETE & DONE",
-        `I-mark as DONE at magpadala ng thank you message kay ${thread.customerName}?`,
+        `I-mark as DONE at magpadala ng thank you message kay ${displayName}?`,
         () => executeDoneFacebookCustomer(threadId)
     );
 }
@@ -1075,6 +1260,7 @@ async function executeDoneFacebookCustomer(threadId) {
     const thread = sourceList.find(c => c.id === threadId);
     if (!thread) return;
 
+    const displayName = sanitizeText(thread.customerName || thread.name, "Facebook Customer");
     const myName = (appState.riderName || "").trim();
     const doneTimestamp = Date.now();
 
@@ -1099,15 +1285,19 @@ async function executeDoneFacebookCustomer(threadId) {
     thread.lastMessage = END_MESSAGE;
     thread.lastMessageIsRider = true;
     thread.lastUpdated = doneTimestamp;
+    thread.folder = 'done';
+    thread.isMetaDone = true;
 
-    // Instantly remove thread from active inbox array
     conversationsList = conversationsList.filter(c => c.id !== threadId);
+    if (!doneConversationsList.some(c => c.id === threadId)) {
+        doneConversationsList.unshift(thread);
+    }
 
     renderThreadsList();
     if (activeThreadId === threadId) {
         renderThreadMessages(activeThreadId, true);
     }
-    showToast(`✅ Customer ${thread.customerName} marked DONE! Moved to Meta Business Done folder.`);
+    showToast(`✅ Customer ${displayName} marked DONE! Moved to Meta Business Done folder.`);
 
     if (db) {
         db.ref(`facebook_assignments/${threadId}`).set({
@@ -1258,7 +1448,7 @@ export function sendCurrentReceipt() {
 
     const sourceList = conversationsList.concat(doneConversationsList);
     const thread = sourceList.find(c => c.id === activeThreadId);
-    const custName = (thread?.customerName || "").toLowerCase().trim();
+    const custName = (thread?.customerName || thread?.name || "").toLowerCase().trim();
 
     const receipts = globalState.globalDailyReceipts || [];
     let matchedReceipt = receipts.find(r => 
@@ -1278,12 +1468,13 @@ export function sendCurrentReceipt() {
             .replace(/\r\n/g, '\n')
             .replace(/\r/g, '\n');
 
-        const input = document.getElementById('fb-message-input');
-        if (input) {
-            input.value = formattedReceipt;
-            input.style.height = 'auto';
-            input.style.height = Math.min(input.scrollHeight, 200) + 'px';
-            input.focus();
+        const input = document.getElementById('fb-[#0084FF]-cust-name'); 
+        const fbInput = document.getElementById('fb-message-input');
+        if (fbInput) {
+            fbInput.value = formattedReceipt;
+            fbInput.style.height = 'auto';
+            fbInput.style.height = Math.min(fbInput.scrollHeight, 200) + 'px';
+            fbInput.focus();
             showToast("🧾 Receipt loaded with multi-line layout! Tap Send to deliver.");
         }
     } else {
@@ -1308,11 +1499,13 @@ export function renderThreadMessages(threadId, forceScrollToBottom = false, isPa
     const thread = sourceList.find(c => c.id === threadId);
     if (!thread) return;
 
-    if (headerName && headerName.innerText !== (thread.customerName || "Customer")) {
-        headerName.innerText = thread.customerName || "Customer";
+    const displayName = sanitizeText(thread.customerName || thread.name, "Customer");
+
+    if (headerName && headerName.innerText !== displayName) {
+        headerName.innerText = displayName;
     }
     if (headerAvatar) {
-        const newAvatar = thread.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(thread.customerName || 'C')}&background=0084FF&color=fff`;
+        const newAvatar = thread.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0084FF&color=fff`;
         if (headerAvatar.src !== newAvatar) {
             headerAvatar.src = newAvatar;
         }
@@ -1346,8 +1539,9 @@ export function renderThreadMessages(threadId, forceScrollToBottom = false, isPa
         }
 
         const imageMarkup = m.imageUrl ? `<img src="${m.imageUrl}" onerror="this.style.display='none'" class="max-w-[220px] sm:max-w-[280px] w-full min-h-[100px] bg-gray-800/50 rounded-xl mt-1 border border-black/20 object-cover shadow-sm block">` : '';
-        const textMarkup = m.text && m.text.trim() ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${escapeHtml(m.text)}</div>` : '';
-        const senderLabel = escapeHtml(m.sender || (isRider ? "Meta Business Suite" : (thread.customerName || "Customer")));
+        const cleanMsgText = sanitizeText(m.text, "");
+        const textMarkup = cleanMsgText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${escapeHtml(cleanMsgText)}</div>` : '';
+        const senderLabel = escapeHtml(sanitizeText(m.sender, isRider ? "Meta Business Suite" : displayName));
 
         if (isRider) {
             return `
@@ -1365,7 +1559,7 @@ export function renderThreadMessages(threadId, forceScrollToBottom = false, isPa
         } else {
             return `
             <div data-msg-id="${m.id}" class="flex gap-2 my-1 self-start max-w-[85%] sm:max-w-[75%]">
-                <img src="${thread.avatarUrl || 'https://img.icons8.com/color/48/user-male-circle--v1.png'}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(thread.customerName || 'C')}&background=0084FF&color=fff'" class="w-7 h-7 rounded-full object-cover shrink-0 mt-0.5 border border-gray-700 shadow-sm">
+                <img src="${thread.avatarUrl || 'https://img.icons8.com/color/48/user-male-circle--v1.png'}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0084FF&color=fff'" class="w-7 h-7 rounded-full object-cover shrink-0 mt-0.5 border border-gray-700 shadow-sm">
                 <div class="flex flex-col">
                     <div class="bg-[#3a3b3c] text-gray-100 p-2.5 px-3.5 rounded-2xl rounded-tl-none text-xs leading-relaxed shadow-sm font-sans w-fit max-w-full break-words">
                         ${textMarkup}
@@ -1559,4 +1753,8 @@ if (typeof window !== 'undefined') {
     window.toggleFacebookNewMessageAlarm = toggleFacebookNewMessageAlarm;
     window.isCurrentRiderFirstAvailable = isCurrentRiderFirstAvailable;
     window.releaseRiderCateredCustomers = releaseRiderCateredCustomers;
+    window.loadOlderConversations = loadOlderConversations;
+    window.closeSlideDeleteModal = closeSlideDeleteModal;
+    window.onSlideProgress = onSlideProgress;
+    window.onSlideEnd = onSlideEnd;
 }
