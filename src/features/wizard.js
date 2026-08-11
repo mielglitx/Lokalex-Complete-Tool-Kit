@@ -4,11 +4,17 @@ import { db } from '../config/firebase.js';
 import { getLocalTodayStr, copyText, escapeHtml } from '../utils/helpers.js';
 import { showToast, showSideNotification } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
-import { saveCartState, getCurrentCart, getEffectiveCartClient, renderCartItems, renderCartTabs } from './cart.js';
+import { saveCartState, getCurrentCart, clearCartSlot, getEffectiveCartClient, renderCartItems, renderCartTabs } from './cart.js';
 import { getActiveCateringCustomersWithTimes } from './roster.js';
 import { API_URL } from '../config/constants.js';
 
 let currentReceiptTransactionId = "";
+
+function isRiderActivelyCatering() {
+    const myId = (appState.telegramId || "").toString();
+    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === myId) : null;
+    return myRecord && myRecord.status === 'Catering';
+}
 
 export function getDailyRiderId() {
     const rName = (appState.riderName || appState.telegramId || "RIDER").replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -148,6 +154,7 @@ export function calculateGrandTotal() {
     const subtotal = Math.max(0, wizState.subtotal || 0);
     let codTotal = Math.max(0, subtotal + hFee + mFee + multistop + dFee - disc);
 
+    // Auto-calculate ePayment processing fee
     let epayFee = 0;
     if (codTotal > 0) {
         epayFee = codTotal <= 1000 ? 15 : 15 + Math.ceil((codTotal - 1000) / 500) * 5;
@@ -413,33 +420,19 @@ export function completeReceiptDone() {
 
 export function copyFinalReceipt() {
     const textEl = document.getElementById('final-receipt-text');
-    const rawReceiptText = textEl ? (textEl.innerText || textEl.textContent || "") : "";
-
-    if (!rawReceiptText) {
-        showToast("⚠️ No receipt available to copy.");
-        return;
+    if (textEl && textEl.innerText) {
+        copyText(textEl.innerText);
     }
-
-    const formattedReceipt = String(rawReceiptText)
-        .replace(/\\n/g, '\n')
-        .replace(/<br\s*[\/]?>/gi, '\n')
-        .replace(/\r\n/g, '\n')
-        .replace(/\r/g, '\n');
-
-    copyText(formattedReceipt);
-    showToast("📋 Receipt copied to clipboard!");
 }
 
 if (typeof window !== 'undefined') {
     window.proceedToWizard = proceedToWizard;
-    window.initWizardForCart = initWizardForCart;
     window.selectCateredClientName = selectCateredClientName;
     window.toggleManualClientInput = toggleManualClientInput;
     window.adjustStoreCount = adjustStoreCount;
     window.calculateGrandTotal = calculateGrandTotal;
     window.generateFinalReceipt = generateFinalReceipt;
     window.confirmSampleReceiptProceed = confirmSampleReceiptProceed;
-    window.renderFinalReceiptText = renderFinalReceiptText;
     window.completeReceiptDone = completeReceiptDone;
     window.copyFinalReceipt = copyFinalReceipt;
 }

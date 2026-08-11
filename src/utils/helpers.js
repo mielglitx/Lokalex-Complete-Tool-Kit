@@ -63,12 +63,3 @@ export function getDateString(timestamp) {
     const day = d.getDate().toString().padStart(2, '0');
     return `${d.getFullYear()}-${m}-${day}`;
 }
-// Add at the bottom of src/utils/helpers.js
-
-export function openInAppBrowser(url) {
-    window.open(url, '_blank', 'noopener,noreferrer');
-}
-
-if (typeof window !== 'undefined') {
-    window.openInAppBrowser = openInAppBrowser;
-}

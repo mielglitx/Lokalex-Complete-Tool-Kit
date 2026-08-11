@@ -6,6 +6,7 @@ import { showToast } from './notifications.js';
 
 let slideDeleteCallback = null;
 
+// FETCH AND RESTORE GCASH DETAILS FROM FIREBASE & GOOGLE SHEETS
 export async function fetchGCashDetails() {
     const riderId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const riderName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
@@ -15,6 +16,7 @@ export async function fetchGCashDetails() {
     let foundName = "";
     let foundNo = "";
 
+    // 1. Check Firebase first
     if (db) {
         try {
             const snap = await db.ref('gcash').once('value');
@@ -32,6 +34,7 @@ export async function fetchGCashDetails() {
         } catch(e) {}
     }
 
+    // 2. Fallback check to Google Sheets API
     if (!foundName || !foundNo) {
         try {
             const res = await fetch(`${API_URL}?type=all`);
@@ -53,6 +56,7 @@ export async function fetchGCashDetails() {
         } catch(e) {}
     }
 
+    // Restore details to state and local cache
     if (foundName || foundNo) {
         appState.gcashName = foundName;
         appState.gcashNo = foundNo;
@@ -66,6 +70,7 @@ export async function fetchGCashDetails() {
     }
 }
 
+// GCASH REGISTRATION MODAL LOGIC WITH SLIDE CONFIRMATION
 export async function openGCashModal() {
     const modal = document.getElementById('gcash-modal');
     if (modal) {
@@ -80,6 +85,7 @@ export async function openGCashModal() {
         
         modal.classList.remove('hidden');
 
+        // Automatically fetch online records to ensure missing local values populate
         await fetchGCashDetails();
     }
 }
@@ -232,16 +238,6 @@ export function closeEditItemModal() {
     document.getElementById('edit-item-modal').classList.add('hidden'); 
 }
 
-export function openWebHubModal() {
-    const modal = document.getElementById('web-hub-modal');
-    if (modal) modal.classList.remove('hidden');
-}
-
-export function closeWebHubModal() {
-    const modal = document.getElementById('web-hub-modal');
-    if (modal) modal.classList.add('hidden');
-}
-
 export function openSlideDeleteModal(title, arg2, arg3) {
     let subtitle = "I-drag pakanan ang slider para kumpirmahin.";
     let callback = null;
@@ -271,18 +267,16 @@ export function openSlideDeleteModal(title, arg2, arg3) {
 export function closeSlideDeleteModal() {
     const modal = document.getElementById('slide-delete-modal');
     if (modal) modal.classList.add('hidden');
-    const rangeEl = document.getElementById('slide-delete-range');
-    if (rangeEl) rangeEl.value = 0;
     slideDeleteCallback = null;
 }
 
 export function onSlideProgress(val) {
-    if (Number(val) >= 90) {
+    if (val >= 90) {
+        const rangeEl = document.getElementById('slide-delete-range');
+        if (rangeEl) rangeEl.value = 100;
+        
         if (slideDeleteCallback && typeof slideDeleteCallback === 'function') {
-            const cb = slideDeleteCallback;
-            slideDeleteCallback = null;
-            const rangeEl = document.getElementById('slide-delete-range');
-            if (rangeEl) rangeEl.value = 100;
+            let cb = slideDeleteCallback;
             closeSlideDeleteModal();
             cb();
         }
@@ -291,14 +285,12 @@ export function onSlideProgress(val) {
 
 export function onSlideEnd() {
     const range = document.getElementById('slide-delete-range');
-    if (range && Number(range.value) < 90) { 
+    if (range && range.value < 90) { 
         range.value = 0; 
     }
 }
 
 if (typeof window !== 'undefined') {
-    window.openWebHubModal = openWebHubModal;
-    window.closeWebHubModal = closeWebHubModal;
     window.fetchGCashDetails = fetchGCashDetails;
     window.openGCashModal = openGCashModal;
     window.closeGCashModal = closeGCashModal;
