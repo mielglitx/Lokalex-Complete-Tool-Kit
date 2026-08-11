@@ -317,7 +317,7 @@
         </h1>
         
         <div class="flex items-center gap-2">
-            <!-- META BUSINESS SUITE ICON BUTTON (TEXT REMOVED) -->
+            <!-- META BUSINESS SUITE ICON BUTTON -->
             <button onclick="openFacebookMessagesModal()" class="bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 p-2 rounded-full text-xs font-bold transition active:scale-95 flex items-center justify-center shadow-sm" title="Meta Business Suite">
                 <i class="fa-brands fa-facebook-messenger text-sm"></i>
             </button>
@@ -554,7 +554,7 @@
                 </div>
 
                 <input type="text" id="rcpt-name" placeholder="Customer / Store Name (Required)" class="w-full bg-inputBg text-sm rounded-lg p-2.5 mt-1 outline-none border border-gray-700">
-                <input type="text" id="rcpt-contact" placeholder="Contact Number / Address" class="w-full bg-inputBg text-sm rounded-lg p-2.5 mt-2 outline-none border border-gray-700">
+                <input type="text" id="rcpt-contact" placeholder="Contact Number / Address" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 mt-2">
             </div>
 
             <div class="text-xs text-gray-400 mt-2 uppercase tracking-wider font-bold">Auto-Calculated Fees (Editable)</div>
@@ -752,8 +752,8 @@
 
     </main>
 
-    <!-- AUTHENTIC META BUSINESS SUITE INBOX MODAL (RESIZED & OPTIMIZED FOR MOBILE VIEWPORTS WITH OVERSCROLL CONTAINMENT) -->
-    <div id="facebook-messages-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-0 sm:p-3">
+    <!-- AUTHENTIC META BUSINESS SUITE INBOX MODAL -->
+    <div id="facebook-messages-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-0 sm:p-3">
         <div class="bg-[#1c1e21] border border-gray-800 sm:rounded-2xl w-full max-w-4xl h-[100dvh] sm:h-[90vh] max-h-[100dvh] shadow-2xl flex flex-col overflow-hidden text-gray-200">
             
             <!-- META INBOX HEADER BAR -->
@@ -894,310 +894,51 @@
         </div>
     </div>
 
-    <!-- GCASH REGISTRATION MODAL -->
-    <div id="gcash-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-blue-500/40 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
-            <div class="w-12 h-12 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center mx-auto text-2xl">
-                <i class="fa-solid fa-mobile-screen-button"></i>
-            </div>
-            <h3 class="font-bold text-base text-center text-blue-400">Rider GCash Details</h3>
-            <p class="text-[11px] text-gray-300 text-center leading-relaxed">
-                I-register ang iyong GCash details. Lalabas ito sa iyong opisyal na resibo kahit offline.
-            </p>
-            <div class="flex flex-col gap-2 text-left">
-                <label class="text-[10px] text-gray-400 font-bold uppercase">GCash Account Name</label>
-                <input type="text" id="gcash-name-input" placeholder="e.g. JUAN DELA CRUZ" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold">
-                
-                <label class="text-[10px] text-gray-400 font-bold uppercase mt-1">GCash Number</label>
-                <input type="text" id="gcash-no-input" placeholder="e.g. 09123456789" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold font-mono">
-            </div>
-            <div class="flex gap-2 mt-2">
-                <button onclick="closeGCashModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-                <button onclick="saveGCashDetails()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save Details</button>
-            </div>
+    <!-- IMAGE VIEWER MODAL -->
+    <div id="image-viewer-modal" class="hidden fixed inset-0 bg-black/95 z-[100000] flex flex-col items-center justify-center touch-none">
+        <div class="absolute top-4 right-4 flex gap-4 z-10">
+            <button onclick="window.zoomImageViewer && window.zoomImageViewer(0.5)" class="bg-gray-800 hover:bg-gray-700 text-white w-10 h-10 rounded-full shadow-lg transition active:scale-90"><i class="fa-solid fa-search-plus"></i></button>
+            <button onclick="window.zoomImageViewer && window.zoomImageViewer(-0.5)" class="bg-gray-800 hover:bg-gray-700 text-white w-10 h-10 rounded-full shadow-lg transition active:scale-90"><i class="fa-solid fa-search-minus"></i></button>
+            <button onclick="window.closeImageViewer && window.closeImageViewer()" class="bg-red-600 hover:bg-red-500 text-white w-10 h-10 rounded-full shadow-lg transition active:scale-90"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="image-viewer-container" class="w-full h-full overflow-auto flex items-center justify-center">
+            <img id="image-viewer-img" src="" class="max-w-full max-h-full object-contain transition-transform duration-200" style="transform: scale(1);">
         </div>
     </div>
 
-    <!-- ADMIN MANUAL COMMISSION RECORD MODAL WITH RIDER DROPDOWN -->
-    <div id="admin-add-comm-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-emerald-500/40 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
-            <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl">
-                <i class="fa-solid fa-file-circle-plus"></i>
+    <!-- IMAGE EDITOR MODAL -->
+    <div id="image-editor-modal" class="hidden fixed inset-0 bg-black/95 z-[100000] flex flex-col items-center justify-center">
+        <div class="absolute top-4 left-4 right-4 flex justify-between items-center z-10">
+            <button onclick="window.closeImageEditor && window.closeImageEditor()" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md transition active:scale-95">Cancel</button>
+            <div class="flex gap-2 items-center bg-gray-900/80 p-1.5 rounded-2xl shadow-xl border border-gray-700">
+                <button id="editor-tool-draw" onclick="window.setEditorTool && window.setEditorTool('draw')" class="bg-blue-600 text-white px-3 py-2 rounded-xl text-xs font-bold border-2 border-blue-400 transition"><i class="fa-solid fa-pen"></i> Draw</button>
+                <button id="editor-tool-text" onclick="window.setEditorTool && window.setEditorTool('text')" class="bg-gray-800 text-white px-3 py-2 rounded-xl text-xs font-bold border-2 border-transparent transition"><i class="fa-solid fa-t"></i> Text</button>
+                <input type="color" id="editor-color-picker" value="#ff0000" class="w-8 h-8 rounded-lg cursor-pointer border-0 p-0 m-0 shadow-sm" title="Choose Color">
             </div>
-            <h3 class="font-bold text-base text-center text-emerald-400">Add Manual Commission Record</h3>
-            
-            <div class="flex flex-col gap-3 text-left">
-                <div>
-                    <label class="text-[10px] text-gray-400 font-bold uppercase">Select Rider *</label>
-                    <select id="manual-comm-rider-select" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-emerald-500 text-white font-bold mt-1">
-                        <!-- Dynamically populated with clean list of riders -->
-                    </select>
-                </div>
-
-                <div>
-                    <label class="text-[10px] text-gray-400 font-bold uppercase">Customer Name *</label>
-                    <input type="text" id="manual-comm-cust-input" placeholder="e.g. Juan Dela Cruz" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-emerald-500 text-white font-bold mt-1">
-                </div>
-
-                <div>
-                    <label class="text-[10px] text-gray-400 font-bold uppercase">Gross Total Fee (₱) *</label>
-                    <input type="number" step="0.01" id="manual-comm-fee-input" placeholder="100.00" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-emerald-500 text-white font-bold font-mono mt-1">
-                </div>
-
-                <div>
-                    <label class="text-[10px] text-gray-400 font-bold uppercase">Transaction Date *</label>
-                    <input type="date" id="manual-comm-date-input" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-emerald-500 text-white font-bold mt-1">
-                </div>
-            </div>
-
-            <div class="flex gap-2 mt-2">
-                <button onclick="closeAdminAddCommModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-                <button onclick="submitAdminAddCommissionRecord()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save Record</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- PAID ITEM CONFIRMATION MODAL -->
-    <div id="paid-item-confirm-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-emerald-500/50 p-6 rounded-2xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-3">
-            <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl">
-                <i class="fa-solid fa-hand-holding-dollar"></i>
-            </div>
-            <h3 class="font-bold text-base text-emerald-400">May Nakamarkang PAID Item</h3>
-            <p class="text-xs text-gray-300 leading-relaxed">
-                Mayroong item sa cart na nakamarka bilang <strong>PAID (₱0.00)</strong>. Sigurado ka bang nais magpatuloy sa resibo?
-            </p>
-            <div class="flex gap-2 mt-2">
-                <button onclick="closePaidItemModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 rounded-xl text-xs transition active:scale-95">
-                    Go Back & Edit
-                </button>
-                <button onclick="confirmPaidItemProceed()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95">
-                    Proceed
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL 1: MAP CALCULATION BOARD MODAL -->
-    <div id="mapcalc-board-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-gray-800 p-5 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col gap-4 max-h-[85vh]">
-            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
-                <h3 class="font-bold text-sm text-blue-400 flex items-center gap-2">
-                    <i class="fa-solid fa-calculator"></i> Map Calculation Board
-                </h3>
-                <button onclick="closeMapCalcBoardModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-
-            <button onclick="promptMapCalcCustomerName()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow transition active:scale-95 text-xs flex items-center justify-center gap-2">
-                <i class="fa-solid fa-plus-circle"></i> + Generate Link
-            </button>
-
-            <div id="mapcalc-board-list" class="flex-1 overflow-y-auto flex flex-col gap-2.5 min-h-[220px]">
-                <div class="text-center text-gray-500 italic py-10 text-xs">Loading map calculations...</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL 2: MAP CALCULATION CUSTOMER NAME PROMPT -->
-    <div id="mapcalc-name-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
-            <h3 class="font-bold text-base text-center text-blue-400"><i class="fa-solid fa-user-tag"></i> New Map Calculation</h3>
-            <div class="flex flex-col gap-1 text-left">
-                <label class="text-[10px] text-gray-400 font-bold">Customer Name</label>
-                <input type="text" id="mapcalc-cust-name-input" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
-            </div>
-            <div class="flex gap-2 mt-2">
-                <button onclick="closeMapCalcNameModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-                <button onclick="confirmGenerateMapCalcLink()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Finalize Link</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- SIDE-ONLY MOVEABLE COMPACT CHAT WIDGET -->
-    <div id="floating-chat-container" class="fixed right-0 z-50 flex flex-col items-end pointer-events-none" style="top: 80%;">
-        <div id="expanded-chat-window" class="hidden pointer-events-auto bg-cardBg border border-gray-700 rounded-2xl shadow-2xl w-80 sm:w-88 h-96 flex flex-col overflow-hidden mr-3 mb-2 transition-all">
-            <div id="chat-drag-handle" class="bg-gray-800 p-3 flex items-center justify-between select-none border-b border-gray-700">
-                <div class="flex items-center gap-2 font-bold text-xs text-blue-400">
-                    <i class="fa-solid fa-comments text-base"></i> Team Comms
-                </div>
-                <button onclick="toggleChatWindow(false)" class="text-gray-400 hover:text-white text-sm active:scale-90">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-            
-            <div id="bubble-chat-messages" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 text-xs">
-                <div class="text-center text-gray-500 italic py-10">Loading messages...</div>
-            </div>
-
-            <div class="p-2 bg-inputBg border-t border-gray-700 flex flex-col gap-2 relative">
-                <div id="tag-suggestions" class="hidden absolute bottom-full left-0 right-0 bg-cardBg border border-gray-700 rounded-t-xl max-h-32 overflow-y-auto z-20 p-1 text-xs shadow-xl"></div>
-                
-                <div class="flex gap-1.5 items-center">
-                    <button onclick="triggerTeamChatImage()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 w-8 h-8 rounded-xl flex items-center justify-center text-xs transition active:scale-90 shrink-0 border border-gray-700" title="Attach Photo">
-                        <i class="fa-solid fa-camera text-blue-400"></i>
-                    </button>
-                    <input type="text" id="bubble-chat-input" oninput="handleChatInput(this)" onkeydown="if(event.key==='Enter') sendBubbleChatMessage()" placeholder="Message team (@everyone)..." class="flex-1 bg-darkBg text-xs rounded-xl px-3 py-2 outline-none border border-gray-700 focus:border-blue-500 text-white">
-                    <button onclick="sendBubbleChatMessage()" class="bg-blue-600 hover:bg-blue-500 text-white w-8 h-8 rounded-xl flex items-center justify-center text-xs transition active:scale-90 shrink-0">
-                        <i class="fa-solid fa-paper-plane"></i>
-                    </button>
-                </div>
-
-                <!-- HIDDEN FILE INPUT FOR TEAM CHAT IMAGE -->
-                <input type="file" id="team-chat-image-input" accept="image/*" class="hidden" onchange="handleTeamChatImageFile(event)">
-            </div>
-        </div>
-
-        <div id="chat-bubble" class="pointer-events-auto relative bg-blue-600 hover:bg-blue-500 text-white p-3.5 rounded-l-2xl shadow-2xl flex items-center justify-center cursor-pointer transition-all active:scale-90 border-l-2 border-t-2 border-b-2 border-white/20 select-none touch-none">
-            <i class="fa-solid fa-comments text-lg"></i>
-            <div id="chat-tag-badge" class="hidden absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-black text-[9px] font-black rounded-full flex items-center justify-center border-2 border-darkBg animate-bounce shadow-md">!</div>
-            <div id="chat-unread-badge" class="hidden absolute -top-1.5 -left-1.5 min-w-[18px] h-4 px-1 bg-red-600 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-darkBg shadow-md">0</div>
-        </div>
-    </div>
-
-    <!-- SAMPLE RECEIPT CONFIRMATION MODAL -->
-    <div id="sample-receipt-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-amber-500/50 p-6 rounded-2xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-3">
-            <div class="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mx-auto text-2xl">
-                <i class="fa-solid fa-triangle-exclamation"></i>
-            </div>
-            <h3 class="font-bold text-base text-amber-400">Walang Customer Name</h3>
-            <p class="text-xs text-gray-300 leading-relaxed">
-                Wala kang inilagay na pangalan ng customer. Nais mo bang magpatuloy bilang <strong>Sample Receipt</strong>?
-            </p>
-            <p class="text-[11px] text-gray-400 bg-black/40 p-2.5 rounded-xl border border-gray-800 italic text-left">
-                ⚠️ Ang Sample Receipt ay <strong>HINDI mai-save sa database</strong> at <strong>HINDI mai-re-record sa iyong daily commission</strong>.
-            </p>
-            <div class="flex gap-2 mt-2">
-                <button onclick="closeSampleReceiptModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 rounded-xl text-xs transition active:scale-95">
-                    Go Back
-                </button>
-                <button onclick="confirmSampleReceiptProceed()" class="flex-1 bg-amber-500 hover:bg-amber-400 text-black font-bold py-3 rounded-xl text-xs transition active:scale-95">
-                    Proceed
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- SCHEDULED DELIVERY / ADVANCED ORDERS MODAL -->
-    <div id="adv-orders-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-gray-800 p-5 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col gap-4 max-h-[85vh]">
-            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
-                <h3 class="font-bold text-sm text-purple-400 flex items-center gap-2">
-                    <i class="fa-solid fa-calendar-check"></i> Scheduled Delivery Reminders
-                </h3>
-                <button onclick="closeAdvancedOrdersModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-
-            <div class="flex bg-inputBg p-1 rounded-xl text-xs font-bold">
-                <button id="adv-tab-btn-list" onclick="switchAdvTab('list')" class="flex-1 py-1.5 rounded-lg bg-purple-600 text-white transition">Orders List</button>
-                <button id="adv-tab-btn-add" onclick="switchAdvTab('add')" class="flex-1 py-1.5 rounded-lg text-gray-400 transition">+ Schedule New</button>
-            </div>
-
-            <div id="adv-tab-list-content" class="flex-1 overflow-y-auto flex flex-col gap-2 min-h-[180px]">
-                <div class="text-center text-gray-500 italic py-8 text-xs">Loading advanced orders...</div>
-            </div>
-
-            <div id="adv-tab-add-content" class="hidden flex flex-col gap-2 overflow-y-auto">
-                <input type="text" id="adv-cust-name" placeholder="Customer Name *" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
-                <input type="text" id="adv-receiver" placeholder="Receiver Name / Alternate" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
-                <input type="text" id="adv-address" placeholder="Delivery Address" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
-                <input type="text" id="adv-contact" placeholder="Contact Number" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
-                
-                <div class="grid grid-cols-2 gap-2">
-                    <div class="flex flex-col gap-1">
-                        <label class="text-[10px] text-gray-400 font-bold uppercase">Date to Receive:</label>
-                        <input type="date" id="adv-receive-date" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
-                    </div>
-                    <div class="flex flex-col gap-1">
-                        <label class="text-[10px] text-gray-400 font-bold uppercase">Time to Receive:</label>
-                        <input type="time" id="adv-receive-time" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
-                    </div>
-                </div>
-
-                <button onclick="submitNewAdvancedOrder()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl mt-2 text-xs transition active:scale-95">
-                    Save Scheduled Order
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- GPS REQUIRED ALERT MODAL -->
-    <div id="gps-alert-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-red-500/50 p-6 rounded-2xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-3">
-            <div class="w-14 h-14 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto text-2xl animate-pulse">
-                <i class="fa-solid fa-location-crosshairs"></i>
-            </div>
-            <h3 class="font-bold text-base text-red-400">GPS Location Required</h3>
-            <p class="text-xs text-gray-300 leading-relaxed">
-                Kailangan mong i-turn on ang iyong <strong>GPS Location</strong> sa telepono bago mag-Available sa roster.
-            </p>
-            <button onclick="closeGpsModal()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95 mt-2">
-                OK, Naintindihan Ko
+            <button onclick="window.sendEditedImage && window.sendEditedImage()" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center gap-1.5">
+                <i class="fa-solid fa-paper-plane"></i> Send
             </button>
         </div>
-    </div>
-
-    <!-- CATERING PROMPT MODAL -->
-    <div id="catering-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
-            <h3 class="font-bold text-base text-center text-red-400"><i class="fa-solid fa-motorcycle"></i> Start Catering</h3>
-            <div class="flex flex-col gap-1 text-left">
-                <label class="text-[10px] text-gray-400 font-bold">Customer Name</label>
-                <input type="text" id="catering-customer-name" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
-            </div>
-            <div class="flex gap-2 mt-2">
-                <button onclick="closeCateringModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-                <button onclick="confirmCateringStatus()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Start</button>
-            </div>
+        
+        <div class="flex-1 w-full h-full flex items-center justify-center overflow-hidden relative mt-20 mb-4 bg-[#121212] border border-gray-800 rounded-xl max-w-3xl">
+            <canvas id="image-editor-canvas" class="max-w-full max-h-full object-contain touch-none cursor-crosshair"></canvas>
+            <input type="text" id="editor-text-input" class="hidden absolute bg-black/50 text-white border-2 border-dashed border-white px-2 py-1 rounded text-lg outline-none font-bold placeholder-gray-300" placeholder="Type text & press Enter...">
         </div>
+        <div class="absolute bottom-4 text-[10px] text-gray-400 font-bold bg-black/50 px-3 py-1 rounded-full pointer-events-none">Lokalex Image Editor</div>
     </div>
 
-    <!-- ADMIN / TL FORCE CATERING MODAL WITH PENALTY SELECTION -->
-    <div id="admin-catering-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
-            <h3 class="font-bold text-base text-center text-yellow-400"><i class="fa-solid fa-user-shield"></i> Force Catering</h3>
-            <div class="flex flex-col gap-1 text-left">
-                <label class="text-[10px] text-gray-400 font-bold">Customer Name</label>
-                <input type="text" id="admin-catering-customer-name" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
-            </div>
-
-            <div class="flex flex-col gap-2 border-t border-gray-800 pt-3 text-left">
-                <label class="text-[10px] text-gray-400 font-bold uppercase">Penalty Cooldown On Available</label>
-                <div class="flex items-center gap-3 text-xs">
-                    <label class="flex items-center gap-1.5 cursor-pointer">
-                        <input type="radio" name="penalty-option" value="none" checked onchange="togglePenaltyInput(false)" class="accent-yellow-500">
-                        <span>Not Penalized</span>
-                    </label>
-                    <label class="flex items-center gap-1.5 cursor-pointer">
-                        <input type="radio" name="penalty-option" value="penalized" onchange="togglePenaltyInput(true)" class="accent-yellow-500">
-                        <span>Penalized</span>
-                    </label>
-                </div>
-                <div id="penalty-time-box" class="hidden flex items-center gap-2 mt-1">
-                    <input type="number" id="penalty-minutes-input" value="10" min="1" max="180" class="w-20 bg-inputBg text-xs text-center rounded-lg p-2 outline-none border border-gray-700 text-yellow-400 font-bold">
-                    <span class="text-xs text-gray-400">minutes cooldown</span>
-                </div>
-            </div>
-
-            <div class="flex gap-2 mt-2">
-                <button onclick="closeAdminCateringModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-                <button onclick="confirmAdminCatering()" class="flex-1 bg-yellow-600 hover:bg-yellow-500 py-2.5 rounded-xl text-xs font-bold text-black transition active:scale-95">Force Cater</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- UNIVERSAL SLIDE CONFIRMATION MODAL -->
-    <div id="slide-delete-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[99999] flex items-end sm:items-center justify-center p-4">
-        <div class="bg-[#1E1A1A] border border-red-500/30 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl flex flex-col gap-4">
+    <!-- UNIVERSAL SLIDE CONFIRMATION MODAL WITH HIGH Z-INDEX AND TOUCH-UP RESETS -->
+    <div id="slide-delete-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-end sm:items-center justify-center p-4">
+        <div class="bg-[#1E1A1A] border border-red-500/40 p-6 rounded-3xl max-w-sm w-full text-center shadow-2xl flex flex-col gap-4">
             <i id="slide-modal-icon" class="fa-solid fa-triangle-exclamation text-red-500 text-3xl mx-auto"></i>
-            <h3 id="slide-delete-title" class="font-bold text-base">Confirm Action</h3>
+            <h3 id="slide-delete-title" class="font-bold text-base text-white">Confirm Action</h3>
             <p id="slide-delete-sub" class="text-xs text-gray-400 whitespace-pre-line">I-drag pakanan ang slider para kumpirmahin.</p>
             
-            <div class="relative h-12 bg-black/40 rounded-full border border-red-500/30 flex items-center px-2 overflow-hidden mt-2">
-                <span class="absolute inset-0 flex items-center justify-center text-[10px] text-white/30 font-bold tracking-widest pointer-events-none">&gt;&gt;&gt;&gt; SLIDE TO CONFIRM &gt;&gt;&gt;&gt;</span>
-                <input type="range" id="slide-delete-range" min="0" max="100" value="0" oninput="onSlideProgress(this.value)" onmouseup="onSlideEnd()" ontouchend="onSlideEnd()" class="w-full accent-red-500 cursor-pointer z-10 opacity-80 h-10">
+            <div class="relative h-12 bg-black/60 rounded-full border border-red-500/40 flex items-center px-2 overflow-hidden mt-2">
+                <span class="absolute inset-0 flex items-center justify-center text-[10px] text-white/40 font-bold tracking-widest pointer-events-none">&gt;&gt;&gt;&gt; SLIDE TO CONFIRM &gt;&gt;&gt;&gt;</span>
+                <input type="range" id="slide-delete-range" min="0" max="100" value="0" oninput="window.onSlideProgress && window.onSlideProgress(this.value)" onmouseup="window.onSlideEnd && window.onSlideEnd()" ontouchend="window.onSlideEnd && window.onSlideEnd()" class="w-full accent-red-500 cursor-pointer z-10 opacity-90 h-10">
             </div>
-            <button onclick="closeSlideDeleteModal()" class="text-xs text-gray-400 py-1">Cancel</button>
+            <button onclick="window.closeSlideDeleteModal && window.closeSlideDeleteModal()" class="text-xs text-gray-400 hover:text-white py-1 transition font-bold">Cancel</button>
         </div>
     </div>
 
@@ -1245,34 +986,6 @@
                 <button onclick="closeEditItemModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
                 <button onclick="saveItemEdit()" class="flex-1 bg-green-600 hover:bg-green-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save</button>
             </div>
-        </div>
-    </div>
-
-    <!-- FIND MY RIDERS MAP MODAL (ADMIN ONLY) -->
-    <div id="find-riders-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-indigo-500/40 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3 max-h-[85vh]">
-            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
-                <h3 class="font-bold text-sm text-indigo-300 flex items-center gap-2">
-                    <i class="fa-solid fa-map-location-dot text-indigo-400"></i> Find My Riders (Active)
-                </h3>
-                <div class="flex items-center gap-2">
-                    <button onclick="refreshFindRidersMap()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/50 px-2.5 py-1 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5" title="Refresh Rider Positions">
-                        <i id="find-riders-refresh-icon" class="fa-solid fa-rotate"></i> Refresh
-                    </button>
-                    <button onclick="closeFindRidersModal()" class="text-gray-400 hover:text-white text-sm ml-1"><i class="fa-solid fa-xmark"></i></button>
-                </div>
-            </div>
-            
-            <div id="find-riders-map-container" class="w-full h-80 rounded-2xl overflow-hidden border border-indigo-500/50 relative shadow-inner">
-                <div id="find-riders-google-map" class="w-full h-full"></div>
-            </div>
-
-            <div id="find-riders-status-summary" class="text-xs text-gray-300 bg-darkBg p-2.5 rounded-xl border border-gray-800 flex justify-around text-center">
-            </div>
-
-            <button onclick="closeFindRidersModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
-                Close
-            </button>
         </div>
     </div>
 
