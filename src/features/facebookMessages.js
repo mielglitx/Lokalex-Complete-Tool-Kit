@@ -52,7 +52,6 @@ function requestSlideConfirmation(title, subtext, onConfirmCallback) {
         rangeInput.value = "0";
         modal.classList.remove('hidden');
 
-        // Attach confirmation event handler
         window.onSlideConfirmAction = () => {
             modal.classList.add('hidden');
             if (typeof onConfirmCallback === 'function') {
@@ -173,6 +172,9 @@ export function openFacebookMessagesModal() {
     const modal = document.getElementById('facebook-messages-modal');
     if (modal) modal.classList.remove('hidden');
 
+    // Prevent background page scrolling
+    document.body.classList.add('overflow-hidden');
+
     if (window.closeWebHubModal) window.closeWebHubModal();
 
     updateAlarmButtonUI();
@@ -195,6 +197,9 @@ export function openFacebookMessagesModal() {
 export function closeFacebookMessagesModal() {
     const modal = document.getElementById('facebook-messages-modal');
     if (modal) modal.classList.add('hidden');
+
+    // Restore background page scrolling
+    document.body.classList.remove('overflow-hidden');
 
     if (liveSyncInterval) {
         clearInterval(liveSyncInterval);
@@ -338,7 +343,9 @@ export async function fetchFacebookConversations(isSilent = false) {
             if (res.ok) {
                 const result = await res.json();
                 if (result.data) {
-                    conversationsList = result.data.map(conv => {
+                    const fetchedMap = new Map();
+
+                    result.data.forEach(conv => {
                         const senderObj = conv.senders?.data?.[0] || {};
                         const senderName = senderObj.name || "Facebook Customer";
                         const senderId = senderObj.id || conv.id;
@@ -379,7 +386,7 @@ export async function fetchFacebookConversations(isSilent = false) {
 
                         const lastMsgObj = rawMsgs[rawMsgs.length - 1] || {};
 
-                        return {
+                        fetchedMap.set(conv.id, {
                             id: conv.id,
                             customerName: senderName,
                             senderId: senderId,
@@ -390,9 +397,30 @@ export async function fetchFacebookConversations(isSilent = false) {
                             lastUpdated: new Date(conv.updated_time).getTime(),
                             unreadCount: conv.unread_count || 0,
                             folder: 'inbox'
-                        };
+                        });
                     });
 
+                    const mergedMap = new Map();
+                    conversationsList.forEach(c => mergedMap.set(c.id, c));
+                    fetchedMap.forEach((c, id) => {
+                        const existing = mergedMap.get(id);
+                        if (existing && existing.messages) {
+                            const msgMap = new Map();
+                            existing.messages.forEach(m => msgMap.set(m.id, m));
+                            c.messages.forEach(m => msgMap.set(m.id, m));
+                            const mergedMsgs = Array.from(msgMap.values()).sort((a,b) => a.timestamp - b.timestamp);
+                            c.messages = mergedMsgs;
+                            const lastM = mergedMsgs[mergedMsgs.length - 1];
+                            if (lastM) {
+                                c.lastMessage = lastM.imageUrl ? "📷 [Image]" : (lastM.text || "No messages yet");
+                                c.lastMessageIsRider = lastM.isRider || false;
+                                c.lastUpdated = Math.max(c.lastUpdated, lastM.timestamp || 0);
+                            }
+                        }
+                        mergedMap.set(id, c);
+                    });
+
+                    conversationsList = Array.from(mergedMap.values());
                     checkNewIncomingMessages(conversationsList);
                 }
             }

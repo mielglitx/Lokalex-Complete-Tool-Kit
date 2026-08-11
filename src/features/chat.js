@@ -14,21 +14,30 @@ export function initDraggableChat() {
 
     if (!bubble || !container) return;
 
+    let isPointerDown = false;
     let isDragging = false;
     let startY = 0;
     let initialTop = 0;
+    let touchStartTime = 0;
 
     const onStart = (e) => {
+        isPointerDown = true;
         isDragging = false;
+        touchStartTime = Date.now();
         startY = e.touches ? e.touches[0].clientY : e.clientY;
         const rect = container.getBoundingClientRect();
         initialTop = rect.top;
     };
 
     const onMove = (e) => {
+        // Prevent moving the chat bubble unless touch/mouse press originated on the bubble
+        if (!isPointerDown) return;
+
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
         const deltaY = clientY - startY;
-        if (Math.abs(deltaY) > 5) {
+
+        // Require > 10px vertical shift from drag origin to engage movement
+        if (Math.abs(deltaY) > 10) {
             isDragging = true;
             let newTop = initialTop + deltaY;
             const maxTop = window.innerHeight - 80;
@@ -38,9 +47,16 @@ export function initDraggableChat() {
     };
 
     const onEnd = () => {
-        if (!isDragging) {
+        if (!isPointerDown) return;
+        isPointerDown = false;
+
+        const elapsedTime = Date.now() - touchStartTime;
+
+        // TAP GUARD: If touch/click lasted under 250ms or didn't drag, treat strictly as a click
+        if (!isDragging || elapsedTime < 250) {
             toggleChatWindow(!isChatOpen);
         }
+        isDragging = false;
     };
 
     bubble.addEventListener('mousedown', onStart);
@@ -146,7 +162,6 @@ export function scrollChatToBottom() {
     }
 }
 
-// SEND TEAM CHAT MESSAGE WITH @everyone TAG SUPPORT
 export function sendBubbleChatMessage() {
     const input = document.getElementById('bubble-chat-input');
     const text = input ? input.value.trim() : "";
@@ -174,7 +189,6 @@ export function sendBubbleChatMessage() {
     }
 }
 
-// TRIGGER TEAM CHAT PHOTO ATTACHMENT
 export function triggerTeamChatImage() {
     const input = document.getElementById('team-chat-image-input');
     if (input) input.click();
