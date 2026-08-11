@@ -228,7 +228,6 @@ export function handleCardTouchMove(e, cardEl) {
     touchCurrentX = e.touches[0].clientX;
     const diffX = touchCurrentX - touchStartX;
 
-    // Dampen resistance past -120px or +120px
     let translateX = diffX;
     if (Math.abs(diffX) > 120) {
         const sign = diffX > 0 ? 1 : -1;
@@ -237,7 +236,6 @@ export function handleCardTouchMove(e, cardEl) {
 
     cardEl.style.transform = `translateX(${translateX}px)`;
     
-    // Visual feedback color changes when approaching deletion trigger
     if (Math.abs(diffX) > 80) {
         cardEl.style.borderColor = '#ef4444';
     } else {
@@ -253,12 +251,10 @@ export function handleCardTouchEnd(e, index) {
     cardEl.style.transition = 'transform 0.2s ease-out, border-color 0.2s ease-out';
 
     if (Math.abs(diffX) >= 80) {
-        // Trigger Slide-to-Confirm Deletion Modal
         deleteSingleCartItem(index);
         cardEl.style.transform = 'translateX(0px)';
         cardEl.style.borderColor = '';
     } else {
-        // Reset card back to original position smoothly
         cardEl.style.transform = 'translateX(0px)';
         cardEl.style.borderColor = '';
     }
@@ -307,6 +303,8 @@ export function renderCartItems() {
                 <div class="relative w-full max-w-xs h-12 bg-black/60 rounded-full border border-emerald-500/50 flex items-center px-2 overflow-hidden mt-3 shadow-inner">
                     <span class="absolute inset-0 flex items-center justify-center text-[10px] text-emerald-400/60 font-black tracking-widest pointer-events-none select-none">&gt;&gt;&gt;&gt; SLIDE TO UNLOCK &gt;&gt;&gt;&gt;</span>
                     <input type="range" min="0" max="100" value="0" 
+                        oninput="if(this.value >= 90) handleOverlaySlideEnd(this)"
+                        onchange="handleOverlaySlideEnd(this)"
                         onmouseup="handleOverlaySlideEnd(this)" 
                         ontouchend="handleOverlaySlideEnd(this)" 
                         class="w-full accent-emerald-500 cursor-pointer z-10 opacity-80 h-10">
@@ -370,7 +368,6 @@ export function renderCartItems() {
                 <div class="flex items-start gap-2 flex-1 min-w-0">
                     <input type="checkbox" onchange="toggleItemSelect(${index})" ${isSelected ? "checked" : ""} class="w-4 h-4 accent-blue-500 rounded cursor-pointer shrink-0 mt-0.5">
                     <span class="text-[10px] text-gray-500 font-bold shrink-0 mt-0.5">#${index + 1}</span>
-                    <!-- FULL WORD WRAPPING FOR ITEM NAME - NO PERIODS OR TRUNCATION -->
                     <span class="break-words text-wrap font-bold text-sm text-white flex-1 min-w-0">${escapeHtml(item.name)}</span>
                     ${unpricedWarningBadge}
                 </div>
@@ -626,7 +623,6 @@ export function validateAndProceedToWizard() {
         return showToast("⚠️ I-slide muna ang lock sa overlay screen upang i-unlock ang cart.");
     }
 
-    // STRICT CHECK: Block if any item has price <= 0 and is NOT marked as paid
     const unpricedUnpaidItems = currentCart.filter(i => (parseFloat(i.price) || 0) <= 0 && !i.isPaid);
 
     if (unpricedUnpaidItems.length > 0) {
@@ -670,7 +666,6 @@ export function clearCartSlot() {
     }
 }
 
-// CLEAR ALL 4 CARTS AND UNLOCK ALL SLOTS WHEN MARKING AVAILABLE
 export function clearAllCartSlots() {
     for (let slot = 1; slot <= 4; slot++) {
         multiCarts[slot] = {
@@ -687,7 +682,6 @@ export function clearAllCartSlots() {
     resetToCartOne();
 }
 
-// AUTO-INITIALIZE SMART CART ON LOAD & VIEW LOAD
 loadCartState();
 setTimeout(() => {
     renderCartTabs();
