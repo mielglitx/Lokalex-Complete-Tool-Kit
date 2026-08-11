@@ -51,66 +51,61 @@ export function getPageToken() {
     return localStorage.getItem('lokalex_fb_page_token') || DIRECT_PAGE_ACCESS_TOKEN;
 }
 
-// UNIVERSAL SLIDE CONFIRMATION MODAL LOGIC (SHARED ACROSS SMART CART, ROSTER & BUSINESS SUITE)
+// UNIVERSAL SLIDE CONFIRMATION MODAL CONTROLLER (FOR ROSTER, SMART CART, CATERED LIST & BUSINESS SUITE)
+let isSlideConfirmed = false;
+
 export function closeSlideDeleteModal() {
     const modal = document.getElementById('slide-delete-modal');
     const rangeInput = document.getElementById('slide-delete-range');
     if (modal) modal.classList.add('hidden');
     if (rangeInput) rangeInput.value = "0";
     window.onSlideConfirmAction = null;
+    isSlideConfirmed = false;
 }
 
 export function onSlideProgress(val) {
+    if (isSlideConfirmed) return;
+
     if (Number(val) >= 90) {
+        isSlideConfirmed = true;
+        const modal = document.getElementById('slide-delete-modal');
+        const rangeInput = document.getElementById('slide-delete-range');
+        
+        if (modal) modal.classList.add('hidden');
+        if (rangeInput) rangeInput.value = "0";
+
         if (typeof window.onSlideConfirmAction === 'function') {
             const action = window.onSlideConfirmAction;
-            window.onSlideConfirmAction = null; // Re-entry guard
+            window.onSlideConfirmAction = null;
             action();
         }
     }
 }
 
 export function onSlideEnd() {
-    const rangeInput = document.getElementById('slide-delete-range');
-    if (!rangeInput) return;
-    if (Number(rangeInput.value) >= 90) {
-        if (typeof window.onSlideConfirmAction === 'function') {
-            const action = window.onSlideConfirmAction;
-            window.onSlideConfirmAction = null;
-            action();
-        }
-    } else {
-        rangeInput.value = "0";
+    if (!isSlideConfirmed) {
+        const rangeInput = document.getElementById('slide-delete-range');
+        if (rangeInput) rangeInput.value = "0";
     }
 }
 
-export function requestSlideConfirmation(title, subtext, onConfirmCallback, iconClass = "fa-solid fa-triangle-exclamation text-red-500") {
+export function requestSlideConfirmation(title, subtext, onConfirmCallback) {
     const modal = document.getElementById('slide-delete-modal');
     const titleEl = document.getElementById('slide-delete-title');
     const subEl = document.getElementById('slide-delete-sub');
     const rangeInput = document.getElementById('slide-delete-range');
-    const iconEl = document.getElementById('slide-modal-icon');
 
     if (modal && titleEl && subEl && rangeInput) {
         titleEl.innerText = title || "Confirm Action";
         subEl.innerText = subtext || "I-drag pakanan ang slider para kumpirmahin.";
-        if (iconEl) iconEl.className = `${iconClass} text-3xl mx-auto`;
-        
         rangeInput.value = "0";
-        modal.classList.remove('hidden');
+        isSlideConfirmed = false;
 
-        window.onSlideConfirmAction = () => {
-            modal.classList.add('hidden');
-            rangeInput.value = "0";
-            if (typeof onConfirmCallback === 'function') {
-                onConfirmCallback();
-            }
-        };
+        window.onSlideConfirmAction = onConfirmCallback;
+        modal.classList.remove('hidden');
     } else {
         if (confirm(`${title}\n\n${subtext}`)) {
-            if (typeof onConfirmCallback === 'function') {
-                onConfirmCallback();
-            }
+            if (typeof onConfirmCallback === 'function') onConfirmCallback();
         }
     }
 }
@@ -666,7 +661,7 @@ export async function loadOlderConversations() {
         }
     } catch(e) {
         console.error("Error fetching older conversations page:", e);
-    } fontally {
+    } font-bold {
         isLoadingOlderThreads = false;
     }
 }
@@ -779,7 +774,7 @@ export function renderThreadsList() {
         const threadStatus = typeof assignData === 'object' ? assignData.status : (cateringRider ? 'catering' : 'open');
         const myName = (appState.riderName || "").trim();
 
-        // 1. ALL MESSAGES (ACTIVE META INBOX FOLDER)
+        // 1. ALL MESSAGES (ACTIVE META INBOX FOLDER ONLY)
         if (activeInboxFilter === 'all') {
             if (threadStatus === 'done' || threadStatus === 'hidden' || conv.isMetaDone || conv.folder === 'done') {
                 return false;
@@ -1926,7 +1921,6 @@ if (typeof window !== 'undefined') {
     window.closeSlideDeleteModal = closeSlideDeleteModal;
     window.onSlideProgress = onSlideProgress;
     window.onSlideEnd = onSlideEnd;
-    window.requestSlideConfirmation = requestSlideConfirmation;
     window.openImageViewer = openImageViewer;
     window.closeImageViewer = closeImageViewer;
     window.zoomImageViewer = zoomImageViewer;
