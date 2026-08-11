@@ -4,7 +4,10 @@ export const CSV_AUTH_URL = "https://docs.google.com/spreadsheets/d/1lc-1os3xTnA
 export const HUB_LOCATION = { lat: 15.6881, lng: 120.4144, mapUrl: "https://maps.app.goo.gl/sCBrMSjP9FEjB43C7" };
 export const ADMIN_IDS = ["4547425", "5548562"];
 
-// 🔹 FACEBOOK PAGE LINK CONFIGURATION
+// 🔹 FACEBOOK APP & PAGE CONFIGURATION
+// Replace with your valid Meta Developer App ID from https://developers.facebook.com/
+// src/config/constants.js
+export const FB_APP_ID = "3509728395866188";
 export const FB_PAGE_USERNAME = "lokaledeliverygroup"; 
 export const FB_PAGE_URL = `https://m.me/${FB_PAGE_USERNAME}`;
 

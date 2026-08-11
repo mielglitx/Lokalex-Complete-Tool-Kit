@@ -1,207 +1,478 @@
 // src/features/chat.js
 import { db } from '../config/firebase.js';
 import { appState, globalState } from '../store/state.js';
+import { showToast } from '../ui/notifications.js';
 import { escapeHtml } from '../utils/helpers.js';
-import { playNotificationSound } from '../ui/notifications.js';
 
-let isChatDragging = false;
-let chatStartY = 0;
-let chatTopOffset = 0;
-let currentBubbleY = Math.max(120, window.innerHeight - 180);
-let lastReadChatCount = parseInt(localStorage.getItem('lastReadChatCount') || "0");
-let lastSoundProcessedCount = -1;
-let tagObserver = null;
+let isChatOpen = false;
+let unreadChatCount = 0;
+let lastKnownChatMsgCount = 0;
 
+let activeRiderChatCustId = null;
+let activeRiderChatListener = null;
+
+// ============================================================================
+// 1. TEAM COMMS CHAT WIDGET
+// ============================================================================
 export function initDraggableChat() {
     const bubble = document.getElementById('chat-bubble');
-    if (!bubble) return;
-
-    updateChatPositions();
-
-    bubble.addEventListener('pointerdown', (e) => {
-        isChatDragging = false;
-        chatStartY = e.clientY;
-        chatTopOffset = currentBubbleY;
-        bubble.setPointerCapture(e.pointerId);
-    });
-
-    bubble.addEventListener('pointermove', (e) => {
-        if (Math.abs(e.clientY - chatStartY) > 5) isChatDragging = true;
-        if (!isChatDragging) return;
-
-        const deltaY = e.clientY - chatStartY;
-        let newY = chatTopOffset + deltaY;
-        currentBubbleY = Math.max(70, Math.min(window.innerHeight - 60, newY));
-        updateChatPositions();
-    });
-
-    bubble.addEventListener('pointerup', (e) => {
-        try { bubble.releasePointerCapture(e.pointerId); } catch(err){}
-        if (!isChatDragging) toggleChatWindow();
-        isChatDragging = false;
-    });
-
-    document.addEventListener('pointerdown', (e) => {
-        const windowEl = document.getElementById('expanded-chat-window');
-        const containerEl = document.getElementById('floating-chat-container');
-        if (windowEl && !windowEl.classList.contains('hidden') && containerEl && !containerEl.contains(e.target)) {
-            toggleChatWindow(false);
-        }
-    });
-
-    window.addEventListener('chatUpdated', updateChatBadgesAndUI);
-}
-
-function updateChatPositions() {
     const container = document.getElementById('floating-chat-container');
-    const windowEl = document.getElementById('expanded-chat-window');
-    if (!container) return;
-    
-    if (windowEl.classList.contains('hidden')) {
-        container.style.top = currentBubbleY + 'px';
-        container.style.bottom = 'auto';
-    } else {
-        const windowHeight = 384;
-        let windowTop = Math.max(60, currentBubbleY - windowHeight - 8);
-        if (windowTop + windowHeight + 50 > window.innerHeight) {
-            windowTop = Math.max(60, window.innerHeight - windowHeight - 60);
+
+    if (!bubble || !container) return;
+
+    let isPointerDown = false;
+    let isDragging = false;
+    let startY = 0;
+    let initialTop = 0;
+    let touchStartTime = 0;
+
+    const onStart = (e) => {
+        isPointerDown = true;
+        isDragging = false;
+        touchStartTime = Date.now();
+        startY = e.touches ? e.touches[0].clientY : e.clientY;
+        const rect = container.getBoundingClientRect();
+        initialTop = rect.top;
+    };
+
+    const onMove = (e) => {
+        if (!isPointerDown) return;
+
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const deltaY = clientY - startY;
+
+        if (Math.abs(deltaY) > 10) {
+            isDragging = true;
+            let newTop = initialTop + deltaY;
+            const maxTop = window.innerHeight - 80;
+            newTop = Math.max(60, Math.min(newTop, maxTop));
+            container.style.top = `${newTop}px`;
         }
-        container.style.top = windowTop + 'px';
-        container.style.bottom = 'auto';
-    }
+    };
+
+    const onEnd = () => {
+        if (!isPointerDown) return;
+        isPointerDown = false;
+
+        const elapsedTime = Date.now() - touchStartTime;
+
+        if (!isDragging || elapsedTime < 250) {
+            toggleChatWindow(!isChatOpen);
+        }
+        isDragging = false;
+    };
+
+    bubble.addEventListener('mousedown', onStart);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onEnd);
+
+    bubble.addEventListener('touchstart', onStart, { passive: true });
+    document.addEventListener('touchmove', onMove, { passive: true });
+    document.addEventListener('touchend', onEnd);
+
+    listenToFirebaseChat();
 }
 
-export function toggleChatWindow(forceShow) {
+export function toggleChatWindow(show) {
+    isChatOpen = show;
     const windowEl = document.getElementById('expanded-chat-window');
-    const show = forceShow !== undefined ? forceShow : windowEl.classList.contains('hidden');
-    
-    if (show) {
-        windowEl.classList.remove('hidden');
-        lastReadChatCount = globalState.chatMessages.length;
-        localStorage.setItem('lastReadChatCount', lastReadChatCount.toString());
-        document.getElementById('chat-unread-badge').classList.add('hidden');
-        document.getElementById('chat-tag-badge').classList.add('hidden');
-        renderBubbleMessages(); 
-    } else {
-        windowEl.classList.add('hidden');
-    }
-    updateChatPositions();
-}
-
-function updateChatBadgesAndUI() {
-    const chatMessages = globalState.chatMessages;
-    const myName = (appState.riderName || "").toLowerCase();
-
-    if (lastSoundProcessedCount === -1) {
-        lastSoundProcessedCount = chatMessages.length;
-    } else if (chatMessages.length > lastSoundProcessedCount) {
-        const newMessages = chatMessages.slice(lastSoundProcessedCount);
-        let hasIncoming = false;
-        let hasMention = false;
-
-        newMessages.forEach(m => {
-            if (m.sender !== appState.riderName) {
-                hasIncoming = true;
-                if (myName && m.text && m.text.toLowerCase().includes('@' + myName)) hasMention = true;
-            }
-        });
-
-        if (hasMention) playNotificationSound(true);
-        else if (hasIncoming) playNotificationSound(false);
-        lastSoundProcessedCount = chatMessages.length;
-    }
-
-    const isChatOpen = !document.getElementById('expanded-chat-window').classList.contains('hidden');
-    if (isChatOpen) {
-        lastReadChatCount = chatMessages.length;
-        localStorage.setItem('lastReadChatCount', lastReadChatCount.toString());
-        renderBubbleMessages();
-        return;
-    }
-
-    const unreadCount = Math.max(0, chatMessages.length - lastReadChatCount);
     const unreadBadge = document.getElementById('chat-unread-badge');
-    const tagBadge = document.getElementById('chat-tag-badge');
 
-    if (unreadCount > 0) {
-        unreadBadge.innerText = unreadCount > 99 ? '99+' : unreadCount;
-        unreadBadge.classList.remove('hidden');
-        const hasTag = myName && chatMessages.slice(lastReadChatCount).some(m => m.text && m.text.toLowerCase().includes('@' + myName));
-        hasTag ? tagBadge.classList.remove('hidden') : tagBadge.classList.add('hidden');
-    } else {
-        unreadBadge.classList.add('hidden');
-        tagBadge.classList.add('hidden');
+    if (windowEl) {
+        if (show) {
+            windowEl.classList.remove('hidden');
+            unreadChatCount = 0;
+            if (unreadBadge) unreadBadge.classList.add('hidden');
+            scrollChatToBottom();
+        } else {
+            windowEl.classList.add('hidden');
+        }
     }
 }
 
-function renderBubbleMessages() {
-    const feed = document.getElementById('bubble-chat-messages');
-    const chatMessages = globalState.chatMessages;
-    
-    if (!chatMessages || chatMessages.length === 0) {
-        feed.innerHTML = `<div class="text-center text-gray-500 italic py-10">No messages yet.</div>`;
+export function listenToFirebaseChat() {
+    if (!db) return;
+
+    db.ref('chat').on('value', (snapshot) => {
+        const data = snapshot.val();
+        let msgs = [];
+        if (data) {
+            msgs = Object.keys(data).map(key => ({
+                id: key,
+                ...data[key]
+            }));
+            msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        }
+
+        globalState.chatMessages = msgs;
+
+        if (lastKnownChatMsgCount > 0 && msgs.length > lastKnownChatMsgCount && !isChatOpen) {
+            unreadChatCount += (msgs.length - lastKnownChatMsgCount);
+            const unreadBadge = document.getElementById('chat-unread-badge');
+            if (unreadBadge) {
+                unreadBadge.innerText = unreadChatCount;
+                unreadBadge.classList.remove('hidden');
+            }
+        }
+        lastKnownChatMsgCount = msgs.length;
+
+        renderBubbleChatMessages(msgs);
+    });
+}
+
+export function renderBubbleChatMessages(msgs) {
+    const container = document.getElementById('bubble-chat-messages');
+    if (!container) return;
+
+    if (!msgs || msgs.length === 0) {
+        container.innerHTML = `<div class="text-center text-gray-500 italic py-10 text-xs">No team messages yet.</div>`;
         return;
     }
 
-    const myName = (appState.riderName || "").toLowerCase();
-    feed.innerHTML = chatMessages.map((m) => {
-        const isMe = m.sender === appState.riderName;
-        const isTagged = myName && m.text && m.text.toLowerCase().includes('@' + myName);
+    const myName = (appState.riderName || "").trim();
+
+    container.innerHTML = msgs.map(m => {
+        const isMe = (m.sender || "").trim().toLowerCase() === myName.toLowerCase();
+        const alignClass = isMe ? "self-end bg-blue-600 text-white rounded-br-none" : "self-start bg-cardBg border border-gray-700 text-gray-200 rounded-bl-none";
+        
+        let timeStr = "";
+        if (m.timestamp) {
+            timeStr = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        const imageMarkup = m.imageUrl ? `<img src="${m.imageUrl}" class="w-44 max-w-full rounded-xl mt-1 border border-gray-700 shadow-md">` : '';
+        const isEveryoneTagged = m.text && m.text.includes('@everyone');
+        const tagHighlight = isEveryoneTagged ? 'ring-2 ring-amber-400 bg-amber-500/20 p-1 rounded-lg' : '';
+
         return `
-        <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'} my-0.5">
-            <span class="text-[9px] text-gray-400 font-bold px-1">${escapeHtml(m.sender || 'Rider')} • ${escapeHtml(m.time || '')}</span>
-            <div class="chat-msg-bubble px-3 py-2 rounded-2xl max-w-[85%] text-xs transition-all duration-700 ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'} ${isTagged ? 'pending-tag-highlight' : ''}">
-                ${escapeHtml(m.text || '').replace(/@(\w+)/g, '<span class="bg-blue-900/80 text-blue-300 font-bold px-1 rounded">@$1</span>')}
+        <div class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 shadow-sm text-xs ${alignClass} ${tagHighlight}">
+            <div class="text-[9px] ${isMe ? 'text-blue-200' : 'text-blue-400'} font-bold flex justify-between gap-3">
+                <span>${escapeHtml(m.sender || "Rider")}</span>
+                <span class="opacity-60 font-mono">${timeStr}</span>
             </div>
+            <div class="leading-relaxed whitespace-pre-wrap font-sans">${escapeHtml(m.text)}</div>
+            ${imageMarkup}
         </div>`;
     }).join('');
-    feed.scrollTop = feed.scrollHeight;
+
+    scrollChatToBottom();
+}
+
+export function scrollChatToBottom() {
+    const container = document.getElementById('bubble-chat-messages');
+    if (container) {
+        container.scrollTop = container.scrollHeight;
+    }
 }
 
 export function sendBubbleChatMessage() {
     const input = document.getElementById('bubble-chat-input');
-    const text = input.value.trim();
+    const text = input ? input.value.trim() : "";
+
     if (!text) return;
 
-    input.value = "";
-    document.getElementById('tag-suggestions').classList.add('hidden');
+    const senderName = appState.riderName || "Lokalex Rider";
+    const isEveryoneTagged = text.includes('@everyone');
 
-    const msgData = {
-        sender: appState.riderName,
+    const newMsg = {
+        sender: senderName,
         text: text,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: Date.now(),
+        isEveryoneTagged: isEveryoneTagged
     };
-    db.ref('chat').push(msgData);
+
+    if (db) {
+        db.ref('chat').push(newMsg);
+    }
+
+    if (input) input.value = "";
+
+    if (isEveryoneTagged) {
+        showToast("📢 Tagged @everyone in Team Comms!");
+    }
 }
-// --- PASTE AT THE BOTTOM OF src/features/chat.js ---
-export function handleChatInput(inputEl) {
-    const val = inputEl.value;
-    const dropdown = document.getElementById('tag-suggestions');
-    const atIndex = val.lastIndexOf('@');
 
-    if (atIndex !== -1 && atIndex === val.length - 1 || (atIndex !== -1 && !val.substring(atIndex).includes(' '))) {
-        const query = val.substring(atIndex + 1).toLowerCase();
-        let riders = globalState.rosterMembers ? globalState.rosterMembers.map(r => r.riderName) : [];
-        riders = [...new Set(riders)].filter(r => r.toLowerCase().includes(query));
+export function triggerTeamChatImage() {
+    const input = document.getElementById('team-chat-image-input');
+    if (input) input.click();
+}
 
-        if (riders.length > 0) {
-            dropdown.innerHTML = riders.map(r => `
-                <div onclick="selectTagRider('${escapeHtml(r)}')" class="p-2 hover:bg-blue-600/30 rounded cursor-pointer flex items-center gap-2 font-bold text-blue-400">
-                    <i class="fa-solid fa-at"></i> ${escapeHtml(r)}
-                </div>
-            `).join('');
-            dropdown.classList.remove('hidden');
+export function handleTeamChatImageFile(event) {
+    const file = event.target?.files?.[0];
+    if (!file) return;
+
+    showToast("📸 Processing photo...");
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const imageDataUrl = e.target.result;
+        const senderName = appState.riderName || "Lokalex Rider";
+
+        const newMsg = {
+            sender: senderName,
+            text: "📷 [Shared Image]",
+            imageUrl: imageDataUrl,
+            timestamp: Date.now()
+        };
+
+        if (db) {
+            db.ref('chat').push(newMsg);
+        }
+
+        showToast("✅ Image sent to Team Comms!");
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
+}
+
+export function handleChatInput(inputEl) {}
+
+// ============================================================================
+// 2. CUSTOMER-SIDE REAL-TIME CHAT WITH RIDERS
+// ============================================================================
+export function listenToCustomerRiderChat() {
+    if (!db) return;
+
+    const custFbId = appState.customerFacebookId || localStorage.getItem('lokalex_customer_fb_id');
+    if (!custFbId) return;
+
+    db.ref(`customerChats/${custFbId}/messages`).on('value', (snapshot) => {
+        const data = snapshot.val();
+        const container = document.getElementById('cust-rider-chat-messages');
+        if (!container) return;
+
+        if (!data) {
+            container.innerHTML = `<div class="text-center text-gray-500 italic py-10 text-xs">Pumili o mag-type ng mensahe para sa mga riders...</div>`;
             return;
         }
-    }
-    dropdown.classList.add('hidden');
+
+        const msgs = Object.values(data);
+        msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+        container.innerHTML = msgs.map(m => {
+            const isRider = !!m.isRider;
+            const alignClass = isRider 
+                ? "self-start bg-cardBg border border-gray-700 text-gray-200 rounded-tl-none" 
+                : "self-end bg-blue-600 text-white rounded-tr-none";
+
+            let timeStr = "";
+            if (m.timestamp) {
+                timeStr = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+
+            return `
+            <div class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 shadow-sm text-xs ${alignClass}">
+                <div class="text-[9px] ${isRider ? 'text-blue-400' : 'text-blue-200'} font-bold flex justify-between gap-3">
+                    <span>${escapeHtml(m.sender || (isRider ? "Lokalex Rider" : "You"))}</span>
+                    <span class="opacity-60 font-mono">${timeStr}</span>
+                </div>
+                <div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${escapeHtml(m.text)}</div>
+            </div>`;
+        }).join('');
+
+        container.scrollTop = container.scrollHeight;
+    });
 }
 
-export function selectTagRider(name) {
-    const inputEl = document.getElementById('bubble-chat-input');
-    const val = inputEl.value;
-    const atIndex = val.lastIndexOf('@');
-    inputEl.value = val.substring(0, atIndex) + '@' + name + ' ';
-    document.getElementById('tag-suggestions').classList.add('hidden');
-    inputEl.focus();
+export function sendCustomerToRiderChat() {
+    const input = document.getElementById('cust-rider-chat-input');
+    const text = input ? input.value.trim() : "";
+
+    if (!text) return;
+
+    const custFbId = appState.customerFacebookId || localStorage.getItem('lokalex_customer_fb_id') || `CUST_${Date.now()}`;
+    const custName = appState.customerName || localStorage.getItem('lokalex_customer_name') || "Customer";
+    const custAvatar = localStorage.getItem('lokalex_customer_avatar') || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff`;
+
+    const now = Date.now();
+
+    const newMsg = {
+        sender: custName,
+        senderId: custFbId,
+        text: text,
+        timestamp: now,
+        isRider: false
+    };
+
+    if (db) {
+        db.ref(`customerChats/${custFbId}/messages`).push(newMsg);
+        db.ref(`customerChats/${custFbId}/metadata`).set({
+            lastMessage: text,
+            lastUpdated: now,
+            customerName: custName,
+            customerFbId: custFbId,
+            avatarUrl: custAvatar
+        });
+    }
+
+    if (input) input.value = "";
+    showToast("💬 Message sent to riders!");
+}
+
+// ============================================================================
+// 3. RIDER-SIDE CUSTOMER CHAT FEED & DIRECT REPLY MODAL
+// ============================================================================
+export function listenToAllCustomerChatsForRider() {
+    if (!db) return;
+
+    db.ref('customerChats').on('value', (snapshot) => {
+        const data = snapshot.val();
+        const feed = document.getElementById('rider-cust-chats-feed');
+        const badge = document.getElementById('rider-cust-chats-badge');
+
+        if (!feed) return;
+
+        if (!data) {
+            feed.innerHTML = `<div class="text-gray-500 italic text-center py-4 text-xs">No active customer messages yet.</div>`;
+            if (badge) badge.innerText = "0 threads";
+            return;
+        }
+
+        const threads = Object.keys(data).map(key => {
+            const item = data[key];
+            const meta = item.metadata || {};
+            return {
+                custId: key,
+                customerName: meta.customerName || "Customer",
+                avatarUrl: meta.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(meta.customerName || "Customer")}&background=0084FF&color=fff`,
+                lastMessage: meta.lastMessage || "No messages yet",
+                lastUpdated: meta.lastUpdated || 0,
+                messages: item.messages ? Object.values(item.messages) : []
+            };
+        });
+
+        threads.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+
+        if (badge) badge.innerText = `${threads.length} ${threads.length === 1 ? 'thread' : 'threads'}`;
+
+        feed.innerHTML = threads.map(t => {
+            let timeStr = "";
+            if (t.lastUpdated) {
+                timeStr = new Date(t.lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+
+            return `
+            <div onclick="openRiderCustomerChatModal('${t.custId}', '${escapeHtml(t.customerName)}', '${escapeHtml(t.avatarUrl)}')" class="bg-black/30 hover:bg-black/50 border border-gray-800 p-2.5 rounded-xl flex items-center justify-between cursor-pointer transition active:scale-[0.99]">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <img src="${t.avatarUrl}" class="w-9 h-9 rounded-full object-cover border border-blue-500 shrink-0">
+                    <div class="min-w-0">
+                        <div class="font-bold text-white text-xs truncate">${escapeHtml(t.customerName)}</div>
+                        <div class="text-[11px] text-gray-400 truncate">${escapeHtml(t.lastMessage)}</div>
+                    </div>
+                </div>
+                <div class="text-[9px] text-gray-500 font-mono shrink-0 ml-2">${timeStr}</div>
+            </div>`;
+        }).join('');
+    });
+}
+
+export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
+    activeRiderChatCustId = custId;
+
+    const modal = document.getElementById('rider-customer-chat-modal');
+    const nameEl = document.getElementById('rider-chat-cust-name');
+    const avatarEl = document.getElementById('rider-chat-cust-avatar');
+
+    if (nameEl) nameEl.innerText = custName || "Customer";
+    if (avatarEl) avatarEl.src = avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff`;
+
+    if (modal) modal.classList.remove('hidden');
+
+    if (activeRiderChatListener) activeRiderChatListener.off();
+
+    if (db && custId) {
+        activeRiderChatListener = db.ref(`customerChats/${custId}/messages`);
+        activeRiderChatListener.on('value', (snapshot) => {
+            const data = snapshot.val();
+            const container = document.getElementById('rider-cust-chat-messages');
+            if (!container) return;
+
+            if (!data) {
+                container.innerHTML = `<div class="text-center text-gray-500 italic py-10 text-xs">No messages yet.</div>`;
+                return;
+            }
+
+            const msgs = Object.values(data);
+            msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+            const riderName = appState.riderName || "Rider";
+
+            container.innerHTML = msgs.map(m => {
+                const isRider = !!m.isRider;
+                const alignClass = isRider 
+                    ? "self-end bg-blue-600 text-white rounded-tr-none" 
+                    : "self-start bg-cardBg border border-gray-700 text-gray-200 rounded-tl-none";
+
+                let timeStr = "";
+                if (m.timestamp) {
+                    timeStr = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+
+                return `
+                <div class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 shadow-sm text-xs ${alignClass}">
+                    <div class="text-[9px] ${isRider ? 'text-blue-200' : 'text-blue-400'} font-bold flex justify-between gap-3">
+                        <span>${escapeHtml(m.sender || (isRider ? riderName : custName))}</span>
+                        <span class="opacity-60 font-mono">${timeStr}</span>
+                    </div>
+                    <div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${escapeHtml(m.text)}</div>
+                </div>`;
+            }).join('');
+
+            container.scrollTop = container.scrollHeight;
+        });
+    }
+}
+
+export function closeRiderCustomerChatModal() {
+    const modal = document.getElementById('rider-customer-chat-modal');
+    if (modal) modal.classList.add('hidden');
+
+    if (activeRiderChatListener) {
+        activeRiderChatListener.off();
+        activeRiderChatListener = null;
+    }
+    activeRiderChatCustId = null;
+}
+
+export function sendRiderToCustomerChat() {
+    const input = document.getElementById('rider-cust-chat-input');
+    const text = input ? input.value.trim() : "";
+
+    if (!text || !activeRiderChatCustId) return;
+
+    const riderName = appState.riderName || "Lokalex Rider";
+    const now = Date.now();
+
+    const newMsg = {
+        sender: riderName,
+        text: text,
+        timestamp: now,
+        isRider: true
+    };
+
+    if (db) {
+        db.ref(`customerChats/${activeRiderChatCustId}/messages`).push(newMsg);
+        db.ref(`customerChats/${activeRiderChatCustId}/metadata`).update({
+            lastMessage: `You: ${text}`,
+            lastUpdated: now
+        });
+    }
+
+    if (input) input.value = "";
+}
+
+// BIND TO GLOBAL WINDOW OBJECT
+if (typeof window !== 'undefined') {
+    window.initDraggableChat = initDraggableChat;
+    window.toggleChatWindow = toggleChatWindow;
+    window.sendBubbleChatMessage = sendBubbleChatMessage;
+    window.triggerTeamChatImage = triggerTeamChatImage;
+    window.handleTeamChatImageFile = handleTeamChatImageFile;
+    window.handleChatInput = handleChatInput;
+    window.sendCustomerToRiderChat = sendCustomerToRiderChat;
+    window.listenToCustomerRiderChat = listenToCustomerRiderChat;
+    window.listenToAllCustomerChatsForRider = listenToAllCustomerChatsForRider;
+    window.openRiderCustomerChatModal = openRiderCustomerChatModal;
+    window.closeRiderCustomerChatModal = closeRiderCustomerChatModal;
+    window.sendRiderToCustomerChat = sendRiderToCustomerChat;
 }

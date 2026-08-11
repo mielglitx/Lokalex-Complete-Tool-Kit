@@ -50,6 +50,9 @@ export function showSideNotification(title, message, iconClass = "fa-sync fa-spi
     const titleEl = document.getElementById('side-notify-title');
     const msgEl = document.getElementById('side-notify-msg');
 
+    // Guard clause: safely exit if elements are not present in DOM
+    if (!banner || !icon || !titleEl || !msgEl) return;
+
     banner.className = `fixed top-16 right-3 z-[9998] max-w-xs w-72 bg-gray-900/95 border-l-4 ${borderClass} text-white p-3.5 rounded-xl shadow-2xl transition-all duration-300 ease-out side-notify-visible pointer-events-none flex items-start gap-3 backdrop-blur-md`;
     icon.className = `fa-solid ${iconClass}`;
     titleEl.innerText = title;

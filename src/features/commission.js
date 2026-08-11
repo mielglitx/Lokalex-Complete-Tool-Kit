@@ -79,7 +79,7 @@ export function isRiderAdmin(riderName = "", telegramId = "") {
     return false;
 }
 
-// GET DYNAMIC COMMISSION RATES PER RIDER BASED ON COMMISSIONSETTINGS & ADMIN STATUS
+// GET DYNAMIC COMMISSION RATES PER RIDER BASED ON COMMISSIONSETTINGS, PENALTIES, & ADMIN STATUS
 function getCommissionRates(dateStr, riderName = "", telegramId = "") {
     const d = new Date((dateStr || getLocalTodayStr()) + "T00:00:00");
     const isSunday = d.getDay() === 0;
@@ -95,6 +95,7 @@ function getCommissionRates(dateStr, riderName = "", telegramId = "") {
             companyPerc: 0,
             riderPerc: 100,
             baseCompanyPerc: 0,
+            penaltyPerc: 0,
             isAdmin: true
         };
     }
@@ -108,19 +109,30 @@ function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         else if (setting.basePercentage !== undefined) baseCompanyPerc = parseFloat(setting.basePercentage);
     }
 
+    // CHECK SPECIFIC-DATE PENALTY INJECTION
+    const penaltyKey = `${cleanName}_${dateStr}`;
+    const penaltyRecord = globalState.globalCommissionPenalties ? globalState.globalCommissionPenalties[penaltyKey] : null;
+    let penaltyPerc = 0;
+
+    if (penaltyRecord && penaltyRecord.penaltyPercentage) {
+        penaltyPerc = Math.max(0, parseFloat(penaltyRecord.penaltyPercentage) || 0);
+    }
+
     let sundayDiscount = isSunday ? 5 : 0;
 
-    let finalCompanyPerc = Math.max(0, baseCompanyPerc - sundayDiscount);
+    let finalCompanyPerc = Math.max(0, baseCompanyPerc + penaltyPerc - sundayDiscount);
     let companyRate = finalCompanyPerc / 100;
-    let riderRate = (100 - finalCompanyPerc) / 100;
+    let riderRate = Math.max(0, (100 - finalCompanyPerc) / 100);
 
     return {
         companyRate: companyRate,
         riderRate: riderRate,
         isSunday: isSunday,
         companyPerc: finalCompanyPerc,
-        riderPerc: 100 - finalCompanyPerc,
+        riderPerc: Math.max(0, 100 - finalCompanyPerc),
         baseCompanyPerc: baseCompanyPerc,
+        penaltyPerc: penaltyPerc,
+        penaltyReason: penaltyRecord ? penaltyRecord.reason : "",
         isAdmin: false
     };
 }
@@ -166,6 +178,11 @@ export async function fetchCommissionSettings() {
                 globalState.globalRiderRates = ratesMap;
                 refreshCommissionView();
             }
+        });
+
+        db.ref('commissionPenalties').once('value', (snapshot) => {
+            globalState.globalCommissionPenalties = snapshot.val() || {};
+            refreshCommissionView();
         });
     }
 }
@@ -229,7 +246,15 @@ function setupAdminControls() {
 
         let addBtn = document.getElementById('admin-add-comm-btn');
         if (!addBtn && filterBox) {
-            const btnHtml = `<button id="admin-add-comm-btn" onclick="promptAdminAddCommissionRecord()" class="mt-2 bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 border border-emerald-500/50 text-xs font-bold py-2 px-3 rounded-lg transition active:scale-95 flex items-center justify-center gap-1.5"><i class="fa-solid fa-plus-circle"></i> + Add Manual Record</button>`;
+            const btnHtml = `
+            <div class="flex gap-2 mt-2">
+                <button id="admin-add-comm-btn" onclick="promptAdminAddCommissionRecord()" class="flex-1 bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 border border-emerald-500/50 text-[11px] font-bold py-2 px-2 rounded-lg transition active:scale-95 flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-plus-circle"></i> + Manual Record
+                </button>
+                <button id="admin-add-penalty-btn" onclick="openAdminPenaltyModal()" class="flex-1 bg-red-600/30 hover:bg-red-600 text-red-300 border border-red-500/50 text-[11px] font-bold py-2 px-2 rounded-lg transition active:scale-95 flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-gavel"></i> + Date Penalty
+                </button>
+            </div>`;
             filterBox.insertAdjacentHTML('beforeend', btnHtml);
         }
     } else {
@@ -424,7 +449,6 @@ export function refreshCommissionView() {
 
         let gross = parseFloat(r.totalFees) || 0;
         
-        // Dynamic rates calculated per rider (0% for Admins based on Login ID sheet, normal rates for TLs & Riders)
         const rates = getCommissionRates(rDate, rName, rId);
 
         const earnedAmt = gross * rates.riderRate;
@@ -491,29 +515,19 @@ export function refreshCommissionView() {
     if (grossEl) grossEl.innerText = grandGross.toFixed(2);
     if (summaryTitleEl) summaryTitleEl.innerText = `${viewSettings.period.toUpperCase()} SUMMARY`;
 
-    const selDate = new Date(viewSettings.dateValue + "T00:00:00");
-    const isSelSunday = viewSettings.period === 'daily' && selDate.getDay() === 0;
-
     const displayRates = selectedRiderRates || getCommissionRates(viewSettings.dateValue, appState.riderName, appState.telegramId);
+    let penaltyNotice = displayRates.penaltyPerc > 0 ? ` (+${displayRates.penaltyPerc}% Penalty)` : '';
 
     if (viewSettings.mode === 'earned') {
         if (mainLabelEl) {
-            mainLabelEl.innerText = isSelSunday 
-                ? `YOUR EARNINGS (${displayRates.riderPerc}% SUNDAY PROMO)` 
-                : `YOUR EARNINGS (${displayRates.riderPerc}%)`;
+            mainLabelEl.innerText = `YOUR EARNINGS (${displayRates.riderPerc}% Rate${penaltyNotice})`;
             mainLabelEl.className = "text-[10px] text-emerald-400 font-bold uppercase";
         }
         if (mainWrapperEl) mainWrapperEl.className = "text-4xl font-black text-emerald-400 drop-shadow-md";
         if (mainAmountEl) mainAmountEl.innerText = grandEarned.toFixed(2);
     } else {
         if (mainLabelEl) {
-            if (displayRates.isAdmin) {
-                mainLabelEl.innerText = `TO PAY COMPANY (ADMIN EXEMPT)`;
-            } else {
-                mainLabelEl.innerText = isSelSunday 
-                    ? `TO PAY COMPANY (${displayRates.companyPerc}% SUNDAY PROMO)` 
-                    : `TO PAY COMPANY (${displayRates.companyPerc}%)`;
-            }
+            mainLabelEl.innerText = displayRates.isAdmin ? `TO PAY COMPANY (ADMIN EXEMPT)` : `TO PAY COMPANY (${displayRates.companyPerc}% Rate${penaltyNotice})`;
             mainLabelEl.className = "text-[10px] text-red-400 font-bold uppercase";
         }
         if (mainWrapperEl) mainWrapperEl.className = "text-4xl font-black text-red-400 drop-shadow-md";
@@ -597,6 +611,196 @@ export function toggleRiderCustomerBreakdown(uid) {
     if (icon) {
         icon.style.transform = box.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
     }
+}
+
+export function openAdminPenaltyModal() {
+    const modal = document.getElementById('admin-penalty-modal');
+    const riderSelect = document.getElementById('penalty-rider-select');
+    const dateInput = document.getElementById('penalty-date-input');
+    const rateInput = document.getElementById('penalty-rate-input');
+    const reasonInput = document.getElementById('penalty-reason-input');
+
+    if (!modal || !riderSelect) return;
+
+    const cleanRiders = getCleanRiderList();
+    let optionsHtml = "";
+    cleanRiders.forEach(name => {
+        optionsHtml += `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
+    });
+    riderSelect.innerHTML = optionsHtml;
+
+    if (dateInput) dateInput.value = viewSettings.dateValue || getLocalTodayStr();
+    if (rateInput) rateInput.value = "10";
+    if (reasonInput) reasonInput.value = "";
+
+    modal.classList.remove('hidden');
+}
+
+export function closeAdminPenaltyModal() {
+    const modal = document.getElementById('admin-penalty-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export function submitAdminPenalty() {
+    const riderSelect = document.getElementById('penalty-rider-select');
+    const dateInput = document.getElementById('penalty-date-input');
+    const rateInput = document.getElementById('penalty-rate-input');
+    const reasonInput = document.getElementById('penalty-reason-input');
+
+    const rName = riderSelect ? riderSelect.value.trim() : "";
+    const targetDate = dateInput ? dateInput.value : getLocalTodayStr();
+    const penaltyRate = rateInput ? parseFloat(rateInput.value) : 0;
+    const reason = reasonInput ? reasonInput.value.trim() : "Admin Penalty";
+
+    if (!rName) return showToast("⚠️ Please select a rider.");
+    if (isNaN(penaltyRate) || penaltyRate <= 0) return showToast("⚠️ Please enter a valid penalty percentage.");
+
+    const cleanName = rName.toLowerCase().trim();
+    const penaltyKey = `${cleanName}_${targetDate}`;
+
+    const penaltyRecord = {
+        riderName: rName,
+        date: targetDate,
+        penaltyPercentage: penaltyRate,
+        reason: reason,
+        createdBy: appState.riderName || "Admin",
+        createdAt: Date.now()
+    };
+
+    if (db) {
+        db.ref(`commissionPenalties/${penaltyKey}`).set(penaltyRecord);
+    }
+
+    if (!globalState.globalCommissionPenalties) globalState.globalCommissionPenalties = {};
+    globalState.globalCommissionPenalties[penaltyKey] = penaltyRecord;
+
+    closeAdminPenaltyModal();
+    showToast(`⚖️ Added +${penaltyRate}% Commission Penalty for ${rName} on ${targetDate}!`);
+    refreshCommissionView();
+}
+
+export function removeAdminPenalty(riderName, targetDate) {
+    const cleanName = (riderName || "").toLowerCase().trim();
+    const penaltyKey = `${cleanName}_${targetDate}`;
+
+    openSlideDeleteModal(`Tanggalin ang Date Penalty?`, `Sigurado ka bang tanggalin ang +commission penalty para kay ${riderName} sa ${targetDate}?`, () => {
+        if (db) {
+            db.ref(`commissionPenalties/${penaltyKey}`).remove();
+        }
+        if (globalState.globalCommissionPenalties) {
+            delete globalState.globalCommissionPenalties[penaltyKey];
+        }
+        showToast(`✅ Penalty removed for ${riderName}`);
+        refreshCommissionView();
+    });
+}
+
+function renderRiderSummaryList(riderListArray) {
+    const container = document.getElementById('commission-rider-list');
+    if (!container) return;
+    
+    if (riderListArray.length === 0) {
+        container.innerHTML = `<div class="text-center text-gray-500 italic text-xs py-10">No active commission records for this period.</div>`;
+        return;
+    }
+
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
+
+    container.innerHTML = riderListArray.map((rider, idx) => {
+        const rates = rider.lastRates || getCommissionRates(viewSettings.dateValue, rider.name, rider.id);
+        
+        let amountLabel = "";
+        let colorClass = "";
+
+        if (viewSettings.mode === 'earned') {
+            amountLabel = `+ ₱${rider.earned.toFixed(2)}`;
+            colorClass = "text-emerald-400";
+        } else {
+            if (rates.isAdmin) {
+                amountLabel = `- ₱0.00 (Admin Exempt)`;
+                colorClass = "text-gray-400";
+            } else {
+                amountLabel = `- ₱${rider.company.toFixed(2)}`;
+                colorClass = "text-red-400";
+            }
+        }
+
+        const uid = `comm-rider-cust-${idx}`;
+        const customerCount = rider.customers ? rider.customers.length : 0;
+
+        let customerItemsHtml = "";
+        if (customerCount > 0) {
+            customerItemsHtml = rider.customers.map(c => {
+                let cAmt = viewSettings.mode === 'earned' 
+                    ? `+ ₱${c.earned.toFixed(2)}` 
+                    : (rates.isAdmin ? `- ₱0.00 (Exempt)` : `- ₱${c.company.toFixed(2)}`);
+                    
+                let dateTimeStr = c.date;
+                if (c.time) dateTimeStr += ` • ${c.time}`;
+
+                const editBtn = isAdmin 
+                    ? `<button onclick="event.stopPropagation(); promptAdminEditCustomerFee('${escapeHtml(rider.name)}', '${escapeHtml(c.customerName)}', '${c.date}', ${c.gross})" class="text-amber-400 hover:text-amber-300 ml-1.5 p-0.5" title="Edit Fee"><i class="fa-solid fa-pen text-[10px]"></i></button>` 
+                    : ``;
+
+                const deleteBtn = isAdmin 
+                    ? `<button onclick="event.stopPropagation(); promptAdminDeleteCommissionRecord('${escapeHtml(rider.name)}', '${escapeHtml(c.customerName)}', '${c.date}', '${c.transactionId}')" class="text-red-400 hover:text-red-300 ml-1 p-0.5" title="Delete Record"><i class="fa-solid fa-trash text-[10px]"></i></button>` 
+                    : ``;
+
+                return `
+                <div class="bg-black/40 p-2.5 rounded-lg border border-gray-800/80 flex justify-between items-center text-xs">
+                    <div class="flex flex-col gap-0.5">
+                        <span class="font-bold text-orange-300 flex items-center gap-1.5">
+                            <i class="fa-solid fa-user text-[10px]"></i> ${escapeHtml(c.customerName)} ${editBtn} ${deleteBtn}
+                        </span>
+                        <span class="text-[10px] text-gray-400 font-mono">${escapeHtml(dateTimeStr)}</span>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-bold ${colorClass}">${cAmt}</div>
+                        <div class="text-[9px] text-gray-500 font-mono">Paid: ₱${c.gross.toFixed(2)}</div>
+                    </div>
+                </div>`;
+            }).join('');
+        } else {
+            customerItemsHtml = `<div class="text-gray-500 italic text-[11px] py-2 text-center">No individual orders recorded.</div>`;
+        }
+
+        const adminBadge = rates.isAdmin ? `<span class="bg-purple-600/20 text-purple-300 border border-purple-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded ml-1">ADMIN</span>` : '';
+
+        const penaltyBadge = rates.penaltyPerc > 0 
+            ? `<div class="flex items-center justify-between bg-red-900/30 border border-red-500/40 px-2.5 py-1 rounded-lg text-[10px] text-red-300 font-bold my-1">
+                <span><i class="fa-solid fa-gavel text-red-400"></i> Date Penalty Active (+${rates.penaltyPerc}% to Company)</span>
+                ${isAdmin ? `<button onclick="event.stopPropagation(); removeAdminPenalty('${escapeHtml(rider.name)}', '${viewSettings.dateValue}')" class="text-white hover:text-red-300 underline ml-2"><i class="fa-solid fa-trash"></i> Remove</button>` : ''}
+               </div>`
+            : '';
+
+        return `
+            <div class="bg-cardBg rounded-xl border border-gray-800 shadow-sm flex flex-col overflow-hidden">
+                <div onclick="toggleRiderCustomerBreakdown('${uid}')" class="p-3.5 flex justify-between items-center text-sm cursor-pointer hover:bg-white/5 transition select-none">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-blue-300 flex items-center gap-1.5">
+                            <i class="fa-solid fa-motorcycle text-gray-500"></i> ${escapeHtml(rider.name)} ${adminBadge}
+                        </span>
+                        <span class="bg-blue-600/20 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-500/30">
+                            ${customerCount} ${customerCount === 1 ? 'customer' : 'customers'}
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-black ${colorClass}">${amountLabel}</span>
+                        <i id="icon-${uid}" class="fa-solid fa-chevron-down text-gray-400 text-xs transition-transform duration-300"></i>
+                    </div>
+                </div>
+
+                <div id="box-${uid}" class="hidden bg-darkBg/60 p-3 border-t border-gray-800/80 flex flex-col gap-2">
+                    ${penaltyBadge}
+                    <div class="text-[10px] text-amber-400 font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
+                        <span><i class="fa-solid fa-list-check"></i> Customer Breakdown (${viewSettings.period.toUpperCase()})</span>
+                        <span class="text-gray-400">Total Paid: ₱${rider.gross.toFixed(2)}</span>
+                    </div>
+                    ${customerItemsHtml}
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 export function promptAdminAddCommissionRecord() {
@@ -820,106 +1024,6 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
     refreshCommissionView();
 }
 
-function renderRiderSummaryList(riderListArray) {
-    const container = document.getElementById('commission-rider-list');
-    if (!container) return;
-    
-    if (riderListArray.length === 0) {
-        container.innerHTML = `<div class="text-center text-gray-500 italic text-xs py-10">No active commission records for this period.</div>`;
-        return;
-    }
-
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
-
-    container.innerHTML = riderListArray.map((rider, idx) => {
-        const rates = rider.lastRates || getCommissionRates(viewSettings.dateValue, rider.name, rider.id);
-        
-        let amountLabel = "";
-        let colorClass = "";
-
-        if (viewSettings.mode === 'earned') {
-            amountLabel = `+ ₱${rider.earned.toFixed(2)}`;
-            colorClass = "text-emerald-400";
-        } else {
-            if (rates.isAdmin) {
-                amountLabel = `- ₱0.00 (Admin Exempt)`;
-                colorClass = "text-gray-400";
-            } else {
-                amountLabel = `- ₱${rider.company.toFixed(2)}`;
-                colorClass = "text-red-400";
-            }
-        }
-
-        const uid = `comm-rider-cust-${idx}`;
-        const customerCount = rider.customers ? rider.customers.length : 0;
-
-        let customerItemsHtml = "";
-        if (customerCount > 0) {
-            customerItemsHtml = rider.customers.map(c => {
-                let cAmt = viewSettings.mode === 'earned' 
-                    ? `+ ₱${c.earned.toFixed(2)}` 
-                    : (rates.isAdmin ? `- ₱0.00 (Exempt)` : `- ₱${c.company.toFixed(2)}`);
-                    
-                let dateTimeStr = c.date;
-                if (c.time) dateTimeStr += ` • ${c.time}`;
-
-                const editBtn = isAdmin 
-                    ? `<button onclick="event.stopPropagation(); promptAdminEditCustomerFee('${escapeHtml(rider.name)}', '${escapeHtml(c.customerName)}', '${c.date}', ${c.gross})" class="text-amber-400 hover:text-amber-300 ml-1.5 p-0.5" title="Edit Fee"><i class="fa-solid fa-pen text-[10px]"></i></button>` 
-                    : ``;
-
-                const deleteBtn = isAdmin 
-                    ? `<button onclick="event.stopPropagation(); promptAdminDeleteCommissionRecord('${escapeHtml(rider.name)}', '${escapeHtml(c.customerName)}', '${c.date}', '${c.transactionId}')" class="text-red-400 hover:text-red-300 ml-1 p-0.5" title="Delete Record"><i class="fa-solid fa-trash text-[10px]"></i></button>` 
-                    : ``;
-
-                return `
-                <div class="bg-black/40 p-2.5 rounded-lg border border-gray-800/80 flex justify-between items-center text-xs">
-                    <div class="flex flex-col gap-0.5">
-                        <span class="font-bold text-orange-300 flex items-center gap-1.5">
-                            <i class="fa-solid fa-user text-[10px]"></i> ${escapeHtml(c.customerName)} ${editBtn} ${deleteBtn}
-                        </span>
-                        <span class="text-[10px] text-gray-400 font-mono">${escapeHtml(dateTimeStr)}</span>
-                    </div>
-                    <div class="text-right">
-                        <div class="font-bold ${colorClass}">${cAmt}</div>
-                        <div class="text-[9px] text-gray-500 font-mono">Paid: ₱${c.gross.toFixed(2)}</div>
-                    </div>
-                </div>`;
-            }).join('');
-        } else {
-            customerItemsHtml = `<div class="text-gray-500 italic text-[11px] py-2 text-center">No individual orders recorded.</div>`;
-        }
-
-        const adminBadge = rates.isAdmin ? `<span class="bg-purple-600/20 text-purple-300 border border-purple-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded ml-1">ADMIN</span>` : '';
-
-        return `
-            <div class="bg-cardBg rounded-xl border border-gray-800 shadow-sm flex flex-col overflow-hidden">
-                <div onclick="toggleRiderCustomerBreakdown('${uid}')" class="p-3.5 flex justify-between items-center text-sm cursor-pointer hover:bg-white/5 transition active:scale-[0.99] select-none">
-                    <div class="flex items-center gap-2">
-                        <span class="font-bold text-blue-300 flex items-center gap-1.5">
-                            <i class="fa-solid fa-motorcycle text-gray-500"></i> ${escapeHtml(rider.name)} ${adminBadge}
-                        </span>
-                        <span class="bg-blue-600/20 text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-500/30">
-                            ${customerCount} ${customerCount === 1 ? 'customer' : 'customers'}
-                        </span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <span class="font-black ${colorClass}">${amountLabel}</span>
-                        <i id="icon-${uid}" class="fa-solid fa-chevron-down text-gray-400 text-xs transition-transform duration-300"></i>
-                    </div>
-                </div>
-
-                <div id="box-${uid}" class="hidden bg-darkBg/60 p-3 border-t border-gray-800/80 flex flex-col gap-2">
-                    <div class="text-[10px] text-amber-400 font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
-                        <span><i class="fa-solid fa-list-check"></i> Customer Breakdown (${viewSettings.period.toUpperCase()})</span>
-                        <span class="text-gray-400">Total Paid: ₱${rider.gross.toFixed(2)}</span>
-                    </div>
-                    ${customerItemsHtml}
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
 export function generateDailyReportText() {
     const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
     let targetRiderFilter = isAdmin ? document.getElementById('admin-rider-select')?.value : appState.telegramId;
@@ -952,7 +1056,6 @@ export function generateDailyReportText() {
         }
 
         let gross = parseFloat(r.totalFees) || 0;
-
         const rates = getCommissionRates(rDate, rName, rId);
 
         if (!riderTotals[rId]) {
@@ -1028,6 +1131,10 @@ if (typeof window !== 'undefined') {
     window.submitAdminAddCommissionRecord = submitAdminAddCommissionRecord;
     window.promptAdminDeleteCommissionRecord = promptAdminDeleteCommissionRecord;
     window.executeDeleteCommissionRecord = executeDeleteCommissionRecord;
+    window.openAdminPenaltyModal = openAdminPenaltyModal;
+    window.closeAdminPenaltyModal = closeAdminPenaltyModal;
+    window.submitAdminPenalty = submitAdminPenalty;
+    window.removeAdminPenalty = removeAdminPenalty;
     window.fetchRiderUserTypes = fetchRiderUserTypes;
     window.isRiderAdmin = isRiderAdmin;
     window.getMergedDeduplicatedCommissionList = getMergedDeduplicatedCommissionList;

@@ -23,13 +23,17 @@ export function renderViewUI(targetViewId) {
     const headerSpacer = document.getElementById('header-spacer');
     const headerTitle = document.getElementById('header-title');
 
-    if (targetViewId === 'view-home' || targetViewId === 'view-login') {
+    if (targetViewId === 'view-home' || targetViewId === 'view-login' || targetViewId === 'view-customer-home') {
         if (appHeader) appHeader.classList.remove('hidden');
         if (backBtn) backBtn.classList.add('hidden');
         if (headerSpacer) headerSpacer.classList.remove('hidden');
+
         if (targetViewId === 'view-home' && headerTitle) {
             headerTitle.innerHTML = `L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub`;
+        } else if (targetViewId === 'view-customer-home' && headerTitle) {
+            headerTitle.innerHTML = `L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Customer Portal`;
         }
+
         if (targetViewId === 'view-login' && appHeader) appHeader.classList.add('hidden');
     } else {
         if (appHeader) appHeader.classList.remove('hidden');
@@ -51,14 +55,15 @@ export function goBack() {
     if (window.history.length > 1) {
         history.back();
     } else {
-        switchView('view-home', true);
+        const isCustomer = !!localStorage.getItem('lokalex_customer_fb_id');
+        switchView(isCustomer ? 'view-customer-home' : 'view-home', true);
     }
 }
 
 window.addEventListener('popstate', function(event) {
     const currentView = document.querySelector('main > section:not(.hidden)')?.id;
 
-    if (currentView === 'view-home' || currentView === 'view-login') {
+    if (currentView === 'view-home' || currentView === 'view-login' || currentView === 'view-customer-home') {
         backPressCount++;
         if (backPressCount < 3) {
             history.pushState({ view: currentView }, '', '#' + currentView);
@@ -73,7 +78,14 @@ window.addEventListener('popstate', function(event) {
         if (event.state && event.state.view) {
             renderViewUI(event.state.view);
         } else {
-            renderViewUI('view-home');
+            const isCustomer = !!localStorage.getItem('lokalex_customer_fb_id');
+            renderViewUI(isCustomer ? 'view-customer-home' : 'view-home');
         }
     }
 });
+
+if (typeof window !== 'undefined') {
+    window.switchView = switchView;
+    window.renderViewUI = renderViewUI;
+    window.goBack = goBack;
+}

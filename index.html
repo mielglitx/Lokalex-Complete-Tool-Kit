@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Lokalex Toolkit</title>
     
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#1E1E1E">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Lokalex Hub">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -15,12 +22,24 @@
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- GOOGLE MAPS JS API -->
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBVAwn0UnyHJ926oHeK0k789ncADMzmX80&libraries=places"></script>
-
-    <!-- FIREBASE REALTIME DATABASE SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+    <!-- INLINE FACEBOOK SDK INITIALIZATION -->
+    <script>
+    window.fbAsyncInit = function() {
+        if (typeof FB !== 'undefined') {
+            FB.init({
+                appId: '3509728395866188', // Updated App ID
+                cookie: true,
+                xfbml: true,
+                version: 'v19.0'
+            });
+        }
+    };
+</script>
+    <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
 
     <style>
         ::-webkit-scrollbar { width: 0px; background: transparent; }
@@ -30,27 +49,24 @@
             z-index: 1000; pointer-events: none; color: #ef4444; font-size: 36px;
             filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.5));
         }
-        .side-notify-hidden {
-            transform: translateX(110%);
-            opacity: 0;
-        }
-        .side-notify-visible {
-            transform: translateX(0);
-            opacity: 1;
-        }
-        .scrubber-letter {
-            will-change: transform;
-            transition: transform 0.05s linear;
-        }
-        #cart-items-list > div {
-            touch-action: pan-y;
-        }
+        .side-notify-hidden { transform: translateX(110%); opacity: 0; }
+        .side-notify-visible { transform: translateX(0); opacity: 1; }
+        .scrubber-letter { will-change: transform; transition: transform 0.05s linear; }
+        #cart-items-list > div { touch-action: pan-y; }
     </style>
 </head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-darkBg text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative">
 
-    <!-- GOLDEN BORDER FOR FIRST IN LINE -->
     <div id="golden-first-line-border" class="hidden pointer-events-none fixed inset-0 border-[6px] border-yellow-400 shadow-[inset_0_0_30px_rgba(250,204,21,0.8)] z-[9999]"></div>
+
+    <!-- SIDE NOTIFICATION BANNER -->
+    <div id="side-notification-banner" class="fixed top-16 right-3 z-[9998] max-w-xs w-72 bg-gray-900/95 border-l-4 border-blue-500 text-white p-3.5 rounded-xl shadow-2xl transition-all duration-300 ease-out side-notify-hidden pointer-events-none flex items-start gap-3 backdrop-blur-md">
+        <i id="side-notify-icon" class="fa-solid fa-sync fa-spin"></i>
+        <div class="flex flex-col gap-0.5">
+            <div id="side-notify-title" class="font-bold text-xs text-blue-400 tracking-wide uppercase"></div>
+            <div id="side-notify-msg" class="text-xs text-gray-200"></div>
+        </div>
+    </div>
 
     <!-- FIRST IN LINE ALARM CONFIRMATION MODAL -->
     <div id="first-line-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
@@ -64,37 +80,68 @@
                     Nasa <strong>#1 Position</strong> ka na sa Roster Queue. Maghanda para sa susunod na order!
                 </p>
             </div>
-            <button onclick="confirmFirstInLineAlarm()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl text-sm shadow-xl transition active:scale-95 flex items-center justify-center gap-2">
+            <button onclick="window.confirmFirstInLineAlarm && window.confirmFirstInLineAlarm()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl text-sm shadow-xl transition active:scale-95 flex items-center justify-center gap-2">
                 <i class="fa-solid fa-check-circle text-lg"></i> STOP ALARM & CONFIRM
             </button>
         </div>
     </div>
 
-    <!-- 1. ONE-TIME MAP CALCULATION CUSTOMER PORTAL (?mapcalc=KEY) -->
+    <!-- SWAP APPROVAL MODAL -->
+    <div id="swap-approval-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-purple-500/80 p-6 rounded-3xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-4 animate-bounce">
+            <div class="w-14 h-14 bg-purple-500/20 text-purple-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+                <i class="fa-solid fa-arrows-rotate animate-spin"></i>
+            </div>
+            <div>
+                <h3 class="font-black text-base text-purple-300 uppercase tracking-wide">Customer Swap Request</h3>
+                <p id="swap-approval-msg" class="text-xs text-gray-200 mt-2 leading-relaxed"></p>
+            </div>
+            <div class="flex gap-2">
+                <button id="swap-decline-btn" onclick="window.declineSwapRequest && window.declineSwapRequest()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-red-400 font-bold py-3 rounded-xl text-xs transition active:scale-95">
+                    Decline
+                </button>
+                <button id="swap-accept-btn" onclick="window.acceptSwapRequest && window.acceptSwapRequest()" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95">
+                    Accept Swap
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIDER-TO-CUSTOMER DIRECT CHAT MODAL -->
+    <div id="rider-customer-chat-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-3">
+        <div class="bg-cardBg border border-blue-500/60 p-4 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 h-[80vh] max-h-[600px] overflow-hidden">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-2 shrink-0">
+                <div class="flex items-center gap-2">
+                    <img id="rider-chat-cust-avatar" src="" class="w-8 h-8 rounded-full border border-blue-500 object-cover">
+                    <div>
+                        <h3 id="rider-chat-cust-name" class="font-bold text-xs text-white">Customer Chat</h3>
+                        <span class="text-[9px] text-emerald-400 font-mono">Real-time Connected</span>
+                    </div>
+                </div>
+                <button onclick="window.closeRiderCustomerChatModal && window.closeRiderCustomerChatModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div id="rider-cust-chat-messages" class="flex-1 overflow-y-auto flex flex-col gap-2 p-2 text-xs min-h-0 bg-black/30 rounded-2xl border border-gray-800">
+                <div class="text-center text-gray-500 italic py-10">Loading chat history...</div>
+            </div>
+
+            <div class="flex gap-2 items-center shrink-0 pt-1">
+                <input type="text" id="rider-cust-chat-input" onkeydown="if(event.key==='Enter') window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" placeholder="Type reply to customer..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 text-white">
+                <button onclick="window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. MAP CALCULATION PORTAL (?mapcalc=KEY) -->
     <div id="mapcalc-customer-portal" class="hidden fixed inset-0 bg-darkBg z-[99999] flex flex-col items-center justify-center p-4 text-center overflow-y-auto">
         <div class="bg-cardBg border border-emerald-500/40 p-5 rounded-3xl max-w-sm w-full shadow-2xl flex flex-col gap-3 my-auto relative">
-            
             <div class="w-14 h-12 bg-emerald-600/20 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto text-2xl shrink-0">
                 <i class="fa-solid fa-route animate-pulse"></i>
             </div>
             <h2 class="text-xl font-black text-white">L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Distance Calc</h2>
             
-            <div class="bg-amber-500/10 border border-amber-500/30 p-3 rounded-2xl text-left flex flex-col gap-1.5 shadow-inner">
-                <div class="flex items-center justify-between text-xs font-bold text-amber-400">
-                    <span><i class="fa-solid fa-compass"></i> STEP 1: Messenger User?</span>
-                    <span class="flex items-center gap-1 text-[10px] bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
-                        Top-Right <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                    </span>
-                </div>
-                <p class="text-[11px] text-gray-300 leading-tight">
-                    Pindutin ang <strong>3 Dots (...)</strong> sa itaas at piliin ang <strong>"Open in Chrome / Safari"</strong> bago mag-pin.
-                </p>
-            </div>
-
-            <a href="https://m.me/lokalex" target="_blank" class="w-full bg-[#0084FF]/20 hover:bg-[#0084FF]/30 text-[#0084FF] border border-[#0084FF]/40 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 transition active:scale-95 my-1">
-                <i class="fa-brands fa-facebook-messenger text-base"></i> Message Us on Facebook
-            </a>
-
             <div id="mapcalc-cust-map-box" class="hidden w-full h-40 rounded-2xl overflow-hidden border border-emerald-500/50 relative my-1 shadow-inner">
                 <div id="mapcalc-cust-google-map" class="w-full h-full"></div>
             </div>
@@ -103,42 +150,19 @@
                 Pindutin ang green button sa ibaba para ma-pin ang iyong lokasyon.
             </div>
 
-            <div class="flex flex-col items-center gap-1 my-0.5 text-emerald-400 animate-bounce">
-                <span class="text-[10px] font-black uppercase tracking-wider">STEP 2: Pindutin ang Button sa Ibaba</span>
-                <i class="fa-solid fa-chevron-down text-base"></i>
-            </div>
-
-            <button id="mapcalc-cust-btn" onclick="startMapCalcLocationSharing()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 text-sm flex justify-center items-center gap-2 ring-2 ring-emerald-400/50">
+            <button id="mapcalc-cust-btn" onclick="window.startMapCalcLocationSharing && window.startMapCalcLocationSharing()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 text-sm flex justify-center items-center gap-2 ring-2 ring-emerald-400/50">
                 <i class="fa-solid fa-location-arrow text-base"></i> SHARE LOCATION FOR DISTANCE CALC
             </button>
-            <p class="text-[10px] text-gray-500"> Isang beses lamang gagamitin ang link na ito.</p>
         </div>
     </div>
 
     <!-- 2. STANDARD LIVE TRACKING PORTAL (?track=KEY) -->
     <div id="customer-tracking-portal" class="hidden fixed inset-0 bg-darkBg z-[99999] flex flex-col items-center justify-center p-4 text-center overflow-y-auto">
         <div class="bg-cardBg border border-blue-500/40 p-5 rounded-3xl max-w-sm w-full shadow-2xl flex flex-col gap-3 my-auto relative">
-            
             <div class="w-14 h-12 bg-blue-600/20 text-blue-400 rounded-2xl flex items-center justify-center mx-auto text-2xl shrink-0">
                 <i class="fa-solid fa-location-crosshairs animate-pulse"></i>
             </div>
             <h2 class="text-xl font-black text-white">L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Delivery Tracking</h2>
-
-            <div class="bg-amber-500/10 border border-amber-500/30 p-3 rounded-2xl text-left flex flex-col gap-1.5 shadow-inner">
-                <div class="flex items-center justify-between text-xs font-bold text-amber-400">
-                    <span><i class="fa-solid fa-compass"></i> STEP 1: Messenger User?</span>
-                    <span class="flex items-center gap-1 text-[10px] bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
-                        Top-Right <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                    </span>
-                </div>
-                <p class="text-[11px] text-gray-300 leading-tight">
-                    Pindutin ang <strong>3 Dots (...)</strong> sa itaas at piliin ang <strong>"Open in Chrome / Safari"</strong> para sa GPS access.
-                </p>
-            </div>
-
-            <a href="https://m.me/lokalex" target="_blank" class="w-full bg-[#0084FF]/20 hover:bg-[#0084FF]/30 text-[#0084FF] border border-[#0084FF]/40 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 transition active:scale-95 my-1">
-                <i class="fa-brands fa-facebook-messenger text-base"></i> Need Help? Chat on Messenger
-            </a>
 
             <div id="cust-map-container-box" class="hidden w-full h-40 rounded-2xl overflow-hidden border border-blue-500/50 relative my-1 shadow-inner">
                 <div id="cust-google-map" class="w-full h-full"></div>
@@ -148,24 +172,17 @@
                 Pindutin ang blue button sa ibaba para i-pin ang iyong kinaroroonan.
             </div>
 
-            <div class="flex flex-col items-center gap-1 my-0.5 text-blue-400 animate-bounce">
-                <span class="text-[10px] font-black uppercase tracking-wider">STEP 2: Pindutin ang Button sa Ibaba</span>
-                <i class="fa-solid fa-chevron-down text-base"></i>
-            </div>
-
-            <button id="cust-share-btn" onclick="startCustomerLocationSharing()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 text-sm flex justify-center items-center gap-2 ring-2 ring-blue-400/50">
+            <button id="cust-share-btn" onclick="window.startCustomerLocationSharing && window.startCustomerLocationSharing()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 text-sm flex justify-center items-center gap-2 ring-2 ring-blue-400/50">
                 <i class="fa-solid fa-paper-plane text-base"></i> SHARE MY LOCATION
             </button>
-            <p class="text-[10px] text-gray-500">Awtomatikong ire-record ang pin location sa system.</p>
         </div>
     </div>
 
     <!-- 3. MUTUAL LIVE GPS TRACKER PORTAL (?livegps=KEY) -->
     <div id="livegps-portal" class="hidden fixed inset-0 bg-darkBg z-[99999] flex flex-col items-center justify-center p-4 text-center overflow-y-auto">
         <div class="bg-cardBg border border-indigo-500/40 p-5 rounded-3xl max-w-sm w-full shadow-2xl flex flex-col gap-3 my-auto relative">
-            
             <div class="absolute top-4 left-4">
-                <button id="livegps-rider-close-btn" onclick="closeRiderLiveMap()" class="hidden bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5">
+                <button id="livegps-rider-close-btn" onclick="window.closeRiderLiveMap && window.closeRiderLiveMap()" class="hidden bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5">
                     <i class="fa-solid fa-arrow-left"></i> Back
                 </button>
             </div>
@@ -179,185 +196,237 @@
                 <div id="livegps-map-container" class="w-full h-full"></div>
             </div>
 
-            <div class="text-[11px] text-gray-300 font-bold flex justify-center gap-4 mt-1 bg-black/40 py-2 rounded-xl border border-gray-800">
-                <span class="flex items-center gap-1.5">
-                    <img src="https://img.icons8.com/color/48/motorcycle.png" class="w-5 h-5"> Rider
-                </span>
-                <span class="flex items-center gap-1.5">
-                    <img src="http://maps.google.com/mapfiles/ms/icons/red-dot.png" class="w-4 h-4"> Customer
-                </span>
-            </div>
-            <div class="text-[10px] text-indigo-400 font-semibold mb-1">Maps auto-refresh every 15 seconds</div>
-
             <div id="livegps-customer-controls" class="w-full flex flex-col gap-3 mt-1">
-                <div class="bg-amber-500/10 border border-amber-500/30 p-3 rounded-2xl text-left flex flex-col gap-1.5 shadow-inner">
-                    <div class="flex items-center justify-between text-xs font-bold text-amber-400">
-                        <span><i class="fa-solid fa-compass"></i> Messenger User?</span>
-                        <span class="flex items-center gap-1 text-[10px] bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
-                            Top-Right <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                        </span>
-                    </div>
-                    <p class="text-[11px] text-gray-300 leading-tight">
-                        Pindutin ang <strong>3 Dots (...)</strong> sa itaas at piliin ang <strong>"Open in Chrome / Safari"</strong> para sa GPS access.
-                    </p>
-                </div>
-
-                <a href="https://m.me/lokalex" target="_blank" class="w-full bg-[#0084FF]/20 hover:bg-[#0084FF]/30 text-[#0084FF] border border-[#0084FF]/40 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 transition active:scale-95 my-1">
-                    <i class="fa-brands fa-facebook-messenger text-base"></i> Contact Lokalex Messenger
-                </a>
-
-                <div id="livegps-status" class="text-xs font-bold text-amber-400 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
-                    Pindutin ang blue button sa ibaba para sumali sa Live Tracking.
-                </div>
-
-                <div id="livegps-step2-pointer" class="flex flex-col items-center gap-1 text-indigo-400 animate-bounce">
-                    <span class="text-[10px] font-black uppercase tracking-wider">Pindutin ang Button sa Ibaba</span>
-                    <i class="fa-solid fa-chevron-down text-base"></i>
-                </div>
-
-                <button id="livegps-share-btn" onclick="startMutualCustomerLocationSharing()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 text-sm flex justify-center items-center gap-2 ring-2 ring-indigo-400/50">
+                <button id="livegps-share-btn" onclick="window.startMutualCustomerLocationSharing && window.startMutualCustomerLocationSharing()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 text-sm flex justify-center items-center gap-2 ring-2 ring-indigo-400/50">
                     <i class="fa-solid fa-satellite-dish text-base"></i> JOIN LIVE TRACKING
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- EXPIRED / ENDED SESSION PORTAL -->
-    <div id="livegps-expired-portal" class="hidden fixed inset-0 bg-darkBg z-[99999] flex flex-col items-center justify-center p-6 text-center">
-        <div class="bg-cardBg border border-gray-800 p-8 rounded-3xl max-w-sm w-full shadow-2xl flex flex-col items-center gap-4">
-            <div class="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center text-3xl">
-                <i class="fa-solid fa-check-circle"></i>
-            </div>
-            <div>
-                <h2 class="text-xl font-black text-white">Session Ended</h2>
-                <p class="text-sm text-gray-300 mt-2 leading-relaxed">
-                    Thank you for choosing Lokalex!
-                </p>
-            </div>
-            <div class="text-[11px] text-gray-500 bg-black/40 p-3 rounded-xl border border-gray-800/60 w-full mt-2">
-                Naihatid na ang iyong order. Maraming salamat po!
-            </div>
-            <a href="https://m.me/lokalex" target="_blank" class="w-full bg-[#0084FF] hover:bg-[#0072E0] text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 transition active:scale-95 shadow-lg mt-3">
-                <i class="fa-brands fa-facebook-messenger text-lg"></i> Message Our Page
-            </a>
-        </div>
-    </div>
-
-    <!-- RIDER LIVE GPS SESSION MANAGEMENT MODAL -->
-    <div id="livegps-manage-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-indigo-500/40 p-6 rounded-3xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-4">
-            <div class="w-12 h-12 bg-indigo-500/20 text-indigo-400 rounded-full flex items-center justify-center mx-auto text-2xl">
-                <i class="fa-solid fa-satellite-dish animate-pulse"></i>
-            </div>
-            <div>
-                <h3 class="font-bold text-base text-indigo-300">Active Live Tracking</h3>
+    <!-- ADMIN BLOCK USER MODAL -->
+    <div id="admin-block-user-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-red-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-user-slash text-red-400 text-lg"></i>
+                    <h3 class="font-bold text-sm text-white">Ban / Block User Management</h3>
+                </div>
+                <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="text-gray-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
-            <div id="livegps-manage-status-box" class="bg-darkBg p-3 rounded-xl border border-gray-800"></div>
+            <div class="flex flex-col gap-2">
+                <select id="block-target-select" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold">
+                    <option value="" disabled selected>-- Select Rider / User --</option>
+                </select>
 
-            <div class="grid grid-cols-2 gap-2 mt-1">
-                <button onclick="copyLiveGpsLink()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl text-xs transition active:scale-95 flex flex-col items-center justify-center gap-1 shadow-lg">
-                    <i class="fa-solid fa-link text-lg"></i> Copy Link
-                </button>
-                <button onclick="showRiderLiveMap()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl text-xs transition active:scale-95 flex flex-col items-center justify-center gap-1 shadow-lg">
-                    <i class="fa-solid fa-map-location-dot text-lg"></i> Show Map
+                <input type="text" id="block-reason-input" placeholder="Reason for blocking" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none">
+                <button onclick="window.submitBlockUser && window.submitBlockUser()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
+                    🚫 Block Account
                 </button>
             </div>
 
-            <button onclick="promptEndLiveGpsSession()" class="w-full bg-red-600/20 border border-red-600/50 hover:bg-red-600 text-red-400 hover:text-white font-bold py-3.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-2 mt-1">
-                <i class="fa-solid fa-power-off"></i> End Session
+            <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-2">Blocked Users List</div>
+            <div id="blocked-users-list" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 min-h-[120px]"></div>
+
+            <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
+                Close
             </button>
-
-            <button onclick="closeLiveGpsManageModal()" class="text-xs text-gray-500 py-1 font-bold mt-1 uppercase tracking-wider">Close Window</button>
         </div>
     </div>
 
-    <!-- SCHEDULED DELIVERY ALERTS BANNER -->
-    <div id="adv-order-banner" class="hidden sticky top-0 z-[9999] bg-gradient-to-r from-amber-600 via-orange-600 to-red-600 text-white px-4 py-3 shadow-2xl flex items-center justify-between transition-all animate-bounce">
-        <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-full bg-black/30 flex items-center justify-center text-lg shrink-0">
-                <i class="fa-solid fa-clock-rotate-left"></i>
+    <!-- ADMIN DATE PENALTY MODAL -->
+    <div id="admin-penalty-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-red-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-gavel text-red-400 text-lg"></i>
+                    <h3 class="font-bold text-sm text-white">Specific-Date Commission Penalty</h3>
+                </div>
+                <button onclick="window.closeAdminPenaltyModal && window.closeAdminPenaltyModal()" class="text-gray-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div>
-                <div id="adv-banner-title" class="font-black text-xs uppercase tracking-wider">SCHEDULED DELIVERY ALERT</div>
-                <div id="adv-banner-msg" class="text-xs font-semibold leading-tight">Order due soon!</div>
+
+            <div class="flex flex-col gap-2 text-xs">
+                <label class="text-[10px] text-gray-400 font-bold">Select Rider</label>
+                <select id="penalty-rider-select" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold"></select>
+
+                <label class="text-[10px] text-gray-400 font-bold">Select Date</label>
+                <input type="date" id="penalty-date-input" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white">
+
+                <label class="text-[10px] text-gray-400 font-bold">Extra Company Pay Percentage (+%)</label>
+                <input type="number" id="penalty-rate-input" placeholder="10" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold">
+
+                <label class="text-[10px] text-gray-400 font-bold">Reason / Notes</label>
+                <input type="text" id="penalty-reason-input" placeholder="e.g. Late shift penalty" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none">
+
+                <button onclick="window.submitAdminPenalty && window.submitAdminPenalty()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95 shadow-lg mt-2">
+                    ⚖️ Apply Date Penalty
+                </button>
             </div>
         </div>
-        <button onclick="openAdvancedOrdersModal()" class="bg-black/40 hover:bg-black/60 text-white text-xs font-bold px-3 py-1.5 rounded-lg border border-white/20 transition active:scale-95 shrink-0">
-            View Orders
-        </button>
     </div>
 
-    <!-- SLIDE-OUT SIDE NOTIFICATION BANNER -->
-    <div id="side-notification-banner" class="fixed top-16 right-3 z-[9998] max-w-xs w-72 bg-gray-900/95 border-l-4 border-blue-500 text-white p-3.5 rounded-xl shadow-2xl transition-all duration-300 ease-out side-notify-hidden pointer-events-none flex items-start gap-3 backdrop-blur-md">
-        <div id="side-notify-icon-box" class="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 mt-0.5 text-sm">
-            <i id="side-notify-icon" class="fa-solid fa-sync fa-spin"></i>
-        </div>
-        <div class="flex-1 flex flex-col">
-            <span id="side-notify-title" class="font-bold text-xs text-blue-400 tracking-wide uppercase">RECORDING CHANGE...</span>
-            <p id="side-notify-msg" class="text-[11px] text-gray-300 leading-tight mt-0.5 font-medium">Updating system records...</p>
+    <!-- SWAP CUSTOMER MODAL -->
+    <div id="swap-customer-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-purple-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-2.5">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-purple-600/30 text-purple-300 flex items-center justify-center text-sm font-bold border border-purple-500/40">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-sm text-white">Swap / Transfer Customer</h3>
+                        <p id="swap-modal-source-label" class="text-[10px] text-purple-300 font-mono"></p>
+                    </div>
+                </div>
+                <button onclick="window.closeSwapCustomerModal && window.closeSwapCustomerModal()" class="text-gray-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div id="swap-riders-accordion-list" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 min-h-0"></div>
+
+            <button onclick="window.closeSwapCustomerModal && window.closeSwapCustomerModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 mt-1">
+                Cancel
+            </button>
         </div>
     </div>
 
-    <!-- HEADER BAR WITH LIVE ONLINE / OFFLINE STATUS PILL -->
+    <!-- HEADER BAR -->
     <header id="app-header" class="hidden bg-cardBg px-4 py-3.5 flex items-center justify-between shadow-md sticky top-0 z-40 border-b border-gray-800/80">
-        <button id="back-btn" onclick="goBack()" class="hidden text-blue-400 font-semibold flex items-center gap-1.5 transition active:scale-95 text-xs">
+        <button id="back-btn" onclick="window.goBack && window.goBack()" class="hidden text-blue-400 font-semibold flex items-center gap-1.5 transition active:scale-95 text-xs">
             <i class="fa-solid fa-arrow-left"></i> Back
         </button>
         <h1 id="header-title" class="text-base font-bold tracking-wide flex items-center gap-1.5">
             L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub
         </h1>
-        <div id="network-status-pill" class="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span id="network-status-text">ONLINE</span>
+        
+        <div class="flex items-center gap-2">
+            <div id="network-status-pill" class="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span id="network-status-text">ONLINE</span>
+            </div>
         </div>
     </header>
 
-    <!-- CONTAINER -->
     <main class="flex-1 max-w-md w-full mx-auto flex flex-col relative pb-20">
 
-        <!-- LOGIN SPLASH SCREEN -->
-        <section id="view-login" class="hidden flex-1 flex flex-col justify-center p-6 gap-6">
-            <div class="text-center">
-                <i class="fa-solid fa-motorcycle text-5xl text-blue-500 mb-4"></i>
-                <h2 class="text-2xl font-black">L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Access</h2>
-                <p class="text-xs text-gray-400 mt-2">Requires valid ID to log in.</p>
+        <!-- LOGIN SCREEN (CUSTOMER PORTAL FOCUS) -->
+        <section id="view-login" class="hidden flex-1 flex flex-col justify-center p-6 gap-4">
+            <div class="text-center mb-1">
+                <i class="fa-solid fa-bag-shopping text-5xl text-blue-500 mb-3"></i>
+                <h2 class="text-2xl font-black">L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub</h2>
+                <p class="text-xs text-gray-400 mt-1">Delivery & Live Tracking Portal</p>
             </div>
-            
-            <div class="bg-cardBg p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col gap-4">
-                <div class="relative">
-                    <i class="fa-solid fa-key absolute left-3 top-3.5 text-gray-400"></i>
-                    <input type="text" id="login-id" placeholder="Enter Login ID" class="w-full bg-inputBg text-sm rounded-xl pl-10 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
+
+            <!-- MAIN CUSTOMER FORM -->
+            <div id="portal-form-customer" class="bg-cardBg p-6 rounded-3xl border border-gray-800 shadow-xl flex flex-col gap-4 text-center">
+                <div class="text-xs text-blue-400 font-bold uppercase tracking-wider">
+                    <i class="fa-brands fa-facebook text-base mr-1"></i> Customer Registration & Login
                 </div>
-                <button id="login-btn" onclick="processLogin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95">
+                <p class="text-xs text-gray-300 leading-relaxed">
+                    Mabilis at secure na mag-login o mag-register gamit ang iyong Facebook Account para sa live order tracking at delivery updates.
+                </p>
+
+                <button onclick="window.registerCustomerViaFacebook && window.registerCustomerViaFacebook()" class="w-full bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-sm">
+                    <i class="fa-brands fa-facebook-f text-lg"></i> Continue with Facebook
+                </button>
+
+                <div id="customer-profile-card" class="hidden bg-black/40 border border-gray-800 p-3.5 rounded-xl flex items-center gap-3 text-left mt-1">
+                    <img id="cust-fb-avatar" src="" class="w-11 h-11 rounded-full object-cover border border-blue-500 shadow-sm shrink-0">
+                    <div class="flex-1 min-w-0">
+                        <div id="cust-fb-name" class="font-bold text-sm text-white truncate"></div>
+                        <div id="cust-fb-email" class="text-[11px] text-gray-400 truncate"></div>
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-gray-800/80 mt-2">
+                    <button onclick="window.switchLoginPortalTab && window.switchLoginPortalTab('rider')" class="text-[11px] text-gray-500 hover:text-gray-300 transition flex items-center justify-center gap-1.5 mx-auto">
+                        <i class="fa-solid fa-id-badge text-gray-500"></i> Rider Portal Access
+                    </button>
+                </div>
+            </div>
+
+            <!-- RIDER LOGIN FORM -->
+            <div id="portal-form-rider" class="hidden bg-cardBg p-6 rounded-3xl border border-gray-800 shadow-xl flex flex-col gap-4">
+                <div class="flex items-center justify-between border-b border-gray-800 pb-2">
+                    <div class="text-xs text-gray-400 font-bold uppercase tracking-wider">Rider Operations Portal</div>
+                    <button onclick="window.switchLoginPortalTab && window.switchLoginPortalTab('customer')" class="text-[10px] text-blue-400 hover:underline font-bold">
+                        ← Customer Access
+                    </button>
+                </div>
+                <div class="relative mt-1">
+                    <i class="fa-solid fa-key absolute left-3 top-3.5 text-gray-400"></i>
+                    <input type="text" id="login-id" placeholder="Enter Rider Login ID" class="w-full bg-inputBg text-sm rounded-xl pl-10 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
+                </div>
+                <button id="login-btn" onclick="window.processLogin && window.processLogin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95">
                     LOGIN & MARK AVAILABLE
                 </button>
             </div>
         </section>
 
-        <!-- HOME / DASHBOARD VIEW -->
+        <!-- DEDICATED CUSTOMER LANDING PAGE VIEW -->
+        <section id="view-customer-home" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
+            <div class="bg-cardBg border border-blue-500/40 p-4 rounded-3xl shadow-xl flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                    <img id="cust-landing-avatar" src="https://ui-avatars.com/api/?name=Customer&background=1877F2&color=fff" class="w-12 h-12 rounded-full object-cover border-2 border-blue-500 shadow">
+                    <div class="min-w-0">
+                        <div id="cust-landing-name" class="font-bold text-sm text-white truncate">Customer Account</div>
+                        <div id="cust-landing-email" class="text-[11px] text-gray-400 truncate">Facebook Connected</div>
+                    </div>
+                </div>
+                <button onclick="window.logout && window.logout()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold px-3 py-2 rounded-xl transition active:scale-95 shrink-0">
+                    Log out
+                </button>
+            </div>
+
+            <!-- REAL-TIME CHAT WITH RIDERS PANEL -->
+            <div class="bg-cardBg border border-gray-800 rounded-3xl p-4 flex flex-col gap-3 shadow-xl flex-1 min-h-[360px]">
+                <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-comments text-blue-400 text-base"></i>
+                        <h3 class="font-bold text-sm text-white">Chat with Lokalex Riders</h3>
+                    </div>
+                    <span class="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Live
+                    </span>
+                </div>
+
+                <!-- CUSTOMER CHAT MESSAGE STREAM -->
+                <div id="cust-rider-chat-messages" class="flex-1 overflow-y-auto p-3 bg-black/40 rounded-2xl border border-gray-800/80 flex flex-col gap-2.5 text-xs min-h-[220px]">
+                    <div class="text-center text-gray-500 italic py-10">Pumili o mag-type ng mensahe para sa mga riders...</div>
+                </div>
+
+                <!-- INPUT AREA -->
+                <div class="flex gap-2 items-center pt-1">
+                    <input type="text" id="cust-rider-chat-input" onkeydown="if(event.key==='Enter') window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" placeholder="Mag-type ng mensahe para sa rider..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-3 outline-none border border-gray-700 focus:border-blue-500 text-white">
+                    <button onclick="window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 rounded-xl text-xs font-bold shadow-md transition active:scale-95 shrink-0">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- DASHBOARD VIEW -->
         <section id="view-home" class="hidden flex-1 flex flex-col p-4 gap-4 py-4">
             <div class="flex flex-col gap-3 mt-1">
-                <!-- SMART CART & MAP CALCULATION ROW -->
                 <div class="grid grid-cols-2 gap-2">
-                    <button onclick="switchView('view-cart')" class="bg-emerald-600/20 border border-emerald-600 hover:bg-emerald-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95">
+                    <button onclick="window.switchView && window.switchView('view-cart')" class="bg-emerald-600/20 border border-emerald-600 hover:bg-emerald-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95">
                         <div class="w-10 h-10 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-receipt"></i></div>
                         <div class="text-left"><div class="text-xs font-bold text-emerald-400">Smart Cart (1-4)</div><div class="text-[10px] text-gray-400">Receipts & Cart</div></div>
                     </button>
 
-                    <button onclick="openMapCalcBoardModal()" class="bg-blue-600/20 border border-blue-500 hover:bg-blue-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95">
+                    <button onclick="window.openMapCalcBoardModal && window.openMapCalcBoardModal()" class="bg-blue-600/20 border border-blue-500 hover:bg-blue-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95">
                         <div class="w-10 h-10 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-calculator"></i></div>
                         <div class="text-left"><div class="text-xs font-bold text-blue-400">Map Calculation</div><div class="text-[10px] text-gray-400">One-time Distance</div></div>
                     </button>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2">
-                    <button onclick="openCommissionScreen()" class="bg-amber-600/20 border border-amber-600 hover:bg-amber-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95">
+                    <button onclick="window.openCommissionScreen && window.openCommissionScreen()" class="bg-amber-600/20 border border-amber-600 hover:bg-amber-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95">
                         <div class="w-10 h-10 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-wallet"></i></div>
                         <div class="text-left"><div class="text-xs font-bold text-amber-400">Commission</div><div class="text-[10px] text-gray-400">Daily earnings</div></div>
                     </button>
 
-                    <button onclick="openAdvancedOrdersModal()" class="bg-purple-600/20 border border-purple-600 hover:bg-purple-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95 relative">
+                    <button onclick="window.openAdvancedOrdersModal && window.openAdvancedOrdersModal()" class="bg-purple-600/20 border border-purple-600 hover:bg-purple-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95 relative">
                         <div class="w-10 h-10 bg-purple-500/20 text-purple-400 rounded-full flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-calendar-check"></i></div>
                         <div class="text-left"><div class="text-xs font-bold text-purple-400">Adv. Orders</div><div class="text-[10px] text-gray-400">Scheduled reminders</div></div>
                         <div id="adv-count-badge" class="hidden absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-darkBg animate-pulse">0</div>
@@ -365,8 +434,7 @@
                 </div>
 
                 <div class="grid grid-cols-2 gap-2">
-                    <!-- MUTUAL LIVE GPS TRACKER BUTTON -->
-                    <button onclick="promptStartLiveGpsSession()" class="bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95 col-span-2">
+                    <button onclick="window.promptStartLiveGpsSession && window.promptStartLiveGpsSession()" class="bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95 col-span-2">
                         <div class="w-10 h-10 bg-indigo-500/20 text-indigo-400 rounded-full flex items-center justify-center text-lg shrink-0">
                             <i class="fa-solid fa-satellite-dish animate-pulse"></i>
                         </div>
@@ -377,47 +445,61 @@
                     </button>
                 </div>
 
-                <!-- DASHBOARD QUICK DIRECTORY GRID WITH UPDATED GCASH LOGO IMAGE -->
                 <div class="grid grid-cols-4 gap-2">
-                    <button onclick="openDirectory('customers')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
+                    <button onclick="window.openDirectory && window.openDirectory('customers')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
                         <i class="fa-solid fa-users text-lg text-blue-400"></i>
                         <div class="text-[11px] font-bold">Customers</div>
                     </button>
 
-                    <button onclick="openDirectory('stores')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
+                    <button onclick="window.openDirectory && window.openDirectory('stores')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
                         <i class="fa-solid fa-store text-lg text-orange-400"></i>
                         <div class="text-[11px] font-bold">Stores</div>
                     </button>
 
-                    <button onclick="openDirectory('barangays')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
+                    <button onclick="window.openDirectory && window.openDirectory('barangays')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
                         <i class="fa-solid fa-map-location-dot text-lg text-emerald-400"></i>
                         <div class="text-[11px] font-bold">Rates</div>
                     </button>
 
-                    <button onclick="openGCashModal()" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
+                    <button onclick="window.openGCashModal && window.openGCashModal()" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
                         <img src="gcash-logo-png_seeklogo-522261.png" alt="GCash" class="w-5 h-5 object-contain my-0.5">
                         <div class="text-[11px] font-bold">GCash</div>
                     </button>
                 </div>
             </div>
 
-            <!-- EMBEDDED TELEGRAM-STYLE LIVE ROSTER -->
+            <!-- RIDER LIVE CUSTOMER CHATS PANEL -->
+            <div class="bg-cardBg border border-gray-800 rounded-2xl flex flex-col overflow-hidden shadow-md">
+                <div class="bg-gray-800/50 p-3 text-xs font-bold text-gray-300 flex justify-between items-center">
+                    <span><i class="fa-solid fa-comments text-blue-400 mr-1.5"></i> Customer Live Chats</span>
+                    <span class="text-[10px] text-gray-400" id="rider-cust-chats-badge">0 threads</span>
+                </div>
+                <div id="rider-cust-chats-feed" class="p-3 flex flex-col gap-2 text-xs max-h-48 overflow-y-auto">
+                    <div class="text-gray-500 italic text-center py-4">No active customer messages yet.</div>
+                </div>
+            </div>
+
+            <!-- ROSTER PANEL -->
             <div class="bg-tgBg text-[#f5f5f5] rounded-xl border border-gray-800 p-4 flex flex-col gap-4 shadow-md">
                 <div class="flex justify-between items-center">
                     <h3 class="text-sm font-bold tracking-wide">🛵 LOKALEX RIDER ROTATION</h3>
                     
-                    <div class="flex items-center gap-2">
-                        <button id="admin-find-riders-btn" onclick="openFindRidersModal()" class="hidden bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 border border-indigo-500/50 text-[10px] px-2 py-1 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
-                            <i class="fa-solid fa-map-location-dot"></i> Find My Riders
+                    <div class="flex items-center gap-1.5">
+                        <button id="admin-block-btn" onclick="window.openAdminBlockModal && window.openAdminBlockModal()" class="hidden bg-red-600/30 hover:bg-red-600 text-red-300 border border-red-500/50 text-[10px] px-2 py-1 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                            <i class="fa-solid fa-user-slash"></i> Ban List
+                        </button>
+
+                        <button id="admin-find-riders-btn" onclick="window.openFindRidersModal && window.openFindRidersModal()" class="hidden bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 border border-indigo-500/50 text-[10px] px-2 py-1 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                            <i class="fa-solid fa-map-location-dot"></i> Find Riders
                         </button>
 
                         <div id="admin-toggle-wrapper" class="hidden">
                             <label class="inline-flex items-center gap-1.5 cursor-pointer text-[10px] text-amber-400 font-bold bg-black/40 px-2 py-1 rounded-lg border border-amber-500/30">
-                                <input type="checkbox" id="admin-controls-toggle" onchange="toggleAdminControls(this.checked)" class="accent-amber-500 w-3.5 h-3.5">
+                                <input type="checkbox" id="admin-controls-toggle" onchange="window.toggleAdminControls && window.toggleAdminControls(this.checked)" class="accent-amber-500 w-3.5 h-3.5">
                                 <span>Admin Controls</span>
                             </label>
                         </div>
-                        <button id="admin-force-all-btn" onclick="forceAllEndShift()" class="hidden bg-red-600/20 border border-red-600 text-red-400 text-[10px] px-2 py-1 rounded font-bold transition active:scale-95">Force All End</button>
+                        <button id="admin-force-all-btn" onclick="window.forceAllEndShift && window.forceAllEndShift()" class="hidden bg-red-600/20 border border-red-600 text-red-400 text-[10px] px-2 py-1 rounded font-bold transition active:scale-95">Force All End</button>
                     </div>
                 </div>
                 
@@ -446,16 +528,16 @@
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 mt-2 pt-3 border-t border-gray-700/50">
-                     <button id="btn-status-avail" onclick="triggerStatusWithSlide('Available')" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95">
+                     <button id="btn-status-avail" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('Available')" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95">
                          <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div> Available
                      </button>
-                     <button id="btn-status-cater" onclick="promptCateringStatus()" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95">
+                     <button id="btn-status-cater" onclick="window.promptCateringStatus && window.promptCateringStatus()" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95">
                          <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div> Catering
                      </button>
-                     <button id="btn-status-break" onclick="triggerStatusWithSlide('Break')" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95">
+                     <button id="btn-status-break" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('Break')" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95">
                          ☕ Break
                      </button>
-                     <button id="btn-status-end" onclick="triggerStatusWithSlide('End')" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95 text-gray-400">
+                     <button id="btn-status-end" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('End')" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95 text-gray-400">
                          <div class="w-2.5 h-2.5 rounded-full bg-black border border-gray-500"></div> End Shift
                      </button>
                 </div>
@@ -472,7 +554,7 @@
                 </div>
             </div>
 
-            <!-- GLOBAL COMPLETED CATERED CUSTOMERS LIST -->
+            <!-- CATERED CUSTOMERS LIST -->
             <div class="bg-cardBg border border-gray-800 rounded-xl flex flex-col mt-2 overflow-hidden">
                 <div class="bg-gray-800/50 p-3 text-xs font-bold text-gray-300 flex justify-between items-center">
                     <span><i class="fa-solid fa-list-check text-orange-400"></i> Catered Customers List</span>
@@ -483,10 +565,10 @@
                 </div>
             </div>
             
-            <button onclick="logout()" class="text-xs text-red-400/50 hover:text-red-400 py-2 mt-2">Log out of device</button>
+            <button onclick="window.logout && window.logout()" class="text-xs text-red-400/50 hover:text-red-400 py-2 mt-2">Log out of device</button>
         </section>
 
-        <!-- MULTI SMART CART VIEW (CART 1, 2, 3, 4) -->
+        <!-- SMART CART VIEW -->
         <section id="view-cart" class="hidden flex-1 flex flex-col">
             <div class="bg-cardBg border-b border-gray-800 p-2 grid grid-cols-4 gap-1.5 shrink-0" id="cart-tabs-header"></div>
 
@@ -503,11 +585,11 @@
             </div>
             
             <div class="p-3 flex justify-between gap-2 shrink-0 flex-wrap" id="cart-actions-toolbar">
-                <button onclick="showBulkAddModal()" class="flex-1 bg-blue-600/20 text-blue-400 text-xs font-bold py-2 rounded-lg border border-blue-600/30 transition active:scale-95">
+                <button onclick="window.showBulkAddModal && window.showBulkAddModal()" class="flex-1 bg-blue-600/20 text-blue-400 text-xs font-bold py-2 rounded-lg border border-blue-600/30 transition active:scale-95">
                     <i class="fa-solid fa-list-check"></i> Paste List
                 </button>
                 <div id="delete-selected-btn-container" class="contents"></div>
-                <button id="cart-action-btn" onclick="handleCartActionBtn()" class="flex-1 bg-red-600/20 text-red-400 text-xs font-bold py-2 rounded-lg border border-red-600/30 transition active:scale-95">
+                <button id="cart-action-btn" onclick="window.handleCartActionBtn && window.handleCartActionBtn()" class="flex-1 bg-red-600/20 text-red-400 text-xs font-bold py-2 rounded-lg border border-red-600/30 transition active:scale-95">
                     <i class="fa-solid fa-trash-can"></i> Clear Cart 1
                 </button>
             </div>
@@ -515,13 +597,13 @@
             <div id="cart-items-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 pb-20"></div>
 
             <div class="p-4 bg-darkBg border-t border-gray-800 shrink-0">
-                <button onclick="validateAndProceedToWizard()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold p-3.5 rounded-xl shadow-lg transition active:scale-95">
+                <button onclick="window.validateAndProceedToWizard && window.validateAndProceedToWizard()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold p-3.5 rounded-xl shadow-lg transition active:scale-95">
                     Create Receipt (<span id="btn-cart-slot-label">Cart 1</span>)
                 </button>
             </div>
         </section>
 
-        <!-- FEE WIZARD VIEW -->
+        <!-- WIZARD VIEW -->
         <section id="view-wizard" class="hidden flex-1 flex flex-col gap-3 p-4 overflow-y-auto">
             <div class="bg-cardBg rounded-xl border border-gray-800 p-4">
                 <h3 class="text-sm font-bold text-emerald-500 uppercase tracking-wider mb-2">Client Details</h3>
@@ -532,31 +614,31 @@
                 </div>
 
                 <div class="flex items-center gap-2 my-1">
-                    <input type="checkbox" id="manual-client-toggle" onchange="toggleManualClientInput(this.checked)" class="w-4 h-4 accent-blue-500">
+                    <input type="checkbox" id="manual-client-toggle" onchange="window.toggleManualClientInput && window.toggleManualClientInput(this.checked)" class="w-4 h-4 accent-blue-500">
                     <label for="manual-client-toggle" class="text-xs text-gray-300">Type client name manually</label>
                 </div>
 
                 <input type="text" id="rcpt-name" placeholder="Customer / Store Name (Required)" class="w-full bg-inputBg text-sm rounded-lg p-2.5 mt-1 outline-none border border-gray-700">
-                <input type="text" id="rcpt-contact" placeholder="Contact Number / Address" class="w-full bg-inputBg text-sm rounded-lg p-2.5 mt-2 outline-none border border-gray-700">
+                <input type="text" id="rcpt-contact" placeholder="Contact Number / Address" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 mt-2">
             </div>
 
             <div class="text-xs text-gray-400 mt-2 uppercase tracking-wider font-bold">Auto-Calculated Fees (Editable)</div>
             <div class="bg-cardBg rounded-xl border border-gray-800 overflow-hidden text-sm flex flex-col gap-3 p-3">
                 <div class="flex justify-between items-center gap-2">
                     <span class="text-gray-300 flex-1">Handling Fee (Store)</span>
-                    <input type="number" id="wiz-handling" oninput="calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold">
+                    <input type="number" id="wiz-handling" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold">
                 </div>
                 <div class="flex justify-between items-center gap-2">
                     <span class="text-gray-300 flex-1">Market Fee</span>
-                    <input type="number" id="wiz-market" oninput="calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold">
+                    <input type="number" id="wiz-market" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold">
                 </div>
                 <div class="flex justify-between items-center gap-2">
                     <span class="text-gray-300 flex-1">Multi-Stop Fee</span>
                     <div class="flex items-center gap-2">
-                        <button onclick="adjustStoreCount(-1)" class="text-red-400"><i class="fa-solid fa-circle-minus"></i></button>
+                        <button onclick="window.adjustStoreCount && window.adjustStoreCount(-1)" class="text-red-400"><i class="fa-solid fa-circle-minus"></i></button>
                         <span id="wiz-store-count" class="font-bold w-4 text-center">1</span>
-                        <button onclick="adjustStoreCount(1)" class="text-green-400"><i class="fa-solid fa-circle-plus"></i></button>
-                        <input type="number" id="wiz-multistop" oninput="calculateGrandTotal()" placeholder="0" class="w-20 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 text-blue-400 font-bold">
+                        <button onclick="window.adjustStoreCount && window.adjustStoreCount(1)" class="text-green-400"><i class="fa-solid fa-circle-plus"></i></button>
+                        <input type="number" id="wiz-multistop" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-20 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 text-blue-400 font-bold">
                     </div>
                 </div>
             </div>
@@ -565,11 +647,11 @@
             <div class="bg-cardBg rounded-xl border border-gray-800 overflow-hidden text-sm flex flex-col gap-3 p-3">
                 <div class="flex justify-between items-center gap-2">
                     <span class="text-gray-300 flex-1">Rider Delivery Fee</span>
-                    <input type="number" id="wiz-delivery" oninput="calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold">
+                    <input type="number" id="wiz-delivery" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold">
                 </div>
                 <div class="flex justify-between items-center gap-2">
                     <span class="text-gray-300 flex-1">Discount Bawas</span>
-                    <input type="number" id="wiz-discount" oninput="calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 text-red-400 font-bold">
+                    <input type="number" id="wiz-discount" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 text-red-400 font-bold">
                 </div>
             </div>
 
@@ -580,7 +662,7 @@
                     <div class="text-sm font-bold text-orange-400"><i class="fa-solid fa-gift"></i> Libreng Deliberi</div>
                     <div class="text-[10px] text-gray-400">Walang sasaguting fees ang customer</div>
                 </div>
-                <input type="checkbox" id="wiz-free-delivery" onchange="calculateGrandTotal()" class="w-5 h-5 accent-orange-500">
+                <input type="checkbox" id="wiz-free-delivery" onchange="window.calculateGrandTotal && window.calculateGrandTotal()" class="w-5 h-5 accent-orange-500">
             </label>
 
             <div class="mt-4 p-4 bg-emerald-900/20 border border-emerald-800/50 rounded-xl flex justify-between items-center">
@@ -588,58 +670,56 @@
                 <span class="text-2xl font-black text-emerald-400">₱<span id="wiz-grand-total">0.00</span></span>
             </div>
 
-            <button onclick="generateFinalReceipt()" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold p-3.5 rounded-xl shadow-lg transition active:scale-95">
+            <button onclick="window.generateFinalReceipt && window.generateFinalReceipt()" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold p-3.5 rounded-xl shadow-lg transition active:scale-95">
                 Generate Digital Receipt
             </button>
         </section>
 
-        <!-- FINAL RECEIPT VIEW -->
+        <!-- RECEIPT VIEW -->
         <section id="view-receipt-final" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
             <div class="flex-1 bg-cardBg border border-gray-800 rounded-xl p-4 overflow-y-auto min-h-[180px]">
                 <pre id="final-receipt-text" class="text-xs font-mono text-gray-300 whitespace-pre-wrap"></pre>
             </div>
             
             <div class="flex gap-2">
-                <button onclick="copyFinalReceipt()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center items-center gap-2 transition active:scale-95">
+                <button onclick="window.copyFinalReceipt && window.copyFinalReceipt()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center items-center gap-2 transition active:scale-95">
                     <i class="fa-solid fa-copy"></i> Copy
                 </button>
-                <button onclick="completeReceiptDone()" class="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center items-center gap-2 transition active:scale-95">
+                <button onclick="window.completeReceiptDone && window.completeReceiptDone()" class="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center items-center gap-2 transition active:scale-95">
                     <i class="fa-solid fa-check"></i> Done
                 </button>
             </div>
         </section>
 
-        <!-- DAILY / WEEKLY / MONTHLY COMMISSION VIEW -->
+        <!-- COMMISSION VIEW -->
         <section id="view-commission" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
             
             <div class="bg-cardBg p-3 rounded-xl border border-gray-800 flex flex-col gap-3 shadow-md">
                 <div id="admin-commission-filter-box" class="hidden flex-col gap-1 border-b border-gray-800 pb-3">
                     <span class="text-[10px] text-amber-400 font-bold uppercase tracking-wider"><i class="fa-solid fa-user-shield"></i> Admin View: Select Rider</span>
-                    <select id="admin-rider-select" onchange="refreshCommissionView()" class="w-full bg-inputBg text-sm text-white rounded-lg p-2.5 outline-none border border-gray-700 focus:border-amber-500 transition"></select>
+                    <select id="admin-rider-select" onchange="window.refreshCommissionView && window.refreshCommissionView()" class="w-full bg-inputBg text-sm text-white rounded-lg p-2.5 outline-none border border-gray-700 focus:border-amber-500 transition"></select>
                 </div>
 
                 <div class="flex bg-darkBg rounded-lg p-1 text-xs font-bold border border-gray-800">
-                    <button id="comm-mode-earned" onclick="setCommissionMode('earned')" class="flex-1 py-2 rounded-md bg-emerald-600/20 text-emerald-400 border border-emerald-500/50 transition">My Earnings</button>
-                    <button id="comm-mode-company" onclick="setCommissionMode('company')" class="flex-1 py-2 rounded-md text-gray-400 hover:text-white transition">To Pay (Company)</button>
+                    <button id="comm-mode-earned" onclick="window.setCommissionMode && window.setCommissionMode('earned')" class="flex-1 py-2 rounded-md bg-emerald-600/20 text-emerald-400 border border-emerald-500/50 transition">My Earnings</button>
+                    <button id="comm-mode-company" onclick="window.setCommissionMode && window.setCommissionMode('company')" class="flex-1 py-2 rounded-md text-gray-400 hover:text-white transition">To Pay (Company)</button>
                 </div>
 
                 <div class="grid grid-cols-3 gap-1 bg-darkBg rounded-lg p-1 text-[10px] font-bold border border-gray-800">
-                    <button id="comm-period-daily" onclick="setCommissionPeriod('daily')" class="py-1.5 rounded bg-blue-600 text-white transition">Daily</button>
-                    <button id="comm-period-weekly" onclick="setCommissionPeriod('weekly')" class="py-1.5 rounded text-gray-400 hover:text-white transition">Weekly</button>
-                    <button id="comm-period-monthly" onclick="setCommissionPeriod('monthly')" class="py-1.5 rounded text-gray-400 hover:text-white transition">Monthly</button>
+                    <button id="comm-period-daily" onclick="window.setCommissionPeriod && window.setCommissionPeriod('daily')" class="py-1.5 rounded bg-blue-600 text-white transition">Daily</button>
+                    <button id="comm-period-weekly" onclick="window.setCommissionPeriod && window.setCommissionPeriod('weekly')" class="py-1.5 rounded text-gray-400 hover:text-white transition">Weekly</button>
+                    <button id="comm-period-monthly" onclick="window.setCommissionPeriod && window.setCommissionPeriod('monthly')" class="py-1.5 rounded text-gray-400 hover:text-white transition">Monthly</button>
                 </div>
 
                 <div class="flex justify-between items-center">
                     <span class="text-xs text-gray-400 font-bold" id="comm-date-label">Select Date:</span>
-                    <input type="date" id="comm-input-daily" onchange="refreshCommissionView()" class="bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
-                    <input type="week" id="comm-input-weekly" onchange="refreshCommissionView()" class="hidden bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
-                    <input type="month" id="comm-input-monthly" onchange="refreshCommissionView()" class="hidden bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
+                    <input type="date" id="comm-input-daily" onchange="window.refreshCommissionView && window.refreshCommissionView()" class="bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
+                    <input type="week" id="comm-input-weekly" onchange="window.refreshCommissionView && window.refreshCommissionView()" class="hidden bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
+                    <input type="month" id="comm-input-monthly" onchange="window.refreshCommissionView && window.refreshCommissionView()" class="hidden bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
                 </div>
             </div>
 
             <div class="bg-cardBg p-4 rounded-xl border border-gray-800 shadow-sm flex flex-col gap-3 relative overflow-hidden">
-                <div id="comm-status-badge" class="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest shadow-md">UNPAID</div>
-
                 <div class="text-xs text-gray-400 uppercase tracking-widest font-bold text-center mt-2" id="comm-summary-title">Daily Summary</div>
                 
                 <div class="flex flex-col items-center justify-center py-2">
@@ -649,13 +729,9 @@
                     </div>
                     <div class="text-[10px] text-gray-500 mt-1">Gross Total: ₱<span id="comm-gross-amount">0.00</span></div>
                 </div>
-
-                <button id="admin-mark-paid-btn" onclick="toggleSettlementStatus()" class="hidden w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl text-xs transition active:scale-95 shadow-lg mt-1 border border-emerald-400/50">
-                    <i class="fa-solid fa-check-double"></i> MARK AS PAID
-                </button>
             </div>
 
-            <button onclick="generateDailyReportText()" class="w-full bg-blue-600/20 border border-blue-600/50 hover:bg-blue-600 text-blue-400 hover:text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2 transition active:scale-95 text-xs">
+            <button onclick="window.generateDailyReportText && window.generateDailyReportText()" class="w-full bg-blue-600/20 border border-blue-600/50 hover:bg-blue-600 text-blue-400 hover:text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2 transition active:scale-95 text-xs">
                 <i class="fa-solid fa-file-lines"></i> Generate Text Report
             </button>
 
@@ -668,9 +744,9 @@
             <div class="flex gap-2 mb-4 pr-6">
                 <div class="relative flex-1">
                     <i class="fa-solid fa-search absolute left-3 top-3.5 text-gray-400 text-sm"></i>
-                    <input type="text" id="search-input" oninput="filterDirectoryRecords()" placeholder="Search records..." class="w-full bg-inputBg text-sm rounded-xl pl-9 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
+                    <input type="text" id="search-input" oninput="window.filterDirectoryRecords && window.filterDirectoryRecords()" placeholder="Search records..." class="w-full bg-inputBg text-sm rounded-xl pl-9 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
                 </div>
-                <button onclick="syncData()" class="bg-cardBg hover:bg-inputBg px-4 rounded-xl border border-gray-800 text-gray-300 transition active:scale-90" title="Refresh">
+                <button onclick="window.syncData && window.syncData()" class="bg-cardBg hover:bg-inputBg px-4 rounded-xl border border-gray-800 text-gray-300 transition active:scale-90" title="Refresh">
                     <i class="fa-solid fa-rotate"></i>
                 </button>
             </div>
@@ -679,7 +755,7 @@
             
             <div id="alphabet-scrubber" class="fixed right-2 top-1/2 -translate-y-1/2 flex flex-col text-[10px] text-gray-400 font-bold z-30 touch-none select-none"></div>
 
-            <button id="directory-add-fab" onclick="openForm(null)" class="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center text-xl z-40 transition active:scale-90">
+            <button id="directory-add-fab" onclick="window.openForm && window.openForm(null)" class="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center text-xl z-40 transition active:scale-90">
                 <i class="fa-solid fa-plus"></i>
             </button>
         </section>
@@ -700,20 +776,20 @@
                 <label class="text-xs text-gray-400 font-bold">Map Link (Lat_Lon_Link)</label>
                 <div class="flex gap-2">
                     <input type="text" id="form-latlon" placeholder="Paste link or get from Map" class="flex-1 bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
-                    <button onclick="openMapPicker()" class="bg-blue-600 hover:bg-blue-500 px-4 rounded-xl text-white text-sm font-bold flex items-center gap-2 transition active:scale-95">
+                    <button onclick="window.openMapPicker && window.openMapPicker()" class="bg-blue-600 hover:bg-blue-500 px-4 rounded-xl text-white text-sm font-bold flex items-center gap-2 transition active:scale-95">
                         <i class="fa-solid fa-map-location-dot"></i> Map
                     </button>
                 </div>
             </div>
-            <button onclick="submitForm()" id="form-submit-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold p-4 rounded-xl shadow-lg mt-auto transition active:scale-95">
+            <button onclick="window.submitForm && window.submitForm()" id="form-submit-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold p-4 rounded-xl shadow-lg mt-auto transition active:scale-95">
                 SAVE RECORD
             </button>
         </section>
 
-        <!-- MAP PICKER & LIVE ROUTE NAVIGATION VIEW -->
+        <!-- MAP PICKER VIEW -->
         <section id="view-map" class="hidden fixed inset-0 bg-darkBg z-[100] flex flex-col w-full h-full overflow-hidden">
             <header class="bg-cardBg px-4 py-3 flex items-center justify-between shadow-md shrink-0 border-b border-gray-800">
-                <button onclick="goBack()" class="text-red-400 font-semibold flex items-center gap-2 transition active:opacity-50 text-sm">
+                <button onclick="window.goBack && window.goBack()" class="text-red-400 font-semibold flex items-center gap-2 transition active:opacity-50 text-sm">
                     <i class="fa-solid fa-xmark"></i> Cancel
                 </button>
                 <h1 id="map-view-title" class="text-sm font-bold">Pick Location Pin</h1>
@@ -724,10 +800,10 @@
                 <div id="map-center-pin" class="map-center-marker"><i class="fa-solid fa-location-dot"></i></div>
             </div>
             <div class="p-3 bg-cardBg shadow-lg shrink-0 border-t border-gray-800 z-10 pb-6 sm:pb-3 flex flex-col gap-2">
-                <button id="map-confirm-btn" onclick="confirmGoogleMapPin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95">
+                <button id="map-confirm-btn" onclick="window.confirmGoogleMapPin && window.confirmGoogleMapPin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95">
                     Confirm Location Pin
                 </button>
-                <button id="map-nav-app-btn" onclick="openExternalGoogleNav()" class="hidden w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2">
+                <button id="map-nav-app-btn" onclick="window.openExternalGoogleNav && window.openExternalGoogleNav()" class="hidden w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2">
                     <i class="fa-solid fa-location-arrow"></i> START GOOGLE MAPS GPS NAV
                 </button>
             </div>
@@ -753,13 +829,13 @@
                 <input type="text" id="gcash-no-input" placeholder="e.g. 09123456789" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold font-mono">
             </div>
             <div class="flex gap-2 mt-2">
-                <button onclick="closeGCashModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-                <button onclick="saveGCashDetails()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save Details</button>
+                <button onclick="window.closeGCashModal && window.closeGCashModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="window.saveGCashDetails && window.saveGCashDetails()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save Details</button>
             </div>
         </div>
     </div>
 
-    <!-- ADMIN MANUAL COMMISSION RECORD MODAL WITH RIDER DROPDOWN -->
+    <!-- ADMIN MANUAL COMMISSION RECORD MODAL -->
     <div id="admin-add-comm-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
         <div class="bg-cardBg border border-emerald-500/40 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
             <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl">
@@ -771,7 +847,6 @@
                 <div>
                     <label class="text-[10px] text-gray-400 font-bold uppercase">Select Rider *</label>
                     <select id="manual-comm-rider-select" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-emerald-500 text-white font-bold mt-1">
-                        <!-- Dynamically populated with clean list of riders -->
                     </select>
                 </div>
 
@@ -792,8 +867,8 @@
             </div>
 
             <div class="flex gap-2 mt-2">
-                <button onclick="closeAdminAddCommModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-                <button onclick="submitAdminAddCommissionRecord()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save Record</button>
+                <button onclick="window.closeAdminAddCommModal && window.closeAdminAddCommModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="window.submitAdminAddCommissionRecord && window.submitAdminAddCommissionRecord()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save Record</button>
             </div>
         </div>
     </div>
@@ -809,10 +884,10 @@
                 Mayroong item sa cart na nakamarka bilang <strong>PAID (₱0.00)</strong>. Sigurado ka bang nais magpatuloy sa resibo?
             </p>
             <div class="flex gap-2 mt-2">
-                <button onclick="closePaidItemModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 rounded-xl text-xs transition active:scale-95">
+                <button onclick="window.closePaidItemModal && window.closePaidItemModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 rounded-xl text-xs transition active:scale-95">
                     Go Back & Edit
                 </button>
-                <button onclick="confirmPaidItemProceed()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95">
+                <button onclick="window.confirmPaidItemProceed && window.confirmPaidItemProceed()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95">
                     Proceed
                 </button>
             </div>
@@ -826,10 +901,10 @@
                 <h3 class="font-bold text-sm text-blue-400 flex items-center gap-2">
                     <i class="fa-solid fa-calculator"></i> Map Calculation Board
                 </h3>
-                <button onclick="closeMapCalcBoardModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+                <button onclick="window.closeMapCalcBoardModal && window.closeMapCalcBoardModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
-            <button onclick="promptMapCalcCustomerName()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow transition active:scale-95 text-xs flex items-center justify-center gap-2">
+            <button onclick="window.promptMapCalcCustomerName && window.promptMapCalcCustomerName()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow transition active:scale-95 text-xs flex items-center justify-center gap-2">
                 <i class="fa-solid fa-plus-circle"></i> + Generate Link
             </button>
 
@@ -848,8 +923,8 @@
                 <input type="text" id="mapcalc-cust-name-input" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
             </div>
             <div class="flex gap-2 mt-2">
-                <button onclick="closeMapCalcNameModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-                <button onclick="confirmGenerateMapCalcLink()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Finalize Link</button>
+                <button onclick="window.closeMapCalcNameModal && window.closeMapCalcNameModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="window.confirmGenerateMapCalcLink && window.confirmGenerateMapCalcLink()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Finalize Link</button>
             </div>
         </div>
     </div>
@@ -861,7 +936,7 @@
                 <div class="flex items-center gap-2 font-bold text-xs text-blue-400">
                     <i class="fa-solid fa-comments text-base"></i> Team Comms
                 </div>
-                <button onclick="toggleChatWindow(false)" class="text-gray-400 hover:text-white text-sm active:scale-90">
+                <button onclick="window.toggleChatWindow && window.toggleChatWindow(false)" class="text-gray-400 hover:text-white text-sm active:scale-90">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
@@ -874,8 +949,8 @@
                 <div id="tag-suggestions" class="hidden absolute bottom-full left-0 right-0 bg-cardBg border border-gray-700 rounded-t-xl max-h-32 overflow-y-auto z-20 p-1 text-xs shadow-xl"></div>
                 
                 <div class="flex gap-2 items-center">
-                    <input type="text" id="bubble-chat-input" oninput="handleChatInput(this)" onkeydown="if(event.key==='Enter') sendBubbleChatMessage()" placeholder="Type a message or @rider..." class="flex-1 bg-darkBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white">
-                    <button onclick="sendBubbleChatMessage()" class="bg-blue-600 hover:bg-blue-500 text-white w-9 h-9 rounded-xl flex items-center justify-center text-xs transition active:scale-90 shrink-0">
+                    <input type="text" id="bubble-chat-input" oninput="window.handleChatInput && window.handleChatInput(this)" onkeydown="if(event.key==='Enter') window.sendBubbleChatMessage && window.sendBubbleChatMessage()" placeholder="Type a message or @rider..." class="flex-1 bg-darkBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white">
+                    <button onclick="window.sendBubbleChatMessage && window.sendBubbleChatMessage()" class="bg-blue-600 hover:bg-blue-500 text-white w-9 h-9 rounded-xl flex items-center justify-center text-xs transition active:scale-90 shrink-0">
                         <i class="fa-solid fa-paper-plane"></i>
                     </button>
                 </div>
@@ -903,10 +978,10 @@
                 ⚠️ Ang Sample Receipt ay <strong>HINDI mai-save sa database</strong> at <strong>HINDI mai-re-record sa iyong daily commission</strong>.
             </p>
             <div class="flex gap-2 mt-2">
-                <button onclick="closeSampleReceiptModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 rounded-xl text-xs transition active:scale-95">
+                <button onclick="window.closeSampleReceiptModal && window.closeSampleReceiptModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 rounded-xl text-xs transition active:scale-95">
                     Go Back
                 </button>
-                <button onclick="confirmSampleReceiptProceed()" class="flex-1 bg-amber-500 hover:bg-amber-400 text-black font-bold py-3 rounded-xl text-xs transition active:scale-95">
+                <button onclick="window.confirmSampleReceiptProceed && window.confirmSampleReceiptProceed()" class="flex-1 bg-amber-500 hover:bg-amber-400 text-black font-bold py-3 rounded-xl text-xs transition active:scale-95">
                     Proceed
                 </button>
             </div>
@@ -920,12 +995,12 @@
                 <h3 class="font-bold text-sm text-purple-400 flex items-center gap-2">
                     <i class="fa-solid fa-calendar-check"></i> Scheduled Delivery Reminders
                 </h3>
-                <button onclick="closeAdvancedOrdersModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+                <button onclick="window.closeAdvancedOrdersModal && window.closeAdvancedOrdersModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
             <div class="flex bg-inputBg p-1 rounded-xl text-xs font-bold">
-                <button id="adv-tab-btn-list" onclick="switchAdvTab('list')" class="flex-1 py-1.5 rounded-lg bg-purple-600 text-white transition">Orders List</button>
-                <button id="adv-tab-btn-add" onclick="switchAdvTab('add')" class="flex-1 py-1.5 rounded-lg text-gray-400 transition">+ Schedule New</button>
+                <button id="adv-tab-btn-list" onclick="window.switchAdvTab && window.switchAdvTab('list')" class="flex-1 py-1.5 rounded-lg bg-purple-600 text-white transition">Orders List</button>
+                <button id="adv-tab-btn-add" onclick="window.switchAdvTab && window.switchAdvTab('add')" class="flex-1 py-1.5 rounded-lg text-gray-400 transition">+ Schedule New</button>
             </div>
 
             <div id="adv-tab-list-content" class="flex-1 overflow-y-auto flex flex-col gap-2 min-h-[180px]">
@@ -949,7 +1024,7 @@
                     </div>
                 </div>
 
-                <button onclick="submitNewAdvancedOrder()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl mt-2 text-xs transition active:scale-95">
+                <button onclick="window.submitNewAdvancedOrder && window.submitNewAdvancedOrder()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl mt-2 text-xs transition active:scale-95">
                     Save Scheduled Order
                 </button>
             </div>
@@ -966,7 +1041,7 @@
             <p class="text-xs text-gray-300 leading-relaxed">
                 Kailangan mong i-turn on ang iyong <strong>GPS Location</strong> sa telepono bago mag-Available sa roster.
             </p>
-            <button onclick="closeGpsModal()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95 mt-2">
+            <button onclick="window.closeGpsModal && window.closeGpsModal()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95 mt-2">
                 OK, Naintindihan Ko
             </button>
         </div>
@@ -981,8 +1056,8 @@
                 <input type="text" id="catering-customer-name" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
             </div>
             <div class="flex gap-2 mt-2">
-                <button onclick="closeCateringModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-                <button onclick="confirmCateringStatus()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Start</button>
+                <button onclick="window.closeCateringModal && window.closeCateringModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="window.confirmCateringStatus && window.confirmCateringStatus()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Start</button>
             </div>
         </div>
     </div>
@@ -1000,11 +1075,11 @@
                 <label class="text-[10px] text-gray-400 font-bold uppercase">Penalty Cooldown On Available</label>
                 <div class="flex items-center gap-3 text-xs">
                     <label class="flex items-center gap-1.5 cursor-pointer">
-                        <input type="radio" name="penalty-option" value="none" checked onchange="togglePenaltyInput(false)" class="accent-yellow-500">
+                        <input type="radio" name="penalty-option" value="none" checked onchange="window.togglePenaltyInput && window.togglePenaltyInput(false)" class="accent-yellow-500">
                         <span>Not Penalized</span>
                     </label>
                     <label class="flex items-center gap-1.5 cursor-pointer">
-                        <input type="radio" name="penalty-option" value="penalized" onchange="togglePenaltyInput(true)" class="accent-yellow-500">
+                        <input type="radio" name="penalty-option" value="penalized" onchange="window.togglePenaltyInput && window.togglePenaltyInput(true)" class="accent-yellow-500">
                         <span>Penalized</span>
                     </label>
                 </div>
@@ -1015,8 +1090,8 @@
             </div>
 
             <div class="flex gap-2 mt-2">
-                <button onclick="closeAdminCateringModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-                <button onclick="confirmAdminCatering()" class="flex-1 bg-yellow-600 hover:bg-yellow-500 py-2.5 rounded-xl text-xs font-bold text-black transition active:scale-95">Force Cater</button>
+                <button onclick="window.closeAdminCateringModal && window.closeAdminCateringModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="window.confirmAdminCatering && window.confirmAdminCatering()" class="flex-1 bg-yellow-600 hover:bg-yellow-500 py-2.5 rounded-xl text-xs font-bold text-black transition active:scale-95">Force Cater</button>
             </div>
         </div>
     </div>
@@ -1032,7 +1107,7 @@
                 <span class="absolute inset-0 flex items-center justify-center text-[10px] text-white/30 font-bold tracking-widest pointer-events-none">&gt;&gt;&gt;&gt; SLIDE TO CONFIRM &gt;&gt;&gt;&gt;</span>
                 <input type="range" id="slide-delete-range" min="0" max="100" value="0" oninput="onSlideProgress(this.value)" onmouseup="onSlideEnd()" ontouchend="onSlideEnd()" class="w-full accent-red-500 cursor-pointer z-10 opacity-80 h-10">
             </div>
-            <button onclick="closeSlideDeleteModal()" class="text-xs text-gray-400 py-1">Cancel</button>
+            <button onclick="window.closeSlideDeleteModal && window.closeSlideDeleteModal()" class="text-xs text-gray-400 py-1">Cancel</button>
         </div>
     </div>
 
@@ -1044,8 +1119,8 @@
             <p class="text-xs text-gray-400 mb-4">Enter password to authorize editing.</p>
             <input type="password" id="modal-pass" placeholder="Password" class="w-full bg-inputBg text-sm text-center rounded-xl p-3 mb-4 outline-none border border-gray-700">
             <div class="flex gap-2">
-                <button onclick="closePasswordModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-3 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-                <button onclick="verifyPassword()" class="flex-1 bg-amber-500 hover:bg-amber-400 py-3 rounded-xl text-xs font-bold text-black transition active:scale-95">Verify</button>
+                <button onclick="window.closePasswordModal && window.closePasswordModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-3 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="window.verifyPassword && window.verifyPassword()" class="flex-1 bg-amber-500 hover:bg-amber-400 py-3 rounded-xl text-xs font-bold text-black transition active:scale-95">Verify</button>
             </div>
         </div>
     </div>
@@ -1055,8 +1130,8 @@
             <h3 class="font-bold text-base"><i class="fa-solid fa-paste text-blue-400"></i> Paste Listahan</h3>
             <textarea id="bulk-input" rows="6" placeholder="Format: Item Name Price&#10;Halimbawa:&#10;1pc chicken 150&#10;Sibuyas&#10;Bigas 60" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 focus:border-blue-500 resize-none font-mono"></textarea>
             <div class="flex gap-2">
-                <button onclick="closeBulkModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-3 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-                <button onclick="processBulkAdd()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded-xl text-xs font-bold text-white transition active:scale-95">Add Items</button>
+                <button onclick="window.closeBulkModal && window.closeBulkModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-3 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="window.processBulkAdd && window.processBulkAdd()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded-xl text-xs font-bold text-white transition active:scale-95">Add Items</button>
             </div>
         </div>
     </div>
@@ -1077,8 +1152,8 @@
                 <label for="edit-paid-input" class="text-xs text-gray-300 font-bold cursor-pointer">Mark as Paid (₱0.00)</label>
             </div>
             <div class="flex gap-2 mt-2">
-                <button onclick="closeEditItemModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-                <button onclick="saveItemEdit()" class="flex-1 bg-green-600 hover:bg-green-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save</button>
+                <button onclick="window.closeEditItemModal && window.closeEditItemModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+                <button onclick="window.saveItemEdit && window.saveItemEdit()" class="flex-1 bg-green-600 hover:bg-green-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save</button>
             </div>
         </div>
     </div>
@@ -1091,10 +1166,10 @@
                     <i class="fa-solid fa-map-location-dot text-indigo-400"></i> Find My Riders (Active)
                 </h3>
                 <div class="flex items-center gap-2">
-                    <button onclick="refreshFindRidersMap()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/50 px-2.5 py-1 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5" title="Refresh Rider Positions">
+                    <button onclick="window.refreshFindRidersMap && window.refreshFindRidersMap()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/50 px-2.5 py-1 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5" title="Refresh Rider Positions">
                         <i id="find-riders-refresh-icon" class="fa-solid fa-rotate"></i> Refresh
                     </button>
-                    <button onclick="closeFindRidersModal()" class="text-gray-400 hover:text-white text-sm ml-1"><i class="fa-solid fa-xmark"></i></button>
+                    <button onclick="window.closeFindRidersModal && window.closeFindRidersModal()" class="text-gray-400 hover:text-white text-sm ml-1"><i class="fa-solid fa-xmark"></i></button>
                 </div>
             </div>
             
@@ -1105,7 +1180,7 @@
             <div id="find-riders-status-summary" class="text-xs text-gray-300 bg-darkBg p-2.5 rounded-xl border border-gray-800 flex justify-around text-center">
             </div>
 
-            <button onclick="closeFindRidersModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
+            <button onclick="window.closeFindRidersModal && window.closeFindRidersModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
                 Close
             </button>
         </div>
