@@ -4,17 +4,11 @@ import { db } from '../config/firebase.js';
 import { getLocalTodayStr, copyText, escapeHtml } from '../utils/helpers.js';
 import { showToast, showSideNotification } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
-import { saveCartState, getCurrentCart, clearCartSlot, getEffectiveCartClient, renderCartItems, renderCartTabs } from './cart.js';
+import { saveCartState, getCurrentCart, getEffectiveCartClient, renderCartItems, renderCartTabs } from './cart.js';
 import { getActiveCateringCustomersWithTimes } from './roster.js';
 import { API_URL } from '../config/constants.js';
 
 let currentReceiptTransactionId = "";
-
-function isRiderActivelyCatering() {
-    const myId = (appState.telegramId || "").toString();
-    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === myId) : null;
-    return myRecord && myRecord.status === 'Catering';
-}
 
 export function getDailyRiderId() {
     const rName = (appState.riderName || appState.telegramId || "RIDER").replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -154,7 +148,6 @@ export function calculateGrandTotal() {
     const subtotal = Math.max(0, wizState.subtotal || 0);
     let codTotal = Math.max(0, subtotal + hFee + mFee + multistop + dFee - disc);
 
-    // Auto-calculate ePayment processing fee
     let epayFee = 0;
     if (codTotal > 0) {
         epayFee = codTotal <= 1000 ? 15 : 15 + Math.ceil((codTotal - 1000) / 500) * 5;
@@ -418,7 +411,6 @@ export function completeReceiptDone() {
     if(freeDelivEl) freeDelivEl.checked = false;
 }
 
-// COPY RECEIPT WITH MULTI-LINE PRESERVATION & INSTANT CHAT REDIRECT
 export function copyFinalReceipt() {
     const textEl = document.getElementById('final-receipt-text');
     const rawReceiptText = textEl ? (textEl.innerText || textEl.textContent || "") : "";
@@ -435,18 +427,7 @@ export function copyFinalReceipt() {
         .replace(/\r/g, '\n');
 
     copyText(formattedReceipt);
-    showToast("📋 Receipt copied! Switching to Meta Business chat...");
-
-    const custName = appState.receiptCustomerName || appState.selectedCateringClient || document.getElementById('rcpt-name')?.value || "";
-
-    setTimeout(() => {
-        if (window.openFacebookMessagesModal) {
-            window.openFacebookMessagesModal();
-            if (window.selectFacebookThreadByCustomerName && custName) {
-                window.selectFacebookThreadByCustomerName(custName, formattedReceipt);
-            }
-        }
-    }, 300);
+    showToast("📋 Receipt copied to clipboard!");
 }
 
 if (typeof window !== 'undefined') {

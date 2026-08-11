@@ -99,10 +99,6 @@
                 </p>
             </div>
 
-            <a href="https://m.me/lokalex" target="_blank" class="w-full bg-[#0084FF]/20 hover:bg-[#0084FF]/30 text-[#0084FF] border border-[#0084FF]/40 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 transition active:scale-95 my-1">
-                <i class="fa-brands fa-facebook-messenger text-base"></i> Message Us on Facebook
-            </a>
-
             <div id="mapcalc-cust-map-box" class="hidden w-full h-40 rounded-2xl overflow-hidden border border-emerald-500/50 relative my-1 shadow-inner">
                 <div id="mapcalc-cust-google-map" class="w-full h-full"></div>
             </div>
@@ -119,7 +115,7 @@
             <button id="mapcalc-cust-btn" onclick="startMapCalcLocationSharing()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 text-sm flex justify-center items-center gap-2 ring-2 ring-emerald-400/50">
                 <i class="fa-solid fa-location-arrow text-base"></i> SHARE LOCATION FOR DISTANCE CALC
             </button>
-            <p class="text-[10px] text-gray-500"> Isang beses lamang gagamitin ang link na ito.</p>
+            <p class="text-[10px] text-gray-500">Isang beses lamang gagamitin ang link na ito.</p>
         </div>
     </div>
 
@@ -143,10 +139,6 @@
                     Pindutin ang <strong>3 Dots (...)</strong> sa itaas at piliin ang <strong>"Open in Chrome / Safari"</strong> para sa GPS access.
                 </p>
             </div>
-
-            <a href="https://m.me/lokalex" target="_blank" class="w-full bg-[#0084FF]/20 hover:bg-[#0084FF]/30 text-[#0084FF] border border-[#0084FF]/40 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 transition active:scale-95 my-1">
-                <i class="fa-brands fa-facebook-messenger text-base"></i> Need Help? Chat on Messenger
-            </a>
 
             <div id="cust-map-container-box" class="hidden w-full h-40 rounded-2xl overflow-hidden border border-blue-500/50 relative my-1 shadow-inner">
                 <div id="cust-google-map" class="w-full h-full"></div>
@@ -210,10 +202,6 @@
                     </p>
                 </div>
 
-                <a href="https://m.me/lokalex" target="_blank" class="w-full bg-[#0084FF]/20 hover:bg-[#0084FF]/30 text-[#0084FF] border border-[#0084FF]/40 text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 transition active:scale-95 my-1">
-                    <i class="fa-brands fa-facebook-messenger text-base"></i> Contact Lokalex Messenger
-                </a>
-
                 <div id="livegps-status" class="text-xs font-bold text-amber-400 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
                     Pindutin ang blue button sa ibaba para sumali sa Live Tracking.
                 </div>
@@ -245,9 +233,6 @@
             <div class="text-[11px] text-gray-500 bg-black/40 p-3 rounded-xl border border-gray-800/60 w-full mt-2">
                 Naihatid na ang iyong order. Maraming salamat po!
             </div>
-            <a href="https://m.me/lokalex" target="_blank" class="w-full bg-[#0084FF] hover:bg-[#0072E0] text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 transition active:scale-95 shadow-lg mt-3">
-                <i class="fa-brands fa-facebook-messenger text-lg"></i> Message Our Page
-            </a>
         </div>
     </div>
 
@@ -280,6 +265,35 @@
         </div>
     </div>
 
+    <!-- RIDER CUSTOMER SWAP MODAL -->
+    <div id="swap-customer-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-purple-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-2.5">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-purple-600/30 text-purple-300 flex items-center justify-center text-sm font-bold border border-purple-500/40">
+                        <i class="fa-solid fa-[#0084FF] fa-arrows-rotate"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-sm text-white">Swap / Transfer Customer</h3>
+                        <p id="swap-modal-source-label" class="text-[10px] text-purple-300 font-mono"></p>
+                    </div>
+                </div>
+                <button onclick="closeSwapCustomerModal()" class="text-gray-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="text-[10px] text-gray-400 bg-black/40 p-2.5 rounded-xl border border-gray-800/80">
+                Pumili ng rider sa ibaba para makita ang kanyang catered customers at ma-swap o mailipat ang order.
+            </div>
+
+            <!-- EXPANDABLE RIDER LIST -->
+            <div id="swap-riders-accordion-list" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 min-h-0"></div>
+
+            <button onclick="closeSwapCustomerModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 mt-1">
+                Cancel
+            </button>
+        </div>
+    </div>
+
     <!-- SCHEDULED DELIVERY ALERTS BANNER -->
     <div id="adv-order-banner" class="hidden sticky top-0 z-[9999] bg-gradient-to-r from-amber-600 via-orange-600 to-red-600 text-white px-4 py-3 shadow-2xl flex items-center justify-between transition-all animate-bounce">
         <div class="flex items-center gap-3">
@@ -307,7 +321,7 @@
         </div>
     </div>
 
-    <!-- HEADER BAR WITH LIVE ONLINE STATUS & META BUSINESS SUITE ICON BUTTON -->
+    <!-- HEADER BAR WITH LIVE ONLINE STATUS -->
     <header id="app-header" class="hidden bg-cardBg px-4 py-3.5 flex items-center justify-between shadow-md sticky top-0 z-40 border-b border-gray-800/80">
         <button id="back-btn" onclick="goBack()" class="hidden text-blue-400 font-semibold flex items-center gap-1.5 transition active:scale-95 text-xs">
             <i class="fa-solid fa-arrow-left"></i> Back
@@ -317,11 +331,6 @@
         </h1>
         
         <div class="flex items-center gap-2">
-            <!-- META BUSINESS SUITE ICON BUTTON -->
-            <button onclick="openFacebookMessagesModal()" class="bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 p-2 rounded-full text-xs font-bold transition active:scale-95 flex items-center justify-center shadow-sm" title="Meta Business Suite">
-                <i class="fa-brands fa-facebook-messenger text-sm"></i>
-            </button>
-
             <!-- NETWORK STATUS PILL -->
             <div id="network-status-pill" class="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300">
                 <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -752,182 +761,7 @@
 
     </main>
 
-    <!-- AUTHENTIC META BUSINESS SUITE INBOX MODAL -->
-    <div id="facebook-messages-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-0 sm:p-3">
-        <div class="bg-[#1c1e21] border border-gray-800 sm:rounded-2xl w-full max-w-4xl h-[100dvh] sm:h-[90vh] max-h-[100dvh] shadow-2xl flex flex-col overflow-hidden text-gray-200">
-            
-            <!-- META INBOX HEADER BAR -->
-            <div class="bg-[#242526] px-3.5 py-2 sm:px-4 sm:py-2.5 border-b border-gray-800 flex items-center justify-between shrink-0">
-                <div class="flex items-center gap-2.5">
-                    <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-tr from-purple-600 via-blue-600 to-indigo-500 text-white flex items-center justify-center text-sm font-bold shadow-md shrink-0">
-                        <i class="fa-brands fa-facebook-messenger"></i>
-                    </div>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <h3 class="font-bold text-xs sm:text-sm text-white">Meta Inbox</h3>
-                            <span class="bg-gray-800 text-gray-300 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-gray-700">Inbox</span>
-                        </div>
-                        <p class="text-[9px] sm:text-[10px] text-gray-400">Lokalex Delivery Group • Direct API Sync</p>
-                    </div>
-                </div>
-
-                <!-- TOP RIGHT CONTROLS -->
-                <div class="flex items-center gap-1.5 sm:gap-2">
-                    <button id="fb-alarm-toggle-btn" onclick="toggleFacebookNewMessageAlarm()" class="bg-gray-800 hover:bg-gray-700 text-gray-400 p-1.5 sm:p-2 rounded-xl text-xs transition active:scale-95" title="Toggle New Message Alarm">
-                        <i id="fb-alarm-icon" class="fa-solid fa-bell-slash"></i>
-                    </button>
-                    <button onclick="refreshFacebookInbox()" class="bg-gray-800 hover:bg-gray-700 text-gray-200 p-1.5 sm:p-2 rounded-xl text-xs transition active:scale-95" title="Refresh Messages">
-                        <i id="fb-refresh-icon" class="fa-solid fa-rotate"></i>
-                    </button>
-                    <button onclick="closeFacebookMessagesModal()" class="bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white p-1.5 sm:p-2 rounded-xl text-xs transition active:scale-95">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- TWO-COLUMN META BUSINESS INBOX CONTAINER -->
-            <div class="flex-1 flex min-h-0 overflow-hidden relative">
-                
-                <!-- LEFT PANEL: THREADS / CONVERSATIONS LIST -->
-                <div id="fb-threads-panel" class="w-full md:w-80 lg:w-96 border-r border-gray-800 flex flex-col bg-[#1c1e21] shrink-0 min-h-0">
-                    <!-- Search & Working Filter Header -->
-                    <div class="p-2 sm:p-3 border-b border-gray-800 flex flex-col gap-1.5 bg-[#242526] shrink-0">
-                        <div class="relative">
-                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
-                            <input type="text" id="fb-thread-search" oninput="filterFacebookThreads()" placeholder="Search Messenger..." class="w-full bg-[#3a3b3c] text-xs text-white rounded-full pl-8 pr-3 py-1.5 outline-none border border-transparent focus:border-[#0084FF]">
-                        </div>
-                        <!-- WORKING FILTER TAB BUTTONS INCLUDING "DONE" -->
-                        <div id="fb-filter-tabs" class="flex gap-1 text-[10px] font-bold overflow-x-auto py-0.5">
-                            <button data-filter="all" onclick="setInboxFilter('all')" class="bg-[#0084FF] text-white px-3 py-1 rounded-full text-[10px] font-bold shadow-sm transition">All Messages</button>
-                            <button data-filter="unread" onclick="setInboxFilter('unread')" class="bg-[#3a3b3c] text-gray-300 px-3 py-1 rounded-full text-[10px] font-bold hover:bg-gray-700 transition">Unread</button>
-                            <button data-filter="assigned" onclick="setInboxFilter('assigned')" class="bg-[#3a3b3c] text-gray-300 px-3 py-1 rounded-full text-[10px] font-bold hover:bg-gray-700 transition">Assigned</button>
-                            <button data-filter="done" onclick="setInboxFilter('done')" class="bg-[#3a3b3c] text-gray-300 px-3 py-1 rounded-full text-[10px] font-bold hover:bg-gray-700 transition">Done</button>
-                        </div>
-                    </div>
-
-                    <!-- Scrollable Thread List Feed (Overscroll Contained) -->
-                    <div id="fb-threads-list" class="flex-1 overflow-y-auto overscroll-y-contain flex flex-col min-h-0">
-                        <div class="text-center text-gray-500 italic py-12 text-xs">Loading Meta Inbox conversations...</div>
-                    </div>
-                </div>
-
-                <!-- RIGHT PANEL: ACTIVE CHAT PANEL -->
-                <div id="fb-chat-panel" class="hidden md:flex flex-1 flex-col bg-[#18191a] min-w-0 min-h-0 h-full max-h-full overflow-hidden">
-                    
-                    <!-- Chat View Top Header -->
-                    <div class="p-2 sm:p-2.5 bg-[#242526] border-b border-gray-800 flex items-center justify-between shrink-0">
-                        <div class="flex items-center gap-2 min-w-0">
-                            <button onclick="showInboxThreadListMobile()" class="md:hidden text-gray-400 hover:text-white p-1 text-sm mr-0.5">
-                                <i class="fa-solid fa-chevron-left"></i>
-                            </button>
-                            <img id="fb-chat-header-avatar" src="https://img.icons8.com/color/48/user-male-circle--v1.png" class="w-8 h-8 rounded-full object-cover border border-gray-700 shrink-0">
-                            <div class="truncate">
-                                <h4 id="fb-[#0084FF]-cust-name" class="font-bold text-xs text-white truncate">Select a conversation</h4>
-                                <div class="text-[9px] text-gray-400 flex items-center gap-1">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span> Facebook Messenger
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- CANCEL CATER BUTTON UNDER CHATBOX HEADER -->
-                        <button id="fb-cancel-cater-btn" onclick="cancelCaterFacebookCustomer()" class="hidden bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/40 px-2 py-1 sm:px-2.5 sm:py-1 rounded-xl text-[10px] sm:text-xs font-bold transition active:scale-95 flex items-center gap-1 shadow-sm shrink-0">
-                            <i class="fa-solid fa-ban text-xs"></i> <span>Cancel Cater</span>
-                        </button>
-                    </div>
-
-                    <!-- Assignment Notification Card -->
-                    <div id="fb-assignment-banner" class="hidden bg-[#242526] p-2 mx-2 mt-2 rounded-xl border border-gray-800 flex justify-between items-center text-xs text-gray-300 shadow-md shrink-0">
-                        <div id="fb-assign-text" class="leading-tight text-[10px] sm:text-xs">
-                            Do you want to be assigned to this conversation? <button onclick="assignConversationToMe()" class="text-[#0084FF] underline font-bold ml-1">Assign to me</button>
-                        </div>
-                        <button onclick="dismissAssignmentBanner()" class="text-gray-400 hover:text-white ml-2 text-xs"><i class="fa-solid fa-xmark"></i></button>
-                    </div>
-
-                    <!-- Messages Stream Box (Overscroll Contained) -->
-                    <div id="fb-chat-messages" class="flex-1 overflow-y-auto overscroll-y-contain p-2.5 sm:p-4 flex flex-col gap-2 text-xs min-h-0">
-                        <div class="text-center text-gray-500 italic py-16">Select a customer thread on the left to view messages.</div>
-                    </div>
-
-                    <!-- Meta Business Toolbar & Reply Composer Box -->
-                    <div class="p-2 sm:p-2.5 bg-[#242526] border-t border-gray-800 flex flex-col gap-1.5 shrink-0 pb-3 sm:pb-2.5">
-                        <div class="flex items-center gap-1.5">
-                            <div class="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-emerald-600/30 text-emerald-400 flex items-center justify-center font-bold text-[9px] sm:text-[10px] shrink-0 border border-emerald-500/40">
-                                LX
-                            </div>
-                            <textarea id="fb-message-input" rows="1" onkeydown="if(event.key==='Enter' && !event.shiftKey){ event.preventDefault(); sendFacebookReply(); }" placeholder="Reply in Messenger..." class="flex-1 bg-[#3a3b3c] text-xs text-white rounded-2xl px-3 py-1.5 outline-none border border-transparent focus:border-[#0084FF] resize-none font-sans leading-relaxed min-h-[34px] max-h-24"></textarea>
-                        </div>
-
-                        <!-- LOWER CHAT BOX TOOLBAR: SEND IMAGE, SEND COORDINATES, SEND RECEIPT, CREATE RECEIPT -->
-                        <div class="flex items-center justify-between pt-0.5 gap-1 flex-wrap">
-                            <div class="flex items-center gap-1 overflow-x-auto py-0.5 max-w-full">
-                                <button onclick="triggerSendImage()" class="bg-[#3a3b3c] hover:bg-gray-700 text-gray-200 px-2 py-1 rounded-xl text-[10px] font-bold transition active:scale-95 flex items-center gap-1 shrink-0 border border-gray-700">
-                                    <i class="fa-solid fa-camera text-blue-400"></i> Send Image
-                                </button>
-                                <button onclick="sendRiderCoordinates()" class="bg-[#3a3b3c] hover:bg-gray-700 text-gray-200 px-2 py-1 rounded-xl text-[10px] font-bold transition active:scale-95 flex items-center gap-1 shrink-0 border border-gray-700">
-                                    <i class="fa-solid fa-location-dot text-emerald-400"></i> Coordinates
-                                </button>
-                                <button onclick="sendCurrentReceipt()" class="bg-[#3a3b3c] hover:bg-gray-700 text-gray-200 px-2 py-1 rounded-xl text-[10px] font-bold transition active:scale-95 flex items-center gap-1 shrink-0 border border-gray-700">
-                                    <i class="fa-solid fa-receipt text-amber-400"></i> Send Receipt
-                                </button>
-                                <button onclick="createReceiptFromChat()" class="bg-[#3a3b3c] hover:bg-gray-700 text-gray-200 px-2 py-1 rounded-xl text-[10px] font-bold transition active:scale-95 flex items-center gap-1 shrink-0 border border-gray-700">
-                                    <i class="fa-solid fa-file-circle-plus text-purple-400"></i> Create Receipt
-                                </button>
-                            </div>
-
-                            <div class="flex items-center gap-1 shrink-0 ml-auto">
-                                <button onclick="sendThumbsUp()" class="text-[#0084FF] hover:text-blue-400 text-base transition active:scale-90 px-1" title="Send Thumbs Up">
-                                    <i class="fa-solid fa-thumbs-up"></i>
-                                </button>
-                                <button onclick="sendFacebookReply()" class="bg-[#0084FF] hover:bg-blue-600 text-white px-3 py-1 rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center gap-1">
-                                    <span>Send</span> <i class="fa-solid fa-paper-plane text-[9px]"></i>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- HIDDEN FILE INPUT FOR IMAGE SELECTION -->
-                        <input type="file" id="fb-image-file-input" accept="image/*" class="hidden" onchange="handleSendImageFile(event)">
-                    </div>
-
-                </div>
-            </div>
-
-        </div>
-    </div>
-
-    <!-- IMAGE VIEWER MODAL -->
-    <div id="image-viewer-modal" class="hidden fixed inset-0 bg-black/95 z-[100000] flex flex-col items-center justify-center touch-none">
-        <div class="absolute top-4 right-4 flex gap-4 z-10">
-            <button onclick="window.zoomImageViewer && window.zoomImageViewer(0.5)" class="bg-gray-800 hover:bg-gray-700 text-white w-10 h-10 rounded-full shadow-lg transition active:scale-90"><i class="fa-solid fa-search-plus"></i></button>
-            <button onclick="window.zoomImageViewer && window.zoomImageViewer(-0.5)" class="bg-gray-800 hover:bg-gray-700 text-white w-10 h-10 rounded-full shadow-lg transition active:scale-90"><i class="fa-solid fa-search-minus"></i></button>
-            <button onclick="window.closeImageViewer && window.closeImageViewer()" class="bg-red-600 hover:bg-red-500 text-white w-10 h-10 rounded-full shadow-lg transition active:scale-90"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div id="image-viewer-container" class="w-full h-full overflow-auto flex items-center justify-center">
-            <img id="image-viewer-img" src="" class="max-w-full max-h-full object-contain transition-transform duration-200" style="transform: scale(1);">
-        </div>
-    </div>
-
-    <!-- IMAGE EDITOR MODAL -->
-    <div id="image-editor-modal" class="hidden fixed inset-0 bg-black/95 z-[100000] flex flex-col items-center justify-center">
-        <div class="absolute top-4 left-4 right-4 flex justify-between items-center z-10">
-            <button onclick="window.closeImageEditor && window.closeImageEditor()" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md transition active:scale-95">Cancel</button>
-            <div class="flex gap-2 items-center bg-gray-900/80 p-1.5 rounded-2xl shadow-xl border border-gray-700">
-                <button id="editor-tool-draw" onclick="window.setEditorTool && window.setEditorTool('draw')" class="bg-blue-600 text-white px-3 py-2 rounded-xl text-xs font-bold border-2 border-blue-400 transition"><i class="fa-solid fa-pen"></i> Draw</button>
-                <button id="editor-tool-text" onclick="window.setEditorTool && window.setEditorTool('text')" class="bg-gray-800 text-white px-3 py-2 rounded-xl text-xs font-bold border-2 border-transparent transition"><i class="fa-solid fa-t"></i> Text</button>
-                <input type="color" id="editor-color-picker" value="#ff0000" class="w-8 h-8 rounded-lg cursor-pointer border-0 p-0 m-0 shadow-sm" title="Choose Color">
-            </div>
-            <button onclick="window.sendEditedImage && window.sendEditedImage()" class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center gap-1.5">
-                <i class="fa-solid fa-paper-plane"></i> Send
-            </button>
-        </div>
-        
-        <div class="flex-1 w-full h-full flex items-center justify-center overflow-hidden relative mt-20 mb-4 bg-[#121212] border border-gray-800 rounded-xl max-w-3xl">
-            <canvas id="image-editor-canvas" class="max-w-full max-h-full object-contain touch-none cursor-crosshair"></canvas>
-            <input type="text" id="editor-text-input" class="hidden absolute bg-black/50 text-white border-2 border-dashed border-white px-2 py-1 rounded text-lg outline-none font-bold placeholder-gray-300" placeholder="Type text & press Enter...">
-        </div>
-        <div class="absolute bottom-4 text-[10px] text-gray-400 font-bold bg-black/50 px-3 py-1 rounded-full pointer-events-none">Lokalex Image Editor</div>
-    </div>
-
-    <!-- UNIVERSAL SLIDE CONFIRMATION MODAL WITH HIGH Z-INDEX AND TOUCH-UP RESETS -->
+    <!-- UNIVERSAL SLIDE CONFIRMATION MODAL -->
     <div id="slide-delete-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-end sm:items-center justify-center p-4">
         <div class="bg-[#1E1A1A] border border-red-500/40 p-6 rounded-3xl max-w-sm w-full text-center shadow-2xl flex flex-col gap-4">
             <i id="slide-modal-icon" class="fa-solid fa-triangle-exclamation text-red-500 text-3xl mx-auto"></i>
@@ -936,7 +770,7 @@
             
             <div class="relative h-12 bg-black/60 rounded-full border border-red-500/40 flex items-center px-2 overflow-hidden mt-2">
                 <span class="absolute inset-0 flex items-center justify-center text-[10px] text-white/40 font-bold tracking-widest pointer-events-none">&gt;&gt;&gt;&gt; SLIDE TO CONFIRM &gt;&gt;&gt;&gt;</span>
-                <input type="range" id="slide-delete-range" min="0" max="100" value="0" oninput="window.onSlideProgress && window.onSlideProgress(this.value)" onmouseup="window.onSlideEnd && window.onSlideEnd()" ontouchend="window.onSlideEnd && window.onSlideEnd()" class="w-full accent-red-500 cursor-pointer z-10 opacity-90 h-10">
+                <input type="range" id="slide-delete-range" min="0" max="100" value="0" oninput="window.onSlideProgress && window.onSlideProgress(this.value)" onchange="window.onSlideProgress && window.onSlideProgress(this.value)" onmouseup="window.onSlideEnd && window.onSlideEnd()" ontouchend="window.onSlideEnd && window.onSlideEnd()" class="w-full accent-red-500 cursor-pointer z-10 opacity-90 h-10">
             </div>
             <button onclick="window.closeSlideDeleteModal && window.closeSlideDeleteModal()" class="text-xs text-gray-400 hover:text-white py-1 transition font-bold">Cancel</button>
         </div>

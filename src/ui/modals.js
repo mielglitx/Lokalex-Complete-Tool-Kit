@@ -6,7 +6,6 @@ import { showToast } from './notifications.js';
 
 let slideDeleteCallback = null;
 
-// FETCH AND RESTORE GCASH DETAILS FROM FIREBASE & GOOGLE SHEETS
 export async function fetchGCashDetails() {
     const riderId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const riderName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
@@ -16,7 +15,6 @@ export async function fetchGCashDetails() {
     let foundName = "";
     let foundNo = "";
 
-    // 1. Check Firebase first
     if (db) {
         try {
             const snap = await db.ref('gcash').once('value');
@@ -34,7 +32,6 @@ export async function fetchGCashDetails() {
         } catch(e) {}
     }
 
-    // 2. Fallback check to Google Sheets API
     if (!foundName || !foundNo) {
         try {
             const res = await fetch(`${API_URL}?type=all`);
@@ -56,7 +53,6 @@ export async function fetchGCashDetails() {
         } catch(e) {}
     }
 
-    // Restore details to state and local cache
     if (foundName || foundNo) {
         appState.gcashName = foundName;
         appState.gcashNo = foundNo;
@@ -70,7 +66,6 @@ export async function fetchGCashDetails() {
     }
 }
 
-// GCASH REGISTRATION MODAL LOGIC WITH SLIDE CONFIRMATION
 export async function openGCashModal() {
     const modal = document.getElementById('gcash-modal');
     if (modal) {
@@ -247,19 +242,6 @@ export function closeWebHubModal() {
     if (modal) modal.classList.add('hidden');
 }
 
-export function promptSaveFacebookPageToken() {
-    if (typeof window.refreshFacebookInbox === 'function') {
-        const currentToken = localStorage.getItem('lokalex_fb_page_token') || "";
-        const newToken = prompt("Enter your Facebook Page Access Token for direct messaging:", currentToken);
-        if (newToken !== null) {
-            localStorage.setItem('lokalex_fb_page_token', newToken.trim());
-            showToast("✅ Page Access Token saved!");
-            if (window.refreshFacebookInbox) window.refreshFacebookInbox();
-        }
-    }
-}
-
-// SLIDE-TO-CONFIRM CONTROLLER
 export function openSlideDeleteModal(title, arg2, arg3) {
     let subtitle = "I-drag pakanan ang slider para kumpirmahin.";
     let callback = null;
@@ -317,7 +299,6 @@ export function onSlideEnd() {
 if (typeof window !== 'undefined') {
     window.openWebHubModal = openWebHubModal;
     window.closeWebHubModal = closeWebHubModal;
-    window.promptSaveFacebookPageToken = promptSaveFacebookPageToken;
     window.fetchGCashDetails = fetchGCashDetails;
     window.openGCashModal = openGCashModal;
     window.closeGCashModal = closeGCashModal;

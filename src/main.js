@@ -13,7 +13,6 @@ import * as advancedOrders from './features/advancedOrders.js';
 import * as maps from './features/maps.js';
 import * as wizard from './features/wizard.js';
 import * as liveTracker from './features/liveTracker.js';
-import * as facebookMessages from './features/facebookMessages.js';
 
 // --- UI & HELPER IMPORTS ---
 import * as modals from './ui/modals.js';
@@ -22,11 +21,11 @@ import * as helpers from './utils/helpers.js';
 import { unlockAudioContext } from './ui/notifications.js';
 
 // -------------------------------------------------------------
-// 1. GLOBAL WINDOW BINDER (Modals first, features second)
+// 1. GLOBAL WINDOW BINDER
 // -------------------------------------------------------------
 const allModules = [
     modals, auth, cart, chat, roster, directory, commission, 
-    advancedOrders, maps, wizard, liveTracker, facebookMessages, router, helpers
+    advancedOrders, maps, wizard, liveTracker, router, helpers
 ];
 
 allModules.forEach(mod => {
