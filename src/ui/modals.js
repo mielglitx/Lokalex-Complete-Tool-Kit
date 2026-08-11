@@ -259,6 +259,7 @@ export function promptSaveFacebookPageToken() {
     }
 }
 
+// SLIDE-TO-CONFIRM CONTROLLER
 export function openSlideDeleteModal(title, arg2, arg3) {
     let subtitle = "I-drag pakanan ang slider para kumpirmahin.";
     let callback = null;
@@ -288,16 +289,18 @@ export function openSlideDeleteModal(title, arg2, arg3) {
 export function closeSlideDeleteModal() {
     const modal = document.getElementById('slide-delete-modal');
     if (modal) modal.classList.add('hidden');
+    const rangeEl = document.getElementById('slide-delete-range');
+    if (rangeEl) rangeEl.value = 0;
     slideDeleteCallback = null;
 }
 
 export function onSlideProgress(val) {
-    if (val >= 90) {
-        const rangeEl = document.getElementById('slide-delete-range');
-        if (rangeEl) rangeEl.value = 100;
-        
+    if (Number(val) >= 90) {
         if (slideDeleteCallback && typeof slideDeleteCallback === 'function') {
-            let cb = slideDeleteCallback;
+            const cb = slideDeleteCallback;
+            slideDeleteCallback = null;
+            const rangeEl = document.getElementById('slide-delete-range');
+            if (rangeEl) rangeEl.value = 100;
             closeSlideDeleteModal();
             cb();
         }
@@ -306,7 +309,7 @@ export function onSlideProgress(val) {
 
 export function onSlideEnd() {
     const range = document.getElementById('slide-delete-range');
-    if (range && range.value < 90) { 
+    if (range && Number(range.value) < 90) { 
         range.value = 0; 
     }
 }
