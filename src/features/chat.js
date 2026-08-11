@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // src/features/chat.js
 import { db } from '../config/firebase.js';
 import { appState, globalState } from '../store/state.js';
@@ -234,3 +235,5 @@ if (typeof window !== 'undefined') {
     window.handleTeamChatImageFile = handleTeamChatImageFile;
     window.handleChatInput = handleChatInput;
 }
+=======
+>>>>>>> 93b8bd596e386e6b91c1adfb7cae677bc797fe87
