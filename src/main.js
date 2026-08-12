@@ -108,7 +108,11 @@ function bootApp() {
 
             if (avatarImg && savedCustomerAvatar) avatarImg.src = savedCustomerAvatar;
             if (nameEl) nameEl.innerText = savedCustomerName || "Customer Account";
-            if (emailEl) emailEl.innerText = savedCustomerEmail || "Facebook Connected";
+            if (emailEl) emailEl.innerText = savedCustomerEmail || "Phone Verified";
+
+            if (chat && chat.listenToCustomerRiderChat) {
+                chat.listenToCustomerRiderChat();
+            }
 
             history.replaceState({ view: 'view-customer-home' }, '', '#view-customer-home');
             router.renderViewUI('view-customer-home');
@@ -134,6 +138,14 @@ window.addEventListener('loginSuccess', () => {
         commission.fetchRiderUserTypes();
     }
     initRealtimeFirebaseListeners();
+});
+
+window.addEventListener('viewChanged', (e) => {
+    if (e.detail === 'view-customer-home') {
+        if (chat && chat.listenToCustomerRiderChat) {
+            chat.listenToCustomerRiderChat();
+        }
+    }
 });
 
 function initRealtimeFirebaseListeners() {

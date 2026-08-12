@@ -1,14 +1,16 @@
 // src/features/auth.js
 import { appState, globalState } from '../store/state.js';
-import { CSV_AUTH_URL, ADMIN_IDS, FB_APP_ID } from '../config/constants.js';
+import { CSV_AUTH_URL, ADMIN_IDS } from '../config/constants.js';
 import { switchView, renderViewUI } from '../ui/router.js';
 import { showToast, unlockAudioContext } from '../ui/notifications.js';
 import { fetchGCashDetails } from '../ui/modals.js';
-import { db } from '../config/firebase.js';
+import { db, auth } from '../config/firebase.js';
+import { listenToCustomerRiderChat } from './chat.js';
 
 let backgroundGpsWatchId = null;
 let lastRosterGpsPushTime = 0;
 const GPS_ROSTER_PULSE_MS = 30000;
+let confirmationResultObj = null;
 
 export function switchLoginPortalTab(mode) {
     const riderForm = document.getElementById('portal-form-rider');
@@ -35,104 +37,160 @@ export function isUserBlocked(idOrName) {
     });
 }
 
-export function registerCustomerViaFacebook() {
-    const isSecureContext = window.location.protocol === 'https:' || 
-                            window.location.hostname === 'localhost' || 
-                            window.location.hostname === '127.0.0.1';
+function formatPhoneNumber(phone) {
+    let clean = (phone || '').replace(/[^0-9+]/g, '').trim();
+    if (clean.startsWith('09')) {
+        clean = '+63' + clean.substring(1);
+    } else if (clean.startsWith('9') && clean.length === 10) {
+        clean = '+63' + clean;
+    } else if (!clean.startsWith('+')) {
+        clean = '+' + clean;
+    }
+    return clean;
+}
 
-    const appIdToUse = FB_APP_ID || '3509728395866188';
+export function sendCustomerPhoneOTP() {
+    const phoneInput = document.getElementById('cust-phone-num')?.value.trim();
 
-    if (typeof FB === 'undefined' || !isSecureContext) {
-        if (!isSecureContext && typeof FB !== 'undefined') {
-            showToast("⚠️ Facebook Login requires HTTPS or localhost. Test login activated.");
-        }
-        // Fallback simulation if FB SDK fails to load or running over plain HTTP
-        handleCustomerLoginSuccess({
-            id: "FB_SIM_" + Date.now(),
-            name: "Test Customer (Facebook)",
-            email: "customer@lokalex.com",
-            picture: { data: { url: "https://ui-avatars.com/api/?name=Customer&background=1877F2&color=fff" } }
-        });
-        return;
+    if (!phoneInput) return showToast("⚠️ Paki-lagay ang iyong Phone Number!");
+
+    const formattedPhone = formatPhoneNumber(phoneInput);
+    if (formattedPhone.length < 12) {
+        return showToast("⚠️ Format ng phone number ay hindi valid (hal. 09123456789)");
     }
 
-    try {
-        if (FB && typeof FB.init === 'function') {
-            FB.init({
-                appId: appIdToUse,
-                cookie: true,
-                xfbml: true,
-                version: 'v19.0'
-            });
-        }
+    const sendBtn = document.getElementById('send-otp-btn');
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Sending SMS OTP...`;
+    }
 
-        FB.login(function(response) {
-            if (response && response.authResponse) {
-                FB.api('/me', { fields: 'id, name, email, picture.type(large)' }, function(userInfo) {
-                    handleCustomerLoginSuccess(userInfo);
-                });
-            } else {
-                showToast("⚠️ Facebook authentication cancelled or failed.");
+    if (!window.recaptchaVerifier) {
+        try {
+            window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+                'size': 'invisible',
+                'callback': () => {}
+            });
+        } catch (e) {
+            console.error("Recaptcha init error:", e);
+        }
+    }
+
+    const appVerifier = window.recaptchaVerifier;
+
+    auth.signInWithPhoneNumber(formattedPhone, appVerifier)
+        .then((confirmationResult) => {
+            confirmationResultObj = confirmationResult;
+            showToast("📲 OTP Code sent via SMS!");
+
+            document.getElementById('phone-auth-step-1')?.classList.add('hidden');
+            document.getElementById('phone-auth-step-2')?.classList.remove('hidden');
+        })
+        .catch((error) => {
+            console.error("Error sending OTP:", error);
+            showToast(`❌ Error: ${error.message || "Failed to send SMS OTP"}`);
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> SEND OTP CODE`;
             }
-        }, { scope: 'public_profile,email' });
-    } catch (err) {
-        console.warn("FB.login exception captured:", err);
-        showToast("⚠️ Facebook login error. Activated test customer account.");
-        handleCustomerLoginSuccess({
-            id: "FB_SIM_" + Date.now(),
-            name: "Test Customer (Facebook)",
-            email: "customer@lokalex.com",
-            picture: { data: { url: "https://ui-avatars.com/api/?name=Customer&background=1877F2&color=fff" } }
+            if (window.recaptchaVerifier) {
+                window.recaptchaVerifier.render().then(widgetId => {
+                    if (window.grecaptcha) grecaptcha.reset(widgetId);
+                });
+            }
         });
+}
+
+export function verifyCustomerPhoneOTP() {
+    const codeInput = document.getElementById('cust-otp-code')?.value.trim();
+    if (!codeInput || codeInput.length < 6) {
+        return showToast("⚠️ Paki-lagay ang 6-digit OTP code!");
+    }
+
+    if (!confirmationResultObj) {
+        return showToast("⚠️ Session expired. Paki-resend ng OTP code.");
+    }
+
+    const verifyBtn = document.getElementById('verify-otp-btn');
+    if (verifyBtn) {
+        verifyBtn.disabled = true;
+        verifyBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Verifying...`;
+    }
+
+    const custName = document.getElementById('cust-phone-name')?.value.trim() || "Customer";
+
+    confirmationResultObj.confirm(codeInput)
+        .then((result) => {
+            const user = result.user;
+            handleCustomerPhoneLoginSuccess(user, custName);
+        })
+        .catch((error) => {
+            console.error("Error verifying OTP:", error);
+            showToast("❌ Mali ang OTP code. Paki-subukan muli.");
+            if (verifyBtn) {
+                verifyBtn.disabled = false;
+                verifyBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> VERIFY & LOGIN`;
+            }
+        });
+}
+
+export function resetPhoneAuthStep() {
+    confirmationResultObj = null;
+    document.getElementById('phone-auth-step-2')?.classList.add('hidden');
+    document.getElementById('phone-auth-step-1')?.classList.remove('hidden');
+    const sendBtn = document.getElementById('send-otp-btn');
+    if (sendBtn) {
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> SEND OTP CODE`;
     }
 }
 
-function handleCustomerLoginSuccess(userInfo) {
-    const fbName = userInfo.name || "Facebook Customer";
-    const fbEmail = userInfo.email || "No email shared";
-    const fbId = userInfo.id || "";
+function handleCustomerPhoneLoginSuccess(user, custName) {
+    const uid = user.uid || `PHONE_${Date.now()}`;
+    const phone = user.phoneNumber || "";
+    const displayName = custName || "Customer (" + phone.slice(-4) + ")";
+    const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0084FF&color=fff`;
 
-    if (isUserBlocked(fbId) || isUserBlocked(fbName)) {
+    if (isUserBlocked(uid) || isUserBlocked(displayName) || isUserBlocked(phone)) {
         showToast(`🚫 Account Blocked! Contact Lokalex Admin.`);
         return;
     }
 
-    const avatarUrl = userInfo.picture?.data?.url || `https://ui-avatars.com/api/?name=${encodeURIComponent(fbName)}&background=0084FF&color=fff`;
-
     const customerRecord = {
         type: "customer_account",
-        facebookId: fbId,
-        name: fbName,
-        email: fbEmail,
+        uid: uid,
+        phoneNumber: phone,
+        name: displayName,
         avatarUrl: avatarUrl,
         registeredAt: Date.now()
     };
 
-    localStorage.setItem('lokalex_customer_fb_id', fbId);
-    localStorage.setItem('lokalex_customer_name', fbName);
-    localStorage.setItem('lokalex_customer_email', fbEmail);
+    localStorage.setItem('lokalex_customer_fb_id', uid);
+    localStorage.setItem('lokalex_customer_name', displayName);
+    localStorage.setItem('lokalex_customer_email', phone);
     localStorage.setItem('lokalex_customer_avatar', avatarUrl);
 
-    appState.customerFacebookId = fbId;
-    appState.customerName = fbName;
+    appState.customerFacebookId = uid;
+    appState.customerName = displayName;
 
-    if (db && fbId) {
-        db.ref(`customers/${fbId}`).set(customerRecord);
+    if (db && uid) {
+        db.ref(`customers/${uid}`).set(customerRecord);
     }
 
-    const profileCard = document.getElementById('customer-profile-card');
-    const avatarImg = document.getElementById('cust-fb-avatar');
-    const nameEl = document.getElementById('cust-fb-name');
-    const emailEl = document.getElementById('cust-fb-email');
+    const avatarImg = document.getElementById('cust-landing-avatar');
+    const nameEl = document.getElementById('cust-landing-name');
+    const emailEl = document.getElementById('cust-landing-email');
 
     if (avatarImg) avatarImg.src = avatarUrl;
-    if (nameEl) nameEl.innerText = fbName;
-    if (emailEl) emailEl.innerText = fbEmail;
-    if (profileCard) profileCard.classList.remove('hidden');
+    if (nameEl) nameEl.innerText = displayName;
+    if (emailEl) emailEl.innerText = phone;
 
-    showToast(`✅ Welcome, ${fbName}!`);
-    
-    // Switch to Customer Landing Page
+    showToast(`✅ Welcome, ${displayName}!`);
+
+    if (typeof listenToCustomerRiderChat === 'function') {
+        listenToCustomerRiderChat();
+    }
+
     if (window.switchView) {
         window.switchView('view-customer-home');
     }
@@ -434,7 +492,9 @@ if (appState.telegramId) {
 
 if (typeof window !== 'undefined') {
     window.switchLoginPortalTab = switchLoginPortalTab;
-    window.registerCustomerViaFacebook = registerCustomerViaFacebook;
+    window.sendCustomerPhoneOTP = sendCustomerPhoneOTP;
+    window.verifyCustomerPhoneOTP = verifyCustomerPhoneOTP;
+    window.resetPhoneAuthStep = resetPhoneAuthStep;
     window.processLogin = processLogin;
     window.logout = logout;
     window.openAdminBlockModal = openAdminBlockModal;

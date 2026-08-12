@@ -24,22 +24,8 @@
     
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBVAwn0UnyHJ926oHeK0k789ncADMzmX80&libraries=places"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
-
-    <!-- INLINE FACEBOOK SDK INITIALIZATION -->
-    <script>
-    window.fbAsyncInit = function() {
-        if (typeof FB !== 'undefined') {
-            FB.init({
-                appId: '3509728395866188', // Updated App ID
-                cookie: true,
-                xfbml: true,
-                version: 'v19.0'
-            });
-        }
-    };
-</script>
-    <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
 
     <style>
         ::-webkit-scrollbar { width: 0px; background: transparent; }
@@ -68,40 +54,136 @@
         </div>
     </div>
 
-    <!-- FIRST IN LINE ALARM CONFIRMATION MODAL -->
-    <div id="first-line-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-emerald-500/80 p-6 rounded-3xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-4 animate-bounce">
-            <div class="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-3xl">
-                <i class="fa-solid fa-bell animate-pulse"></i>
+    <!-- IMAGE VIEWER MODAL (PINCH ZOOM, DOWNLOAD, DIRECT EDIT, BOTTOM SLIDER) -->
+    <div id="image-viewer-modal" class="hidden fixed inset-0 bg-black/95 backdrop-blur-md z-[999999] flex flex-col justify-between p-3 select-none">
+        <!-- Header Toolbar -->
+        <div class="flex justify-between items-center bg-cardBg/90 border border-gray-800 p-2.5 rounded-2xl shadow-xl z-10">
+            <div class="flex items-center gap-1.5">
+                <button onclick="window.zoomViewerImage && window.zoomViewerImage(0.25)" class="bg-gray-800 hover:bg-gray-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition" title="Zoom In">
+                    <i class="fa-solid fa-magnifying-glass-plus"></i>
+                </button>
+                <button onclick="window.zoomViewerImage && window.zoomViewerImage(-0.25)" class="bg-gray-800 hover:bg-gray-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition" title="Zoom Out">
+                    <i class="fa-solid fa-magnifying-glass-minus"></i>
+                </button>
+                <button onclick="window.resetViewerZoom && window.resetViewerZoom()" class="bg-gray-800 hover:bg-gray-700 text-cyan-400 font-bold px-2.5 py-1.5 rounded-xl text-xs active:scale-95 transition" title="Reset Zoom">
+                    1:1
+                </button>
             </div>
-            <div>
-                <h3 class="font-black text-xl text-emerald-400 uppercase tracking-wide">IKAW NA ANG SUNOD!</h3>
-                <p class="text-xs text-gray-200 mt-1 leading-relaxed">
-                    Nasa <strong>#1 Position</strong> ka na sa Roster Queue. Maghanda para sa susunod na order!
-                </p>
+
+            <div class="flex items-center gap-2">
+                <a id="viewer-download-btn" href="#" download="lokalex_photo.jpg" target="_blank" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition flex items-center gap-1">
+                    <i class="fa-solid fa-download"></i> Download
+                </a>
+                <button onclick="window.editViewerImage && window.editViewerImage()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition flex items-center gap-1">
+                    <i class="fa-solid fa-pen-to-square"></i> Edit
+                </button>
+                <button onclick="window.closeImageViewerModal && window.closeImageViewerModal()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white p-2 rounded-xl text-xs active:scale-95 transition">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
             </div>
-            <button onclick="window.confirmFirstInLineAlarm && window.confirmFirstInLineAlarm()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl text-sm shadow-xl transition active:scale-95 flex items-center justify-center gap-2">
-                <i class="fa-solid fa-check-circle text-lg"></i> STOP ALARM & CONFIRM
-            </button>
+        </div>
+
+        <!-- Zoomable Image Viewport with Pinch Gesture Support -->
+        <div id="viewer-image-viewport" class="flex-1 w-full h-full flex items-center justify-center overflow-hidden my-2 relative touch-none">
+            <img id="viewer-image" src="" class="max-w-full max-h-full object-contain rounded-xl transition-transform duration-75 origin-center shadow-2xl">
+        </div>
+
+        <!-- Bottom Zoom Slider Bar -->
+        <div class="bg-cardBg/90 border border-gray-800 p-2.5 rounded-2xl shadow-xl flex items-center gap-3 z-10">
+            <i class="fa-solid fa-magnifying-glass-minus text-gray-400 text-xs"></i>
+            <input type="range" id="viewer-zoom-slider" min="50" max="400" value="100" oninput="window.setViewerZoom && window.setViewerZoom(this.value / 100)" class="w-full accent-cyan-500 cursor-pointer h-1.5 rounded-lg bg-gray-700">
+            <i class="fa-solid fa-magnifying-glass-plus text-gray-400 text-xs"></i>
+            <span id="viewer-zoom-val" class="text-xs font-mono font-bold text-cyan-400 shrink-0 w-10 text-right">100%</span>
         </div>
     </div>
 
-    <!-- SWAP APPROVAL MODAL -->
-    <div id="swap-approval-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-purple-500/80 p-6 rounded-3xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-4 animate-bounce">
-            <div class="w-14 h-14 bg-purple-500/20 text-purple-400 rounded-full flex items-center justify-center mx-auto text-2xl">
-                <i class="fa-solid fa-arrows-rotate animate-spin"></i>
+    <!-- PHOTO CANVAS EDITOR MODAL -->
+    <div id="image-editor-modal" class="hidden fixed inset-0 bg-black/90 backdrop-blur-md z-[99999] flex items-center justify-center p-3">
+        <div class="bg-cardBg border border-gray-800 p-4 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3 max-h-[92vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+                <h3 class="font-bold text-sm text-blue-400 flex items-center gap-2">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Edit & Annotate Photo
+                </h3>
+                <button onclick="window.closeImageEditorModal && window.closeImageEditorModal()" class="text-gray-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div>
-                <h3 class="font-black text-base text-purple-300 uppercase tracking-wide">Customer Swap Request</h3>
-                <p id="swap-approval-msg" class="text-xs text-gray-200 mt-2 leading-relaxed"></p>
+
+            <div class="relative w-full flex justify-center bg-black/60 rounded-2xl border border-gray-800 p-2 overflow-hidden">
+                <canvas id="photo-canvas" class="max-w-full max-h-[45vh] rounded-xl cursor-crosshair touch-none"></canvas>
             </div>
+
+            <!-- CANVAS CONTROLS -->
+            <div class="flex flex-col gap-3 bg-black/40 p-3 rounded-2xl border border-gray-800 text-xs">
+                <!-- Top Row: Color Swatches + Brush Toggle + Aa Button + Clear Button -->
+                <div class="flex items-center justify-between gap-2">
+                    <!-- Color Swatches (Red, Black, White) -->
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] text-gray-400 font-bold uppercase shrink-0">Color:</span>
+                        <div class="flex items-center gap-2">
+                            <button onclick="window.setEditorColor && window.setEditorColor('#ef4444')" id="color-btn-red" class="w-7 h-7 rounded-full border-2 border-black ring-2 ring-blue-500 transition active:scale-95 shadow" title="Red"></button>
+                            <button onclick="window.setEditorColor && window.setEditorColor('#000000')" id="color-btn-black" class="w-7 h-7 rounded-full border-2 border-white transition active:scale-95 shadow" title="Black"></button>
+                            <button onclick="window.setEditorColor && window.setEditorColor('#ffffff')" id="color-btn-white" class="w-7 h-7 rounded-full border-2 border-black transition active:scale-95 shadow" title="White"></button>
+                        </div>
+                    </div>
+
+                    <!-- Futuristic Brush Size Cycle Button -->
+                    <div class="flex items-center gap-1">
+                        <span class="text-[10px] text-gray-400 font-bold uppercase shrink-0">Brush:</span>
+                        <button id="editor-brush-cycle-btn" onclick="window.cycleBrushSize && window.cycleBrushSize()" class="w-10 h-10 rounded-2xl bg-darkBg/80 border border-cyan-500/50 hover:border-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.2)] flex items-center justify-center transition active:scale-90 relative" title="Click to change brush size">
+                            <span id="brush-size-dot" class="rounded-full bg-red-500 border border-black shadow transition-all duration-200" style="width: 6px; height: 6px;"></span>
+                            <span id="brush-size-label" class="absolute -bottom-1 text-[8px] font-black font-mono text-cyan-400 uppercase">S</span>
+                        </button>
+                    </div>
+
+                    <!-- Direct Text & Clear Buttons -->
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="window.addEditorTextOverlay && window.addEditorTextOverlay()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3 py-2 rounded-xl transition active:scale-95 flex items-center gap-1 shadow" title="Add Text to Image">
+                            <i class="fa-solid fa-font"></i> Aa
+                        </button>
+                        <button onclick="window.clearEditorDrawings && window.clearEditorDrawings()" class="bg-gray-800 hover:bg-gray-700 text-red-400 font-bold text-xs px-3 py-2 rounded-xl transition active:scale-95" title="Clear All Edits">
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- CONTEXTUAL SELECTED TEXT CONTROLS (Appears only when text is selected) -->
+                <div id="editor-text-controls" class="hidden flex flex-col gap-2 pt-2 border-t border-cyan-500/30 bg-cyan-950/20 p-2.5 rounded-xl border">
+                    <div class="flex justify-between items-center text-[10px] font-bold text-cyan-400 uppercase tracking-wider">
+                        <span><i class="fa-solid fa-font"></i> Selected Text Controls</span>
+                        <button onclick="window.deleteSelectedTextOverlay && window.deleteSelectedTextOverlay()" class="bg-red-600/30 hover:bg-red-600 text-red-300 border border-red-500/50 px-2 py-0.5 rounded text-[10px] font-bold transition active:scale-95 flex items-center gap-1">
+                            <i class="fa-solid fa-trash"></i> Delete
+                        </button>
+                    </div>
+
+                    <!-- Text Size Slider -->
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-gray-300 font-bold uppercase shrink-0 w-12">Size:</label>
+                        <input type="range" id="editor-text-size-slider" min="12" max="120" value="24" oninput="window.updateSelectedTextFontSize && window.updateSelectedTextFontSize(this.value)" class="w-full accent-cyan-500 cursor-pointer h-1.5 rounded-lg bg-gray-700">
+                        <span id="editor-text-size-val" class="text-[10px] font-mono font-bold text-cyan-300 shrink-0 w-8 text-right">24px</span>
+                    </div>
+
+                    <!-- Text Rotation Slider -->
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-gray-300 font-bold uppercase shrink-0 w-12">Rotate:</label>
+                        <input type="range" id="editor-text-rotate-slider" min="-180" max="180" value="0" oninput="window.updateSelectedTextRotation && window.updateSelectedTextRotation(this.value)" class="w-full accent-cyan-500 cursor-pointer h-1.5 rounded-lg bg-gray-700">
+                        <span id="editor-text-rotate-val" class="text-[10px] font-mono font-bold text-cyan-300 shrink-0 w-8 text-right">0°</span>
+                    </div>
+                </div>
+
+                <!-- Lighting Adjustment Slider -->
+                <div class="flex items-center gap-2 pt-1 border-t border-gray-800/80">
+                    <label class="text-[10px] text-gray-400 font-bold uppercase shrink-0 flex items-center gap-1">
+                        <i class="fa-solid fa-sun text-yellow-400"></i> Lighting:
+                    </label>
+                    <input type="range" id="editor-brightness" min="50" max="150" value="100" oninput="window.renderEditorCanvas && window.renderEditorCanvas()" class="w-full accent-yellow-500 cursor-pointer h-1.5 rounded-lg bg-gray-700">
+                </div>
+            </div>
+
             <div class="flex gap-2">
-                <button id="swap-decline-btn" onclick="window.declineSwapRequest && window.declineSwapRequest()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-red-400 font-bold py-3 rounded-xl text-xs transition active:scale-95">
-                    Decline
+                <button onclick="window.closeImageEditorModal && window.closeImageEditorModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 rounded-xl text-xs transition active:scale-95">
+                    Cancel
                 </button>
-                <button id="swap-accept-btn" onclick="window.acceptSwapRequest && window.acceptSwapRequest()" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95">
-                    Accept Swap
+                <button onclick="window.exportAndSendEditedImage && window.exportAndSendEditedImage()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-paper-plane"></i> Send Photo
                 </button>
             </div>
         </div>
@@ -109,25 +191,55 @@
 
     <!-- RIDER-TO-CUSTOMER DIRECT CHAT MODAL -->
     <div id="rider-customer-chat-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-3">
-        <div class="bg-cardBg border border-blue-500/60 p-4 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 h-[80vh] max-h-[600px] overflow-hidden">
-            <div class="flex justify-between items-center border-b border-gray-800 pb-2 shrink-0">
-                <div class="flex items-center gap-2">
-                    <img id="rider-chat-cust-avatar" src="" class="w-8 h-8 rounded-full border border-blue-500 object-cover">
-                    <div>
-                        <h3 id="rider-chat-cust-name" class="font-bold text-xs text-white">Customer Chat</h3>
-                        <span class="text-[9px] text-emerald-400 font-mono">Real-time Connected</span>
+        <div class="bg-cardBg border border-blue-500/60 p-4 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-2.5 h-[85vh] max-h-[640px] overflow-hidden">
+            <!-- HEADER & LOCK BANNER -->
+            <div class="flex flex-col gap-1 border-b border-gray-800 pb-2 shrink-0">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-2">
+                        <img id="rider-chat-cust-avatar" src="" class="w-8 h-8 rounded-full border border-blue-500 object-cover">
+                        <div>
+                            <h3 id="rider-chat-cust-name" class="font-bold text-xs text-white">Customer Chat</h3>
+                            <span class="text-[9px] text-emerald-400 font-mono">Real-time Connected</span>
+                        </div>
                     </div>
+                    <button onclick="window.closeRiderCustomerChatModal && window.closeRiderCustomerChatModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
                 </div>
-                <button onclick="window.closeRiderCustomerChatModal && window.closeRiderCustomerChatModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+                <div id="rider-chat-lock-banner" class="hidden text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/30 p-1.5 rounded-lg text-center font-bold"></div>
             </div>
 
+            <!-- RIDER ACTION TOOLBAR -->
+            <div id="rider-chat-action-toolbar" class="grid grid-cols-4 gap-1 shrink-0 bg-black/30 p-1.5 rounded-xl border border-gray-800">
+                <button onclick="window.caterCustomerThread && window.caterCustomerThread()" class="bg-purple-600/30 hover:bg-purple-600 text-purple-300 border border-purple-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Lock customer thread to you">
+                    <i class="fa-solid fa-lock"></i> Cater
+                </button>
+                <button onclick="window.markThreadFollowUp && window.markThreadFollowUp()" class="bg-amber-600/30 hover:bg-amber-600 text-amber-300 border border-amber-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move to Follow Up section">
+                    <i class="fa-solid fa-bookmark"></i> Follow Up
+                </button>
+                <button onclick="window.markThreadDone && window.markThreadDone()" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move to Done section">
+                    <i class="fa-solid fa-circle-check"></i> Done
+                </button>
+                <button onclick="window.cancelCustomerThread && window.cancelCustomerThread()" class="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700/50 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Cancel & release thread">
+                    <i class="fa-solid fa-ban"></i> Cancel
+                </button>
+            </div>
+
+            <!-- MESSAGES CONTAINER -->
             <div id="rider-cust-chat-messages" class="flex-1 overflow-y-auto flex flex-col gap-2 p-2 text-xs min-h-0 bg-black/30 rounded-2xl border border-gray-800">
                 <div class="text-center text-gray-500 italic py-10">Loading chat history...</div>
             </div>
 
-            <div class="flex gap-2 items-center shrink-0 pt-1">
-                <input type="text" id="rider-cust-chat-input" onkeydown="if(event.key==='Enter') window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" placeholder="Type reply to customer..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 text-white">
-                <button onclick="window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95">
+            <!-- INPUT AREA WITH PHOTO & LOCATION -->
+            <div class="flex gap-1.5 items-center shrink-0 pt-1">
+                <input type="file" id="rider-chat-file-input" accept="image/*" class="hidden" onchange="if(this.files[0]) { window.openImageEditorModal && window.openImageEditorModal(this.files[0], 'rider'); this.value = ''; }">
+                <button onclick="document.getElementById('rider-chat-file-input').click()" class="bg-gray-800 hover:bg-gray-700 text-blue-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Attach & Edit Photo">
+                    <i class="fa-solid fa-image"></i>
+                </button>
+                <button onclick="window.sendRiderLocation && window.sendRiderLocation()" class="bg-gray-800 hover:bg-gray-700 text-emerald-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Send GPS Location">
+                    <i class="fa-solid fa-location-dot"></i>
+                </button>
+
+                <input type="text" id="rider-cust-chat-input" name="rider_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" onkeydown="if(event.key==='Enter') window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" placeholder="Type reply..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 text-white">
+                <button id="rider-cust-send-btn" onclick="window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0">
                     <i class="fa-solid fa-paper-plane"></i>
                 </button>
             </div>
@@ -220,7 +332,7 @@
                     <option value="" disabled selected>-- Select Rider / User --</option>
                 </select>
 
-                <input type="text" id="block-reason-input" placeholder="Reason for blocking" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none">
+                <input type="text" id="block-reason-input" name="block_reason_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Reason for blocking" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none">
                 <button onclick="window.submitBlockUser && window.submitBlockUser()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
                     🚫 Block Account
                 </button>
@@ -231,61 +343,6 @@
 
             <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
                 Close
-            </button>
-        </div>
-    </div>
-
-    <!-- ADMIN DATE PENALTY MODAL -->
-    <div id="admin-penalty-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-red-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3">
-            <div class="flex justify-between items-center border-b border-gray-800 pb-2">
-                <div class="flex items-center gap-2">
-                    <i class="fa-solid fa-gavel text-red-400 text-lg"></i>
-                    <h3 class="font-bold text-sm text-white">Specific-Date Commission Penalty</h3>
-                </div>
-                <button onclick="window.closeAdminPenaltyModal && window.closeAdminPenaltyModal()" class="text-gray-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-
-            <div class="flex flex-col gap-2 text-xs">
-                <label class="text-[10px] text-gray-400 font-bold">Select Rider</label>
-                <select id="penalty-rider-select" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold"></select>
-
-                <label class="text-[10px] text-gray-400 font-bold">Select Date</label>
-                <input type="date" id="penalty-date-input" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white">
-
-                <label class="text-[10px] text-gray-400 font-bold">Extra Company Pay Percentage (+%)</label>
-                <input type="number" id="penalty-rate-input" placeholder="10" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold">
-
-                <label class="text-[10px] text-gray-400 font-bold">Reason / Notes</label>
-                <input type="text" id="penalty-reason-input" placeholder="e.g. Late shift penalty" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none">
-
-                <button onclick="window.submitAdminPenalty && window.submitAdminPenalty()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95 shadow-lg mt-2">
-                    ⚖️ Apply Date Penalty
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- SWAP CUSTOMER MODAL -->
-    <div id="swap-customer-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
-        <div class="bg-cardBg border border-purple-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
-            <div class="flex justify-between items-center border-b border-gray-800 pb-2.5">
-                <div class="flex items-center gap-2">
-                    <div class="w-8 h-8 rounded-xl bg-purple-600/30 text-purple-300 flex items-center justify-center text-sm font-bold border border-purple-500/40">
-                        <i class="fa-solid fa-arrows-rotate"></i>
-                    </div>
-                    <div>
-                        <h3 class="font-bold text-sm text-white">Swap / Transfer Customer</h3>
-                        <p id="swap-modal-source-label" class="text-[10px] text-purple-300 font-mono"></p>
-                    </div>
-                </div>
-                <button onclick="window.closeSwapCustomerModal && window.closeSwapCustomerModal()" class="text-gray-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-
-            <div id="swap-riders-accordion-list" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 min-h-0"></div>
-
-            <button onclick="window.closeSwapCustomerModal && window.closeSwapCustomerModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 mt-1">
-                Cancel
             </button>
         </div>
     </div>
@@ -309,7 +366,7 @@
 
     <main class="flex-1 max-w-md w-full mx-auto flex flex-col relative pb-20">
 
-        <!-- LOGIN SCREEN (CUSTOMER PORTAL FOCUS) -->
+        <!-- LOGIN SCREEN (CUSTOMER PHONE AUTH FOCUS) -->
         <section id="view-login" class="hidden flex-1 flex flex-col justify-center p-6 gap-4">
             <div class="text-center mb-1">
                 <i class="fa-solid fa-bag-shopping text-5xl text-blue-500 mb-3"></i>
@@ -317,18 +374,35 @@
                 <p class="text-xs text-gray-400 mt-1">Delivery & Live Tracking Portal</p>
             </div>
 
-            <!-- MAIN CUSTOMER FORM -->
+            <!-- MAIN CUSTOMER PHONE AUTH FORM -->
             <div id="portal-form-customer" class="bg-cardBg p-6 rounded-3xl border border-gray-800 shadow-xl flex flex-col gap-4 text-center">
                 <div class="text-xs text-blue-400 font-bold uppercase tracking-wider">
-                    <i class="fa-brands fa-facebook text-base mr-1"></i> Customer Registration & Login
+                    <i class="fa-solid fa-mobile-screen text-base mr-1"></i> Customer Login / Register
                 </div>
                 <p class="text-xs text-gray-300 leading-relaxed">
-                    Mabilis at secure na mag-login o mag-register gamit ang iyong Facebook Account para sa live order tracking at delivery updates.
+                    I-enter ang iyong Mobile Number para makatanggap ng Verification Code (OTP) via SMS.
                 </p>
 
-                <button onclick="window.registerCustomerViaFacebook && window.registerCustomerViaFacebook()" class="w-full bg-[#1877F2] hover:bg-[#166FE5] text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-sm">
-                    <i class="fa-brands fa-facebook-f text-lg"></i> Continue with Facebook
-                </button>
+                <div id="phone-auth-step-1" class="flex flex-col gap-3">
+                    <input type="text" id="cust-phone-name" name="cust_phone_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Pangalan (Full Name)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white font-bold">
+                    <input type="tel" id="cust-phone-num" name="cust_phone_num_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="09123456789" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white font-bold font-mono">
+                    <button id="send-otp-btn" onclick="window.sendCustomerPhoneOTP && window.sendCustomerPhoneOTP()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs">
+                        <i class="fa-solid fa-paper-plane"></i> SEND OTP CODE
+                    </button>
+                </div>
+
+                <div id="phone-auth-step-2" class="hidden flex flex-col gap-3 border-t border-gray-800 pt-3">
+                    <label class="text-[10px] text-emerald-400 font-bold uppercase">Enter 6-Digit SMS Code</label>
+                    <input type="text" id="cust-otp-code" name="cust_otp_code_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="123456" maxlength="6" class="w-full bg-inputBg text-center tracking-widest text-lg font-black rounded-xl p-3 border border-emerald-500/50 outline-none text-white font-mono">
+                    <button id="verify-otp-btn" onclick="window.verifyCustomerPhoneOTP && window.verifyCustomerPhoneOTP()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs">
+                        <i class="fa-solid fa-check-double"></i> VERIFY & LOGIN
+                    </button>
+                    <button onclick="window.resetPhoneAuthStep && window.resetPhoneAuthStep()" class="text-[10px] text-gray-400 hover:underline">
+                        ← Change Phone Number
+                    </button>
+                </div>
+
+                <div id="recaptcha-container" class="mx-auto"></div>
 
                 <div id="customer-profile-card" class="hidden bg-black/40 border border-gray-800 p-3.5 rounded-xl flex items-center gap-3 text-left mt-1">
                     <img id="cust-fb-avatar" src="" class="w-11 h-11 rounded-full object-cover border border-blue-500 shadow-sm shrink-0">
@@ -355,7 +429,7 @@
                 </div>
                 <div class="relative mt-1">
                     <i class="fa-solid fa-key absolute left-3 top-3.5 text-gray-400"></i>
-                    <input type="text" id="login-id" placeholder="Enter Rider Login ID" class="w-full bg-inputBg text-sm rounded-xl pl-10 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
+                    <input type="text" id="login-id" name="rider_login_id_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Enter Rider Login ID" class="w-full bg-inputBg text-sm rounded-xl pl-10 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
                 </div>
                 <button id="login-btn" onclick="window.processLogin && window.processLogin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95">
                     LOGIN & MARK AVAILABLE
@@ -370,7 +444,7 @@
                     <img id="cust-landing-avatar" src="https://ui-avatars.com/api/?name=Customer&background=1877F2&color=fff" class="w-12 h-12 rounded-full object-cover border-2 border-blue-500 shadow">
                     <div class="min-w-0">
                         <div id="cust-landing-name" class="font-bold text-sm text-white truncate">Customer Account</div>
-                        <div id="cust-landing-email" class="text-[11px] text-gray-400 truncate">Facebook Connected</div>
+                        <div id="cust-landing-email" class="text-[11px] text-gray-400 truncate">Phone Verified</div>
                     </div>
                 </div>
                 <button onclick="window.logout && window.logout()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold px-3 py-2 rounded-xl transition active:scale-95 shrink-0">
@@ -378,7 +452,7 @@
                 </button>
             </div>
 
-            <!-- REAL-TIME CHAT WITH RIDERS PANEL -->
+            <!-- CUSTOMER CHAT PANEL -->
             <div class="bg-cardBg border border-gray-800 rounded-3xl p-4 flex flex-col gap-3 shadow-xl flex-1 min-h-[360px]">
                 <div class="flex justify-between items-center border-b border-gray-800 pb-2">
                     <div class="flex items-center gap-2">
@@ -395,10 +469,18 @@
                     <div class="text-center text-gray-500 italic py-10">Pumili o mag-type ng mensahe para sa mga riders...</div>
                 </div>
 
-                <!-- INPUT AREA -->
-                <div class="flex gap-2 items-center pt-1">
-                    <input type="text" id="cust-rider-chat-input" onkeydown="if(event.key==='Enter') window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" placeholder="Mag-type ng mensahe para sa rider..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-3 outline-none border border-gray-700 focus:border-blue-500 text-white">
-                    <button onclick="window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 rounded-xl text-xs font-bold shadow-md transition active:scale-95 shrink-0">
+                <!-- INPUT AREA WITH PHOTO & LOCATION -->
+                <div class="flex gap-1.5 items-center pt-1">
+                    <input type="file" id="cust-chat-file-input" accept="image/*" class="hidden" onchange="if(this.files[0]) { window.openImageEditorModal && window.openImageEditorModal(this.files[0], 'customer'); this.value = ''; }">
+                    <button onclick="document.getElementById('cust-chat-file-input').click()" class="bg-gray-800 hover:bg-gray-700 text-blue-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Attach & Edit Photo">
+                        <i class="fa-solid fa-image"></i>
+                    </button>
+                    <button onclick="window.sendCustomerLocation && window.sendCustomerLocation()" class="bg-gray-800 hover:bg-gray-700 text-emerald-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Send GPS Location">
+                        <i class="fa-solid fa-location-dot"></i>
+                    </button>
+
+                    <input type="text" id="cust-rider-chat-input" name="cust_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" onkeydown="if(event.key==='Enter') window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" placeholder="Mag-type ng mensahe..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white">
+                    <button onclick="window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold shadow-md transition active:scale-95 shrink-0">
                         <i class="fa-solid fa-paper-plane"></i>
                     </button>
                 </div>
@@ -468,11 +550,19 @@
                 </div>
             </div>
 
-            <!-- RIDER LIVE CUSTOMER CHATS PANEL -->
+            <!-- RIDER LIVE CUSTOMER CHATS PANEL WITH INBOX / FOLLOW-UP / DONE FILTERS -->
             <div class="bg-cardBg border border-gray-800 rounded-2xl flex flex-col overflow-hidden shadow-md">
-                <div class="bg-gray-800/50 p-3 text-xs font-bold text-gray-300 flex justify-between items-center">
-                    <span><i class="fa-solid fa-comments text-blue-400 mr-1.5"></i> Customer Live Chats</span>
-                    <span class="text-[10px] text-gray-400" id="rider-cust-chats-badge">0 threads</span>
+                <div class="bg-gray-800/50 p-2.5 text-xs font-bold text-gray-300 flex flex-col gap-2">
+                    <div class="flex justify-between items-center">
+                        <span><i class="fa-solid fa-comments text-blue-400 mr-1.5"></i> Customer Live Chats</span>
+                        <span class="text-[10px] text-gray-400" id="rider-cust-chats-badge">0 threads</span>
+                    </div>
+                    <!-- FILTER MODE TABS -->
+                    <div class="flex bg-black/40 p-1 rounded-xl border border-gray-800 text-center gap-1">
+                        <button id="rider-chat-tab-inbox" onclick="window.setRiderChatFilter && window.setRiderChatFilter('inbox')" class="flex-1 py-1 rounded-lg bg-blue-600 text-white font-bold text-[10px] transition shadow">Inbox</button>
+                        <button id="rider-chat-tab-followup" onclick="window.setRiderChatFilter && window.setRiderChatFilter('followup')" class="flex-1 py-1 rounded-lg text-gray-400 font-bold text-[10px] hover:text-white transition">Follow Up</button>
+                        <button id="rider-chat-tab-done" onclick="window.setRiderChatFilter && window.setRiderChatFilter('done')" class="flex-1 py-1 rounded-lg text-gray-400 font-bold text-[10px] hover:text-white transition">Done</button>
+                    </div>
                 </div>
                 <div id="rider-cust-chats-feed" class="p-3 flex flex-col gap-2 text-xs max-h-48 overflow-y-auto">
                     <div class="text-gray-500 italic text-center py-4">No active customer messages yet.</div>
@@ -618,8 +708,8 @@
                     <label for="manual-client-toggle" class="text-xs text-gray-300">Type client name manually</label>
                 </div>
 
-                <input type="text" id="rcpt-name" placeholder="Customer / Store Name (Required)" class="w-full bg-inputBg text-sm rounded-lg p-2.5 mt-1 outline-none border border-gray-700">
-                <input type="text" id="rcpt-contact" placeholder="Contact Number / Address" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 mt-2">
+                <input type="text" id="rcpt-name" name="rcpt_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Customer / Store Name (Required)" class="w-full bg-inputBg text-sm rounded-lg p-2.5 mt-1 outline-none border border-gray-700">
+                <input type="text" id="rcpt-contact" name="rcpt_contact_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Contact Number / Address" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 mt-2">
             </div>
 
             <div class="text-xs text-gray-400 mt-2 uppercase tracking-wider font-bold">Auto-Calculated Fees (Editable)</div>
@@ -693,7 +783,6 @@
 
         <!-- COMMISSION VIEW -->
         <section id="view-commission" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
-            
             <div class="bg-cardBg p-3 rounded-xl border border-gray-800 flex flex-col gap-3 shadow-md">
                 <div id="admin-commission-filter-box" class="hidden flex-col gap-1 border-b border-gray-800 pb-3">
                     <span class="text-[10px] text-amber-400 font-bold uppercase tracking-wider"><i class="fa-solid fa-user-shield"></i> Admin View: Select Rider</span>
@@ -744,7 +833,7 @@
             <div class="flex gap-2 mb-4 pr-6">
                 <div class="relative flex-1">
                     <i class="fa-solid fa-search absolute left-3 top-3.5 text-gray-400 text-sm"></i>
-                    <input type="text" id="search-input" oninput="window.filterDirectoryRecords && window.filterDirectoryRecords()" placeholder="Search records..." class="w-full bg-inputBg text-sm rounded-xl pl-9 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
+                    <input type="text" id="search-input" name="search_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" oninput="window.filterDirectoryRecords && window.filterDirectoryRecords()" placeholder="Search records..." class="w-full bg-inputBg text-sm rounded-xl pl-9 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
                 </div>
                 <button onclick="window.syncData && window.syncData()" class="bg-cardBg hover:bg-inputBg px-4 rounded-xl border border-gray-800 text-gray-300 transition active:scale-90" title="Refresh">
                     <i class="fa-solid fa-rotate"></i>
@@ -768,14 +857,14 @@
             </div>
             <div class="flex flex-col gap-3">
                 <label class="text-xs text-gray-400 font-bold">Name / Store Name</label>
-                <input type="text" id="form-name" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+                <input type="text" id="form-name" name="form_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
                 <label class="text-xs text-gray-400 font-bold">Contact Number</label>
-                <input type="text" id="form-contact" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+                <input type="text" id="form-contact" name="form_contact_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
                 <label class="text-xs text-gray-400 font-bold">General Address</label>
-                <input type="text" id="form-address" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+                <input type="text" id="form-address" name="form_address_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
                 <label class="text-xs text-gray-400 font-bold">Map Link (Lat_Lon_Link)</label>
                 <div class="flex gap-2">
-                    <input type="text" id="form-latlon" placeholder="Paste link or get from Map" class="flex-1 bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+                    <input type="text" id="form-latlon" name="form_latlon_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Paste link or get from Map" class="flex-1 bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
                     <button onclick="window.openMapPicker && window.openMapPicker()" class="bg-blue-600 hover:bg-blue-500 px-4 rounded-xl text-white text-sm font-bold flex items-center gap-2 transition active:scale-95">
                         <i class="fa-solid fa-map-location-dot"></i> Map
                     </button>
@@ -823,10 +912,10 @@
             </p>
             <div class="flex flex-col gap-2 text-left">
                 <label class="text-[10px] text-gray-400 font-bold uppercase">GCash Account Name</label>
-                <input type="text" id="gcash-name-input" placeholder="e.g. JUAN DELA CRUZ" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold">
+                <input type="text" id="gcash-name-input" name="gcash_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="e.g. JUAN DELA CRUZ" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold">
                 
                 <label class="text-[10px] text-gray-400 font-bold uppercase mt-1">GCash Number</label>
-                <input type="text" id="gcash-no-input" placeholder="e.g. 09123456789" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold font-mono">
+                <input type="text" id="gcash-no-input" name="gcash_no_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="e.g. 09123456789" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold font-mono">
             </div>
             <div class="flex gap-2 mt-2">
                 <button onclick="window.closeGCashModal && window.closeGCashModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
@@ -852,7 +941,7 @@
 
                 <div>
                     <label class="text-[10px] text-gray-400 font-bold uppercase">Customer Name *</label>
-                    <input type="text" id="manual-comm-cust-input" placeholder="e.g. Juan Dela Cruz" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-emerald-500 text-white font-bold mt-1">
+                    <input type="text" id="manual-comm-cust-input" name="manual_cust_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="e.g. Juan Dela Cruz" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-emerald-500 text-white font-bold mt-1">
                 </div>
 
                 <div>
@@ -920,7 +1009,7 @@
             <h3 class="font-bold text-base text-center text-blue-400"><i class="fa-solid fa-user-tag"></i> New Map Calculation</h3>
             <div class="flex flex-col gap-1 text-left">
                 <label class="text-[10px] text-gray-400 font-bold">Customer Name</label>
-                <input type="text" id="mapcalc-cust-name-input" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
+                <input type="text" id="mapcalc-cust-name-input" name="mapcalc_cust_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
             </div>
             <div class="flex gap-2 mt-2">
                 <button onclick="window.closeMapCalcNameModal && window.closeMapCalcNameModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
@@ -949,7 +1038,7 @@
                 <div id="tag-suggestions" class="hidden absolute bottom-full left-0 right-0 bg-cardBg border border-gray-700 rounded-t-xl max-h-32 overflow-y-auto z-20 p-1 text-xs shadow-xl"></div>
                 
                 <div class="flex gap-2 items-center">
-                    <input type="text" id="bubble-chat-input" oninput="window.handleChatInput && window.handleChatInput(this)" onkeydown="if(event.key==='Enter') window.sendBubbleChatMessage && window.sendBubbleChatMessage()" placeholder="Type a message or @rider..." class="flex-1 bg-darkBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white">
+                    <input type="text" id="bubble-chat-input" name="bubble_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" oninput="window.handleChatInput && window.handleChatInput(this)" onkeydown="if(event.key==='Enter') window.sendBubbleChatMessage && window.sendBubbleChatMessage()" placeholder="Type a message or @rider..." class="flex-1 bg-darkBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white">
                     <button onclick="window.sendBubbleChatMessage && window.sendBubbleChatMessage()" class="bg-blue-600 hover:bg-blue-500 text-white w-9 h-9 rounded-xl flex items-center justify-center text-xs transition active:scale-90 shrink-0">
                         <i class="fa-solid fa-paper-plane"></i>
                     </button>
@@ -1008,10 +1097,10 @@
             </div>
 
             <div id="adv-tab-add-content" class="hidden flex flex-col gap-2 overflow-y-auto">
-                <input type="text" id="adv-cust-name" placeholder="Customer Name *" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
-                <input type="text" id="adv-receiver" placeholder="Receiver Name / Alternate" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
-                <input type="text" id="adv-address" placeholder="Delivery Address" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
-                <input type="text" id="adv-contact" placeholder="Contact Number" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
+                <input type="text" id="adv-cust-name" name="adv_cust_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Customer Name *" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
+                <input type="text" id="adv-receiver" name="adv_receiver_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Receiver Name / Alternate" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
+                <input type="text" id="adv-address" name="adv_address_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Delivery Address" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
+                <input type="text" id="adv-contact" name="adv_contact_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Contact Number" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700">
                 
                 <div class="grid grid-cols-2 gap-2">
                     <div class="flex flex-col gap-1">
@@ -1053,7 +1142,7 @@
             <h3 class="font-bold text-base text-center text-red-400"><i class="fa-solid fa-motorcycle"></i> Start Catering</h3>
             <div class="flex flex-col gap-1 text-left">
                 <label class="text-[10px] text-gray-400 font-bold">Customer Name</label>
-                <input type="text" id="catering-customer-name" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
+                <input type="text" id="catering-customer-name" name="cater_cust_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
             </div>
             <div class="flex gap-2 mt-2">
                 <button onclick="window.closeCateringModal && window.closeCateringModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
@@ -1068,7 +1157,7 @@
             <h3 class="font-bold text-base text-center text-yellow-400"><i class="fa-solid fa-user-shield"></i> Force Catering</h3>
             <div class="flex flex-col gap-1 text-left">
                 <label class="text-[10px] text-gray-400 font-bold">Customer Name</label>
-                <input type="text" id="admin-catering-customer-name" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
+                <input type="text" id="admin-catering-customer-name" name="admin_cater_cust_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
             </div>
 
             <div class="flex flex-col gap-2 border-t border-gray-800 pt-3 text-left">
@@ -1117,7 +1206,7 @@
             <div class="w-12 h-12 bg-amber-500/20 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-3"><i class="fa-solid fa-lock"></i></div>
             <h3 class="font-bold text-base mb-1">Protected Record</h3>
             <p class="text-xs text-gray-400 mb-4">Enter password to authorize editing.</p>
-            <input type="password" id="modal-pass" placeholder="Password" class="w-full bg-inputBg text-sm text-center rounded-xl p-3 mb-4 outline-none border border-gray-700">
+            <input type="password" id="modal-pass" name="modal_pass_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Password" class="w-full bg-inputBg text-sm text-center rounded-xl p-3 mb-4 outline-none border border-gray-700">
             <div class="flex gap-2">
                 <button onclick="window.closePasswordModal && window.closePasswordModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-3 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
                 <button onclick="window.verifyPassword && window.verifyPassword()" class="flex-1 bg-amber-500 hover:bg-amber-400 py-3 rounded-xl text-xs font-bold text-black transition active:scale-95">Verify</button>
@@ -1141,7 +1230,7 @@
             <h3 class="font-bold text-base text-center">Edit Item</h3>
             <div class="flex flex-col gap-1 text-left">
                 <label class="text-[10px] text-gray-400 font-bold">Item Name</label>
-                <input type="text" id="edit-name-input" class="w-full bg-inputBg text-sm rounded-xl p-2.5 outline-none border border-gray-700 focus:border-blue-500">
+                <input type="text" id="edit-name-input" name="edit_item_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" class="w-full bg-inputBg text-sm rounded-xl p-2.5 outline-none border border-gray-700 focus:border-blue-500">
             </div>
             <div class="flex flex-col gap-1 text-left">
                 <label class="text-[10px] text-gray-400 font-bold">Price (₱)</label>
