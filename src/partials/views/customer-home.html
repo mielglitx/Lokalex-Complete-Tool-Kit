@@ -1,0 +1,66 @@
+<section id="view-customer-home" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
+    <!-- CUSTOMER PROFILE HEADER WITH EDIT PROFILE BUTTON -->
+    <div class="bg-cardBg border border-blue-500/40 p-4 rounded-3xl shadow-xl flex items-center justify-between gap-3 shrink-0">
+        <div class="flex items-center gap-3 min-w-0">
+            <img id="cust-landing-avatar" src="https://ui-avatars.com/api/?name=Customer&background=1877F2&color=fff" class="w-12 h-12 rounded-full object-cover border-2 border-blue-500 shadow">
+            <div class="min-w-0">
+                <div id="cust-landing-name" class="font-bold text-sm text-white truncate">Customer Account</div>
+                <div id="cust-landing-email" class="text-[11px] text-gray-400 truncate">Account Active</div>
+            </div>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+            <button onclick="window.openEditCustomerProfileModal && window.openEditCustomerProfileModal()" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 text-xs font-bold px-3 py-2 rounded-xl transition active:scale-95 flex items-center gap-1" title="Edit Profile Details">
+                <i class="fa-solid fa-user-pen"></i> Edit
+            </button>
+            <button onclick="window.logout && window.logout()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold px-3 py-2 rounded-xl transition active:scale-95">
+                Log out
+            </button>
+        </div>
+    </div>
+
+    <!-- INSTALL APP SHORTCUT BUTTON (FULL WIDTH) -->
+    <button id="pwa-install-btn" onclick="window.installPwaApp && window.installPwaApp()" class="w-full bg-gradient-to-r from-blue-600/30 to-indigo-600/30 hover:from-blue-600/50 hover:to-indigo-600/50 border border-blue-500/50 p-3.5 rounded-2xl flex items-center gap-3 transition active:scale-95 text-left shadow-md shrink-0">
+        <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-lg shrink-0 shadow">
+            <i class="fa-solid fa-mobile-screen-button"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+            <div class="text-xs font-bold text-blue-300 truncate">Install Lokalex App</div>
+            <div class="text-[10px] text-gray-400 truncate">Add shortcut to Home Screen for fast access</div>
+        </div>
+        <i class="fa-solid fa-chevron-right text-xs text-blue-400/60"></i>
+    </button>
+
+    <!-- CUSTOMER CHAT PANEL -->
+    <div class="bg-cardBg border border-gray-800 rounded-3xl p-4 flex flex-col gap-3 shadow-xl h-[480px] sm:h-[520px] max-h-[65vh] min-h-[350px] shrink-0">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2 shrink-0">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-comments text-blue-400 text-base"></i>
+                <h3 class="font-bold text-sm text-white">Chat with Lokalex Riders</h3>
+            </div>
+            <span class="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Live
+            </span>
+        </div>
+
+        <!-- CUSTOMER CHAT MESSAGE STREAM -->
+        <div id="cust-rider-chat-messages" class="flex-1 min-h-0 overflow-y-auto p-3 bg-black/40 rounded-2xl border border-gray-800/80 flex flex-col gap-2.5 text-xs">
+            <div class="text-center text-gray-500 italic py-10">Pumili o mag-type ng mensahe para sa mga riders...</div>
+        </div>
+
+        <!-- INPUT AREA WITH PHOTO & MAP PIN PICKER -->
+        <div class="flex gap-1.5 items-center pt-1 shrink-0">
+            <input type="file" id="cust-chat-file-input" accept="image/*" class="hidden" onchange="if(this.files[0]) { window.openImageEditorModal && window.openImageEditorModal(this.files[0], 'customer'); this.value = ''; }">
+            <button onclick="document.getElementById('cust-chat-file-input').click()" class="bg-gray-800 hover:bg-gray-700 text-blue-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Attach & Edit Photo">
+                <i class="fa-solid fa-image"></i>
+            </button>
+            <button onclick="window.sendCustomerLocation && window.sendCustomerLocation()" class="bg-gray-800 hover:bg-gray-700 text-emerald-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Pick Location Pin on Map">
+                <i class="fa-solid fa-location-dot"></i>
+            </button>
+
+            <input type="text" id="cust-rider-chat-input" name="cust_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" onkeydown="if(event.key==='Enter') window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" placeholder="Mag-type ng mensahe..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white">
+            <button onclick="window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold shadow-md transition active:scale-95 shrink-0">
+                <i class="fa-solid fa-paper-plane"></i>
+            </button>
+        </div>
+    </div>
+</section>

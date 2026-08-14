@@ -7,6 +7,8 @@ import { switchView, goBack } from '../ui/router.js';
 import { escapeHtml, copyText, getLocalTodayStr } from '../utils/helpers.js';
 import { openSlideDeleteModal } from '../ui/modals.js';
 import { getDeviceLocation } from './auth.js';
+import { sendCustomerToRiderChat, sendRiderToCustomerChat } from './chat/index.js';
+import { canManageRoster } from './roster/rosterUtils.js';
 
 let googleMapObj = null;
 let custGoogleMapObj = null;
@@ -15,10 +17,305 @@ let mapDirectionsService = null;
 let mapDirectionsRenderer = null;
 let activeNavTargetCoords = null;
 
+let findRidersMapObj = null;
+let findRidersMarkers = [];
+
+let mapSearchAutocomplete = null;
+let mapPickerContext = 'form'; // 'form', 'chat', 'rider-chat', 'registration'
+let selectedMapLat = 0;
+let selectedMapLng = 0;
+
 let trackingHistory = JSON.parse(localStorage.getItem('lokalex_tracking_history') || '{}');
 
 // ============================================================================
-// 1. DELIVERY TRACKING SYSTEM (?track=KEY) - FROM CATERING LINEUP
+// FIND ALL RIDERS MAP MODAL (ADMIN / TL EXCLUSIVE)
+// ============================================================================
+export function openFindRidersModal() {
+    if (!canManageRoster()) return showToast("⚠️ Unauthorized access.");
+
+    const modal = document.getElementById('find-riders-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        refreshFindRidersMap();
+    }
+}
+
+export function closeFindRidersModal() {
+    const modal = document.getElementById('find-riders-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export function refreshFindRidersMap() {
+    const mapContainer = document.getElementById('find-riders-google-map');
+    const summaryEl = document.getElementById('find-riders-status-summary');
+    const refreshIcon = document.getElementById('find-riders-refresh-icon');
+
+    if (refreshIcon) refreshIcon.classList.add('fa-spin');
+
+    const roster = globalState.rosterMembers || [];
+    const activeRiders = roster.filter(m => m.status && m.status !== 'End');
+
+    let availCount = 0, caterCount = 0, breakCount = 0;
+    activeRiders.forEach(r => {
+        if (r.status === 'Available') availCount++;
+        else if (r.status === 'Catering') caterCount++;
+        else if (r.status === 'Break') breakCount++;
+    });
+
+    if (summaryEl) {
+        summaryEl.innerHTML = `
+            <div><span class="text-green-400 font-bold">${availCount}</span> Available</div>
+            <div><span class="text-red-400 font-bold">${caterCount}</span> Catering</div>
+            <div><span class="text-yellow-400 font-bold">${breakCount}</span> On Break</div>
+        `;
+    }
+
+    if (typeof google === 'undefined' || !google.maps || !mapContainer) {
+        if (refreshIcon) refreshIcon.classList.remove('fa-spin');
+        return;
+    }
+
+    const hubCenter = { lat: HUB_LOCATION.lat, lng: HUB_LOCATION.lng };
+
+    if (!findRidersMapObj) {
+        findRidersMapObj = new google.maps.Map(mapContainer, {
+            center: hubCenter,
+            zoom: 14,
+            disableDefaultUI: false,
+            zoomControl: true
+        });
+    }
+
+    // Clear old markers
+    findRidersMarkers.forEach(m => m.setMap(null));
+    findRidersMarkers = [];
+
+    const bounds = new google.maps.LatLngBounds();
+    let markerCount = 0;
+
+    activeRiders.forEach(r => {
+        const lat = parseFloat(r.lat);
+        const lng = parseFloat(r.lng);
+
+        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+            const pos = { lat, lng };
+            bounds.extend(pos);
+            markerCount++;
+
+            let iconUrl = "http://maps.google.com/mapfiles/ms/icons/green-dot.png";
+            if (r.status === 'Catering') iconUrl = "http://maps.google.com/mapfiles/ms/icons/red-dot.png";
+            else if (r.status === 'Break' || r.status === 'Cooldown') iconUrl = "http://maps.google.com/mapfiles/ms/icons/yellow-dot.png";
+
+            const marker = new google.maps.Marker({
+                position: pos,
+                map: findRidersMapObj,
+                title: `${r.riderName || 'Rider'} (${r.status})`,
+                icon: iconUrl
+            });
+
+            const infoWindow = new google.maps.InfoWindow({
+                content: `<div class="p-1 text-xs text-black font-bold">
+                    <strong>${escapeHtml(r.riderName || 'Rider')}</strong><br>
+                    Status: <span class="uppercase">${escapeHtml(r.status)}</span><br>
+                    ${r.customerName ? `Catering: ${escapeHtml(r.customerName)}` : ''}
+                </div>`
+            });
+
+            marker.addListener('click', () => {
+                infoWindow.open(findRidersMapObj, marker);
+            });
+
+            findRidersMarkers.push(marker);
+        }
+    });
+
+    if (markerCount > 0) {
+        findRidersMapObj.fitBounds(bounds);
+    } else {
+        findRidersMapObj.setCenter(hubCenter);
+    }
+
+    setTimeout(() => {
+        if (refreshIcon) refreshIcon.classList.remove('fa-spin');
+    }, 500);
+}
+
+// ============================================================================
+// 1. INTERACTIVE MAP PICKER (DIRECTORY WORKFLOW + SEARCH + CENTER PIN)
+// ============================================================================
+export function initMapSearchAutocomplete() {
+    const input = document.getElementById('map-search-input');
+    if (!input || !window.google || !window.google.maps || !window.google.maps.places) return;
+
+    if (!mapSearchAutocomplete) {
+        mapSearchAutocomplete = new google.maps.places.Autocomplete(input, {
+            types: ['geocode', 'establishment']
+        });
+
+        mapSearchAutocomplete.addListener('place_changed', () => {
+            const place = mapSearchAutocomplete.getPlace();
+            if (!place.geometry || !place.geometry.location) {
+                showToast("⚠️ Location not found. Please select from dropdown.");
+                return;
+            }
+
+            if (googleMapObj) {
+                googleMapObj.panTo(place.geometry.location);
+                googleMapObj.setZoom(17);
+            }
+        });
+    }
+}
+
+export async function openMapPicker(context = 'form') {
+    mapPickerContext = context;
+
+    switchView('view-map');
+    
+    const searchBarContainer = document.getElementById('map-search-bar-container');
+    const confirmBtn = document.getElementById('map-confirm-btn');
+    const confirmBtnText = document.getElementById('map-confirm-btn-text');
+    const navBtn = document.getElementById('map-nav-app-btn');
+    const centerPin = document.getElementById('map-center-pin');
+    const titleEl = document.getElementById('map-view-title');
+
+    if (searchBarContainer) searchBarContainer.classList.remove('hidden');
+    if (centerPin) centerPin.classList.remove('hidden');
+    if (confirmBtn) confirmBtn.classList.remove('hidden');
+    if (navBtn) navBtn.classList.add('hidden');
+
+    if (context === 'chat') {
+        if (titleEl) titleEl.innerText = "Select Location for Chat";
+        if (confirmBtnText) confirmBtnText.innerText = "SEND LOCATION PIN TO CHAT";
+    } else if (context === 'rider-chat') {
+        if (titleEl) titleEl.innerText = "Select Rider Location Pin";
+        if (confirmBtnText) confirmBtnText.innerText = "SEND RIDER LOCATION PIN";
+    } else if (context === 'registration') {
+        if (titleEl) titleEl.innerText = "Pin Delivery Location";
+        if (confirmBtnText) confirmBtnText.innerText = "CONFIRM REGISTRATION PIN";
+    } else {
+        if (titleEl) titleEl.innerText = "Pick Location Pin";
+        if (confirmBtnText) confirmBtnText.innerText = "CONFIRM LOCATION PIN";
+    }
+
+    showToast("📡 Calibrating map center...");
+    const coords = await getDeviceLocation();
+
+    let initialLat = 0;
+    let initialLng = 0;
+
+    if (coords && coords.lat !== 0 && coords.lon !== 0) {
+        initialLat = coords.lat;
+        initialLng = coords.lon;
+    } else {
+        const custUid = appState.customerFacebookId || localStorage.getItem('lokalex_customer_fb_id');
+        let savedProfileLat = 0;
+        let savedProfileLng = 0;
+
+        if (custUid && db) {
+            try {
+                const snap = await db.ref(`customers/${custUid}`).once('value');
+                const val = snap.val();
+                if (val && val.lat && val.lng) {
+                    savedProfileLat = parseFloat(val.lat);
+                    savedProfileLng = parseFloat(val.lng);
+                }
+            } catch(e) {}
+        }
+
+        if (savedProfileLat !== 0 && savedProfileLng !== 0) {
+            initialLat = savedProfileLat;
+            initialLng = savedProfileLng;
+            showToast("📍 Using saved profile address as map center");
+        } else {
+            initialLat = appState.lat || HUB_LOCATION.lat;
+            initialLng = appState.lon || HUB_LOCATION.lng;
+        }
+    }
+
+    selectedMapLat = initialLat;
+    selectedMapLng = initialLng;
+
+    initGoogleMapObject(selectedMapLat, selectedMapLng);
+    initMapSearchAutocomplete();
+}
+
+function initGoogleMapObject(lat, lng) {
+    const mapCenter = { lat: parseFloat(lat), lng: parseFloat(lng) };
+    const mapContainer = document.getElementById('google-map-container');
+
+    if (!mapContainer || !window.google || !window.google.maps) return;
+
+    if (!googleMapObj) {
+        googleMapObj = new google.maps.Map(mapContainer, {
+            center: mapCenter,
+            zoom: 17,
+            mapTypeId: 'hybrid',
+            disableDefaultUI: false,
+            zoomControl: true,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false
+        });
+
+        googleMapObj.addListener('center_changed', () => {
+            const center = googleMapObj.getCenter();
+            selectedMapLat = center.lat();
+            selectedMapLng = center.lng();
+        });
+    } else {
+        googleMapObj.setCenter(mapCenter);
+        googleMapObj.setZoom(17);
+    }
+
+    appState.lat = lat;
+    appState.lon = lng;
+}
+
+export function confirmGoogleMapPin() {
+    if (!googleMapObj) return;
+
+    const formattedLat = selectedMapLat.toFixed(6);
+    const formattedLng = selectedMapLng.toFixed(6);
+    const mapLink = `https://www.google.com/maps/search/?api=1&query=${formattedLat},${formattedLng}`;
+
+    appState.lat = selectedMapLat;
+    appState.lon = selectedMapLng;
+
+    if (mapPickerContext === 'chat') {
+        goBack();
+        if (typeof sendCustomerToRiderChat === 'function') {
+            sendCustomerToRiderChat("", null, { lat: selectedMapLat, lng: selectedMapLng });
+        }
+        showToast("📍 Location card sent to chat!");
+    } else if (mapPickerContext === 'rider-chat') {
+        goBack();
+        if (typeof sendRiderToCustomerChat === 'function') {
+            sendRiderToCustomerChat("📍 Shared Rider Location", null, { lat: selectedMapLat, lng: selectedMapLng });
+        }
+        showToast("📍 Rider location pin sent to chat!");
+    } else if (mapPickerContext === 'registration') {
+        const regGpsInput = document.getElementById('reg-gps-link');
+        const regLatInput = document.getElementById('reg-lat');
+        const regLonInput = document.getElementById('reg-lon');
+
+        if (regGpsInput) regGpsInput.value = mapLink;
+        if (regLatInput) regLatInput.value = formattedLat;
+        if (regLonInput) regLonInput.value = formattedLng;
+
+        goBack();
+        showToast("📍 Registration location pinned!");
+    } else {
+        const formLatLonInput = document.getElementById('form-latlon');
+        if (formLatLonInput) formLatLonInput.value = mapLink;
+        
+        goBack();
+        showToast("📍 Location pin confirmed!");
+    }
+}
+
+// ============================================================================
+// 2. DELIVERY TRACKING SYSTEM (?track=KEY)
 // ============================================================================
 export function copyCustomerTrackingLink(custName, forceRefresh = false) {
     if (!custName) custName = "Customer";
@@ -144,6 +441,10 @@ export async function openLiveCustomerMap(custName) {
 
     switchView('view-map');
     document.getElementById('map-view-title').innerText = `Tracking: ${custName}`;
+    
+    const searchBarContainer = document.getElementById('map-search-bar-container');
+    if (searchBarContainer) searchBarContainer.classList.add('hidden');
+    
     document.getElementById('map-center-pin').classList.add('hidden');
     document.getElementById('map-confirm-btn').classList.add('hidden');
     document.getElementById('map-nav-app-btn').classList.remove('hidden');
@@ -188,7 +489,7 @@ export async function openLiveCustomerMap(custName) {
 }
 
 // ============================================================================
-// 2. MAP CALCULATION SYSTEM (?mapcalc=KEY) - DISTANCE CALCULATION
+// 3. MAP CALCULATION SYSTEM (?mapcalc=KEY)
 // ============================================================================
 export function openMapCalcBoardModal() {
     const modal = document.getElementById('mapcalc-board-modal');
@@ -369,6 +670,9 @@ export function openMapCalcRoute(targetLat, targetLng, custName) {
     switchView('view-map');
     
     document.getElementById('map-view-title').innerText = `Map Calc: ${custName}`;
+    const searchBarContainer = document.getElementById('map-search-bar-container');
+    if (searchBarContainer) searchBarContainer.classList.add('hidden');
+    
     document.getElementById('map-center-pin').classList.add('hidden');
     document.getElementById('map-confirm-btn').classList.add('hidden');
     document.getElementById('map-nav-app-btn').classList.remove('hidden');
@@ -406,262 +710,18 @@ export function deleteMapCalcRecord(key, custName) {
     });
 }
 
-// ============================================================================
-// 3. RIDER MAP PIN PICKER (MANUAL FORMS)
-// ============================================================================
 export function openExternalGoogleNav() {
     if (!activeNavTargetCoords) return showToast("No customer GPS pin received yet.");
     const url = `https://www.google.com/maps/dir/?api=1&destination=${activeNavTargetCoords.lat},${activeNavTargetCoords.lng}&travelmode=driving`;
     window.open(url, '_blank');
 }
 
-export function openMapPicker() {
-    switchView('view-map');
-    document.getElementById('map-view-title').innerText = "Pick Location Pin";
-    document.getElementById('map-center-pin').classList.remove('hidden');
-    document.getElementById('map-confirm-btn').classList.remove('hidden');
-    document.getElementById('map-nav-app-btn').classList.add('hidden');
-
-    const initOrCenterGoogleMap = (lat, lng) => {
-        const mapCenter = { lat: parseFloat(lat), lng: parseFloat(lng) };
-        const mapContainer = document.getElementById('google-map-container');
-
-        if (!googleMapObj) {
-            googleMapObj = new google.maps.Map(mapContainer, {
-                center: mapCenter, zoom: 17, disableDefaultUI: false, zoomControl: true, mapTypeControl: false, streetViewControl: false, fullscreenControl: false
-            });
-        } else {
-            googleMapObj.setCenter(mapCenter);
-        }
-
-        appState.lat = lat;
-        appState.lon = lng;
-    };
-
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            (pos) => initOrCenterGoogleMap(pos.coords.latitude, pos.coords.longitude),
-            () => initOrCenterGoogleMap(appState.lat || HUB_LOCATION.lat, appState.lon || HUB_LOCATION.lng),
-            { enableHighAccuracy: true, timeout: 5000 }
-        );
-    } else {
-        initOrCenterGoogleMap(appState.lat || HUB_LOCATION.lat, appState.lon || HUB_LOCATION.lng);
-    }
-}
-
-export function confirmGoogleMapPin() {
-    if (googleMapObj) {
-        const center = googleMapObj.getCenter();
-        const lat = center.lat().toFixed(6);
-        const lng = center.lng().toFixed(6);
-        const mapLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-
-        document.getElementById('form-latlon').value = mapLink;
-        appState.lat = center.lat();
-        appState.lon = center.lng();
-    }
-    goBack();
-}
-
-// ============================================================================
-// 4. FIND MY RIDERS MAP SYSTEM (ACCURATE REALTIME & FRESHNESS AGING)
-// ============================================================================
-let findRidersMapObj = null;
-let findRidersMarkers = [];
-
-export async function openFindRidersModal() {
-    const modal = document.getElementById('find-riders-modal');
-    if (!modal) {
-        showToast("⚠️ find-riders-modal missing from index.html");
-        return;
-    }
-    modal.classList.remove('hidden');
-    await fetchLatestRiderPositions();
-}
-
-export function closeFindRidersModal() {
-    const modal = document.getElementById('find-riders-modal');
-    if (modal) modal.classList.add('hidden');
-}
-
-export async function refreshFindRidersMap() {
-    const icon = document.getElementById('find-riders-refresh-icon');
-    if (icon) icon.classList.add('fa-spin');
-
-    await fetchLatestRiderPositions();
-    showToast("🔄 Rider locations updated!");
-
-    setTimeout(() => {
-        if (icon) icon.classList.remove('fa-spin');
-    }, 600);
-}
-
-export async function fetchLatestRiderPositions() {
-    try {
-        const rosterSnap = await db.ref('roster').once('value');
-        if (rosterSnap.exists()) {
-            globalState.rosterMembers = Object.values(rosterSnap.val());
-        }
-
-        const sessionSnap = await db.ref('liveSessions').once('value');
-        let activeLiveRiders = {};
-        if (sessionSnap.exists()) {
-            const sessions = sessionSnap.val();
-            Object.values(sessions).forEach(sess => {
-                if (sess.status === 'active' && sess.users && sess.users.rider) {
-                    const rData = sess.users.rider;
-                    if (rData.lat && rData.lng) {
-                        activeLiveRiders[(rData.name || '').toLowerCase()] = {
-                            lat: rData.lat,
-                            lng: rData.lng,
-                            updatedAt: rData.updatedAt
-                        };
-                    }
-                }
-            });
-        }
-        
-        renderFindRidersMap(activeLiveRiders);
-    } catch(e) {
-        console.error("Error fetching fresh rider positions:", e);
-        renderFindRidersMap({});
-    }
-}
-
-function getRelativeTimeAgo(timestamp) {
-    if (!timestamp) return "Unknown";
-    const diffSecs = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
-    if (diffSecs < 60) return `${diffSecs}s ago`;
-    const diffMins = Math.floor(diffSecs / 60);
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    return `${diffHours}h ago`;
-}
-
-export function renderFindRidersMap(activeLiveRiders = {}) {
-    if (typeof google === 'undefined' || !google.maps) return;
-
-    const container = document.getElementById('find-riders-google-map');
-    if (!container) return;
-
-    findRidersMarkers.forEach(m => m.setMap(null));
-    findRidersMarkers = [];
-
-    const roster = globalState.rosterMembers || [];
-    const logins = globalState.globalLogins || [];
-
-    const activeRiders = roster.filter(m => ['Available', 'Catering', 'Break'].includes(m.status));
-
-    let countAvail = 0, countCater = 0, countBreak = 0;
-    const bounds = new google.maps.LatLngBounds();
-    let hasValidCoords = false;
-
-    activeRiders.forEach(r => {
-        if (r.status === 'Available') countAvail++;
-        else if (r.status === 'Catering') countCater++;
-        else if (r.status === 'Break') countBreak++;
-
-        const rNameKey = (r.riderName || r.name || "").toLowerCase();
-        let lat = parseFloat(r.lat);
-        let lng = parseFloat(r.lng);
-        let updatedAt = r.locationUpdatedAt || null;
-        let accuracy = r.accuracy || 0;
-        let locationSource = "Roster GPS";
-
-        if (activeLiveRiders[rNameKey]) {
-            lat = parseFloat(activeLiveRiders[rNameKey].lat);
-            lng = parseFloat(activeLiveRiders[rNameKey].lng);
-            updatedAt = activeLiveRiders[rNameKey].updatedAt;
-            locationSource = "📡 Live Delivery Stream";
-        } else if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
-            const userLogin = logins.slice().reverse().find(l => {
-                const lName = (l.riderName || "").toLowerCase();
-                return (lName && lName === rNameKey) && l.location;
-            });
-
-            if (userLogin && userLogin.location) {
-                const match = userLogin.location.match(/query=(-?\d+\.\d+),(-?\d+\.\d+)/);
-                if (match) {
-                    lat = parseFloat(match[1]);
-                    lng = parseFloat(match[2]);
-                    locationSource = "⚠️ Initial Shift Login";
-                }
-            }
-        }
-
-        if (!isNaN(lat) && !isNaN(lng) && (lat !== 0 || lng !== 0)) {
-            hasValidCoords = true;
-            const pos = { lat, lng };
-            bounds.extend(pos);
-
-            let iconUrl = "http://maps.google.com/mapfiles/ms/icons/green-dot.png";
-            if (r.status === 'Catering') iconUrl = "http://maps.google.com/mapfiles/ms/icons/red-dot.png";
-            else if (r.status === 'Break') iconUrl = "http://maps.google.com/mapfiles/ms/icons/yellow-dot.png";
-
-            const rNameDisplay = r.riderName || r.name || "Rider";
-            const custInfo = r.customerName ? ` (${r.customerName})` : "";
-            const agoStr = getRelativeTimeAgo(updatedAt);
-            const accStr = accuracy ? ` (±${Math.round(accuracy)}m)` : '';
-
-            const marker = new google.maps.Marker({
-                position: pos,
-                title: `${rNameDisplay} - ${r.status}${custInfo}`,
-                icon: { url: iconUrl }
-            });
-
-            const infoWindow = new google.maps.InfoWindow({
-                content: `<div style="color:black; font-weight:bold; font-size:12px; padding:4px;">
-                    <div style="font-size:13px; color:#1e293b;">🛵 ${escapeHtml(rNameDisplay)}</div>
-                    <div style="font-size:10px; color:#475569; margin-top:2px;">Status: <strong>${escapeHtml(r.status)}</strong>${escapeHtml(custInfo)}</div>
-                    <div style="font-size:10px; color:#2563eb; margin-top:2px;">Source: ${locationSource}</div>
-                    <div style="font-size:9px; color:#059669; margin-top:2px;">Freshness: ${agoStr}${accStr}</div>
-                </div>`
-            });
-
-            marker.addListener('click', () => {
-                infoWindow.open(findRidersMapObj, marker);
-            });
-
-            findRidersMarkers.push(marker);
-        }
-    });
-
-    const defaultCenter = HUB_LOCATION || { lat: 15.6881, lng: 120.4144 };
-
-    if (!findRidersMapObj) {
-        findRidersMapObj = new google.maps.Map(container, {
-            center: defaultCenter,
-            zoom: 14,
-            disableDefaultUI: false,
-            zoomControl: true
-        });
-    }
-
-    findRidersMarkers.forEach(m => m.setMap(findRidersMapObj));
-
-    if (hasValidCoords) {
-        findRidersMapObj.fitBounds(bounds);
-        if (findRidersMarkers.length === 1) {
-            findRidersMapObj.setZoom(16);
-        }
-    } else {
-        findRidersMapObj.setCenter(defaultCenter);
-        findRidersMapObj.setZoom(14);
-    }
-
-    const summaryEl = document.getElementById('find-riders-status-summary');
-    if (summaryEl) {
-        summaryEl.innerHTML = `
-            <div><span class="text-green-400 font-bold">🟢 Available:</span> ${countAvail}</div>
-            <div><span class="text-red-400 font-bold">🔴 Catering:</span> ${countCater}</div>
-            <div><span class="text-yellow-400 font-bold">☕ Break:</span> ${countBreak}</div>
-        `;
-    }
-}
-
 if (typeof window !== 'undefined') {
+    window.openMapPicker = openMapPicker;
+    window.confirmGoogleMapPin = confirmGoogleMapPin;
+    window.openExternalGoogleNav = openExternalGoogleNav;
+    window.copyMapCalcCustomerMessage = copyMapCalcCustomerMessage;
     window.openFindRidersModal = openFindRidersModal;
     window.closeFindRidersModal = closeFindRidersModal;
     window.refreshFindRidersMap = refreshFindRidersMap;
-    window.copyMapCalcCustomerMessage = copyMapCalcCustomerMessage;
 }

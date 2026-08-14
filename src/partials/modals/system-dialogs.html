@@ -1,0 +1,701 @@
+<!-- EDIT CUSTOMER PROFILE MODAL -->
+<div id="edit-customer-profile-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-blue-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-4 relative animate-in fade-in zoom-in duration-200">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center text-sm font-bold border border-blue-500/30">
+                    <i class="fa-solid fa-user-pen"></i>
+                </div>
+                <h3 class="font-bold text-sm text-white">Edit Account Details</h3>
+            </div>
+            <button onclick="window.closeEditCustomerProfileModal && window.closeEditCustomerProfileModal()" class="text-gray-400 hover:text-white text-sm">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="flex flex-col gap-3 text-xs">
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Full Name</label>
+                <input type="text" id="edit-cust-fullname" placeholder="Full Name" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Delivery Address</label>
+                <input type="text" id="edit-cust-address" placeholder="Address" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Mobile Number (Requires OTP if changed)</label>
+                <input type="tel" id="edit-cust-phone" placeholder="09123456789 or +1..." class="w-full bg-inputBg text-xs font-mono font-bold rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Delivery GPS Location Pin</label>
+                <div class="flex gap-1.5 mt-1">
+                    <input type="text" id="edit-cust-gps-link" placeholder="Map Link" readonly class="flex-1 bg-inputBg text-[10px] rounded-xl p-2.5 border border-gray-700 text-gray-300 font-mono truncate">
+                    <button type="button" onclick="window.captureEditProfileGPS && window.captureEditProfileGPS()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition active:scale-95 shrink-0">
+                        <i class="fa-solid fa-location-crosshairs"></i> Pin Map
+                    </button>
+                </div>
+                <input type="hidden" id="edit-cust-lat" value="0">
+                <input type="hidden" id="edit-cust-lon" value="0">
+            </div>
+
+            <!-- OTP INPUT BOX (HIDDEN UNTIL PHONE IS CHANGED) -->
+            <div id="edit-cust-otp-box" class="hidden bg-darkBg p-3 rounded-2xl border border-emerald-500/40 flex flex-col gap-2 mt-1">
+                <span class="text-[10px] text-emerald-400 font-bold uppercase">Enter 6-Digit SMS OTP Code</span>
+                <input type="text" id="edit-cust-otp-code" placeholder="123456" maxlength="6" class="w-full bg-inputBg text-center tracking-widest text-base font-black rounded-xl p-2.5 border border-emerald-500/50 outline-none text-white font-mono">
+                <button type="button" id="edit-cust-verify-otp-btn" onclick="window.verifyAndUpdatePhoneOTP && window.verifyAndUpdatePhoneOTP()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs shadow transition active:scale-95 flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-check-double"></i> VERIFY & SAVE
+                </button>
+            </div>
+        </div>
+
+        <button id="edit-cust-save-btn" onclick="window.saveCustomerProfile && window.saveCustomerProfile()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-2xl text-xs shadow transition active:scale-95 flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-floppy-disk"></i> SAVE PROFILE CHANGES
+        </button>
+    </div>
+</div>
+
+<!-- FIRST IN LINE QUEUE NOTIFICATION MODAL (STOPS RINGING ALARM) -->
+<div id="first-in-line-modal" class="hidden fixed inset-0 bg-black/90 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border-2 border-emerald-500 p-6 rounded-3xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-4 animate-bounce">
+        <div class="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-3xl shadow-inner border border-emerald-500/40">
+            <i class="fa-solid fa-bell"></i>
+        </div>
+        <div>
+            <h3 class="font-black text-lg text-emerald-400">IKAW NA ANG SUNOD!</h3>
+            <p class="text-xs text-gray-200 mt-2 leading-relaxed">
+                You are currently <strong>#1 First in Line</strong> in the queue. Prepare for incoming catering orders!
+            </p>
+        </div>
+        <button onclick="window.dismissQueueAlarm && window.dismissQueueAlarm()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-2xl shadow-lg transition active:scale-95 text-xs flex items-center justify-center gap-2 ring-2 ring-emerald-400/50">
+            <i class="fa-solid fa-volume-xmark"></i> ACKNOWLEDGE & STOP ALARM
+        </button>
+    </div>
+</div>
+
+<!-- MAP CALCULATION BOARD MODAL -->
+<div id="mapcalc-board-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-emerald-500/50 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 relative max-h-[85vh]">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-calculator text-emerald-400 text-sm"></i>
+                <h3 class="font-bold text-xs text-white">Map Calculation Board</h3>
+            </div>
+            <button onclick="window.closeMapCalcBoardModal && window.closeMapCalcBoardModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div id="mapcalc-list-container" class="flex-1 overflow-y-auto flex flex-col gap-2 min-h-[200px] text-xs">
+            <div class="text-center text-gray-500 italic py-10">No active calculations recorded.</div>
+        </div>
+
+        <button onclick="window.promptMapCalcCustomerName && window.promptMapCalcCustomerName()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 shadow">
+            + New Distance Calculation
+        </button>
+    </div>
+</div>
+
+<!-- MAP CALCULATION CUSTOMER NAME PROMPT MODAL -->
+<div id="mapcalc-name-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-emerald-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3">
+        <h3 class="font-bold text-xs text-white text-center">New Distance Calculation</h3>
+        <input type="text" id="mapcalc-cust-name-input" placeholder="Enter Customer / Destination Name..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold">
+        <div class="flex gap-2 mt-1">
+            <button onclick="window.closeMapCalcNameModal && window.closeMapCalcNameModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300">Cancel</button>
+            <button onclick="window.startMapCalcForCustomer && window.startMapCalcForCustomer()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-xl text-xs font-bold text-white">Start</button>
+        </div>
+    </div>
+</div>
+
+<!-- ADMIN FORCE CATERING MODAL -->
+<div id="admin-catering-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
+        <h3 class="font-bold text-base text-center text-red-400 flex items-center justify-center gap-2">
+            <i class="fa-solid fa-motorcycle"></i> Start Catering
+        </h3>
+
+        <!-- Hidden input fields to store target rider details -->
+        <input type="hidden" id="admin-cater-target-rider-id" value="">
+        <input type="hidden" id="admin-cater-target-rider-name" value="">
+
+        <div class="flex flex-col gap-2 text-left">
+            <label class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Select Customer (Inbox)</label>
+            <select id="admin-cater-customer-select" onchange="if(this.value) document.getElementById('admin-cater-cust-name').value = this.value;" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white font-bold">
+                <option value="">-- Select Active Customer --</option>
+            </select>
+
+            <label class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mt-1">Or Enter Name Manually</label>
+            <input type="text" id="admin-cater-cust-name" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold">
+        </div>
+
+        <div class="flex gap-2 mt-2">
+            <button type="button" onclick="window.closeAdminCateringModal && window.closeAdminCateringModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+            <button type="button" onclick="window.submitAdminForceCatering && window.submitAdminForceCatering()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Start</button>
+        </div>
+    </div>
+</div>
+
+<!-- ADMIN DATE PENALTY MODAL -->
+<div id="admin-penalty-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-red-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3">
+        <div class="flex items-center gap-2 border-b border-gray-800 pb-2">
+            <i class="fa-solid fa-gavel text-red-400"></i>
+            <h3 class="font-bold text-xs text-white">Add Date Penalty</h3>
+        </div>
+        <div>
+            <label class="text-[10px] text-gray-400 font-bold uppercase">Rider</label>
+            <select id="penalty-rider-select" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+                <option value="">-- Select Rider --</option>
+            </select>
+        </div>
+        <div>
+            <label class="text-[10px] text-gray-400 font-bold uppercase">Target Date</label>
+            <input type="date" id="penalty-date-input" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+        </div>
+        <div>
+            <label class="text-[10px] text-gray-400 font-bold uppercase">Penalty Rate (%)</label>
+            <input type="number" id="penalty-rate-input" value="10" placeholder="10" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+        </div>
+        <div>
+            <label class="text-[10px] text-gray-400 font-bold uppercase">Reason</label>
+            <input type="text" id="penalty-reason-input" placeholder="e.g. Late shift arrival" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+        </div>
+        <div class="flex gap-2 mt-2">
+            <button onclick="window.closeAdminPenaltyModal && window.closeAdminPenaltyModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300">Cancel</button>
+            <button onclick="window.submitAdminPenalty && window.submitAdminPenalty()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white">Add Penalty</button>
+        </div>
+    </div>
+</div>
+
+<!-- ADMIN MANUAL COMMISSION RECORD MODAL -->
+<div id="admin-add-comm-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-emerald-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3">
+        <div class="flex items-center gap-2 border-b border-gray-800 pb-2">
+            <i class="fa-solid fa-plus-circle text-emerald-400"></i>
+            <h3 class="font-bold text-xs text-white">Manual Commission Record</h3>
+        </div>
+        <div>
+            <label class="text-[10px] text-gray-400 font-bold uppercase">Rider</label>
+            <select id="manual-comm-rider-select" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+                <option value="">-- Select Rider --</option>
+            </select>
+        </div>
+        <div>
+            <label class="text-[10px] text-gray-400 font-bold uppercase">Customer Name</label>
+            <input type="text" id="manual-comm-cust-input" placeholder="Enter customer name..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+        </div>
+        <div>
+            <label class="text-[10px] text-gray-400 font-bold uppercase">Gross Total Fee (₱)</label>
+            <input type="number" id="manual-comm-fee-input" placeholder="0.00" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+        </div>
+        <div>
+            <label class="text-[10px] text-gray-400 font-bold uppercase">Date</label>
+            <input type="date" id="manual-comm-date-input" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+        </div>
+        <div class="flex gap-2 mt-2">
+            <button onclick="window.closeAdminAddCommModal && window.closeAdminAddCommModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300">Cancel</button>
+            <button onclick="window.submitAdminAddCommissionRecord && window.submitAdminAddCommissionRecord()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-xl text-xs font-bold text-white">Save Record</button>
+        </div>
+    </div>
+</div>
+
+<!-- CUSTOMER GPS PERMISSION REQUEST MODAL -->
+<div id="cust-gps-prompt-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-emerald-500/50 p-6 rounded-3xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-4 animate-in fade-in zoom-in duration-200">
+        <div class="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-3xl shadow-inner animate-pulse">
+            <i class="fa-solid fa-location-crosshairs"></i>
+        </div>
+        <div>
+            <h3 class="font-black text-base text-white">Enable GPS Location</h3>
+            <p class="text-xs text-gray-300 mt-2 leading-relaxed">
+                Kailangan ng Lokalex Hub ang iyong <strong>GPS Location</strong> upang mahanap ang tamang delivery pin at ma-track ang biyahe ng rider papunta sa iyo.
+            </p>
+        </div>
+        <div class="flex flex-col gap-2 pt-1">
+            <button onclick="window.requestCustomerGpsPermission && window.requestCustomerGpsPermission()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-2xl shadow-lg transition active:scale-95 text-xs flex items-center justify-center gap-2 ring-2 ring-emerald-400/50">
+                <i class="fa-solid fa-location-arrow"></i> ALLOW GPS LOCATION
+            </button>
+            <button onclick="window.closeCustomerGpsModal && window.closeCustomerGpsModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-400 font-bold py-2.5 rounded-2xl text-xs transition active:scale-95">
+                Mamaya na
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- RIDER-TO-CUSTOMER DIRECT CHAT MODAL WITH INFO BUTTON -->
+<div id="rider-customer-chat-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-3">
+    <div class="bg-cardBg border border-blue-500/60 p-4 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-2.5 h-[85vh] max-h-[620px] overflow-hidden">
+        <!-- HEADER WITH CUSTOMER INFO BUTTON -->
+        <div class="flex flex-col gap-1 border-b border-gray-800 pb-2 shrink-0">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <img id="rider-chat-cust-avatar" src="" class="w-8 h-8 rounded-full border border-blue-500 object-cover">
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <h3 id="rider-chat-cust-name" class="font-bold text-xs text-white">Customer Chat</h3>
+                            <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-[10px] shadow shrink-0" title="View Customer Profile & GPS Pin">
+                                <i class="fa-solid fa-circle-info"></i>
+                            </button>
+                        </div>
+                        <span class="text-[9px] text-emerald-400 font-mono">Real-time Connected</span>
+                    </div>
+                </div>
+                <button onclick="window.closeRiderCustomerChatModal && window.closeRiderCustomerChatModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="rider-chat-lock-banner" class="hidden text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/30 p-1.5 rounded-lg text-center font-bold"></div>
+        </div>
+
+        <!-- ACTION TOOLBAR -->
+        <div id="rider-chat-action-toolbar" class="grid grid-cols-4 gap-1 shrink-0 bg-black/30 p-1.5 rounded-xl border border-gray-800">
+            <button onclick="window.markThreadUndone && window.markThreadUndone()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 border border-indigo-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move thread back to inbox"><i class="fa-solid fa-rotate-left"></i> Undone </button>
+            <button onclick="window.markThreadFollowUp && window.markThreadFollowUp()" class="bg-amber-600/30 hover:bg-amber-600 text-amber-300 border border-amber-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move to Follow Up section"><i class="fa-solid fa-bookmark"></i> Follow Up</button>
+            <button onclick="window.markThreadDone && window.markThreadDone()" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move to Done section"><i class="fa-solid fa-circle-check"></i> Done</button>
+            <button onclick="window.cancelCustomerThread && window.cancelCustomerThread()" class="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700/50 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Cancel & release thread"><i class="fa-solid fa-ban"></i> Cancel</button>
+        </div>
+
+        <!-- CHAT MESSAGES BODY (SCROLLABLE INSIDE) -->
+        <div id="rider-cust-chat-messages" class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 p-2 text-xs bg-black/30 rounded-2xl border border-gray-800">
+            <div class="text-center text-gray-500 italic py-10">Loading chat history...</div>
+        </div>
+
+        <!-- FOOTER INPUT BAR -->
+        <div class="flex gap-1.5 items-center shrink-0 pt-1">
+            <input type="file" id="rider-chat-file-input" accept="image/*" class="hidden" onchange="if(this.files[0]) { window.openImageEditorModal && window.openImageEditorModal(this.files[0], 'rider'); this.value = ''; }">
+            <button onclick="document.getElementById('rider-chat-file-input').click()" class="bg-gray-800 hover:bg-gray-700 text-blue-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Attach & Edit Photo"><i class="fa-solid fa-image"></i></button>
+            <button onclick="window.sendRiderLocation && window.sendRiderLocation()" class="bg-gray-800 hover:bg-gray-700 text-emerald-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Pick Rider Location Pin on Map"><i class="fa-solid fa-location-dot"></i></button>
+
+            <input type="text" id="rider-cust-chat-input" name="rider_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" onkeydown="if(event.key==='Enter') window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" placeholder="Type reply..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 text-white">
+            <button id="rider-cust-send-btn" onclick="window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>
+    </div>
+</div>
+
+<!-- CUSTOMER DETAILS MODAL (FOR RIDERS) -->
+<div id="customer-details-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-blue-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-4 relative animate-in fade-in zoom-in duration-200">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center text-sm font-bold border border-blue-500/30">
+                    <i class="fa-solid fa-address-card"></i>
+                </div>
+                <h3 class="font-bold text-sm text-white">Customer Profile</h3>
+            </div>
+            <button onclick="window.closeCustomerDetailsModal && window.closeCustomerDetailsModal()" class="text-gray-400 hover:text-white text-sm">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="flex flex-col gap-3 text-xs">
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800">
+                <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Full Name</span>
+                <span id="cust-modal-name" class="font-bold text-sm text-white mt-0.5 block">Customer Name</span>
+            </div>
+
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex justify-between items-center">
+                <div>
+                    <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Mobile Number</span>
+                    <a id="cust-modal-phone" href="#" class="font-bold text-blue-400 font-mono mt-0.5 block hover:underline">---</a>
+                </div>
+            </div>
+
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800">
+                <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Delivery Address</span>
+                <span id="cust-modal-address" class="text-gray-200 mt-0.5 block leading-relaxed">---</span>
+            </div>
+
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex flex-col gap-2">
+                <span class="text-[10px] text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <i class="fa-solid fa-location-crosshairs"></i> Registered GPS Location Pin
+                </span>
+                <a id="cust-modal-map" href="#" target="_blank" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 text-xs flex items-center justify-center gap-2 shadow">
+                    <i class="fa-solid fa-map-location-dot text-sm"></i> OPEN GPS PIN IN GOOGLE MAPS
+                </a>
+            </div>
+        </div>
+
+        <button onclick="window.closeCustomerDetailsModal && window.closeCustomerDetailsModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-2xl text-xs transition active:scale-95">
+            Close
+        </button>
+    </div>
+</div>
+
+<!-- PWA INSTALL APP MODAL -->
+<div id="pwa-install-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-blue-500/50 p-6 rounded-3xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-4 animate-in fade-in zoom-in duration-200">
+        <div class="w-14 h-14 bg-blue-600/20 text-blue-400 rounded-2xl flex items-center justify-center mx-auto text-2xl shadow-inner">
+            <i class="fa-solid fa-mobile-screen-button"></i>
+        </div>
+        <div>
+            <h3 class="font-black text-base text-white">Install Lokalex App</h3>
+            <p class="text-xs text-gray-300 mt-1 leading-relaxed">
+                I-add ang Lokalex Hub shortcut sa iyong Phone Home Screen para sa mabilis na access!
+            </p>
+        </div>
+
+        <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 text-left text-xs flex flex-col gap-2">
+            <div class="font-bold text-blue-400 flex items-center gap-1.5">
+                <i class="fa-brands fa-apple text-sm"></i> For iPhone / iOS (Safari):
+            </div>
+            <ol class="list-decimal list-inside text-[11px] text-gray-300 flex flex-col gap-1 pl-1">
+                <li>Pindutin ang <strong>Share button</strong> (<i class="fa-solid fa-arrow-up-from-bracket text-blue-400"></i>) sa Safari.</li>
+                <li>Piliin ang <strong>"Add to Home Screen"</strong> (<i class="fa-regular fa-square-plus text-blue-400"></i>).</li>
+            </ol>
+
+            <div class="border-t border-gray-800 pt-2 mt-1">
+                <div class="font-bold text-emerald-400 flex items-center gap-1.5">
+                    <i class="fa-brands fa-android text-sm"></i> For Android (Chrome):
+                </div>
+                <ol class="list-decimal list-inside text-[11px] text-gray-300 flex flex-col gap-1 pl-1">
+                    <li>Pindutin ang <strong>3 dots menu</strong> (<i class="fa-solid fa-ellipsis-vertical text-emerald-400"></i>) sa Chrome.</li>
+                    <li>Piliin ang <strong>"Install app"</strong> o <strong>"Add to Home screen"</strong>.</li>
+                </ol>
+            </div>
+        </div>
+
+        <button onclick="window.closePwaInstallModal && window.closePwaInstallModal()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-2xl text-xs transition active:scale-95 shadow">
+            Naintindihan Ko
+        </button>
+    </div>
+</div>
+
+<!-- GCASH REGISTRATION MODAL -->
+<div id="gcash-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-blue-500/40 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
+        <div class="w-12 h-12 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+            <i class="fa-solid fa-mobile-screen-button"></i>
+        </div>
+        <h3 class="font-bold text-base text-center text-blue-400">Rider GCash Details</h3>
+        <p class="text-[11px] text-gray-300 text-center leading-relaxed">
+            I-register ang iyong GCash details. Lalabas ito sa iyong opisyal na resibo kahit offline.
+        </p>
+        <div class="flex flex-col gap-2 text-left">
+            <label class="text-[10px] text-gray-400 font-bold uppercase">GCash Account Name</label>
+            <input type="text" id="gcash-name-input" placeholder="e.g. JUAN DELA CRUZ" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 text-white font-bold">
+            
+            <label class="text-[10px] text-gray-400 font-bold uppercase mt-1">GCash Number</label>
+            <input type="text" id="gcash-no-input" placeholder="e.g. 09123456789" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 text-white font-bold font-mono">
+        </div>
+        <div class="flex gap-2 mt-2">
+            <button onclick="window.closeGCashModal && window.closeGCashModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+            <button onclick="window.saveGCashDetails && window.saveGCashDetails()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save Details</button>
+        </div>
+    </div>
+</div>
+
+<!-- FORGOT PASSWORD MODAL -->
+<div id="forgot-password-modal" class="hidden fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl relative flex flex-col gap-4 text-center animate-in fade-in zoom-in duration-200">
+        <button onclick="window.closeForgotPasswordModal && window.closeForgotPasswordModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white transition w-8 h-8 rounded-full bg-darkBg border border-gray-800 flex items-center justify-center">
+            <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+
+        <div class="flex flex-col items-center mt-2">
+            <div class="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 text-xl mb-3 shadow-inner">
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <h3 class="text-lg font-black text-white">Password Recovery</h3>
+            <p class="text-xs text-gray-400 mt-1">Pumili ng paraan para ma-reset ang iyong password</p>
+        </div>
+
+        <div id="fp-step-method" class="flex flex-col gap-3 mt-1">
+            <button onclick="window.selectResetMethod && window.selectResetMethod('sms')" class="group p-4 bg-darkBg hover:bg-blue-600/10 border border-gray-800 hover:border-blue-500/50 rounded-2xl flex items-center gap-3 transition text-left active:scale-[0.98]">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-base shrink-0">
+                    <i class="fa-solid fa-comment-sms"></i>
+                </div>
+                <div class="flex flex-col flex-1">
+                    <span class="text-xs font-bold text-white group-hover:text-blue-400 transition">SMS OTP Code</span>
+                    <span class="text-[10px] text-gray-400">Magpapadala ng 6-digit code sa iyong phone</span>
+                </div>
+                <i class="fa-solid fa-chevron-right text-xs text-gray-600"></i>
+            </button>
+
+            <button onclick="window.selectResetMethod && window.selectResetMethod('email')" class="group p-4 bg-darkBg hover:bg-blue-600/10 border border-gray-800 hover:border-blue-500/50 rounded-2xl flex items-center gap-3 transition text-left active:scale-[0.98]">
+                <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 text-base shrink-0">
+                    <i class="fa-solid fa-envelope"></i>
+                </div>
+                <div class="flex flex-col flex-1">
+                    <span class="text-xs font-bold text-white group-hover:text-blue-400 transition">Email Reset Link</span>
+                    <span class="text-[10px] text-gray-400">Magpapadala ng reset link sa iyong email</span>
+                </div>
+                <i class="fa-solid fa-chevron-right text-xs text-gray-600"></i>
+            </button>
+        </div>
+
+        <div id="fp-step-phone" class="hidden flex flex-col gap-3 mt-1">
+            <div class="text-left">
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Mobile Number</label>
+                <input type="tel" id="fp-phone-input" placeholder="09123456789" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white font-bold font-mono mt-1">
+            </div>
+            <button id="fp-send-sms-btn" onclick="window.sendResetSMS && window.sendResetSMS()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs">
+                <i class="fa-solid fa-paper-plane"></i> SEND OTP CODE
+            </button>
+            <button onclick="window.backToResetMethod && window.backToResetMethod()" class="text-[10px] text-gray-400 hover:text-white transition">
+                ← Bumalik sa pagpipilian
+            </button>
+        </div>
+
+        <div id="fp-step-email" class="hidden flex flex-col gap-3 mt-1">
+            <div class="text-left">
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Email Address</label>
+                <input type="email" id="fp-email-input" placeholder="name@example.com" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white mt-1">
+            </div>
+            <button id="fp-send-email-btn" onclick="window.sendResetEmailLink && window.sendResetEmailLink()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs">
+                <i class="fa-solid fa-paper-plane"></i> SEND RESET LINK
+            </button>
+            <button onclick="window.backToResetMethod && window.backToResetMethod()" class="text-[10px] text-gray-400 hover:text-white transition">
+                ← Bumalik sa pagpipilian
+            </button>
+        </div>
+
+        <div id="fp-step-otp" class="hidden flex flex-col gap-3 mt-1">
+            <div class="text-left">
+                <label class="text-[10px] text-emerald-400 font-bold uppercase">Enter 6-Digit SMS Code</label>
+                <input type="text" id="fp-otp-input" placeholder="123456" maxlength="6" class="w-full bg-inputBg text-center tracking-widest text-lg font-black rounded-xl p-3 border border-emerald-500/50 outline-none text-white font-mono mt-1">
+            </div>
+            <button id="fp-verify-otp-btn" onclick="window.verifyResetOTP && window.verifyResetOTP()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs">
+                <i class="fa-solid fa-check-double"></i> VERIFY CODE
+            </button>
+        </div>
+
+        <div id="fp-step-newpass" class="hidden flex flex-col gap-3 mt-1 text-left">
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Bagong Password</label>
+                <div class="relative mt-1">
+                    <input type="password" id="fp-new-pass" placeholder="At least 6 characters" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-700 outline-none text-white font-bold">
+                    <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('fp-new-pass', 'fp-pass-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-white transition">
+                        <i id="fp-pass-eye" class="fa-solid fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Ulitin ang Bagong Password</label>
+                <div class="relative mt-1">
+                    <input type="password" id="fp-confirm-pass" placeholder="Ulitin ang bagong password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-700 outline-none text-white font-bold">
+                    <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('fp-confirm-pass', 'fp-confirm-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-white transition">
+                        <i id="fp-confirm-eye" class="fa-solid fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+            <button id="fp-save-pass-btn" onclick="window.completePasswordReset && window.completePasswordReset()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs mt-1">
+                <i class="fa-solid fa-lock"></i> UPDATE PASSWORD
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ADMIN BLOCK USER MODAL -->
+<div id="admin-block-user-modal" class="hidden fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-red-500/30 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+            <div class="flex items-center gap-2 text-red-400 font-bold text-xs uppercase">
+                <i class="fa-solid fa-user-slash text-base"></i>
+                <span>Block User / Rider</span>
+            </div>
+            <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="text-gray-400 hover:text-white text-xs">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+
+        <div class="flex flex-col gap-3">
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Select User</label>
+                <select id="block-target-select" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white mt-1">
+                    <option value="" disabled selected>-- Select Rider / User --</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Reason for Block</label>
+                <input type="text" id="block-reason-input" placeholder="e.g. Non-compliance, Unprofessional conduct" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white mt-1">
+            </div>
+
+            <button onclick="window.submitBlockUser && window.submitBlockUser()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition active:scale-95 text-xs mt-1">
+                CONFIRM BLOCK
+            </button>
+        </div>
+
+        <div class="border-t border-gray-800 pt-3">
+            <div class="text-[10px] text-gray-400 font-bold uppercase mb-2">Blocked Users List</div>
+            <div id="blocked-users-list" class="flex flex-col gap-2 max-h-40 overflow-y-auto pr-1"></div>
+        </div>
+    </div>
+</div>
+
+<!-- PAID ITEM CONFIRMATION MODAL -->
+<div id="paid-item-confirm-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-emerald-500/50 p-6 rounded-2xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-3">
+        <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+            <i class="fa-solid fa-hand-holding-dollar"></i>
+        </div>
+        <h3 class="font-bold text-base text-emerald-400">May Nakamarkang PAID Item</h3>
+        <p class="text-xs text-gray-300 leading-relaxed">
+            Mayroong item sa cart na nakamarka bilang <strong>PAID (₱0.00)</strong>. Sigurado ka bang nais magpatuloy sa resibo?
+        </p>
+        <div class="flex gap-2 mt-2">
+            <button onclick="window.closePaidItemModal && window.closePaidItemModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 rounded-xl text-xs transition active:scale-95">Go Back & Edit</button>
+            <button onclick="window.confirmPaidItemProceed && window.confirmPaidItemProceed()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95">Proceed</button>
+        </div>
+    </div>
+</div>
+
+<!-- SAMPLE RECEIPT CONFIRMATION MODAL -->
+<div id="sample-receipt-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-amber-500/50 p-6 rounded-2xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-3">
+        <div class="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <h3 class="font-bold text-base text-amber-400">Walang Customer Name</h3>
+        <p class="text-xs text-gray-300 leading-relaxed">
+            Wala kang inilagay na pangalan ng customer. Nais mo bang magpatuloy bilang <strong>Sample Receipt</strong>?
+        </p>
+        <p class="text-[11px] text-gray-400 bg-black/40 p-2.5 rounded-xl border border-gray-800 italic text-left">
+            ⚠️ Ang Sample Receipt ay <strong>HINDI mai-save sa database</strong> at <strong>HINDI mai-re-record sa iyong daily commission</strong>.
+        </p>
+        <div class="flex gap-2 mt-2">
+            <button onclick="window.closeSampleReceiptModal && window.closeSampleReceiptModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 rounded-xl text-xs transition active:scale-95">Go Back</button>
+            <button onclick="window.confirmSampleReceiptProceed && window.confirmSampleReceiptProceed()" class="flex-1 bg-amber-500 hover:bg-amber-400 text-black font-bold py-3 rounded-xl text-xs transition active:scale-95">Proceed</button>
+        </div>
+    </div>
+</div>
+
+<!-- SCHEDULED DELIVERY / ADVANCED ORDERS MODAL -->
+<div id="adv-orders-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-[20000] flex items-center justify-center p-4" style="z-index: 20000 !important;">
+    <div class="bg-cardBg border border-gray-800 p-5 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col gap-4 max-h-[85vh]">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+            <h3 class="font-bold text-sm text-purple-400 flex items-center gap-2">
+                <i class="fa-solid fa-calendar-check"></i> Scheduled Delivery Reminders
+            </h3>
+            <button onclick="window.closeAdvancedOrdersModal && window.closeAdvancedOrdersModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex bg-inputBg p-1 rounded-xl text-xs font-bold">
+            <button id="adv-tab-btn-list" onclick="window.switchAdvTab && window.switchAdvTab('list')" class="flex-1 py-1.5 rounded-lg bg-purple-600 text-white transition">Orders List</button>
+            <button id="adv-tab-btn-add" onclick="window.switchAdvTab && window.switchAdvTab('add')" class="flex-1 py-1.5 rounded-lg text-gray-400 transition">+ Schedule New</button>
+        </div>
+
+        <div id="adv-tab-list-content" class="flex-1 overflow-y-auto flex flex-col gap-2 min-h-[180px]">
+            <div class="text-center text-gray-500 italic py-8 text-xs">Loading advanced orders...</div>
+        </div>
+
+        <div id="adv-tab-add-content" class="hidden flex flex-col gap-2 overflow-y-auto">
+            <input type="text" id="adv-cust-name" placeholder="Customer Name *" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
+            <input type="text" id="adv-receiver" placeholder="Receiver Name / Alternate" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
+            <input type="text" id="adv-address" placeholder="Delivery Address" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
+            <input type="text" id="adv-contact" placeholder="Contact Number" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
+            
+            <div class="grid grid-cols-2 gap-2">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Date to Receive:</label>
+                    <input type="date" id="adv-receive-date" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Time to Receive:</label>
+                    <input type="time" id="adv-receive-time" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
+                </div>
+            </div>
+
+            <button onclick="window.submitNewAdvancedOrder && window.submitNewAdvancedOrder()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2.5 rounded-xl mt-2 text-xs transition active:scale-95">
+                Save Scheduled Order
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- GPS REQUIRED ALERT MODAL -->
+<div id="gps-alert-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-red-500/50 p-6 rounded-2xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-3">
+        <div class="w-14 h-14 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto text-2xl animate-pulse">
+            <i class="fa-solid fa-location-crosshairs"></i>
+        </div>
+        <h3 class="font-bold text-base text-red-400">GPS Location Required</h3>
+        <p class="text-xs text-gray-300 leading-relaxed">
+            Kailangan mong i-turn on ang iyong <strong>GPS Location</strong> sa telepono bago mag-Available sa roster.
+        </p>
+        <button onclick="window.closeGpsModal && window.closeGpsModal()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95 mt-2">
+            OK, Naintindihan Ko
+        </button>
+    </div>
+</div>
+
+<!-- CATERING PROMPT MODAL -->
+<div id="catering-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
+        <h3 class="font-bold text-base text-center text-red-400"><i class="fa-solid fa-motorcycle"></i> Start Catering</h3>
+        <div class="flex flex-col gap-2 text-left">
+            <label class="text-[10px] text-gray-400 font-bold uppercase">Select Customer (Inbox)</label>
+            <select id="catering-customer-select" onchange="if(this.value) document.getElementById('catering-customer-name').value = this.value;" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white font-bold">
+                <option value="">-- Select Active Customer --</option>
+            </select>
+
+            <label class="text-[10px] text-gray-400 font-bold uppercase mt-1">Or Enter Name Manually</label>
+            <input type="text" id="catering-customer-name" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold">
+        </div>
+        <div class="flex gap-2 mt-2">
+            <button onclick="window.closeCateringModal && window.closeCateringModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+            <button onclick="window.confirmCateringStatus && window.confirmCateringStatus()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Start</button>
+        </div>
+    </div>
+</div>
+
+<!-- UNIVERSAL SLIDE CONFIRMATION MODAL -->
+<div id="slide-delete-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[99999] flex items-end sm:items-center justify-center p-4">
+    <div class="bg-[#1E1A1A] border border-red-500/30 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl flex flex-col gap-4">
+        <i id="slide-modal-icon" class="fa-solid fa-triangle-exclamation text-red-500 text-3xl mx-auto"></i>
+        <h3 id="slide-delete-title" class="font-bold text-base">Confirm Action</h3>
+        <p id="slide-delete-sub" class="text-xs text-gray-400 whitespace-pre-line">I-drag pakanan ang slider para kumpirmahin.</p>
+        
+        <div class="relative h-12 bg-black/40 rounded-full border border-red-500/30 flex items-center px-2 overflow-hidden mt-2">
+            <span class="absolute inset-0 flex items-center justify-center text-[10px] text-white/30 font-bold tracking-widest pointer-events-none">&gt;&gt;&gt;&gt; SLIDE TO CONFIRM &gt;&gt;&gt;&gt;</span>
+            <input type="range" id="slide-delete-range" min="0" max="100" value="0" oninput="onSlideProgress(this.value)" onmouseup="onSlideEnd()" ontouchend="onSlideEnd()" class="w-full accent-red-500 cursor-pointer z-10 opacity-80 h-10">
+        </div>
+        <button onclick="window.closeSlideDeleteModal && window.closeSlideDeleteModal()" class="text-xs text-gray-400 py-1">Cancel</button>
+    </div>
+</div>
+
+<!-- UNIVERSAL PASSWORD MODAL -->
+<div id="password-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl">
+        <div class="w-12 h-12 bg-amber-500/20 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-3"><i class="fa-solid fa-lock"></i></div>
+        <h3 class="font-bold text-base mb-1">Protected Record</h3>
+        <p class="text-xs text-gray-400 mb-4">Enter password to authorize editing.</p>
+        <input type="password" id="modal-pass" placeholder="Password" class="w-full bg-inputBg text-sm text-center rounded-xl p-3 mb-4 outline-none border border-gray-700">
+        <div class="flex gap-2">
+            <button onclick="window.closePasswordModal && window.closePasswordModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-3 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+            <button onclick="window.verifyPassword && window.verifyPassword()" class="flex-1 bg-amber-500 hover:bg-amber-400 py-3 rounded-xl text-xs font-bold text-black transition active:scale-95">Verify</button>
+        </div>
+    </div>
+</div>
+
+<div id="bulk-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl w-full max-w-md shadow-2xl flex flex-col gap-4">
+        <h3 class="font-bold text-base"><i class="fa-solid fa-paste text-blue-400"></i> Paste Listahan</h3>
+        <textarea id="bulk-input" rows="6" placeholder="Format: Item Name Price&#10;Halimbawa:&#10;1pc chicken 150&#10;Sibuyas&#10;Bigas 60" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 focus:border-blue-500 resize-none font-mono"></textarea>
+        <div class="flex gap-2">
+            <button onclick="window.closeBulkModal && window.closeBulkModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-3 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+            <button onclick="window.processBulkAdd && window.processBulkAdd()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded-xl text-xs font-bold text-white transition active:scale-95">Add Items</button>
+        </div>
+    </div>
+</div>
+
+<div id="edit-item-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
+        <h3 class="font-bold text-base text-center">Edit Item</h3>
+        <div class="flex flex-col gap-1 text-left">
+            <label class="text-[10px] text-gray-400 font-bold">Item Name</label>
+            <input type="text" id="edit-name-input" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
+        </div>
+        <div class="flex flex-col gap-1 text-left">
+            <label class="text-[10px] text-gray-400 font-bold">Price (₱)</label>
+            <input type="number" id="edit-price-input" placeholder="0.00" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
+        </div>
+        <div class="flex items-center gap-2 mt-1 text-left">
+            <input type="checkbox" id="edit-paid-input" class="w-4 h-4 accent-emerald-500 cursor-pointer">
+            <label for="edit-paid-input" class="text-xs text-gray-300 font-bold cursor-pointer">Mark as Paid (₱0.00)</label>
+        </div>
+        <div class="flex gap-2 mt-2">
+            <button onclick="window.closeEditItemModal && window.closeEditItemModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+            <button onclick="window.saveItemEdit && window.saveItemEdit()" class="flex-1 bg-green-600 hover:bg-green-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Save</button>
+        </div>
+    </div>
+</div>

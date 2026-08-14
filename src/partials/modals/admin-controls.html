@@ -1,0 +1,172 @@
+<!-- ADMIN BLOCK USER MODAL -->
+<div id="admin-block-user-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-red-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-user-slash text-red-400 text-lg"></i>
+                <h3 class="font-bold text-sm text-white">Ban / Block User Management</h3>
+            </div>
+            <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="text-gray-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex flex-col gap-2">
+            <select id="block-target-select" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold">
+                <option value="" disabled selected>-- Select Rider / User --</option>
+            </select>
+
+            <input type="text" id="block-reason-input" name="block_reason_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Reason for blocking" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none">
+            <button onclick="window.submitBlockUser && window.submitBlockUser()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
+                🚫 Block Account
+            </button>
+        </div>
+
+        <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-2">Blocked Users List</div>
+        <div id="blocked-users-list" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 min-h-[120px]"></div>
+
+        <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
+            Close
+        </button>
+    </div>
+</div>
+
+<!-- ADMIN MANAGE RIDERS MODAL (ACCOUNT TYPE & PERMISSIONS) -->
+<div id="admin-manage-riders-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-blue-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-users-gear text-blue-400 text-lg"></i>
+                <h3 class="font-bold text-sm text-white">Rider Accounts & Permissions</h3>
+            </div>
+            <button onclick="window.closeAdminManageRidersModal && window.closeAdminManageRidersModal()" class="text-gray-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex justify-between items-center bg-darkBg p-2.5 rounded-2xl border border-gray-800">
+            <span class="text-xs text-gray-300 font-bold">Rider Accounts List</span>
+            <button onclick="window.openAddRiderModal && window.openAddRiderModal()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs transition active:scale-95 shadow flex items-center gap-1">
+                <i class="fa-solid fa-user-plus"></i> + Add Rider
+            </button>
+        </div>
+
+        <div id="admin-riders-list-container" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 min-h-[160px]">
+            <div class="text-center text-gray-500 italic py-8 text-xs">Loading rider accounts...</div>
+        </div>
+
+        <button onclick="window.closeAdminManageRidersModal && window.closeAdminManageRidersModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
+            Close
+        </button>
+    </div>
+</div>
+
+<!-- ADMIN ADD / EDIT RIDER MODAL WITH GENERATE ID FEATURE -->
+<div id="admin-edit-rider-modal" class="hidden fixed inset-0 bg-black/90 backdrop-blur-md z-[999999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-blue-500/60 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3 relative animate-in fade-in zoom-in duration-200">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+            <h3 id="admin-edit-rider-title" class="font-bold text-xs text-white">Add New Rider Account</h3>
+            <button onclick="window.closeAdminEditRiderModal && window.closeAdminEditRiderModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex flex-col gap-2.5 text-xs">
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Rider Login ID *</label>
+                <div class="flex gap-2 mt-1">
+                    <input type="text" id="edit-rider-id-input" placeholder="e.g. 1001 or Telegram ID" class="flex-1 bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold font-mono">
+                    <button type="button" onclick="window.generateRandomRiderId && window.generateRandomRiderId()" class="bg-emerald-600/30 hover:bg-emerald-600 border border-emerald-500/50 text-emerald-300 hover:text-white px-3 py-2 rounded-xl text-xs font-bold transition active:scale-95 flex items-center gap-1.5 shrink-0" title="Generate Random ID">
+                        <i class="fa-solid fa-dice"></i> Generate
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Rider Full Name *</label>
+                <input type="text" id="edit-rider-name-input" placeholder="e.g. Juan Dela Cruz" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold mt-1">
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Account Type (Permissions) *</label>
+                <select id="edit-rider-usertype-select" class="w-full bg-inputBg text-xs font-bold text-amber-300 rounded-xl p-2.5 border border-gray-700 outline-none mt-1">
+                    <option value="rider">Rider (Standard Member)</option>
+                    <option value="tl">TL (Team Lead)</option>
+                    <option value="admin">Admin (Full Access)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="flex gap-2 mt-2">
+            <button onclick="window.closeAdminEditRiderModal && window.closeAdminEditRiderModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+            <button onclick="window.submitSaveRiderAccount && window.submitSaveRiderAccount()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Save Account</button>
+        </div>
+    </div>
+</div>
+
+<!-- FIND MY RIDERS MAP MODAL (ADMIN ONLY) -->
+<div id="find-riders-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-indigo-500/40 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3 max-h-[85vh]">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+            <h3 class="font-bold text-sm text-indigo-300 flex items-center gap-2">
+                <i class="fa-solid fa-map-location-dot text-indigo-400"></i> Find My Riders (Active)
+            </h3>
+            <div class="flex items-center gap-2">
+                <button onclick="window.refreshFindRidersMap && window.refreshFindRidersMap()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/50 px-2.5 py-1 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5" title="Refresh Rider Positions">
+                    <i id="find-riders-refresh-icon" class="fa-solid fa-rotate"></i> Refresh
+                </button>
+                <button onclick="window.closeFindRidersModal && window.closeFindRidersModal()" class="text-gray-400 hover:text-white text-sm ml-1"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+        </div>
+        
+        <div id="find-riders-map-container" class="w-full h-80 rounded-2xl overflow-hidden border border-indigo-500/50 relative shadow-inner">
+            <div id="find-riders-google-map" class="w-full h-full"></div>
+        </div>
+
+        <div id="find-riders-status-summary" class="text-xs text-gray-300 bg-darkBg p-2.5 rounded-xl border border-gray-800 flex justify-around text-center">
+        </div>
+
+        <button onclick="window.closeFindRidersModal && window.closeFindRidersModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
+            Close
+        </button>
+    </div>
+</div>
+
+<!-- SWAP APPROVAL MODAL -->
+<div id="swap-approval-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-purple-500/80 p-6 rounded-3xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-4 animate-bounce">
+        <div class="w-14 h-14 bg-purple-500/20 text-purple-400 rounded-full flex items-center justify-center mx-auto text-2xl">
+            <i class="fa-solid fa-arrows-rotate animate-spin"></i>
+        </div>
+        <div>
+            <h3 class="font-black text-base text-purple-300 uppercase tracking-wide">Customer Swap Request</h3>
+            <p id="swap-approval-msg" class="text-xs text-gray-200 mt-2 leading-relaxed"></p>
+        </div>
+        <div class="flex gap-2">
+            <button id="swap-decline-btn" onclick="window.declineSwapRequest && window.declineSwapRequest()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-red-400 font-bold py-3 rounded-xl text-xs transition active:scale-95">
+                Decline
+            </button>
+            <button id="swap-accept-btn" onclick="window.acceptSwapRequest && window.acceptSwapRequest()" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95">
+                Accept Swap
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- SWAP CUSTOMER MODAL -->
+<div id="swap-customer-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-purple-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2.5">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-purple-600/30 text-purple-300 flex items-center justify-center text-sm font-bold border border-purple-500/40">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm text-white">Swap / Transfer Customer</h3>
+                    <p id="swap-modal-source-label" class="text-[10px] text-purple-300 font-mono"></p>
+                </div>
+            </div>
+            <button onclick="window.closeSwapCustomerModal && window.closeSwapCustomerModal()" class="text-gray-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div id="swap-riders-accordion-list" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 min-h-0"></div>
+
+        <button onclick="window.closeSwapCustomerModal && window.closeSwapCustomerModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 mt-1">
+            Cancel
+        </button>
+    </div>
+</div>

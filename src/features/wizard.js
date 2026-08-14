@@ -5,8 +5,7 @@ import { getLocalTodayStr, copyText, escapeHtml } from '../utils/helpers.js';
 import { showToast, showSideNotification } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
 import { saveCartState, getCurrentCart, clearCartSlot, getEffectiveCartClient, renderCartItems, renderCartTabs } from './cart.js';
-import { getActiveCateringCustomersWithTimes } from './roster.js';
-import { API_URL } from '../config/constants.js';
+import { getActiveCateringCustomersWithTimes } from './roster/index.js';
 
 let currentReceiptTransactionId = "";
 
@@ -56,6 +55,8 @@ export function initWizardForCart() {
         .reduce((s, i) => s + Math.max(0, parseFloat(i.price) || 0), 0);
 
     wizState.subtotal = Math.max(0, marketSum + storeSum);
+    wizState.discountType = wizState.discountType || 'amount';
+
     const autoMarket = marketSum > 0 ? Math.ceil(marketSum / 500) * 15 : 0;
     const autoHandling = storeSum > 0 ? Math.ceil(storeSum / 500) * 10 : 0;
     
@@ -70,6 +71,7 @@ export function initWizardForCart() {
     if (multistopEl && !multistopEl.value) multistopEl.value = 0;
 
     setupWizardClientDetails();
+    updateDiscountTypeUI();
     calculateGrandTotal();
 }
 
@@ -137,6 +139,45 @@ export function adjustStoreCount(delta) {
     calculateGrandTotal();
 }
 
+// TOGGLE DISCOUNT MODE (FIXED AMOUNT VS PERCENTAGE)
+export function toggleDiscountType(type) {
+    if (type) {
+        wizState.discountType = type;
+    } else {
+        wizState.discountType = wizState.discountType === 'percent' ? 'amount' : 'percent';
+    }
+
+    updateDiscountTypeUI();
+    calculateGrandTotal();
+}
+
+export function updateDiscountTypeUI() {
+    const isPercent = wizState.discountType === 'percent';
+
+    const btnAmount = document.getElementById('wiz-discount-type-amount');
+    const btnPercent = document.getElementById('wiz-discount-type-percent');
+    const discountIcon = document.getElementById('wiz-discount-icon');
+    const discountInput = document.getElementById('wiz-discount');
+
+    if (btnAmount && btnPercent) {
+        if (isPercent) {
+            btnPercent.className = "px-2 py-1 bg-red-600 text-white font-bold rounded-md text-[10px] shadow transition";
+            btnAmount.className = "px-2 py-1 bg-gray-800 text-gray-400 font-bold rounded-md text-[10px] hover:text-white transition";
+        } else {
+            btnAmount.className = "px-2 py-1 bg-red-600 text-white font-bold rounded-md text-[10px] shadow transition";
+            btnPercent.className = "px-2 py-1 bg-gray-800 text-gray-400 font-bold rounded-md text-[10px] hover:text-white transition";
+        }
+    }
+
+    if (discountIcon) {
+        discountIcon.innerText = isPercent ? "%" : "₱";
+    }
+
+    if (discountInput) {
+        discountInput.placeholder = isPercent ? "0%" : "0";
+    }
+}
+
 export function calculateGrandTotal() {
     const freeDeliveryEl = document.getElementById('wiz-free-delivery');
     const isFree = freeDeliveryEl ? freeDeliveryEl.checked : false;
@@ -145,16 +186,26 @@ export function calculateGrandTotal() {
     let mFee = Math.max(0, parseFloat(document.getElementById('wiz-market')?.value) || 0);
     let multistop = Math.max(0, parseFloat(document.getElementById('wiz-multistop')?.value) || 0);
     let dFee = Math.max(0, parseFloat(document.getElementById('wiz-delivery')?.value) || 0);
-    let disc = Math.max(0, parseFloat(document.getElementById('wiz-discount')?.value) || 0);
+    let rawDiscountInput = Math.max(0, parseFloat(document.getElementById('wiz-discount')?.value) || 0);
 
     if (isFree) {
         hFee = 0; mFee = 0; multistop = 0; dFee = 0;
     }
 
     const subtotal = Math.max(0, wizState.subtotal || 0);
-    let codTotal = Math.max(0, subtotal + hFee + mFee + multistop + dFee - disc);
+    const grossTotalBeforeDiscount = subtotal + hFee + mFee + multistop + dFee;
 
-    // Auto-calculate ePayment processing fee
+    let calculatedDiscount = 0;
+    if (wizState.discountType === 'percent') {
+        calculatedDiscount = (grossTotalBeforeDiscount * Math.min(100, rawDiscountInput)) / 100;
+    } else {
+        calculatedDiscount = rawDiscountInput;
+    }
+
+    calculatedDiscount = Math.min(grossTotalBeforeDiscount, Math.max(0, calculatedDiscount));
+
+    let codTotal = Math.max(0, grossTotalBeforeDiscount - calculatedDiscount);
+
     let epayFee = 0;
     if (codTotal > 0) {
         epayFee = codTotal <= 1000 ? 15 : 15 + Math.ceil((codTotal - 1000) / 500) * 5;
@@ -171,7 +222,8 @@ export function calculateGrandTotal() {
     wizState.finalMFee = mFee;
     wizState.finalMulti = multistop;
     wizState.deliveryFee = dFee;
-    wizState.discount = disc;
+    wizState.rawDiscountVal = rawDiscountInput;
+    wizState.discount = calculatedDiscount;
     wizState.finalEpay = epayFee;
     wizState.codTotal = codTotal;
     wizState.gcashTotal = gcashTotal;
@@ -271,17 +323,19 @@ async function saveReceiptToDatabase(customerName) {
             market: wizState.finalMFee || 0,
             multistore: wizState.finalMulti || 0,
             delivery: wizState.deliveryFee || 0,
-            discount: wizState.discount || 0
+            discount: wizState.discount || 0,
+            discountType: wizState.discountType || 'amount',
+            rawDiscountVal: wizState.rawDiscountVal || 0
         },
         totalFees: totalFees,
         date: todayStr
     };
 
     try {
-        if (currentReceiptTransactionId) {
+        if (currentReceiptTransactionId && db) {
             db.ref('receipts/' + currentReceiptTransactionId).set(payload);
         }
-        if (appState.telegramId) {
+        if (appState.telegramId && db) {
             db.ref('roster/' + appState.telegramId).update({
                 lastReceiptFees: payload.fees,
                 lastReceiptTotalFees: totalFees
@@ -299,10 +353,6 @@ async function saveReceiptToDatabase(customerName) {
     } catch (e) {
         console.error("Firebase write error:", e);
     }
-
-    try {
-        fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
-    } catch (e) {}
 }
 
 export function renderFinalReceiptText() {
@@ -320,6 +370,8 @@ export function renderFinalReceiptText() {
     const finalMulti = wizState.finalMulti || 0;
     const deliveryFee = wizState.deliveryFee || 0;
     const discount = wizState.discount || 0;
+    const isPercent = wizState.discountType === 'percent';
+    const rawDiscVal = wizState.rawDiscountVal || 0;
 
     const codTotal = Math.max(0, wizState.codTotal || wizState.finalTotal || 0);
     const epayFee = wizState.finalEpay || (codTotal <= 1000 ? 15 : 15 + Math.ceil((codTotal - 1000) / 500) * 5);
@@ -340,7 +392,13 @@ export function renderFinalReceiptText() {
     if (finalMFee > 0) feesTxt += `🔹 Market Fee: ₱${finalMFee.toFixed(2)}\n`;
     if (finalMulti > 0) feesTxt += `🔹 Multistore Fee: ₱${finalMulti.toFixed(2)}\n`;
     if (deliveryFee > 0) feesTxt += `🔹 Delivery Fee: ₱${deliveryFee.toFixed(2)}\n`;
-    if (discount > 0) feesTxt += `🔻 Discount: -₱${discount.toFixed(2)}\n`;
+    if (discount > 0) {
+        if (isPercent) {
+            feesTxt += `🔻 Discount (${rawDiscVal}%): -₱${discount.toFixed(2)}\n`;
+        } else {
+            feesTxt += `🔻 Discount: -₱${discount.toFixed(2)}\n`;
+        }
+    }
 
     if (!feesTxt) feesTxt = "🔹 Wala pong karagdagang fees.\n";
 
@@ -401,6 +459,8 @@ export function completeReceiptDone() {
 
     wizState.subtotal = 0;
     wizState.storeCount = 1;
+    wizState.discountType = 'amount';
+    wizState.rawDiscountVal = 0;
     appState.selectedCateringClient = "";
 
     const handlingEl = document.getElementById('wiz-handling');
@@ -416,6 +476,8 @@ export function completeReceiptDone() {
     if(deliveryEl) deliveryEl.value = "";
     if(discountEl) discountEl.value = "";
     if(freeDelivEl) freeDelivEl.checked = false;
+    
+    updateDiscountTypeUI();
 }
 
 export function copyFinalReceipt() {
@@ -430,6 +492,8 @@ if (typeof window !== 'undefined') {
     window.selectCateredClientName = selectCateredClientName;
     window.toggleManualClientInput = toggleManualClientInput;
     window.adjustStoreCount = adjustStoreCount;
+    window.toggleDiscountType = toggleDiscountType;
+    window.updateDiscountTypeUI = updateDiscountTypeUI;
     window.calculateGrandTotal = calculateGrandTotal;
     window.generateFinalReceipt = generateFinalReceipt;
     window.confirmSampleReceiptProceed = confirmSampleReceiptProceed;

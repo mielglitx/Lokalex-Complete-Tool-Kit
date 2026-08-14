@@ -1,0 +1,45 @@
+<section id="view-commission" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
+    <div class="bg-cardBg p-3 rounded-xl border border-gray-800 flex flex-col gap-3 shadow-md">
+        <div id="admin-commission-filter-box" class="hidden flex-col gap-1 border-b border-gray-800 pb-3">
+            <span class="text-[10px] text-amber-400 font-bold uppercase tracking-wider"><i class="fa-solid fa-user-shield"></i> Admin View: Select Rider</span>
+            <select id="admin-rider-select" onchange="window.refreshCommissionView && window.refreshCommissionView()" class="w-full bg-inputBg text-sm text-white rounded-lg p-2.5 outline-none border border-gray-700 focus:border-amber-500 transition"></select>
+        </div>
+
+        <div class="flex bg-darkBg rounded-lg p-1 text-xs font-bold border border-gray-800">
+            <button id="comm-mode-earned" onclick="window.setCommissionMode && window.setCommissionMode('earned')" class="flex-1 py-2 rounded-md bg-emerald-600/20 text-emerald-400 border border-emerald-500/50 transition">My Earnings</button>
+            <button id="comm-mode-company" onclick="window.setCommissionMode && window.setCommissionMode('company')" class="flex-1 py-2 rounded-md text-gray-400 hover:text-white transition">To Pay (Company)</button>
+        </div>
+
+        <div class="grid grid-cols-3 gap-1 bg-darkBg rounded-lg p-1 text-[10px] font-bold border border-gray-800">
+            <button id="comm-period-daily" onclick="window.setCommissionPeriod && window.setCommissionPeriod('daily')" class="py-1.5 rounded bg-blue-600 text-white transition">Daily</button>
+            <button id="comm-period-weekly" onclick="window.setCommissionPeriod && window.setCommissionPeriod('weekly')" class="py-1.5 rounded text-gray-400 hover:text-white transition">Weekly</button>
+            <button id="comm-period-monthly" onclick="window.setCommissionPeriod && window.setCommissionPeriod('monthly')" class="py-1.5 rounded text-gray-400 hover:text-white transition">Monthly</button>
+        </div>
+
+        <div class="flex justify-between items-center">
+            <span class="text-xs text-gray-400 font-bold" id="comm-date-label">Select Date:</span>
+            <input type="date" id="comm-input-daily" onchange="window.refreshCommissionView && window.refreshCommissionView()" class="bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
+            <input type="week" id="comm-input-weekly" onchange="window.refreshCommissionView && window.refreshCommissionView()" class="hidden bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
+            <input type="month" id="comm-input-monthly" onchange="window.refreshCommissionView && window.refreshCommissionView()" class="hidden bg-inputBg text-xs rounded-lg p-2 outline-none border border-gray-700 text-white">
+        </div>
+    </div>
+
+    <div class="bg-cardBg p-4 rounded-xl border border-gray-800 shadow-sm flex flex-col gap-3 relative overflow-hidden">
+        <div class="text-xs text-gray-400 uppercase tracking-widest font-bold text-center mt-2" id="comm-summary-title">Daily Summary</div>
+        
+        <div class="flex flex-col items-center justify-center py-2">
+            <div class="text-[10px] text-gray-400 font-bold uppercase" id="comm-main-label">Total Earnings</div>
+            <div id="comm-main-wrapper" class="text-4xl font-black text-emerald-400 drop-shadow-md">
+                <span id="comm-main-currency">₱</span><span id="comm-main-amount">0.00</span>
+            </div>
+            <div class="text-[10px] text-gray-500 mt-1">Gross Total: ₱<span id="comm-gross-amount">0.00</span></div>
+        </div>
+    </div>
+
+    <button onclick="window.generateDailyReportText && window.generateDailyReportText()" class="w-full bg-blue-600/20 border border-blue-600/50 hover:bg-blue-600 text-blue-400 hover:text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2 transition active:scale-95 text-xs">
+        <i class="fa-solid fa-file-lines"></i> Generate Text Report
+    </button>
+
+    <div class="text-[10px] text-gray-500 uppercase tracking-wider font-bold mt-2 border-b border-gray-800 pb-1">Rider Summary</div>
+    <div id="commission-rider-list" class="flex flex-col gap-3 pb-20"></div>
+</section>

@@ -4,12 +4,17 @@ const firebaseConfig = {
     authDomain: "lokalex-hub.firebaseapp.com",
     databaseURL: "https://lokalex-hub-default-rtdb.asia-southeast1.firebasedatabase.app",
     projectId: "lokalex-hub",
-    storageBucket: "lokalex-hub.firebasestorage.app",
-    messagingSenderId: "56934926994",
-    appId: "1:56934926994:web:e2e0eb51e0a230bf53b44b",
-    measurementId: "G-Q148X0NJ7K"
+    storageBucket: "lokalex-hub.appspot.com",
+    messagingSenderId: "102938475610",
+    appId: "1:102938475610:web:abcdef1234567890"
 };
 
-firebase.initializeApp(firebaseConfig);
-export const db = firebase.database();
-export const auth = firebase.auth();
+const fb = window.firebase || (typeof firebase !== 'undefined' ? firebase : null);
+
+if (fb && !fb.apps.length) {
+    fb.initializeApp(firebaseConfig);
+}
+
+export const db = fb ? fb.database() : null;
+export const auth = fb ? fb.auth() : null;
+export default fb;

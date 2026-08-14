@@ -1,16 +1,49 @@
 // src/features/auth.js
 import { appState, globalState } from '../store/state.js';
-import { CSV_AUTH_URL, ADMIN_IDS } from '../config/constants.js';
+import { ADMIN_IDS } from '../config/constants.js';
 import { switchView, renderViewUI } from '../ui/router.js';
 import { showToast, unlockAudioContext } from '../ui/notifications.js';
 import { fetchGCashDetails } from '../ui/modals.js';
 import { db, auth } from '../config/firebase.js';
-import { listenToCustomerRiderChat } from './chat.js';
+import { listenToCustomerRiderChat } from './chat/index.js';
+import { openMapPicker } from './maps.js';
 
 let backgroundGpsWatchId = null;
 let lastRosterGpsPushTime = 0;
 const GPS_ROSTER_PULSE_MS = 30000;
 let confirmationResultObj = null;
+let pendingRegUser = null;
+let fpConfirmationResult = null;
+let fpUserRef = null;
+let profileUpdateConfirmationObj = null;
+let newPendingPhoneNumber = "";
+
+let deferredPwaPrompt = null;
+
+if (typeof window !== 'undefined') {
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPwaPrompt = e;
+    });
+}
+
+// ============================================================================
+// 1. UTILITY & HELPER FUNCTIONS
+// ============================================================================
+export function togglePasswordVisibility(inputId, iconId) {
+    const inputEl = document.getElementById(inputId);
+    const iconEl = document.getElementById(iconId);
+
+    if (inputEl && iconEl) {
+        if (inputEl.type === 'password') {
+            inputEl.type = 'text';
+            iconEl.className = 'fa-solid fa-eye-slash text-blue-400';
+        } else {
+            inputEl.type = 'password';
+            iconEl.className = 'fa-solid fa-eye text-gray-400';
+        }
+    }
+}
 
 export function switchLoginPortalTab(mode) {
     const riderForm = document.getElementById('portal-form-rider');
@@ -22,6 +55,46 @@ export function switchLoginPortalTab(mode) {
     } else {
         if (custForm) custForm.classList.remove('hidden');
         if (riderForm) riderForm.classList.add('hidden');
+    }
+}
+
+export function switchCustomerAuthTab(tabName) {
+    const loginView = document.getElementById('auth-view-login');
+    const regView = document.getElementById('auth-view-register');
+    const tabLogin = document.getElementById('auth-tab-login');
+    const tabReg = document.getElementById('auth-tab-register');
+
+    if (tabName === 'login') {
+        if (loginView) loginView.classList.remove('hidden');
+        if (regView) regView.classList.add('hidden');
+        if (tabLogin) tabLogin.className = "flex-1 py-2 rounded-xl bg-blue-600 text-white transition shadow";
+        if (tabReg) tabReg.className = "flex-1 py-2 rounded-xl text-gray-400 hover:text-white transition";
+    } else {
+        if (regView) regView.classList.remove('hidden');
+        if (loginView) loginView.classList.add('hidden');
+        if (tabReg) tabReg.className = "flex-1 py-2 rounded-xl bg-emerald-600 text-white transition shadow";
+        if (tabLogin) tabLogin.className = "flex-1 py-2 rounded-xl text-gray-400 hover:text-white transition";
+    }
+}
+
+function formatPhoneNumber(phone) {
+    let clean = (phone || '').replace(/[^0-9+]/g, '').trim();
+    if (clean.startsWith('+')) return clean;
+    if (clean.startsWith('09') && clean.length === 11) return '+63' + clean.substring(1);
+    if (clean.startsWith('9') && clean.length === 10) return '+63' + clean;
+    return '+' + clean;
+}
+
+function initRecaptcha() {
+    if (!window.recaptchaVerifier) {
+        try {
+            window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+                'size': 'invisible',
+                'callback': () => {}
+            });
+        } catch (e) {
+            console.error("Recaptcha init error:", e);
+        }
     }
 }
 
@@ -37,155 +110,590 @@ export function isUserBlocked(idOrName) {
     });
 }
 
-function formatPhoneNumber(phone) {
-    let clean = (phone || '').replace(/[^0-9+]/g, '').trim();
-    if (clean.startsWith('09')) {
-        clean = '+63' + clean.substring(1);
-    } else if (clean.startsWith('9') && clean.length === 10) {
-        clean = '+63' + clean;
-    } else if (!clean.startsWith('+')) {
-        clean = '+' + clean;
+// ============================================================================
+// 2. PWA INSTALLATION & CHAT LOCATION PIN LAUNCHER
+// ============================================================================
+export function installPwaApp() {
+    if (deferredPwaPrompt) {
+        deferredPwaPrompt.prompt();
+        deferredPwaPrompt.userChoice.then((choiceResult) => {
+            if (choiceResult.outcome === 'accepted') {
+                showToast("🎉 Salamat sa pag-install ng Lokalex App!");
+            }
+            deferredPwaPrompt = null;
+        });
+    } else {
+        const modal = document.getElementById('pwa-install-modal');
+        if (modal) modal.classList.remove('hidden');
     }
-    return clean;
 }
 
-export function sendCustomerPhoneOTP() {
-    const phoneInput = document.getElementById('cust-phone-num')?.value.trim();
+export function closePwaInstallModal() {
+    const modal = document.getElementById('pwa-install-modal');
+    if (modal) modal.classList.add('hidden');
+}
 
-    if (!phoneInput) return showToast("⚠️ Paki-lagay ang iyong Phone Number!");
+export function sendCustomerLocation() {
+    openMapPicker('chat');
+}
 
-    const formattedPhone = formatPhoneNumber(phoneInput);
-    if (formattedPhone.length < 12) {
-        return showToast("⚠️ Format ng phone number ay hindi valid (hal. 09123456789)");
+export function captureRegistrationGPS() {
+    openMapPicker('registration');
+}
+
+export function captureEditProfileGPS() {
+    openMapPicker('edit-profile');
+}
+
+// ============================================================================
+// 3. EDIT CUSTOMER PROFILE & PHONE OTP VERIFICATION
+// ============================================================================
+export async function openEditCustomerProfileModal() {
+    const modal = document.getElementById('edit-customer-profile-modal');
+    const uid = appState.customerFacebookId || localStorage.getItem('lokalex_customer_fb_id');
+    if (!modal || !uid || !db) return;
+
+    try {
+        const snap = await db.ref(`customers/${uid}`).once('value');
+        const data = snap.val() || {};
+
+        document.getElementById('edit-cust-fullname').value = data.name || appState.customerName || "";
+        document.getElementById('edit-cust-phone').value = data.phoneNumber || "";
+        document.getElementById('edit-cust-address').value = data.address || "";
+        document.getElementById('edit-cust-gps-link').value = data.mapPinLink || "";
+        document.getElementById('edit-cust-lat').value = data.lat || "0";
+        document.getElementById('edit-cust-lon').value = data.lng || "0";
+
+        document.getElementById('edit-cust-otp-box')?.classList.add('hidden');
+        document.getElementById('edit-cust-save-btn')?.classList.remove('hidden');
+
+        modal.classList.remove('hidden');
+    } catch (e) {
+        showToast("⚠️ Could not load profile details.");
+    }
+}
+
+export function closeEditCustomerProfileModal() {
+    const modal = document.getElementById('edit-customer-profile-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export async function saveCustomerProfile() {
+    const uid = appState.customerFacebookId || localStorage.getItem('lokalex_customer_fb_id');
+    if (!uid || !db) return showToast("⚠️ Session missing. Please login again.");
+
+    const newName = document.getElementById('edit-cust-fullname')?.value.trim();
+    const newAddress = document.getElementById('edit-cust-address')?.value.trim();
+    const newGpsLink = document.getElementById('edit-cust-gps-link')?.value.trim();
+    const newLat = parseFloat(document.getElementById('edit-cust-lat')?.value) || 0;
+    const newLon = parseFloat(document.getElementById('edit-cust-lon')?.value) || 0;
+    const rawPhone = document.getElementById('edit-cust-phone')?.value.trim();
+
+    if (!newName) return showToast("⚠️ Please enter your Full Name.");
+    if (!newAddress) return showToast("⚠️ Please enter your Delivery Address.");
+    if (!rawPhone) return showToast("⚠️ Please enter your Mobile Number.");
+
+    const formattedNewPhone = formatPhoneNumber(rawPhone);
+
+    const snap = await db.ref(`customers/${uid}`).once('value');
+    const currentData = snap.val() || {};
+    const oldPhone = currentData.phoneNumber || "";
+
+    if (formattedNewPhone !== oldPhone) {
+        sendProfileUpdateOTP(formattedNewPhone);
+        return;
     }
 
-    const sendBtn = document.getElementById('send-otp-btn');
-    if (sendBtn) {
-        sendBtn.disabled = true;
-        sendBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Sending SMS OTP...`;
+    await executeProfileUpdate(uid, {
+        name: newName,
+        address: newAddress,
+        mapPinLink: newGpsLink,
+        lat: newLat,
+        lng: newLon,
+        phoneNumber: oldPhone
+    });
+}
+
+async function sendProfileUpdateOTP(formattedPhone) {
+    const saveBtn = document.getElementById('edit-cust-save-btn');
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Sending OTP...`;
     }
 
-    if (!window.recaptchaVerifier) {
-        try {
-            window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-                'size': 'invisible',
-                'callback': () => {}
-            });
-        } catch (e) {
-            console.error("Recaptcha init error:", e);
+    try {
+        const cleanPhoneKey = formattedPhone.replace(/[^0-9]/g, '');
+        const phoneSnap = await db.ref(`phones/${cleanPhoneKey}`).once('value');
+        if (phoneSnap.exists()) {
+            throw new Error("🚫 The new mobile number is already registered to another account!");
+        }
+
+        initRecaptcha();
+        profileUpdateConfirmationObj = await auth.signInWithPhoneNumber(formattedPhone, window.recaptchaVerifier);
+        newPendingPhoneNumber = formattedPhone;
+
+        showToast("📲 OTP Code sent to your new mobile number!");
+        document.getElementById('edit-cust-otp-box')?.classList.remove('hidden');
+        document.getElementById('edit-cust-save-btn')?.classList.add('hidden');
+    } catch (e) {
+        showToast(`❌ ${e.message || "Failed to send OTP"}`);
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> SAVE PROFILE CHANGES`;
         }
     }
-
-    const appVerifier = window.recaptchaVerifier;
-
-    auth.signInWithPhoneNumber(formattedPhone, appVerifier)
-        .then((confirmationResult) => {
-            confirmationResultObj = confirmationResult;
-            showToast("📲 OTP Code sent via SMS!");
-
-            document.getElementById('phone-auth-step-1')?.classList.add('hidden');
-            document.getElementById('phone-auth-step-2')?.classList.remove('hidden');
-        })
-        .catch((error) => {
-            console.error("Error sending OTP:", error);
-            showToast(`❌ Error: ${error.message || "Failed to send SMS OTP"}`);
-            if (sendBtn) {
-                sendBtn.disabled = false;
-                sendBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> SEND OTP CODE`;
-            }
-            if (window.recaptchaVerifier) {
-                window.recaptchaVerifier.render().then(widgetId => {
-                    if (window.grecaptcha) grecaptcha.reset(widgetId);
-                });
-            }
-        });
 }
 
-export function verifyCustomerPhoneOTP() {
-    const codeInput = document.getElementById('cust-otp-code')?.value.trim();
-    if (!codeInput || codeInput.length < 6) {
-        return showToast("⚠️ Paki-lagay ang 6-digit OTP code!");
-    }
+export async function verifyAndUpdatePhoneOTP() {
+    const code = document.getElementById('edit-cust-otp-code')?.value.trim();
+    if (!code || code.length < 6) return showToast("⚠️ Enter 6-digit OTP code!");
+    if (!profileUpdateConfirmationObj || !newPendingPhoneNumber) return showToast("⚠️ Session expired.");
 
-    if (!confirmationResultObj) {
-        return showToast("⚠️ Session expired. Paki-resend ng OTP code.");
-    }
-
-    const verifyBtn = document.getElementById('verify-otp-btn');
+    const verifyBtn = document.getElementById('edit-cust-verify-otp-btn');
     if (verifyBtn) {
         verifyBtn.disabled = true;
         verifyBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Verifying...`;
     }
 
-    const custName = document.getElementById('cust-phone-name')?.value.trim() || "Customer";
+    try {
+        await profileUpdateConfirmationObj.confirm(code);
+        const uid = appState.customerFacebookId || localStorage.getItem('lokalex_customer_fb_id');
+
+        const newName = document.getElementById('edit-cust-fullname')?.value.trim();
+        const newAddress = document.getElementById('edit-cust-address')?.value.trim();
+        const newGpsLink = document.getElementById('edit-cust-gps-link')?.value.trim();
+        const newLat = parseFloat(document.getElementById('edit-cust-lat')?.value) || 0;
+        const newLon = parseFloat(document.getElementById('edit-cust-lon')?.value) || 0;
+
+        const newCleanPhoneKey = newPendingPhoneNumber.replace(/[^0-9]/g, '');
+        await db.ref(`phones/${newCleanPhoneKey}`).set({ uid: uid, phoneNumber: newPendingPhoneNumber });
+
+        await executeProfileUpdate(uid, {
+            name: newName,
+            address: newAddress,
+            mapPinLink: newGpsLink,
+            lat: newLat,
+            lng: newLon,
+            phoneNumber: newPendingPhoneNumber
+        });
+
+    } catch (e) {
+        showToast("❌ Invalid OTP Code.");
+    } finally {
+        if (verifyBtn) {
+            verifyBtn.disabled = false;
+            verifyBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> VERIFY & SAVE`;
+        }
+    }
+}
+
+async function executeProfileUpdate(uid, profileData) {
+    if (db) {
+        const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(profileData.name)}&background=10B981&color=fff`;
+        profileData.avatarUrl = avatarUrl;
+
+        await db.ref(`customers/${uid}`).update(profileData);
+    }
+
+    finalizeCustomerSession(uid, profileData.name, profileData.phoneNumber, profileData.avatarUrl);
+    closeEditCustomerProfileModal();
+    showToast("✅ Profile updated successfully!");
+}
+
+// ============================================================================
+// 4. CUSTOMER REGISTRATION
+// ============================================================================
+export async function sendCustomerRegisterOTP() {
+    const phoneInput = document.getElementById('reg-phone-num')?.value.trim();
+    if (!phoneInput) return showToast("⚠️ Paki-lagay ang iyong Mobile Number!");
+
+    const formattedPhone = formatPhoneNumber(phoneInput);
+    const cleanPhoneKey = formattedPhone.replace(/[^0-9]/g, '');
+
+    const sendBtn = document.getElementById('reg-send-otp-btn');
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Checking Number...`;
+    }
+
+    try {
+        if (db) {
+            const phoneSnap = await db.ref(`phones/${cleanPhoneKey}`).once('value');
+            if (phoneSnap.exists()) {
+                throw new Error("🚫 Ang Mobile Number na ito ay nakarehistro na! Paki-login na lamang.");
+            }
+        }
+
+        if (sendBtn) {
+            sendBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Sending OTP...`;
+        }
+
+        initRecaptcha();
+
+        const confirmationResult = await auth.signInWithPhoneNumber(formattedPhone, window.recaptchaVerifier);
+        confirmationResultObj = confirmationResult;
+        showToast("📲 OTP Code sent via SMS!");
+        document.getElementById('reg-otp-box')?.classList.remove('hidden');
+
+    } catch (error) {
+        console.error("Reg OTP Error:", error);
+        showToast(`❌ Error: ${error.message || "Failed to send SMS"}`);
+    } finally {
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> SEND OTP CODE`;
+        }
+    }
+}
+
+export function verifyCustomerRegisterOTP() {
+    const codeInput = document.getElementById('reg-otp-code')?.value.trim();
+    if (!codeInput || codeInput.length < 6) return showToast("⚠️ Paki-lagay ang 6-digit OTP code!");
+    if (!confirmationResultObj) return showToast("⚠️ Session expired. Paki-resend ng OTP.");
+
+    const verifyBtn = document.getElementById('reg-verify-otp-btn');
+    if (verifyBtn) {
+        verifyBtn.disabled = true;
+        verifyBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Verifying...`;
+    }
 
     confirmationResultObj.confirm(codeInput)
         .then((result) => {
-            const user = result.user;
-            handleCustomerPhoneLoginSuccess(user, custName);
+            pendingRegUser = result.user;
+            showToast("✅ OTP Verified! Kumpletuhin ang iyong detalye sa ibaba.");
+            document.getElementById('reg-step-1')?.classList.add('hidden');
+            document.getElementById('reg-step-2')?.classList.remove('hidden');
         })
         .catch((error) => {
-            console.error("Error verifying OTP:", error);
-            showToast("❌ Mali ang OTP code. Paki-subukan muli.");
+            console.error("Verify OTP error:", error);
+            showToast("❌ Mali ang OTP code. Subukan muli.");
             if (verifyBtn) {
                 verifyBtn.disabled = false;
-                verifyBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> VERIFY & LOGIN`;
+                verifyBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> VERIFY OTP CODE`;
             }
         });
 }
 
-export function resetPhoneAuthStep() {
-    confirmationResultObj = null;
-    document.getElementById('phone-auth-step-2')?.classList.add('hidden');
-    document.getElementById('phone-auth-step-1')?.classList.remove('hidden');
-    const sendBtn = document.getElementById('send-otp-btn');
-    if (sendBtn) {
-        sendBtn.disabled = false;
-        sendBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> SEND OTP CODE`;
+export async function completeCustomerRegistration() {
+    const fullName = document.getElementById('reg-fullname')?.value.trim();
+    const address = document.getElementById('reg-address')?.value.trim();
+    const email = document.getElementById('reg-email')?.value.trim();
+    const password = document.getElementById('reg-password')?.value;
+    const confirmPassword = document.getElementById('reg-confirm-password')?.value;
+    const gpsLink = document.getElementById('reg-gps-link')?.value.trim();
+    const regLat = parseFloat(document.getElementById('reg-lat')?.value) || 0;
+    const regLon = parseFloat(document.getElementById('reg-lon')?.value) || 0;
+
+    if (!fullName) return showToast("⚠️ Paki-lagay ang iyong Buong Pangalan!");
+    if (!address) return showToast("⚠️ Paki-lagay ang iyong Delivery Address!");
+    if (!gpsLink) return showToast("⚠️ Paki-pin ang iyong Exact GPS Location!");
+    if (!password) return showToast("⚠️ Paki-lagay ang iyong Password!");
+    if (password.length < 6) return showToast("⚠️ Ang Password ay dapat may 6 o higit pang characters!");
+    if (password !== confirmPassword) return showToast("⚠️ Hindi nagtutugma ang Password at Ulitin ang Password!");
+
+    if (!pendingRegUser) {
+        const currentUser = auth.currentUser;
+        if (currentUser) pendingRegUser = currentUser;
+        else return showToast("⚠️ Phone verification session missing. Paki-subukan muli.");
+    }
+
+    const completeBtn = document.getElementById('reg-complete-btn');
+    if (completeBtn) {
+        completeBtn.disabled = true;
+        completeBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Registering...`;
+    }
+
+    try {
+        if (email && db) {
+            const cleanEmailKey = email.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
+            const emailSnap = await db.ref(`emails/${cleanEmailKey}`).once('value');
+            if (emailSnap.exists()) {
+                throw new Error("🚫 Ang Email Address na ito ay nakarehistro na! Gamitin ang ibang Email.");
+            }
+        }
+
+        const uid = pendingRegUser.uid;
+        const phone = pendingRegUser.phoneNumber || "";
+        const cleanPhoneKey = phone.replace(/[^0-9]/g, '');
+        const syntheticEmail = email || `${cleanPhoneKey}@lokalex.app`;
+        const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=10B981&color=fff`;
+
+        const emailCred = firebase.auth.EmailAuthProvider.credential(syntheticEmail, password);
+        try {
+            await pendingRegUser.linkWithCredential(emailCred);
+        } catch (linkErr) {
+            console.warn("Credential link fallback:", linkErr.message);
+            if (pendingRegUser.updatePassword) {
+                await pendingRegUser.updatePassword(password);
+            }
+        }
+
+        const customerRecord = {
+            type: "customer_account",
+            uid: uid,
+            name: fullName,
+            phoneNumber: phone,
+            address: address,
+            email: email || "",
+            loginEmail: syntheticEmail,
+            mapPinLink: gpsLink,
+            lat: regLat,
+            lng: regLon,
+            avatarUrl: avatarUrl,
+            registeredAt: Date.now()
+        };
+
+        if (db) {
+            await db.ref(`customers/${uid}`).set(customerRecord);
+            await db.ref(`phones/${cleanPhoneKey}`).set({ uid: uid, phoneNumber: phone, loginEmail: syntheticEmail });
+            if (email) {
+                const cleanEmailKey = email.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
+                await db.ref(`emails/${cleanEmailKey}`).set(uid);
+            }
+        }
+
+        finalizeCustomerSession(uid, fullName, phone, avatarUrl);
+        showToast("🎉 Registration Successful! Maligayang pagdating!");
+
+    } catch (err) {
+        console.error("Failed to complete registration:", err);
+        showToast(`❌ ${err.message || "Failed to save profile"}`);
+    } finally {
+        if (completeBtn) {
+            completeBtn.disabled = false;
+            completeBtn.innerHTML = `<i class="fa-solid fa-user-check"></i> REGISTER ACCOUNT`;
+        }
     }
 }
 
-function handleCustomerPhoneLoginSuccess(user, custName) {
-    const uid = user.uid || `PHONE_${Date.now()}`;
-    const phone = user.phoneNumber || "";
-    const displayName = custName || "Customer (" + phone.slice(-4) + ")";
-    const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0084FF&color=fff`;
+// ============================================================================
+// 5. CUSTOMER LOGIN & FORGOT PASSWORD MODAL
+// ============================================================================
+export async function processCustomerLogin() {
+    const phoneInput = document.getElementById('cust-login-phone')?.value.trim();
+    const password = document.getElementById('cust-login-pass')?.value;
 
-    if (isUserBlocked(uid) || isUserBlocked(displayName) || isUserBlocked(phone)) {
-        showToast(`🚫 Account Blocked! Contact Lokalex Admin.`);
-        return;
+    if (!phoneInput || !password) {
+        return showToast("⚠️ I-enter ang iyong Mobile Number at Password!");
     }
 
-    const customerRecord = {
-        type: "customer_account",
-        uid: uid,
-        phoneNumber: phone,
-        name: displayName,
-        avatarUrl: avatarUrl,
-        registeredAt: Date.now()
-    };
+    const formattedPhone = formatPhoneNumber(phoneInput);
+    const cleanPhoneKey = formattedPhone.replace(/[^0-9]/g, '');
 
+    const btn = document.getElementById('cust-login-submit-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Authenticating...`;
+    }
+
+    try {
+        let custData = null;
+
+        if (db) {
+            const phoneSnap = await db.ref(`phones/${cleanPhoneKey}`).once('value');
+            const phoneRec = phoneSnap.val();
+            let uid = phoneRec?.uid;
+
+            if (uid) {
+                const custSnap = await db.ref(`customers/${uid}`).once('value');
+                custData = custSnap.val();
+            } else {
+                const snap = await db.ref('customers').orderByChild('phoneNumber').equalTo(formattedPhone).once('value');
+                const val = snap.val();
+                if (val) {
+                    uid = Object.keys(val)[0];
+                    custData = val[uid];
+                }
+            }
+        }
+
+        if (!custData) {
+            throw new Error("🚫 Hindi nakarehistro ang mobile number na ito. Paki-register muna.");
+        }
+
+        const loginEmail = custData.loginEmail || custData.email || `${cleanPhoneKey}@lokalex.app`;
+        
+        const userCred = await auth.signInWithEmailAndPassword(loginEmail, password);
+        finalizeCustomerSession(userCred.user.uid, custData.name, formattedPhone, custData.avatarUrl);
+
+        showToast(`✅ Welcome back, ${custData.name}!`);
+
+    } catch (err) {
+        console.error("Login Error:", err);
+        showToast(`❌ Login Failed: Mali ang Password o Mobile Number.`);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> LOGIN`;
+        }
+    }
+}
+
+export function triggerForgotPassword() {
+    const modal = document.getElementById('forgot-password-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        backToResetMethod();
+    }
+}
+
+export function closeForgotPasswordModal() {
+    const modal = document.getElementById('forgot-password-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export function backToResetMethod() {
+    document.getElementById('fp-step-method')?.classList.remove('hidden');
+    document.getElementById('fp-step-phone')?.classList.add('hidden');
+    document.getElementById('fp-step-email')?.classList.add('hidden');
+    document.getElementById('fp-step-otp')?.classList.add('hidden');
+    document.getElementById('fp-step-newpass')?.classList.add('hidden');
+}
+
+export function selectResetMethod(method) {
+    document.getElementById('fp-step-method')?.classList.add('hidden');
+    if (method === 'sms') {
+        document.getElementById('fp-step-phone')?.classList.remove('hidden');
+    } else {
+        document.getElementById('fp-step-email')?.classList.remove('hidden');
+    }
+}
+
+export function sendResetSMS() {
+    const phoneInput = document.getElementById('fp-phone-input')?.value.trim();
+    if (!phoneInput) return showToast("⚠️ Paki-lagay ang iyong Mobile Number!");
+
+    const formattedPhone = formatPhoneNumber(phoneInput);
+    const sendBtn = document.getElementById('fp-send-sms-btn');
+
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Sending SMS...`;
+    }
+
+    initRecaptcha();
+
+    auth.signInWithPhoneNumber(formattedPhone, window.recaptchaVerifier)
+        .then((confirmationResult) => {
+            fpConfirmationResult = confirmationResult;
+            showToast("📲 OTP Code sent via SMS!");
+            document.getElementById('fp-step-phone')?.classList.add('hidden');
+            document.getElementById('fp-step-otp')?.classList.remove('hidden');
+        })
+        .catch((error) => {
+            console.error("Reset SMS error:", error);
+            showToast(`❌ Error: ${error.message || "Failed to send SMS"}`);
+        })
+        .finally(() => {
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> SEND OTP CODE`;
+            }
+        });
+}
+
+export function sendResetEmailLink() {
+    const emailInput = document.getElementById('fp-email-input')?.value.trim();
+    if (!emailInput || !emailInput.includes('@')) return showToast("⚠️ Valid Email Address required!");
+
+    const sendBtn = document.getElementById('fp-send-email-btn');
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Sending...`;
+    }
+
+    auth.sendPasswordResetEmail(emailInput)
+        .then(() => {
+            showToast("📧 Password reset link sent to your email!");
+            closeForgotPasswordModal();
+        })
+        .catch((error) => {
+            showToast(`❌ Error: ${error.message}`);
+        })
+        .finally(() => {
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> SEND RESET LINK`;
+            }
+        });
+}
+
+export function verifyResetOTP() {
+    const code = document.getElementById('fp-otp-input')?.value.trim();
+    if (!code || code.length < 6) return showToast("⚠️ Paki-lagay ang 6-digit OTP code!");
+
+    const verifyBtn = document.getElementById('fp-verify-otp-btn');
+    if (verifyBtn) {
+        verifyBtn.disabled = true;
+        verifyBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Verifying...`;
+    }
+
+    if (!fpConfirmationResult) return showToast("⚠️ Session expired. Subukan muli.");
+
+    fpConfirmationResult.confirm(code)
+        .then((result) => {
+            fpUserRef = result.user;
+            showToast("✅ Code verified! Set your new password.");
+            document.getElementById('fp-step-otp')?.classList.add('hidden');
+            document.getElementById('fp-step-newpass')?.classList.remove('hidden');
+        })
+        .catch((error) => {
+            showToast("❌ Mali ang OTP code.");
+        })
+        .finally(() => {
+            if (verifyBtn) {
+                verifyBtn.disabled = false;
+                verifyBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> VERIFY CODE`;
+            }
+        });
+}
+
+export async function completePasswordReset() {
+    const newPass = document.getElementById('fp-new-pass')?.value;
+    const confirmPass = document.getElementById('fp-confirm-pass')?.value;
+
+    if (!newPass || newPass.length < 6) return showToast("⚠️ Ang password ay dapat min 6 characters!");
+    if (newPass !== confirmPass) return showToast("⚠️ Hindi nagtutugma ang password!");
+
+    if (!fpUserRef) return showToast("⚠️ Session expired. Paki-subukan muli.");
+
+    const saveBtn = document.getElementById('fp-save-pass-btn');
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Updating...`;
+    }
+
+    try {
+        await fpUserRef.updatePassword(newPass);
+        showToast("✅ Password updated successfully! Subukang mag-login.");
+        closeForgotPasswordModal();
+    } catch (err) {
+        showToast(`❌ Error: ${err.message}`);
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = `<i class="fa-solid fa-lock"></i> UPDATE PASSWORD`;
+        }
+    }
+}
+
+function finalizeCustomerSession(uid, name, phone, avatarUrl) {
     localStorage.setItem('lokalex_customer_fb_id', uid);
-    localStorage.setItem('lokalex_customer_name', displayName);
+    localStorage.setItem('lokalex_customer_name', name);
     localStorage.setItem('lokalex_customer_email', phone);
     localStorage.setItem('lokalex_customer_avatar', avatarUrl);
 
     appState.customerFacebookId = uid;
-    appState.customerName = displayName;
-
-    if (db && uid) {
-        db.ref(`customers/${uid}`).set(customerRecord);
-    }
+    appState.customerName = name;
 
     const avatarImg = document.getElementById('cust-landing-avatar');
     const nameEl = document.getElementById('cust-landing-name');
     const emailEl = document.getElementById('cust-landing-email');
 
     if (avatarImg) avatarImg.src = avatarUrl;
-    if (nameEl) nameEl.innerText = displayName;
+    if (nameEl) nameEl.innerText = name;
     if (emailEl) emailEl.innerText = phone;
-
-    showToast(`✅ Welcome, ${displayName}!`);
 
     if (typeof listenToCustomerRiderChat === 'function') {
         listenToCustomerRiderChat();
@@ -196,6 +704,9 @@ function handleCustomerPhoneLoginSuccess(user, custName) {
     }
 }
 
+// ============================================================================
+// 6. BAN & BLOCK LIST MANAGEMENT
+// ============================================================================
 export function openAdminBlockModal() {
     const modal = document.getElementById('admin-block-user-modal');
     const selectEl = document.getElementById('block-target-select');
@@ -314,6 +825,9 @@ export function renderBlockedUsersList() {
     `).join('');
 }
 
+// ============================================================================
+// 7. GPS LOCATION & TRACKER
+// ============================================================================
 export function calibrateGPS(onProgress) {
     return new Promise((resolve) => {
         if (!navigator.geolocation) {
@@ -404,18 +918,23 @@ export function getDeviceLocation() {
     return calibrateGPS();
 }
 
+// ============================================================================
+// 8. RIDER LOGIN & LOGOUT (100% FIREBASE REALTIME DATABASE)
+// ============================================================================
 export async function processLogin() {
     unlockAudioContext();
-    const idInput = document.getElementById('login-id').value.trim();
-    if (!idInput) return showToast("Please enter a valid ID");
+    const idInput = document.getElementById('login-id')?.value.trim();
+    if (!idInput) return showToast("Please enter a valid Rider ID");
 
     if (isUserBlocked(idInput)) {
         return showToast("🚫 Access Denied: Your account is blocked by Admin.");
     }
-    
+
     const btn = document.getElementById('login-btn');
-    btn.innerHTML = `<i class="fa-solid fa-satellite-dish fa-spin"></i> Calibrating GPS...`; 
-    btn.disabled = true;
+    if (btn) {
+        btn.innerHTML = `<i class="fa-solid fa-satellite-dish fa-spin"></i> Calibrating GPS...`;
+        btn.disabled = true;
+    }
 
     try {
         showToast("📡 Calibrating GPS location...");
@@ -429,31 +948,37 @@ export async function processLogin() {
             showToast(`✅ GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
         }
 
-        appState.lat = coords.lat; 
+        appState.lat = coords.lat;
         appState.lon = coords.lon;
         appState.gpsAccuracy = coords.accuracy;
 
-        const res = await fetch(CSV_AUTH_URL);
-        if (!res.ok) throw new Error("Cannot reach authorization sheet");
-        const csvData = await res.text();
-        
         let authorized = false;
-        for (let line of csvData.split('\n')) {
-            const cols = line.split(',');
-            if (cols.length >= 2) {
-                const cleanId = cols[cols.length >= 3 ? 1 : 0].replace(/['"\r\n]+/g, '').trim();
-                const cleanName = cols[cols.length >= 3 ? 2 : 1].replace(/['"\r\n]+/g, '').trim();
-                if (cleanId === idInput) {
-                    if (isUserBlocked(cleanName)) {
-                        throw new Error("🚫 Access Denied: Account blocked.");
-                    }
-                    appState.riderName = cleanName; 
-                    appState.telegramId = idInput; 
-                    appState.userType = cols.length >= 3 ? cols[0].replace(/['"\r\n]+/g, '').trim() : "";
-                    authorized = true; 
-                    break;
-                }
+        let riderRecord = null;
+
+        // 100% Direct Firebase RTDB Authentication Query
+        if (db) {
+            const snap = await db.ref(`riders/${idInput}`).once('value');
+            riderRecord = snap.val();
+
+            if (!riderRecord) {
+                // Fallback check against roster
+                const rosterSnap = await db.ref(`roster/${idInput}`).once('value');
+                riderRecord = rosterSnap.val();
             }
+        }
+
+        if (riderRecord) {
+            const cleanName = riderRecord.name || riderRecord.riderName || idInput;
+            const cleanUserType = riderRecord.userType || riderRecord.type || "rider";
+
+            if (isUserBlocked(cleanName)) {
+                throw new Error("🚫 Access Denied: Account blocked.");
+            }
+
+            appState.riderName = cleanName;
+            appState.telegramId = idInput;
+            appState.userType = cleanUserType;
+            authorized = true;
         }
 
         if (authorized) {
@@ -461,21 +986,23 @@ export async function processLogin() {
             localStorage.setItem('riderName', appState.riderName);
             localStorage.setItem('userType', appState.userType || "");
             showToast("Login Successful!");
-            
+
             fetchGCashDetails();
             startBackgroundRosterGpsTracker();
 
             history.replaceState({ view: 'view-home' }, '', '#view-home');
             renderViewUI('view-home');
             window.dispatchEvent(new CustomEvent('loginSuccess'));
-        } else { 
-            showToast("Access Denied: ID not found in sheet."); 
+        } else {
+            showToast("Access Denied: Rider ID not found in database.");
         }
-    } catch (err) { 
-        showToast(err.message || "Error during login"); 
-    } finally { 
-        btn.innerHTML = "LOGIN & MARK AVAILABLE"; 
-        btn.disabled = false; 
+    } catch (err) {
+        showToast(err.message || "Error during login");
+    } finally {
+        if (btn) {
+            btn.innerHTML = "LOGIN & MARK AVAILABLE";
+            btn.disabled = false;
+        }
     }
 }
 
@@ -491,10 +1018,30 @@ if (appState.telegramId) {
 }
 
 if (typeof window !== 'undefined') {
+    window.togglePasswordVisibility = togglePasswordVisibility;
     window.switchLoginPortalTab = switchLoginPortalTab;
-    window.sendCustomerPhoneOTP = sendCustomerPhoneOTP;
-    window.verifyCustomerPhoneOTP = verifyCustomerPhoneOTP;
-    window.resetPhoneAuthStep = resetPhoneAuthStep;
+    window.switchCustomerAuthTab = switchCustomerAuthTab;
+    window.installPwaApp = installPwaApp;
+    window.closePwaInstallModal = closePwaInstallModal;
+    window.sendCustomerLocation = sendCustomerLocation;
+    window.captureRegistrationGPS = captureRegistrationGPS;
+    window.captureEditProfileGPS = captureEditProfileGPS;
+    window.openEditCustomerProfileModal = openEditCustomerProfileModal;
+    window.closeEditCustomerProfileModal = closeEditCustomerProfileModal;
+    window.saveCustomerProfile = saveCustomerProfile;
+    window.verifyAndUpdatePhoneOTP = verifyAndUpdatePhoneOTP;
+    window.sendCustomerRegisterOTP = sendCustomerRegisterOTP;
+    window.verifyCustomerRegisterOTP = verifyCustomerRegisterOTP;
+    window.completeCustomerRegistration = completeCustomerRegistration;
+    window.processCustomerLogin = processCustomerLogin;
+    window.triggerForgotPassword = triggerForgotPassword;
+    window.closeForgotPasswordModal = closeForgotPasswordModal;
+    window.selectResetMethod = selectResetMethod;
+    window.backToResetMethod = backToResetMethod;
+    window.sendResetSMS = sendResetSMS;
+    window.sendResetEmailLink = sendResetEmailLink;
+    window.verifyResetOTP = verifyResetOTP;
+    window.completePasswordReset = completePasswordReset;
     window.processLogin = processLogin;
     window.logout = logout;
     window.openAdminBlockModal = openAdminBlockModal;

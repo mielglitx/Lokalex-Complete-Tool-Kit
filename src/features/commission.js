@@ -1,7 +1,7 @@
 // src/features/commission.js
 import { appState, globalState } from '../store/state.js';
 import { db } from '../config/firebase.js';
-import { API_URL, CSV_AUTH_URL, ADMIN_IDS } from '../config/constants.js';
+import { ADMIN_IDS } from '../config/constants.js';
 import { getLocalTodayStr, copyText, getWeekString, getMonthString, getDateString, escapeHtml } from '../utils/helpers.js';
 import { showToast } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
@@ -13,44 +13,34 @@ let viewSettings = {
     dateValue: getLocalTodayStr()
 };
 
-// FETCH LOGIN ID SHEET TO IDENTIFY RIDER TYPES (ADMIN, TL, ETC.)
+// 100% FIREBASE USER TYPE LOADER
 export async function fetchRiderUserTypes() {
+    if (!db) return;
     try {
-        const res = await fetch(CSV_AUTH_URL);
-        if (res.ok) {
-            const csvText = await res.text();
+        const snap = await db.ref('riders').once('value');
+        const val = snap.val();
+        if (val) {
             const userTypes = {};
-            csvText.split('\n').forEach(line => {
-                const cols = line.split(',').map(c => c.replace(/['"\r\n]+/g, '').trim());
-                if (cols.length >= 3) {
-                    const cleanType = cols[0].toLowerCase();
-                    const cleanId = cols[1];
-                    const cleanName = cols[2].toLowerCase();
-                    if (cleanName) userTypes[cleanName] = cleanType;
-                    if (cleanId) userTypes[cleanId] = cleanType;
-                } else if (cols.length >= 2) {
-                    const cleanId = cols[0];
-                    const cleanName = cols[1].toLowerCase();
-                    if (cleanName) userTypes[cleanName] = "";
-                    if (cleanId) userTypes[cleanId] = "";
-                }
+            Object.entries(val).forEach(([id, rider]) => {
+                const name = (rider.riderName || rider.name || "").toLowerCase().trim();
+                const type = (rider.userType || rider.type || "").toLowerCase().trim();
+                if (name) userTypes[name] = type;
+                if (id) userTypes[id] = type;
             });
             globalState.userTypesMap = userTypes;
         }
     } catch(e) {
-        console.warn("Could not fetch rider user types from CSV, using fallback roster state...", e);
+        console.warn("Could not fetch rider user types from Firebase:", e);
     }
 }
 
-// STRICT CHECK IF A RIDER IS AN ADMIN (EXCLUDES TL & STANDARD RIDERS BASED ON GOOGLE SHEET LOGIN ID TAB)
+// STRICT CHECK IF A RIDER IS AN ADMIN (EXCLUDES TL & STANDARD RIDERS)
 export function isRiderAdmin(riderName = "", telegramId = "") {
     const cleanName = (riderName || "").toString().toLowerCase().trim();
     const cleanId = (telegramId || "").toString().trim();
 
-    // 1. Explicit ID match in ADMIN_IDS constant
     if (cleanId && ADMIN_IDS.includes(cleanId)) return true;
 
-    // 2. Direct ground-truth check against Google Sheet 'Login ID' tab
     if (globalState.userTypesMap) {
         const hasName = cleanName && (cleanName in globalState.userTypesMap);
         const hasId = cleanId && (cleanId in globalState.userTypesMap);
@@ -59,12 +49,10 @@ export function isRiderAdmin(riderName = "", telegramId = "") {
             const typeByName = hasName ? globalState.userTypesMap[cleanName] : "";
             const typeById = hasId ? globalState.userTypesMap[cleanId] : "";
 
-            // Return true ONLY if explicitly defined as 'admin' in the Google Sheet
             return typeByName === "admin" || typeById === "admin";
         }
     }
 
-    // 3. Fallback check ONLY if rider is not listed in Google Sheet 'Login ID' tab
     const rosterMem = (globalState.rosterMembers || []).find(m => 
         (m.riderName || m.name || "").toLowerCase().trim() === cleanName ||
         (m.telegramId || "").toString().trim() === cleanId
@@ -79,14 +67,13 @@ export function isRiderAdmin(riderName = "", telegramId = "") {
     return false;
 }
 
-// GET DYNAMIC COMMISSION RATES PER RIDER BASED ON COMMISSIONSETTINGS, PENALTIES, & ADMIN STATUS
+// GET DYNAMIC COMMISSION RATES PER RIDER BASED ON FIREBASE COMMISSION SETTINGS & PENALTIES
 function getCommissionRates(dateStr, riderName = "", telegramId = "") {
     const d = new Date((dateStr || getLocalTodayStr()) + "T00:00:00");
     const isSunday = d.getDay() === 0;
 
     const isAdmin = isRiderAdmin(riderName, telegramId);
 
-    // ADMIN EXEMPTION: Only Admins do NOT pay company commission (0% Company Rate / 100% Rider Rate)
     if (isAdmin) {
         return {
             companyRate: 0,
@@ -109,7 +96,6 @@ function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         else if (setting.basePercentage !== undefined) baseCompanyPerc = parseFloat(setting.basePercentage);
     }
 
-    // CHECK SPECIFIC-DATE PENALTY INJECTION
     const penaltyKey = `${cleanName}_${dateStr}`;
     const penaltyRecord = globalState.globalCommissionPenalties ? globalState.globalCommissionPenalties[penaltyKey] : null;
     let penaltyPerc = 0;
@@ -139,27 +125,6 @@ function getCommissionRates(dateStr, riderName = "", telegramId = "") {
 
 export async function fetchCommissionSettings() {
     await fetchRiderUserTypes();
-
-    try {
-        const res = await fetch(`${API_URL}?type=all`);
-        if (res.ok) {
-            const data = await res.json();
-            if (data && data.riderRates) {
-                let ratesMap = {};
-                for (let name in data.riderRates) {
-                    const cleanName = name.toLowerCase().trim();
-                    const item = data.riderRates[name];
-                    ratesMap[cleanName] = {
-                        percentage: item.basePercentage !== undefined ? item.basePercentage : (item.percentage || 20),
-                        promoLess: item.promoLess || 0
-                    };
-                }
-                globalState.globalRiderRates = ratesMap;
-            }
-        }
-    } catch(e) {
-        console.warn("Could not fetch live commission settings from Google Sheets, checking Firebase...", e);
-    }
 
     if (db) {
         db.ref('commissionSettings').once('value', (snapshot) => {
@@ -316,7 +281,6 @@ function findReceiptFeeForCustomer(rName, cName, rDate) {
     return 0;
 }
 
-// EXPORTED MERGED & DEDUPLICATED COMMISSION DATASET
 export function getMergedDeduplicatedCommissionList() {
     const mergedMap = new Map();
 
@@ -869,11 +833,7 @@ export function submitAdminAddCommissionRecord() {
     if (!globalState.globalDailyReceipts) globalState.globalDailyReceipts = [];
     globalState.globalDailyReceipts.push(newRecord);
 
-    db.ref('receipts/' + txId).set(newRecord);
-
-    try {
-        fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(newRecord) });
-    } catch(e) {}
+    if (db) db.ref('receipts/' + txId).set(newRecord);
 
     closeAdminAddCommModal();
     showToast(`✅ Added ₱${grossFee.toFixed(2)} for ${cNameInput} (${rNameInput})`);
@@ -917,47 +877,45 @@ export function executeDeleteCommissionRecord(riderName, customerName, dateVal, 
         });
     }
 
-    db.ref('receipts').once('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            Object.keys(data).forEach(key => {
-                const item = data[key];
-                if (txId && (item.transactionId === txId || key === txId)) {
-                    db.ref('receipts/' + key).remove();
-                } else {
-                    const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
-                    const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
-                    const matchDate = (item.date || item.completedDate) === dateVal;
-                    if (matchRider && matchCust && matchDate) {
+    if (db) {
+        db.ref('receipts').once('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    const item = data[key];
+                    if (txId && (item.transactionId === txId || key === txId)) {
                         db.ref('receipts/' + key).remove();
+                    } else {
+                        const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
+                        const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
+                        const matchDate = (item.date || item.completedDate) === dateVal;
+                        if (matchRider && matchCust && matchDate) {
+                            db.ref('receipts/' + key).remove();
+                        }
                     }
-                }
-            });
-        }
-    });
+                });
+            }
+        });
 
-    db.ref('cateredHistory').once('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            Object.keys(data).forEach(key => {
-                const item = data[key];
-                if (txId && (item.transactionId === txId || key === txId)) {
-                    db.ref('cateredHistory/' + key).remove();
-                } else {
-                    const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
-                    const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
-                    const matchDate = (item.completedDate || item.date) === dateVal;
-                    if (matchRider && matchCust && matchDate) {
+        db.ref('cateredHistory').once('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    const item = data[key];
+                    if (txId && (item.transactionId === txId || key === txId)) {
                         db.ref('cateredHistory/' + key).remove();
+                    } else {
+                        const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
+                        const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
+                        const matchDate = (item.completedDate || item.date) === dateVal;
+                        if (matchRider && matchCust && matchDate) {
+                            db.ref('cateredHistory/' + key).remove();
+                        }
                     }
-                }
-            });
-        }
-    });
-
-    try {
-        fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: "void_history", riderName, customerName, completedDate: dateVal }) });
-    } catch(e) {}
+                });
+            }
+        });
+    }
 
     showToast("🗑️ Record deleted successfully!");
     refreshCommissionView();
@@ -992,33 +950,35 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
         }
     });
 
-    db.ref('receipts').once('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            Object.keys(data).forEach(key => {
-                const item = data[key];
-                const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
-                const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
-                if (matchRider && matchCust) {
-                    db.ref('receipts/' + key).update({ totalFees: parsedFee });
-                }
-            });
-        }
-    });
+    if (db) {
+        db.ref('receipts').once('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    const item = data[key];
+                    const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
+                    const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
+                    if (matchRider && matchCust) {
+                        db.ref('receipts/' + key).update({ totalFees: parsedFee });
+                    }
+                });
+            }
+        });
 
-    db.ref('cateredHistory').once('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            Object.keys(data).forEach(key => {
-                const item = data[key];
-                const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
-                const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
-                if (matchRider && matchCust) {
-                    db.ref('cateredHistory/' + key).update({ totalFees: parsedFee });
-                }
-            });
-        }
-    });
+        db.ref('cateredHistory').once('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    const item = data[key];
+                    const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
+                    const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
+                    if (matchRider && matchCust) {
+                        db.ref('cateredHistory/' + key).update({ totalFees: parsedFee });
+                    }
+                });
+            }
+        });
+    }
 
     showToast(`✅ Fee updated to ₱${parsedFee.toFixed(2)} for ${customerName}!`);
     refreshCommissionView();

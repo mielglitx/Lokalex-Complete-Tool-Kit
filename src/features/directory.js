@@ -86,12 +86,35 @@ export async function openDirectory(type) {
     renderDirectoryList();
 }
 
-// SILENT BACKGROUND SYNC ON APP STARTUP
+// SILENT BACKGROUND SYNC ON APP STARTUP (FIREBASE & API)
 export async function silentSyncDirectory() {
-    loadDirectoryCache();
     try {
-        await syncData(true);
-    } catch(e) {}
+        const type = globalState.currentType || 'customers';
+        if (db) {
+            const snap = await db.ref(`directory/${type}`).once('value');
+            const fbData = snap.val();
+            if (fbData) {
+                const fbList = Object.values(fbData).map(item => ({
+                    name: (item.name || "").trim(),
+                    contact: (item.contact || "").trim(),
+                    address: (item.address || "").trim(),
+                    rate: (item.rate || item.address || "").toString().trim(),
+                    lat_lon_link: (item.lat_lon_link || "").trim(),
+                    type: item.type || type,
+                    recorded_by: item.recorded_by || "Amiel",
+                    recorded_at: (item.recorded_at || item.recorded_date || item.date || "").toString().trim()
+                })).filter(r => r.name !== "");
+
+                if (fbList.length > 0) {
+                    const otherTypeRecords = (globalState.records || []).filter(r => r.type !== type);
+                    globalState.records = [...otherTypeRecords, ...fbList];
+                    saveDirectoryCache();
+                }
+            }
+        }
+    } catch (err) {
+        console.warn("Silent directory sync skipped:", err.message);
+    }
 }
 
 // DUAL-SOURCE DATA SYNC WITH OFFLINE MERGE
@@ -105,7 +128,7 @@ export async function syncData(isSilent = false) {
         listEl.innerHTML = `
         <div class="text-center text-blue-400 font-bold py-16 text-xs flex flex-col items-center justify-center gap-2">
             <i class="fa-solid fa-rotate fa-spin text-2xl"></i>
-            <span>Syncing ${type.toUpperCase()} records from Google Sheets...</span>
+            <span>Syncing ${type.toUpperCase()} records...</span>
         </div>`;
     }
 
@@ -140,7 +163,7 @@ export async function syncData(isSilent = false) {
             }
         }
     } catch (err) {
-        console.warn("Offline/Network error syncing directory from Sheets, using local cache...", err);
+        console.warn("Offline/Network error syncing directory, using local cache...", err);
     }
 
     if (db) {

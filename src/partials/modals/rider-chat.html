@@ -1,0 +1,96 @@
+<!-- RIDER TO CUSTOMER CHAT MODAL -->
+<div id="rider-chat-modal" class="hidden fixed inset-0 z-[9990] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-cardBg border border-gray-800 w-full max-w-md h-[85vh] max-h-[620px] rounded-3xl shadow-2xl flex flex-col relative overflow-hidden">
+        
+        <!-- HEADER WITH INFO BUTTON -->
+        <div class="p-4 bg-darkBg/90 border-b border-gray-800 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-3">
+                <div id="rider-chat-avatar" class="w-10 h-10 rounded-full bg-emerald-600 text-white font-black flex items-center justify-center text-sm shadow">
+                    CU
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h3 id="rider-chat-cust-name" class="font-bold text-sm text-white">Customer Name</h3>
+                        <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-xs shadow" title="View Customer Info">
+                            <i class="fa-solid fa-circle-info"></i>
+                        </button>
+                    </div>
+                    <p class="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Real-time Connected
+                    </p>
+                </div>
+            </div>
+            <button onclick="window.closeRiderChatModal && window.closeRiderChatModal()" class="text-gray-400 hover:text-white p-2 text-base transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- LOCK BANNER -->
+        <div id="rider-chat-lock-banner" class="hidden bg-amber-500/20 border-b border-amber-500/40 px-3 py-1.5 text-[11px] text-amber-300 font-bold text-center shrink-0"></div>
+
+        <!-- ACTION BUTTONS ROW -->
+        <div id="rider-chat-action-toolbar" class="p-2.5 bg-darkBg/60 border-b border-gray-800/80 flex items-center gap-2 overflow-x-auto shrink-0 no-scrollbar">
+            <button onclick="window.markThreadUndone && window.markThreadUndone()" class="flex-1 min-w-[80px] bg-indigo-700/80 hover:bg-indigo-600 text-indigo-100 border border-indigo-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow">
+                <i class="fa-solid fa-rotate-left"></i> Undone
+            </button>
+            <button onclick="window.followUpCustomerOrder && window.followUpCustomerOrder()" class="flex-1 min-w-[90px] bg-amber-600/80 hover:bg-amber-500 text-amber-100 border border-amber-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow">
+                <i class="fa-solid fa-bookmark"></i> Follow Up
+            </button>
+            <button onclick="window.completeCatering && window.completeCatering()" class="flex-1 min-w-[75px] bg-emerald-700/80 hover:bg-emerald-600 text-emerald-100 border border-emerald-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow">
+                <i class="fa-solid fa-circle-check"></i> Done
+            </button>
+            <button id="rider-chat-cancel-btn" onclick="window.cancelCatering && window.cancelCatering()" class="hidden flex-1 min-w-[80px] bg-red-700/80 hover:bg-red-600 text-red-100 border border-red-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow">
+                <i class="fa-solid fa-ban"></i> Cancel
+            </button>
+        </div>
+
+        <!-- SAVED QUICK REPLIES BAR -->
+        <div id="quick-replies-drawer" class="hidden bg-darkBg/95 border-b border-gray-800 p-2.5 flex items-center gap-2 overflow-x-auto shrink-0 no-scrollbar">
+            <span class="text-[10px] text-amber-400 font-bold uppercase shrink-0"><i class="fa-solid fa-bolt"></i> Saved:</span>
+            <button onclick="window.sendQuickReply && window.sendQuickReply('Papunta na po ako sa location niyo 🛵')" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 px-3 py-1.5 rounded-full text-[11px] whitespace-nowrap transition active:scale-95">
+                🛵 Papunta na po ako
+            </button>
+            <button onclick="window.sendQuickReply && window.sendQuickReply('Nandito na po ako sa labas/location 📍')" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 px-3 py-1.5 rounded-full text-[11px] whitespace-nowrap transition active:scale-95">
+                📍 Nandito na po sa labas
+            </button>
+            <button onclick="window.sendQuickReply && window.sendQuickReply('Nabili/Nakuha na po ang order ninyo 🛒')" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 px-3 py-1.5 rounded-full text-[11px] whitespace-nowrap transition active:scale-95">
+                🛒 Nabili na po order
+            </button>
+            <button onclick="window.sendQuickReply && window.sendQuickReply('Paki-handa po ang eksaktong pambayad 💵')" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 px-3 py-1.5 rounded-full text-[11px] whitespace-nowrap transition active:scale-95">
+                💵 Paki-handa ang pambayad
+            </button>
+        </div>
+
+        <!-- CHAT MESSAGES BODY (Scrollable Inside) -->
+        <div id="rider-chat-messages-container" class="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain flex flex-col gap-3 scroll-smooth">
+            <div class="text-center text-gray-500 italic text-xs py-8">Loading real-time chat history...</div>
+        </div>
+
+        <!-- FOOTER INPUT BAR -->
+        <div class="p-3 bg-darkBg/90 border-t border-gray-800 flex items-center gap-2 shrink-0">
+            <button type="button" id="chat-hd-toggle-btn" onclick="window.toggleHdMode && window.toggleHdMode()" class="p-2 bg-inputBg text-gray-400 rounded-xl border border-gray-700 hover:text-white transition active:scale-95 text-xs font-bold" title="Toggle HD Mode">
+                <i id="chat-hd-icon" class="fa-solid fa-compress text-gray-400"></i>
+            </button>
+            <button onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="p-2.5 bg-inputBg hover:bg-amber-500/20 text-amber-400 rounded-xl border border-gray-700 transition active:scale-95 text-xs" title="Saved Quick Replies">
+                <i class="fa-solid fa-bolt"></i>
+            </button>
+            <button onclick="window.promptImageAttachmentSource && window.promptImageAttachmentSource()" class="p-2.5 bg-inputBg hover:bg-blue-500/20 text-blue-400 rounded-xl border border-gray-700 transition active:scale-95 text-xs" title="Send Image">
+                <i class="fa-solid fa-image"></i>
+            </button>
+            <button onclick="window.sendChatLocationPin && window.sendChatLocationPin()" class="p-2.5 bg-inputBg hover:bg-emerald-500/20 text-emerald-400 rounded-xl border border-gray-700 transition active:scale-95 text-xs" title="Pick Rider Location Pin on Map">
+                <i class="fa-solid fa-location-dot"></i>
+            </button>
+
+            <input type="text" id="rider-chat-input" placeholder="Type reply..." onkeydown="if(event.key === 'Enter') window.sendRiderChatMessage && window.sendRiderChatMessage()" class="flex-1 bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white focus:border-blue-500">
+
+            <button id="rider-cust-send-btn" onclick="window.sendRiderChatMessage && window.sendRiderChatMessage()" class="p-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-lg transition active:scale-95 text-xs shrink-0">
+                <i class="fa-solid fa-paper-plane"></i>
+            </button>
+        </div>
+
+        <input type="file" id="chat-camera-input" accept="image/*" capture="environment" class="hidden" onchange="window.handleChatImageUpload && window.handleChatImageUpload(this)">
+        <input type="file" id="chat-file-input" accept="image/*" multiple class="hidden" onchange="window.handleChatImageUpload && window.handleChatImageUpload(this)">
+
+    </div>
+</div>

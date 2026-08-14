@@ -1,0 +1,82 @@
+<!-- RIDER-TO-CUSTOMER DIRECT CHAT MODAL -->
+<div id="rider-customer-chat-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-3">
+    <div class="bg-cardBg border border-blue-500/60 p-4 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-2.5 h-[85vh] max-h-[620px] overflow-hidden">
+        <!-- HEADER -->
+        <div class="flex flex-col gap-1 border-b border-gray-800 pb-2 shrink-0">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <img id="rider-chat-cust-avatar" src="" class="w-8 h-8 rounded-full border border-blue-500 object-cover">
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <h3 id="rider-chat-cust-name" class="font-bold text-xs text-white">Customer Chat</h3>
+                            <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-[10px] shadow shrink-0" title="View Customer Profile & GPS Pin">
+                                <i class="fa-solid fa-circle-info"></i>
+                            </button>
+                        </div>
+                        <span class="text-[9px] text-emerald-400 font-mono">Real-time Connected</span>
+                    </div>
+                </div>
+                <button onclick="window.closeRiderCustomerChatModal && window.closeRiderCustomerChatModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="rider-chat-lock-banner" class="hidden text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/30 p-1.5 rounded-lg text-center font-bold"></div>
+        </div>
+
+        <!-- ACTION TOOLBAR -->
+        <div id="rider-chat-action-toolbar" class="grid grid-cols-4 gap-1 shrink-0 bg-black/30 p-1.5 rounded-xl border border-gray-800">
+            <button onclick="window.markThreadUndone && window.markThreadUndone()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 border border-indigo-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move thread back to inbox"><i class="fa-solid fa-rotate-left"></i> Undone </button>
+            <button onclick="window.markThreadFollowUp && window.markThreadFollowUp()" class="bg-amber-600/30 hover:bg-amber-600 text-amber-300 border border-amber-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move to Follow Up section"><i class="fa-solid fa-bookmark"></i> Follow Up</button>
+            <button onclick="window.markThreadDone && window.markThreadDone()" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move to Done section"><i class="fa-solid fa-circle-check"></i> Done</button>
+            <button onclick="window.cancelCustomerThread && window.cancelCustomerThread()" class="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700/50 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Cancel & release thread"><i class="fa-solid fa-ban"></i> Cancel</button>
+        </div>
+
+        <!-- CHAT MESSAGES BODY (SCROLLABLE INSIDE) -->
+        <div id="rider-cust-chat-messages" class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 p-2 text-xs bg-black/30 rounded-2xl border border-gray-800">
+            <div class="text-center text-gray-500 italic py-10">Loading chat history...</div>
+        </div>
+
+        <!-- FOOTER INPUT BAR -->
+        <div class="flex gap-1.5 items-center shrink-0 pt-1">
+            <input type="file" id="rider-chat-file-input" accept="image/*" class="hidden" onchange="if(this.files[0]) { window.openImageEditorModal && window.openImageEditorModal(this.files[0], 'rider'); this.value = ''; }">
+            <button onclick="document.getElementById('rider-chat-file-input').click()" class="bg-gray-800 hover:bg-gray-700 text-blue-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Attach & Edit Photo"><i class="fa-solid fa-image"></i></button>
+            <button onclick="window.sendRiderLocation && window.sendRiderLocation()" class="bg-gray-800 hover:bg-gray-700 text-emerald-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Pick Rider Location Pin on Map"><i class="fa-solid fa-location-dot"></i></button>
+
+            <input type="text" id="rider-cust-chat-input" name="rider_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" onkeydown="if(event.key==='Enter') window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" placeholder="Type reply..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 text-white">
+            <button id="rider-cust-send-btn" onclick="window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>
+    </div>
+</div>
+
+<!-- FLOATING TEAM COMMS CHAT WIDGET -->
+<div id="floating-chat-container" class="fixed right-0 z-50 flex flex-col items-end pointer-events-none" style="top: 80%;">
+    <div id="expanded-chat-window" class="hidden pointer-events-auto bg-cardBg border border-gray-700 rounded-2xl shadow-2xl w-80 sm:w-88 h-96 max-h-[75vh] flex flex-col overflow-hidden mr-3 mb-2 transition-all">
+        <div id="chat-drag-handle" class="bg-gray-800 p-3 flex items-center justify-between select-none border-b border-gray-700 shrink-0">
+            <div class="flex items-center gap-2 font-bold text-xs text-blue-400">
+                <i class="fa-solid fa-comments text-base"></i> Team Comms
+            </div>
+            <button onclick="window.toggleChatWindow && window.toggleChatWindow(false)" class="text-gray-400 hover:text-white text-sm active:scale-90">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        
+        <div id="bubble-chat-messages" class="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col gap-2 text-xs">
+            <div class="text-center text-gray-500 italic py-10">Loading messages...</div>
+        </div>
+
+        <div class="p-2 bg-inputBg border-t border-gray-700 flex flex-col relative shrink-0">
+            <div id="tag-suggestions" class="hidden absolute bottom-full left-0 right-0 bg-cardBg border border-gray-700 rounded-t-xl max-h-32 overflow-y-auto z-20 p-1 text-xs shadow-xl"></div>
+            
+            <div class="flex gap-2 items-center">
+                <input type="text" id="bubble-chat-input" name="bubble_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" oninput="window.handleChatInput && window.handleChatInput(this)" onkeydown="if(event.key==='Enter') window.sendBubbleChatMessage && window.sendBubbleChatMessage()" placeholder="Type a message or @rider..." class="flex-1 bg-darkBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white">
+                <button onclick="window.sendBubbleChatMessage && window.sendBubbleChatMessage()" class="bg-blue-600 hover:bg-blue-500 text-white w-9 h-9 rounded-xl flex items-center justify-center text-xs transition active:scale-90 shrink-0">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="chat-bubble" class="pointer-events-auto relative bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-l-2xl shadow-2xl flex items-center justify-center cursor-pointer transition-all active:scale-90 border-l-2 border-t-2 border-b-2 border-white/20 select-none touch-none">
+        <i class="fa-solid fa-comments text-base"></i>
+        <div id="chat-tag-badge" class="hidden absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-black text-[9px] font-black rounded-full flex items-center justify-center border-2 border-darkBg animate-bounce shadow-md">!</div>
+        <div id="chat-unread-badge" class="hidden absolute -top-1.5 -left-1.5 min-w-[18px] h-4 px-1 bg-red-600 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-darkBg shadow-md">0</div>
+    </div>
+</div>

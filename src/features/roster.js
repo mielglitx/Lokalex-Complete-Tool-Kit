@@ -8,6 +8,7 @@ import { calibrateGPS } from './auth.js';
 import { getLocalTodayStr, isSameDate, escapeHtml } from '../utils/helpers.js';
 import { switchView } from '../ui/router.js';
 import { autoStartLiveGpsSession, endLiveGpsSession } from './liveTracker.js';
+import { populateCateringCustomerDropdown } from './chat/index.js';
 
 let lineAlarmInterval = null;
 let lineAlarmConfirmed = false;
@@ -180,9 +181,11 @@ export function hasReceiptForActiveSession(custName, custStartTime) {
     if (!custName || custName.toLowerCase() === 'sample') return true;
     const rName = (appState.riderName || "").trim().toLowerCase();
     const cName = custName.trim().toLowerCase();
+    const cleanCName = cName.replace(/[^a-z0-9]/g, '');
     const sTime = (custStartTime || "").trim();
     const todayStr = getLocalTodayStr();
 
+    // 1. Check LocalStorage flags
     const keyWithTime = `receipt_done_${rName}_${cName}_${sTime}_${todayStr}`;
     const keyTypo = `receipt_done_${rName}_${cName}__${todayStr}`;
     const keyWithoutTime = `receipt_done_${rName}_${cName}_${todayStr}`;
@@ -193,13 +196,25 @@ export function hasReceiptForActiveSession(custName, custStartTime) {
         return true;
     }
 
-    if (globalState.cartClients && globalState.cartLocked) {
-        for (let i = 0; i < 4; i++) {
-            const client = (globalState.cartClients[i] || "").trim().toLowerCase();
-            if (client === cName && globalState.cartLocked[i]) {
-                return true;
-            }
-        }
+    // 2. Check global daily receipts list
+    const receipts = globalState.globalDailyReceipts || [];
+    const hasReceiptRecord = receipts.some(rc => {
+        const rcRider = (rc.riderName || "").trim().toLowerCase();
+        const rcCust = (rc.customerName || "").trim().toLowerCase();
+        const cleanRcCust = rcCust.replace(/[^a-z0-9]/g, '');
+        const rcDate = rc.date || rc.completedDate;
+
+        return rcRider === rName && 
+               (rcCust === cName || cleanRcCust === cleanCName) && 
+               isSameDate(rcDate, todayStr);
+    });
+
+    if (hasReceiptRecord) return true;
+
+    // 3. Check customerFees on current rider roster record
+    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === (appState.telegramId || "").toString()) : null;
+    if (myRecord && myRecord.customerFees && cleanCName && myRecord.customerFees[cleanCName]) {
+        return true;
     }
 
     return false;
@@ -288,7 +303,6 @@ export function updateRosterUI() {
 
     const showControls = globalState.adminControlsEnabled && canManageRoster();
 
-    // Dynamically show/hide "Force All End" button based on Admin Controls checkbox
     const forceAllBtn = document.getElementById('admin-force-all-btn');
     if (forceAllBtn) {
         if (showControls) forceAllBtn.classList.remove('hidden');
@@ -493,6 +507,7 @@ export async function triggerStatusWithSlide(targetStatus) {
             return;
         }
 
+        // STRICT RECEIPT CHECK BEFORE ALLOWING AVAILABLE
         const activeCustList = getActiveCateringCustomersWithTimes();
         if (activeCustList.length > 0) {
             let missingReceiptCust = null;
@@ -516,25 +531,30 @@ export async function triggerStatusWithSlide(targetStatus) {
             }
         }
 
+        // INSTANT QUEUE LOCKING
+        const currentRoster = globalState.rosterMembers || [];
+        const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== myId);
+        let maxTime = new Date().getTime();
+        availableRiders.forEach(r => {
+            const t = parseQueueTime(r.queueTime);
+            if (t > maxTime) maxTime = t;
+        });
+        const lockedQueueTime = maxTime + 1000;
+
         showToast("📡 Calibrating GPS location...");
+        
         const coords = await calibrateGPS((accuracy) => {
             showToast(`📡 Calibrating GPS: ±${Math.round(accuracy)}m`);
         });
 
-        if (!coords || (coords.lat === 0 && coords.lon === 0)) {
-            const modal = document.getElementById('gps-alert-modal');
-            if (modal) modal.classList.remove('hidden');
-            return;
-        }
+        appState.lat = coords ? coords.lat : (appState.lat || 0);
+        appState.lon = coords ? coords.lon : (appState.lon || 0);
+        showToast(`✅ GPS Calibrated: ±${Math.round(coords ? coords.accuracy : 0)}m`);
 
-        appState.lat = coords.lat; 
-        appState.lon = coords.lon;
-        showToast(`✅ GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
-
-        showSideNotification("RECORDING STATUS", `Marking ${appState.riderName} Available — placing at end of line`, "fa-user-check", "text-green-400", "border-green-500");
+        showSideNotification("RECORDING STATUS", `Marking ${appState.riderName} Available — queue position secured`, "fa-user-check", "text-green-400", "border-green-500");
 
         endLiveGpsSession();
-        await updateRosterStatus('Available');
+        await updateRosterStatus('Available', null, null, lockedQueueTime);
         
         if (window.clearAllCartSlots) {
             window.clearAllCartSlots();
@@ -583,6 +603,18 @@ export function promptCateringStatus() {
         }
     }
 
+    // 4-CUSTOMER LIMIT CHECK
+    if (myRecord && myRecord.customerName) {
+        const activeCusts = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+        if (activeCusts.length >= 4) {
+            return showToast("⚠️ Reached maximum limit of 4 active catering customers!");
+        }
+    }
+
+    if (typeof populateCateringCustomerDropdown === 'function') {
+        populateCateringCustomerDropdown();
+    }
+
     const input = document.getElementById('catering-customer-name');
     if (input) input.value = "";
     const modal = document.getElementById('catering-modal');
@@ -595,11 +627,6 @@ export async function confirmCateringStatus() {
     const custName = input ? input.value.trim() : "";
     if (!custName) return showToast("Please enter customer name");
 
-    closeCateringModal();
-    stopLineAlarm();
-    lineAlarmConfirmed = false;
-
-    const startTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const myId = (appState.telegramId || "").toString();
     const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === myId) : null;
 
@@ -610,6 +637,17 @@ export async function confirmCateringStatus() {
         existingCustomers = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
         existingTimes = myRecord.startTime ? myRecord.startTime.split(', ').map(t => t.trim()) : [];
     }
+
+    // ENFORCE 4-CUSTOMER MAX LIMIT
+    if (existingCustomers.length >= 4 && !existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase())) {
+        return showToast("⚠️ Reached maximum limit of 4 active catering customers!");
+    }
+
+    closeCateringModal();
+    stopLineAlarm();
+    lineAlarmConfirmed = false;
+
+    const startTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     if (!existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase())) {
         existingCustomers.push(custName);
@@ -623,7 +661,7 @@ export async function confirmCateringStatus() {
     await updateRosterStatusData('Catering', existingCustomers.join(', '), existingTimes.join(', '), myRecord ? parseQueueTime(myRecord.queueTime) : 0);
 }
 
-export async function updateRosterStatus(status, targetId = null, targetName = null) {
+export async function updateRosterStatus(status, targetId = null, targetName = null, precalculatedQueueTime = null) {
     const tId = targetId || appState.telegramId;
     const tName = targetName || appState.riderName;
     const rosterMembers = globalState.rosterMembers || [];
@@ -632,6 +670,31 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
     let recordLogin = false;
 
     const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === tId.toString());
+
+    // AUTOMATICALLY MOVE CUSTOMER INBOX THREADS TO 'DONE' WHEN MARKING AVAILABLE OR END
+    if (status === 'Available' && targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
+        const custs = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+        if (db && custs.length > 0) {
+            db.ref('customerChats').once('value', (snapshot) => {
+                const chats = snapshot.val();
+                if (chats) {
+                    Object.keys(chats).forEach(custId => {
+                        const chatMeta = chats[custId]?.metadata || chats[custId] || {};
+                        const chatCustName = (chatMeta.customerName || chatMeta.name || "").trim().toLowerCase();
+                        
+                        if (chatCustName && custs.some(c => c.toLowerCase() === chatCustName)) {
+                            db.ref(`customerChats/${custId}/metadata`).update({
+                                folder: 'done',
+                                cateredByRiderId: null,
+                                cateredByRiderName: null,
+                                cateredBy: null
+                            });
+                        }
+                    });
+                }
+            });
+        }
+    }
 
     if (status !== 'Catering' && targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
         const custs = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
@@ -676,8 +739,8 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
         locationLink = `https://www.google.com/maps/search/?api=1&query=${appState.lat.toFixed(6)},${appState.lon.toFixed(6)}`;
     }
 
-    let newQueueTime = 0;
-    if (status === 'Available') {
+    let newQueueTime = precalculatedQueueTime !== null ? precalculatedQueueTime : 0;
+    if (status === 'Available' && precalculatedQueueTime === null) {
         const availableRiders = rosterMembers.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== tId.toString());
         let maxTime = new Date().getTime();
         availableRiders.forEach(r => {
@@ -709,7 +772,6 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         lng: appState.lon || 0
     };
 
-    // OPTIMISTIC LOCAL UPDATE
     if (!globalState.rosterMembers) globalState.rosterMembers = [];
     const existingIdx = globalState.rosterMembers.findIndex(m => (m.telegramId || "").toString() === tId.toString());
     if (existingIdx !== -1) {
@@ -796,12 +858,23 @@ export function confirmAdminCatering() {
     const custName = nameInput ? nameInput.value.trim() : "";
     if (!custName) return showToast("Please enter customer name");
 
+    const target = pendingAdminTarget;
+    if (!target) return;
+
+    const rosterMembers = globalState.rosterMembers || [];
+    const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === target.id.toString());
+    
+    if (targetRecord && targetRecord.customerName) {
+        const activeCusts = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+        if (activeCusts.length >= 4 && !activeCusts.some(c => c.toLowerCase() === custName.toLowerCase())) {
+            return showToast(`⚠️ ${target.name} has already reached the maximum limit of 4 active customers!`);
+        }
+    }
+
     const isPenalized = document.querySelector('input[name="penalty-option"]:checked')?.value === 'penalized';
     const penMins = isPenalized ? (parseInt(document.getElementById('penalty-minutes-input')?.value) || 10) : 0;
 
-    const target = pendingAdminTarget;
     closeAdminCateringModal();
-    if (!target) return;
 
     const startTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     showSideNotification("FORCE CATER", `Assigned ${custName} to ${target.name}${penMins > 0 ? ` (${penMins}m penalty)` : ''}`, "fa-user-shield", "text-amber-400", "border-amber-500");
@@ -855,6 +928,41 @@ export async function adminVoidActiveCustomer(riderId, riderName) {
     await updateRosterStatusData('Available', "", "", topQueueTime, riderId, riderName, [], false);
 }
 
+// FIX: VOID SPECIFIC SINGLE CUSTOMER FOR ADMIN CONTROLS
+export async function adminVoidSpecificCustomer(riderId, riderName, customerName) {
+    openSlideDeleteModal(`Void customer [${customerName}] for ${riderName}?`, async () => {
+        const rosterMembers = globalState.rosterMembers || [];
+        const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === riderId.toString());
+        if (!targetRecord) return;
+
+        let custs = targetRecord.customerName ? targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean) : [];
+        let times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
+
+        const idx = custs.findIndex(c => c.toLowerCase() === customerName.toLowerCase());
+        if (idx !== -1) {
+            custs.splice(idx, 1);
+            if (times[idx]) times.splice(idx, 1);
+        }
+
+        const newStatus = custs.length > 0 ? 'Catering' : 'Available';
+        let queueTime = parseQueueTime(targetRecord.queueTime);
+
+        if (newStatus === 'Available') {
+            const availableRiders = rosterMembers.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== riderId.toString());
+            let maxTime = new Date().getTime();
+            availableRiders.forEach(r => {
+                const t = parseQueueTime(r.queueTime);
+                if (t > maxTime) maxTime = t;
+            });
+            queueTime = maxTime + 1000;
+        }
+
+        showSideNotification("ORDER VOIDED", `Voided ${customerName} for ${riderName}`, "fa-ban", "text-red-400", "border-red-500");
+
+        await updateRosterStatusData(newStatus, custs.join(', '), times.join(', '), queueTime, riderId, riderName, [], false);
+    });
+}
+
 export function openSwapCustomerModal(sourceRiderId, sourceRiderName, sourceCustomerName) {
     activeSwapData = { sourceRiderId, sourceRiderName, sourceCustomerName };
 
@@ -889,7 +997,6 @@ export function renderSwapRidersAccordion() {
         const srcId = (activeSwapData.sourceRiderId || "").toString().trim();
         const srcName = (activeSwapData.sourceRiderName || "").trim().toLowerCase();
 
-        // Exclude the source rider AND the logged in user from being target options
         if ((srcId && mId === srcId) || (srcName && mName === srcName)) return false;
         if ((myId && mId === myId) || (myName && mName === myName)) return false;
         if (!m.status || m.status === 'End' || m.status === 'End Shift') return false;
@@ -1027,7 +1134,6 @@ export function listenToSwapRequests() {
 
         const requests = Object.values(data);
 
-        // Target rider must match current user AND current user must NOT be the source rider
         const incomingPending = requests.find(r => {
             if (!r || r.status !== 'pending') return false;
 

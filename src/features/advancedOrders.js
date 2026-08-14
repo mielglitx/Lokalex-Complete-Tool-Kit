@@ -1,16 +1,14 @@
 // src/features/advancedOrders.js
 import { db } from '../config/firebase.js';
-import { API_URL } from '../config/constants.js';
 import { appState, globalState } from '../store/state.js';
 import { showToast, unlockAudioContext } from '../ui/notifications.js';
 import { escapeHtml, getLocalTodayStr } from '../utils/helpers.js';
-import { updateRosterStatusData, parseQueueTime } from './roster.js';
+import { updateRosterStatusData, parseQueueTime } from './roster/index.js';
 
 let alarmInterval = null;
 let alarmTimeout = null;
 const triggeredAlerts = new Set();
 
-// --- 30-SECOND REMINDER ALARM AUDIO ---
 function playReminderAlarm() {
     unlockAudioContext();
     stopReminderAlarm();
@@ -59,7 +57,6 @@ export function stopReminderAlarm() {
     }
 }
 
-// --- SCHEDULED ALERTS CHECKER (30m, 15m, 5m) ---
 export function checkScheduledDeliveryAlerts() {
     if (!globalState.globalAdvancedOrders || globalState.globalAdvancedOrders.length === 0) return;
 
@@ -250,10 +247,7 @@ export async function submitNewAdvancedOrder() {
         cateredBy: ""
     };
 
-    db.ref('advancedOrders').push(newOrd);
-    try {
-        fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: "add_advanced_order", ...newOrd }) });
-    } catch(e) {}
+    if (db) db.ref('advancedOrders').push(newOrd);
 
     document.getElementById('adv-cust-name').value = "";
     document.getElementById('adv-receive-time').value = "";
@@ -293,23 +287,24 @@ export async function takeAdvancedOrder(custName, timeToReceive) {
 }
 
 export async function changeAdvOrderStatus(custName, timeToReceive, newStatus) {
-    db.ref('advancedOrders').once('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            Object.keys(data).forEach(key => {
-                if (data[key].custName === custName && data[key].timeToReceive === timeToReceive) {
-                    db.ref('advancedOrders/' + key).update({
-                        status: newStatus, cateredBy: (newStatus === 'Pending') ? "" : appState.riderName
-                    });
-                }
-            });
-        }
-    });
+    if (db) {
+        db.ref('advancedOrders').once('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    if (data[key].custName === custName && data[key].timeToReceive === timeToReceive) {
+                        db.ref('advancedOrders/' + key).update({
+                            status: newStatus, cateredBy: (newStatus === 'Pending') ? "" : appState.riderName
+                        });
+                    }
+                });
+            }
+        });
+    }
 }
 
-// AUTOMATICALLY MARK CLAIMED ADVANCED ORDERS AS COMPLETED (CATERED) WHEN RIDER BECOMES AVAILABLE
 export function autoCompleteAdvancedOrdersForRider(riderName, customerNameStr = "") {
-    if (!riderName) return;
+    if (!riderName || !db) return;
     const cleanRider = riderName.toLowerCase().trim();
 
     db.ref('advancedOrders').once('value', (snapshot) => {
@@ -329,9 +324,8 @@ export function autoCompleteAdvancedOrdersForRider(riderName, customerNameStr = 
     });
 }
 
-// AUTOMATICALLY MARK CLAIMED ADVANCED ORDERS AS CANCELLED WHEN ACTIVE CATERING IS VOIDED
 export function autoCancelAdvancedOrdersForRider(riderName, customerNameStr = "") {
-    if (!riderName) return;
+    if (!riderName || !db) return;
     const cleanRider = riderName.toLowerCase().trim();
 
     db.ref('advancedOrders').once('value', (snapshot) => {
