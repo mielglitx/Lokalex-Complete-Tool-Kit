@@ -31,9 +31,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
--name: Build Vite App
+      - name: Build Vite App
         run: node node_modules/vite/bin/vite.js build
-
+run: node node_modules/vite/bin/vite.js build
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
