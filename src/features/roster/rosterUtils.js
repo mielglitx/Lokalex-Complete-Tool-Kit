@@ -257,7 +257,6 @@ export function checkFirstInLineAlarm(availableRiders) {
             }
         }
     } else {
-        lineAlarmConfirmed = false;
         stopLineAlarm();
         if (modal) modal.classList.add('hidden');
         if (goldenBox) goldenBox.classList.add('hidden');

@@ -330,7 +330,6 @@ export function fetchAndRenderMapCalculations() {
     });
 }
 
-// RESTORED EXACT ORIGINAL MESSAGE STATEMENT TEMPLATE
 export function copyMapCalcLink(id, rawLink, customerName = "") {
     const targetLink = rawLink || `${window.location.origin}/?mapcalc=${id}`;
     const nameGreeting = customerName ? `Magandang araw po ${customerName}! 👋` : `Magandang araw po! 👋`;
@@ -365,8 +364,12 @@ export function deleteMapCalculation(key) {
 }
 
 export function dismissQueueAlarm() {
-    const modal = document.getElementById('first-in-line-modal');
+    const modal = document.getElementById('first-in-line-modal') || document.getElementById('first-line-modal');
     if (modal) modal.classList.add('hidden');
+    
+    if (window.setLineAlarmConfirmed && typeof window.setLineAlarmConfirmed === 'function') {
+        window.setLineAlarmConfirmed(true);
+    }
     if (window.stopLineAlarm && typeof window.stopLineAlarm === 'function') {
         window.stopLineAlarm();
     }
