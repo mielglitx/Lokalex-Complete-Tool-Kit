@@ -1,4 +1,4 @@
-// src/features/roster/rosterUI.js
+// src/features/roster/rosterAdmin.js
 import { appState, globalState } from '../../store/state.js';
 import { escapeHtml, isSameDate, getLocalTodayStr } from '../../utils/helpers.js';
 import { 
@@ -96,7 +96,6 @@ export function updateRosterUI() {
         let nameStr = escapeHtml(mName);
 
         if (showControls) {
-            // VOID ORDER IS EXCLUDED FROM AVAILABLE QUEUE DROPDOWN
             nameStr += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
 
             nameStr += `
@@ -150,7 +149,7 @@ export function updateRosterUI() {
                         ` : ''}
 
                         ${!isMyLine ? `
-                            <button onclick="window.claimCustomerFromRider && window.claimCustomerFromRider('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Get this customer for yourself">
+                            <button onclick="window.claimCustomerFromRider && window.claimCustomerFromRider('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Request to get this customer">
                                 📥 Get
                             </button>
                         ` : ''}

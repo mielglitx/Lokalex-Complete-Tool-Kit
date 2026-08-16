@@ -4,13 +4,28 @@ import { appState, globalState } from '../../store/state.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { escapeHtml } from '../../utils/helpers.js';
 import { parseQueueTime } from './rosterUtils.js';
-import { updateRosterStatusData } from './rosterActions.js';
+import { autoStartLiveGpsSession } from '../liveTracker.js';
 
 let activeSwapData = null;
 let currentPendingSwapRequest = null;
 
+// HELPER: CALCULATE QUEUE TIME TO PLACE RIDER AT #1 SPOT IN AVAILABLE QUEUE
+function getTopQueueTime() {
+    const rosterMembers = globalState.rosterMembers || [];
+    const availableRiders = rosterMembers
+        .filter(m => m.status === 'Available')
+        .map(m => parseQueueTime(m.queueTime))
+        .filter(t => t > 0);
+
+    if (availableRiders.length > 0) {
+        const minTime = Math.min(...availableRiders);
+        return minTime - 1000;
+    }
+    return Date.now() - 1000;
+}
+
 export function openSwapCustomerModal(sourceRiderId, sourceRiderName, sourceCustomerName) {
-    activeSwapData = { sourceRiderId, sourceRiderName, sourceCustomerName };
+    activeSwapData = { sourceRiderId, sourceRiderName, sourceCustomerName, type: 'swap' };
 
     const labelEl = document.getElementById('swap-modal-source-label');
     if (labelEl) {
@@ -139,6 +154,7 @@ export function requestCustomerSwap(targetRiderId, targetRiderName, targetCustom
 
             const requestObj = {
                 id: requestId,
+                type: targetCustomerName ? 'swap' : 'transfer',
                 sourceRiderId: sourceRiderId,
                 sourceRiderName: sourceRiderName,
                 sourceCustomerName: sourceCustomerName,
@@ -160,6 +176,51 @@ export function requestCustomerSwap(targetRiderId, targetRiderName, targetCustom
     }
 }
 
+// REQUEST CLAIM / GET CUSTOMER FROM ANOTHER RIDER (REQUIRES HOLDER APPROVAL)
+export function requestClaimCustomer(targetRiderId, targetRiderName, targetCustomerName) {
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "Rider").trim();
+
+    if (!myId) return showToast("⚠️ Rider ID missing.");
+    if (targetRiderId.toString().trim() === myId) return showToast("⚠️ Iyo na ang customer na ito.");
+
+    if (db) {
+        db.ref('swapRequests').once('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    const req = data[key];
+                    if (req && req.status === 'pending' &&
+                        (req.sourceRiderId || "").toString() === myId &&
+                        (req.targetCustomerName || "").toLowerCase().trim() === targetCustomerName.toLowerCase().trim()) {
+                        db.ref('swapRequests/' + key).remove();
+                    }
+                });
+            }
+
+            const requestId = `CLAIM_${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).substring(2,6).toUpperCase()}`;
+
+            const requestObj = {
+                id: requestId,
+                type: 'claim',
+                sourceRiderId: myId,
+                sourceRiderName: myName,
+                sourceCustomerName: "",
+                targetRiderId: targetRiderId.toString().trim(),
+                targetRiderName: targetRiderName,
+                targetCustomerName: targetCustomerName,
+                status: 'pending',
+                createdAt: Date.now()
+            };
+
+            db.ref('swapRequests/' + requestId).set(requestObj);
+        });
+    }
+
+    showToast(`⏳ Humihingi ng pahintulot kay ${targetRiderName} upang kunin si ${targetCustomerName}...`);
+    showSideNotification("REQUEST SENT", `Waiting for ${targetRiderName} to approve transfer of ${targetCustomerName}`, "fa-paper-plane", "text-blue-400", "border-blue-500");
+}
+
 export function listenToSwapRequests() {
     if (!db) return;
 
@@ -172,6 +233,7 @@ export function listenToSwapRequests() {
         const data = snapshot.val();
         const approvalModal = document.getElementById('swap-approval-modal');
         const msgEl = document.getElementById('swap-approval-msg');
+        const acceptBtn = document.getElementById('swap-accept-btn');
 
         if (!data) {
             if (approvalModal) approvalModal.classList.add('hidden');
@@ -180,6 +242,7 @@ export function listenToSwapRequests() {
 
         const requests = Object.values(data);
 
+        // 1. Check incoming pending requests where CURRENT USER is the target
         const incomingPending = requests.find(r => {
             if (!r || r.status !== 'pending') return false;
 
@@ -199,16 +262,40 @@ export function listenToSwapRequests() {
         if (incomingPending) {
             currentPendingSwapRequest = incomingPending;
             if (msgEl) {
-                if (incomingPending.targetCustomerName) {
+                if (incomingPending.type === 'claim' || (!incomingPending.sourceCustomerName && incomingPending.targetCustomerName)) {
+                    msgEl.innerHTML = `Nais <strong>KUNIN / I-CLAIM</strong> ni <strong>${escapeHtml(incomingPending.sourceRiderName)}</strong> ang customer mo na si <strong>${escapeHtml(incomingPending.targetCustomerName)}</strong>.<br><br>Papayag ka bang ibigay ito sa kanya?`;
+                    if (acceptBtn) acceptBtn.innerHTML = `<i class="fa-solid fa-hand-holding-hand mr-1"></i> Ibigay ang Customer`;
+                } else if (incomingPending.targetCustomerName) {
                     msgEl.innerHTML = `Nais makipag-<strong>SWAP</strong> si <strong>${escapeHtml(incomingPending.sourceRiderName)}</strong>:<br><br>• Ibibigay sayo: <strong>${escapeHtml(incomingPending.sourceCustomerName)}</strong><br>• Kukunin ang sayo: <strong>${escapeHtml(incomingPending.targetCustomerName)}</strong>`;
+                    if (acceptBtn) acceptBtn.innerHTML = `<i class="fa-solid fa-arrows-rotate mr-1"></i> Accept Swap`;
                 } else {
                     msgEl.innerHTML = `Nais i-<strong>TRANSFER</strong> ni <strong>${escapeHtml(incomingPending.sourceRiderName)}</strong> ang customer na si <strong>${escapeHtml(incomingPending.sourceCustomerName)}</strong> sa iyo.`;
+                    if (acceptBtn) acceptBtn.innerHTML = `<i class="fa-solid fa-check mr-1"></i> Accept Transfer`;
                 }
             }
             if (approvalModal) approvalModal.classList.remove('hidden');
         } else {
             if (approvalModal) approvalModal.classList.add('hidden');
         }
+
+        // 2. Check completed requests initiated by CURRENT USER to give instant feedback
+        requests.forEach(r => {
+            if (!r) return;
+            const isSourceMe = (
+                (r.sourceRiderId && myId && r.sourceRiderId.toString().trim() === myId) ||
+                (r.sourceRiderName && myName && r.sourceRiderName.toString().trim().toLowerCase() === myName)
+            );
+
+            if (isSourceMe && r.status === 'accepted') {
+                const targetCust = r.targetCustomerName || r.sourceCustomerName || "Customer";
+                showToast(`✅ Inaprubahan ni ${r.targetRiderName}! Na-transfer na si ${targetCust} sa iyo.`);
+                db.ref(`swapRequests/${r.id}`).remove();
+            } else if (isSourceMe && r.status === 'rejected') {
+                const targetCust = r.targetCustomerName || r.sourceCustomerName || "Customer";
+                showToast(`❌ Tinanggihan ni ${r.targetRiderName} ang iyong request para kay ${targetCust}.`);
+                db.ref(`swapRequests/${r.id}`).remove();
+            }
+        });
     });
 }
 
@@ -228,7 +315,8 @@ export function acceptSwapRequest() {
     activeSwapData = {
         sourceRiderId: req.sourceRiderId,
         sourceRiderName: req.sourceRiderName,
-        sourceCustomerName: req.sourceCustomerName
+        sourceCustomerName: req.sourceCustomerName,
+        type: req.type || (req.sourceCustomerName ? (req.targetCustomerName ? 'swap' : 'transfer') : 'claim')
     };
 
     executeCustomerSwap(req.targetRiderId, req.targetRiderName, req.targetCustomerName);
@@ -247,13 +335,14 @@ export function declineSwapRequest() {
         db.ref(`swapRequests/${req.id}`).update({ status: 'rejected' });
     }
 
-    showToast("❌ Swap request declined.");
+    showToast("❌ Request declined.");
 }
 
 export async function executeCustomerSwap(targetRiderId, targetRiderName, targetCustomerName = "") {
     if (!activeSwapData) return;
 
-    const { sourceRiderId, sourceRiderName, sourceCustomerName } = activeSwapData;
+    const { sourceRiderId, sourceRiderName, sourceCustomerName, type } = activeSwapData;
+    const isClaim = type === 'claim' || (!sourceCustomerName && targetCustomerName);
 
     const roster = globalState.rosterMembers || [];
     const sourceRec = roster.find(m => (m.telegramId || "").toString() === sourceRiderId.toString());
@@ -269,6 +358,68 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
     let targetCusts = targetRec.customerName ? targetRec.customerName.split(', ').map(c => c.trim()).filter(Boolean) : [];
     let targetTimes = targetRec.startTime ? targetRec.startTime.split(', ').map(t => t.trim()) : [];
 
+    if (isClaim) {
+        // SCENARIO 1: CLAIM / GET (Target/Holder gives targetCustomerName to Source/Requester)
+        const tgtIdx = targetCusts.findIndex(c => c.toLowerCase() === targetCustomerName.toLowerCase());
+        const extractedTime = tgtIdx !== -1 ? (targetTimes[tgtIdx] || nowTimeStr) : nowTimeStr;
+
+        if (tgtIdx !== -1) {
+            targetCusts.splice(tgtIdx, 1);
+            if (targetTimes[tgtIdx]) targetTimes.splice(tgtIdx, 1);
+        }
+
+        if (!sourceCusts.some(c => c.toLowerCase() === targetCustomerName.toLowerCase())) {
+            sourceCusts.push(targetCustomerName);
+            sourceTimes.push(extractedTime);
+        }
+
+        const newTargetStatus = targetCusts.length > 0 ? 'Catering' : 'Available';
+        const newTargetQueue = newTargetStatus === 'Available' ? getTopQueueTime() : parseQueueTime(targetRec.queueTime);
+
+        if (db) {
+            db.ref('roster/' + targetRiderId).update({
+                status: newTargetStatus,
+                customerName: targetCusts.join(', '),
+                startTime: targetTimes.join(', '),
+                queueTime: newTargetQueue,
+                lastUpdated: nowTimeStr
+            });
+
+            db.ref('roster/' + sourceRiderId).update({
+                status: 'Catering',
+                customerName: sourceCusts.join(', '),
+                startTime: sourceTimes.join(', '),
+                lastUpdated: nowTimeStr
+            });
+
+            // Reassign customer chat thread in Firebase
+            const cleanSearchName = targetCustomerName.toLowerCase().trim();
+            db.ref('customerChats').once('value', (snapshot) => {
+                const chats = snapshot.val();
+                if (chats) {
+                    Object.keys(chats).forEach(custId => {
+                        const meta = chats[custId]?.metadata || chats[custId] || {};
+                        const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
+                        if (chatCustName && chatCustName === cleanSearchName) {
+                            db.ref(`customerChats/${custId}/metadata`).update({
+                                folder: 'catering',
+                                cateredByRiderId: sourceRiderId,
+                                cateredByRiderName: sourceRiderName,
+                                cateredBy: sourceRiderName,
+                                lastUpdated: Date.now()
+                            });
+                        }
+                    });
+                }
+            });
+        }
+
+        showSideNotification("CUSTOMER CLAIMED", `Transferred ${targetCustomerName} to ${sourceRiderName}`, "fa-hand-holding-hand", "text-emerald-400", "border-emerald-500");
+        showToast(`✅ Naibigay na si ${targetCustomerName} kay ${sourceRiderName}!`);
+        return;
+    }
+
+    // SCENARIO 2: STANDARD SWAP OR TRANSFER
     const srcIdx = sourceCusts.findIndex(c => c.toLowerCase() === sourceCustomerName.toLowerCase());
     const srcTime = srcIdx !== -1 ? sourceTimes[srcIdx] : nowTimeStr;
 
@@ -325,6 +476,29 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
             startTime: targetTimes.join(', '),
             lastUpdated: nowTimeStr
         });
+
+        // Reassign chat thread metadata
+        if (sourceCustomerName) {
+            const cleanSrc = sourceCustomerName.toLowerCase().trim();
+            db.ref('customerChats').once('value', (snapshot) => {
+                const chats = snapshot.val();
+                if (chats) {
+                    Object.keys(chats).forEach(custId => {
+                        const meta = chats[custId]?.metadata || chats[custId] || {};
+                        const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
+                        if (chatCustName && chatCustName === cleanSrc) {
+                            db.ref(`customerChats/${custId}/metadata`).update({
+                                folder: 'catering',
+                                cateredByRiderId: targetRiderId,
+                                cateredByRiderName: targetRiderName,
+                                cateredBy: targetRiderName,
+                                lastUpdated: Date.now()
+                            });
+                        }
+                    });
+                }
+            });
+        }
     }
 
     if (targetCustomerName) {
@@ -334,4 +508,17 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
         showSideNotification("CUSTOMER TRANSFERRED", `Transferred ${sourceCustomerName} to ${targetRiderName}`, "fa-share", "text-purple-400", "border-purple-500");
         showToast(`🔀 Transferred ${sourceCustomerName} to ${targetRiderName}`);
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.openSwapCustomerModal = openSwapCustomerModal;
+    window.closeSwapCustomerModal = closeSwapCustomerModal;
+    window.renderSwapRidersAccordion = renderSwapRidersAccordion;
+    window.toggleSwapRiderAccordion = toggleSwapRiderAccordion;
+    window.requestCustomerSwap = requestCustomerSwap;
+    window.requestClaimCustomer = requestClaimCustomer;
+    window.listenToSwapRequests = listenToSwapRequests;
+    window.acceptSwapRequest = acceptSwapRequest;
+    window.declineSwapRequest = declineSwapRequest;
+    window.executeCustomerSwap = executeCustomerSwap;
 }

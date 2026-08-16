@@ -35,11 +35,13 @@ allModules.forEach(mod => {
 
 window.unlockAudioContext = unlockAudioContext;
 
-export function updateNetworkStatus() {
+export function updateNetworkStatus(forcedState = null) {
     const container = document.getElementById('network-status-pill');
     if (!container) return;
 
-    if (navigator.onLine) {
+    const isOnline = forcedState !== null ? forcedState : navigator.onLine;
+
+    if (isOnline) {
         container.className = "flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300";
         container.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span>ONLINE</span>`;
     } else {
@@ -48,8 +50,46 @@ export function updateNetworkStatus() {
     }
 }
 
-window.addEventListener('online', updateNetworkStatus);
-window.addEventListener('offline', updateNetworkStatus);
+window.addEventListener('online', () => {
+    if (db) db.goOnline();
+    updateNetworkStatus(true);
+});
+
+window.addEventListener('offline', () => {
+    updateNetworkStatus(false);
+});
+
+// PWA RESUME & VISIBILITY RECONNECTION HANDLER
+function handleAppResume() {
+    if (document.visibilityState === 'visible') {
+        if (db) {
+            db.goOnline();
+        }
+
+        updateNetworkStatus(true);
+
+        if (appState.telegramId && authFeature.startBackgroundRosterGpsTracker) {
+            authFeature.startBackgroundRosterGpsTracker();
+        }
+
+        if (roster && roster.checkAndTriggerAutoEndShift) {
+            roster.checkAndTriggerAutoEndShift();
+        }
+
+        // Force immediate fresh snapshot for roster
+        if (db) {
+            db.ref('roster').once('value', (snapshot) => {
+                globalState.rosterMembers = snapshot.val() ? Object.values(snapshot.val()) : [];
+                if (roster && roster.saveRosterCache) roster.saveRosterCache();
+                if (roster && roster.updateRosterUI) roster.updateRosterUI();
+            });
+        }
+    }
+}
+
+document.addEventListener('visibilitychange', handleAppResume);
+window.addEventListener('pageshow', handleAppResume);
+window.addEventListener('focus', handleAppResume);
 
 function bootApp() {
     try {
@@ -70,6 +110,13 @@ function bootApp() {
         if (directory && directory.silentSyncDirectory) {
             directory.silentSyncDirectory();
         }
+
+        // Periodic check for auto-endshift routine every 30 seconds
+        setInterval(() => {
+            if (roster && roster.checkAndTriggerAutoEndShift) {
+                roster.checkAndTriggerAutoEndShift();
+            }
+        }, 30000);
 
         const urlParams = new URLSearchParams(window.location.search);
         
@@ -145,6 +192,13 @@ window.addEventListener('viewChanged', (e) => {
 
 function initRealtimeFirebaseListeners() {
     try {
+        if (db) {
+            db.ref('.info/connected').on('value', (snap) => {
+                const isConnected = !!snap.val();
+                updateNetworkStatus(isConnected);
+            });
+        }
+
         if (roster && roster.listenToSwapRequests) {
             roster.listenToSwapRequests();
         }

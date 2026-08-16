@@ -25,6 +25,7 @@ import {
     loadRosterCache
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
+import { requestClaimCustomer } from './rosterSwap.js';
 
 let pendingAdminTarget = null;
 let editingRiderTarget = null;
@@ -277,7 +278,6 @@ export async function confirmCateringStatus() {
         existingTimes.push(startTime);
     }
 
-    // AUTOMATICALLY MOVE MATCHING CUSTOMER THREAD TO 'CATERING' FOLDER IN FIREBASE
     if (db && custName) {
         const cleanSearchName = custName.toLowerCase().trim();
         db.ref('customerChats').once('value', (snapshot) => {
@@ -412,80 +412,21 @@ export async function submitAdminForceCatering() {
     showSideNotification("FORCE CATER", `Assigned ${custName} to ${targetName}`, "fa-user-gear", "text-amber-400", "border-amber-500");
 }
 
-// GET / CLAIM CUSTOMER FROM ANOTHER RIDER
-export async function claimCustomerFromRider(fromRiderId, fromRiderName, custName) {
-    const myId = (appState.telegramId || "").toString();
-    const myName = appState.riderName || localStorage.getItem('riderName') || "Rider";
+// GET / CLAIM CUSTOMER (SENDS PERMISSION REQUEST TO THE HOLDER)
+export function claimCustomerFromRider(fromRiderId, fromRiderName, custName) {
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "Rider").trim();
 
-    if (!myId) return showToast("⚠️ Telegram ID missing.");
-    if (fromRiderId.toString() === myId.toString()) return showToast("⚠️ Iyo na ang customer na ito.");
+    if (!myId) return showToast("⚠️ Rider ID missing.");
+    if (fromRiderId.toString().trim() === myId) return showToast("⚠️ Iyo na ang customer na ito.");
 
-    openSlideDeleteModal(`Get Customer: ${custName}?`, `Kukunin mo ba si ${custName} mula kay ${fromRiderName}?`, async () => {
-        const rosterMembers = globalState.rosterMembers || [];
-        const fromRecord = rosterMembers.find(m => (m.telegramId || "").toString() === fromRiderId.toString());
-        const myRecord = rosterMembers.find(m => (m.telegramId || "").toString() === myId);
-
-        if (fromRecord && fromRecord.customerName) {
-            let fromCusts = fromRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-            let fromTimes = fromRecord.startTime ? fromRecord.startTime.split(', ').map(t => t.trim()) : [];
-            
-            let newCusts = [];
-            let newTimes = [];
-            fromCusts.forEach((c, idx) => {
-                if (c.toLowerCase() !== custName.toLowerCase()) {
-                    newCusts.push(c);
-                    newTimes.push(fromTimes[idx] || fromTimes[0] || "");
-                }
-            });
-
-            if (newCusts.length > 0) {
-                await updateRosterStatusData('Catering', newCusts.join(', '), newTimes.join(', '), parseQueueTime(fromRecord.queueTime), fromRiderId, fromRiderName);
-            } else {
-                const topQueueTime = getTopQueueTime();
-                await updateRosterStatusData('Available', '', '', topQueueTime, fromRiderId, fromRiderName);
-            }
+    openSlideDeleteModal(
+        `Request Customer: ${custName}?`,
+        `Hihingin mo ba si ${custName} mula kay ${fromRiderName}?\nMagpapadala ng request para sa kanyang pag-apruba.`,
+        () => {
+            requestClaimCustomer(fromRiderId, fromRiderName, custName);
         }
-
-        let myCusts = [];
-        let myTimes = [];
-        if (myRecord && myRecord.status === 'Catering' && myRecord.customerName) {
-            myCusts = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-            myTimes = myRecord.startTime ? myRecord.startTime.split(', ').map(t => t.trim()) : [];
-        }
-
-        const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        if (!myCusts.some(c => c.toLowerCase() === custName.toLowerCase())) {
-            myCusts.push(custName);
-            myTimes.push(nowTime);
-        }
-
-        if (db && custName) {
-            const cleanSearchName = custName.toLowerCase().trim();
-            db.ref('customerChats').once('value', (snapshot) => {
-                const chats = snapshot.val();
-                if (chats) {
-                    Object.keys(chats).forEach(custId => {
-                        const meta = chats[custId]?.metadata || chats[custId] || {};
-                        const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
-                        if (chatCustName && chatCustName === cleanSearchName) {
-                            db.ref(`customerChats/${custId}/metadata`).update({
-                                folder: 'catering',
-                                cateredByRiderId: myId,
-                                cateredByRiderName: myName,
-                                cateredBy: myName,
-                                lastUpdated: Date.now()
-                            });
-                        }
-                    });
-                }
-            });
-        }
-
-        await updateRosterStatusData('Catering', myCusts.join(', '), myTimes.join(', '), myRecord ? parseQueueTime(myRecord.queueTime) : Date.now(), myId, myName);
-
-        showToast(`📥 Na-transfer na si ${custName} sa iyo mula kay ${fromRiderName}!`);
-        showSideNotification("CUSTOMER CLAIMED", `Claimed ${custName} from ${fromRiderName}`, "fa-hand-holding-hand", "text-emerald-400", "border-emerald-500");
-    });
+    );
 }
 
 // ADMIN FORCE STATUS
@@ -625,6 +566,141 @@ export async function forceAllEndShift() {
 }
 
 // ============================================================================
+// ADMIN AUTO END SHIFT CONFIGURATION & SCHEDULER
+// ============================================================================
+export function openAdminAutoEndShiftModal() {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    const modal = document.getElementById('admin-auto-endshift-modal');
+    if (!modal) return;
+
+    if (db) {
+        db.ref('settings/autoEndShift').once('value', (snap) => {
+            const data = snap.val() || {};
+            const enabledToggle = document.getElementById('auto-endshift-enabled');
+            const timeInput = document.getElementById('auto-endshift-time');
+            const statusDesc = document.getElementById('auto-endshift-status-desc');
+
+            if (enabledToggle) enabledToggle.checked = !!data.enabled;
+            if (timeInput) timeInput.value = data.time || "03:00";
+            if (statusDesc) {
+                statusDesc.innerText = data.enabled 
+                    ? `Active: Scheduled daily at ${data.time || '03:00'}`
+                    : "Disabled: No auto end shift will occur.";
+            }
+        });
+    }
+    modal.classList.remove('hidden');
+}
+
+export function closeAdminAutoEndShiftModal() {
+    const modal = document.getElementById('admin-auto-endshift-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export async function saveAdminAutoEndShiftSettings() {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    const enabledToggle = document.getElementById('auto-endshift-enabled');
+    const timeInput = document.getElementById('auto-endshift-time');
+
+    const isEnabled = enabledToggle ? enabledToggle.checked : false;
+    const setTime = timeInput ? timeInput.value.trim() : "03:00";
+
+    if (isEnabled && !setTime) {
+        return showToast("⚠️ Please select a valid end shift time.");
+    }
+
+    const payload = {
+        enabled: isEnabled,
+        time: setTime,
+        updatedBy: appState.riderName || "Admin",
+        updatedAt: Date.now()
+    };
+
+    if (db) {
+        await db.ref('settings/autoEndShift').update(payload);
+    }
+
+    closeAdminAutoEndShiftModal();
+    showToast(`⚙️ Auto End Shift ${isEnabled ? `set to ${setTime}` : 'Disabled'}!`);
+    showSideNotification("SETTINGS SAVED", `Auto End Shift: ${isEnabled ? setTime : 'DISABLED'}`, "fa-clock", "text-purple-400", "border-purple-500");
+}
+
+export async function checkAndTriggerAutoEndShift() {
+    if (!db) return;
+    try {
+        const snap = await db.ref('settings/autoEndShift').once('value');
+        const config = snap.val();
+        if (!config || !config.enabled || !config.time) return;
+
+        const todayStr = getLocalTodayStr();
+        if (config.lastTriggeredDate === todayStr) return;
+
+        const now = new Date();
+        const [targetHour, targetMinute] = config.time.split(':').map(Number);
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+
+        const currentTotalMins = currentHour * 60 + currentMinute;
+        const targetTotalMins = targetHour * 60 + targetMinute;
+
+        if (currentTotalMins >= targetTotalMins) {
+            const updateRes = await db.ref('settings/autoEndShift').transaction((current) => {
+                if (!current || !current.enabled || current.lastTriggeredDate === todayStr) {
+                    return;
+                }
+                current.lastTriggeredDate = todayStr;
+                return current;
+            });
+
+            if (updateRes.committed) {
+                await executeAutoEndShift();
+            }
+        }
+    } catch(e) {
+        console.error("Auto end shift evaluation error:", e);
+    }
+}
+
+export async function executeAutoEndShift() {
+    showSideNotification("AUTO END SHIFT", "System auto end shift triggered for all active riders", "fa-power-off", "text-red-400", "border-red-500");
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (db) {
+        const rosterSnap = await db.ref('roster').once('value');
+        const roster = rosterSnap.val() || {};
+
+        const updates = {};
+        const loginUpdates = {};
+
+        Object.keys(roster).forEach((riderId) => {
+            const m = roster[riderId];
+            if (m && m.status !== 'End') {
+                updates[`roster/${riderId}/status`] = 'End';
+                updates[`roster/${riderId}/customerName`] = '';
+                updates[`roster/${riderId}/startTime`] = '';
+                updates[`roster/${riderId}/pendingPenaltyMinutes`] = 0;
+                updates[`roster/${riderId}/cooldownUntil`] = 0;
+                updates[`roster/${riderId}/lastUpdated`] = timeStr;
+
+                loginUpdates[`logins/${riderId}/clockOutTime`] = timeStr;
+            }
+        });
+
+        if (Object.keys(updates).length > 0) {
+            await db.ref().update({ ...updates, ...loginUpdates });
+        }
+    }
+
+    try {
+        await fetch(API_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({ type: "roster", action: "auto_end_shift", time: timeStr })
+        });
+    } catch(e) {}
+}
+
+// ============================================================================
 // ADMIN RIDER ACCOUNT MANAGEMENT & USER TYPE UPDATER (ADMIN ONLY)
 // ============================================================================
 export function openAdminManageRidersModal() {
@@ -732,12 +808,10 @@ export async function executeDeleteRiderAccount(riderId, riderName) {
 
     try {
         if (db) {
-            // Remove from both riders and roster nodes
             await db.ref(`riders/${riderId}`).remove();
             await db.ref(`roster/${riderId}`).remove();
         }
 
-        // Clean in-memory roster state & user types map
         if (globalState.rosterMembers) {
             globalState.rosterMembers = globalState.rosterMembers.filter(m => (m.telegramId || "").toString().trim() !== riderId.toString().trim());
         }
@@ -1064,6 +1138,11 @@ if (typeof window !== 'undefined') {
     window.adminVoidSpecificCustomer = adminVoidSpecificCustomer;
     window.adminShiftRiderQueue = adminShiftRiderQueue;
     window.forceAllEndShift = forceAllEndShift;
+    window.openAdminAutoEndShiftModal = openAdminAutoEndShiftModal;
+    window.closeAdminAutoEndShiftModal = closeAdminAutoEndShiftModal;
+    window.saveAdminAutoEndShiftSettings = saveAdminAutoEndShiftSettings;
+    window.checkAndTriggerAutoEndShift = checkAndTriggerAutoEndShift;
+    window.executeAutoEndShift = executeAutoEndShift;
     window.dismissQueueAlarm = dismissQueueAlarm;
     window.checkFirstInLineNotification = checkFirstInLineNotification;
     window.updateRosterStatus = updateRosterStatus;

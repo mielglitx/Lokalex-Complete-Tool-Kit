@@ -61,6 +61,12 @@ export function updateRosterUI() {
         else manageRidersBtn.classList.add('hidden');
     }
 
+    const autoEndShiftBtn = document.getElementById('admin-auto-endshift-btn');
+    if (autoEndShiftBtn) {
+        if (isAdmin()) autoEndShiftBtn.classList.remove('hidden');
+        else autoEndShiftBtn.classList.add('hidden');
+    }
+
     const blockBtn = document.getElementById('admin-block-btn');
     if (blockBtn) {
         if (isAdmin()) blockBtn.classList.remove('hidden');
@@ -173,7 +179,7 @@ export function updateRosterUI() {
                         ` : ''}
 
                         ${!isMyLine ? `
-                            <button onclick="window.claimCustomerFromRider && window.claimCustomerFromRider('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Get this customer for yourself">
+                            <button onclick="window.claimCustomerFromRider && window.claimCustomerFromRider('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Request to get this customer">
                                 📥 Get
                             </button>
                         ` : ''}

@@ -883,7 +883,12 @@ export function calibrateGPS(onProgress) {
 
 export function startBackgroundRosterGpsTracker() {
     if (!navigator.geolocation || !appState.telegramId) return;
-    if (backgroundGpsWatchId !== null) navigator.geolocation.clearWatch(backgroundGpsWatchId);
+    if (backgroundGpsWatchId !== null) {
+        navigator.geolocation.clearWatch(backgroundGpsWatchId);
+        backgroundGpsWatchId = null;
+    }
+
+    lastRosterGpsPushTime = 0; // Trigger immediate push upon foreground resume
 
     backgroundGpsWatchId = navigator.geolocation.watchPosition(
         (pos) => {
@@ -955,13 +960,11 @@ export async function processLogin() {
         let authorized = false;
         let riderRecord = null;
 
-        // 100% Direct Firebase RTDB Authentication Query
         if (db) {
             const snap = await db.ref(`riders/${idInput}`).once('value');
             riderRecord = snap.val();
 
             if (!riderRecord) {
-                // Fallback check against roster
                 const rosterSnap = await db.ref(`roster/${idInput}`).once('value');
                 riderRecord = rosterSnap.val();
             }
