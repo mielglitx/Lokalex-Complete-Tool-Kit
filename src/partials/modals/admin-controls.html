@@ -29,6 +29,112 @@
     </div>
 </div>
 
+<!-- ADMIN COMMISSION FEE SETTINGS MODAL (ADMIN ONLY) -->
+<div id="admin-commission-settings-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-amber-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3.5 max-h-[88vh] relative animate-in fade-in zoom-in duration-200">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2.5 shrink-0">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-amber-600/20 text-amber-400 flex items-center justify-center text-sm font-bold border border-amber-500/30">
+                    <i class="fa-solid fa-percent"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-white">Daily Commission Fee Settings</h3>
+                    <p class="text-[9px] text-amber-400 font-mono">Set Percentage & Promo Rules</p>
+                </div>
+            </div>
+            <button onclick="window.closeAdminCommissionSettingsModal && window.closeAdminCommissionSettingsModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex flex-col gap-3 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
+            <!-- DEFAULT GLOBAL RATE -->
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between shrink-0">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-coins text-amber-400"></i> Default Commission Rate
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Applies to all riders by default</div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <input type="number" step="0.5" min="0" max="100" id="admin-default-commission-rate" value="10" class="w-16 bg-inputBg text-sm text-center font-black text-amber-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-amber-500">
+                    <span class="text-xs text-gray-300 font-bold">%</span>
+                </div>
+            </div>
+
+            <!-- RECURRING DAY SPECIAL RULE (e.g. Every Sunday Less 5%) -->
+            <div class="bg-darkBg p-3 rounded-2xl border border-purple-500/40 flex flex-col gap-2 shrink-0">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="font-bold text-purple-300 text-xs flex items-center gap-1.5">
+                            <i class="fa-solid fa-calendar-week text-purple-400"></i> Recurring Day Promo Less
+                        </div>
+                        <div class="text-[10px] text-gray-400">Bawas komisyon sa partikular na araw</div>
+                    </div>
+                    <input type="checkbox" id="admin-recurring-discount-enabled" class="w-4 h-4 accent-purple-500 cursor-pointer">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <div>
+                        <label class="text-[9px] text-gray-400 font-bold uppercase">Piliin ang Araw</label>
+                        <select id="admin-recurring-discount-day" class="w-full bg-inputBg text-xs font-bold text-white rounded-xl p-2 border border-gray-700 outline-none mt-0.5">
+                            <option value="0" selected>Every Sunday</option>
+                            <option value="1">Every Monday</option>
+                            <option value="2">Every Tuesday</option>
+                            <option value="3">Every Wednesday</option>
+                            <option value="4">Every Thursday</option>
+                            <option value="5">Every Friday</option>
+                            <option value="6">Every Saturday</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[9px] text-gray-400 font-bold uppercase">Less Commission %</label>
+                        <div class="flex items-center gap-1 mt-0.5">
+                            <input type="number" step="0.5" min="0" max="100" id="admin-recurring-discount-rate" value="5" class="w-full bg-inputBg text-xs text-center font-bold text-purple-300 rounded-xl p-2 border border-gray-700 outline-none focus:border-purple-500">
+                            <span class="text-xs text-gray-400 font-bold">%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SPECIFIC CALENDAR DATES PROMO RULE -->
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex flex-col gap-2 shrink-0">
+                <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-calendar-day text-emerald-400"></i> Specific Promo Date Rules
+                </div>
+                <div class="flex gap-2 items-center">
+                    <input type="date" id="admin-special-promo-date" class="flex-1 bg-inputBg text-xs font-mono font-bold text-white rounded-xl p-2 border border-gray-700 outline-none">
+                    <div class="flex items-center gap-1">
+                        <input type="number" step="0.5" min="1" max="100" id="admin-special-promo-disc" placeholder="5" value="5" class="w-14 bg-inputBg text-xs text-center font-bold text-emerald-400 rounded-xl p-2 border border-gray-700 outline-none">
+                        <span class="text-xs text-gray-400 font-bold">%</span>
+                    </div>
+                    <button type="button" onclick="window.addSpecialPromoDate && window.addSpecialPromoDate()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-2 rounded-xl text-xs transition active:scale-95 shrink-0 shadow">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                </div>
+
+                <div id="admin-special-dates-list" class="flex flex-col gap-1.5 mt-1 max-h-28 overflow-y-auto">
+                    <div class="text-gray-500 italic text-[10px] text-center py-1">Walang active na specific promo dates.</div>
+                </div>
+            </div>
+
+            <!-- INDIVIDUAL RIDER OVERRIDES -->
+            <div class="flex flex-col shrink-0 pb-2">
+                <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1.5 flex justify-between items-center">
+                    <span>Individual Rider Overrides</span>
+                    <span class="text-[9px] text-amber-400 lowercase">blank = follows default</span>
+                </div>
+                <div id="admin-commission-riders-list" class="flex flex-col gap-2 min-h-[80px]">
+                    <div class="text-center text-gray-500 italic py-6 text-xs">Loading riders list...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-2 pt-2 border-t border-gray-800 shrink-0">
+            <button onclick="window.closeAdminCommissionSettingsModal && window.closeAdminCommissionSettingsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+            <button onclick="window.saveAdminCommissionSettings && window.saveAdminCommissionSettings()" class="flex-1 bg-amber-600 hover:bg-amber-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Save Settings</button>
+        </div>
+    </div>
+</div>
+
 <!-- ADMIN AUTO END SHIFT SETTINGS MODAL (ADMIN ONLY) -->
 <div id="admin-auto-endshift-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-purple-500/60 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3.5 relative animate-in fade-in zoom-in duration-200">
@@ -46,7 +152,6 @@
         </div>
 
         <div class="flex flex-col gap-3 text-xs">
-            <!-- ENABLE / DISABLE TOGGLE -->
             <label class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex justify-between items-center cursor-pointer select-none">
                 <div>
                     <div class="font-bold text-white text-xs flex items-center gap-1.5">
@@ -57,7 +162,6 @@
                 <input type="checkbox" id="auto-endshift-enabled" class="w-5 h-5 accent-purple-500 cursor-pointer">
             </label>
 
-            <!-- SCHEDULE TIME INPUT -->
             <div>
                 <label class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Set Daily End Shift Time</label>
                 <div class="relative">

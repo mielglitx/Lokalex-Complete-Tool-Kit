@@ -3,9 +3,21 @@ import { appState, globalState } from '../store/state.js';
 import { db } from '../config/firebase.js';
 import { ADMIN_IDS } from '../config/constants.js';
 import { getLocalTodayStr, copyText, getWeekString, getMonthString, getDateString, escapeHtml } from '../utils/helpers.js';
-import { showToast } from '../ui/notifications.js';
+import { showToast, showSideNotification } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
 import { openSlideDeleteModal } from '../ui/modals.js';
+import { isAdmin as checkIsAdmin } from './roster/rosterUtils.js';
+
+let defaultCommissionRate = 10; // Default company commission percentage
+let customRiderRates = {}; // Map of riderId / riderName -> custom percentage
+
+// Special Discount Rules Settings
+let recurringDiscount = {
+    enabled: true,
+    day: 0, // 0 = Sunday, 1 = Monday, etc.
+    percentage: 5 // 5% discount
+};
+let specialDateDiscounts = {}; // e.g. { "2026-12-25": 10 }
 
 let viewSettings = {
     mode: 'earned', // 'earned' or 'company'
@@ -39,7 +51,8 @@ export function isRiderAdmin(riderName = "", telegramId = "") {
     const cleanName = (riderName || "").toString().toLowerCase().trim();
     const cleanId = (telegramId || "").toString().trim();
 
-    if (cleanId && ADMIN_IDS.includes(cleanId)) return true;
+    if (cleanId && ADMIN_IDS.some(id => id.toString().trim() === cleanId)) return true;
+    if (cleanName && ADMIN_IDS.some(id => id.toString().toLowerCase().trim() === cleanName)) return true;
 
     if (globalState.userTypesMap) {
         const hasName = cleanName && (cleanName in globalState.userTypesMap);
@@ -67,10 +80,11 @@ export function isRiderAdmin(riderName = "", telegramId = "") {
     return false;
 }
 
-// GET DYNAMIC COMMISSION RATES PER RIDER BASED ON FIREBASE COMMISSION SETTINGS & PENALTIES
-function getCommissionRates(dateStr, riderName = "", telegramId = "") {
-    const d = new Date((dateStr || getLocalTodayStr()) + "T00:00:00");
-    const isSunday = d.getDay() === 0;
+// GET DYNAMIC COMMISSION RATES PER RIDER BASED ON OVERRIDES, PROMOS & PENALTIES
+export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
+    const dateFormatted = dateStr || getLocalTodayStr();
+    const d = new Date(dateFormatted + "T00:00:00");
+    const dayOfWeek = d.getDay(); // 0 = Sunday, 1 = Monday, etc.
 
     const isAdmin = isRiderAdmin(riderName, telegramId);
 
@@ -78,25 +92,43 @@ function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         return {
             companyRate: 0,
             riderRate: 1.0,
-            isSunday: isSunday,
+            isSunday: dayOfWeek === 0,
             companyPerc: 0,
             riderPerc: 100,
             baseCompanyPerc: 0,
             penaltyPerc: 0,
+            promoDiscountPerc: 0,
+            hasCustomOverride: true,
             isAdmin: true
         };
     }
 
     const cleanName = (riderName || "").toLowerCase().trim();
-    const setting = globalState.globalRiderRates ? globalState.globalRiderRates[cleanName] : null;
+    const cleanId = (telegramId || "").toString().trim();
 
-    let baseCompanyPerc = 20;
-    if (setting) {
-        if (setting.percentage !== undefined) baseCompanyPerc = parseFloat(setting.percentage);
-        else if (setting.basePercentage !== undefined) baseCompanyPerc = parseFloat(setting.basePercentage);
+    // 1. Check for specific Admin Override for this rider
+    let baseCompanyPerc = defaultCommissionRate;
+    let hasCustomOverride = false;
+
+    if (cleanId && customRiderRates[cleanId] !== undefined && customRiderRates[cleanId] !== null && customRiderRates[cleanId] !== "") {
+        baseCompanyPerc = parseFloat(customRiderRates[cleanId]);
+        hasCustomOverride = true;
+    } else if (cleanName && customRiderRates[cleanName] !== undefined && customRiderRates[cleanName] !== null && customRiderRates[cleanName] !== "") {
+        baseCompanyPerc = parseFloat(customRiderRates[cleanName]);
+        hasCustomOverride = true;
+    } else if (globalState.globalRiderRates && globalState.globalRiderRates[cleanName]) {
+        const setting = globalState.globalRiderRates[cleanName];
+        if (setting.percentage !== undefined) {
+            baseCompanyPerc = parseFloat(setting.percentage);
+            hasCustomOverride = true;
+        } else if (setting.basePercentage !== undefined) {
+            baseCompanyPerc = parseFloat(setting.basePercentage);
+            hasCustomOverride = true;
+        }
     }
 
-    const penaltyKey = `${cleanName}_${dateStr}`;
+    // 2. Calculate Date Penalty
+    const penaltyKey = `${cleanName}_${dateFormatted}`;
     const penaltyRecord = globalState.globalCommissionPenalties ? globalState.globalCommissionPenalties[penaltyKey] : null;
     let penaltyPerc = 0;
 
@@ -104,20 +136,32 @@ function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         penaltyPerc = Math.max(0, parseFloat(penaltyRecord.penaltyPercentage) || 0);
     }
 
-    let sundayDiscount = isSunday ? 5 : 0;
+    // 3. Calculate Special Commission Discount (Recurring Day or Specific Date Rule)
+    let promoDiscountPerc = 0;
 
-    let finalCompanyPerc = Math.max(0, baseCompanyPerc + penaltyPerc - sundayDiscount);
+    if (recurringDiscount && recurringDiscount.enabled && recurringDiscount.day === dayOfWeek) {
+        promoDiscountPerc = Math.max(promoDiscountPerc, parseFloat(recurringDiscount.percentage) || 0);
+    }
+
+    if (specialDateDiscounts && specialDateDiscounts[dateFormatted] !== undefined) {
+        promoDiscountPerc = Math.max(promoDiscountPerc, parseFloat(specialDateDiscounts[dateFormatted]) || 0);
+    }
+
+    // 4. Final Percentage Computation
+    let finalCompanyPerc = Math.max(0, baseCompanyPerc + penaltyPerc - promoDiscountPerc);
     let companyRate = finalCompanyPerc / 100;
     let riderRate = Math.max(0, (100 - finalCompanyPerc) / 100);
 
     return {
         companyRate: companyRate,
         riderRate: riderRate,
-        isSunday: isSunday,
+        isSunday: dayOfWeek === 0,
         companyPerc: finalCompanyPerc,
         riderPerc: Math.max(0, 100 - finalCompanyPerc),
         baseCompanyPerc: baseCompanyPerc,
         penaltyPerc: penaltyPerc,
+        promoDiscountPerc: promoDiscountPerc,
+        hasCustomOverride: hasCustomOverride,
         penaltyReason: penaltyRecord ? penaltyRecord.reason : "",
         isAdmin: false
     };
@@ -127,6 +171,25 @@ export async function fetchCommissionSettings() {
     await fetchRiderUserTypes();
 
     if (db) {
+        // Real-time synchronization of commission settings
+        db.ref('settings/commission').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                defaultCommissionRate = typeof data.defaultPercentage === 'number' ? data.defaultPercentage : (parseFloat(data.defaultPercentage) || 10);
+                customRiderRates = data.riderRates || {};
+                
+                if (data.recurringDiscount) {
+                    recurringDiscount = {
+                        enabled: !!data.recurringDiscount.enabled,
+                        day: parseInt(data.recurringDiscount.day) || 0,
+                        percentage: parseFloat(data.recurringDiscount.percentage) || 0
+                    };
+                }
+                specialDateDiscounts = data.specialDateDiscounts || {};
+            }
+            refreshCommissionView();
+        });
+
         db.ref('commissionSettings').once('value', (snapshot) => {
             const val = snapshot.val();
             if (val) {
@@ -135,7 +198,7 @@ export async function fetchCommissionSettings() {
                     const name = (item.rider || item.Rider || "").toLowerCase().trim();
                     if (name) {
                         ratesMap[name] = {
-                            percentage: parseFloat(item.percentage || item.Percentage || item.basePercentage) || 20,
+                            percentage: parseFloat(item.percentage || item.Percentage || item.basePercentage) || defaultCommissionRate,
                             promoLess: parseFloat(item.isPromoLessPerc || item.IsPromoLessPerc || item.promoLess) || 0
                         };
                     }
@@ -145,10 +208,253 @@ export async function fetchCommissionSettings() {
             }
         });
 
-        db.ref('commissionPenalties').once('value', (snapshot) => {
+        db.ref('commissionPenalties').on('value', (snapshot) => {
             globalState.globalCommissionPenalties = snapshot.val() || {};
             refreshCommissionView();
         });
+    }
+}
+
+// ============================================================================
+// ADMIN COMMISSION RATE SETTINGS MODAL & OVERRIDE HANDLERS
+// ============================================================================
+export function openAdminCommissionSettingsModal() {
+    if (!checkIsAdmin()) {
+        return showToast("⚠️ Unauthorized: Only Admin can adjust commission settings.");
+    }
+
+    const modal = document.getElementById('admin-commission-settings-modal');
+    const defaultInput = document.getElementById('admin-default-commission-rate');
+    const recurringEnabled = document.getElementById('admin-recurring-discount-enabled');
+    const recurringDaySelect = document.getElementById('admin-recurring-discount-day');
+    const recurringRateInput = document.getElementById('admin-recurring-discount-rate');
+
+    if (defaultInput) {
+        defaultInput.value = defaultCommissionRate;
+    }
+    if (recurringEnabled) {
+        recurringEnabled.checked = !!recurringDiscount.enabled;
+    }
+    if (recurringDaySelect) {
+        recurringDaySelect.value = recurringDiscount.day !== undefined ? recurringDiscount.day : 0;
+    }
+    if (recurringRateInput) {
+        recurringRateInput.value = recurringDiscount.percentage || 5;
+    }
+
+    renderAdminRiderCommissionRatesList();
+    renderSpecialPromoDatesList();
+
+    if (modal) {
+        modal.classList.remove('hidden');
+    }
+}
+
+export function closeAdminCommissionSettingsModal() {
+    const modal = document.getElementById('admin-commission-settings-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export function renderAdminRiderCommissionRatesList() {
+    const container = document.getElementById('admin-commission-riders-list');
+    if (!container) return;
+
+    if (!db) {
+        container.innerHTML = `<div class="text-center text-gray-500 italic py-6 text-xs">Database offline.</div>`;
+        return;
+    }
+
+    db.ref('riders').once('value', (snapshot) => {
+        const val = snapshot.val() || {};
+        let ridersList = Object.entries(val).map(([id, item]) => ({
+            id: id.toString().trim(),
+            name: item.riderName || item.name || id,
+            userType: (item.userType || item.type || "rider").toLowerCase().trim()
+        }));
+
+        (globalState.rosterMembers || []).forEach(m => {
+            const mId = (m.telegramId || "").toString().trim();
+            const mName = m.riderName || m.name || mId;
+            if (mId && !ridersList.some(r => r.id === mId)) {
+                ridersList.push({ id: mId, name: mName, userType: (m.userType || "rider").toLowerCase().trim() });
+            }
+        });
+
+        if (ridersList.length === 0) {
+            container.innerHTML = `<div class="text-center text-gray-500 italic py-6 text-xs">No registered riders found.</div>`;
+            return;
+        }
+
+        ridersList.sort((a, b) => a.name.localeCompare(b.name));
+
+        container.innerHTML = ridersList.map(r => {
+            const cleanId = r.id;
+            const cleanName = r.name.toLowerCase().trim();
+            
+            let currentRiderRate = "";
+            let isOverridden = false;
+
+            if (customRiderRates[cleanId] !== undefined && customRiderRates[cleanId] !== null && customRiderRates[cleanId] !== "") {
+                currentRiderRate = customRiderRates[cleanId];
+                isOverridden = true;
+            } else if (customRiderRates[cleanName] !== undefined && customRiderRates[cleanName] !== null && customRiderRates[cleanName] !== "") {
+                currentRiderRate = customRiderRates[cleanName];
+                isOverridden = true;
+            }
+
+            const badgeHtml = isOverridden 
+                ? `<span class="text-[9px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded border border-amber-500/30">Custom Rate</span>`
+                : `<span class="text-[9px] bg-gray-800 text-gray-400 font-bold px-1.5 py-0.5 rounded border border-gray-700">Default (${defaultCommissionRate}%)</span>`;
+
+            return `
+            <div class="bg-black/40 border border-gray-800/80 p-2.5 rounded-2xl flex items-center justify-between gap-2 shadow text-xs">
+                <div class="flex flex-col min-w-0 flex-1">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="font-bold text-white truncate">
+                            <i class="fa-solid fa-motorcycle text-amber-400 mr-1"></i>${escapeHtml(r.name)}
+                        </span>
+                        ${badgeHtml}
+                    </div>
+                    <span class="text-[10px] text-gray-400 font-mono">ID: ${escapeHtml(r.id)}</span>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <input type="number" step="0.5" min="0" max="100" 
+                        id="rider-comm-rate-${escapeHtml(r.id)}" 
+                        placeholder="${defaultCommissionRate}%" 
+                        value="${currentRiderRate}" 
+                        class="w-16 bg-inputBg text-xs text-center font-bold text-amber-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-amber-500">
+                    <span class="text-xs text-gray-400 font-bold">%</span>
+                    <button type="button" onclick="window.clearRiderCommissionOverride && window.clearRiderCommissionOverride('${escapeHtml(r.id)}')" class="text-gray-500 hover:text-red-400 p-1 text-xs transition" title="Clear override (Use Default)">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+    });
+}
+
+export function clearRiderCommissionOverride(riderId) {
+    const input = document.getElementById(`rider-comm-rate-${riderId}`);
+    if (input) {
+        input.value = "";
+        input.focus();
+        showToast("🔄 Override cleared. It will use the default rate once saved.");
+    }
+}
+
+export function renderSpecialPromoDatesList() {
+    const container = document.getElementById('admin-special-dates-list');
+    if (!container) return;
+
+    const entries = Object.entries(specialDateDiscounts || {});
+    if (entries.length === 0) {
+        container.innerHTML = `<div class="text-gray-500 italic text-[10px] text-center py-2">Walang active na specific promo dates.</div>`;
+        return;
+    }
+
+    container.innerHTML = entries.map(([dateKey, discount]) => `
+        <div class="flex items-center justify-between bg-black/40 border border-purple-500/30 p-2 rounded-xl text-xs">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-calendar-day text-purple-400"></i>
+                <span class="font-mono text-white font-bold">${escapeHtml(dateKey)}</span>
+                <span class="text-[10px] text-purple-300 font-bold bg-purple-500/20 px-2 py-0.5 rounded-lg border border-purple-500/30">-${discount}% Less</span>
+            </div>
+            <button onclick="window.removeSpecialPromoDate && window.removeSpecialPromoDate('${escapeHtml(dateKey)}')" class="text-red-400 hover:text-red-300 p-1 text-xs transition active:scale-95" title="Remove promo date">
+                <i class="fa-solid fa-trash"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+export function addSpecialPromoDate() {
+    const dateInput = document.getElementById('admin-special-promo-date');
+    const discountInput = document.getElementById('admin-special-promo-disc');
+
+    const dateVal = dateInput ? dateInput.value.trim() : "";
+    const discVal = discountInput ? parseFloat(discountInput.value) : 0;
+
+    if (!dateVal) return showToast("⚠️ Pumili ng date para sa promo!");
+    if (isNaN(discVal) || discVal <= 0 || discVal > 100) return showToast("⚠️ Maglagay ng tamang discount percentage (1 - 100%)!");
+
+    if (!specialDateDiscounts) specialDateDiscounts = {};
+    specialDateDiscounts[dateVal] = discVal;
+
+    if (dateInput) dateInput.value = "";
+    if (discountInput) discountInput.value = "5";
+
+    renderSpecialPromoDatesList();
+    showToast(`🎉 Naidagdag ang promo discount sa ${dateVal} (-${discVal}%)!`);
+}
+
+export function removeSpecialPromoDate(dateKey) {
+    if (specialDateDiscounts && specialDateDiscounts[dateKey] !== undefined) {
+        delete specialDateDiscounts[dateKey];
+        renderSpecialPromoDatesList();
+        showToast(`🗑️ Tinanggal ang promo sa ${dateKey}.`);
+    }
+}
+
+export async function saveAdminCommissionSettings() {
+    if (!checkIsAdmin()) {
+        return showToast("⚠️ Unauthorized: Only Admin can adjust commission settings.");
+    }
+
+    const defaultInput = document.getElementById('admin-default-commission-rate');
+    let newDefaultRate = defaultCommissionRate;
+    if (defaultInput && defaultInput.value.trim() !== "") {
+        const parsed = parseFloat(defaultInput.value);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+            newDefaultRate = parsed;
+        }
+    }
+
+    const updatedRiderRates = {};
+    const rateInputs = document.querySelectorAll('[id^="rider-comm-rate-"]');
+
+    rateInputs.forEach(input => {
+        const riderId = input.id.replace('rider-comm-rate-', '').trim();
+        const valStr = input.value.trim();
+        if (valStr !== "") {
+            const valNum = parseFloat(valStr);
+            if (!isNaN(valNum) && valNum >= 0 && valNum <= 100) {
+                updatedRiderRates[riderId] = valNum;
+            }
+        }
+    });
+
+    const recurringEnabled = document.getElementById('admin-recurring-discount-enabled')?.checked || false;
+    const recurringDay = parseInt(document.getElementById('admin-recurring-discount-day')?.value) || 0;
+    const recurringRate = parseFloat(document.getElementById('admin-recurring-discount-rate')?.value) || 0;
+
+    const payload = {
+        defaultPercentage: newDefaultRate,
+        riderRates: updatedRiderRates,
+        recurringDiscount: {
+            enabled: recurringEnabled,
+            day: recurringDay,
+            percentage: recurringRate
+        },
+        specialDateDiscounts: specialDateDiscounts || {},
+        updatedBy: appState.riderName || localStorage.getItem('riderName') || "Admin",
+        updatedAt: Date.now()
+    };
+
+    try {
+        if (db) {
+            await db.ref('settings/commission').set(payload);
+        }
+
+        defaultCommissionRate = newDefaultRate;
+        customRiderRates = updatedRiderRates;
+        recurringDiscount = payload.recurringDiscount;
+
+        closeAdminCommissionSettingsModal();
+        showToast(`✅ Na-save ang Commission Settings (${newDefaultRate}% default)!`);
+        showSideNotification("COMMISSION UPDATED", `Daily commission overrides and promo settings saved!`, "fa-percent", "text-amber-400", "border-amber-500");
+        refreshCommissionView();
+    } catch(e) {
+        console.error("Firebase save error:", e);
+        showToast(`❌ Failed to update: ${e.message || "Permission Denied"}`);
     }
 }
 
@@ -191,7 +497,7 @@ function getCleanRiderList() {
 }
 
 function setupAdminControls() {
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId); 
+    const isAdmin = checkIsAdmin(); 
     const filterBox = document.getElementById('admin-commission-filter-box');
     const select = document.getElementById('admin-rider-select');
     
@@ -371,8 +677,8 @@ export function getMergedDeduplicatedCommissionList() {
 }
 
 export function refreshCommissionView() {
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
-    let targetRiderFilter = isAdmin ? document.getElementById('admin-rider-select')?.value : appState.telegramId;
+    const isUserAdmin = checkIsAdmin();
+    let targetRiderFilter = isUserAdmin ? document.getElementById('admin-rider-select')?.value : appState.telegramId;
     if (targetRiderFilter === "ALL") targetRiderFilter = null; 
 
     const dateInput = document.getElementById(`comm-input-${viewSettings.period}`);
@@ -481,17 +787,18 @@ export function refreshCommissionView() {
 
     const displayRates = selectedRiderRates || getCommissionRates(viewSettings.dateValue, appState.riderName, appState.telegramId);
     let penaltyNotice = displayRates.penaltyPerc > 0 ? ` (+${displayRates.penaltyPerc}% Penalty)` : '';
+    let promoNotice = displayRates.promoDiscountPerc > 0 ? ` (-${displayRates.promoDiscountPerc}% Promo Less)` : '';
 
     if (viewSettings.mode === 'earned') {
         if (mainLabelEl) {
-            mainLabelEl.innerText = `YOUR EARNINGS (${displayRates.riderPerc}% Rate${penaltyNotice})`;
+            mainLabelEl.innerText = `YOUR EARNINGS (${displayRates.riderPerc}% Rate${penaltyNotice}${promoNotice})`;
             mainLabelEl.className = "text-[10px] text-emerald-400 font-bold uppercase";
         }
         if (mainWrapperEl) mainWrapperEl.className = "text-4xl font-black text-emerald-400 drop-shadow-md";
         if (mainAmountEl) mainAmountEl.innerText = grandEarned.toFixed(2);
     } else {
         if (mainLabelEl) {
-            mainLabelEl.innerText = displayRates.isAdmin ? `TO PAY COMPANY (ADMIN EXEMPT)` : `TO PAY COMPANY (${displayRates.companyPerc}% Rate${penaltyNotice})`;
+            mainLabelEl.innerText = displayRates.isAdmin ? `TO PAY COMPANY (ADMIN EXEMPT)` : `TO PAY COMPANY (${displayRates.companyPerc}% Rate${penaltyNotice}${promoNotice})`;
             mainLabelEl.className = "text-[10px] text-red-400 font-bold uppercase";
         }
         if (mainWrapperEl) mainWrapperEl.className = "text-4xl font-black text-red-400 drop-shadow-md";
@@ -499,7 +806,7 @@ export function refreshCommissionView() {
     }
 
     renderRiderSummaryList(finalRiderList);
-    checkSettlementStatus(targetRiderFilter, viewSettings.period, viewSettings.dateValue, isAdmin);
+    checkSettlementStatus(targetRiderFilter, viewSettings.period, viewSettings.dateValue, isUserAdmin);
 }
 
 function checkSettlementStatus(riderId, period, dateVal, isAdmin) {
@@ -668,7 +975,7 @@ function renderRiderSummaryList(riderListArray) {
         return;
     }
 
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
+    const isAdmin = checkIsAdmin();
 
     container.innerHTML = riderListArray.map((rider, idx) => {
         const rates = rider.lastRates || getCommissionRates(viewSettings.dateValue, rider.name, rider.id);
@@ -737,6 +1044,12 @@ function renderRiderSummaryList(riderListArray) {
                </div>`
             : '';
 
+        const promoBadge = rates.promoDiscountPerc > 0
+            ? `<div class="flex items-center justify-between bg-emerald-900/30 border border-emerald-500/40 px-2.5 py-1 rounded-lg text-[10px] text-emerald-300 font-bold my-1">
+                <span><i class="fa-solid fa-tags text-emerald-400"></i> Special Promo Active (-${rates.promoDiscountPerc}% Commission Less)</span>
+               </div>`
+            : '';
+
         return `
             <div class="bg-cardBg rounded-xl border border-gray-800 shadow-sm flex flex-col overflow-hidden">
                 <div onclick="toggleRiderCustomerBreakdown('${uid}')" class="p-3.5 flex justify-between items-center text-sm cursor-pointer hover:bg-white/5 transition select-none">
@@ -756,6 +1069,7 @@ function renderRiderSummaryList(riderListArray) {
 
                 <div id="box-${uid}" class="hidden bg-darkBg/60 p-3 border-t border-gray-800/80 flex flex-col gap-2">
                     ${penaltyBadge}
+                    ${promoBadge}
                     <div class="text-[10px] text-amber-400 font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
                         <span><i class="fa-solid fa-list-check"></i> Customer Breakdown (${viewSettings.period.toUpperCase()})</span>
                         <span class="text-gray-400">Total Paid: ₱${rider.gross.toFixed(2)}</span>
@@ -768,8 +1082,7 @@ function renderRiderSummaryList(riderListArray) {
 }
 
 export function promptAdminAddCommissionRecord() {
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
-    if (!isAdmin) return showToast("⚠️ Admin access required.");
+    if (!checkIsAdmin()) return showToast("⚠️ Admin access required.");
 
     const modal = document.getElementById('admin-add-comm-modal');
     const riderSelect = document.getElementById('manual-comm-rider-select');
@@ -841,8 +1154,7 @@ export function submitAdminAddCommissionRecord() {
 }
 
 export function promptAdminDeleteCommissionRecord(riderName, customerName, dateVal, txId) {
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
-    if (!isAdmin) return showToast("⚠️ Admin access required.");
+    if (!checkIsAdmin()) return showToast("⚠️ Admin access required.");
 
     openSlideDeleteModal(
         `Delete Commission Record?`,
@@ -922,8 +1234,7 @@ export function executeDeleteCommissionRecord(riderName, customerName, dateVal, 
 }
 
 export function promptAdminEditCustomerFee(riderName, customerName, dateVal, currentGross) {
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
-    if (!isAdmin) return showToast("⚠️ Admin access required to update fees.");
+    if (!checkIsAdmin()) return showToast("⚠️ Admin access required to update fees.");
 
     const newFeeInput = prompt(`Update Gross Fee for [${customerName}] (${riderName}):`, currentGross || "0.00");
     if (newFeeInput === null) return;
@@ -985,8 +1296,8 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
 }
 
 export function generateDailyReportText() {
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ADMIN_IDS.includes(appState.telegramId);
-    let targetRiderFilter = isAdmin ? document.getElementById('admin-rider-select')?.value : appState.telegramId;
+    const isUserAdmin = checkIsAdmin();
+    let targetRiderFilter = isUserAdmin ? document.getElementById('admin-rider-select')?.value : appState.telegramId;
     if (targetRiderFilter === "ALL") targetRiderFilter = null;
 
     const mergedList = getMergedDeduplicatedCommissionList();
@@ -1098,6 +1409,14 @@ if (typeof window !== 'undefined') {
     window.fetchRiderUserTypes = fetchRiderUserTypes;
     window.isRiderAdmin = isRiderAdmin;
     window.getMergedDeduplicatedCommissionList = getMergedDeduplicatedCommissionList;
+    window.openAdminCommissionSettingsModal = openAdminCommissionSettingsModal;
+    window.closeAdminCommissionSettingsModal = closeAdminCommissionSettingsModal;
+    window.renderAdminRiderCommissionRatesList = renderAdminRiderCommissionRatesList;
+    window.renderSpecialPromoDatesList = renderSpecialPromoDatesList;
+    window.addSpecialPromoDate = addSpecialPromoDate;
+    window.removeSpecialPromoDate = removeSpecialPromoDate;
+    window.clearRiderCommissionOverride = clearRiderCommissionOverride;
+    window.saveAdminCommissionSettings = saveAdminCommissionSettings;
 }
 
 window.addEventListener('receiptsUpdated', refreshCommissionView);

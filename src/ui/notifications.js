@@ -1,86 +1,91 @@
 // src/ui/notifications.js
-let audioCtx = null;
-let sideNotifyTimeout = null;
+let audioUnlocked = false;
 
 export function unlockAudioContext() {
-    if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
-}
-
-export function playNotificationSound(isMention = false) {
+    if (audioUnlocked) return;
     try {
-        unlockAudioContext();
-        if (!audioCtx) return;
-        const now = audioCtx.currentTime;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-
-        osc.type = 'sine';
-        if (isMention) {
-            osc.frequency.setValueAtTime(880, now);
-            osc.frequency.exponentialRampToValueAtTime(1320, now + 0.15);
-            gain.gain.setValueAtTime(0.3, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-            osc.connect(gain); 
-            gain.connect(audioCtx.destination);
-            osc.start(now); 
-            osc.stop(now + 0.35);
-        } else {
-            osc.frequency.setValueAtTime(600, now);
-            gain.gain.setValueAtTime(0.2, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-            osc.connect(gain); 
-            gain.connect(audioCtx.destination);
-            osc.start(now); 
-            osc.stop(now + 0.2);
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+            const ctx = new AudioContext();
+            ctx.resume().then(() => {
+                audioUnlocked = true;
+            });
         }
-    } catch (e) {
-        console.warn("Audio playback error:", e);
-    }
+    } catch(e) {}
 }
 
-export function showToast(msg) { 
-    const toast = document.getElementById('toast'); 
-    if (!toast) {
-        // Fallback to side banner if #toast element isn't in DOM
-        showSideNotification("Lokalex Hub", msg, "fa-circle-info", "text-blue-400", "border-blue-500");
-        return;
+export function showToast(message, duration = 3000) {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        // z-[9999999] ensures toasts are always visible on top of all modals
+        container.className = 'fixed bottom-5 left-1/2 -translate-x-1/2 z-[9999999] flex flex-col gap-2 items-center pointer-events-none px-4 w-full max-w-sm';
+        document.body.appendChild(container);
     }
-    toast.innerText = msg; 
-    toast.style.opacity = '1'; 
-    setTimeout(() => { toast.style.opacity = '0'; }, 2500); 
+
+    const toast = document.createElement('div');
+    toast.className = 'bg-gray-900/95 text-white border border-gray-700 text-xs font-bold px-4 py-3 rounded-2xl shadow-2xl backdrop-blur-md transition-all duration-300 pointer-events-auto transform translate-y-2 opacity-0 flex items-center gap-2 text-center';
+    toast.innerHTML = `<span>${message}</span>`;
+
+    container.appendChild(toast);
+
+    // Animate in
+    requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+    });
+
+    // Remove after duration
+    setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-2', 'opacity-0');
+        setTimeout(() => {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 300);
+    }, duration);
 }
 
-export function showSideNotification(title, message, iconClass = "fa-sync fa-spin", colorClass = "text-blue-400", borderClass = "border-blue-500") {
-    const banner = document.getElementById('side-notification-banner');
-    const icon = document.getElementById('side-notify-icon');
-    const titleEl = document.getElementById('side-notify-title');
-    const msgEl = document.getElementById('side-notify-msg');
+export function showSideNotification(title, message, iconClass = "fa-bell", textCol = "text-blue-400", borderCol = "border-blue-500") {
+    let sideContainer = document.getElementById('side-notification-container');
+    if (!sideContainer) {
+        sideContainer = document.createElement('div');
+        sideContainer.id = 'side-notification-container';
+        // z-[9999999] ensures notifications appear above modals
+        sideContainer.className = 'fixed top-4 right-4 z-[9999999] flex flex-col gap-2 pointer-events-none max-w-xs w-full px-2';
+        document.body.appendChild(sideContainer);
+    }
 
-    if (!banner || !icon || !titleEl || !msgEl) return;
+    const card = document.createElement('div');
+    card.className = `bg-gray-900/95 border ${borderCol} p-3 rounded-2xl shadow-2xl backdrop-blur-md flex items-start gap-2.5 text-xs pointer-events-auto transition-all duration-300 transform translate-x-4 opacity-0`;
+    card.innerHTML = `
+        <div class="mt-0.5 text-sm ${textCol} shrink-0">
+            <i class="fa-solid ${iconClass}"></i>
+        </div>
+        <div class="flex-1 flex flex-col">
+            <span class="font-black ${textCol} text-[11px] uppercase tracking-wider">${title}</span>
+            <span class="text-gray-300 text-[11px] mt-0.5 leading-snug">${message}</span>
+        </div>
+    `;
 
-    banner.className = `fixed top-16 right-3 z-[9998] max-w-xs w-72 bg-gray-900/95 border-l-4 ${borderClass} text-white p-3.5 rounded-xl shadow-2xl transition-all duration-300 ease-out pointer-events-none flex items-start gap-3 backdrop-blur-md`;
-    banner.classList.remove('hidden');
-    
-    icon.className = `fa-solid ${iconClass}`;
-    titleEl.innerText = title;
-    titleEl.className = `font-bold text-xs ${colorClass} tracking-wide uppercase`;
-    msgEl.innerText = message;
+    sideContainer.appendChild(card);
 
-    if (sideNotifyTimeout) clearTimeout(sideNotifyTimeout);
-    sideNotifyTimeout = setTimeout(() => {
-        banner.classList.add('hidden');
-    }, 3500);
+    requestAnimationFrame(() => {
+        card.classList.remove('translate-x-4', 'opacity-0');
+        card.classList.add('translate-x-0', 'opacity-100');
+    });
+
+    setTimeout(() => {
+        card.classList.remove('translate-x-0', 'opacity-100');
+        card.classList.add('translate-x-4', 'opacity-0');
+        setTimeout(() => {
+            if (card.parentNode) card.parentNode.removeChild(card);
+        }, 300);
+    }, 4000);
 }
 
 if (typeof window !== 'undefined') {
-    window.addEventListener('showToast', (e) => showToast(e.detail));
-    window.unlockAudioContext = unlockAudioContext;
-    window.playNotificationSound = playNotificationSound;
     window.showToast = showToast;
     window.showSideNotification = showSideNotification;
+    window.unlockAudioContext = unlockAudioContext;
 }

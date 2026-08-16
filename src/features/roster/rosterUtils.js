@@ -69,7 +69,11 @@ export function getUserType() {
 
 export function isAdmin() {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
-    if (myId && ADMIN_IDS.includes(myId)) return true;
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+
+    // Flexible string comparison against ADMIN_IDS
+    if (myId && ADMIN_IDS.some(id => id.toString().trim() === myId)) return true;
+    if (myName && ADMIN_IDS.some(id => id.toString().toLowerCase().trim() === myName)) return true;
 
     const t = getUserType();
     return t === "admin" || t === "owner" || t === "manager" || t.includes("admin");
@@ -81,8 +85,7 @@ export function isTL() {
 }
 
 export function canManageRoster() {
-    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
-    return isAdmin() || isTL() || ADMIN_IDS.includes(myId);
+    return isAdmin() || isTL();
 }
 
 export function canForceCaterTarget(targetType) {

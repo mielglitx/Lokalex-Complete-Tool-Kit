@@ -278,6 +278,7 @@ export async function confirmCateringStatus() {
         existingTimes.push(startTime);
     }
 
+    // AUTOMATICALLY MOVE MATCHING CUSTOMER THREAD TO 'CATERING' FOLDER IN FIREBASE
     if (db && custName) {
         const cleanSearchName = custName.toLowerCase().trim();
         db.ref('customerChats').once('value', (snapshot) => {
@@ -603,11 +604,8 @@ export async function saveAdminAutoEndShiftSettings() {
     const timeInput = document.getElementById('auto-endshift-time');
 
     const isEnabled = enabledToggle ? enabledToggle.checked : false;
-    const setTime = timeInput ? timeInput.value.trim() : "03:00";
-
-    if (isEnabled && !setTime) {
-        return showToast("⚠️ Please select a valid end shift time.");
-    }
+    let setTime = timeInput ? timeInput.value.trim() : "03:00";
+    if (!setTime) setTime = "03:00";
 
     const payload = {
         enabled: isEnabled,
@@ -616,13 +614,17 @@ export async function saveAdminAutoEndShiftSettings() {
         updatedAt: Date.now()
     };
 
-    if (db) {
-        await db.ref('settings/autoEndShift').update(payload);
-    }
+    try {
+        if (db) {
+            await db.ref('settings/autoEndShift').update(payload);
+        }
 
-    closeAdminAutoEndShiftModal();
-    showToast(`⚙️ Auto End Shift ${isEnabled ? `set to ${setTime}` : 'Disabled'}!`);
-    showSideNotification("SETTINGS SAVED", `Auto End Shift: ${isEnabled ? setTime : 'DISABLED'}`, "fa-clock", "text-purple-400", "border-purple-500");
+        closeAdminAutoEndShiftModal();
+        showToast(`⚙️ Auto End Shift ${isEnabled ? `set to ${setTime}` : 'Disabled'}!`);
+        showSideNotification("SETTINGS SAVED", `Auto End Shift: ${isEnabled ? setTime : 'DISABLED'}`, "fa-clock", "text-purple-400", "border-purple-500");
+    } catch(e) {
+        showToast("❌ Failed to update auto end shift settings.");
+    }
 }
 
 export async function checkAndTriggerAutoEndShift() {

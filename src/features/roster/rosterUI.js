@@ -61,6 +61,12 @@ export function updateRosterUI() {
         else manageRidersBtn.classList.add('hidden');
     }
 
+    const commissionSettingsBtn = document.getElementById('admin-commission-settings-btn');
+    if (commissionSettingsBtn) {
+        if (isAdmin()) commissionSettingsBtn.classList.remove('hidden');
+        else commissionSettingsBtn.classList.add('hidden');
+    }
+
     const autoEndShiftBtn = document.getElementById('admin-auto-endshift-btn');
     if (autoEndShiftBtn) {
         if (isAdmin()) autoEndShiftBtn.classList.remove('hidden');
