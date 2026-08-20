@@ -6,7 +6,7 @@ import { showToast } from '../ui/notifications.js';
 import { switchView, goBack } from '../ui/router.js';
 import { escapeHtml, copyText, getLocalTodayStr } from '../utils/helpers.js';
 import { openSlideDeleteModal } from '../ui/modals.js';
-import { getDeviceLocation } from './auth.js';
+import { getDeviceLocation } from './auth/index.js';
 import { sendCustomerToRiderChat, sendRiderToCustomerChat } from './chat/index.js';
 import { canManageRoster } from './roster/rosterUtils.js';
 

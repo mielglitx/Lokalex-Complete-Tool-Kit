@@ -193,18 +193,24 @@ export function calculateGrandTotal() {
     }
 
     const subtotal = Math.max(0, wizState.subtotal || 0);
-    const grossTotalBeforeDiscount = subtotal + hFee + mFee + multistop + dFee;
 
+    // 1. Calculate the total of all service and delivery fees strictly (excluding items)
+    const totalFeesBeforeDiscount = hFee + mFee + multistop + dFee;
+
+    // 2. Apply discount strictly against the fees
     let calculatedDiscount = 0;
     if (wizState.discountType === 'percent') {
-        calculatedDiscount = (grossTotalBeforeDiscount * Math.min(100, rawDiscountInput)) / 100;
+        calculatedDiscount = (totalFeesBeforeDiscount * Math.min(100, rawDiscountInput)) / 100;
     } else {
         calculatedDiscount = rawDiscountInput;
     }
 
-    calculatedDiscount = Math.min(grossTotalBeforeDiscount, Math.max(0, calculatedDiscount));
+    // Cap the discount so it cannot exceed total fees
+    calculatedDiscount = Math.min(totalFeesBeforeDiscount, Math.max(0, calculatedDiscount));
 
-    let codTotal = Math.max(0, grossTotalBeforeDiscount - calculatedDiscount);
+    // 3. Compute Net Fees and Grand COD Total
+    const netFees = Math.max(0, totalFeesBeforeDiscount - calculatedDiscount);
+    let codTotal = Math.max(0, subtotal + netFees);
 
     let epayFee = 0;
     if (codTotal > 0) {

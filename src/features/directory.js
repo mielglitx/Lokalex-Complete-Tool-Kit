@@ -5,9 +5,9 @@ import { API_URL, BARANGAY_DATA, ADMIN_IDS } from '../config/constants.js';
 import { showToast, showSideNotification } from '../ui/notifications.js';
 import { switchView, goBack } from '../ui/router.js';
 import { openSlideDeleteModal } from '../ui/modals.js';
-import { calibrateGPS } from './auth.js';
+import { calibrateGPS } from './auth/index.js';
 import { escapeHtml, copyText, getLocalTodayStr } from '../utils/helpers.js';
-import { isRiderAdmin } from './commission.js';
+import { isRiderAdmin } from './commission/index.js';
 
 let editingRecord = null;
 let mapInstance = null;
@@ -15,7 +15,7 @@ let selectedMapLat = 0;
 let selectedMapLng = 0;
 let lastJumpLetter = "";
 
-const CACHE_KEY = 'lokalex_directory_cache';
+const CACHE_KEY = 'lokalex_directory_cache_v2';
 
 // CHECK IF CURRENT USER IS AN ADMIN
 export function checkAdminAccess() {
@@ -37,33 +37,41 @@ export function checkAdminAccess() {
 // PERSIST DIRECTORY RECORDS TO LOCALSTORAGE
 export function saveDirectoryCache() {
     try {
-        localStorage.setItem(CACHE_KEY, JSON.stringify(globalState.records || []));
+        if (globalState.records && globalState.records.length > 0) {
+            localStorage.setItem(CACHE_KEY, JSON.stringify(globalState.records));
+        }
     } catch(e) {}
 }
 
-// LOAD DIRECTORY RECORDS FROM LOCALSTORAGE ON APP BOOT
+// LOAD DIRECTORY RECORDS FROM LOCALSTORAGE ON APP BOOT (INSTANT OFFLINE ACCESS)
 export function loadDirectoryCache() {
     try {
         const saved = localStorage.getItem(CACHE_KEY);
         if (saved) {
-            globalState.records = JSON.parse(saved);
-        } else {
-            if (!globalState.records || globalState.records.length === 0) {
-                globalState.records = BARANGAY_DATA.map(b => ({
-                    name: b.name,
-                    contact: "",
-                    address: `₱${b.fee.toFixed(2)}`,
-                    rate: `₱${b.fee.toFixed(2)}`,
-                    lat_lon_link: "",
-                    type: 'barangays',
-                    recorded_by: "System",
-                    recorded_at: getLocalTodayStr()
-                }));
-                saveDirectoryCache();
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                globalState.records = parsed;
             }
         }
+        
+        // Ensure default barangay data exists if no barangays are cached
+        const hasBarangays = (globalState.records || []).some(r => r.type === 'barangays');
+        if (!hasBarangays) {
+            const defaultBarangays = BARANGAY_DATA.map(b => ({
+                name: b.name,
+                contact: "",
+                address: `₱${b.fee.toFixed(2)}`,
+                rate: `₱${b.fee.toFixed(2)}`,
+                lat_lon_link: "",
+                type: 'barangays',
+                recorded_by: "System",
+                recorded_at: getLocalTodayStr()
+            }));
+            globalState.records = [...(globalState.records || []), ...defaultBarangays];
+            saveDirectoryCache();
+        }
     } catch(e) {
-        globalState.records = [];
+        if (!globalState.records) globalState.records = [];
     }
 }
 
@@ -79,37 +87,83 @@ export async function openDirectory(type) {
         else headerTitle.innerText = "Rates & Barangays";
     }
 
-    if (!globalState.records || globalState.records.length === 0) {
-        loadDirectoryCache();
-    }
-
+    loadDirectoryCache();
     renderDirectoryList();
 }
 
-// SILENT BACKGROUND SYNC ON APP STARTUP (FIREBASE & API)
+// SILENT BACKGROUND SYNC ON APP STARTUP & RESUME (SYNCS ALL DIRECTORIES & REGISTERED CUSTOMERS)
 export async function silentSyncDirectory() {
+    if (!db) return;
+
     try {
-        const type = globalState.currentType || 'customers';
-        if (db) {
+        const types = ['customers', 'stores', 'barangays'];
+        let updatedRecordsMap = new Map();
+
+        // 1. Seed existing local records into map
+        (globalState.records || []).forEach(r => {
+            if (r && r.name) {
+                const key = `${r.type || 'customers'}_${r.name.toLowerCase().trim()}`;
+                updatedRecordsMap.set(key, r);
+            }
+        });
+
+        // 2. Sync directory nodes from Firebase
+        for (const type of types) {
             const snap = await db.ref(`directory/${type}`).once('value');
             const fbData = snap.val();
             if (fbData) {
-                const fbList = Object.values(fbData).map(item => ({
-                    name: (item.name || "").trim(),
-                    contact: (item.contact || "").trim(),
-                    address: (item.address || "").trim(),
-                    rate: (item.rate || item.address || "").toString().trim(),
-                    lat_lon_link: (item.lat_lon_link || "").trim(),
-                    type: item.type || type,
-                    recorded_by: item.recorded_by || "Amiel",
-                    recorded_at: (item.recorded_at || item.recorded_date || item.date || "").toString().trim()
-                })).filter(r => r.name !== "");
+                Object.values(fbData).forEach(item => {
+                    const name = (item.name || "").trim();
+                    if (name) {
+                        const key = `${type}_${name.toLowerCase()}`;
+                        updatedRecordsMap.set(key, {
+                            name: name,
+                            contact: (item.contact || "").trim(),
+                            address: (item.address || "").trim(),
+                            rate: (item.rate || item.address || "").toString().trim(),
+                            lat_lon_link: (item.lat_lon_link || "").trim(),
+                            type: item.type || type,
+                            recorded_by: item.recorded_by || "Amiel",
+                            recorded_at: (item.recorded_at || item.recorded_date || item.date || "").toString().trim()
+                        });
+                    }
+                });
+            }
+        }
 
-                if (fbList.length > 0) {
-                    const otherTypeRecords = (globalState.records || []).filter(r => r.type !== type);
-                    globalState.records = [...otherTypeRecords, ...fbList];
-                    saveDirectoryCache();
-                }
+        // 3. Merge registered customer accounts into customer directory
+        try {
+            const custSnap = await db.ref('customers').once('value');
+            const custVal = custSnap.val();
+            if (custVal) {
+                Object.values(custVal).forEach(c => {
+                    const name = (c.name || "").trim();
+                    if (name) {
+                        const key = `customers_${name.toLowerCase()}`;
+                        const existing = updatedRecordsMap.get(key) || {};
+                        updatedRecordsMap.set(key, {
+                            name: name,
+                            contact: (c.phoneNumber || existing.contact || "").trim(),
+                            address: (c.address || existing.address || "").trim(),
+                            rate: existing.rate || "",
+                            lat_lon_link: (c.mapPinLink || existing.lat_lon_link || (c.lat && c.lng ? `https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}` : "")).trim(),
+                            type: 'customers',
+                            recorded_by: existing.recorded_by || "App Registered",
+                            recorded_at: existing.recorded_at || getLocalTodayStr()
+                        });
+                    }
+                });
+            }
+        } catch(e) {}
+
+        const finalMerged = Array.from(updatedRecordsMap.values());
+        if (finalMerged.length > 0) {
+            globalState.records = finalMerged;
+            saveDirectoryCache();
+
+            const currentViewEl = document.querySelector('main > section:not(.hidden)');
+            if (currentViewEl && currentViewEl.id === 'view-directory') {
+                renderDirectoryList();
             }
         }
     } catch (err) {
@@ -122,6 +176,7 @@ export async function syncData(isSilent = false) {
     const type = globalState.currentType || 'customers';
     const listEl = document.getElementById('record-list');
     
+    loadDirectoryCache();
     const hasExistingLocal = (globalState.records || []).some(r => (r.type || 'customers') === type);
 
     if (!isSilent && !hasExistingLocal && listEl) {
@@ -163,7 +218,7 @@ export async function syncData(isSilent = false) {
             }
         }
     } catch (err) {
-        console.warn("Offline/Network error syncing directory, using local cache...", err);
+        console.warn("Offline/Network error syncing directory, preserving local cache...");
     }
 
     if (db) {
@@ -198,6 +253,8 @@ export async function syncData(isSilent = false) {
         if (!isSilent) {
             showToast(`✅ Synced ${fetchedRecords.length} ${type} records!`);
         }
+    } else if (!isSilent) {
+        showToast(`📁 Loaded from offline cache.`);
     }
 
     const currentViewEl = document.querySelector('main > section:not(.hidden)');
@@ -210,7 +267,7 @@ export function filterDirectoryRecords() {
     renderDirectoryList();
 }
 
-// COPY BARANGAY RATE WITH CUSTOMER FEE TEMPLATE & CLEAN SPACING
+// COPY BARANGAY RATE WITH CUSTOMER FEE TEMPLATE
 export function copyBarangayRate(barangayName, rawRate) {
     let rateNum = parseFloat((rawRate || "").replace(/[^0-9.]/g, ''));
     let amountStr = !isNaN(rateNum) ? rateNum.toFixed(0) : (rawRate || '0').replace(/[^0-9.]/g, '');
@@ -232,11 +289,15 @@ function getSectionLetter(name) {
     return "#";
 }
 
-// RENDER DIRECTORY LIST WITH RECORDED BY & RECORDED DATE DETAILS
+// RENDER DIRECTORY LIST
 export function renderDirectoryList() {
     const listEl = document.getElementById('record-list');
     const searchVal = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
     if (!listEl) return;
+
+    if (!globalState.records || globalState.records.length === 0) {
+        loadDirectoryCache();
+    }
 
     let records = globalState.records ? globalState.records.filter(r => (r.type || 'customers') === globalState.currentType) : [];
 
@@ -540,7 +601,7 @@ export function executeDeleteDirectoryRecord(name) {
     } catch(e) {}
 }
 
-// INSTANT OFFLINE SAVE & EDIT WITH STRICT GPS GUARDRAIL & BACKGROUND SYNC
+// INSTANT OFFLINE SAVE & EDIT WITH BACKGROUND SYNC
 export async function submitForm() {
     const nameInput = document.getElementById('form-name');
     const contactInput = document.getElementById('form-contact');

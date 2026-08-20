@@ -1,61 +1,65 @@
-<section id="view-home" class="hidden flex-1 flex flex-col p-4 gap-4 py-4">
-    <div class="flex flex-col gap-3 mt-1">
-        <div class="grid grid-cols-2 gap-2">
-            <button onclick="window.switchView && window.switchView('view-cart')" class="bg-emerald-600/20 border border-emerald-600 hover:bg-emerald-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95">
-                <div class="w-10 h-10 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-receipt"></i></div>
-                <div class="text-left"><div class="text-xs font-bold text-emerald-400">Smart Cart (1-4)</div><div class="text-[10px] text-gray-400">Receipts & Cart</div></div>
+<!-- src/partials/views/home-dashboard.html -->
+<section id="view-home" class="hidden flex-1 flex flex-col p-3 gap-3 py-3">
+    <!-- ULTRA-COMPACT 2-TIER QUICK ACTION DOCK (70% VERTICAL SPACE SAVER) -->
+    <div class="flex flex-col gap-1.5 mt-0.5">
+        <!-- TIER 1: PRIMARY WORKFLOW TOOLS (4-COL GRID) -->
+        <div class="grid grid-cols-4 gap-1.5">
+            <!-- Smart Cart -->
+            <button onclick="window.switchView && window.switchView('view-cart')" class="bg-emerald-950/40 border border-emerald-500/30 hover:border-emerald-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm">
+                <i class="fa-solid fa-receipt text-emerald-400 text-sm"></i>
+                <span class="text-[10px] font-bold text-emerald-300 truncate w-full text-center">Smart Cart</span>
             </button>
 
-            <button onclick="window.openMapCalcBoardModal && window.openMapCalcBoardModal()" class="bg-blue-600/20 border border-blue-500 hover:bg-blue-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95">
-                <div class="w-10 h-10 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-calculator"></i></div>
-                <div class="text-left"><div class="text-xs font-bold text-blue-400">Map Calculation</div><div class="text-[10px] text-gray-400">One-time Distance</div></div>
-            </button>
-        </div>
-
-        <div class="grid grid-cols-2 gap-2">
-            <button onclick="window.openCommissionScreen && window.openCommissionScreen()" class="bg-amber-600/20 border border-amber-600 hover:bg-amber-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95">
-                <div class="w-10 h-10 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-wallet"></i></div>
-                <div class="text-left"><div class="text-xs font-bold text-amber-400">Commission</div><div class="text-[10px] text-gray-400">Daily earnings</div></div>
+            <!-- Map Calculation -->
+            <button onclick="window.openMapCalcBoardModal && window.openMapCalcBoardModal()" class="bg-blue-950/40 border border-blue-500/30 hover:border-blue-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm">
+                <i class="fa-solid fa-calculator text-blue-400 text-sm"></i>
+                <span class="text-[10px] font-bold text-blue-300 truncate w-full text-center">Map Calc</span>
             </button>
 
-            <button onclick="window.openAdvancedOrdersModal && window.openAdvancedOrdersModal()" class="bg-purple-600/20 border border-purple-600 hover:bg-purple-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95 relative">
-                <div class="w-10 h-10 bg-purple-500/20 text-purple-400 rounded-full flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-calendar-check"></i></div>
-                <div class="text-left"><div class="text-xs font-bold text-purple-400">Adv. Orders</div><div class="text-[10px] text-gray-400">Scheduled reminders</div></div>
-                <div id="adv-count-badge" class="hidden absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full border-2 border-darkBg animate-pulse">0</div>
+            <!-- Commission -->
+            <button onclick="window.openCommissionScreen && window.openCommissionScreen()" class="bg-amber-950/40 border border-amber-500/30 hover:border-amber-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm">
+                <i class="fa-solid fa-wallet text-amber-400 text-sm"></i>
+                <span class="text-[10px] font-bold text-amber-300 truncate w-full text-center">Commission</span>
             </button>
-        </div>
 
-        <div class="grid grid-cols-2 gap-2">
-            <button onclick="window.promptStartLiveGpsSession && window.promptStartLiveGpsSession()" class="bg-indigo-600/20 border border-indigo-500 hover:bg-indigo-600/30 p-3.5 rounded-xl flex items-center gap-3 transition active:scale-95 col-span-2">
-                <div class="w-10 h-10 bg-indigo-500/20 text-indigo-400 rounded-full flex items-center justify-center text-lg shrink-0">
-                    <i class="fa-solid fa-satellite-dish animate-pulse"></i>
-                </div>
-                <div class="text-left">
-                    <div class="text-xs font-bold text-indigo-300">Mutual Live GPS Tracker</div>
-                    <div class="text-[10px] text-gray-400">Share real-time locations with customer</div>
-                </div>
+            <!-- Adv. Orders -->
+            <button onclick="window.openAdvancedOrdersModal && window.openAdvancedOrdersModal()" class="bg-purple-950/40 border border-purple-500/30 hover:border-purple-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm relative">
+                <i class="fa-solid fa-calendar-check text-purple-400 text-sm"></i>
+                <span class="text-[10px] font-bold text-purple-300 truncate w-full text-center">Adv. Orders</span>
+                <div id="adv-count-badge" class="hidden absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full border border-darkBg animate-pulse">0</div>
             </button>
         </div>
 
-        <div class="grid grid-cols-4 gap-2">
-            <button onclick="window.openDirectory && window.openDirectory('customers')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
-                <i class="fa-solid fa-users text-lg text-blue-400"></i>
-                <div class="text-[11px] font-bold">Customers</div>
+        <!-- TIER 2: TRACKER & DIRECTORY UTILITIES (5-COL GRID) -->
+        <div class="grid grid-cols-5 gap-1.5">
+            <!-- Mutual Live GPS Tracker -->
+            <button onclick="window.promptStartLiveGpsSession && window.promptStartLiveGpsSession()" class="bg-indigo-950/40 border border-indigo-500/30 hover:border-indigo-400 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-90 shadow-sm" title="Mutual Live GPS Tracker">
+                <i class="fa-solid fa-satellite-dish text-indigo-400 text-xs animate-pulse"></i>
+                <span class="text-[9px] font-bold text-indigo-300 truncate w-full text-center">Live GPS</span>
             </button>
 
-            <button onclick="window.openDirectory && window.openDirectory('stores')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
-                <i class="fa-solid fa-store text-lg text-orange-400"></i>
-                <div class="text-[11px] font-bold">Stores</div>
+            <!-- Customers Directory -->
+            <button onclick="window.openDirectory && window.openDirectory('customers')" class="bg-cardBg border border-gray-800 hover:border-blue-500/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-90 shadow-sm">
+                <i class="fa-solid fa-users text-blue-400 text-xs"></i>
+                <span class="text-[9px] font-bold text-gray-300 truncate w-full text-center">Customers</span>
             </button>
 
-            <button onclick="window.openDirectory && window.openDirectory('barangays')" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
-                <i class="fa-solid fa-map-location-dot text-lg text-emerald-400"></i>
-                <div class="text-[11px] font-bold">Rates</div>
+            <!-- Stores Directory -->
+            <button onclick="window.openDirectory && window.openDirectory('stores')" class="bg-cardBg border border-gray-800 hover:border-orange-500/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-90 shadow-sm">
+                <i class="fa-solid fa-store text-orange-400 text-xs"></i>
+                <span class="text-[9px] font-bold text-gray-300 truncate w-full text-center">Stores</span>
             </button>
 
-            <button onclick="window.openGCashModal && window.openGCashModal()" class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col items-center gap-1 transition active:scale-95">
-                <img src="gcash-logo-png_seeklogo-522261.png" alt="GCash" class="w-5 h-5 object-contain my-0.5">
-                <div class="text-[11px] font-bold">GCash</div>
+            <!-- Rates Directory -->
+            <button onclick="window.openDirectory && window.openDirectory('barangays')" class="bg-cardBg border border-gray-800 hover:border-emerald-500/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-90 shadow-sm">
+                <i class="fa-solid fa-map-location-dot text-emerald-400 text-xs"></i>
+                <span class="text-[9px] font-bold text-gray-300 truncate w-full text-center">Rates</span>
+            </button>
+
+            <!-- GCash Modal -->
+            <button onclick="window.openGCashModal && window.openGCashModal()" class="bg-cardBg border border-gray-800 hover:border-blue-400/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-90 shadow-sm">
+                <img src="gcash-logo-png_seeklogo-522261.png" alt="GCash" class="w-3.5 h-3.5 object-contain">
+                <span class="text-[9px] font-bold text-gray-300 truncate w-full text-center">GCash</span>
             </button>
         </div>
     </div>
@@ -81,105 +85,110 @@
     </div>
 
     <!-- ROSTER PANEL -->
-    <div class="bg-tgBg text-[#f5f5f5] rounded-xl border border-gray-800 p-4 flex flex-col gap-4 shadow-md">
-        <div class="flex justify-between items-center flex-wrap gap-2">
-            <h3 class="text-sm font-bold tracking-wide">🛵 LOKALEX RIDER ROTATION</h3>
+    <div class="bg-tgBg text-[#f5f5f5] rounded-xl border border-gray-800 p-3.5 flex flex-col gap-3 shadow-md">
+        <!-- HEADER & ADMIN TOOLS -->
+        <div class="flex justify-between items-center flex-wrap gap-1.5">
+            <h3 class="text-xs font-bold tracking-wide">🛵 LOKALEX RIDER ROTATION</h3>
             
-            <div class="flex items-center gap-1.5 flex-wrap">
+            <div class="flex items-center gap-1 flex-wrap">
                 <!-- MANAGE RIDERS BUTTON (ADMIN EXCLUSIVE) -->
-                <button id="admin-manage-riders-btn" onclick="window.openAdminManageRidersModal && window.openAdminManageRidersModal()" class="hidden bg-blue-600/30 hover:bg-blue-600 text-blue-300 border border-blue-500/50 text-[10px] px-2 py-1 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
-                    <i class="fa-solid fa-users-gear"></i> Manage Riders
+                <button id="admin-manage-riders-btn" onclick="window.openAdminManageRidersModal && window.openAdminManageRidersModal()" class="hidden bg-blue-600/30 hover:bg-blue-600 text-blue-300 border border-blue-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                    <i class="fa-solid fa-users-gear"></i> Manage
                 </button>
 
                 <!-- COMMISSION SETTINGS BUTTON (ADMIN EXCLUSIVE) -->
-                <button id="admin-commission-settings-btn" onclick="window.openAdminCommissionSettingsModal && window.openAdminCommissionSettingsModal()" class="hidden bg-amber-600/30 hover:bg-amber-600 text-amber-300 border border-amber-500/50 text-[10px] px-2 py-1 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
-                    <i class="fa-solid fa-percent"></i> Commission Rate
+                <button id="admin-commission-settings-btn" onclick="window.openAdminCommissionSettingsModal && window.openAdminCommissionSettingsModal()" class="hidden bg-amber-600/30 hover:bg-amber-600 text-amber-300 border border-amber-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                    <i class="fa-solid fa-percent"></i> Commission
                 </button>
 
                 <!-- AUTO END SHIFT BUTTON (ADMIN EXCLUSIVE) -->
-                <button id="admin-auto-endshift-btn" onclick="window.openAdminAutoEndShiftModal && window.openAdminAutoEndShiftModal()" class="hidden bg-purple-600/30 hover:bg-purple-600 text-purple-300 border border-purple-500/50 text-[10px] px-2 py-1 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
-                    <i class="fa-solid fa-clock-rotate-left"></i> Auto End Shift
+                <button id="admin-auto-endshift-btn" onclick="window.openAdminAutoEndShiftModal && window.openAdminAutoEndShiftModal()" class="hidden bg-purple-600/30 hover:bg-purple-600 text-purple-300 border border-purple-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                    <i class="fa-solid fa-clock-rotate-left"></i> Auto End
                 </button>
 
-                <button id="admin-block-btn" onclick="window.openAdminBlockModal && window.openAdminBlockModal()" class="hidden bg-red-600/30 hover:bg-red-600 text-red-300 border border-red-500/50 text-[10px] px-2 py-1 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                <button id="admin-block-btn" onclick="window.openAdminBlockModal && window.openAdminBlockModal()" class="hidden bg-red-600/30 hover:bg-red-600 text-red-300 border border-red-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
                     <i class="fa-solid fa-user-slash"></i> Ban List
                 </button>
 
-                <button id="admin-find-riders-btn" onclick="window.openFindRidersModal && window.openFindRidersModal()" class="hidden bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 border border-indigo-500/50 text-[10px] px-2 py-1 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
-                    <i class="fa-solid fa-map-location-dot"></i> Find Riders
+                <button id="admin-find-riders-btn" onclick="window.openFindRidersModal && window.openFindRidersModal()" class="hidden bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 border border-indigo-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                    <i class="fa-solid fa-map-location-dot"></i> Find
                 </button>
 
                 <div id="admin-toggle-wrapper" class="hidden">
-                    <label class="inline-flex items-center gap-1.5 cursor-pointer text-[10px] text-amber-400 font-bold bg-black/40 px-2 py-1 rounded-lg border border-amber-500/30">
-                        <input type="checkbox" id="admin-controls-toggle" onchange="window.toggleAdminControls && window.toggleAdminControls(this.checked)" class="accent-amber-500 w-3.5 h-3.5">
-                        <span>Admin Controls</span>
+                    <label class="inline-flex items-center gap-1 cursor-pointer text-[9px] text-amber-400 font-bold bg-black/40 px-1.5 py-0.5 rounded-lg border border-amber-500/30">
+                        <input type="checkbox" id="admin-controls-toggle" onchange="window.toggleAdminControls && window.toggleAdminControls(this.checked)" class="accent-amber-500 w-3 h-3">
+                        <span>Admin</span>
                     </label>
                 </div>
-                <button id="admin-force-all-btn" onclick="window.forceAllEndShift && window.forceAllEndShift()" class="hidden bg-red-600/20 border border-red-600 text-red-400 text-[10px] px-2 py-1 rounded font-bold transition active:scale-95">Force All End</button>
+                <button id="admin-force-all-btn" onclick="window.forceAllEndShift && window.forceAllEndShift()" class="hidden bg-red-600/20 border border-red-600 text-red-400 text-[9px] px-1.5 py-0.5 rounded font-bold transition active:scale-95">Force All End</button>
             </div>
         </div>
-        
-        <div>
-            <div class="flex items-center gap-2 text-green-500 font-bold text-xs">
-                <div class="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_6px_#22c55e]"></div> AVAILABLE (Queue):
-            </div>
-            <div class="pl-2 text-xs text-gray-400 mt-1 flex flex-col gap-1.5" id="home-roster-avail">(Walang naka-duty)</div>
-        </div>
-        
-        <div>
-            <div class="flex items-center gap-2 text-red-500 font-bold text-xs">
-                <div class="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_6px_#ef4444]"></div> CATERING / BUSY:
-            </div>
-            <div class="pl-2 text-xs text-gray-400 mt-1 flex flex-col gap-1.5" id="home-roster-busy">(Walang bumibiyahe)</div>
-        </div>
 
-        <div>
-            <div class="flex items-center gap-2 text-gray-300 font-bold text-xs">☕ ON BREAK:</div>
-            <div class="pl-2 text-xs text-gray-400 mt-1 flex flex-col gap-1.5" id="home-roster-break">(Walang naka-break)</div>
-        </div>
-
-        <div>
-            <div class="flex items-center gap-2 text-yellow-500 font-bold text-xs">⏳ PENALTY COOLDOWN:</div>
-            <div class="pl-2 text-xs text-gray-400 mt-1 flex flex-col gap-1.5" id="home-roster-cooldown">(Walang naka-cooldown)</div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-2 mt-2 pt-3 border-t border-gray-700/50">
-             <button id="btn-status-avail" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('Available')" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95">
-                 <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div> Available
+        <!-- ULTRA-COMPACT 4-COL ACTION BUTTONS (DIRECTLY ABOVE AVAILABLE QUEUE) -->
+        <div class="grid grid-cols-4 gap-1.5 p-1 bg-black/40 border border-gray-800 rounded-xl">
+             <button id="btn-status-avail" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('Available')" class="bg-tgBtn hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-green-400">
+                 <div class="w-2 h-2 rounded-full bg-green-500"></div> Available
              </button>
-             <button id="btn-status-cater" onclick="window.promptCateringStatus && window.promptCateringStatus()" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95">
-                 <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div> Catering
+             <button id="btn-status-cater" onclick="window.promptCateringStatus && window.promptCateringStatus()" class="bg-tgBtn hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-red-400">
+                 <div class="w-2 h-2 rounded-full bg-red-500"></div> Catering
              </button>
-             <button id="btn-status-break" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('Break')" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95">
+             <button id="btn-status-break" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('Break')" class="bg-tgBtn hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-amber-300">
                  ☕ Break
              </button>
-             <button id="btn-status-end" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('End')" class="bg-tgBtn hover:bg-gray-700 py-2 rounded-lg flex items-center justify-center gap-2 font-bold text-xs transition active:scale-95 text-gray-400">
-                 <div class="w-2.5 h-2.5 rounded-full bg-black border border-gray-500"></div> End Shift
+             <button id="btn-status-end" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('End')" class="bg-tgBtn hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-gray-400">
+                 <div class="w-2 h-2 rounded-full bg-black border border-gray-500"></div> End Shift
              </button>
+        </div>
+        
+        <!-- QUEUE LISTINGS -->
+        <div class="flex flex-col gap-2.5">
+            <div>
+                <div class="flex items-center gap-1.5 text-green-500 font-bold text-xs">
+                    <div class="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_6px_#22c55e]"></div> AVAILABLE (Queue):
+                </div>
+                <div class="pl-2 text-xs text-gray-400 mt-1 flex flex-col gap-1" id="home-roster-avail">(Walang naka-duty)</div>
+            </div>
+            
+            <div>
+                <div class="flex items-center gap-1.5 text-red-500 font-bold text-xs">
+                    <div class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_6px_#ef4444]"></div> CATERING / BUSY:
+                </div>
+                <div class="pl-2 text-xs text-gray-400 mt-1 flex flex-col gap-1" id="home-roster-busy">(Walang bumibiyahe)</div>
+            </div>
+
+            <div>
+                <div class="flex items-center gap-1.5 text-gray-300 font-bold text-xs">☕ ON BREAK:</div>
+                <div class="pl-2 text-xs text-gray-400 mt-1 flex flex-col gap-1" id="home-roster-break">(Walang naka-break)</div>
+            </div>
+
+            <div>
+                <div class="flex items-center gap-1.5 text-yellow-500 font-bold text-xs">⏳ PENALTY COOLDOWN:</div>
+                <div class="pl-2 text-xs text-gray-400 mt-1 flex flex-col gap-1" id="home-roster-cooldown">(Walang naka-cooldown)</div>
+            </div>
         </div>
     </div>
 
     <!-- LOGIN LIST PANEL -->
-    <div class="bg-cardBg border border-gray-800 rounded-xl flex flex-col mt-2 overflow-hidden">
-        <div class="bg-gray-800/50 p-3 text-xs font-bold text-gray-300 flex justify-between items-center">
+    <div class="bg-cardBg border border-gray-800 rounded-xl flex flex-col mt-1 overflow-hidden">
+        <div class="bg-gray-800/50 p-2.5 text-xs font-bold text-gray-300 flex justify-between items-center">
             <span><i class="fa-solid fa-right-to-bracket text-blue-400"></i> Rider Login List (Today)</span>
             <span class="text-[10px] text-gray-400" id="login-count-badge">0 logins</span>
         </div>
-        <div id="login-list-feed" class="p-3 flex flex-col gap-2 text-xs max-h-36 overflow-y-auto">
+        <div id="login-list-feed" class="p-2.5 flex flex-col gap-1.5 text-xs max-h-36 overflow-y-auto">
             <div class="text-gray-500 italic text-center py-2">No logins recorded yet today.</div>
         </div>
     </div>
 
     <!-- CATERED CUSTOMERS LIST -->
-    <div class="bg-cardBg border border-gray-800 rounded-xl flex flex-col mt-2 overflow-hidden">
-        <div class="bg-gray-800/50 p-3 text-xs font-bold text-gray-300 flex justify-between items-center">
+    <div class="bg-cardBg border border-gray-800 rounded-xl flex flex-col mt-1 overflow-hidden">
+        <div class="bg-gray-800/50 p-2.5 text-xs font-bold text-gray-300 flex justify-between items-center">
             <span><i class="fa-solid fa-list-check text-orange-400"></i> Catered Customers List</span>
             <span class="text-[10px] text-gray-400" id="catered-count-badge">0 recorded</span>
         </div>
-        <div id="catered-customers-feed" class="p-3 flex flex-col gap-2 text-xs max-h-48 overflow-y-auto">
+        <div id="catered-customers-feed" class="p-2.5 flex flex-col gap-1.5 text-xs max-h-48 overflow-y-auto">
             <div class="text-gray-500 italic text-center py-4">No completed catered customers yet today.</div>
         </div>
     </div>
     
-    <button onclick="window.logout && window.logout()" class="text-xs text-red-400/50 hover:text-red-400 py-2 mt-2">Log out of device</button>
+    <button onclick="window.logout && window.logout()" class="text-xs text-red-400/50 hover:text-red-400 py-1.5 mt-1">Log out of device</button>
 </section>

@@ -2,12 +2,12 @@
 import { appState, globalState } from './store/state.js';
 import { db, auth as firebaseAuth } from './config/firebase.js';
 
-import * as authFeature from './features/auth.js';
+import * as authFeature from './features/auth/index.js';
 import * as cart from './features/cart.js';
 import * as chat from './features/chat/index.js';
 import * as roster from './features/roster/index.js';
 import * as directory from './features/directory.js';
-import * as commission from './features/commission.js';
+import * as commission from './features/commission/index.js';
 import * as advancedOrders from './features/advancedOrders.js';
 import * as maps from './features/maps.js';
 import * as wizard from './features/wizard.js';
@@ -35,61 +35,103 @@ allModules.forEach(mod => {
 
 window.unlockAudioContext = unlockAudioContext;
 
+let isReconnecting = false;
+let lastHeartbeatTime = Date.now();
+
 export function updateNetworkStatus(forcedState = null) {
     const container = document.getElementById('network-status-pill');
     if (!container) return;
 
-    const isOnline = forcedState !== null ? forcedState : navigator.onLine;
+    const isOnline = forcedState !== null ? forcedState : (navigator.onLine && document.visibilityState === 'visible');
 
     if (isOnline) {
         container.className = "flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300";
         container.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span>ONLINE</span>`;
     } else {
         container.className = "flex items-center gap-1.5 bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300";
-        container.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span><span>OFFLINE</span>`;
+        container.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span><span>${navigator.onLine ? 'CONNECTING...' : 'OFFLINE'}</span>`;
+    }
+}
+
+// FORCE RECONNECT FIREBASE WEBSOCKET ON APP RESUME
+export function forceReconnectFirebase() {
+    if (isReconnecting) return;
+    isReconnecting = true;
+
+    if (db) {
+        try {
+            db.goOffline();
+            setTimeout(() => {
+                db.goOnline();
+                isReconnecting = false;
+                updateNetworkStatus(true);
+
+                db.ref('roster').once('value', (snapshot) => {
+                    globalState.rosterMembers = snapshot.val() ? Object.values(snapshot.val()) : [];
+                    if (roster && roster.saveRosterCache) roster.saveRosterCache();
+                    if (roster && roster.updateRosterUI) roster.updateRosterUI();
+                });
+
+                if (chat && chat.listenToAllCustomerChatsForRider) {
+                    chat.listenToAllCustomerChatsForRider();
+                }
+
+                if (directory && directory.silentSyncDirectory) {
+                    directory.silentSyncDirectory();
+                }
+
+                if (commission && commission.fetchCommissionSettings) {
+                    commission.fetchCommissionSettings();
+                }
+
+                if (appState.telegramId && authFeature.startBackgroundRosterGpsTracker) {
+                    authFeature.startBackgroundRosterGpsTracker();
+                }
+
+                if (roster && roster.checkAndTriggerAutoEndShift) {
+                    roster.checkAndTriggerAutoEndShift();
+                }
+            }, 150);
+        } catch (e) {
+            isReconnecting = false;
+        }
+    } else {
+        isReconnecting = false;
     }
 }
 
 window.addEventListener('online', () => {
-    if (db) db.goOnline();
-    updateNetworkStatus(true);
+    forceReconnectFirebase();
 });
 
 window.addEventListener('offline', () => {
     updateNetworkStatus(false);
 });
 
-// PWA RESUME & VISIBILITY RECONNECTION HANDLER
-function handleAppResume() {
+// PWA RESUME & VISIBILITY RECONNECTION HANDLERS
+function handleAppVisibilityChange() {
     if (document.visibilityState === 'visible') {
-        if (db) {
-            db.goOnline();
-        }
-
-        updateNetworkStatus(true);
-
-        if (appState.telegramId && authFeature.startBackgroundRosterGpsTracker) {
-            authFeature.startBackgroundRosterGpsTracker();
-        }
-
-        if (roster && roster.checkAndTriggerAutoEndShift) {
-            roster.checkAndTriggerAutoEndShift();
-        }
-
-        // Force immediate fresh snapshot for roster
-        if (db) {
-            db.ref('roster').once('value', (snapshot) => {
-                globalState.rosterMembers = snapshot.val() ? Object.values(snapshot.val()) : [];
-                if (roster && roster.saveRosterCache) roster.saveRosterCache();
-                if (roster && roster.updateRosterUI) roster.updateRosterUI();
-            });
-        }
+        forceReconnectFirebase();
+    } else {
+        updateNetworkStatus(false);
     }
 }
 
-document.addEventListener('visibilitychange', handleAppResume);
-window.addEventListener('pageshow', handleAppResume);
-window.addEventListener('focus', handleAppResume);
+document.addEventListener('visibilitychange', handleAppVisibilityChange);
+window.addEventListener('pageshow', handleAppVisibilityChange);
+window.addEventListener('focus', handleAppVisibilityChange);
+window.addEventListener('resume', handleAppVisibilityChange);
+
+// TIMER DRIFT WATCHDOG
+setInterval(() => {
+    const now = Date.now();
+    const drift = now - lastHeartbeatTime;
+    lastHeartbeatTime = now;
+
+    if (drift > 10000 && document.visibilityState === 'visible') {
+        forceReconnectFirebase();
+    }
+}, 4000);
 
 function bootApp() {
     try {
@@ -98,20 +140,27 @@ function bootApp() {
         if (roster && roster.loadRosterCache) roster.loadRosterCache();
         if (roster && roster.updateRosterUI) roster.updateRosterUI();
 
+        // Load offline cached settings & directory immediately on cold start
+        if (commission && commission.loadCommissionSettingsCache) {
+            commission.loadCommissionSettingsCache();
+        }
+        if (directory && directory.loadDirectoryCache) {
+            directory.loadDirectoryCache();
+        }
+
         initRealtimeFirebaseListeners();
 
         if (chat && chat.initDraggableChat) chat.initDraggableChat();
         if (cart && cart.loadCartState) cart.loadCartState();
 
-        if (commission && commission.fetchRiderUserTypes) {
-            commission.fetchRiderUserTypes();
+        if (commission && commission.fetchCommissionSettings) {
+            commission.fetchCommissionSettings();
         }
 
         if (directory && directory.silentSyncDirectory) {
             directory.silentSyncDirectory();
         }
 
-        // Periodic check for auto-endshift routine every 30 seconds
         setInterval(() => {
             if (roster && roster.checkAndTriggerAutoEndShift) {
                 roster.checkAndTriggerAutoEndShift();
@@ -176,8 +225,8 @@ if (document.readyState === 'loading') {
 }
 
 window.addEventListener('loginSuccess', () => {
-    if (commission && commission.fetchRiderUserTypes) {
-        commission.fetchRiderUserTypes();
+    if (commission && commission.fetchCommissionSettings) {
+        commission.fetchCommissionSettings();
     }
     initRealtimeFirebaseListeners();
 });
