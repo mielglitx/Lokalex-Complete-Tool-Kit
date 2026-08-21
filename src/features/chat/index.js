@@ -143,7 +143,6 @@ export function renderFilteredCustomerChats(targetFolder = 'inbox') {
     }).join('');
 }
 
-// Global window binding
 if (typeof window !== 'undefined') {
     window.renderFilteredCustomerChats = renderFilteredCustomerChats;
 }

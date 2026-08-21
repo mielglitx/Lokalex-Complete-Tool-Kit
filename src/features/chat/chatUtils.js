@@ -2,7 +2,7 @@
 import { db } from '../../config/firebase.js';
 import { appState } from '../../store/state.js';
 import { showToast } from '../../ui/notifications.js';
-import { escapeHtml } from '../../utils/helpers.js';
+import { escapeHtml, copyText } from '../../utils/helpers.js';
 
 export let isHdMode = false;
 
@@ -185,4 +185,156 @@ export function handleChatImageUpload(inputEl) {
     }
 
     inputEl.value = "";
+}
+
+// ============================================================================
+// 5. MESSAGE ACTION POPOVER (REPLY, COPY, EMOJI REACTIONS) WITH ULTRA HIGH Z-INDEX
+// ============================================================================
+export function closeMessageActionPopover() {
+    const existing = document.getElementById('chat-msg-action-popover-container');
+    if (existing) existing.remove();
+}
+
+export function openMessageActionPopover(event, msgId, chatContext, rawEncodedText = '', rawEncodedSender = '') {
+    if (event) {
+        event.stopPropagation();
+    }
+
+    closeMessageActionPopover();
+
+    const decodedText = decodeURIComponent(rawEncodedText || '');
+    const decodedSender = decodeURIComponent(rawEncodedSender || 'User');
+
+    const clickX = event?.clientX || (window.innerWidth / 2);
+    const clickY = event?.clientY || (window.innerHeight / 2);
+
+    const popoverContainer = document.createElement('div');
+    popoverContainer.id = 'chat-msg-action-popover-container';
+    popoverContainer.className = 'fixed inset-0 select-none';
+    popoverContainer.style.cssText = 'z-index: 9999999 !important;';
+
+    // Backdrop layer to close on outside click
+    const backdrop = document.createElement('div');
+    backdrop.className = 'absolute inset-0 bg-black/20 backdrop-blur-[1px]';
+    backdrop.onclick = (e) => {
+        e.stopPropagation();
+        closeMessageActionPopover();
+    };
+
+    // Popover box
+    const popover = document.createElement('div');
+    popover.className = 'absolute bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-700 shadow-2xl rounded-2xl p-2 flex flex-col gap-1.5 animate-in fade-in zoom-in-95 duration-100 min-w-[180px] max-w-[240px] text-xs';
+    popover.style.cssText = 'z-index: 10000000 !important;';
+
+    // Emoji reaction row
+    const emojis = ['👍', '❤️', '🔥', '😂', '🛵', '📍'];
+    const emojiRowHtml = emojis.map(emoji => `
+        <button type="button" onclick="event.stopPropagation(); window.handlePopoverReaction('${msgId}', '${emoji}', '${chatContext}')" class="w-7 h-7 rounded-xl hover:bg-gray-100 dark:hover:bg-black/50 text-base flex items-center justify-center transition active:scale-125">
+            ${emoji}
+        </button>
+    `).join('');
+
+    popover.innerHTML = `
+        <div class="flex items-center justify-around border-b border-gray-100 dark:border-gray-800 pb-1.5 mb-0.5">
+            ${emojiRowHtml}
+        </div>
+        <div class="flex flex-col gap-0.5">
+            <button type="button" onclick="event.stopPropagation(); window.handlePopoverReply('${msgId}', '${escapeHtml(decodedSender)}', '${encodeURIComponent(decodedText)}', '${chatContext}')" class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold flex items-center gap-2 transition active:scale-95">
+                <i class="fa-solid fa-reply text-xs w-4"></i> Reply
+            </button>
+            ${decodedText ? `
+            <button type="button" onclick="event.stopPropagation(); window.handlePopoverCopy('${encodeURIComponent(decodedText)}')" class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-black/40 text-gray-700 dark:text-gray-200 font-bold flex items-center gap-2 transition active:scale-95">
+                <i class="fa-solid fa-copy text-xs w-4"></i> Copy Text
+            </button>` : ''}
+        </div>
+    `;
+
+    popoverContainer.appendChild(backdrop);
+    popoverContainer.appendChild(popover);
+    document.body.appendChild(popoverContainer);
+
+    // Calculate smart positioning within viewport boundaries
+    requestAnimationFrame(() => {
+        const popRect = popover.getBoundingClientRect();
+        let left = clickX - (popRect.width / 2);
+        let top = clickY - popRect.height - 12;
+
+        if (left < 12) left = 12;
+        if (left + popRect.width > window.innerWidth - 12) {
+            left = window.innerWidth - popRect.width - 12;
+        }
+
+        if (top < 12) {
+            top = clickY + 16;
+        }
+
+        popover.style.left = `${left}px`;
+        popover.style.top = `${top}px`;
+    });
+}
+
+export function handlePopoverReaction(msgId, emoji, chatContext) {
+    closeMessageActionPopover();
+
+    if (chatContext === 'rider-cust' && typeof window.toggleRiderMessageReaction === 'function') {
+        window.toggleRiderMessageReaction(msgId, emoji);
+    } else if (chatContext === 'cust-rider' && typeof window.toggleCustomerMessageReaction === 'function') {
+        window.toggleCustomerMessageReaction(msgId, emoji);
+    } else if (chatContext === 'store-rider' && typeof window.toggleStoreRiderReaction === 'function') {
+        window.toggleStoreRiderReaction(msgId, emoji);
+    }
+}
+
+export function handlePopoverReply(msgId, senderName, encodedText, chatContext) {
+    closeMessageActionPopover();
+    const text = decodeURIComponent(encodedText || '');
+
+    if (chatContext === 'rider-cust' && typeof window.setRiderReply === 'function') {
+        window.setRiderReply(msgId, senderName, text);
+    } else if (chatContext === 'cust-rider' && typeof window.setCustomerReply === 'function') {
+        window.setCustomerReply(msgId, senderName, text);
+    } else if (chatContext === 'store-rider' && typeof window.setStoreRiderReply === 'function') {
+        window.setStoreRiderReply(msgId, senderName, text);
+    } else if (chatContext === 'store-rider' && typeof window.setStoreReply === 'function') {
+        window.setStoreReply(msgId, senderName, text);
+    }
+}
+
+export function handlePopoverCopy(encodedText) {
+    closeMessageActionPopover();
+    const text = decodeURIComponent(encodedText || '');
+    if (text) {
+        copyText(text);
+        showToast("📋 Message copied to clipboard!");
+    }
+}
+
+// Scroll bubble helper for replying to specific messages
+export function scrollToBubble(msgId) {
+    const bubble = document.getElementById(`msg-bubble-${msgId}`);
+    if (bubble) {
+        bubble.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        bubble.classList.add('ring-2', 'ring-amber-400', 'transition-all');
+        setTimeout(() => {
+            bubble.classList.remove('ring-2', 'ring-amber-400');
+        }, 1500);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.toggleBodyScroll = toggleBodyScroll;
+    window.populateCateringCustomerDropdown = populateCateringCustomerDropdown;
+    window.toggleHdMode = toggleHdMode;
+    window.compressAndResizeImage = compressAndResizeImage;
+    window.promptImageAttachmentSource = promptImageAttachmentSource;
+    window.closeImagePickerModal = closeImagePickerModal;
+    window.triggerImageCapture = triggerImageCapture;
+    window.handleChatImageUpload = handleChatImageUpload;
+
+    window.openMessageActionPopover = openMessageActionPopover;
+    window.closeMessageActionPopover = closeMessageActionPopover;
+    window.handlePopoverReaction = handlePopoverReaction;
+    window.handlePopoverReply = handlePopoverReply;
+    window.handlePopoverCopy = handlePopoverCopy;
+    window.scrollToBubble = scrollToBubble;
 }
