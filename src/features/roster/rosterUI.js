@@ -55,6 +55,12 @@ export function updateRosterUI() {
         else findRidersBtn.classList.add('hidden');
     }
 
+    const storeHubBtn = document.getElementById('admin-store-hub-btn');
+    if (storeHubBtn) {
+        if (isAdmin()) storeHubBtn.classList.remove('hidden');
+        else storeHubBtn.classList.add('hidden');
+    }
+
     const manageRidersBtn = document.getElementById('admin-manage-riders-btn');
     if (manageRidersBtn) {
         if (isAdmin()) manageRidersBtn.classList.remove('hidden');
@@ -124,35 +130,40 @@ export function updateRosterUI() {
     let availHtml = [], busyHtml = [], brkHtml = [], cdHtml = [];
     let availCounter = 1;
 
-    // 1. AVAILABLE QUEUE RIDERS
+    // 1. AVAILABLE QUEUE RIDERS (COMPACT HORIZONTAL CHIPS FROM LEFT TO RIGHT)
     availableRiders.forEach((m) => {
         const mId = (m.telegramId || "").toString();
         const mName = m.riderName || m.name || "Rider";
         let nameStr = escapeHtml(mName);
 
         if (showControls) {
-            nameStr += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
+            nameStr += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
 
             nameStr += `
-            <div class="inline-flex gap-1 ml-2 text-[10px] align-middle">
-                <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_top')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Top">⬆️</button>
-                <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_up')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Up (+1)">▲</button>
-                <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_down')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Down (-1)">▼</button>
-                <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_bottom')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Bottom">⬇️</button>
+            <div class="inline-flex gap-1 ml-1.5 text-[10px] align-middle">
+                <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_top')" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/30 dark:hover:bg-blue-600 dark:text-blue-300 dark:border-transparent px-1 py-0.5 rounded font-bold transition active:scale-95" title="Move Top">⬆️</button>
+                <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_up')" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/30 dark:hover:bg-blue-600 dark:text-blue-300 dark:border-transparent px-1 py-0.5 rounded font-bold transition active:scale-95" title="Move Up (+1)">▲</button>
+                <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_down')" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/30 dark:hover:bg-blue-600 dark:text-blue-300 dark:border-transparent px-1 py-0.5 rounded font-bold transition active:scale-95" title="Move Down (-1)">▼</button>
+                <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_bottom')" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/30 dark:hover:bg-blue-600 dark:text-blue-300 dark:border-transparent px-1 py-0.5 rounded font-bold transition active:scale-95" title="Move Bottom">⬇️</button>
             </div>`;
         }
 
-        availHtml.push(`<div class="flex items-center justify-between py-1"><span class="font-bold text-green-400 mr-2">${availCounter++}.</span><span class="flex-1">${nameStr}</span></div>`);
+        availHtml.push(`
+            <div class="inline-flex items-center bg-white dark:bg-white/5 border border-gray-200 dark:border-gray-700/60 rounded-xl px-2.5 py-1 text-xs shadow-xs transition hover:border-emerald-500">
+                <span class="font-black text-emerald-600 dark:text-green-400 mr-1.5">${availCounter++}.</span>
+                <span class="font-bold text-gray-900 dark:text-gray-100 flex items-center">${nameStr}</span>
+            </div>
+        `);
     });
 
     // 2. CATERING RIDERS
     cateringRiders.forEach(m => {
         const mId = (m.telegramId || "").toString();
         const mName = m.riderName || m.name || "Rider";
-        let cardHtml = `<div class="flex flex-col py-1.5 border-b border-gray-800/60 last:border-0 gap-1"><div class="flex items-center justify-between"><span class="font-bold text-white">${escapeHtml(mName)}</span>`;
+        let cardHtml = `<div class="flex flex-col py-1.5 border-b border-gray-200 dark:border-gray-800/60 last:border-0 gap-1"><div class="flex items-center justify-between"><span class="font-black text-xs text-gray-900 dark:text-white">${escapeHtml(mName)}</span>`;
 
         if (showControls) {
-            cardHtml += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer shrink-0"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void All Orders</option></select>`;
+            cardHtml += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer shrink-0"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void All Orders</option></select>`;
         }
         cardHtml += `</div>`;
 
@@ -169,29 +180,29 @@ export function updateRosterUI() {
                 const canSwap = isMyLine || showControls;
 
                 cardHtml += `
-                <div class="flex flex-wrap items-center justify-between gap-1 bg-black/30 p-1.5 rounded-lg border border-gray-800">
-                    <span class="text-orange-300 font-medium">👤 ${escapeHtml(cName)} <span class="text-gray-400 text-[10px]">${timeDetails}</span></span>
+                <div class="flex flex-wrap items-center justify-between gap-1 bg-white dark:bg-cardBg p-2 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs">
+                    <span class="text-gray-900 dark:text-orange-300 font-black">👤 ${escapeHtml(cName)} <span class="text-gray-600 dark:text-gray-400 text-[10px] font-normal font-mono">(${timeDetails})</span></span>
                     
                     <div class="flex items-center gap-1">
                         ${isMyLine ? `
-                            <button onclick="window.copyCustomerTrackingLink && window.copyCustomerTrackingLink('${escapeHtml(cName)}')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Send Track Link">🔗 Link</button>
-                            <button onclick="window.openLiveCustomerMap && window.openLiveCustomerMap('${escapeHtml(cName)}')" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Open Live Map">🗺️ Map</button>
+                            <button onclick="window.copyCustomerTrackingLink && window.copyCustomerTrackingLink('${escapeHtml(cName)}')" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/30 dark:hover:bg-blue-600 dark:text-blue-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Send Track Link">🔗 Link</button>
+                            <button onclick="window.openLiveCustomerMap && window.openLiveCustomerMap('${escapeHtml(cName)}')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Open Live Map">🗺️ Map</button>
                         ` : ''}
 
                         ${canSwap ? `
-                            <button onclick="window.openSwapCustomerModal && window.openSwapCustomerModal('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-purple-600/30 hover:bg-purple-600 text-purple-300 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Swap customer with another rider">
+                            <button onclick="window.openSwapCustomerModal && window.openSwapCustomerModal('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Swap customer with another rider">
                                 🔀 Swap
                             </button>
                         ` : ''}
 
                         ${!isMyLine ? `
-                            <button onclick="window.claimCustomerFromRider && window.claimCustomerFromRider('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Request to get this customer">
+                            <button onclick="window.claimCustomerFromRider && window.claimCustomerFromRider('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-emerald-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Request to get this customer">
                                 📥 Get
                             </button>
                         ` : ''}
 
                         ${showControls ? `
-                            <button onclick="window.adminVoidSpecificCustomer && window.adminVoidSpecificCustomer('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700/50 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Void specific customer">
+                            <button onclick="window.adminVoidSpecificCustomer && window.adminVoidSpecificCustomer('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-300 dark:border-red-700/50 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Void specific customer">
                                 🚫 Void
                             </button>
                         ` : ''}
@@ -212,9 +223,9 @@ export function updateRosterUI() {
         let nameStr = escapeHtml(mName);
 
         if (showControls) {
-            nameStr += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
+            nameStr += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
         }
-        brkHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
+        brkHtml.push(`<div class="flex items-center justify-between py-1 text-xs font-bold text-gray-900 dark:text-gray-200">${nameStr}</div>`);
     });
 
     // 4. COOLDOWN RIDERS
@@ -227,12 +238,12 @@ export function updateRosterUI() {
         let mins = String(Math.floor(remSecs / 60)).padStart(2, '0');
         let secs = String(remSecs % 60).padStart(2, '0');
 
-        nameStr += ` <span class="text-yellow-400 font-mono text-[10px]">(${mins}:${secs} remaining)</span>`;
+        nameStr += ` <span class="text-amber-700 dark:text-yellow-400 font-mono text-[10px] font-bold">(${mins}:${secs} remaining)</span>`;
 
         if (showControls) {
-            nameStr += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
+            nameStr += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
         }
-        cdHtml.push(`<div class="flex items-center justify-between py-1">${nameStr}</div>`);
+        cdHtml.push(`<div class="flex items-center justify-between py-1 text-xs font-bold text-gray-900 dark:text-gray-200">${nameStr}</div>`);
     });
 
     const elAvail = document.getElementById('home-roster-avail');
@@ -257,14 +268,14 @@ export function loadGlobalCateredList() {
     if (badge) badge.innerText = `${todayHistory.length} recorded`;
 
     if (todayHistory.length === 0) {
-        feed.innerHTML = `<div class="text-gray-500 italic text-center py-4">No completed catered customers yet today.</div>`;
+        feed.innerHTML = `<div class="text-gray-500 dark:text-gray-400 italic text-center py-4 text-xs">No completed catered customers yet today.</div>`;
         return;
     }
 
     feed.innerHTML = todayHistory.slice().reverse().map(h => {
         let voidBtn = "";
         if (isAdmin()) {
-            voidBtn = `<button onclick="window.promptVoidCustomer && window.promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate)}')" class="bg-red-900/40 text-red-400 hover:bg-red-800 text-[10px] font-bold px-2 py-1 rounded border border-red-700/50 transition active:scale-95"><i class="fa-solid fa-ban"></i> Void</button>`;
+            voidBtn = `<button onclick="window.promptVoidCustomer && window.promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate)}')" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-400 dark:border-red-700/50 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shrink-0"><i class="fa-solid fa-ban"></i> Void</button>`;
         }
 
         let durationStr = h.duration || "";
@@ -277,17 +288,17 @@ export function loadGlobalCateredList() {
             timeInfo += ` → ${escapeHtml(h.completedTime)}`;
         }
         if (durationStr) {
-            timeInfo += ` <span class="text-emerald-400 font-bold">[${escapeHtml(durationStr)}]</span>`;
+            timeInfo += ` <span class="text-emerald-600 dark:text-emerald-400 font-bold">[${escapeHtml(durationStr)}]</span>`;
         }
 
         return `
-        <div class="bg-gray-800/40 border border-gray-700/60 p-2.5 rounded-lg flex justify-between items-center">
-            <div>
-                <div class="font-bold text-orange-400"><i class="fa-solid fa-user"></i> ${escapeHtml(h.customerName)}</div>
-                <div class="text-[10px] text-gray-400">Rider: <span class="text-blue-400">${escapeHtml(h.riderName)}</span></div>
+        <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-xl flex justify-between items-center gap-2 shadow-xs">
+            <div class="min-w-0 flex-1">
+                <div class="font-black text-xs text-gray-900 dark:text-white truncate flex items-center gap-1.5"><i class="fa-solid fa-user text-orange-600 dark:text-orange-400 text-[10px]"></i> <span>${escapeHtml(h.customerName)}</span></div>
+                <div class="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5 font-medium">Rider: <span class="text-blue-600 dark:text-blue-400 font-bold">${escapeHtml(h.riderName)}</span></div>
             </div>
-            <div class="flex items-center gap-3">
-                <div class="text-[10px] text-gray-400 font-mono text-right">
+            <div class="flex items-center gap-2.5 shrink-0">
+                <div class="text-[10px] text-gray-800 dark:text-gray-200 font-mono text-right font-medium">
                     ${timeInfo}
                 </div>
                 ${voidBtn}
@@ -307,23 +318,23 @@ export function loadGlobalLoginList() {
     if (badge) badge.innerText = `${todayLogins.length} logins`;
 
     if (todayLogins.length === 0) {
-        feed.innerHTML = `<div class="text-gray-500 italic text-center py-2">No logins recorded yet today.</div>`;
+        feed.innerHTML = `<div class="text-gray-500 dark:text-gray-400 italic text-center py-2 text-xs">No logins recorded yet today.</div>`;
         return;
     }
 
     feed.innerHTML = todayLogins.slice().reverse().map(l => {
         let mapBtn = "";
         if (l.location) {
-            mapBtn = `<a href="${escapeHtml(l.location)}" target="_blank" class="text-[10px] text-emerald-400 font-bold underline flex items-center gap-1 mt-0.5 active:opacity-60"><i class="fa-solid fa-location-dot text-red-500"></i> View Pin Location</a>`;
+            mapBtn = `<a href="${escapeHtml(l.location)}" target="_blank" class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold underline flex items-center gap-1 mt-0.5 active:opacity-60"><i class="fa-solid fa-location-dot text-red-500 text-[9px]"></i> View Pin Location</a>`;
         }
-        const clockOutTxt = l.clockOutTime ? `<span class="text-red-400 ml-1">(Out: ${escapeHtml(l.clockOutTime)})</span>` : '';
+        const clockOutTxt = l.clockOutTime ? `<span class="text-red-600 dark:text-red-400 font-bold ml-1">(Out: ${escapeHtml(l.clockOutTime)})</span>` : '';
         return `
-        <div class="bg-gray-800/30 border border-gray-700/40 p-2 rounded-lg flex justify-between items-center">
-            <div class="flex flex-col">
-                <span class="font-bold text-blue-400"><i class="fa-solid fa-motorcycle"></i> ${escapeHtml(l.riderName)}</span>
+        <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-xl flex justify-between items-center gap-2 shadow-xs">
+            <div class="flex flex-col min-w-0 flex-1">
+                <span class="font-black text-xs text-gray-900 dark:text-white truncate flex items-center gap-1.5"><i class="fa-solid fa-motorcycle text-blue-600 dark:text-blue-400 text-[10px]"></i> <span>${escapeHtml(l.riderName)}</span></span>
                 ${mapBtn}
             </div>
-            <div class="text-[10px] text-gray-400 font-mono text-right">
+            <div class="text-[10px] text-gray-800 dark:text-gray-200 font-mono text-right shrink-0 font-medium">
                 <span>In: ${escapeHtml(l.loginTime)}</span>
                 ${clockOutTxt}
             </div>

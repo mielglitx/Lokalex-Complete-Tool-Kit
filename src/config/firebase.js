@@ -17,4 +17,5 @@ if (fb && !fb.apps.length) {
 
 export const db = fb ? fb.database() : null;
 export const auth = fb ? fb.auth() : null;
+export const messaging = (fb && typeof fb.messaging === 'function' && fb.messaging.isSupported()) ? fb.messaging() : null;
 export default fb;

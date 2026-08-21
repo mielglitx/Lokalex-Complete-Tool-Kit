@@ -4,18 +4,33 @@ import * as imageEditor from './imageEditor.js';
 import * as imageViewer from './imageViewer.js';
 import * as customerChat from './customerChat.js';
 import * as riderChat from './riderChat.js';
+import * as riderStoreChat from './riderStoreChat.js';
+import * as riderThreadActions from './riderThreadActions.js';
 import * as teamComms from './teamComms.js';
+import { globalState } from '../../store/state.js';
+import { escapeHtml } from '../../utils/helpers.js';
 
 export * from './chatUtils.js';
 export * from './imageEditor.js';
 export * from './imageViewer.js';
 export * from './customerChat.js';
 export * from './riderChat.js';
+export * from './riderStoreChat.js';
+export * from './riderThreadActions.js';
 export * from './teamComms.js';
 
 // Bind all chat functions to global window object
 if (typeof window !== 'undefined') {
-    const modules = [chatUtils, imageEditor, imageViewer, customerChat, riderChat, teamComms];
+    const modules = [
+        chatUtils, 
+        imageEditor, 
+        imageViewer, 
+        customerChat, 
+        riderChat, 
+        riderStoreChat, 
+        riderThreadActions, 
+        teamComms
+    ];
     modules.forEach(mod => {
         if (mod) {
             Object.keys(mod).forEach(fn => {

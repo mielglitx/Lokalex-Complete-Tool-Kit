@@ -1,0 +1,81 @@
+<!-- src/partials/modals/store-account-modal.html -->
+<div id="admin-store-account-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-gray-800 w-full max-w-md rounded-3xl p-5 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+        <!-- HEADER -->
+        <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-400 flex items-center justify-center text-sm font-bold">
+                    <i class="fa-solid fa-shop"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-black text-white">Store Hub Manager</h3>
+                    <p class="text-[10px] text-gray-400">Create & Manage Merchant Store Accounts</p>
+                </div>
+            </div>
+            <button onclick="closeAdminStoreAccountModal()" class="text-gray-400 hover:text-white p-1 text-sm transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- NEW STORE ACCOUNT FORM -->
+        <div class="bg-black/30 border border-gray-800/80 p-3.5 rounded-2xl flex flex-col gap-2.5 text-xs">
+            <div class="text-[11px] font-bold text-orange-400 uppercase tracking-wider flex items-center justify-between">
+                <span>+ New Merchant Account</span>
+                <button type="button" onclick="generateStoreCredentials()" class="text-blue-400 hover:text-blue-300 text-[10px] font-bold underline flex items-center gap-1">
+                    <i class="fa-solid fa-dice"></i> Generate User/Pass
+                </button>
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Store / Business Name *</label>
+                <input type="text" id="store-acc-name" placeholder="e.g. Milk Tea Central" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold mt-1">
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Owner Name</label>
+                    <input type="text" id="store-acc-owner" placeholder="Owner Full Name" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+                </div>
+                <div>
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Contact Number</label>
+                    <input type="tel" id="store-acc-contact" placeholder="09123456789" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-mono mt-1">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Username *</label>
+                    <input type="text" id="store-acc-username" placeholder="store_username" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-mono font-bold mt-1">
+                </div>
+                <div>
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Password *</label>
+                    <input type="text" id="store-acc-password" placeholder="min 6 chars" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-mono font-bold mt-1">
+                </div>
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Store Address</label>
+                <input type="text" id="store-acc-address" placeholder="Poblacion / Barangay, Camiling" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Commission Rate (%)</label>
+                <input type="number" id="store-acc-comm" value="10" min="0" max="100" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-amber-400 font-bold mt-1">
+            </div>
+
+            <button id="store-acc-submit-btn" onclick="submitCreateStoreAccount()" class="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 mt-1">
+                <i class="fa-solid fa-plus-circle"></i> CREATE STORE ACCOUNT
+            </button>
+        </div>
+
+        <!-- EXISTING STORE ACCOUNTS -->
+        <div class="flex flex-col gap-2">
+            <div class="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                <span>Registered Store Merchants</span>
+            </div>
+            <div id="admin-store-accounts-list" class="flex flex-col gap-2 max-h-48 overflow-y-auto">
+                <div class="text-center text-gray-500 italic py-6 text-xs">Loading store accounts...</div>
+            </div>
+        </div>
+    </div>
+</div>

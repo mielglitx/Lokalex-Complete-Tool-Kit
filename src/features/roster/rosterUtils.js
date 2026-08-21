@@ -45,7 +45,6 @@ export function getUserType() {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
 
-    // 1. Check real-time Firebase userTypesMap
     if (globalState.userTypesMap) {
         if (myId && globalState.userTypesMap[myId]) {
             return globalState.userTypesMap[myId].toString().trim().toLowerCase();
@@ -55,7 +54,6 @@ export function getUserType() {
         }
     }
 
-    // 2. Check active roster record
     if (globalState.rosterMembers && myId) {
         const myRosterRec = globalState.rosterMembers.find(m => (m.telegramId || "").toString().trim() === myId);
         if (myRosterRec && myRosterRec.userType) {
@@ -63,7 +61,6 @@ export function getUserType() {
         }
     }
 
-    // 3. Fallback to appState / localStorage
     return (appState.userType || localStorage.getItem('userType') || "rider").toString().trim().toLowerCase();
 }
 
@@ -71,7 +68,6 @@ export function isAdmin() {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
 
-    // Flexible string comparison against ADMIN_IDS
     if (myId && ADMIN_IDS.some(id => id.toString().trim() === myId)) return true;
     if (myName && ADMIN_IDS.some(id => id.toString().toLowerCase().trim() === myName)) return true;
 
@@ -146,6 +142,72 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     }
 
     return durationText;
+}
+
+export async function archiveRiderCateringIfNeeded(targetRecord) {
+    if (!targetRecord || targetRecord.status !== 'Catering' || !targetRecord.customerName) return;
+
+    const custs = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+    const times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
+    const custCount = custs.length || 1;
+    const completedTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const tId = (targetRecord.telegramId || "").toString();
+    const tName = targetRecord.riderName || targetRecord.name || "Rider";
+
+    if (db && custs.length > 0) {
+        db.ref('customerChats').once('value', (snapshot) => {
+            const chats = snapshot.val();
+            if (chats) {
+                Object.keys(chats).forEach(custId => {
+                    const chatMeta = chats[custId]?.metadata || chats[custId] || {};
+                    const chatCustName = (chatMeta.customerName || chatMeta.name || "").trim().toLowerCase();
+                    
+                    if (chatCustName && custs.some(c => c.toLowerCase() === chatCustName)) {
+                        db.ref(`customerChats/${custId}/metadata`).update({
+                            folder: 'done',
+                            cateredByRiderId: null,
+                            cateredByRiderName: null,
+                            cateredBy: null,
+                            lastUpdated: Date.now()
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    for (let i = 0; i < custs.length; i++) {
+        const cName = custs[i];
+        const cleanCustKey = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const sTime = times[i] || times[0] || 'N/A';
+        const splitDuration = calculateSplitDuration(sTime, completedTimeStr, custCount);
+
+        const custFeeObj = (targetRecord.customerFees && cleanCustKey && targetRecord.customerFees[cleanCustKey]) 
+            ? targetRecord.customerFees[cleanCustKey] 
+            : null;
+
+        const finalFees = custFeeObj ? custFeeObj.totalFees : (targetRecord.lastReceiptTotalFees || 0);
+        const finalFeeDetails = custFeeObj ? custFeeObj.fees : (targetRecord.lastReceiptFees || null);
+
+        const hItem = {
+            riderName: tName,
+            telegramId: tId,
+            customerName: cName,
+            startTime: sTime,
+            completedTime: completedTimeStr,
+            completedDate: getLocalTodayStr(),
+            customerCount: custCount,
+            duration: splitDuration,
+            totalFees: finalFees,
+            fees: finalFeeDetails
+        };
+
+        if (db) db.ref('cateredHistory').push(hItem);
+
+        if (!globalState.globalCateredHistory) globalState.globalCateredHistory = [];
+        globalState.globalCateredHistory.push(hItem);
+    }
+    saveRosterCache();
 }
 
 export function getElapsedCateringTime(startTimeStr) {

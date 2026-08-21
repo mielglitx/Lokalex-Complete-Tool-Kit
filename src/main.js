@@ -1,6 +1,6 @@
 // src/main.js
 import { appState, globalState } from './store/state.js';
-import { db, auth as firebaseAuth } from './config/firebase.js';
+import { db, auth as firebaseAuth, messaging } from './config/firebase.js';
 
 import * as authFeature from './features/auth/index.js';
 import * as cart from './features/cart.js';
@@ -12,15 +12,18 @@ import * as advancedOrders from './features/advancedOrders.js';
 import * as maps from './features/maps.js';
 import * as wizard from './features/wizard.js';
 import * as liveTracker from './features/liveTracker.js';
+import * as storeHub from './features/storeHub/index.js';
+import * as customerStorefront from './features/customer/customerStorefront.js';
 
 import * as modals from './ui/modals.js';
 import * as router from './ui/router.js';
 import * as helpers from './utils/helpers.js';
-import { unlockAudioContext, showToast } from './ui/notifications.js';
+import { unlockAudioContext, showToast, showSideNotification } from './ui/notifications.js';
 
 const allModules = [
     authFeature, cart, chat, roster, directory, commission, 
-    advancedOrders, maps, wizard, liveTracker, modals, router, helpers
+    advancedOrders, maps, wizard, liveTracker, storeHub, 
+    customerStorefront, modals, router, helpers
 ];
 
 allModules.forEach(mod => {
@@ -37,6 +40,80 @@ window.unlockAudioContext = unlockAudioContext;
 
 let isReconnecting = false;
 let lastHeartbeatTime = Date.now();
+
+// SERVICE WORKER REGISTRATION & FCM PUSH NOTIFICATIONS
+export function registerServiceWorker() {
+    if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+        navigator.serviceWorker.register('/sw.js').then((reg) => {
+            initFCMNotifications(reg);
+
+            reg.onupdatefound = () => {
+                const installingWorker = reg.installing;
+                if (installingWorker) {
+                    installingWorker.onstatechange = () => {
+                        if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            console.log('⚡ Lokalex App updated in background.');
+                        }
+                    };
+                }
+            };
+        }).catch((err) => {
+            console.warn('SW registration warning:', err);
+        });
+    }
+}
+
+export async function initFCMNotifications(registration) {
+    if (!('Notification' in window) || !messaging) return;
+
+    try {
+        let permission = Notification.permission;
+        if (permission === 'default') {
+            permission = await Notification.requestPermission();
+        }
+
+        if (permission === 'granted') {
+            const currentToken = await messaging.getToken({
+                serviceWorkerRegistration: registration
+            });
+
+            if (currentToken) {
+                syncDeviceFcmToken(currentToken);
+            }
+
+            messaging.onMessage((payload) => {
+                const title = payload.notification?.title || payload.data?.title || 'Lokalex Alert';
+                const body = payload.notification?.body || payload.data?.body || 'New notification received.';
+                
+                showToast(`🔔 ${title}: ${body}`);
+                if (showSideNotification) {
+                    showSideNotification(title, body, 'fa-bell', 'text-amber-400', 'border-amber-500');
+                }
+
+                if (typeof window.playLineAlarm === 'function') {
+                    window.playLineAlarm();
+                }
+            });
+        }
+    } catch(err) {
+        console.warn('FCM setup warning:', err);
+    }
+}
+
+export function syncDeviceFcmToken(token) {
+    if (!db || !token) return;
+
+    const myRiderId = (appState.telegramId || localStorage.getItem('telegramId') || '').toString().trim();
+    const myCustId = (appState.customerFacebookId || localStorage.getItem('lokalex_customer_fb_id') || '').toString().trim();
+
+    if (myRiderId) {
+        db.ref(`riders/${myRiderId}/fcmToken`).set(token).catch(() => {});
+        db.ref(`roster/${myRiderId}/fcmToken`).set(token).catch(() => {});
+    }
+    if (myCustId) {
+        db.ref(`customers/${myCustId}/fcmToken`).set(token).catch(() => {});
+    }
+}
 
 export function updateNetworkStatus(forcedState = null) {
     const container = document.getElementById('network-status-pill');
@@ -84,6 +161,10 @@ export function forceReconnectFirebase() {
                     commission.fetchCommissionSettings();
                 }
 
+                if (customerStorefront && customerStorefront.initCustomerStorefront) {
+                    customerStorefront.initCustomerStorefront();
+                }
+
                 if (appState.telegramId && authFeature.startBackgroundRosterGpsTracker) {
                     authFeature.startBackgroundRosterGpsTracker();
                 }
@@ -108,7 +189,6 @@ window.addEventListener('offline', () => {
     updateNetworkStatus(false);
 });
 
-// PWA RESUME & VISIBILITY RECONNECTION HANDLERS
 function handleAppVisibilityChange() {
     if (document.visibilityState === 'visible') {
         forceReconnectFirebase();
@@ -135,31 +215,25 @@ setInterval(() => {
 
 function bootApp() {
     try {
+        registerServiceWorker();
         updateNetworkStatus();
 
+        // Remove lingering floating chat widget elements if present in DOM
+        const legacyWidget = document.getElementById('floating-chat-container');
+        if (legacyWidget) legacyWidget.remove();
+
+        // 1. INSTANT LOCAL CACHE HYDRATION (Zero latency)
         if (roster && roster.loadRosterCache) roster.loadRosterCache();
         if (roster && roster.updateRosterUI) roster.updateRosterUI();
-
-        // Load offline cached settings & directory immediately on cold start
-        if (commission && commission.loadCommissionSettingsCache) {
-            commission.loadCommissionSettingsCache();
-        }
-        if (directory && directory.loadDirectoryCache) {
-            directory.loadDirectoryCache();
-        }
-
-        initRealtimeFirebaseListeners();
-
-        if (chat && chat.initDraggableChat) chat.initDraggableChat();
+        if (commission && commission.loadCommissionSettingsCache) commission.loadCommissionSettingsCache();
+        if (directory && directory.loadDirectoryCache) directory.loadDirectoryCache();
         if (cart && cart.loadCartState) cart.loadCartState();
 
-        if (commission && commission.fetchCommissionSettings) {
-            commission.fetchCommissionSettings();
-        }
+        // 2. BACKGROUND FIREBASE SYNC
+        initRealtimeFirebaseListeners();
 
-        if (directory && directory.silentSyncDirectory) {
-            directory.silentSyncDirectory();
-        }
+        if (commission && commission.fetchCommissionSettings) commission.fetchCommissionSettings();
+        if (directory && directory.silentSyncDirectory) directory.silentSyncDirectory();
 
         setInterval(() => {
             if (roster && roster.checkAndTriggerAutoEndShift) {
@@ -173,9 +247,6 @@ function bootApp() {
             const loginView = document.getElementById('view-login');
             if (loginView) loginView.classList.add('hidden');
 
-            const chatWidget = document.getElementById('floating-chat-container');
-            if (chatWidget) chatWidget.classList.add('hidden');
-
             if (urlParams.has('livegps') && liveTracker.checkAndInitLiveGpsPortal) liveTracker.checkAndInitLiveGpsPortal();
             else if (urlParams.has('track') && maps.checkAndInitTrackPortal) maps.checkAndInitTrackPortal();
             else if (urlParams.has('mapcalc') && maps.checkAndInitMapCalcPortal) maps.checkAndInitMapCalcPortal();
@@ -184,13 +255,16 @@ function bootApp() {
         }
 
         const savedCustomerFbId = localStorage.getItem('lokalex_customer_fb_id');
-        const savedCustomerName = localStorage.getItem('lokalex_customer_name');
-        const savedCustomerEmail = localStorage.getItem('lokalex_customer_email');
-        const savedCustomerAvatar = localStorage.getItem('lokalex_customer_avatar');
+        const savedCustomerName = localStorage.getItem('lokalex_customer_name') || localStorage.getItem('customerName');
+        const savedCustomerEmail = localStorage.getItem('lokalex_customer_email') || localStorage.getItem('customerPhone');
+        const savedCustomerAvatar = localStorage.getItem('lokalex_customer_avatar') || localStorage.getItem('customerAvatarUrl');
 
         if (appState.telegramId) {
             history.replaceState({ view: 'view-home' }, '', '#view-home');
             router.renderViewUI('view-home');
+        } else if (appState.merchantAccountId && appState.merchantStoreId) {
+            history.replaceState({ view: 'view-store-hub' }, '', '#view-store-hub');
+            router.renderViewUI('view-store-hub');
         } else if (savedCustomerFbId) {
             appState.customerFacebookId = savedCustomerFbId;
             appState.customerName = savedCustomerName || "Customer";
@@ -205,6 +279,10 @@ function bootApp() {
 
             if (chat && chat.listenToCustomerRiderChat) {
                 chat.listenToCustomerRiderChat();
+            }
+
+            if (customerStorefront && customerStorefront.initCustomerStorefront) {
+                customerStorefront.initCustomerStorefront();
             }
 
             history.replaceState({ view: 'view-customer-home' }, '', '#view-customer-home');
@@ -228,6 +306,11 @@ window.addEventListener('loginSuccess', () => {
     if (commission && commission.fetchCommissionSettings) {
         commission.fetchCommissionSettings();
     }
+
+    if (navigator.serviceWorker?.controller) {
+        navigator.serviceWorker.ready.then(reg => initFCMNotifications(reg));
+    }
+
     initRealtimeFirebaseListeners();
 });
 
@@ -235,6 +318,9 @@ window.addEventListener('viewChanged', (e) => {
     if (e.detail === 'view-customer-home') {
         if (chat && chat.listenToCustomerRiderChat) {
             chat.listenToCustomerRiderChat();
+        }
+        if (customerStorefront && customerStorefront.initCustomerStorefront) {
+            customerStorefront.initCustomerStorefront();
         }
     }
 });
@@ -260,7 +346,6 @@ function initRealtimeFirebaseListeners() {
             chat.listenToAllCustomerChatsForRider();
         }
 
-        // REAL-TIME RIDERS PERMISSIONS LISTENER
         db.ref('riders').on('value', (snapshot) => {
             const val = snapshot.val();
             const myId = (appState.telegramId || "").toString().trim();
@@ -305,24 +390,24 @@ function initRealtimeFirebaseListeners() {
             if (commission.refreshCommissionView) commission.refreshCommissionView();
         });
 
-        db.ref('logins').on('value', (snapshot) => {
+        db.ref('logins').limitToLast(100).on('value', (snapshot) => {
             globalState.globalLogins = snapshot.val() ? Object.values(snapshot.val()) : [];
             if (roster && roster.saveRosterCache) roster.saveRosterCache();
             window.dispatchEvent(new Event('loginsUpdated'));
         });
 
-        db.ref('cateredHistory').on('value', (snapshot) => {
+        db.ref('cateredHistory').limitToLast(100).on('value', (snapshot) => {
             globalState.globalCateredHistory = snapshot.val() ? Object.values(snapshot.val()) : [];
             if (roster && roster.saveRosterCache) roster.saveRosterCache();
             window.dispatchEvent(new Event('cateredUpdated'));
         });
 
-        db.ref('receipts').on('value', (snapshot) => {
+        db.ref('receipts').limitToLast(100).on('value', (snapshot) => {
             globalState.globalDailyReceipts = snapshot.val() ? Object.values(snapshot.val()) : [];
             window.dispatchEvent(new Event('receiptsUpdated'));
         });
 
-        db.ref('chat').on('value', (snapshot) => {
+        db.ref('chat').limitToLast(50).on('value', (snapshot) => {
             globalState.chatMessages = snapshot.val() ? Object.values(snapshot.val()) : [];
             window.dispatchEvent(new Event('chatUpdated'));
         });
@@ -333,7 +418,7 @@ function initRealtimeFirebaseListeners() {
             if (advancedOrders.renderAdvancedOrdersList) advancedOrders.renderAdvancedOrdersList();
         });
 
-        db.ref('mapCalculations').on('value', (snapshot) => {
+        db.ref('mapCalculations').limitToLast(50).on('value', (snapshot) => {
             globalState.globalMapCalculations = snapshot.val() ? Object.values(snapshot.val()) : [];
             if (maps.renderMapCalcBoardList) maps.renderMapCalcBoardList();
         });

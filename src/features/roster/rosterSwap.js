@@ -9,7 +9,6 @@ import { autoStartLiveGpsSession } from '../liveTracker.js';
 let activeSwapData = null;
 let currentPendingSwapRequest = null;
 
-// HELPER: CALCULATE QUEUE TIME TO PLACE RIDER AT #1 SPOT IN AVAILABLE QUEUE
 function getTopQueueTime() {
     const rosterMembers = globalState.rosterMembers || [];
     const availableRiders = rosterMembers
@@ -130,95 +129,72 @@ export function toggleSwapRiderAccordion(accordionId) {
     }
 }
 
-export function requestCustomerSwap(targetRiderId, targetRiderName, targetCustomerName = "") {
+export async function requestCustomerSwap(targetRiderId, targetRiderName, targetCustomerName = "") {
     if (!activeSwapData) return;
 
     const { sourceRiderId, sourceRiderName, sourceCustomerName } = activeSwapData;
     closeSwapCustomerModal();
 
-    if (db) {
-        db.ref('swapRequests').once('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                Object.keys(data).forEach(key => {
-                    const req = data[key];
-                    if (req && req.status === 'pending' &&
-                        (req.sourceRiderId || "").toString() === sourceRiderId.toString() &&
-                        (req.sourceCustomerName || "").toLowerCase().trim() === sourceCustomerName.toLowerCase().trim()) {
-                        db.ref('swapRequests/' + key).remove();
-                    }
-                });
-            }
+    if (!db) return;
 
-            const requestId = `SWAP_${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).substring(2,6).toUpperCase()}`;
+    try {
+        const requestId = `SWAP_${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).substring(2,6).toUpperCase()}`;
+        const requestObj = {
+            id: requestId,
+            type: targetCustomerName ? 'swap' : 'transfer',
+            sourceRiderId: sourceRiderId.toString(),
+            sourceRiderName: sourceRiderName,
+            sourceCustomerName: sourceCustomerName,
+            targetRiderId: targetRiderId.toString(),
+            targetRiderName: targetRiderName,
+            targetCustomerName: targetCustomerName || "",
+            status: 'pending',
+            createdAt: Date.now()
+        };
 
-            const requestObj = {
-                id: requestId,
-                type: targetCustomerName ? 'swap' : 'transfer',
-                sourceRiderId: sourceRiderId,
-                sourceRiderName: sourceRiderName,
-                sourceCustomerName: sourceCustomerName,
-                targetRiderId: targetRiderId,
-                targetRiderName: targetRiderName,
-                targetCustomerName: targetCustomerName,
-                status: 'pending',
-                createdAt: Date.now()
-            };
+        await db.ref('swapRequests/' + requestId).set(requestObj);
 
-            db.ref('swapRequests/' + requestId).set(requestObj);
-        });
-    }
-
-    if (targetCustomerName) {
-        showToast(`⏳ Swap request sent to ${targetRiderName}. Waiting for agreement...`);
-    } else {
-        showToast(`⏳ Transfer request sent to ${targetRiderName}. Waiting for agreement...`);
+        if (targetCustomerName) {
+            showToast(`⏳ Swap request sent to ${targetRiderName}. Waiting for agreement...`);
+        } else {
+            showToast(`⏳ Transfer request sent to ${targetRiderName}. Waiting for agreement...`);
+        }
+    } catch(e) {
+        showToast("❌ Failed to send swap request.");
     }
 }
 
-// REQUEST CLAIM / GET CUSTOMER FROM ANOTHER RIDER (REQUIRES HOLDER APPROVAL)
-export function requestClaimCustomer(targetRiderId, targetRiderName, targetCustomerName) {
+export async function requestClaimCustomer(targetRiderId, targetRiderName, targetCustomerName) {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const myName = (appState.riderName || localStorage.getItem('riderName') || "Rider").trim();
 
     if (!myId) return showToast("⚠️ Rider ID missing.");
     if (targetRiderId.toString().trim() === myId) return showToast("⚠️ Iyo na ang customer na ito.");
 
-    if (db) {
-        db.ref('swapRequests').once('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                Object.keys(data).forEach(key => {
-                    const req = data[key];
-                    if (req && req.status === 'pending' &&
-                        (req.sourceRiderId || "").toString() === myId &&
-                        (req.targetCustomerName || "").toLowerCase().trim() === targetCustomerName.toLowerCase().trim()) {
-                        db.ref('swapRequests/' + key).remove();
-                    }
-                });
-            }
+    if (!db) return;
 
-            const requestId = `CLAIM_${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).substring(2,6).toUpperCase()}`;
+    try {
+        const requestId = `CLAIM_${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).substring(2,6).toUpperCase()}`;
+        const requestObj = {
+            id: requestId,
+            type: 'claim',
+            sourceRiderId: myId,
+            sourceRiderName: myName,
+            sourceCustomerName: "",
+            targetRiderId: targetRiderId.toString().trim(),
+            targetRiderName: targetRiderName,
+            targetCustomerName: targetCustomerName,
+            status: 'pending',
+            createdAt: Date.now()
+        };
 
-            const requestObj = {
-                id: requestId,
-                type: 'claim',
-                sourceRiderId: myId,
-                sourceRiderName: myName,
-                sourceCustomerName: "",
-                targetRiderId: targetRiderId.toString().trim(),
-                targetRiderName: targetRiderName,
-                targetCustomerName: targetCustomerName,
-                status: 'pending',
-                createdAt: Date.now()
-            };
+        await db.ref('swapRequests/' + requestId).set(requestObj);
 
-            db.ref('swapRequests/' + requestId).set(requestObj);
-        });
+        showToast(`⏳ Humihingi ng pahintulot kay ${targetRiderName} upang kunin si ${targetCustomerName}...`);
+        showSideNotification("REQUEST SENT", `Waiting for ${targetRiderName} to approve transfer of ${targetCustomerName}`, "fa-paper-plane", "text-blue-400", "border-blue-500");
+    } catch(e) {
+        showToast("❌ Failed to send claim request.");
     }
-
-    showToast(`⏳ Humihingi ng pahintulot kay ${targetRiderName} upang kunin si ${targetCustomerName}...`);
-    showSideNotification("REQUEST SENT", `Waiting for ${targetRiderName} to approve transfer of ${targetCustomerName}`, "fa-paper-plane", "text-blue-400", "border-blue-500");
 }
 
 export function listenToSwapRequests() {
@@ -242,7 +218,6 @@ export function listenToSwapRequests() {
 
         const requests = Object.values(data);
 
-        // 1. Check incoming pending requests where CURRENT USER is the target
         const incomingPending = requests.find(r => {
             if (!r || r.status !== 'pending') return false;
 
@@ -278,7 +253,6 @@ export function listenToSwapRequests() {
             if (approvalModal) approvalModal.classList.add('hidden');
         }
 
-        // 2. Check completed requests initiated by CURRENT USER to give instant feedback
         requests.forEach(r => {
             if (!r) return;
             const isSourceMe = (
@@ -338,175 +312,176 @@ export function declineSwapRequest() {
     showToast("❌ Request declined.");
 }
 
+// ATOMIC MULTI-PATH TRANSACTION SWAP EXECUTION
 export async function executeCustomerSwap(targetRiderId, targetRiderName, targetCustomerName = "") {
-    if (!activeSwapData) return;
+    if (!activeSwapData || !db) return;
 
     const { sourceRiderId, sourceRiderName, sourceCustomerName, type } = activeSwapData;
     const isClaim = type === 'claim' || (!sourceCustomerName && targetCustomerName);
 
-    const roster = globalState.rosterMembers || [];
-    const sourceRec = roster.find(m => (m.telegramId || "").toString() === sourceRiderId.toString());
-    const targetRec = roster.find(m => (m.telegramId || "").toString() === targetRiderId.toString());
+    try {
+        const [sourceSnap, targetSnap] = await Promise.all([
+            db.ref(`roster/${sourceRiderId}`).once('value'),
+            db.ref(`roster/${targetRiderId}`).once('value')
+        ]);
 
-    if (!sourceRec || !targetRec) return showToast("⚠️ Operational error executing customer swap.");
+        const sourceRec = sourceSnap.val();
+        const targetRec = targetSnap.val();
 
-    const nowTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        if (!sourceRec || !targetRec) {
+            return showToast("⚠️ Operational error: Rider records not found.");
+        }
 
-    let sourceCusts = sourceRec.customerName ? sourceRec.customerName.split(', ').map(c => c.trim()).filter(Boolean) : [];
-    let sourceTimes = sourceRec.startTime ? sourceRec.startTime.split(', ').map(t => t.trim()) : [];
+        const nowTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    let targetCusts = targetRec.customerName ? targetRec.customerName.split(', ').map(c => c.trim()).filter(Boolean) : [];
-    let targetTimes = targetRec.startTime ? targetRec.startTime.split(', ').map(t => t.trim()) : [];
+        let sourceCusts = sourceRec.customerName ? sourceRec.customerName.split(', ').map(c => c.trim()).filter(Boolean) : [];
+        let sourceTimes = sourceRec.startTime ? sourceRec.startTime.split(', ').map(t => t.trim()) : [];
 
-    if (isClaim) {
-        // SCENARIO 1: CLAIM / GET (Target/Holder gives targetCustomerName to Source/Requester)
-        const tgtIdx = targetCusts.findIndex(c => c.toLowerCase() === targetCustomerName.toLowerCase());
-        const extractedTime = tgtIdx !== -1 ? (targetTimes[tgtIdx] || nowTimeStr) : nowTimeStr;
+        let targetCusts = targetRec.customerName ? targetRec.customerName.split(', ').map(c => c.trim()).filter(Boolean) : [];
+        let targetTimes = targetRec.startTime ? targetRec.startTime.split(', ').map(t => t.trim()) : [];
 
-        if (tgtIdx !== -1) {
+        const atomicUpdates = {};
+
+        if (isClaim) {
+            const tgtIdx = targetCusts.findIndex(c => c.toLowerCase() === targetCustomerName.toLowerCase());
+            if (tgtIdx === -1) {
+                return showToast(`⚠️ Hindi na available si ${targetCustomerName} kay ${targetRiderName}.`);
+            }
+
+            const extractedTime = targetTimes[tgtIdx] || nowTimeStr;
             targetCusts.splice(tgtIdx, 1);
             if (targetTimes[tgtIdx]) targetTimes.splice(tgtIdx, 1);
-        }
 
-        if (!sourceCusts.some(c => c.toLowerCase() === targetCustomerName.toLowerCase())) {
-            sourceCusts.push(targetCustomerName);
-            sourceTimes.push(extractedTime);
-        }
+            if (!sourceCusts.some(c => c.toLowerCase() === targetCustomerName.toLowerCase())) {
+                sourceCusts.push(targetCustomerName);
+                sourceTimes.push(extractedTime);
+            }
 
-        const newTargetStatus = targetCusts.length > 0 ? 'Catering' : 'Available';
-        const newTargetQueue = newTargetStatus === 'Available' ? getTopQueueTime() : parseQueueTime(targetRec.queueTime);
+            const newTargetStatus = targetCusts.length > 0 ? 'Catering' : 'Available';
+            const newTargetQueue = newTargetStatus === 'Available' ? getTopQueueTime() : parseQueueTime(targetRec.queueTime);
 
-        if (db) {
-            db.ref('roster/' + targetRiderId).update({
-                status: newTargetStatus,
-                customerName: targetCusts.join(', '),
-                startTime: targetTimes.join(', '),
-                queueTime: newTargetQueue,
-                lastUpdated: nowTimeStr
-            });
+            atomicUpdates[`roster/${targetRiderId}/status`] = newTargetStatus;
+            atomicUpdates[`roster/${targetRiderId}/customerName`] = targetCusts.join(', ');
+            atomicUpdates[`roster/${targetRiderId}/startTime`] = targetTimes.join(', ');
+            atomicUpdates[`roster/${targetRiderId}/queueTime`] = newTargetQueue;
+            atomicUpdates[`roster/${targetRiderId}/lastUpdated`] = nowTimeStr;
 
-            db.ref('roster/' + sourceRiderId).update({
-                status: 'Catering',
-                customerName: sourceCusts.join(', '),
-                startTime: sourceTimes.join(', '),
-                lastUpdated: nowTimeStr
-            });
+            atomicUpdates[`roster/${sourceRiderId}/status`] = 'Catering';
+            atomicUpdates[`roster/${sourceRiderId}/customerName`] = sourceCusts.join(', ');
+            atomicUpdates[`roster/${sourceRiderId}/startTime`] = sourceTimes.join(', ');
+            atomicUpdates[`roster/${sourceRiderId}/lastUpdated`] = nowTimeStr;
 
-            // Reassign customer chat thread in Firebase
-            const cleanSearchName = targetCustomerName.toLowerCase().trim();
-            db.ref('customerChats').once('value', (snapshot) => {
-                const chats = snapshot.val();
-                if (chats) {
-                    Object.keys(chats).forEach(custId => {
-                        const meta = chats[custId]?.metadata || chats[custId] || {};
-                        const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
-                        if (chatCustName && chatCustName === cleanSearchName) {
-                            db.ref(`customerChats/${custId}/metadata`).update({
-                                folder: 'catering',
-                                cateredByRiderId: sourceRiderId,
-                                cateredByRiderName: sourceRiderName,
-                                cateredBy: sourceRiderName,
-                                lastUpdated: Date.now()
-                            });
-                        }
-                    });
+            const chatsSnap = await db.ref('customerChats').once('value');
+            const chats = chatsSnap.val() || {};
+            const cleanTargetCust = targetCustomerName.toLowerCase().trim();
+
+            Object.keys(chats).forEach(custId => {
+                const meta = chats[custId]?.metadata || chats[custId] || {};
+                const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
+                if (chatCustName && chatCustName === cleanTargetCust) {
+                    atomicUpdates[`customerChats/${custId}/metadata/folder`] = 'catering';
+                    atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderId`] = sourceRiderId;
+                    atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderName`] = sourceRiderName;
+                    atomicUpdates[`customerChats/${custId}/metadata/cateredBy`] = sourceRiderName;
+                    atomicUpdates[`customerChats/${custId}/metadata/lastUpdated`] = Date.now();
                 }
             });
+
+            await db.ref().update(atomicUpdates);
+            showSideNotification("CUSTOMER CLAIMED", `Transferred ${targetCustomerName} to ${sourceRiderName}`, "fa-hand-holding-hand", "text-emerald-400", "border-emerald-500");
+            showToast(`✅ Naibigay na si ${targetCustomerName} kay ${sourceRiderName}!`);
+            return;
         }
 
-        showSideNotification("CUSTOMER CLAIMED", `Transferred ${targetCustomerName} to ${sourceRiderName}`, "fa-hand-holding-hand", "text-emerald-400", "border-emerald-500");
-        showToast(`✅ Naibigay na si ${targetCustomerName} kay ${sourceRiderName}!`);
-        return;
-    }
+        const srcIdx = sourceCusts.findIndex(c => c.toLowerCase() === sourceCustomerName.toLowerCase());
+        const srcTime = srcIdx !== -1 ? sourceTimes[srcIdx] : nowTimeStr;
 
-    // SCENARIO 2: STANDARD SWAP OR TRANSFER
-    const srcIdx = sourceCusts.findIndex(c => c.toLowerCase() === sourceCustomerName.toLowerCase());
-    const srcTime = srcIdx !== -1 ? sourceTimes[srcIdx] : nowTimeStr;
-
-    if (srcIdx !== -1) {
-        sourceCusts.splice(srcIdx, 1);
-        if (sourceTimes[srcIdx]) sourceTimes.splice(srcIdx, 1);
-    }
-
-    let tgtTime = nowTimeStr;
-    if (targetCustomerName) {
-        const tgtIdx = targetCusts.findIndex(c => c.toLowerCase() === targetCustomerName.toLowerCase());
-        if (tgtIdx !== -1) {
-            tgtTime = targetTimes[tgtIdx] || nowTimeStr;
-            targetCusts.splice(tgtIdx, 1);
-            if (targetTimes[tgtIdx]) targetTimes.splice(tgtIdx, 1);
+        if (srcIdx !== -1) {
+            sourceCusts.splice(srcIdx, 1);
+            if (sourceTimes[srcIdx]) sourceTimes.splice(srcIdx, 1);
         }
-        
-        if (!sourceCusts.some(c => c.toLowerCase() === targetCustomerName.toLowerCase())) {
-            sourceCusts.push(targetCustomerName);
-            sourceTimes.push(tgtTime);
+
+        let tgtTime = nowTimeStr;
+        if (targetCustomerName) {
+            const tgtIdx = targetCusts.findIndex(c => c.toLowerCase() === targetCustomerName.toLowerCase());
+            if (tgtIdx !== -1) {
+                tgtTime = targetTimes[tgtIdx] || nowTimeStr;
+                targetCusts.splice(tgtIdx, 1);
+                if (targetTimes[tgtIdx]) targetTimes.splice(tgtIdx, 1);
+            }
+            
+            if (!sourceCusts.some(c => c.toLowerCase() === targetCustomerName.toLowerCase())) {
+                sourceCusts.push(targetCustomerName);
+                sourceTimes.push(tgtTime);
+            }
         }
-    }
 
-    if (!targetCusts.some(c => c.toLowerCase() === sourceCustomerName.toLowerCase())) {
-        targetCusts.push(sourceCustomerName);
-        targetTimes.push(srcTime);
-    }
+        if (!targetCusts.some(c => c.toLowerCase() === sourceCustomerName.toLowerCase())) {
+            targetCusts.push(sourceCustomerName);
+            targetTimes.push(srcTime);
+        }
 
-    const newSourceStatus = sourceCusts.length > 0 ? 'Catering' : 'Available';
-    let newSourceQueue = parseQueueTime(sourceRec.queueTime);
+        const newSourceStatus = sourceCusts.length > 0 ? 'Catering' : 'Available';
+        let newSourceQueue = parseQueueTime(sourceRec.queueTime);
 
-    if (newSourceStatus === 'Available') {
-        const availables = roster.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== sourceRiderId.toString());
-        let maxTime = new Date().getTime();
-        availables.forEach(r => {
-            const t = parseQueueTime(r.queueTime);
-            if (t > maxTime) maxTime = t;
-        });
-        newSourceQueue = maxTime + 1000;
-    }
-
-    if (db) {
-        db.ref('roster/' + sourceRiderId).update({
-            status: newSourceStatus,
-            customerName: sourceCusts.join(', '),
-            startTime: sourceTimes.join(', '),
-            queueTime: newSourceQueue,
-            lastUpdated: nowTimeStr
-        });
-
-        db.ref('roster/' + targetRiderId).update({
-            status: 'Catering',
-            customerName: targetCusts.join(', '),
-            startTime: targetTimes.join(', '),
-            lastUpdated: nowTimeStr
-        });
-
-        // Reassign chat thread metadata
-        if (sourceCustomerName) {
-            const cleanSrc = sourceCustomerName.toLowerCase().trim();
-            db.ref('customerChats').once('value', (snapshot) => {
-                const chats = snapshot.val();
-                if (chats) {
-                    Object.keys(chats).forEach(custId => {
-                        const meta = chats[custId]?.metadata || chats[custId] || {};
-                        const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
-                        if (chatCustName && chatCustName === cleanSrc) {
-                            db.ref(`customerChats/${custId}/metadata`).update({
-                                folder: 'catering',
-                                cateredByRiderId: targetRiderId,
-                                cateredByRiderName: targetRiderName,
-                                cateredBy: targetRiderName,
-                                lastUpdated: Date.now()
-                            });
-                        }
-                    });
-                }
+        if (newSourceStatus === 'Available') {
+            const currentRoster = globalState.rosterMembers || [];
+            const availables = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== sourceRiderId.toString());
+            let maxTime = Date.now();
+            availables.forEach(r => {
+                const t = parseQueueTime(r.queueTime);
+                if (t > maxTime) maxTime = t;
             });
+            newSourceQueue = maxTime + 1000;
         }
-    }
 
-    if (targetCustomerName) {
-        showSideNotification("CUSTOMER SWAPPED", `Swapped ${sourceCustomerName} with ${targetCustomerName}`, "fa-arrows-rotate", "text-purple-400", "border-purple-500");
-        showToast(`🔀 Swapped ${sourceCustomerName} (${sourceRiderName}) with ${targetCustomerName} (${targetRiderName})`);
-    } else {
-        showSideNotification("CUSTOMER TRANSFERRED", `Transferred ${sourceCustomerName} to ${targetRiderName}`, "fa-share", "text-purple-400", "border-purple-500");
-        showToast(`🔀 Transferred ${sourceCustomerName} to ${targetRiderName}`);
+        atomicUpdates[`roster/${sourceRiderId}/status`] = newSourceStatus;
+        atomicUpdates[`roster/${sourceRiderId}/customerName`] = sourceCusts.join(', ');
+        atomicUpdates[`roster/${sourceRiderId}/startTime`] = sourceTimes.join(', ');
+        atomicUpdates[`roster/${sourceRiderId}/queueTime`] = newSourceQueue;
+        atomicUpdates[`roster/${sourceRiderId}/lastUpdated`] = nowTimeStr;
+
+        atomicUpdates[`roster/${targetRiderId}/status`] = 'Catering';
+        atomicUpdates[`roster/${targetRiderId}/customerName`] = targetCusts.join(', ');
+        atomicUpdates[`roster/${targetRiderId}/startTime`] = targetTimes.join(', ');
+        atomicUpdates[`roster/${targetRiderId}/lastUpdated`] = nowTimeStr;
+
+        const chatsSnap = await db.ref('customerChats').once('value');
+        const chats = chatsSnap.val() || {};
+        const cleanSrc = sourceCustomerName.toLowerCase().trim();
+        const cleanTgt = targetCustomerName ? targetCustomerName.toLowerCase().trim() : '';
+
+        Object.keys(chats).forEach(custId => {
+            const meta = chats[custId]?.metadata || chats[custId] || {};
+            const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
+
+            if (chatCustName && chatCustName === cleanSrc) {
+                atomicUpdates[`customerChats/${custId}/metadata/folder`] = 'catering';
+                atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderId`] = targetRiderId;
+                atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderName`] = targetRiderName;
+                atomicUpdates[`customerChats/${custId}/metadata/cateredBy`] = targetRiderName;
+                atomicUpdates[`customerChats/${custId}/metadata/lastUpdated`] = Date.now();
+            } else if (cleanTgt && chatCustName && chatCustName === cleanTgt) {
+                atomicUpdates[`customerChats/${custId}/metadata/folder`] = 'catering';
+                atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderId`] = sourceRiderId;
+                atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderName`] = sourceRiderName;
+                atomicUpdates[`customerChats/${custId}/metadata/cateredBy`] = sourceRiderName;
+                atomicUpdates[`customerChats/${custId}/metadata/lastUpdated`] = Date.now();
+            }
+        });
+
+        await db.ref().update(atomicUpdates);
+
+        if (targetCustomerName) {
+            showSideNotification("CUSTOMER SWAPPED", `Swapped ${sourceCustomerName} with ${targetCustomerName}`, "fa-arrows-rotate", "text-purple-400", "border-purple-500");
+            showToast(`🔀 Swapped ${sourceCustomerName} (${sourceRiderName}) with ${targetCustomerName} (${targetRiderName})`);
+        } else {
+            showSideNotification("CUSTOMER TRANSFERRED", `Transferred ${sourceCustomerName} to ${targetRiderName}`, "fa-share", "text-purple-400", "border-purple-500");
+            showToast(`🔀 Transferred ${sourceCustomerName} to ${targetRiderName}`);
+        }
+    } catch(e) {
+        console.error("Execute customer swap error:", e);
+        showToast("❌ Failed to complete customer swap.");
     }
 }
 

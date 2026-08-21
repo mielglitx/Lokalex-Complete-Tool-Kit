@@ -1,0 +1,407 @@
+<!-- src/partials/views/store-hub.html -->
+<section id="view-store-hub" class="hidden flex-1 flex flex-col p-4 gap-4 py-4 pb-20">
+    <!-- LIGHT MODE CONTRAST STYLING -->
+    <style>
+        html:not(.dark) #view-store-hub {
+            color: #0f172a;
+        }
+        html:not(.dark) #view-store-hub .bg-cardBg {
+            background-color: #ffffff !important;
+            border-color: #e2e8f0 !important;
+        }
+        html:not(.dark) #merch-orders-feed > div,
+        html:not(.dark) #merch-items-feed > div {
+            background-color: #ffffff !important;
+            border: 1px solid #e2e8f0 !important;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+        }
+    </style>
+
+    <!-- STORE PROFILE & LIVE STATUS CARD -->
+    <div class="bg-cardBg border border-gray-200 dark:border-gray-800 rounded-3xl p-4 shadow-sm flex flex-col gap-3">
+        <div class="flex justify-between items-start gap-2">
+            <div class="flex items-center gap-3 min-w-0 flex-1">
+                <!-- CLICKABLE STORE LOGO / AVATAR -->
+                <button type="button" onclick="window.openStoreIconModal && window.openStoreIconModal()" class="relative group shrink-0" title="Click to update Store Icon">
+                    <div id="merch-store-icon-container" class="w-12 h-12 rounded-2xl bg-orange-500/10 border border-orange-500/30 text-orange-600 dark:text-orange-400 flex items-center justify-center text-xl overflow-hidden shadow-inner relative">
+                        <img id="merch-store-avatar-img" src="" alt="Logo" class="hidden w-full h-full object-cover">
+                        <i id="merch-store-avatar-icon" class="fa-solid fa-shop"></i>
+                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-bold transition">
+                            <i class="fa-solid fa-camera"></i>
+                        </div>
+                    </div>
+                    <div class="absolute -bottom-1 -right-1 bg-orange-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[8px] border border-white dark:border-darkBg shadow-xs">
+                        <i class="fa-solid fa-pen"></i>
+                    </div>
+                </button>
+
+                <!-- STORE NAME, EDIT BUTTON, USERNAME & LOCATION -->
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-1.5">
+                        <h2 id="merch-store-display-name" class="text-sm font-black text-gray-900 dark:text-white truncate">Loading Store...</h2>
+                        <button type="button" onclick="window.openEditStoreProfileModal && window.openEditStoreProfileModal()" class="text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 p-1 text-xs transition active:scale-95 shrink-0" title="Edit Store Name & Address">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                    </div>
+                    
+                    <p id="merch-store-username" class="text-[10px] text-gray-500 dark:text-gray-400 font-mono">@merchant</p>
+                    
+                    <!-- STORE LOCATION DISPLAY -->
+                    <div class="flex items-center gap-1 mt-0.5 text-[10px] text-gray-500 dark:text-gray-400 truncate">
+                        <i class="fa-solid fa-location-dot text-red-500 text-[10px] shrink-0"></i>
+                        <span id="merch-store-address-text" class="truncate font-medium">Walang address</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+                <!-- OPERATING HOURS SCHEDULER BUTTON -->
+                <button type="button" onclick="window.openOperatingHoursModal && window.openOperatingHoursModal()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-darkBg border border-gray-200 dark:border-gray-800 text-purple-600 dark:text-purple-400 flex items-center justify-center text-xs transition active:scale-90" title="Store Operating Hours Schedule">
+                    <i class="fa-solid fa-clock"></i>
+                </button>
+
+                <!-- KITCHEN MUTE / CHIME TEST BUTTON -->
+                <button type="button" id="merch-mute-chime-btn" onclick="window.toggleKitchenMute && window.toggleKitchenMute()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-darkBg border border-gray-200 dark:border-gray-800 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs transition active:scale-90" title="Toggle Kitchen Audio Chime">
+                    <i class="fa-solid fa-bell animate-pulse"></i>
+                </button>
+
+                <!-- OPEN / CLOSED STATUS TOGGLE -->
+                <button id="merch-store-status-btn" onclick="window.toggleStoreOpenStatus && window.toggleStoreOpenStatus()" class="px-3 py-1.5 rounded-full text-[10px] font-black border flex items-center gap-1.5 transition active:scale-95 shadow-xs">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>OPEN FOR ORDERS</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- DAILY SALES & COMMISSION METRICS BAR -->
+        <div class="grid grid-cols-3 gap-2 pt-2 border-t border-gray-200 dark:border-gray-800 text-center">
+            <div class="bg-gray-50 dark:bg-black/30 p-2 rounded-2xl border border-gray-100 dark:border-gray-800">
+                <div class="text-[9px] text-gray-500 dark:text-gray-400 font-bold uppercase">Today's Gross</div>
+                <div id="merch-sales-gross" class="text-xs font-mono font-black text-gray-900 dark:text-white mt-0.5">₱0.00</div>
+            </div>
+            <div class="bg-gray-50 dark:bg-black/30 p-2 rounded-2xl border border-gray-100 dark:border-gray-800">
+                <div class="text-[9px] text-amber-600 dark:text-amber-400 font-bold uppercase">Fee (<span id="merch-comm-rate-badge">10%</span>)</div>
+                <div id="merch-sales-commission" class="text-xs font-mono font-bold text-amber-600 dark:text-amber-400 mt-0.5">-₱0.00</div>
+            </div>
+            <div class="bg-emerald-50 dark:bg-emerald-950/20 p-2 rounded-2xl border border-emerald-200 dark:border-emerald-500/30">
+                <div class="text-[9px] text-emerald-700 dark:text-emerald-400 font-bold uppercase">Net Earnings</div>
+                <div id="merch-sales-net" class="text-xs font-mono font-black text-emerald-600 dark:text-emerald-300 mt-0.5">₱0.00</div>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-1 border-t border-gray-200 dark:border-gray-800 text-[11px]">
+            <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                <span id="merch-total-items-badge" class="bg-gray-100 dark:bg-darkBg px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-800 font-bold text-orange-600 dark:text-orange-400">0 Items</span>
+                <span id="merch-total-cats-badge" class="bg-gray-100 dark:bg-darkBg px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-800 font-bold text-blue-600 dark:text-blue-400">0 Categories</span>
+                <span id="merch-sales-count" class="text-[9.5px] font-mono text-gray-500 hidden sm:inline">0 orders completed</span>
+            </div>
+            <button onclick="window.merchantLogout && window.merchantLogout()" class="text-red-500 hover:text-red-700 dark:text-red-400/70 dark:hover:text-red-400 font-bold flex items-center gap-1 transition">
+                <i class="fa-solid fa-arrow-right-from-bracket"></i> Logout
+            </button>
+        </div>
+    </div>
+
+    <!-- INCOMING LIVE ORDERS & KITCHEN TICKETS SECTION WITH ACTIVE / DONE FOLDER -->
+    <div class="bg-cardBg border border-gray-200 dark:border-gray-800 rounded-3xl p-4 shadow-sm flex flex-col gap-3">
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2">
+            <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs font-bold">
+                    <i class="fa-solid fa-bell animate-bounce"></i>
+                </div>
+                <div>
+                    <h3 class="font-black text-xs text-gray-900 dark:text-white">Kitchen Display System (KDS)</h3>
+                    <p class="text-[9px] text-gray-500 dark:text-gray-400">Live order tickets, prep timers & ready dispatch</p>
+                </div>
+            </div>
+            <span id="merch-live-orders-badge" class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full">
+                0 Active
+            </span>
+        </div>
+
+        <!-- ACTIVE / DONE ORDER FOLDER SWITCHER -->
+        <div class="flex bg-gray-100 dark:bg-black/40 p-1 rounded-xl border border-gray-200 dark:border-gray-800 text-center gap-1">
+            <button id="store-orders-tab-active" onclick="window.setStoreOrdersTab && window.setStoreOrdersTab('active')" class="flex-1 py-1 rounded-lg bg-orange-600 text-white font-bold text-[10px] transition shadow-sm flex items-center justify-center gap-1">
+                <span>🔥 Active</span>
+                <span id="merch-active-count" class="bg-black/20 text-white text-[9px] px-1.5 py-0.2 rounded-full font-mono">0</span>
+            </button>
+            <button id="store-orders-tab-done" onclick="window.setStoreOrdersTab && window.setStoreOrdersTab('done')" class="flex-1 py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition flex items-center justify-center gap-1">
+                <span>✅ Done History</span>
+                <span id="merch-done-count" class="bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-300 text-[9px] px-1.5 py-0.2 rounded-full font-mono">0</span>
+            </button>
+        </div>
+
+        <!-- ORDERS FEED CONTAINER -->
+        <div id="merch-orders-feed" class="flex flex-col gap-3 min-h-[90px] max-h-[420px] overflow-y-auto pr-1">
+            <div class="text-center text-gray-400 dark:text-gray-500 italic py-6 text-xs flex flex-col items-center gap-1.5">
+                <i class="fa-solid fa-receipt text-xl text-gray-400 dark:text-gray-600"></i>
+                <span>No active incoming orders at the moment.</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- CATEGORY BAR & MANAGEMENT -->
+    <div class="flex flex-col gap-2">
+        <div class="flex justify-between items-center px-1">
+            <span class="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                <i class="fa-solid fa-layer-group text-orange-600 dark:text-orange-400"></i> Categories
+            </span>
+            <button onclick="window.openAddCategoryModal && window.openAddCategoryModal()" class="text-[10px] text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 font-bold bg-orange-50 hover:bg-orange-100 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 px-2.5 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs">
+                <i class="fa-solid fa-plus"></i> Add Category
+            </button>
+        </div>
+
+        <!-- CATEGORY SCROLL PILLS -->
+        <div id="merch-category-pills" class="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+            <button class="bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl shrink-0 shadow-xs">All Items</button>
+        </div>
+
+        <!-- SUBCATEGORY FILTER PILLS -->
+        <div id="merch-subcategory-pills" class="hidden flex gap-1.5 overflow-x-auto pb-1 no-scrollbar pt-0.5">
+            <!-- Dynamic Subcategories -->
+        </div>
+    </div>
+
+    <!-- MENU ITEMS SECTION -->
+    <div class="flex-1 flex flex-col gap-2.5">
+        <div class="flex justify-between items-center px-1">
+            <span class="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                <i class="fa-solid fa-utensils text-emerald-600 dark:text-emerald-400"></i> Menu Items
+            </span>
+            <button onclick="window.openItemEditorModal && window.openItemEditorModal()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-md transition active:scale-95 flex items-center gap-1.5">
+                <i class="fa-solid fa-plus-circle"></i> Add New Item
+            </button>
+        </div>
+
+        <!-- ITEMS CONTAINER -->
+        <div id="merch-items-feed" class="flex flex-col gap-2.5 min-h-[160px]">
+            <div class="text-center text-gray-400 dark:text-gray-500 italic py-12 text-xs flex flex-col items-center gap-2">
+                <i class="fa-solid fa-spinner fa-spin text-2xl text-orange-500"></i>
+                <span>Loading store menu...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. STORE PROFILE (NAME & ADDRESS) EDIT MODAL -->
+    <div id="store-profile-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center text-sm font-bold">
+                        <i class="fa-solid fa-store"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-black text-gray-900 dark:text-white">Edit Store Details</h3>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Update store name and address</p>
+                    </div>
+                </div>
+                <button onclick="window.closeEditStoreProfileModal && window.closeEditStoreProfileModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="flex flex-col gap-3 text-xs">
+                <div>
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Store Name *</label>
+                    <input type="text" id="store-edit-name" placeholder="e.g. Milk Tea Central" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold mt-1">
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Store Location / Address *</label>
+                    <input type="text" id="store-edit-address" placeholder="e.g. Poblacion B, Camiling" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1">
+                </div>
+
+                <button id="store-profile-save-btn" onclick="window.submitSaveStoreProfile && window.submitSaveStoreProfile()" class="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 mt-1">
+                    <i class="fa-solid fa-floppy-disk"></i> SAVE STORE DETAILS
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. STORE ICON / LOGO UPDATE MODAL -->
+    <div id="store-icon-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center text-sm font-bold">
+                        <i class="fa-solid fa-image"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-black text-gray-900 dark:text-white">Update Store Icon</h3>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Upload a photo or enter an image link</p>
+                    </div>
+                </div>
+                <button onclick="window.closeStoreIconModal && window.closeStoreIconModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="flex flex-col gap-3 text-xs">
+                <!-- LIVE PREVIEW BOX -->
+                <div class="flex flex-col items-center justify-center gap-1.5 bg-gray-50 dark:bg-black/30 p-3 rounded-2xl border border-gray-200 dark:border-gray-800">
+                    <div class="w-20 h-20 rounded-2xl bg-orange-500/10 border border-orange-500/30 overflow-hidden flex items-center justify-center shadow-inner relative">
+                        <img id="store-icon-modal-preview-img" src="" alt="Preview" class="hidden w-full h-full object-cover">
+                        <i id="store-icon-modal-preview-icon" class="fa-solid fa-shop text-orange-500 text-2xl"></i>
+                    </div>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-medium">Logo Preview</span>
+                </div>
+
+                <!-- FILE UPLOAD SELECTOR -->
+                <input type="file" id="store-icon-file-input" accept="image/*" class="hidden" onchange="window.handleStoreIconFileSelected && window.handleStoreIconFileSelected(event)">
+                
+                <!-- UPLOAD PHOTO BUTTON -->
+                <button type="button" onclick="document.getElementById('store-icon-file-input')?.click()" class="w-full bg-blue-50 hover:bg-blue-100 border border-blue-200 dark:bg-blue-600/20 dark:hover:bg-blue-600 dark:border-blue-500/40 text-blue-700 dark:text-blue-300 hover:text-blue-800 dark:hover:text-white py-2.5 px-3 rounded-xl font-bold transition active:scale-95 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Choose Photo / Take Picture
+                </button>
+
+                <div class="flex items-center gap-2 my-0.5">
+                    <div class="h-px bg-gray-200 dark:bg-gray-800 flex-1"></div>
+                    <span class="text-[10px] text-gray-400 font-bold uppercase">or image link</span>
+                    <div class="h-px bg-gray-200 dark:bg-gray-800 flex-1"></div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Image URL</label>
+                    <input type="url" id="store-icon-url-input" oninput="window.onStoreIconUrlInput && window.onStoreIconUrlInput(this.value)" placeholder="https://example.com/store-logo.jpg" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 outline-none text-blue-600 dark:text-blue-400 font-mono text-[11px] mt-1">
+                </div>
+
+                <div class="flex items-center gap-2 mt-1">
+                    <button type="button" onclick="window.clearStoreIcon && window.clearStoreIcon()" class="bg-gray-100 hover:bg-gray-200 text-red-600 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-red-400 px-3.5 py-3 rounded-xl font-bold text-xs transition active:scale-95" title="Remove Icon">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                    <button id="store-icon-save-btn" onclick="window.submitSaveStoreIcon && window.submitSaveStoreIcon()" class="flex-1 bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-floppy-disk"></i> SAVE LOGO
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. IN-APP ADD CATEGORY MODAL -->
+    <div id="store-category-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center text-sm font-bold">
+                        <i class="fa-solid fa-layer-group"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-black text-gray-900 dark:text-white">Add New Category</h3>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Organize your menu sections</p>
+                    </div>
+                </div>
+                <button onclick="window.closeAddCategoryModal && window.closeAddCategoryModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="flex flex-col gap-2.5 text-xs">
+                <div>
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Category Name *</label>
+                    <input type="text" id="cat-input-name" placeholder="e.g. Milk Tea, Rice Meals, Desserts" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold mt-1">
+                </div>
+
+                <button id="cat-save-btn" onclick="window.submitAddCategory && window.submitAddCategory()" class="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 mt-2">
+                    <i class="fa-solid fa-plus-circle"></i> CREATE CATEGORY
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. AUTOMATED OPERATING HOURS MODAL -->
+    <div id="store-hours-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-cardBg border border-purple-500/40 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center text-sm font-bold">
+                        <i class="fa-solid fa-clock"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-black text-gray-900 dark:text-white">Operating Hours Schedule</h3>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Automate daily store open/close</p>
+                    </div>
+                </div>
+                <button onclick="window.closeOperatingHoursModal && window.closeOperatingHoursModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="flex flex-col gap-3 text-xs">
+                <label class="bg-gray-50 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex justify-between items-center cursor-pointer select-none">
+                    <div>
+                        <div class="font-bold text-gray-900 dark:text-white text-xs flex items-center gap-1.5">
+                            <i class="fa-solid fa-toggle-on text-purple-500"></i> Enable Schedule
+                        </div>
+                        <div class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Automate store status daily</div>
+                    </div>
+                    <input type="checkbox" id="hours-auto-schedule-enabled" class="w-5 h-5 accent-purple-500 cursor-pointer">
+                </label>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Opening Time</label>
+                        <input type="time" id="hours-open-time" value="08:00" class="w-full bg-inputBg text-xs font-mono font-bold rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Closing Time</label>
+                        <input type="time" id="hours-close-time" value="21:00" class="w-full bg-inputBg text-xs font-mono font-bold rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1">
+                    </div>
+                </div>
+
+                <p class="text-[10px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                    Kusa nitong bubuksan ang tindahan sa <strong>Opening Time</strong> at isasara kapag sumapit na ang <strong>Closing Time</strong> upang maiwasan ang mga order habang sarado.
+                </p>
+
+                <button id="hours-save-btn" onclick="window.saveOperatingHoursSettings && window.saveOperatingHoursSettings()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 mt-1">
+                    <i class="fa-solid fa-floppy-disk"></i> SAVE SCHEDULE
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. DEDICATED STORE-TO-RIDER LIVE CHAT MODAL -->
+    <div id="store-rider-chat-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-md h-[85vh] max-h-[600px] rounded-3xl shadow-2xl flex flex-col relative overflow-hidden">
+            <!-- HEADER -->
+            <div class="p-3.5 bg-gray-50 dark:bg-darkBg/95 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-9 h-9 rounded-xl bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-500/30 flex items-center justify-center text-sm font-black shadow-xs shrink-0">
+                        <i class="fa-solid fa-motorcycle"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h3 id="store-chat-rider-name" class="font-bold text-xs text-gray-900 dark:text-white truncate">Rider Chat</h3>
+                        <p id="store-chat-order-id" class="text-[10px] text-gray-500 dark:text-gray-400 font-mono truncate">Order #ORD_000</p>
+                    </div>
+                </div>
+                <button onclick="window.closeStoreRiderChatModal && window.closeStoreRiderChatModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-2 text-sm transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- QUICK STATUS PRESETS ROW -->
+            <div class="bg-gray-100 dark:bg-darkBg/70 border-b border-gray-200 dark:border-gray-800 p-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+                <button onclick="window.sendStoreRiderQuickPreset('⏳ Preparing: We are now preparing your order.')" class="bg-white dark:bg-gray-800 hover:bg-amber-50 dark:hover:bg-amber-600/30 hover:border-amber-500/50 border border-gray-300 dark:border-gray-700 text-amber-700 dark:text-amber-300 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
+                    ⏳ Preparing
+                </button>
+                <button onclick="window.sendStoreRiderQuickPreset('✅ Ready for Pickup: Your order is packed and ready!')" class="bg-white dark:bg-gray-800 hover:bg-emerald-50 dark:hover:bg-emerald-600/30 hover:border-emerald-500/50 border border-gray-300 dark:border-gray-700 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
+                    ✅ Ready for Pickup
+                </button>
+                <button onclick="window.sendStoreRiderQuickPreset('⚠️ Item Replacement: An item is unavailable, please check with customer.')" class="bg-white dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-600/30 hover:border-red-500/50 border border-gray-300 dark:border-gray-700 text-red-700 dark:text-red-300 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
+                    ⚠️ Item Replacement
+                </button>
+            </div>
+
+            <!-- CHAT FEED -->
+            <div id="store-rider-chat-messages" class="flex-1 min-h-0 p-3.5 overflow-y-auto flex flex-col gap-2.5 bg-gray-50 dark:bg-black/40 text-xs">
+                <div class="text-center text-gray-400 dark:text-gray-500 italic py-8 text-xs">No messages yet. Send a quick update to the rider.</div>
+            </div>
+
+            <!-- INPUT BAR -->
+            <div class="p-3 bg-white dark:bg-darkBg/95 border-t border-gray-200 dark:border-gray-800 flex items-center gap-2 shrink-0">
+                <input type="text" id="store-rider-chat-input" placeholder="Type message for rider..." onkeydown="if(event.key === 'Enter') window.sendStoreRiderChatMessage && window.sendStoreRiderChatMessage()" class="flex-1 bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-orange-500">
+                <button onclick="window.sendStoreRiderChatMessage && window.sendStoreRiderChatMessage()" class="p-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl shadow-md transition active:scale-95 text-xs font-bold shrink-0">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</section>

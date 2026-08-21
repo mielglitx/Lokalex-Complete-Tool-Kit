@@ -1,87 +1,84 @@
 // src/ui/notifications.js
-let audioUnlocked = false;
+import { escapeHtml } from '../utils/helpers.js';
+
+let audioCtxInstance = null;
 
 export function unlockAudioContext() {
-    if (audioUnlocked) return;
     try {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
-        if (AudioContext) {
-            const ctx = new AudioContext();
-            ctx.resume().then(() => {
-                audioUnlocked = true;
-            });
+        if (!audioCtxInstance && AudioContext) {
+            audioCtxInstance = new AudioContext();
+        }
+        if (audioCtxInstance && audioCtxInstance.state === 'suspended') {
+            audioCtxInstance.resume();
         }
     } catch(e) {}
 }
 
-export function showToast(message, duration = 3000) {
-    let container = document.getElementById('toast-container');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'toast-container';
-        // z-[9999999] ensures toasts are always visible on top of all modals
-        container.className = 'fixed bottom-5 left-1/2 -translate-x-1/2 z-[9999999] flex flex-col gap-2 items-center pointer-events-none px-4 w-full max-w-sm';
-        document.body.appendChild(container);
+export function showToast(message, duration = 2500) {
+    let toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 z-[99999] flex flex-col items-center gap-1.5 pointer-events-none px-3 w-full max-w-xs';
+        document.body.appendChild(toastContainer);
     }
 
     const toast = document.createElement('div');
-    toast.className = 'bg-gray-900/95 text-white border border-gray-700 text-xs font-bold px-4 py-3 rounded-2xl shadow-2xl backdrop-blur-md transition-all duration-300 pointer-events-auto transform translate-y-2 opacity-0 flex items-center gap-2 text-center';
-    toast.innerHTML = `<span>${message}</span>`;
+    toast.className = 'bg-gray-900/95 dark:bg-black/90 text-white text-[10px] font-bold px-3 py-1.5 rounded-full border border-gray-700/80 shadow-lg backdrop-blur-md transition-all duration-200 transform translate-y-2 opacity-0 pointer-events-auto text-center truncate max-w-full';
+    toast.innerText = message;
 
-    container.appendChild(toast);
+    toastContainer.appendChild(toast);
 
-    // Animate in
     requestAnimationFrame(() => {
         toast.classList.remove('translate-y-2', 'opacity-0');
         toast.classList.add('translate-y-0', 'opacity-100');
     });
 
-    // Remove after duration
     setTimeout(() => {
         toast.classList.remove('translate-y-0', 'opacity-100');
         toast.classList.add('translate-y-2', 'opacity-0');
-        setTimeout(() => {
-            if (toast.parentNode) toast.parentNode.removeChild(toast);
-        }, 300);
+        setTimeout(() => toast.remove(), 200);
     }, duration);
 }
 
-export function showSideNotification(title, message, iconClass = "fa-bell", textCol = "text-blue-400", borderCol = "border-blue-500") {
-    let sideContainer = document.getElementById('side-notification-container');
-    if (!sideContainer) {
-        sideContainer = document.createElement('div');
-        sideContainer.id = 'side-notification-container';
-        // z-[9999999] ensures notifications appear above modals
-        sideContainer.className = 'fixed top-4 right-4 z-[9999999] flex flex-col gap-2 pointer-events-none max-w-xs w-full px-2';
-        document.body.appendChild(sideContainer);
+// ULTRA-COMPACT MICRO SIDE NOTIFICATION (90% SMALLER FOOTPRINT)
+export function showSideNotification(title, message, icon = 'fa-bell', textColor = 'text-blue-400', borderColor = 'border-blue-500', duration = 3000) {
+    let container = document.getElementById('side-notification-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'side-notification-container';
+        container.className = 'fixed top-3 right-3 z-[99999] flex flex-col gap-1 pointer-events-none max-w-[220px]';
+        document.body.appendChild(container);
     }
 
-    const card = document.createElement('div');
-    card.className = `bg-gray-900/95 border ${borderCol} p-3 rounded-2xl shadow-2xl backdrop-blur-md flex items-start gap-2.5 text-xs pointer-events-auto transition-all duration-300 transform translate-x-4 opacity-0`;
-    card.innerHTML = `
-        <div class="mt-0.5 text-sm ${textCol} shrink-0">
-            <i class="fa-solid ${iconClass}"></i>
+    const notif = document.createElement('div');
+    notif.className = `bg-gray-950/95 text-white border ${borderColor} rounded-xl px-2.5 py-1 shadow-lg backdrop-blur-md flex items-center gap-2 pointer-events-auto transition-all duration-200 transform translate-x-4 opacity-0`;
+
+    const cleanIcon = icon.replace(/^fa-/, '');
+
+    notif.innerHTML = `
+        <div class="${textColor} text-xs shrink-0 flex items-center justify-center">
+            <i class="fa-solid fa-${cleanIcon}"></i>
         </div>
-        <div class="flex-1 flex flex-col">
-            <span class="font-black ${textCol} text-[11px] uppercase tracking-wider">${title}</span>
-            <span class="text-gray-300 text-[11px] mt-0.5 leading-snug">${message}</span>
+        <div class="min-w-0 flex-1 leading-tight">
+            <div class="font-black text-[9px] ${textColor} uppercase tracking-wider truncate">${escapeHtml(title)}</div>
+            <div class="text-[8.5px] text-gray-300 font-medium truncate">${escapeHtml(message)}</div>
         </div>
     `;
 
-    sideContainer.appendChild(card);
+    container.appendChild(notif);
 
     requestAnimationFrame(() => {
-        card.classList.remove('translate-x-4', 'opacity-0');
-        card.classList.add('translate-x-0', 'opacity-100');
+        notif.classList.remove('translate-x-4', 'opacity-0');
+        notif.classList.add('translate-x-0', 'opacity-100');
     });
 
     setTimeout(() => {
-        card.classList.remove('translate-x-0', 'opacity-100');
-        card.classList.add('translate-x-4', 'opacity-0');
-        setTimeout(() => {
-            if (card.parentNode) card.parentNode.removeChild(card);
-        }, 300);
-    }, 4000);
+        notif.classList.remove('translate-x-0', 'opacity-100');
+        notif.classList.add('translate-x-4', 'opacity-0');
+        setTimeout(() => notif.remove(), 200);
+    }, duration);
 }
 
 if (typeof window !== 'undefined') {

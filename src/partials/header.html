@@ -1,13 +1,30 @@
-<header id="app-header" class="hidden bg-cardBg px-4 py-3.5 flex items-center justify-between shadow-md sticky top-0 z-40 border-b border-gray-800/80">
-    <button id="back-btn" onclick="window.goBack && window.goBack()" class="hidden text-blue-400 font-semibold flex items-center gap-1.5 transition active:scale-95 text-xs">
+<!-- src/partials/header.html -->
+<header id="app-header" class="hidden bg-cardBg px-4 py-3 flex items-center justify-between sticky top-0 z-40 border-b border-gray-200 dark:border-gray-800/80">
+    <button id="back-btn" onclick="window.goBack && window.goBack()" class="hidden text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1.5 transition active:scale-95 text-xs">
         <i class="fa-solid fa-arrow-left"></i> Back
     </button>
-    <h1 id="header-title" class="text-base font-bold tracking-wide flex items-center gap-1.5">
+    <div id="header-spacer" class="w-1"></div>
+
+    <h1 id="header-title" class="text-base font-bold tracking-wide flex items-center gap-1.5 text-gray-900 dark:text-white">
         L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub
     </h1>
     
     <div class="flex items-center gap-2">
-        <div id="network-status-pill" class="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300">
+        <!-- 3-WAY THEME CONTROLLER TOGGLE (LIGHT / SYSTEM / DARK) -->
+        <div id="theme-switch-group" class="flex items-center bg-gray-100 dark:bg-black/40 border border-gray-300 dark:border-gray-700/60 p-0.5 rounded-xl text-xs shrink-0">
+            <button type="button" onclick="window.setTheme && window.setTheme('light')" id="theme-btn-light" title="Light Theme" class="w-6 h-6 rounded-lg flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-amber-500 transition active:scale-90">
+                <i class="fa-solid fa-sun text-[10px]"></i>
+            </button>
+            <button type="button" onclick="window.setTheme && window.setTheme('system')" id="theme-btn-system" title="System Auto Theme (Default)" class="w-6 h-6 rounded-lg flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-blue-500 transition active:scale-90">
+                <i class="fa-solid fa-desktop text-[10px]"></i>
+            </button>
+            <button type="button" onclick="window.setTheme && window.setTheme('dark')" id="theme-btn-dark" title="Dark Theme" class="w-6 h-6 rounded-lg flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-indigo-400 transition active:scale-90">
+                <i class="fa-solid fa-moon text-[10px]"></i>
+            </button>
+        </div>
+
+        <!-- NETWORK STATUS PILL -->
+        <div id="network-status-pill" class="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full transition-all duration-300 shrink-0">
             <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span id="network-status-text">ONLINE</span>
         </div>

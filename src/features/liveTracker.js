@@ -11,9 +11,13 @@ let customerGpsWatchId = null;
 let liveMapObj = null;
 let riderMarker = null;
 let customerMarker = null;
+let liveDirectionsService = null;
+let liveDirectionsRenderer = null;
+let lastRouteCalcTime = 0;
 
 let lastPushTime = 0;
 const PUSH_TICK_INTERVAL_MS = 15000; // 15 seconds throttled tick for both Rider & Customer
+const ROUTE_THROTTLE_MS = 10000;     // 10 seconds throttle for Directions Service API
 
 // --- AUTOMATED BACKGROUND LIVE GPS INITIATOR ---
 export async function autoStartLiveGpsSession(custName = "Customer") {
@@ -79,6 +83,7 @@ export function startRiderGpsTracking(sessionKey) {
             name: appState.riderName || "Rider",
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
+            speed: pos.coords.speed || 0,
             updatedAt: now
         });
     }, () => {}, { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
@@ -92,6 +97,7 @@ export function startRiderGpsTracking(sessionKey) {
                     name: appState.riderName || "Rider",
                     lat: pos.coords.latitude,
                     lng: pos.coords.longitude,
+                    speed: pos.coords.speed || 0,
                     updatedAt: now
                 });
             }
@@ -142,8 +148,11 @@ export function showRiderLiveMap() {
     if (!activeSessionKey) return showToast("No active session.");
     closeLiveGpsManageModal();
 
-    document.getElementById('livegps-rider-close-btn').classList.remove('hidden');
-    document.getElementById('livegps-customer-controls').classList.add('hidden');
+    const riderBtn = document.getElementById('livegps-rider-close-btn');
+    const custControls = document.getElementById('livegps-customer-controls');
+
+    if (riderBtn) riderBtn.classList.remove('hidden');
+    if (custControls) custControls.classList.add('hidden');
 
     startMutualMapSync(activeSessionKey);
 }
@@ -160,8 +169,11 @@ export function checkAndInitLiveGpsPortal() {
     const sessionKey = urlParams.get('livegps');
     if (!sessionKey) return;
 
-    document.getElementById('livegps-rider-close-btn').classList.add('hidden');
-    document.getElementById('livegps-customer-controls').classList.remove('hidden');
+    const riderBtn = document.getElementById('livegps-rider-close-btn');
+    const custControls = document.getElementById('livegps-customer-controls');
+
+    if (riderBtn) riderBtn.classList.add('hidden');
+    if (custControls) custControls.classList.remove('hidden');
 
     startMutualMapSync(sessionKey);
 }
@@ -170,19 +182,19 @@ export function checkAndInitLiveGpsPortal() {
 function startMutualMapSync(sessionKey) {
     const portal = document.getElementById('livegps-portal');
     const expiredPortal = document.getElementById('livegps-expired-portal');
-    if (!portal || !expiredPortal) return;
+    if (!portal) return;
 
     db.ref('liveSessions/' + sessionKey).on('value', (snapshot) => {
         const data = snapshot.val();
 
         if (!data || data.status === 'ended') {
             portal.classList.add('hidden');
-            expiredPortal.classList.remove('hidden');
+            if (expiredPortal) expiredPortal.classList.remove('hidden');
             if (customerGpsWatchId) navigator.geolocation.clearWatch(customerGpsWatchId);
             return;
         }
 
-        expiredPortal.classList.add('hidden');
+        if (expiredPortal) expiredPortal.classList.add('hidden');
         portal.classList.remove('hidden');
 
         renderMutualLiveMap(data.users);
@@ -200,16 +212,20 @@ export function startMutualCustomerLocationSharing() {
     const mapBox = document.getElementById('livegps-map-container-box');
     const step2Pointer = document.getElementById('livegps-step2-pointer');
 
-    btn.disabled = true;
-    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Kumukuha ng GPS...`;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Kumukuha ng GPS...`;
+    }
 
     if (!navigator.geolocation) {
-        statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
-        statusEl.innerText = "❌ Hindi suportado ang GPS sa browser na ito.";
+        if (statusEl) {
+            statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
+            statusEl.innerText = "❌ Hindi suportado ang GPS sa browser na ito.";
+        }
         return;
     }
 
-    mapBox.classList.remove('hidden');
+    if (mapBox) mapBox.classList.remove('hidden');
     if (step2Pointer) step2Pointer.classList.add('hidden');
 
     customerGpsWatchId = navigator.geolocation.watchPosition(
@@ -225,28 +241,37 @@ export function startMutualCustomerLocationSharing() {
                 });
             }
 
-            statusEl.className = "text-xs font-bold text-indigo-400 bg-indigo-500/10 p-2.5 rounded-xl border border-indigo-500/20";
-            statusEl.innerHTML = "📡 <strong>Live Tracking Active</strong><br><span class=\"text-gray-300 font-normal\">Updating map every 15 seconds...</span>";
-            btn.innerHTML = `<i class="fa-solid fa-check-double"></i> TRACKING ACTIVE`;
+            if (statusEl) {
+                statusEl.className = "text-xs font-bold text-indigo-400 bg-indigo-500/10 p-2.5 rounded-xl border border-indigo-500/20";
+                statusEl.innerHTML = "📡 <strong>Live Tracking Active</strong><br><span class=\"text-gray-300 font-normal\">Updating map every 15 seconds...</span>";
+            }
+            if (btn) btn.innerHTML = `<i class="fa-solid fa-check-double"></i> TRACKING ACTIVE`;
         },
         (err) => {
-            statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
-            statusEl.innerText = "⚠️ Paki-allow ang GPS Location permission sa iyong browser.";
-            btn.disabled = false;
-            btn.innerHTML = `<i class="fa-solid fa-satellite-dish"></i> RETRY JOIN LIVE TRACKING`;
+            if (statusEl) {
+                statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
+                statusEl.innerText = "⚠️ Paki-allow ang GPS Location permission sa iyong browser.";
+            }
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-satellite-dish"></i> RETRY JOIN LIVE TRACKING`;
+            }
         },
         { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
     );
 }
 
-// --- RENDER MAP & ICONS ---
+// --- RENDER MAP, ROUTE POLYLINE & LIVE ETA ---
 function renderMutualLiveMap(usersData) {
     if (typeof google === 'undefined' || !google.maps) return;
 
     const container = document.getElementById('livegps-map-container');
     const mapBox = document.getElementById('livegps-map-container-box');
+    const etaHud = document.getElementById('livegps-eta-hud');
+    const etaText = document.getElementById('livegps-eta-text');
+    const distanceText = document.getElementById('livegps-distance-text');
     
-    if (!container || (mapBox && mapBox.classList.contains('hidden') && document.getElementById('livegps-customer-controls').classList.contains('hidden') === false)) return;
+    if (!container || (mapBox && mapBox.classList.contains('hidden') && document.getElementById('livegps-customer-controls')?.classList.contains('hidden') === false)) return;
 
     const riderData = usersData && usersData.rider;
     const custData = usersData && usersData.customer;
@@ -258,7 +283,24 @@ function renderMutualLiveMap(usersData) {
             center: defaultCenter,
             zoom: 16,
             disableDefaultUI: false,
-            zoomControl: true
+            zoomControl: true,
+            mapTypeId: 'roadmap'
+        });
+    }
+
+    if (!liveDirectionsService) {
+        liveDirectionsService = new google.maps.DirectionsService();
+    }
+
+    if (!liveDirectionsRenderer) {
+        liveDirectionsRenderer = new google.maps.DirectionsRenderer({
+            map: liveMapObj,
+            suppressMarkers: true,
+            polylineOptions: {
+                strokeColor: '#3B82F6',
+                strokeWeight: 5,
+                strokeOpacity: 0.85
+            }
         });
     }
 
@@ -295,11 +337,37 @@ function renderMutualLiveMap(usersData) {
         }
     }
 
-    if (riderMarker && customerMarker) {
-        const bounds = new google.maps.LatLngBounds();
-        bounds.extend(riderMarker.getPosition());
-        bounds.extend(customerMarker.getPosition());
-        liveMapObj.fitBounds(bounds);
+    // Calculate Real-time Polylines & Live ETA between Rider and Customer
+    if (riderData && riderData.lat && riderData.lng && custData && custData.lat && custData.lng) {
+        const riderPos = { lat: riderData.lat, lng: riderData.lng };
+        const custPos = { lat: custData.lat, lng: custData.lng };
+
+        const now = Date.now();
+        if (now - lastRouteCalcTime >= ROUTE_THROTTLE_MS || lastRouteCalcTime === 0) {
+            lastRouteCalcTime = now;
+
+            liveDirectionsService.route({
+                origin: riderPos,
+                destination: custPos,
+                travelMode: google.maps.TravelMode.DRIVING
+            }, (result, status) => {
+                if (status === google.maps.DirectionsStatus.OK && result.routes[0]?.legs[0]) {
+                    liveDirectionsRenderer.setDirections(result);
+                    const leg = result.routes[0].legs[0];
+
+                    if (etaHud) etaHud.classList.remove('hidden');
+                    if (etaText) etaText.innerText = `${leg.duration.text} ETA`;
+                    if (distanceText) distanceText.innerText = `${leg.distance.text} away`;
+                }
+            });
+        }
+    } else {
+        if (etaHud) etaHud.classList.add('hidden');
+        if (riderMarker && !customerMarker) {
+            liveMapObj.setCenter(riderMarker.getPosition());
+        } else if (customerMarker && !riderMarker) {
+            liveMapObj.setCenter(customerMarker.getPosition());
+        }
     }
 }
 
@@ -311,7 +379,7 @@ export function promptEndLiveGpsSession() {
 
 export async function endLiveGpsSession() {
     let currentKey = activeSessionKey || localStorage.getItem('lokalex_active_live_session');
-    if (currentKey) {
+    if (currentKey && db) {
         await db.ref('liveSessions/' + currentKey).update({
             status: "ended",
             endedAt: Date.now()
@@ -335,6 +403,7 @@ if (typeof window !== 'undefined') {
     window.copyLiveGpsLink = copyLiveGpsLink;
     window.showRiderLiveMap = showRiderLiveMap;
     window.closeRiderLiveMap = closeRiderLiveMap;
+    window.checkAndInitLiveGpsPortal = checkAndInitLiveGpsPortal;
     window.startMutualCustomerLocationSharing = startMutualCustomerLocationSharing;
     window.promptEndLiveGpsSession = promptEndLiveGpsSession;
     window.endLiveGpsSession = endLiveGpsSession;

@@ -1,3 +1,4 @@
+<!-- src/partials/views/login.html -->
 <section id="view-login" class="flex-1 flex flex-col justify-center p-6 gap-4">
     <div class="text-center mb-1">
         <i class="fa-solid fa-bag-shopping text-5xl text-blue-500 mb-3"></i>
@@ -5,7 +6,7 @@
         <p class="text-xs text-gray-400 mt-1">Delivery & Live Tracking Portal</p>
     </div>
 
-    <!-- CUSTOMER AUTH CONTAINER -->
+    <!-- 1. CUSTOMER AUTH CONTAINER -->
     <div id="portal-form-customer" class="bg-cardBg p-6 rounded-3xl border border-gray-800 shadow-xl flex flex-col gap-4 text-center">
         <!-- TAB SWITCHER -->
         <div class="flex bg-darkBg p-1 rounded-2xl border border-gray-800 text-xs font-bold mb-1">
@@ -128,27 +129,90 @@
 
         <div id="recaptcha-container" class="mx-auto"></div>
 
-        <div class="pt-2 border-t border-gray-800/80 mt-2">
-            <button onclick="window.switchLoginPortalTab && window.switchLoginPortalTab('rider')" class="text-[11px] text-gray-500 hover:text-gray-300 transition flex items-center justify-center gap-1.5 mx-auto">
-                <i class="fa-solid fa-id-badge text-gray-500"></i> Rider Portal Access
+        <!-- PORTAL SWITCHERS -->
+        <div class="pt-2.5 border-t border-gray-800/80 mt-1 flex justify-center items-center gap-4 text-[11px]">
+            <button onclick="window.switchLoginPortalTab && window.switchLoginPortalTab('rider')" class="text-gray-400 hover:text-white transition flex items-center gap-1.5">
+                <i class="fa-solid fa-motorcycle text-blue-400"></i> Rider Portal
+            </button>
+            <span class="text-gray-600">|</span>
+            <button onclick="window.switchLoginPortalTab && window.switchLoginPortalTab('merchant')" class="text-gray-400 hover:text-white transition flex items-center gap-1.5">
+                <i class="fa-solid fa-shop text-orange-400"></i> Store Merchant Hub
             </button>
         </div>
     </div>
 
-    <!-- RIDER LOGIN CONTAINER -->
+    <!-- 2. RIDER LOGIN CONTAINER -->
     <div id="portal-form-rider" class="hidden bg-cardBg p-6 rounded-3xl border border-gray-800 shadow-xl flex flex-col gap-4">
         <div class="flex items-center justify-between border-b border-gray-800 pb-2">
             <div class="text-xs text-gray-400 font-bold uppercase tracking-wider">Rider Operations Portal</div>
             <button onclick="window.switchLoginPortalTab && window.switchLoginPortalTab('customer')" class="text-[10px] text-blue-400 hover:underline font-bold">
-                ← Customer Access
+                ← Back
             </button>
         </div>
         <div class="relative mt-1">
             <i class="fa-solid fa-key absolute left-3 top-3.5 text-gray-400"></i>
-            <input type="text" id="login-id" name="rider_login_id_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Enter Rider Login ID" class="w-full bg-inputBg text-sm rounded-xl pl-10 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition">
+            <input type="text" id="login-id" name="rider_login_id_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Enter Rider Login ID" class="w-full bg-inputBg text-sm rounded-xl pl-10 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition font-mono">
         </div>
         <button id="login-btn" onclick="window.processLogin && window.processLogin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95">
             LOGIN & MARK AVAILABLE
         </button>
+
+        <div class="pt-2 border-t border-gray-800/80 mt-1 flex justify-center items-center gap-4 text-[11px]">
+            <button onclick="window.switchLoginPortalTab && window.switchLoginPortalTab('customer')" class="text-gray-400 hover:text-white transition flex items-center gap-1">
+                <i class="fa-solid fa-user text-emerald-400"></i> Customer Login
+            </button>
+            <span class="text-gray-600">|</span>
+            <button onclick="window.switchLoginPortalTab && window.switchLoginPortalTab('merchant')" class="text-gray-400 hover:text-white transition flex items-center gap-1">
+                <i class="fa-solid fa-shop text-orange-400"></i> Store Merchant
+            </button>
+        </div>
+    </div>
+
+    <!-- 3. STORE MERCHANT LOGIN CONTAINER -->
+    <div id="portal-form-merchant" class="hidden bg-cardBg p-6 rounded-3xl border border-gray-800 shadow-xl flex flex-col gap-4 text-center">
+        <div class="flex items-center justify-between border-b border-gray-800 pb-2">
+            <div class="text-xs text-orange-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <i class="fa-solid fa-shop"></i> Store Merchant Hub
+            </div>
+            <button onclick="window.switchLoginPortalTab && window.switchLoginPortalTab('customer')" class="text-[10px] text-blue-400 hover:underline font-bold">
+                ← Back
+            </button>
+        </div>
+        <p class="text-xs text-gray-300 leading-relaxed">I-enter ang iyong Store Username at Password upang pamahalaan ang iyong tindahan at mga paninda.</p>
+
+        <div class="flex flex-col gap-2.5 text-left">
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Store Username</label>
+                <div class="relative mt-1">
+                    <i class="fa-solid fa-store absolute left-3 top-3.5 text-gray-400"></i>
+                    <input type="text" id="merch-login-user" name="merch_user_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Username (e.g. store_name)" class="w-full bg-inputBg text-xs rounded-xl pl-9 pr-3 py-3 border border-gray-700 outline-none text-white font-bold font-mono">
+                </div>
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Password</label>
+                <div class="relative mt-1">
+                    <i class="fa-solid fa-lock absolute left-3 top-3.5 text-gray-400"></i>
+                    <input type="password" id="merch-login-pass" name="merch_pass_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Password" class="w-full bg-inputBg text-xs rounded-xl pl-9 pr-10 py-3 border border-gray-700 outline-none text-white font-bold">
+                    <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('merch-login-pass', 'merch-pass-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-white transition">
+                        <i id="merch-pass-eye" class="fa-solid fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+
+            <button id="merch-login-submit-btn" onclick="window.processMerchantLogin && window.processMerchantLogin()" class="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs mt-1">
+                <i class="fa-solid fa-right-to-bracket"></i> STORE LOGIN
+            </button>
+        </div>
+
+        <div class="pt-2 border-t border-gray-800/80 mt-1 flex justify-center items-center gap-4 text-[11px]">
+            <button onclick="window.switchLoginPortalTab && window.switchLoginPortalTab('customer')" class="text-gray-400 hover:text-white transition flex items-center gap-1">
+                <i class="fa-solid fa-user text-emerald-400"></i> Customer
+            </button>
+            <span class="text-gray-600">|</span>
+            <button onclick="window.switchLoginPortalTab && window.switchLoginPortalTab('rider')" class="text-gray-400 hover:text-white transition flex items-center gap-1">
+                <i class="fa-solid fa-motorcycle text-blue-400"></i> Rider
+            </button>
+        </div>
     </div>
 </section>

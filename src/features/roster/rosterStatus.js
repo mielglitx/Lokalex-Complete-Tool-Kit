@@ -4,7 +4,7 @@ import { appState, globalState, multiCarts, activeCartSlot } from '../../store/s
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { openSlideDeleteModal, closeCateringModal } from '../../ui/modals.js';
 import { calibrateGPS } from '../auth/index.js';
-import { getLocalTodayStr, escapeHtml } from '../../utils/helpers.js';
+import { getLocalTodayStr, escapeHtml, isSameDate } from '../../utils/helpers.js';
 import { switchView } from '../../ui/router.js';
 import { autoStartLiveGpsSession, endLiveGpsSession } from '../liveTracker.js';
 import { populateCateringCustomerDropdown } from '../chat/index.js';
@@ -17,7 +17,8 @@ import {
     playLineAlarm,
     getUserType,
     saveRosterCache,
-    setLineAlarmConfirmed
+    setLineAlarmConfirmed,
+    archiveRiderCateringIfNeeded
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 import { requestClaimCustomer } from './rosterSwap.js';
@@ -307,73 +308,19 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
     const tName = targetName || appState.riderName;
     const rosterMembers = globalState.rosterMembers || [];
 
-    let completedHistory = [];
     let recordLogin = false;
-
     const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === tId.toString());
 
-    if (status === 'Available' && targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
-        const custs = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-        if (db && custs.length > 0) {
-            db.ref('customerChats').once('value', (snapshot) => {
-                const chats = snapshot.val();
-                if (chats) {
-                    Object.keys(chats).forEach(custId => {
-                        const chatMeta = chats[custId]?.metadata || chats[custId] || {};
-                        const chatCustName = (chatMeta.customerName || chatMeta.name || "").trim().toLowerCase();
-                        
-                        if (chatCustName && custs.some(c => c.toLowerCase() === chatCustName)) {
-                            db.ref(`customerChats/${custId}/metadata`).update({
-                                folder: 'done',
-                                cateredByRiderId: null,
-                                cateredByRiderName: null,
-                                cateredBy: null,
-                                lastUpdated: Date.now()
-                            });
-                        }
-                    });
-                }
-            });
-        }
+    // Automatically archive catering sessions into cateredHistory & release chat lock when changing status
+    if (status !== 'Catering' && targetRecord) {
+        await archiveRiderCateringIfNeeded(targetRecord);
     }
 
-    if (status !== 'Catering' && targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
-        const custs = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-        const times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
-        const custCount = custs.length || 1;
-        const completedTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-        for (let i = 0; i < custs.length; i++) {
-            const cName = custs[i];
-            const cleanCustKey = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
-            const sTime = times[i] || times[0] || 'N/A';
-            const splitDuration = calculateSplitDuration(sTime, completedTimeStr, custCount);
-
-            const custFeeObj = (targetRecord.customerFees && cleanCustKey && targetRecord.customerFees[cleanCustKey]) 
-                ? targetRecord.customerFees[cleanCustKey] 
-                : null;
-
-            const finalFees = custFeeObj ? custFeeObj.totalFees : (targetRecord.lastReceiptTotalFees || 0);
-            const finalFeeDetails = custFeeObj ? custFeeObj.fees : (targetRecord.lastReceiptFees || null);
-
-            const hItem = {
-                riderName: tName,
-                telegramId: tId.toString(),
-                customerName: cName,
-                startTime: sTime,
-                completedTime: completedTimeStr,
-                completedDate: getLocalTodayStr(),
-                customerCount: custCount,
-                duration: splitDuration,
-                totalFees: finalFees,
-                fees: finalFeeDetails
-            };
-            completedHistory.push(hItem);
-            if (db) db.ref('cateredHistory').push(hItem);
-        }
+    // ONLY record a new login if the rider is transitioning from 'End' or offline to 'Available' (Shift Start)
+    const isStartingShift = !targetRecord || !targetRecord.status || targetRecord.status === 'End';
+    if (status === 'Available' && isStartingShift) {
+        recordLogin = true;
     }
-
-    if (status === 'Available') recordLogin = true;
 
     let locationLink = "";
     if (appState.lat && appState.lon) {
@@ -391,7 +338,7 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
         newQueueTime = maxTime + 1000;
     }
 
-    await updateRosterStatusData(status, "", "", newQueueTime, tId, tName, completedHistory, recordLogin, locationLink);
+    await updateRosterStatusData(status, "", "", newQueueTime, tId, tName, [], recordLogin, locationLink);
 }
 
 export async function updateRosterStatusData(status, customerName, startTime, queueTime = 0, specificId = null, specificName = null, completedHistory = [], recordLogin = false, locationLink = "") {
@@ -436,21 +383,33 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     }
 
     if (recordLogin && db) {
+        const todayStr = getLocalTodayStr();
+        let finalLoginTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        try {
+            const loginSnap = await db.ref('logins/' + tId).once('value');
+            const existingLogin = loginSnap.val();
+            // Preserve the original login time if already logged in today without an active clockOutTime
+            if (existingLogin && isSameDate(existingLogin.date, todayStr) && existingLogin.loginTime && !existingLogin.clockOutTime) {
+                finalLoginTime = existingLogin.loginTime;
+            }
+        } catch(e) {}
+
         const loginEntry = {
             riderName: tName,
-            loginTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            loginTime: finalLoginTime,
             clockOutTime: "",
-            date: getLocalTodayStr(),
+            date: todayStr,
             location: locationLink
         };
-        db.ref('logins/' + tId).set(loginEntry);
+        await db.ref('logins/' + tId).set(loginEntry);
     }
 }
 
 export async function clockOutRider() {
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     if (db && appState.telegramId) {
-        db.ref('logins/' + appState.telegramId).update({ clockOutTime: timeStr });
-        db.ref('roster/' + appState.telegramId).update({ lastActiveTimestamp: Date.now() });
+        await db.ref('logins/' + appState.telegramId).update({ clockOutTime: timeStr });
+        await db.ref('roster/' + appState.telegramId).update({ lastActiveTimestamp: Date.now() });
     }
 }

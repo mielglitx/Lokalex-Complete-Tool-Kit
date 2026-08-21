@@ -5,6 +5,7 @@ export const appState = {
     userType: localStorage.getItem('userType') || "",
     gcashNo: localStorage.getItem('lokalex_gcash_no') || "",
     gcashName: localStorage.getItem('lokalex_gcash_name') || "",
+    themePreference: localStorage.getItem('lokalex_theme_preference') || "system",
     lat: 0, lon: 0
 };
 

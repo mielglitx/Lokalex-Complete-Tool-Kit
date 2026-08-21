@@ -8,12 +8,12 @@ import {
     getElapsedCateringTime, 
     checkFirstInLineAlarm,
     calculateSplitDuration,
-    isAdmin 
+    isAdmin,
+    archiveRiderCateringIfNeeded 
 } from './rosterUtils.js';
 import { autoStartLiveGpsSession, endLiveGpsSession } from '../liveTracker.js';
 import { openMapPicker } from '../maps.js';
 
-// FIND RIDERS MAP WIDGET LAUNCHER
 export function openFindRidersMap() {
     openMapPicker('roster');
 }
@@ -293,13 +293,86 @@ export function loadGlobalLoginList() {
     }).join('');
 }
 
+export async function checkAndTriggerAutoEndShift() {
+    if (!db) return;
+    try {
+        const snap = await db.ref('settings/autoEndShift').once('value');
+        const config = snap.val();
+        if (!config || !config.enabled || !config.time) return;
+
+        const todayStr = getLocalTodayStr();
+        if (config.lastTriggeredDate === todayStr) return;
+
+        const now = new Date();
+        const [targetHour, targetMinute] = config.time.split(':').map(Number);
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+
+        const currentTotalMins = currentHour * 60 + currentMinute;
+        const targetTotalMins = targetHour * 60 + targetMinute;
+
+        if (currentTotalMins >= targetTotalMins) {
+            const updateRes = await db.ref('settings/autoEndShift').transaction((current) => {
+                if (!current || !current.enabled || current.lastTriggeredDate === todayStr) {
+                    return;
+                }
+                current.lastTriggeredDate = todayStr;
+                return current;
+            });
+
+            if (updateRes.committed) {
+                await executeAutoEndShift();
+            }
+        }
+    } catch(e) {
+        console.error("Auto end shift evaluation error:", e);
+    }
+}
+
+export async function executeAutoEndShift() {
+    showSideNotification("AUTO END SHIFT", "System auto end shift triggered for all active riders", "fa-power-off", "text-red-400", "border-red-500");
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (db) {
+        const rosterSnap = await db.ref('roster').once('value');
+        const roster = rosterSnap.val() || {};
+
+        const updates = {};
+        const loginUpdates = {};
+
+        for (const riderId of Object.keys(roster)) {
+            const m = roster[riderId];
+            if (m && m.status !== 'End') {
+                await archiveRiderCateringIfNeeded(m);
+                updates[`roster/${riderId}/status`] = 'End';
+                updates[`roster/${riderId}/customerName`] = '';
+                updates[`roster/${riderId}/startTime`] = '';
+                updates[`roster/${riderId}/pendingPenaltyMinutes`] = 0;
+                updates[`roster/${riderId}/cooldownUntil`] = 0;
+                updates[`roster/${riderId}/lastUpdated`] = timeStr;
+                updates[`roster/${riderId}/lastActiveTimestamp`] = Date.now();
+
+                loginUpdates[`logins/${riderId}/clockOutTime`] = timeStr;
+            }
+        }
+
+        if (Object.keys(updates).length > 0) {
+            await db.ref().update({ ...updates, ...loginUpdates });
+        }
+    }
+
+    try {
+        await fetch(API_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({ type: "roster", action: "auto_end_shift", time: timeStr })
+        });
+    } catch(e) {}
+}
+
 if (typeof window !== 'undefined') {
     window.openFindRidersMap = openFindRidersMap;
     window.updateRosterUI = updateRosterUI;
     window.loadGlobalCateredList = loadGlobalCateredList;
     window.loadGlobalLoginList = loadGlobalLoginList;
-
-    window.addEventListener('rosterUpdated', updateRosterUI);
-    window.addEventListener('cateredUpdated', loadGlobalCateredList);
-    window.addEventListener('loginsUpdated', loadGlobalLoginList);
 }

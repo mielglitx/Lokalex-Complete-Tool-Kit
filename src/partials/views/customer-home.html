@@ -1,65 +1,366 @@
-<section id="view-customer-home" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
-    <!-- CUSTOMER PROFILE HEADER WITH EDIT PROFILE BUTTON -->
-    <div class="bg-cardBg border border-blue-500/40 p-4 rounded-3xl shadow-xl flex items-center justify-between gap-3 shrink-0">
-        <div class="flex items-center gap-3 min-w-0">
-            <img id="cust-landing-avatar" src="https://ui-avatars.com/api/?name=Customer&background=1877F2&color=fff" class="w-12 h-12 rounded-full object-cover border-2 border-blue-500 shadow">
-            <div class="min-w-0">
-                <div id="cust-landing-name" class="font-bold text-sm text-white truncate">Customer Account</div>
-                <div id="cust-landing-email" class="text-[11px] text-gray-400 truncate">Account Active</div>
+<!-- src/partials/views/customer-home.html -->
+<section id="view-customer-home" class="hidden flex-1 flex flex-col p-3 gap-2 pb-4 relative h-[calc(100vh-65px)] max-h-screen overflow-hidden">
+    <!-- COMPACT CUSTOMER PROFILE HEADER -->
+    <div class="bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-2xl flex items-center justify-between gap-2.5 shrink-0">
+        <div class="flex items-center gap-2.5 min-w-0 flex-1">
+            <!-- CLICKABLE CUSTOMER AVATAR WITH PHOTO UPLOAD BADGE -->
+            <button type="button" onclick="window.openEditCustomerProfileModal && window.openEditCustomerProfileModal()" class="relative group shrink-0" title="Click to change profile picture">
+                <div class="w-9 h-9 rounded-full bg-blue-500/10 dark:bg-blue-600/20 border border-blue-500/40 overflow-hidden flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs relative">
+                    <img id="cust-landing-avatar" src="" alt="Avatar" class="hidden w-full h-full object-cover">
+                    <span id="cust-landing-initials" class="font-black text-xs text-blue-600 dark:text-blue-300">CU</span>
+                    <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] transition">
+                        <i class="fa-solid fa-camera"></i>
+                    </div>
+                </div>
+                <div class="absolute -bottom-0.5 -right-0.5 bg-blue-600 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center text-[7px] border border-cardBg">
+                    <i class="fa-solid fa-pen"></i>
+                </div>
+            </button>
+
+            <!-- CUSTOMER DETAILS -->
+            <div class="min-w-0 flex-1">
+                <div id="cust-landing-name" class="font-black text-xs text-gray-900 dark:text-white truncate">Customer Name</div>
+                <div id="cust-landing-email" class="text-[10px] text-gray-500 dark:text-gray-400 font-mono truncate">+639000000000</div>
             </div>
         </div>
+
+        <!-- COMPACT ACTION BUTTONS -->
         <div class="flex items-center gap-1.5 shrink-0">
-            <button onclick="window.openEditCustomerProfileModal && window.openEditCustomerProfileModal()" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 text-xs font-bold px-3 py-2 rounded-xl transition active:scale-95 flex items-center gap-1" title="Edit Profile Details">
-                <i class="fa-solid fa-user-pen"></i> Edit
+            <button onclick="window.openEditCustomerProfileModal && window.openEditCustomerProfileModal()" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/20 dark:hover:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40 text-[11px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1">
+                <i class="fa-solid fa-user-pen text-[10px]"></i> Edit
             </button>
-            <button onclick="window.logout && window.logout()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold px-3 py-2 rounded-xl transition active:scale-95">
+            <button onclick="window.logout && window.logout()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 dark:hover:text-white dark:border-gray-700 text-[11px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95">
                 Log out
             </button>
         </div>
     </div>
 
-    <!-- INSTALL APP SHORTCUT BUTTON (FULL WIDTH) -->
-    <button id="pwa-install-btn" onclick="window.installPwaApp && window.installPwaApp()" class="w-full bg-gradient-to-r from-blue-600/30 to-indigo-600/30 hover:from-blue-600/50 hover:to-indigo-600/50 border border-blue-500/50 p-3.5 rounded-2xl flex items-center gap-3 transition active:scale-95 text-left shadow-md shrink-0">
-        <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-lg shrink-0 shadow">
-            <i class="fa-solid fa-mobile-screen-button"></i>
+    <!-- ULTRA-COMPACT INSTALL APP SHORTCUT BAR -->
+    <button id="pwa-install-btn" onclick="window.installPwaApp && window.installPwaApp()" class="w-full bg-blue-50/80 hover:bg-blue-100/80 border border-blue-200 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 dark:border-blue-800/60 px-3 py-1.5 rounded-xl flex items-center justify-between transition active:scale-95 text-left shrink-0">
+        <div class="flex items-center gap-2 min-w-0">
+            <i class="fa-solid fa-mobile-screen-button text-blue-600 dark:text-blue-400 text-xs"></i>
+            <span class="text-[11px] font-bold text-blue-900 dark:text-blue-200 truncate">Install Lokalex App <span class="text-[9px] font-normal text-blue-700/80 dark:text-blue-300/70 hidden sm:inline">- Add shortcut to Home Screen</span></span>
         </div>
-        <div class="min-w-0 flex-1">
-            <div class="text-xs font-bold text-blue-300 truncate">Install Lokalex App</div>
-            <div class="text-[10px] text-gray-400 truncate">Add shortcut to Home Screen for fast access</div>
-        </div>
-        <i class="fa-solid fa-chevron-right text-xs text-blue-400/60"></i>
+        <i class="fa-solid fa-chevron-right text-[9px] text-blue-500 dark:text-blue-400 shrink-0"></i>
     </button>
 
-    <!-- CUSTOMER CHAT PANEL -->
-    <div class="bg-cardBg border border-gray-800 rounded-3xl p-4 flex flex-col gap-3 shadow-xl h-[480px] sm:h-[520px] max-h-[65vh] min-h-[350px] shrink-0">
-        <div class="flex justify-between items-center border-b border-gray-800 pb-2 shrink-0">
-            <div class="flex items-center gap-2">
-                <i class="fa-solid fa-comments text-blue-400 text-base"></i>
-                <h3 class="font-bold text-sm text-white">Chat with Lokalex Riders</h3>
+    <!-- STORE POPUP ACTION STRIP & VIEW CART -->
+    <div class="flex items-center gap-2 shrink-0">
+        <!-- BUTTON TO OPEN POPUP STORE DIRECTORY -->
+        <button type="button" onclick="window.openCustomerStoresModal && window.openCustomerStoresModal()" class="flex-1 bg-orange-50 hover:bg-orange-100 border border-orange-200 dark:bg-cardBg dark:hover:bg-orange-950/20 dark:border-orange-500/40 p-2.5 rounded-2xl flex items-center justify-between transition active:scale-95 text-left group">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-8 h-8 rounded-xl bg-orange-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                    <i class="fa-solid fa-store"></i>
+                </div>
+                <div class="min-w-0">
+                    <h3 class="font-black text-xs text-orange-950 dark:text-white group-hover:text-orange-600 dark:group-hover:text-orange-400 transition truncate">Explore Local Stores</h3>
+                    <p class="text-[9px] text-orange-800/80 dark:text-gray-400 truncate">Tap to browse menus & merchants</p>
+                </div>
             </div>
-            <span class="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Live
+            <span class="bg-orange-100 border border-orange-300 text-orange-800 dark:bg-orange-500/20 dark:border-orange-500/40 dark:text-orange-300 text-[10px] font-bold px-2.5 py-1 rounded-xl shrink-0 flex items-center gap-1">
+                Browse <i class="fa-solid fa-arrow-right text-[8px]"></i>
+            </span>
+        </button>
+
+        <!-- VIEW CART BUTTON -->
+        <button onclick="window.openCustomerCartModal && window.openCustomerCartModal()" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-orange-500/50 p-2.5 px-3 rounded-2xl flex flex-col items-center justify-center transition active:scale-95 shrink-0" title="View Shopping Cart">
+            <div class="flex items-center gap-1.5 text-xs font-black text-orange-500 dark:text-orange-400">
+                <i class="fa-solid fa-cart-shopping"></i>
+                <span id="cust-nav-cart-count">0</span>
+            </div>
+            <span class="text-[9px] text-gray-600 dark:text-gray-400 font-bold">Cart</span>
+        </button>
+    </div>
+
+    <!-- FULL-HEIGHT EXPANDED CUSTOMER CHAT PANEL -->
+    <div class="flex-1 min-h-0 bg-cardBg border border-gray-200 dark:border-gray-800 rounded-3xl p-3.5 flex flex-col gap-2 overflow-hidden mt-0.5">
+        <!-- CHAT HEADER -->
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2 shrink-0">
+            <div class="flex items-center gap-2 min-w-0">
+                <div class="w-7 h-7 rounded-lg bg-blue-500/10 dark:bg-blue-600/20 border border-blue-200 dark:border-blue-500/30 flex items-center justify-center text-blue-600 dark:text-blue-400 text-xs">
+                    <i class="fa-solid fa-comments"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-gray-900 dark:text-white truncate">Chat with Lokalex Riders</h3>
+                    <p class="text-[9px] text-gray-500 dark:text-gray-400 truncate">Live assistance & delivery coordination</p>
+                </div>
+            </div>
+            <span class="text-[9px] text-emerald-600 dark:text-emerald-400 font-mono flex items-center gap-1 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-2 py-0.5 rounded-full shrink-0">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Live
             </span>
         </div>
 
-        <!-- CUSTOMER CHAT MESSAGE STREAM -->
-        <div id="cust-rider-chat-messages" class="flex-1 min-h-0 overflow-y-auto p-3 bg-black/40 rounded-2xl border border-gray-800/80 flex flex-col gap-2.5 text-xs">
-            <div class="text-center text-gray-500 italic py-10">Pumili o mag-type ng mensahe para sa mga riders...</div>
+        <!-- FULL-EXPANDED CHAT STREAM -->
+        <div id="cust-rider-chat-messages" class="flex-1 min-h-0 overflow-y-auto p-3 bg-gray-50 dark:bg-black/40 rounded-2xl border border-gray-200 dark:border-gray-800/80 flex flex-col gap-2.5 text-xs">
+            <div class="text-center text-gray-400 dark:text-gray-500 italic py-12">Pumili o mag-type ng mensahe para sa mga riders...</div>
         </div>
 
-        <!-- INPUT AREA WITH PHOTO & MAP PIN PICKER -->
-        <div class="flex gap-1.5 items-center pt-1 shrink-0">
+        <!-- ACTIVE QUOTED REPLY PREVIEW BANNER -->
+        <div id="cust-chat-reply-bar" class="hidden bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-500/40 px-3 py-1.5 rounded-xl flex items-center justify-between gap-2 shrink-0 transition-all">
+            <div class="flex items-center gap-2 min-w-0 flex-1">
+                <i class="fa-solid fa-reply text-blue-600 dark:text-blue-400 text-xs shrink-0"></i>
+                <div class="min-w-0 flex-1 text-[11px] leading-tight">
+                    <div id="cust-reply-sender" class="font-bold text-blue-600 dark:text-blue-300 truncate">Replying to User</div>
+                    <div id="cust-reply-text" class="text-gray-600 dark:text-gray-300 truncate text-[10px]">Message text preview...</div>
+                </div>
+            </div>
+            <button type="button" onclick="window.cancelCustomerReply && window.cancelCustomerReply()" class="text-gray-400 hover:text-red-500 p-1 text-xs transition active:scale-90" title="Cancel Reply">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- CHAT INPUT TOOLBAR -->
+        <div class="flex gap-1.5 items-center pt-0.5 shrink-0">
             <input type="file" id="cust-chat-file-input" accept="image/*" class="hidden" onchange="if(this.files[0]) { window.openImageEditorModal && window.openImageEditorModal(this.files[0], 'customer'); this.value = ''; }">
-            <button onclick="document.getElementById('cust-chat-file-input').click()" class="bg-gray-800 hover:bg-gray-700 text-blue-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Attach & Edit Photo">
+            <button onclick="document.getElementById('cust-chat-file-input').click()" class="bg-gray-100 hover:bg-gray-200 text-blue-600 border border-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-blue-400 dark:border-transparent p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Attach & Edit Photo">
                 <i class="fa-solid fa-image"></i>
             </button>
-            <button onclick="window.sendCustomerLocation && window.sendCustomerLocation()" class="bg-gray-800 hover:bg-gray-700 text-emerald-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Pick Location Pin on Map">
+            <button onclick="window.sendCustomerLocation && window.sendCustomerLocation()" class="bg-gray-100 hover:bg-gray-200 text-emerald-600 border border-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-emerald-400 dark:border-transparent p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Pick Location Pin on Map">
                 <i class="fa-solid fa-location-dot"></i>
             </button>
 
-            <input type="text" id="cust-rider-chat-input" name="cust_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" onkeydown="if(event.key==='Enter') window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" placeholder="Mag-type ng mensahe..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white">
-            <button onclick="window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold shadow-md transition active:scale-95 shrink-0">
+            <input type="text" id="cust-rider-chat-input" name="cust_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" onkeydown="if(event.key==='Enter') window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" placeholder="Mag-type ng mensahe para sa rider..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-300 dark:border-gray-700 focus:border-blue-500 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500">
+            <button onclick="window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0">
                 <i class="fa-solid fa-paper-plane"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- FLOATING CART DOCK BUTTON -->
+    <div id="cust-floating-cart-dock" class="hidden fixed bottom-4 left-4 right-4 max-w-md mx-auto z-40">
+        <button onclick="window.openCustomerCartModal && window.openCustomerCartModal()" class="w-full bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white p-2.5 px-3.5 rounded-2xl flex items-center justify-between font-bold text-xs transition active:scale-95 border border-orange-400/50 backdrop-blur-md">
+            <div class="flex items-center gap-2">
+                <div class="w-6 h-6 rounded-lg bg-black/30 flex items-center justify-center text-xs">
+                    <i class="fa-solid fa-bag-shopping"></i>
+                </div>
+                <div class="text-left">
+                    <div id="floating-cart-stores-summary" class="font-black text-xs">0 Store(s)</div>
+                    <div id="floating-cart-items-count" class="text-[9px] text-orange-100 font-normal">0 items in cart</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="floating-cart-total-price" class="text-xs font-mono font-black">₱0.00</span>
+                <i class="fa-solid fa-chevron-right text-[10px] opacity-75"></i>
+            </div>
+        </button>
+    </div>
+
+    <!-- 1. DEDICATED POPUP: ULTRA-COMPACT STORE DIRECTORY MODAL -->
+    <div id="cust-stores-popup-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-4 flex flex-col gap-2.5 max-h-[85vh] overflow-hidden">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5 shrink-0">
+                <div class="flex items-center gap-2 min-w-0">
+                    <div class="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-500 dark:text-orange-400 flex items-center justify-center text-sm font-bold shrink-0">
+                        <i class="fa-solid fa-store"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h3 class="font-black text-sm text-gray-900 dark:text-white truncate">Available Local Stores</h3>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400 truncate">Tap a store to view menu</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <!-- JUMP TO CART BUTTON -->
+                    <button type="button" onclick="window.openCustomerCartModal && window.openCustomerCartModal()" class="bg-orange-50 hover:bg-orange-100 dark:bg-orange-500/10 dark:hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/30 text-[11px] font-bold px-2.5 py-1 rounded-xl transition active:scale-95 flex items-center gap-1.5" title="Jump to Cart">
+                        <i class="fa-solid fa-cart-shopping text-xs"></i>
+                        <span class="cust-modal-cart-count font-mono font-bold">0</span>
+                    </button>
+                    <button onclick="window.closeCustomerStoresModal && window.closeCustomerStoresModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- SEARCH STORES INPUT -->
+            <div class="relative shrink-0">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-[10px]"></i>
+                <input type="text" id="cust-store-search-input" oninput="window.filterCustomerStores && window.filterCustomerStores(this.value)" placeholder="Search store name, burger, milk tea..." class="w-full bg-inputBg text-xs rounded-xl pl-8 pr-3 py-1.5 outline-none border border-gray-300 dark:border-gray-800 focus:border-orange-500 text-gray-900 dark:text-white">
+            </div>
+
+            <!-- ULTRA-COMPACT STORES LIST CONTAINER -->
+            <div id="cust-stores-grid" class="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5 max-h-[60vh]">
+                <div class="text-center text-gray-500 italic py-6 text-xs flex flex-col items-center gap-1.5">
+                    <i class="fa-solid fa-spinner fa-spin text-sm text-orange-500 dark:text-orange-400"></i>
+                    <span class="text-[10px]">Loading stores...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. EDIT CUSTOMER PROFILE & AVATAR MODAL -->
+    <div id="edit-customer-profile-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-5 flex flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">
+                        <i class="fa-solid fa-user-pen"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-black text-gray-900 dark:text-white">Edit Profile</h3>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Update photo and account details</p>
+                    </div>
+                </div>
+                <button onclick="window.closeEditCustomerProfileModal && window.closeEditCustomerProfileModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="flex flex-col items-center justify-center gap-2 bg-gray-50 dark:bg-black/30 p-3.5 rounded-2xl border border-gray-200 dark:border-gray-800">
+                <div class="w-20 h-20 rounded-full bg-blue-600/20 border-2 border-blue-500 overflow-hidden flex items-center justify-center relative">
+                    <img id="cust-modal-avatar-preview" src="" alt="Preview" class="hidden w-full h-full object-cover">
+                    <span id="cust-modal-avatar-initials" class="font-black text-lg text-blue-600 dark:text-blue-300">CU</span>
+                </div>
+
+                <input type="file" id="cust-avatar-file-input" accept="image/*" class="hidden" onchange="window.handleCustomerAvatarFileSelected && window.handleCustomerAvatarFileSelected(event)">
+                
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="document.getElementById('cust-avatar-file-input')?.click()" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/20 dark:hover:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40 text-[10px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5">
+                        <i class="fa-solid fa-cloud-arrow-up"></i> Upload Photo
+                    </button>
+                    <button type="button" onclick="window.clearCustomerAvatar && window.clearCustomerAvatar()" class="bg-gray-100 hover:bg-gray-200 text-red-600 border border-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-red-400 dark:border-transparent text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95" title="Remove Photo">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-2.5 text-xs">
+                <div>
+                    <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Full Name *</label>
+                    <input type="text" id="cust-edit-name-input" placeholder="Your Name" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold mt-1">
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Contact Number *</label>
+                    <input type="tel" id="cust-edit-phone-input" placeholder="+639..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-emerald-600 dark:text-emerald-400 font-mono font-bold mt-1">
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Image URL (Optional Link)</label>
+                    <input type="url" id="cust-edit-avatar-url-input" oninput="window.onCustomerAvatarUrlInput && window.onCustomerAvatarUrlInput(this.value)" placeholder="https://..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-blue-600 dark:text-blue-400 font-mono text-[11px] mt-1">
+                </div>
+
+                <button id="cust-save-profile-btn" onclick="window.submitSaveCustomerProfile && window.submitSaveCustomerProfile()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 mt-1 text-xs">
+                    <i class="fa-solid fa-floppy-disk"></i> SAVE PROFILE
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. STORE MENU VIEWER MODAL -->
+    <div id="cust-store-menu-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-4 flex flex-col gap-3 max-h-[90vh] overflow-hidden">
+            <div class="flex justify-between items-start border-b border-gray-200 dark:border-gray-800 pb-3">
+                <div class="flex items-center gap-3 min-w-0 flex-1">
+                    <div id="cust-menu-store-logo-box" class="w-12 h-12 rounded-2xl bg-orange-500/10 border border-orange-500/30 overflow-hidden flex items-center justify-center text-orange-500 dark:text-orange-400 text-xl shrink-0">
+                        <img id="cust-menu-store-img" src="" class="hidden w-full h-full object-cover">
+                        <i id="cust-menu-store-icon" class="fa-solid fa-shop"></i>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <h3 id="cust-menu-store-name" class="font-black text-sm text-gray-900 dark:text-white truncate">Store Name</h3>
+                        <p id="cust-menu-store-address" class="text-[10px] text-gray-500 dark:text-gray-400 truncate flex items-center gap-1">
+                            <i class="fa-solid fa-location-dot text-red-500 text-[9px]"></i> <span>Store Address</span>
+                        </p>
+                        <div id="cust-menu-store-status-badge" class="mt-1 inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-500/30">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> OPEN
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <!-- JUMP TO CART BUTTON -->
+                    <button type="button" onclick="window.openCustomerCartModal && window.openCustomerCartModal()" class="bg-orange-50 hover:bg-orange-100 dark:bg-orange-500/10 dark:hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/30 text-[11px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5" title="Jump to Cart">
+                        <i class="fa-solid fa-cart-shopping text-xs"></i>
+                        <span class="cust-modal-cart-count font-mono font-bold">0</span>
+                    </button>
+                    <button onclick="window.closeCustomerStoreMenuModal && window.closeCustomerStoreMenuModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1.5 text-sm transition">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="cust-menu-category-pills" class="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar shrink-0"></div>
+            <div id="cust-menu-items-feed" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 min-h-[200px]"></div>
+        </div>
+    </div>
+
+    <!-- 4. ITEM CUSTOMIZER MODAL -->
+    <div id="cust-item-customizer-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-4 flex flex-col gap-3.5 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-start border-b border-gray-200 dark:border-gray-800 pb-2.5">
+                <div class="flex-1 min-w-0 pr-2">
+                    <h3 id="customizer-item-name" class="font-black text-sm text-gray-900 dark:text-white">Item Name</h3>
+                    <p id="customizer-item-desc" class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">Description...</p>
+                    <div class="mt-1 text-xs font-mono font-black text-emerald-600 dark:text-emerald-400">
+                        Base: ₱<span id="customizer-item-base-price">0.00</span>
+                    </div>
+                </div>
+                <button onclick="window.closeItemCustomizerModal && window.closeItemCustomizerModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <input type="hidden" id="customizer-store-id" value="">
+            <input type="hidden" id="customizer-item-id" value="">
+
+            <div id="customizer-sizes-wrapper" class="hidden flex flex-col gap-1.5 bg-gray-50 dark:bg-black/30 p-2.5 rounded-2xl border border-gray-200 dark:border-gray-800">
+                <span class="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                    <i class="fa-solid fa-maximize text-[9px]"></i> Choose Size / Variant
+                </span>
+                <div id="customizer-sizes-options" class="flex flex-col gap-1"></div>
+            </div>
+
+            <div id="customizer-addons-wrapper" class="hidden flex flex-col gap-1.5 bg-gray-50 dark:bg-black/30 p-2.5 rounded-2xl border border-gray-200 dark:border-gray-800">
+                <span class="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                    <i class="fa-solid fa-plus text-[9px]"></i> Optional Add-ons
+                </span>
+                <div id="customizer-addons-options" class="flex flex-col gap-1"></div>
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Special Instructions</label>
+                <textarea id="customizer-item-notes" rows="2" placeholder="e.g. 50% sugar only, separate gravy..." class="w-full bg-inputBg text-xs rounded-xl p-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1"></textarea>
+            </div>
+
+            <div class="flex items-center gap-2.5 pt-2 border-t border-gray-200 dark:border-gray-800">
+                <div class="flex items-center bg-gray-100 dark:bg-black/50 border border-gray-300 dark:border-gray-700 rounded-xl p-0.5 shrink-0">
+                    <button type="button" onclick="window.adjustCustomizerQty && window.adjustCustomizerQty(-1)" class="w-7 h-7 rounded-lg bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-white font-bold text-xs flex items-center justify-center active:scale-90 transition">-</button>
+                    <span id="customizer-qty-display" class="w-8 text-center font-bold font-mono text-xs text-gray-900 dark:text-white">1</span>
+                    <button type="button" onclick="window.adjustCustomizerQty && window.adjustCustomizerQty(1)" class="w-7 h-7 rounded-lg bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-900 dark:text-white font-bold text-xs flex items-center justify-center active:scale-90 transition">+</button>
+                </div>
+
+                <button onclick="window.submitAddCustomizedItemToCart && window.submitAddCustomizedItemToCart()" class="flex-1 bg-orange-600 hover:bg-orange-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 flex items-center justify-between text-xs">
+                    <span>ADD TO CART</span>
+                    <span class="font-mono text-xs">₱<span id="customizer-calc-total">0.00</span></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. MULTI-STORE CART MODAL -->
+    <div id="cust-cart-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-4 flex flex-col gap-3 max-h-[92vh] overflow-hidden">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5 shrink-0">
+                <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-xl bg-orange-500/10 text-orange-500 dark:text-orange-400 flex items-center justify-center text-xs font-bold">
+                        <i class="fa-solid fa-bag-shopping"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-black text-xs text-gray-900 dark:text-white">Your Multi-Store Cart</h3>
+                        <p class="text-[9px] text-gray-500 dark:text-gray-400">Items grouped by store</p>
+                    </div>
+                </div>
+                <button onclick="window.closeCustomerCartModal && window.closeCustomerCartModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div id="cust-cart-stores-container" class="flex-1 overflow-y-auto flex flex-col gap-2.5 min-h-[180px] pr-1"></div>
+
+            <div class="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-gray-800 p-3 rounded-2xl flex items-center justify-between shrink-0 text-xs">
+                <span class="font-bold text-xs text-gray-700 dark:text-gray-300">Expected Items Total:</span>
+                <span class="font-mono text-emerald-600 dark:text-emerald-400 text-sm font-black">₱<span id="cust-cart-grand-total">0.00</span></span>
+            </div>
+
+            <button id="cust-send-order-btn" onclick="window.sendMultiStoreOrderToRiders && window.sendMultiStoreOrderToRiders()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 shrink-0 text-xs shadow-md">
+                <i class="fa-solid fa-paper-plane"></i> SEND ORDER TO RIDERS
             </button>
         </div>
     </div>

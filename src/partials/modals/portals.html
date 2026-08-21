@@ -1,3 +1,5 @@
+<!-- src/partials/modals/portals.html -->
+
 <!-- 1. MAP CALCULATION PORTAL (?mapcalc=KEY) -->
 <div id="mapcalc-customer-portal" class="hidden fixed inset-0 bg-darkBg z-[99999] flex flex-col items-center justify-center p-4 text-center overflow-y-auto">
     <div class="bg-cardBg border border-emerald-500/40 p-5 rounded-3xl max-w-sm w-full shadow-2xl flex flex-col gap-3 my-auto relative">
@@ -45,8 +47,8 @@
 <!-- 3. MUTUAL LIVE GPS TRACKER PORTAL (?livegps=KEY) -->
 <div id="livegps-portal" class="hidden fixed inset-0 bg-darkBg z-[99999] flex flex-col items-center justify-center p-4 text-center overflow-y-auto">
     <div class="bg-cardBg border border-indigo-500/40 p-5 rounded-3xl max-w-sm w-full shadow-2xl flex flex-col gap-3 my-auto relative">
-        <div class="absolute top-4 left-4">
-            <button id="livegps-rider-close-btn" onclick="window.closeRiderLiveMap && window.closeRiderLiveMap()" class="hidden bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5">
+        <div class="absolute top-4 left-4 z-20">
+            <button id="livegps-rider-close-btn" onclick="window.closeRiderLiveMap && window.closeRiderLiveMap()" class="hidden bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5 shadow-md">
                 <i class="fa-solid fa-arrow-left"></i> Back
             </button>
         </div>
@@ -56,14 +58,49 @@
         </div>
         <h2 class="text-xl font-black text-white">L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Live Tracker</h2>
 
+        <!-- REAL-TIME ROUTE & LIVE ETA HUD OVERLAY -->
+        <div id="livegps-eta-hud" class="hidden bg-gradient-to-r from-blue-900/90 to-indigo-900/90 border border-blue-400/50 rounded-2xl p-2.5 flex items-center justify-between text-xs shadow-lg backdrop-blur-md">
+            <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs">
+                    <i class="fa-solid fa-motorcycle animate-bounce"></i>
+                </div>
+                <div class="text-left">
+                    <div id="livegps-eta-text" class="font-black text-white text-xs">Calculating ETA...</div>
+                    <div id="livegps-distance-text" class="text-[10px] text-blue-300 font-mono font-medium">Distance tracking active</div>
+                </div>
+            </div>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+        </div>
+
         <div id="livegps-map-container-box" class="w-full h-56 sm:h-64 rounded-2xl overflow-hidden border border-indigo-500/50 relative my-1 shadow-inner">
             <div id="livegps-map-container" class="w-full h-full"></div>
         </div>
 
         <div id="livegps-customer-controls" class="w-full flex flex-col gap-3 mt-1">
+            <div id="livegps-status" class="text-xs font-bold text-amber-400 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
+                Pindutin ang button sa ibaba upang i-share ang iyong live location.
+            </div>
             <button id="livegps-share-btn" onclick="window.startMutualCustomerLocationSharing && window.startMutualCustomerLocationSharing()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 text-sm flex justify-center items-center gap-2 ring-2 ring-indigo-400/50">
                 <i class="fa-solid fa-satellite-dish text-base"></i> JOIN LIVE TRACKING
             </button>
         </div>
+    </div>
+</div>
+
+<!-- 4. LIVE GPS EXPIRED PORTAL -->
+<div id="livegps-expired-portal" class="hidden fixed inset-0 bg-darkBg z-[99999] flex flex-col items-center justify-center p-4 text-center overflow-y-auto">
+    <div class="bg-cardBg border border-gray-800 p-6 rounded-3xl max-w-sm w-full shadow-2xl flex flex-col gap-4 my-auto relative">
+        <div class="w-16 h-16 bg-red-500/10 text-red-400 rounded-full flex items-center justify-center mx-auto text-3xl">
+            <i class="fa-solid fa-flag-checkered"></i>
+        </div>
+        <div>
+            <h3 class="font-black text-lg text-white">Tracking Session Ended</h3>
+            <p class="text-xs text-gray-400 mt-2 leading-relaxed">
+                Ang live tracking session na ito ay natapos na o naihatid na ng rider ang inyong order.
+            </p>
+        </div>
+        <button onclick="window.location.href='/'" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-2xl text-xs transition active:scale-95 shadow">
+            Bumalik sa Home
+        </button>
     </div>
 </div>

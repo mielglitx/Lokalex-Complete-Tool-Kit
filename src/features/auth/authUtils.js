@@ -18,13 +18,18 @@ export function togglePasswordVisibility(inputId, iconId) {
 export function switchLoginPortalTab(mode) {
     const riderForm = document.getElementById('portal-form-rider');
     const custForm = document.getElementById('portal-form-customer');
+    const merchForm = document.getElementById('portal-form-merchant');
 
-    if (mode === 'rider') {
-        if (riderForm) riderForm.classList.remove('hidden');
-        if (custForm) custForm.classList.add('hidden');
-    } else {
-        if (custForm) custForm.classList.remove('hidden');
-        if (riderForm) riderForm.classList.add('hidden');
+    if (riderForm) riderForm.classList.add('hidden');
+    if (custForm) custForm.classList.add('hidden');
+    if (merchForm) merchForm.classList.add('hidden');
+
+    if (mode === 'rider' && riderForm) {
+        riderForm.classList.remove('hidden');
+    } else if (mode === 'merchant' && merchForm) {
+        merchForm.classList.remove('hidden');
+    } else if (custForm) {
+        custForm.classList.remove('hidden');
     }
 }
 

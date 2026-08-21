@@ -4,16 +4,18 @@ import { appState, globalState } from '../../store/state.js';
 import { API_URL } from '../../config/constants.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { openSlideDeleteModal, closeAdminCateringModal } from '../../ui/modals.js';
-import { getLocalTodayStr } from '../../utils/helpers.js';
+import { getLocalTodayStr, isSameDate } from '../../utils/helpers.js';
 import { populateCateringCustomerDropdown } from '../chat/index.js';
 import { 
     parseQueueTime, 
     isAdmin, 
     canManageRoster, 
-    canForceCaterTarget 
+    canForceCaterTarget,
+    archiveRiderCateringIfNeeded,
+    saveRosterCache 
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
-import { getTopQueueTime, updateRosterStatusData } from './rosterStatus.js';
+import { getTopQueueTime, updateRosterStatus, updateRosterStatusData } from './rosterStatus.js';
 
 let pendingAdminTarget = null;
 
@@ -176,15 +178,15 @@ export async function adminForceStatus(id, name, actionValue) {
                 const t = parseQueueTime(r.queueTime);
                 if (t > maxTime) maxTime = t;
             });
-            await updateRosterStatusData('Available', '', '', maxTime + 1000, id, name);
+            await updateRosterStatus('Available', id, name, maxTime + 1000);
         } else {
-            await updateRosterStatusData(actionValue, '', '', Date.now(), id, name);
+            await updateRosterStatus(actionValue, id, name);
         }
         showToast(`⚡ Force updated ${name} to ${actionValue}`);
     });
 }
 
-// ADMIN VOID SPECIFIC CUSTOMER
+// ADMIN VOID ACTIVE CATERING CUSTOMER
 export async function adminVoidSpecificCustomer(targetId, targetName, custNameToVoid) {
     if (!canManageRoster()) {
         return showToast("⚠️ Unauthorized: Admin or TL access required.");
@@ -222,6 +224,86 @@ export async function adminVoidSpecificCustomer(targetId, targetName, custNameTo
             showToast(`🚫 Voided ${custNameToVoid}. ${targetName} moved to #1 spot in Available queue!`);
         }
     });
+}
+
+// ADMIN VOID COMPLETED CATERED RECORD
+export function promptVoidCustomer(riderName, customerName, completedDate = "", startTime = "") {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+
+    openSlideDeleteModal(
+        `Void Catered Record?`,
+        `Sigurado ka bang nais mong burahin ang record ni [${customerName}] na inihatid ni ${riderName}?`,
+        async () => {
+            await executeVoidCateredCustomer(riderName, customerName, completedDate, startTime);
+        }
+    );
+}
+
+export async function executeVoidCateredCustomer(riderName, customerName, completedDate = "", startTime = "") {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+
+    try {
+        if (db) {
+            const snap = await db.ref('cateredHistory').once('value');
+            const data = snap.val() || {};
+            
+            let targetKey = null;
+            const entries = Object.entries(data);
+
+            for (let i = entries.length - 1; i >= 0; i--) {
+                const [k, v] = entries[i];
+                const rMatch = (v.riderName || "").trim().toLowerCase() === (riderName || "").trim().toLowerCase();
+                const cMatch = (v.customerName || "").trim().toLowerCase() === (customerName || "").trim().toLowerCase();
+                const dMatch = !completedDate || isSameDate(v.completedDate, completedDate);
+                const sMatch = !startTime || (v.startTime || "").trim() === startTime.trim();
+
+                if (rMatch && cMatch && dMatch && sMatch) {
+                    targetKey = k;
+                    break;
+                }
+            }
+
+            if (!targetKey) {
+                for (let i = entries.length - 1; i >= 0; i--) {
+                    const [k, v] = entries[i];
+                    const rMatch = (v.riderName || "").trim().toLowerCase() === (riderName || "").trim().toLowerCase();
+                    const cMatch = (v.customerName || "").trim().toLowerCase() === (customerName || "").trim().toLowerCase();
+                    const dMatch = !completedDate || isSameDate(v.completedDate, completedDate);
+
+                    if (rMatch && cMatch && dMatch) {
+                        targetKey = k;
+                        break;
+                    }
+                }
+            }
+
+            if (targetKey) {
+                await db.ref(`cateredHistory/${targetKey}`).remove();
+            }
+        }
+
+        if (globalState.globalCateredHistory) {
+            const idx = globalState.globalCateredHistory.findIndex(h => 
+                (h.riderName || "").trim().toLowerCase() === (riderName || "").trim().toLowerCase() &&
+                (h.customerName || "").trim().toLowerCase() === (customerName || "").trim().toLowerCase() &&
+                (!completedDate || isSameDate(h.completedDate, completedDate))
+            );
+            if (idx !== -1) {
+                globalState.globalCateredHistory.splice(idx, 1);
+            }
+        }
+
+        saveRosterCache();
+        if (typeof window.loadGlobalCateredList === 'function') {
+            window.loadGlobalCateredList();
+        }
+
+        showToast(`🗑️ Voided catered record for ${customerName}.`);
+        showSideNotification("RECORD VOIDED", `Voided catered entry for ${customerName}`, "fa-trash", "text-red-400", "border-red-500");
+    } catch(e) {
+        console.error("Void catered record error:", e);
+        showToast("❌ Failed to void catered customer record.");
+    }
 }
 
 export function adminShiftRiderQueue(riderId, moveAction) {
@@ -262,8 +344,9 @@ export async function forceAllEndShift() {
         showSideNotification("FORCE ALL END", "Ending shift for all roster riders...", "fa-power-off", "text-red-400", "border-red-500");
         
         const rosterMembers = globalState.rosterMembers || [];
-        rosterMembers.forEach(m => { 
+        for (const m of rosterMembers) {
             if (m.telegramId) {
+                await archiveRiderCateringIfNeeded(m);
                 db.ref('roster/' + m.telegramId).update({ 
                     status: 'End', 
                     customerName: "", 
@@ -273,7 +356,7 @@ export async function forceAllEndShift() {
                     lastActiveTimestamp: Date.now()
                 });
             }
-        });
+        }
 
         try {
             await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: "roster", action: "force_all_end" }) });
@@ -389,9 +472,10 @@ export async function executeAutoEndShift() {
         const updates = {};
         const loginUpdates = {};
 
-        Object.keys(roster).forEach((riderId) => {
+        for (const riderId of Object.keys(roster)) {
             const m = roster[riderId];
             if (m && m.status !== 'End') {
+                await archiveRiderCateringIfNeeded(m);
                 updates[`roster/${riderId}/status`] = 'End';
                 updates[`roster/${riderId}/customerName`] = '';
                 updates[`roster/${riderId}/startTime`] = '';
@@ -402,7 +486,7 @@ export async function executeAutoEndShift() {
 
                 loginUpdates[`logins/${riderId}/clockOutTime`] = timeStr;
             }
-        });
+        }
 
         if (Object.keys(updates).length > 0) {
             await db.ref().update({ ...updates, ...loginUpdates });
@@ -416,4 +500,21 @@ export async function executeAutoEndShift() {
             body: JSON.stringify({ type: "roster", action: "auto_end_shift", time: timeStr })
         });
     } catch(e) {}
+}
+
+if (typeof window !== 'undefined') {
+    window.toggleAdminControls = toggleAdminControls;
+    window.openAdminCateringModal = openAdminCateringModal;
+    window.submitAdminForceCatering = submitAdminForceCatering;
+    window.adminForceStatus = adminForceStatus;
+    window.adminVoidSpecificCustomer = adminVoidSpecificCustomer;
+    window.promptVoidCustomer = promptVoidCustomer;
+    window.executeVoidCateredCustomer = executeVoidCateredCustomer;
+    window.adminShiftRiderQueue = adminShiftRiderQueue;
+    window.forceAllEndShift = forceAllEndShift;
+    window.openAdminAutoEndShiftModal = openAdminAutoEndShiftModal;
+    window.closeAdminAutoEndShiftModal = closeAdminAutoEndShiftModal;
+    window.saveAdminAutoEndShiftSettings = saveAdminAutoEndShiftSettings;
+    window.checkAndTriggerAutoEndShift = checkAndTriggerAutoEndShift;
+    window.executeAutoEndShift = executeAutoEndShift;
 }

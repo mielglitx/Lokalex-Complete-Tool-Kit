@@ -1,0 +1,105 @@
+<!-- src/partials/modals/store-item-modal.html -->
+<div id="store-item-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-gray-800 w-full max-w-md rounded-3xl p-5 shadow-2xl flex flex-col gap-4 max-h-[92vh] overflow-y-auto">
+        <!-- HEADER -->
+        <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-sm font-bold">
+                    <i class="fa-solid fa-burger"></i>
+                </div>
+                <div>
+                    <h3 id="item-modal-title" class="text-sm font-black text-white">Add Menu Item</h3>
+                    <p class="text-[10px] text-gray-400">Configure item details, sizes, and add-ons</p>
+                </div>
+            </div>
+            <button onclick="window.closeItemEditorModal && window.closeItemEditorModal()" class="text-gray-400 hover:text-white p-1 text-sm transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- HIDDEN EDIT ID -->
+        <input type="hidden" id="item-edit-id" value="">
+
+        <!-- BASIC DETAILS FORM -->
+        <div class="flex flex-col gap-3 text-xs">
+            <!-- Item Name -->
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Item Name *</label>
+                <input type="text" id="item-input-name" placeholder="e.g. Brown Sugar Boba Milk Tea" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold mt-1">
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <!-- Base Price -->
+                <div>
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Base Price (₱) *</label>
+                    <input type="number" id="item-input-price" step="0.01" min="0" placeholder="85.00" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-emerald-400 font-bold font-mono mt-1">
+                </div>
+
+                <!-- Category -->
+                <div>
+                    <label class="text-[10px] text-gray-400 font-bold uppercase">Category *</label>
+                    <select id="item-input-category" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold mt-1 cursor-pointer">
+                        <option value="General">General</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Subcategory -->
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Subcategory (Optional)</label>
+                <input type="text" id="item-input-subcategory" placeholder="e.g. Brown Sugar Series / Solo Meals" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+            </div>
+
+            <!-- Description -->
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Description</label>
+                <textarea id="item-input-desc" rows="2" placeholder="Item ingredients, flavors, or serving notes..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1"></textarea>
+            </div>
+
+            <!-- Image URL -->
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Image URL (Optional)</label>
+                <input type="url" id="item-input-image" placeholder="https://image-link.com/photo.jpg" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-blue-400 font-mono text-[11px] mt-1">
+            </div>
+
+            <!-- 1. OPTIONAL UPGRADES: SIZES / UPSIZES (SINGLE CHOICE) -->
+            <div class="bg-black/40 border border-gray-800 p-3 rounded-2xl flex flex-col gap-2">
+                <div class="flex justify-between items-center">
+                    <span class="text-[11px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                        <i class="fa-solid fa-maximize"></i> Sizes / Upsize Options
+                    </span>
+                    <button type="button" onclick="window.addSizeVariantRow && window.addSizeVariantRow()" class="text-[10px] text-blue-400 hover:text-blue-300 font-bold underline">
+                        + Add Size
+                    </button>
+                </div>
+                <p class="text-[10px] text-gray-400">Single selection sizes with price differences (e.g. Large +₱20.00)</p>
+
+                <div id="item-sizes-container" class="flex flex-col gap-1.5 mt-1">
+                    <!-- Dynamic Size Rows -->
+                </div>
+            </div>
+
+            <!-- 2. OPTIONAL UPGRADES: ADD-ONS (MULTI CHOICE) -->
+            <div class="bg-black/40 border border-gray-800 p-3 rounded-2xl flex flex-col gap-2">
+                <div class="flex justify-between items-center">
+                    <span class="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                        <i class="fa-solid fa-plus"></i> Add-ons / Extras
+                    </span>
+                    <button type="button" onclick="window.addAddonRow && window.addAddonRow()" class="text-[10px] text-amber-400 hover:text-amber-300 font-bold underline">
+                        + Add Extra
+                    </button>
+                </div>
+                <p class="text-[10px] text-gray-400">Add-on options customers can add (e.g. Extra Cheese +₱15.00)</p>
+
+                <div id="item-addons-container" class="flex flex-col gap-1.5 mt-1">
+                    <!-- Dynamic Addon Rows -->
+                </div>
+            </div>
+
+            <!-- SUBMIT BUTTON -->
+            <button id="item-save-btn" onclick="window.submitSaveStoreItem && window.submitSaveStoreItem()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 mt-1">
+                <i class="fa-solid fa-floppy-disk"></i> SAVE MENU ITEM
+            </button>
+        </div>
+    </div>
+</div>

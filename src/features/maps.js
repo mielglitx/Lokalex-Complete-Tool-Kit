@@ -86,7 +86,6 @@ export function refreshFindRidersMap() {
         });
     }
 
-    // Clear old markers
     findRidersMarkers.forEach(m => m.setMap(null));
     findRidersMarkers = [];
 
@@ -463,7 +462,15 @@ export async function openLiveCustomerMap(custName) {
     }
 
     if (!mapDirectionsService) mapDirectionsService = new google.maps.DirectionsService();
-    if (!mapDirectionsRenderer) mapDirectionsRenderer = new google.maps.DirectionsRenderer({ map: googleMapObj, suppressMarkers: false });
+    if (!mapDirectionsRenderer) mapDirectionsRenderer = new google.maps.DirectionsRenderer({ 
+        map: googleMapObj, 
+        suppressMarkers: false,
+        polylineOptions: {
+            strokeColor: '#3B82F6',
+            strokeWeight: 6,
+            strokeOpacity: 0.85
+        }
+    });
 
     db.ref('liveTracking/' + trackKey).on('value', (snapshot) => {
         const data = snapshot.val();
@@ -479,7 +486,7 @@ export async function openLiveCustomerMap(custName) {
                 if (status === google.maps.DirectionsStatus.OK) {
                     mapDirectionsRenderer.setDirections(result);
                     const routeLeg = result.routes[0].legs[0];
-                    showToast(`📍 Live Pin Received! Distance: ${routeLeg.distance.text} (${routeLeg.duration.text})`);
+                    showToast(`📍 Route Plotted: ${routeLeg.distance.text} (~${routeLeg.duration.text})`);
                 }
             });
         } else {
@@ -687,7 +694,15 @@ export function openMapCalcRoute(targetLat, targetLng, custName) {
     }
 
     if (!mapDirectionsService) mapDirectionsService = new google.maps.DirectionsService();
-    if (!mapDirectionsRenderer) mapDirectionsRenderer = new google.maps.DirectionsRenderer({ map: googleMapObj, suppressMarkers: false });
+    if (!mapDirectionsRenderer) mapDirectionsRenderer = new google.maps.DirectionsRenderer({ 
+        map: googleMapObj, 
+        suppressMarkers: false,
+        polylineOptions: {
+            strokeColor: '#10B981',
+            strokeWeight: 6,
+            strokeOpacity: 0.85
+        }
+    });
 
     mapDirectionsService.route({
         origin: hubLoc, destination: custLoc, travelMode: google.maps.TravelMode.DRIVING

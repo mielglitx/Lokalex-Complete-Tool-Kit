@@ -1,18 +1,78 @@
 <!-- src/partials/head.html -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#1E1E1E">
+<meta id="meta-theme-color" name="theme-color" content="#121212">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lokalex Hub">
 
+<!-- THEME INITIALIZATION SCRIPT (PREVENTS FLASH OF UNSTYLED THEME ON LOAD) -->
+<script>
+    (function() {
+        const savedTheme = localStorage.getItem('lokalex_theme_preference') || 'system';
+        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const isDark = savedTheme === 'dark' || (savedTheme === 'system' && systemPrefersDark);
+        
+        if (isDark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
+        } else {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.classList.add('light');
+        }
+    })();
+</script>
+
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
     tailwind.config = {
         darkMode: 'class',
-        theme: { extend: { colors: { darkBg: '#121212', cardBg: '#1E1E1E', inputBg: '#2A2A2A', tgBg: '#0e1621', tgCard: '#17212b', tgBtn: '#202b36' } } }
+        theme: { 
+            extend: { 
+                colors: { 
+                    darkBg: 'var(--color-darkBg)', 
+                    cardBg: 'var(--color-cardBg)', 
+                    inputBg: 'var(--color-inputBg)', 
+                    tgBg: '#0e1621', 
+                    tgCard: '#17212b', 
+                    tgBtn: '#202b36' 
+                } 
+            } 
+        }
     }
 </script>
+
+<!-- THEME DYNAMIC CSS VARIABLES & SHADOW REMOVAL -->
+<style>
+    :root {
+        --color-darkBg: #F8FAFC;
+        --color-cardBg: #FFFFFF;
+        --color-inputBg: #F1F5F9;
+        --color-textMain: #0F172A;
+        --color-textMuted: #64748B;
+        --color-border: #E2E8F0;
+    }
+    html.dark {
+        --color-darkBg: #121212;
+        --color-cardBg: #1E1E1E;
+        --color-inputBg: #2A2A2A;
+        --color-textMain: #F9FAFB;
+        --color-textMuted: #9CA3AF;
+        --color-border: #27272A;
+    }
+    *, ::before, ::after {
+        box-shadow: none !important;
+        text-shadow: none !important;
+    }
+    body {
+        background-color: var(--color-darkBg);
+        color: var(--color-textMain);
+        transition: background-color 0.2s ease, color 0.2s ease;
+    }
+    .bg-darkBg { background-color: var(--color-darkBg) !important; }
+    .bg-cardBg { background-color: var(--color-cardBg) !important; }
+    .bg-inputBg { background-color: var(--color-inputBg) !important; }
+</style>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBVAwn0UnyHJ926oHeK0k789ncADMzmX80&libraries=places"></script>
