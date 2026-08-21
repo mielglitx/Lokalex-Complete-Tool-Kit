@@ -364,7 +364,6 @@ export function checkAndApplyStoreOperatingHours() {
     if (openTotalMins <= closeTotalMins) {
         shouldBeOpen = currentMins >= openTotalMins && currentMins < closeTotalMins;
     } else {
-        // Across midnight schedule (e.g. 17:00 to 02:00)
         shouldBeOpen = currentMins >= openTotalMins || currentMins < closeTotalMins;
     }
 
@@ -797,7 +796,7 @@ export function renderStoreOrders() {
             const distKm = calculateDistanceInKm(riderLoc.lat, riderLoc.lng, storeLat, storeLng);
 
             if (distKm !== null) {
-                const estMins = Math.max(1, Math.round(distKm * 2.5)); // ~25 km/h urban average
+                const estMins = Math.max(1, Math.round(distKm * 2.5));
                 riderRadarHtml = `
                     <div class="inline-flex items-center gap-1 text-[9px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 px-2 py-0.5 rounded-full">
                         <i class="fa-solid fa-satellite-dish animate-pulse text-indigo-500"></i>
@@ -916,6 +915,146 @@ export function renderStoreOrders() {
     }).join('');
 
     updateLiveCountdownTimers();
+}
+
+// ACCEPT ORDER & SET PREP TIME (+10m, +15m, +25m)
+export async function acceptStoreOrderWithPrepTime(orderId, prepMinutes) {
+    const rawStoreId = appState.merchantStoreId || localStorage.getItem('lokalex_merchant_store_id');
+    const storeId = cleanFirebasePathKey(rawStoreId);
+    const cleanOrderId = cleanFirebasePathKey(orderId);
+
+    if (!storeId || !cleanOrderId || !db) return;
+
+    acknowledgedOrders.add(cleanOrderId);
+    stopRepeatingKitchenAlarm();
+
+    const now = Date.now();
+    const prepUntil = now + (parseInt(prepMinutes) * 60000);
+
+    try {
+        await db.ref(`storeOrders/${storeId}/${cleanOrderId}`).update({
+            status: 'preparing',
+            prepMinutes: parseInt(prepMinutes),
+            prepUntil: prepUntil,
+            acceptedAt: now,
+            updatedAt: now
+        });
+
+        await db.ref(`orders/${cleanOrderId}`).update({
+            status: 'preparing',
+            prepUntil: prepUntil,
+            [`milestones/preparing`]: {
+                timestamp: now,
+                updatedBy: 'Merchant Kitchen',
+                prepMinutes: parseInt(prepMinutes)
+            }
+        }).catch(() => {});
+
+        const storeName = appState.merchantStoreName || "Store";
+        await db.ref(`storeRiderChats/${cleanOrderId}_${storeId}/messages`).push(sanitizeForFirebase({
+            sender: 'store',
+            senderType: 'store',
+            senderName: storeName,
+            text: `⏳ Order accepted! Kitchen is preparing the order (~${prepMinutes} mins estimated).`,
+            timestamp: now
+        })).catch(() => {});
+
+        await db.ref(`storeRiderChats/${cleanOrderId}_${storeId}`).update(sanitizeForFirebase({
+            lastMessage: `⏳ Preparing (~${prepMinutes}m)`,
+            lastTimestamp: now,
+            unreadForRider: true
+        })).catch(() => {});
+
+        showToast(`🍳 Order accepted! Prep timer set to ${prepMinutes} mins.`);
+        showSideNotification("ORDER ACCEPTED", `Kitchen set to ${prepMinutes}m prep for #${cleanOrderId}`, "fa-kitchen-set", "text-blue-400", "border-blue-500");
+    } catch(e) {
+        showToast("❌ Failed to accept order.");
+    }
+}
+
+export function promptCustomPrepTime(orderId) {
+    const customTime = prompt("Enter preparation time in minutes (e.g. 20):", "20");
+    const parsed = parseInt(customTime);
+    if (!isNaN(parsed) && parsed > 0) {
+        acceptStoreOrderWithPrepTime(orderId, parsed);
+    }
+}
+
+// ONE-TAP "READY FOR PICKUP" DISPATCH
+export async function markStoreOrderReadyForPickup(orderId) {
+    const rawStoreId = appState.merchantStoreId || localStorage.getItem('lokalex_merchant_store_id');
+    const storeId = cleanFirebasePathKey(rawStoreId);
+    const cleanOrderId = cleanFirebasePathKey(orderId);
+
+    if (!storeId || !cleanOrderId || !db) return;
+
+    const now = Date.now();
+
+    try {
+        await db.ref(`storeOrders/${storeId}/${cleanOrderId}`).update({
+            status: 'ready',
+            readyAt: now,
+            updatedAt: now
+        });
+
+        await db.ref(`orders/${cleanOrderId}`).update({
+            status: 'ready_for_pickup',
+            [`milestones/ready_for_pickup`]: {
+                timestamp: now,
+                updatedBy: 'Merchant Kitchen'
+            }
+        }).catch(() => {});
+
+        const storeName = appState.merchantStoreName || "Store";
+        await db.ref(`storeRiderChats/${cleanOrderId}_${storeId}/messages`).push(sanitizeForFirebase({
+            sender: 'store',
+            senderType: 'store',
+            senderName: storeName,
+            text: `✅ Order is packed and READY for pickup!`,
+            timestamp: now
+        })).catch(() => {});
+
+        await db.ref(`storeRiderChats/${cleanOrderId}_${storeId}`).update(sanitizeForFirebase({
+            lastMessage: `✅ READY FOR PICKUP!`,
+            lastTimestamp: now,
+            unreadForRider: true
+        })).catch(() => {});
+
+        showToast("✅ Order marked Ready for Pickup! Rider notified.");
+        showSideNotification("READY FOR PICKUP", `Order #${cleanOrderId} is ready!`, "fa-check-double", "text-emerald-400", "border-emerald-500");
+    } catch(e) {
+        showToast("❌ Failed to mark order ready.");
+    }
+}
+
+export async function updateStoreOrderStatus(orderId, newStatus) {
+    const rawStoreId = appState.merchantStoreId || localStorage.getItem('lokalex_merchant_store_id');
+    const storeId = cleanFirebasePathKey(rawStoreId);
+    const cleanOrderId = cleanFirebasePathKey(orderId);
+
+    if (!storeId || !cleanOrderId || !db) return;
+
+    try {
+        const updatePayload = {
+            status: newStatus,
+            updatedAt: Date.now()
+        };
+
+        if (newStatus === 'done' || newStatus === 'picked_up' || newStatus === 'completed') {
+            updatePayload.isDone = true;
+        }
+
+        await db.ref(`storeOrders/${storeId}/${cleanOrderId}`).update(updatePayload);
+
+        await db.ref(`orders/${cleanOrderId}/stores/${storeId}`).update({
+            status: newStatus,
+            updatedAt: Date.now()
+        }).catch(() => {});
+
+        showToast(`✅ Order marked as ${newStatus.toUpperCase()}`);
+    } catch(e) {
+        showToast("❌ Failed to update order status.");
+    }
 }
 
 // -------------------------------------------------------------
