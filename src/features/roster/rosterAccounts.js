@@ -41,14 +41,14 @@ export function renderAdminRidersList() {
 
         if (val) {
             ridersList = Object.entries(val).map(([id, item]) => ({
-                id: id,
+                id: (item.telegramId || item.id || id).toString().trim(),
                 name: item.riderName || item.name || id,
                 userType: (item.userType || item.type || "rider").toLowerCase().trim()
             }));
         }
 
         (globalState.rosterMembers || []).forEach(m => {
-            const mId = (m.telegramId || "").toString().trim();
+            const mId = (m.telegramId || m.id || "").toString().trim();
             const mName = m.riderName || m.name || mId;
             const mType = (m.userType || "rider").toLowerCase().trim();
 
@@ -116,10 +116,11 @@ export async function executeDeleteRiderAccount(riderId, riderName) {
         if (db) {
             await db.ref(`riders/${riderId}`).remove();
             await db.ref(`roster/${riderId}`).remove();
+            await db.ref(`settings/timeInSchedule/riderSchedules/${riderId}`).remove().catch(() => {});
         }
 
         if (globalState.rosterMembers) {
-            globalState.rosterMembers = globalState.rosterMembers.filter(m => (m.telegramId || "").toString().trim() !== riderId.toString().trim());
+            globalState.rosterMembers = globalState.rosterMembers.filter(m => (m.telegramId || m.id || "").toString().trim() !== riderId.toString().trim());
         }
 
         if (globalState.userTypesMap) {
@@ -151,6 +152,8 @@ export async function quickChangeRiderUserType(riderId, newUserType) {
             });
 
             await db.ref(`roster/${riderId}`).update({
+                telegramId: riderId,
+                id: riderId,
                 userType: newUserType
             }).catch(() => {});
         }
@@ -211,7 +214,7 @@ export async function openEditRiderModal(riderId) {
         }
 
         if (!existingData) {
-            const rMem = (globalState.rosterMembers || []).find(m => (m.telegramId || "").toString() === riderId.toString());
+            const rMem = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === riderId.toString());
             if (rMem) {
                 existingData = { riderName: rMem.riderName || rMem.name, userType: rMem.userType };
             }
@@ -243,6 +246,7 @@ export function generateRandomRiderId() {
     }
 }
 
+// UNIFIES LOGIN ID AND TELEGRAM ID ACROSS ALL DATABASE RECORDS
 export async function submitSaveRiderAccount() {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
@@ -260,28 +264,50 @@ export async function submitSaveRiderAccount() {
     try {
         const payload = {
             telegramId: riderId,
+            id: riderId,
             name: riderName,
             riderName: riderName,
             userType: userType,
             updatedAt: Date.now()
         };
 
+        const rosterEntry = {
+            telegramId: riderId,
+            id: riderId,
+            riderName: riderName,
+            name: riderName,
+            userType: userType,
+            status: 'End',
+            customerName: "",
+            startTime: "",
+            queueTime: Date.now(),
+            lastActiveTimestamp: Date.now()
+        };
+
         if (db) {
             await db.ref(`riders/${riderId}`).set(payload);
+            await db.ref(`roster/${riderId}`).update(rosterEntry).catch(() => {});
+        }
 
-            await db.ref(`roster/${riderId}`).update({
-                riderName: riderName,
-                userType: userType,
-                lastActiveTimestamp: Date.now()
-            }).catch(() => {});
+        if (!globalState.rosterMembers) globalState.rosterMembers = [];
+        const existingIdx = globalState.rosterMembers.findIndex(m => 
+            ((m.telegramId || m.id || "").toString().trim() === riderId) ||
+            ((m.riderName || m.name || "").toLowerCase().trim() === riderName.toLowerCase().trim())
+        );
+
+        if (existingIdx !== -1) {
+            globalState.rosterMembers[existingIdx] = { ...globalState.rosterMembers[existingIdx], ...rosterEntry };
+        } else {
+            globalState.rosterMembers.push(rosterEntry);
         }
 
         if (!globalState.userTypesMap) globalState.userTypesMap = {};
         globalState.userTypesMap[riderId] = userType;
         globalState.userTypesMap[riderName.toLowerCase()] = userType;
 
+        saveRosterCache();
         closeAdminEditRiderModal();
-        showToast(`✅ Saved rider account for ${riderName} (${userType.toUpperCase()})`);
+        showToast(`✅ Saved rider account for ${riderName} (ID: ${riderId})`);
         renderAdminRidersList();
         updateRosterUI();
     } catch(e) {

@@ -16,6 +16,7 @@ import {
     stopLineAlarm, 
     playLineAlarm,
     getUserType,
+    isAdmin,
     saveRosterCache,
     setLineAlarmConfirmed,
     archiveRiderCateringIfNeeded,
@@ -24,6 +25,50 @@ import {
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 import { requestClaimCustomer } from './rosterSwap.js';
+
+// ============================================================================
+// TIME-IN SCHEDULE & PERMANENT EARLY PASS VALIDATION HELPER
+// ============================================================================
+export function checkRiderTimeInAllowed(targetId = null, targetName = null) {
+    const myId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (targetName || appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
+    const myNameKey = myName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+    // Admins and Managers are always exempt from schedule restrictions[cite: 33]
+    if (isAdmin()) return { allowed: true, reason: 'admin' };
+
+    const config = globalState.timeInSchedule || {};
+    if (!config.enabled) return { allowed: true, reason: 'disabled' };
+
+    const riderSchedules = config.riderSchedules || {};
+    const riderSched = (myId && riderSchedules[myId]) || 
+                       (myName && riderSchedules[myName.toLowerCase()]) || 
+                       (myNameKey && riderSchedules[myNameKey]) || 
+                       null;
+
+    // Permanent Early Pass Bypass Check (Bypasses schedule restriction permanently until revoked by Admin)[cite: 33]
+    if (riderSched && riderSched.earlyPassGranted === true) {
+        return { allowed: true, earlyPass: true };
+    }
+
+    const allowedTimeStr = (riderSched && riderSched.allowedTimeIn) ? riderSched.allowedTimeIn : (config.defaultTimeIn || "08:00");
+    const [schedH, schedM] = allowedTimeStr.split(':').map(Number);
+    const schedTotalMins = (schedH * 60) + (schedM || 0);
+
+    const now = new Date();
+    const currentTotalMins = (now.getHours() * 60) + now.getMinutes();
+
+    if (currentTotalMins < schedTotalMins) {
+        return {
+            allowed: false,
+            allowedTime: allowedTimeStr,
+            currentTotalMins,
+            schedTotalMins
+        };
+    }
+
+    return { allowed: true, allowedTime: allowedTimeStr };
+}
 
 export function getTopQueueTime() {
     const rosterMembers = globalState.rosterMembers || [];
@@ -46,7 +91,7 @@ export function dismissQueueAlarm() {
     if (modal) modal.classList.add('hidden');
 }
 
-// CHECK IF RIDER IS FIRST IN LINE (LOWEST GROSS EARNINGS)
+// CHECK IF RIDER IS FIRST IN LINE (LOWEST GROSS EARNINGS)[cite: 33]
 export function checkFirstInLineNotification() {
     const rosterMembers = globalState.rosterMembers || [];
     const availableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
@@ -61,10 +106,10 @@ export function checkFirstInLineNotification() {
     }
 }
 
-// VOID SINGLE CUSTOMER WITHOUT WIPING SIBLING BOOKINGS
+// VOID SINGLE CUSTOMER WITHOUT WIPING SIBLING BOOKINGS[cite: 33]
 export async function voidSingleCateringCustomer(targetId, targetName, custNameToVoid) {
     const rosterMembers = globalState.rosterMembers || [];
-    const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString().trim() === targetId.toString().trim());
+    const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString().trim() === targetId.toString().trim());
     if (!targetRecord) return;
 
     let remainingCusts = [];
@@ -123,7 +168,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
 export async function triggerStatusWithSlide(targetStatus) {
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
-    const myRecord = rosterMembers.find(m => (m.telegramId || "").toString() === myId);
+    const myRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === myId);
 
     if (myRecord && myRecord.status === 'End' && targetStatus !== 'Available') {
         showToast("⚠️ Naka-End Shift ka. Ang Available button lamang ang maaaring pindutin.");
@@ -131,6 +176,14 @@ export async function triggerStatusWithSlide(targetStatus) {
     }
 
     if (targetStatus === 'Available') {
+        // ENFORCE ADMIN TIME-IN SCHEDULE AND PERMANENT EARLY PASS CHECK[cite: 33]
+        const timeCheck = checkRiderTimeInAllowed(appState.telegramId, appState.riderName);
+        if (!timeCheck.allowed) {
+            showToast(`🚫 Bawal pa mag-Time In: Ang iyong allowed time-in ay ${timeCheck.allowedTime}. Humingi ng Early Time-In pass sa Admin.`);
+            showSideNotification("TIME-IN RESTRICTED", `Allowed at ${timeCheck.allowedTime}. Need Admin Early Pass.`, "fa-clock", "text-red-400", "border-red-500");
+            return;
+        }
+
         if (myRecord && myRecord.status === 'Cooldown' && myRecord.cooldownUntil && Date.now() < myRecord.cooldownUntil) {
             const remMins = Math.ceil((myRecord.cooldownUntil - Date.now()) / 60000);
             showToast(`⚠️ Naka-penalty cooldown ka pa. Maghintay ng ${remMins} min(s) bago maging Available.`);
@@ -181,7 +234,7 @@ export async function triggerStatusWithSlide(targetStatus) {
         }
 
         const currentRoster = globalState.rosterMembers || [];
-        const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== myId);
+        const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || m.id || "").toString() !== myId);
         let maxTime = new Date().getTime();
         availableRiders.forEach(r => {
             const t = parseQueueTime(r.queueTime);
@@ -242,7 +295,7 @@ export async function triggerStatusWithSlide(targetStatus) {
 export function promptCateringStatus() {
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
-    const myRecord = rosterMembers.find(m => (m.telegramId || "").toString() === myId);
+    const myRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === myId);
 
     if (myRecord) {
         if (myRecord.status === 'End') return showToast("⚠️ Naka-End Shift ka. Mag-Available muna bago mag-Cater.");
@@ -255,17 +308,21 @@ export function promptCateringStatus() {
 
     if (!amIAlreadyCatering && availableRiders.length > 0) {
         const firstAvailable = availableRiders[0];
-        if ((firstAvailable?.telegramId || "").toString() !== myId) {
-            const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId);
+        if ((firstAvailable?.telegramId || firstAvailable?.id || "").toString() !== myId) {
+            const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
             const myGross = getRiderTodayGross(myRecord?.riderName || myRecord?.name, myId);
             return showToast(`⚠️ 1st in line: ${firstAvailable.riderName || 'Rider'} (Kita: ₱${firstGross.toFixed(0)}) vs Iyo (₱${myGross.toFixed(0)}). Maghintay sa iyong turn.`);
         }
     }
 
-    if (myRecord && myRecord.customerName) {
+    // DYNAMIC ADMIN-CONFIGURED ACTIVE BOOKING LIMIT (EXEMPTING ADMINS)
+    const limitConfig = globalState.bookingLimits || {};
+    const maxActive = (limitConfig.maxActiveBookings !== undefined && limitConfig.maxActiveBookings !== null) ? parseInt(limitConfig.maxActiveBookings) : 4;
+
+    if (myRecord && myRecord.customerName && !isAdmin()) {
         const activeCusts = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-        if (activeCusts.length >= 4) {
-            return showToast("⚠️ Reached maximum limit of 4 active catering customers!");
+        if (activeCusts.length >= maxActive) {
+            return showToast(`⚠️ Reached maximum limit of ${maxActive} active catering customer(s)!`);
         }
     }
 
@@ -287,7 +344,7 @@ export async function confirmCateringStatus() {
 
     const myId = (appState.telegramId || "").toString();
     const myName = appState.riderName || localStorage.getItem('riderName') || "Rider";
-    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === myId) : null;
+    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || m.id || "").toString() === myId) : null;
 
     let existingCustomers = [];
     let existingTimes = [];
@@ -297,8 +354,12 @@ export async function confirmCateringStatus() {
         existingTimes = myRecord.startTime ? myRecord.startTime.split(', ').map(t => t.trim()) : [];
     }
 
-    if (existingCustomers.length >= 4 && !existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase())) {
-        return showToast("⚠️ Reached maximum limit of 4 active catering customers!");
+    // ENFORCE DYNAMIC MAXIMUM ACTIVE BOOKING LIMIT (EXEMPTING ADMINS)
+    const limitConfig = globalState.bookingLimits || {};
+    const maxActive = (limitConfig.maxActiveBookings !== undefined && limitConfig.maxActiveBookings !== null) ? parseInt(limitConfig.maxActiveBookings) : 4;
+
+    if (!isAdmin() && existingCustomers.length >= maxActive && !existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase())) {
+        return showToast(`⚠️ Reached maximum limit of ${maxActive} active catering customer(s)!`);
     }
 
     closeCateringModal();
@@ -362,7 +423,7 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
     const rosterMembers = globalState.rosterMembers || [];
 
     let recordLogin = false;
-    const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === tId.toString());
+    const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === tId.toString());
 
     if (status !== 'Catering' && targetRecord) {
         await archiveRiderCateringIfNeeded(targetRecord);
@@ -380,7 +441,7 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     let newQueueTime = precalculatedQueueTime !== null ? precalculatedQueueTime : 0;
     if (status === 'Available' && precalculatedQueueTime === null) {
-        const availableRiders = rosterMembers.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== tId.toString());
+        const availableRiders = rosterMembers.filter(m => m.status === 'Available' && (m.telegramId || m.id || "").toString() !== tId.toString());
         let maxTime = new Date().getTime();
         availableRiders.forEach(r => {
             const t = parseQueueTime(r.queueTime);
@@ -401,7 +462,9 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     const nowTimestamp = Date.now();
     const rosterData = {
         telegramId: tId.toString(),
+        id: tId.toString(),
         riderName: tName,
+        name: tName,
         userType: getUserType(),
         status: status,
         customerName: customerName || "",
@@ -414,7 +477,7 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     };
 
     if (!globalState.rosterMembers) globalState.rosterMembers = [];
-    const existingIdx = globalState.rosterMembers.findIndex(m => (m.telegramId || "").toString() === tId.toString());
+    const existingIdx = globalState.rosterMembers.findIndex(m => (m.telegramId || m.id || "").toString() === tId.toString());
     if (existingIdx !== -1) {
         globalState.rosterMembers[existingIdx] = {
             ...globalState.rosterMembers[existingIdx],

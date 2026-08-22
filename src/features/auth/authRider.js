@@ -6,6 +6,7 @@ import { fetchGCashDetails } from '../../ui/modals.js';
 import { renderViewUI } from '../../ui/router.js';
 import { calibrateGPS, startBackgroundRosterGpsTracker, stopBackgroundRosterGpsTracker } from './authGps.js';
 import { isUserBlocked } from './authAdmin.js';
+import { checkRiderTimeInAllowed } from '../roster/rosterStatus.js';
 
 let deferredPwaPrompt = null;
 
@@ -52,21 +53,6 @@ export async function processLogin() {
     }
 
     try {
-        showToast("📡 Calibrating GPS location...");
-        const coords = await calibrateGPS((accuracy) => {
-            showToast(`📡 Calibrating GPS: ±${Math.round(accuracy)}m`);
-        });
-
-        if (coords.lat === 0 && coords.lon === 0) {
-            showToast("⚠️ GPS Signal weak. Turn on location services.");
-        } else {
-            showToast(`✅ GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
-        }
-
-        appState.lat = coords.lat;
-        appState.lon = coords.lon;
-        appState.gpsAccuracy = coords.accuracy;
-
         let authorized = false;
         let riderRecord = null;
 
@@ -82,10 +68,19 @@ export async function processLogin() {
 
         if (riderRecord) {
             const cleanName = riderRecord.name || riderRecord.riderName || idInput;
-            const cleanUserType = riderRecord.userType || riderRecord.type || "rider";
+            const cleanUserType = (riderRecord.userType || riderRecord.type || "rider").toLowerCase().trim();
 
             if (isUserBlocked(cleanName)) {
                 throw new Error("🚫 Access Denied: Account blocked.");
+            }
+
+            // SCHEDULE TIME-IN AND PERMANENT EARLY PASS VALIDATION GATE[cite: 51]
+            const isUserAdmin = cleanUserType === 'admin' || cleanUserType === 'owner' || cleanUserType === 'manager';
+            if (!isUserAdmin) {
+                const timeCheck = checkRiderTimeInAllowed(idInput, cleanName);
+                if (!timeCheck.allowed) {
+                    throw new Error(`🚫 Bawal pa mag-Time In: Ang iyong allowed time-in ay ${timeCheck.allowedTime}. Humingi ng Early Time-In pass sa Admin.`);
+                }
             }
 
             appState.riderName = cleanName;
@@ -95,6 +90,21 @@ export async function processLogin() {
         }
 
         if (authorized) {
+            showToast("📡 Calibrating GPS location...");
+            const coords = await calibrateGPS((accuracy) => {
+                showToast(`📡 Calibrating GPS: ±${Math.round(accuracy)}m`);
+            });
+
+            if (coords.lat === 0 && coords.lon === 0) {
+                showToast("⚠️ GPS Signal weak. Turn on location services.");
+            } else {
+                showToast(`✅ GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
+            }
+
+            appState.lat = coords.lat;
+            appState.lon = coords.lon;
+            appState.gpsAccuracy = coords.accuracy;
+
             localStorage.setItem('telegramId', appState.telegramId);
             localStorage.setItem('riderName', appState.riderName);
             localStorage.setItem('userType', appState.userType || "");

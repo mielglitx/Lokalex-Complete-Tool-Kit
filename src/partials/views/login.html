@@ -22,10 +22,10 @@
             <p class="text-xs text-gray-300 leading-relaxed">I-enter ang iyong Mobile Number at Password.</p>
 
             <div id="login-form-container" class="flex flex-col gap-2.5">
-                <input type="tel" id="cust-login-phone" name="cust_login_phone_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Mobile Number (e.g. 09123456789)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white font-bold font-mono">
+                <input type="tel" id="cust-login-phone" autocomplete="tel" inputmode="tel" placeholder="Mobile Number (e.g. 09123456789)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white font-bold font-mono">
                 
                 <div class="relative">
-                    <input type="password" id="cust-login-pass" name="cust_login_pass_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-700 outline-none text-white font-bold">
+                    <input type="password" id="cust-login-pass" autocomplete="current-password" placeholder="Password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-700 outline-none text-white font-bold">
                     <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('cust-login-pass', 'login-pass-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-white transition">
                         <i id="login-pass-eye" class="fa-solid fa-eye"></i>
                     </button>
@@ -49,7 +49,7 @@
 
             <!-- STEP 1: Phone Verification via SMS OTP -->
             <div id="reg-step-1" class="flex flex-col gap-3">
-                <input type="tel" id="reg-phone-num" name="reg_phone_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Mobile Number (e.g. 09123456789)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white font-bold font-mono">
+                <input type="tel" id="reg-phone-num" autocomplete="tel" inputmode="tel" placeholder="Mobile Number (e.g. 09123456789)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white font-bold font-mono">
                 <button id="reg-send-otp-btn" onclick="window.sendCustomerRegisterOTP && window.sendCustomerRegisterOTP()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs">
                     <i class="fa-solid fa-paper-plane"></i> SEND OTP CODE
                 </button>
@@ -57,7 +57,7 @@
                 <!-- OTP Verification Box -->
                 <div id="reg-otp-box" class="hidden flex flex-col gap-3 border-t border-gray-800 pt-3">
                     <label class="text-[10px] text-emerald-400 font-bold uppercase">Enter 6-Digit SMS Code</label>
-                    <input type="text" id="reg-otp-code" name="reg_otp_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="123456" maxlength="6" class="w-full bg-inputBg text-center tracking-widest text-lg font-black rounded-xl p-3 border border-emerald-500/50 outline-none text-white font-mono">
+                    <input type="text" id="reg-otp-code" autocomplete="one-time-code" inputmode="numeric" placeholder="123456" maxlength="6" class="w-full bg-inputBg text-center tracking-widest text-lg font-black rounded-xl p-3 border border-emerald-500/50 outline-none text-white font-mono">
                     <button id="reg-verify-otp-btn" onclick="window.verifyCustomerRegisterOTP && window.verifyCustomerRegisterOTP()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs">
                         <i class="fa-solid fa-check-double"></i> VERIFY OTP CODE
                     </button>
@@ -71,13 +71,13 @@
                 <!-- Full Name (Required) -->
                 <div>
                     <label class="text-[10px] text-gray-400 font-bold uppercase">Buong Pangalan *</label>
-                    <input type="text" id="reg-fullname" name="reg_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Buong Pangalan (Full Name)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white font-bold mt-1">
+                    <input type="text" id="reg-fullname" autocomplete="name" placeholder="Buong Pangalan (Full Name)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white font-bold mt-1">
                 </div>
 
                 <!-- Delivery Address (Required) -->
                 <div>
                     <label class="text-[10px] text-gray-400 font-bold uppercase">Kumpletong Address *</label>
-                    <input type="text" id="reg-address" name="reg_addr_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Kumpletong Address (Delivery Address)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white mt-1">
+                    <input type="text" id="reg-address" autocomplete="street-address" placeholder="Kumpletong Address (Delivery Address)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white mt-1">
                 </div>
 
                 <!-- GPS Location Pin (Required) -->
@@ -96,14 +96,14 @@
                 <!-- Email Address (Optional) -->
                 <div>
                     <label class="text-[10px] text-gray-400 font-bold uppercase">Email Address (Optional)</label>
-                    <input type="email" id="reg-email" name="reg_email_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Email Address (Optional)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white mt-1">
+                    <input type="email" id="reg-email" autocomplete="email" placeholder="Email Address (Optional)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white mt-1">
                 </div>
 
                 <!-- Password (Required) -->
                 <div>
                     <label class="text-[10px] text-gray-400 font-bold uppercase">Password *</label>
                     <div class="relative mt-1">
-                        <input type="password" id="reg-password" name="reg_pass_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Password (min 6 characters)" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-700 outline-none text-white font-bold">
+                        <input type="password" id="reg-password" autocomplete="new-password" placeholder="Password (min 6 characters)" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-700 outline-none text-white font-bold">
                         <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('reg-password', 'reg-pass-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-white transition">
                             <i id="reg-pass-eye" class="fa-solid fa-eye"></i>
                         </button>
@@ -114,7 +114,7 @@
                 <div>
                     <label class="text-[10px] text-gray-400 font-bold uppercase">Ulitin ang Password *</label>
                     <div class="relative mt-1">
-                        <input type="password" id="reg-confirm-password" name="reg_confirm_pass_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Ulitin ang Password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-700 outline-none text-white font-bold">
+                        <input type="password" id="reg-confirm-password" autocomplete="new-password" placeholder="Ulitin ang Password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-700 outline-none text-white font-bold">
                         <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('reg-confirm-password', 'reg-confirm-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-white transition">
                             <i id="reg-confirm-eye" class="fa-solid fa-eye"></i>
                         </button>
@@ -151,7 +151,7 @@
         </div>
         <div class="relative mt-1">
             <i class="fa-solid fa-key absolute left-3 top-3.5 text-gray-400"></i>
-            <input type="text" id="login-id" name="rider_login_id_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Enter Rider Login ID" class="w-full bg-inputBg text-sm rounded-xl pl-10 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition font-mono">
+            <input type="text" id="login-id" autocomplete="username" placeholder="Enter Rider Login ID" class="w-full bg-inputBg text-sm rounded-xl pl-10 pr-4 py-3 outline-none border border-transparent focus:border-blue-500 transition font-mono">
         </div>
         <button id="login-btn" onclick="window.processLogin && window.processLogin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95">
             LOGIN & MARK AVAILABLE
@@ -185,7 +185,7 @@
                 <label class="text-[10px] text-gray-400 font-bold uppercase">Store Username</label>
                 <div class="relative mt-1">
                     <i class="fa-solid fa-store absolute left-3 top-3.5 text-gray-400"></i>
-                    <input type="text" id="merch-login-user" name="merch_user_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Username (e.g. store_name)" class="w-full bg-inputBg text-xs rounded-xl pl-9 pr-3 py-3 border border-gray-700 outline-none text-white font-bold font-mono">
+                    <input type="text" id="merch-login-user" autocomplete="username" placeholder="Username (e.g. store_name)" class="w-full bg-inputBg text-xs rounded-xl pl-9 pr-3 py-3 border border-gray-700 outline-none text-white font-bold font-mono">
                 </div>
             </div>
 
@@ -193,7 +193,7 @@
                 <label class="text-[10px] text-gray-400 font-bold uppercase">Password</label>
                 <div class="relative mt-1">
                     <i class="fa-solid fa-lock absolute left-3 top-3.5 text-gray-400"></i>
-                    <input type="password" id="merch-login-pass" name="merch_pass_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Password" class="w-full bg-inputBg text-xs rounded-xl pl-9 pr-10 py-3 border border-gray-700 outline-none text-white font-bold">
+                    <input type="password" id="merch-login-pass" autocomplete="current-password" placeholder="Password" class="w-full bg-inputBg text-xs rounded-xl pl-9 pr-10 py-3 border border-gray-700 outline-none text-white font-bold">
                     <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('merch-login-pass', 'merch-pass-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-white transition">
                         <i id="merch-pass-eye" class="fa-solid fa-eye"></i>
                     </button>

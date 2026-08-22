@@ -16,17 +16,17 @@
         <div class="flex flex-col gap-3 text-xs">
             <div>
                 <label class="text-[10px] text-gray-400 font-bold uppercase">Full Name</label>
-                <input type="text" id="edit-cust-fullname" placeholder="Full Name" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+                <input type="text" id="edit-cust-fullname" autocomplete="name" placeholder="Full Name" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
             </div>
 
             <div>
                 <label class="text-[10px] text-gray-400 font-bold uppercase">Delivery Address</label>
-                <input type="text" id="edit-cust-address" placeholder="Address" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+                <input type="text" id="edit-cust-address" autocomplete="street-address" placeholder="Address" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
             </div>
 
             <div>
                 <label class="text-[10px] text-gray-400 font-bold uppercase">Mobile Number (Requires OTP if changed)</label>
-                <input type="tel" id="edit-cust-phone" placeholder="09123456789 or +1..." class="w-full bg-inputBg text-xs font-mono font-bold rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+                <input type="tel" id="edit-cust-phone" autocomplete="tel" inputmode="tel" placeholder="09123456789 or +1..." class="w-full bg-inputBg text-xs font-mono font-bold rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
             </div>
 
             <div>
@@ -44,7 +44,7 @@
             <!-- OTP INPUT BOX (HIDDEN UNTIL PHONE IS CHANGED) -->
             <div id="edit-cust-otp-box" class="hidden bg-darkBg p-3 rounded-2xl border border-emerald-500/40 flex flex-col gap-2 mt-1">
                 <span class="text-[10px] text-emerald-400 font-bold uppercase">Enter 6-Digit SMS OTP Code</span>
-                <input type="text" id="edit-cust-otp-code" placeholder="123456" maxlength="6" class="w-full bg-inputBg text-center tracking-widest text-base font-black rounded-xl p-2.5 border border-emerald-500/50 outline-none text-white font-mono">
+                <input type="text" id="edit-cust-otp-code" autocomplete="one-time-code" inputmode="numeric" placeholder="123456" maxlength="6" class="w-full bg-inputBg text-center tracking-widest text-base font-black rounded-xl p-2.5 border border-emerald-500/50 outline-none text-white font-mono">
                 <button type="button" id="edit-cust-verify-otp-btn" onclick="window.verifyAndUpdatePhoneOTP && window.verifyAndUpdatePhoneOTP()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs shadow transition active:scale-95 flex items-center justify-center gap-1.5">
                     <i class="fa-solid fa-check-double"></i> VERIFY & SAVE
                 </button>
@@ -100,7 +100,7 @@
 <div id="mapcalc-name-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-emerald-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3">
         <h3 class="font-bold text-xs text-white text-center">New Distance Calculation</h3>
-        <input type="text" id="mapcalc-cust-name-input" placeholder="Enter Customer / Destination Name..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold">
+        <input type="text" id="mapcalc-cust-name-input" autocomplete="off" autocorrect="off" placeholder="Enter Customer / Destination Name..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold">
         <div class="flex gap-2 mt-1">
             <button onclick="window.closeMapCalcNameModal && window.closeMapCalcNameModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300">Cancel</button>
             <button onclick="window.startMapCalcForCustomer && window.startMapCalcForCustomer()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-2.5 rounded-xl text-xs font-bold text-white">Start</button>
@@ -108,30 +108,52 @@
     </div>
 </div>
 
-<!-- ADMIN FORCE CATERING MODAL -->
+<!-- ADMIN FORCE CATERING MODAL WITH PENALTY COOLDOWN SETTINGS -->
 <div id="admin-catering-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
-    <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-4">
+    <div class="bg-cardBg border border-gray-800 p-6 rounded-2xl w-full max-w-xs shadow-2xl flex flex-col gap-3.5">
         <h3 class="font-bold text-base text-center text-red-400 flex items-center justify-center gap-2">
-            <i class="fa-solid fa-motorcycle"></i> Start Catering
+            <i class="fa-solid fa-motorcycle"></i> Force Cater Order
         </h3>
 
         <!-- Hidden input fields to store target rider details -->
         <input type="hidden" id="admin-cater-target-rider-id" value="">
         <input type="hidden" id="admin-cater-target-rider-name" value="">
 
-        <div class="flex flex-col gap-2 text-left">
-            <label class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Select Customer (Inbox)</label>
-            <select id="admin-cater-customer-select" onchange="if(this.value) document.getElementById('admin-cater-cust-name').value = this.value;" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white font-bold">
-                <option value="">-- Select Active Customer --</option>
-            </select>
+        <div class="flex flex-col gap-2 text-left text-xs">
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Select Customer (Inbox)</label>
+                <select id="admin-cater-customer-select" onchange="if(this.value) document.getElementById('admin-cater-cust-name').value = this.value;" class="w-full bg-inputBg text-xs rounded-xl p-2.5 outline-none border border-gray-700 text-white font-bold">
+                    <option value="">-- Select Active Customer --</option>
+                </select>
+            </div>
 
-            <label class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mt-1">Or Enter Name Manually</label>
-            <input type="text" id="admin-cater-cust-name" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold">
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Or Enter Name Manually</label>
+                <input type="text" id="admin-cater-cust-name" autocomplete="off" autocorrect="off" placeholder="Enter customer name..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold">
+            </div>
+
+            <div class="pt-1">
+                <label class="text-[10px] text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1 mb-1">
+                    <i class="fa-solid fa-hourglass-half"></i> Penalty Cooldown (After Delivery)
+                </label>
+                <select id="admin-cater-penalty-select" class="w-full bg-inputBg text-xs rounded-xl p-2.5 outline-none border border-amber-500/40 text-amber-300 font-bold">
+                    <option value="0" selected>No Penalty (Standard Delivery)</option>
+                    <option value="5">5 Minutes Penalty Cooldown</option>
+                    <option value="10">10 Minutes Penalty Cooldown</option>
+                    <option value="15">15 Minutes Penalty Cooldown</option>
+                    <option value="20">20 Minutes Penalty Cooldown</option>
+                    <option value="30">30 Minutes Penalty Cooldown</option>
+                    <option value="60">60 Minutes Penalty Cooldown</option>
+                </select>
+                <p class="text-[9px] text-gray-400 mt-1 italic">
+                    Kapag may penalty, awtomatikong mag-co-cooldown ang rider bago muling maging Available pagkatapos ng biyahe.
+                </p>
+            </div>
         </div>
 
-        <div class="flex gap-2 mt-2">
+        <div class="flex gap-2 mt-1">
             <button type="button" onclick="window.closeAdminCateringModal && window.closeAdminCateringModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-            <button type="button" onclick="window.submitAdminForceCatering && window.submitAdminForceCatering()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95">Start</button>
+            <button type="button" onclick="window.submitAdminForceCatering && window.submitAdminForceCatering()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Start</button>
         </div>
     </div>
 </div>
@@ -159,7 +181,7 @@
         </div>
         <div>
             <label class="text-[10px] text-gray-400 font-bold uppercase">Reason</label>
-            <input type="text" id="penalty-reason-input" placeholder="e.g. Late shift arrival" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+            <input type="text" id="penalty-reason-input" autocomplete="off" placeholder="e.g. Late shift arrival" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
         </div>
         <div class="flex gap-2 mt-2">
             <button onclick="window.closeAdminPenaltyModal && window.closeAdminPenaltyModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300">Cancel</button>
@@ -183,7 +205,7 @@
         </div>
         <div>
             <label class="text-[10px] text-gray-400 font-bold uppercase">Customer Name</label>
-            <input type="text" id="manual-comm-cust-input" placeholder="Enter customer name..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
+            <input type="text" id="manual-comm-cust-input" autocomplete="off" placeholder="Enter customer name..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
         </div>
         <div>
             <label class="text-[10px] text-gray-400 font-bold uppercase">Gross Total Fee (₱)</label>
@@ -259,13 +281,13 @@
             <div class="text-center text-gray-500 italic py-10">Loading chat history...</div>
         </div>
 
-        <!-- FOOTER INPUT BAR -->
+        <!-- FOOTER INPUT BAR (CLEANED UP TO PREVENT PASSWORD AUTOFILL) -->
         <div class="flex gap-1.5 items-center shrink-0 pt-1">
             <input type="file" id="rider-chat-file-input" accept="image/*" class="hidden" onchange="if(this.files[0]) { window.openImageEditorModal && window.openImageEditorModal(this.files[0], 'rider'); this.value = ''; }">
             <button onclick="document.getElementById('rider-chat-file-input').click()" class="bg-gray-800 hover:bg-gray-700 text-blue-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Attach & Edit Photo"><i class="fa-solid fa-image"></i></button>
             <button onclick="window.sendRiderLocation && window.sendRiderLocation()" class="bg-gray-800 hover:bg-gray-700 text-emerald-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Pick Rider Location Pin on Map"><i class="fa-solid fa-location-dot"></i></button>
 
-            <input type="text" id="rider-cust-chat-input" name="rider_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" onkeydown="if(event.key==='Enter') window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" placeholder="Type reply..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 text-white">
+            <input type="text" id="rider-cust-chat-input" autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true" onkeydown="if(event.key==='Enter') window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" placeholder="Type reply..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 text-white">
             <button id="rider-cust-send-btn" onclick="window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0"><i class="fa-solid fa-paper-plane"></i></button>
         </div>
     </div>
@@ -371,10 +393,10 @@
         </p>
         <div class="flex flex-col gap-2 text-left">
             <label class="text-[10px] text-gray-400 font-bold uppercase">GCash Account Name</label>
-            <input type="text" id="gcash-name-input" placeholder="e.g. JUAN DELA CRUZ" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 text-white font-bold">
+            <input type="text" id="gcash-name-input" autocomplete="off" placeholder="e.g. JUAN DELA CRUZ" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 text-white font-bold">
             
             <label class="text-[10px] text-gray-400 font-bold uppercase mt-1">GCash Number</label>
-            <input type="text" id="gcash-no-input" placeholder="e.g. 09123456789" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 text-white font-bold font-mono">
+            <input type="tel" id="gcash-no-input" autocomplete="tel" inputmode="tel" placeholder="e.g. 09123456789" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 text-white font-bold font-mono">
         </div>
         <div class="flex gap-2 mt-2">
             <button onclick="window.closeGCashModal && window.closeGCashModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
@@ -425,7 +447,7 @@
         <div id="fp-step-phone" class="hidden flex flex-col gap-3 mt-1">
             <div class="text-left">
                 <label class="text-[10px] text-gray-400 font-bold uppercase">Mobile Number</label>
-                <input type="tel" id="fp-phone-input" placeholder="09123456789" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white font-bold font-mono mt-1">
+                <input type="tel" id="fp-phone-input" autocomplete="tel" inputmode="tel" placeholder="09123456789" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white font-bold font-mono mt-1">
             </div>
             <button id="fp-send-sms-btn" onclick="window.sendResetSMS && window.sendResetSMS()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs">
                 <i class="fa-solid fa-paper-plane"></i> SEND OTP CODE
@@ -438,7 +460,7 @@
         <div id="fp-step-email" class="hidden flex flex-col gap-3 mt-1">
             <div class="text-left">
                 <label class="text-[10px] text-gray-400 font-bold uppercase">Email Address</label>
-                <input type="email" id="fp-email-input" placeholder="name@example.com" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white mt-1">
+                <input type="email" id="fp-email-input" autocomplete="email" placeholder="name@example.com" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white mt-1">
             </div>
             <button id="fp-send-email-btn" onclick="window.sendResetEmailLink && window.sendResetEmailLink()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs">
                 <i class="fa-solid fa-paper-plane"></i> SEND RESET LINK
@@ -451,7 +473,7 @@
         <div id="fp-step-otp" class="hidden flex flex-col gap-3 mt-1">
             <div class="text-left">
                 <label class="text-[10px] text-emerald-400 font-bold uppercase">Enter 6-Digit SMS Code</label>
-                <input type="text" id="fp-otp-input" placeholder="123456" maxlength="6" class="w-full bg-inputBg text-center tracking-widest text-lg font-black rounded-xl p-3 border border-emerald-500/50 outline-none text-white font-mono mt-1">
+                <input type="text" id="fp-otp-input" autocomplete="one-time-code" inputmode="numeric" placeholder="123456" maxlength="6" class="w-full bg-inputBg text-center tracking-widest text-lg font-black rounded-xl p-3 border border-emerald-500/50 outline-none text-white font-mono mt-1">
             </div>
             <button id="fp-verify-otp-btn" onclick="window.verifyResetOTP && window.verifyResetOTP()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs">
                 <i class="fa-solid fa-check-double"></i> VERIFY CODE
@@ -462,7 +484,7 @@
             <div>
                 <label class="text-[10px] text-gray-400 font-bold uppercase">Bagong Password</label>
                 <div class="relative mt-1">
-                    <input type="password" id="fp-new-pass" placeholder="At least 6 characters" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-700 outline-none text-white font-bold">
+                    <input type="password" id="fp-new-pass" autocomplete="new-password" placeholder="At least 6 characters" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-700 outline-none text-white font-bold">
                     <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('fp-new-pass', 'fp-pass-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-white transition">
                         <i id="fp-pass-eye" class="fa-solid fa-eye"></i>
                     </button>
@@ -471,7 +493,7 @@
             <div>
                 <label class="text-[10px] text-gray-400 font-bold uppercase">Ulitin ang Bagong Password</label>
                 <div class="relative mt-1">
-                    <input type="password" id="fp-confirm-pass" placeholder="Ulitin ang bagong password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-700 outline-none text-white font-bold">
+                    <input type="password" id="fp-confirm-pass" autocomplete="new-password" placeholder="Ulitin ang bagong password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-700 outline-none text-white font-bold">
                     <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('fp-confirm-pass', 'fp-confirm-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-white transition">
                         <i id="fp-confirm-eye" class="fa-solid fa-eye"></i>
                     </button>
@@ -480,44 +502,6 @@
             <button id="fp-save-pass-btn" onclick="window.completePasswordReset && window.completePasswordReset()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs mt-1">
                 <i class="fa-solid fa-lock"></i> UPDATE PASSWORD
             </button>
-        </div>
-    </div>
-</div>
-
-<!-- ADMIN BLOCK USER MODAL -->
-<div id="admin-block-user-modal" class="hidden fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="bg-cardBg border border-red-500/30 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4">
-        <div class="flex justify-between items-center border-b border-gray-800 pb-3">
-            <div class="flex items-center gap-2 text-red-400 font-bold text-xs uppercase">
-                <i class="fa-solid fa-user-slash text-base"></i>
-                <span>Block User / Rider</span>
-            </div>
-            <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="text-gray-400 hover:text-white text-xs">
-                <i class="fa-solid fa-xmark text-sm"></i>
-            </button>
-        </div>
-
-        <div class="flex flex-col gap-3">
-            <div>
-                <label class="text-[10px] text-gray-400 font-bold uppercase">Select User</label>
-                <select id="block-target-select" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white mt-1">
-                    <option value="" disabled selected>-- Select Rider / User --</option>
-                </select>
-            </div>
-
-            <div>
-                <label class="text-[10px] text-gray-400 font-bold uppercase">Reason for Block</label>
-                <input type="text" id="block-reason-input" placeholder="e.g. Non-compliance, Unprofessional conduct" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white mt-1">
-            </div>
-
-            <button onclick="window.submitBlockUser && window.submitBlockUser()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl transition active:scale-95 text-xs mt-1">
-                CONFIRM BLOCK
-            </button>
-        </div>
-
-        <div class="border-t border-gray-800 pt-3">
-            <div class="text-[10px] text-gray-400 font-bold uppercase mb-2">Blocked Users List</div>
-            <div id="blocked-users-list" class="flex flex-col gap-2 max-h-40 overflow-y-auto pr-1"></div>
         </div>
     </div>
 </div>
@@ -579,10 +563,10 @@
         </div>
 
         <div id="adv-tab-add-content" class="hidden flex flex-col gap-2 overflow-y-auto">
-            <input type="text" id="adv-cust-name" placeholder="Customer Name *" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
-            <input type="text" id="adv-receiver" placeholder="Receiver Name / Alternate" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
-            <input type="text" id="adv-address" placeholder="Delivery Address" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
-            <input type="text" id="adv-contact" placeholder="Contact Number" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
+            <input type="text" id="adv-cust-name" autocomplete="off" placeholder="Customer Name *" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
+            <input type="text" id="adv-receiver" autocomplete="off" placeholder="Receiver Name / Alternate" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
+            <input type="text" id="adv-address" autocomplete="street-address" placeholder="Delivery Address" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
+            <input type="tel" id="adv-contact" autocomplete="tel" inputmode="tel" placeholder="Contact Number" class="w-full bg-inputBg text-xs rounded-lg p-2.5 outline-none border border-gray-700 text-white">
             
             <div class="grid grid-cols-2 gap-2">
                 <div class="flex flex-col gap-1">
@@ -629,7 +613,7 @@
             </select>
 
             <label class="text-[10px] text-gray-400 font-bold uppercase mt-1">Or Enter Name Manually</label>
-            <input type="text" id="catering-customer-name" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold">
+            <input type="text" id="catering-customer-name" autocomplete="off" placeholder="Enter customer name..." class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white font-bold">
         </div>
         <div class="flex gap-2 mt-2">
             <button onclick="window.closeCateringModal && window.closeCateringModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
@@ -659,7 +643,7 @@
         <div class="w-12 h-12 bg-amber-500/20 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-3"><i class="fa-solid fa-lock"></i></div>
         <h3 class="font-bold text-base mb-1">Protected Record</h3>
         <p class="text-xs text-gray-400 mb-4">Enter password to authorize editing.</p>
-        <input type="password" id="modal-pass" placeholder="Password" class="w-full bg-inputBg text-sm text-center rounded-xl p-3 mb-4 outline-none border border-gray-700">
+        <input type="password" id="modal-pass" autocomplete="current-password" placeholder="Password" class="w-full bg-inputBg text-sm text-center rounded-xl p-3 mb-4 outline-none border border-gray-700">
         <div class="flex gap-2">
             <button onclick="window.closePasswordModal && window.closePasswordModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-3 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
             <button onclick="window.verifyPassword && window.verifyPassword()" class="flex-1 bg-amber-500 hover:bg-amber-400 py-3 rounded-xl text-xs font-bold text-black transition active:scale-95">Verify</button>
@@ -683,7 +667,7 @@
         <h3 class="font-bold text-base text-center">Edit Item</h3>
         <div class="flex flex-col gap-1 text-left">
             <label class="text-[10px] text-gray-400 font-bold">Item Name</label>
-            <input type="text" id="edit-name-input" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
+            <input type="text" id="edit-name-input" autocomplete="off" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 focus:border-blue-500">
         </div>
         <div class="flex flex-col gap-1 text-left">
             <label class="text-[10px] text-gray-400 font-bold">Price (₱)</label>

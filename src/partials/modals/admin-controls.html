@@ -14,7 +14,7 @@
                 <option value="" disabled selected>-- Select Rider / User --</option>
             </select>
 
-            <input type="text" id="block-reason-input" name="block_reason_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Reason for blocking" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none">
+            <input type="text" id="block-reason-input" autocomplete="off" autocorrect="off" placeholder="Reason for blocking" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white">
             <button onclick="window.submitBlockUser && window.submitBlockUser()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
                 🚫 Block Account
             </button>
@@ -26,6 +26,252 @@
         <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
             Close
         </button>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- 1. RIDER PERSONAL DAY-OFF SELECTION MODAL (FOR ALL RIDERS)                -->
+<!-- ========================================================================= -->
+<div id="rider-dayoff-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-teal-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3.5 max-h-[88vh] relative animate-in fade-in zoom-in duration-200">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2.5 shrink-0">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-teal-600/20 text-teal-400 flex items-center justify-center text-sm font-bold border border-teal-500/30">
+                    <i class="fa-solid fa-umbrella-beach"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-white">My Weekly Day-Off</h3>
+                    <p id="rider-dayoff-subtitle" class="text-[9px] text-teal-400 font-mono">Pumili ng iyong lingguhang araw ng pahinga</p>
+                </div>
+            </div>
+            <button onclick="window.closeRiderDayOffModal && window.closeRiderDayOffModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex flex-col gap-2.5 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
+            <!-- CURRENT DAY OFF STATUS CARD -->
+            <div class="bg-darkBg p-3 rounded-2xl border border-teal-500/30 flex items-center justify-between">
+                <div>
+                    <span class="text-[10px] text-gray-400 font-bold uppercase">Kasalukuyang Day-Off:</span>
+                    <div id="rider-current-dayoff-display" class="font-black text-sm text-teal-400 mt-0.5">Walang Napili</div>
+                </div>
+                <div id="rider-dayoff-changes-badge" class="text-right text-[10px] font-bold text-gray-400 font-mono">
+                    Changes: <span class="text-white">0/2</span> this month
+                </div>
+            </div>
+
+            <!-- DAYS OF THE WEEK SLOTS LIST -->
+            <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-1">Available Days & Slots:</div>
+            <div id="rider-dayoff-days-list" class="flex flex-col gap-2 min-h-[140px]">
+                <div class="text-center text-gray-500 italic py-6 text-xs">Loading day-off schedule...</div>
+            </div>
+        </div>
+
+        <button onclick="window.closeRiderDayOffModal && window.closeRiderDayOffModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 shrink-0">
+            Close
+        </button>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- 2. ADMIN DAY-OFF SETTINGS & QUOTA MANAGER MODAL (ADMIN ONLY)              -->
+<!-- ========================================================================= -->
+<div id="admin-dayoff-settings-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-teal-500/60 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3.5 max-h-[90vh] relative animate-in fade-in zoom-in duration-200">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2.5 shrink-0">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-teal-600/20 text-teal-400 flex items-center justify-center text-sm font-bold border border-teal-500/30">
+                    <i class="fa-solid fa-sliders"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-white">Day-Off Quotas & Management</h3>
+                    <p class="text-[9px] text-teal-400 font-mono">Set Daily Caps, Limits & Move Day-Offs</p>
+                </div>
+            </div>
+            <button onclick="window.closeAdminDayOffSettingsModal && window.closeAdminDayOffSettingsModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex flex-col gap-3 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
+            <!-- MASTER TOGGLE -->
+            <label class="bg-darkBg p-3 rounded-2xl border border-teal-500/30 flex justify-between items-center cursor-pointer select-none shrink-0">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-shield-halved text-teal-400"></i> Enable Day-Off Quota Rules
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Enforce daily caps and change limits</div>
+                </div>
+                <input type="checkbox" id="admin-dayoff-master-enabled" class="w-5 h-5 accent-teal-500 cursor-pointer">
+            </label>
+
+            <!-- MONTHLY CHANGE LIMIT SETTING -->
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between shrink-0">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-arrows-rotate text-amber-400"></i> Max Changes Per Month
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Allowable day-off modifications per rider</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <input type="number" min="0" max="31" id="admin-dayoff-max-changes" value="2" class="w-16 bg-inputBg text-sm text-center font-mono font-black text-amber-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-amber-500">
+                    <span class="text-gray-400 text-xs font-bold">x</span>
+                </div>
+            </div>
+
+            <!-- DAILY SLOTS QUOTAS (SUNDAY TO SATURDAY) -->
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex flex-col gap-2 shrink-0">
+                <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-users text-teal-400"></i> Max Allowed Riders Per Day (Quota)
+                </div>
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <div class="flex items-center justify-between bg-black/40 p-2 rounded-xl border border-gray-800">
+                        <span class="text-[11px] font-bold text-gray-300">Sunday</span>
+                        <input type="number" min="0" max="99" id="admin-quota-day-0" value="2" class="w-12 bg-inputBg text-xs text-center font-bold text-teal-300 rounded-lg p-1 border border-gray-700 outline-none">
+                    </div>
+                    <div class="flex items-center justify-between bg-black/40 p-2 rounded-xl border border-gray-800">
+                        <span class="text-[11px] font-bold text-gray-300">Monday</span>
+                        <input type="number" min="0" max="99" id="admin-quota-day-1" value="3" class="w-12 bg-inputBg text-xs text-center font-bold text-teal-300 rounded-lg p-1 border border-gray-700 outline-none">
+                    </div>
+                    <div class="flex items-center justify-between bg-black/40 p-2 rounded-xl border border-gray-800">
+                        <span class="text-[11px] font-bold text-gray-300">Tuesday</span>
+                        <input type="number" min="0" max="99" id="admin-quota-day-2" value="3" class="w-12 bg-inputBg text-xs text-center font-bold text-teal-300 rounded-lg p-1 border border-gray-700 outline-none">
+                    </div>
+                    <div class="flex items-center justify-between bg-black/40 p-2 rounded-xl border border-gray-800">
+                        <span class="text-[11px] font-bold text-gray-300">Wednesday</span>
+                        <input type="number" min="0" max="99" id="admin-quota-day-3" value="3" class="w-12 bg-inputBg text-xs text-center font-bold text-teal-300 rounded-lg p-1 border border-gray-700 outline-none">
+                    </div>
+                    <div class="flex items-center justify-between bg-black/40 p-2 rounded-xl border border-gray-800">
+                        <span class="text-[11px] font-bold text-gray-300">Thursday</span>
+                        <input type="number" min="0" max="99" id="admin-quota-day-4" value="3" class="w-12 bg-inputBg text-xs text-center font-bold text-teal-300 rounded-lg p-1 border border-gray-700 outline-none">
+                    </div>
+                    <div class="flex items-center justify-between bg-black/40 p-2 rounded-xl border border-gray-800">
+                        <span class="text-[11px] font-bold text-gray-300">Friday</span>
+                        <input type="number" min="0" max="99" id="admin-quota-day-5" value="3" class="w-12 bg-inputBg text-xs text-center font-bold text-teal-300 rounded-lg p-1 border border-gray-700 outline-none">
+                    </div>
+                    <div class="flex items-center justify-between bg-black/40 p-2 rounded-xl border border-gray-800 col-span-2">
+                        <span class="text-[11px] font-bold text-gray-300">Saturday</span>
+                        <input type="number" min="0" max="99" id="admin-quota-day-6" value="2" class="w-12 bg-inputBg text-xs text-center font-bold text-teal-300 rounded-lg p-1 border border-gray-700 outline-none">
+                    </div>
+                </div>
+            </div>
+
+            <!-- REASSIGN / OVERRIDE RIDER DAY OFF -->
+            <div class="flex flex-col shrink-0 gap-1.5 pb-2">
+                <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex justify-between items-center">
+                    <span>Reassign Rider Day-Off</span>
+                    <span class="text-[9px] text-teal-400 lowercase">Admin can move any rider's day off</span>
+                </div>
+                <div id="admin-dayoff-riders-list" class="flex flex-col gap-2 min-h-[100px]">
+                    <div class="text-center text-gray-500 italic py-6 text-xs">Loading roster...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-2 pt-2 border-t border-gray-800 shrink-0">
+            <button onclick="window.closeAdminDayOffSettingsModal && window.closeAdminDayOffSettingsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+            <button onclick="window.saveAdminDayOffSettings && window.saveAdminDayOffSettings()" class="flex-1 bg-teal-600 hover:bg-teal-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Save Day-Off Settings</button>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- 3. ADMIN MAXIMUM ACTIVE BOOKINGS LIMIT MODAL (ADMIN ONLY)                 -->
+<!-- ========================================================================= -->
+<div id="admin-booking-limits-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-rose-500/60 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3.5 relative animate-in fade-in zoom-in duration-200">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2.5">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-rose-600/20 text-rose-400 flex items-center justify-center text-sm font-bold border border-rose-500/30">
+                    <i class="fa-solid fa-layer-group"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-white">Active Bookings Limit</h3>
+                    <p class="text-[9px] text-rose-400 font-mono">Maximum Catering Customers per Rider</p>
+                </div>
+            </div>
+            <button onclick="window.closeAdminBookingLimitsModal && window.closeAdminBookingLimitsModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex flex-col gap-3 text-xs">
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-user-tag text-rose-400"></i> Max Orders Limit
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Per rider at the same time</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <input type="number" min="1" max="20" id="admin-max-active-bookings" value="2" class="w-16 bg-inputBg text-sm text-center font-mono font-black text-rose-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-rose-500">
+                    <span class="text-gray-400 text-xs font-bold">cust</span>
+                </div>
+            </div>
+
+            <div class="bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl text-[10px] text-rose-300 leading-relaxed">
+                <i class="fa-solid fa-circle-info mr-1 text-rose-400"></i>
+                <strong>Paalala:</strong> Hindi maaaring mag-book ng higit sa itinakdang limitasyon ang mga ordinaryong rider. Ang mga <strong>Admin</strong> ay walang limitasyon.
+            </div>
+        </div>
+
+        <div class="flex gap-2 mt-1">
+            <button onclick="window.closeAdminBookingLimitsModal && window.closeAdminBookingLimitsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+            <button onclick="window.saveAdminBookingLimitsSettings && window.saveAdminBookingLimitsSettings()" class="flex-1 bg-rose-600 hover:bg-rose-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Save Limit</button>
+        </div>
+    </div>
+</div>
+
+<!-- ADMIN TIME-IN SCHEDULE & PERMANENT EARLY PASS MODAL (ADMIN ONLY) -->
+<div id="admin-timein-schedule-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-purple-500/60 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3.5 max-h-[90vh] relative animate-in fade-in zoom-in duration-200">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2.5 shrink-0">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center text-sm font-bold border border-purple-500/30">
+                    <i class="fa-solid fa-clock-user"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-white">Rider Time-In Schedule Controls</h3>
+                    <p class="text-[9px] text-purple-400 font-mono">Shift Gate Restrictions & Permanent Early Passes</p>
+                </div>
+            </div>
+            <button onclick="window.closeAdminTimeInScheduleModal && window.closeAdminTimeInScheduleModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex flex-col gap-3 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
+            <!-- MASTER GLOBAL SWITCH -->
+            <label class="bg-darkBg p-3 rounded-2xl border border-purple-500/30 flex justify-between items-center cursor-pointer select-none shrink-0">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-shield-halved text-purple-400"></i> Enable Time-In Schedule Gate
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Disallow riders from timing in early unless granted an Early Pass</div>
+                </div>
+                <input type="checkbox" id="admin-schedule-master-enabled" class="w-5 h-5 accent-purple-500 cursor-pointer">
+            </label>
+
+            <!-- GLOBAL DEFAULT TIME-IN -->
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between shrink-0">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-clock text-amber-400"></i> Default Allowed Time-In
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Applies to riders without custom schedules</div>
+                </div>
+                <input type="time" id="admin-schedule-default-time" value="08:00" class="w-28 bg-inputBg text-xs text-center font-mono font-bold text-amber-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-amber-500">
+            </div>
+
+            <!-- PER-RIDER CUSTOM OVERRIDES & PERMANENT EARLY PASS -->
+            <div class="flex flex-col shrink-0 gap-1.5 pb-2">
+                <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex justify-between items-center">
+                    <span>Individual Rider Schedules & Passes</span>
+                    <span class="text-[9px] text-purple-400 lowercase">Early pass permanently bypasses schedule</span>
+                </div>
+                <div id="admin-schedule-riders-list" class="flex flex-col gap-2 min-h-[100px]">
+                    <div class="text-center text-gray-500 italic py-6 text-xs">Loading rider schedules...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-2 pt-2 border-t border-gray-800 shrink-0">
+            <button onclick="window.closeAdminTimeInScheduleModal && window.closeAdminTimeInScheduleModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+            <button onclick="window.saveAdminTimeInScheduleSettings && window.saveAdminTimeInScheduleSettings()" class="flex-1 bg-purple-600 hover:bg-purple-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Save Schedule</button>
+        </div>
     </div>
 </div>
 
@@ -60,7 +306,7 @@
                 </div>
             </div>
 
-            <!-- RECURRING DAY SPECIAL RULE (e.g. Every Sunday Less 5%) -->
+            <!-- RECURRING DAY SPECIAL RULE -->
             <div class="bg-darkBg p-3 rounded-2xl border border-purple-500/40 flex flex-col gap-2 shrink-0">
                 <div class="flex items-center justify-between">
                     <div>
@@ -220,7 +466,7 @@
             <div>
                 <label class="text-[10px] text-gray-400 font-bold uppercase">Rider Login ID *</label>
                 <div class="flex gap-2 mt-1">
-                    <input type="text" id="edit-rider-id-input" placeholder="e.g. 1001 or Telegram ID" class="flex-1 bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold font-mono">
+                    <input type="text" id="edit-rider-id-input" autocomplete="off" placeholder="e.g. 1001 or Telegram ID" class="flex-1 bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold font-mono">
                     <button type="button" onclick="window.generateRandomRiderId && window.generateRandomRiderId()" class="bg-emerald-600/30 hover:bg-emerald-600 border border-emerald-500/50 text-emerald-300 hover:text-white px-3 py-2 rounded-xl text-xs font-bold transition active:scale-95 flex items-center gap-1.5 shrink-0" title="Generate Random ID">
                         <i class="fa-solid fa-dice"></i> Generate
                     </button>
@@ -229,7 +475,7 @@
 
             <div>
                 <label class="text-[10px] text-gray-400 font-bold uppercase">Rider Full Name *</label>
-                <input type="text" id="edit-rider-name-input" placeholder="e.g. Juan Dela Cruz" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold mt-1">
+                <input type="text" id="edit-rider-name-input" autocomplete="off" placeholder="e.g. Juan Dela Cruz" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold mt-1">
             </div>
 
             <div>

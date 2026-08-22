@@ -15,6 +15,8 @@ import {
 import { autoStartLiveGpsSession, endLiveGpsSession } from '../liveTracker.js';
 import { openMapPicker } from '../maps.js';
 
+const DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 export function openFindRidersMap() {
     openMapPicker('roster');
 }
@@ -65,6 +67,32 @@ export function updateRosterUI() {
         else manageRidersBtn.classList.add('hidden');
     }
 
+    const scheduleSettingsBtn = document.getElementById('admin-schedule-settings-btn');
+    if (scheduleSettingsBtn) {
+        if (isAdmin()) scheduleSettingsBtn.classList.remove('hidden');
+        else scheduleSettingsBtn.classList.add('hidden');
+    }
+
+    // Admin Day-off Rules & Quota manager button (Admin Exclusive)[cite: 32]
+    const dayOffSettingsBtn = document.getElementById('admin-dayoff-settings-btn');
+    if (dayOffSettingsBtn) {
+        if (isAdmin()) dayOffSettingsBtn.classList.remove('hidden');
+        else dayOffSettingsBtn.classList.add('hidden');
+    }
+
+    // Admin Max Active Bookings Limit Button (Admin Exclusive)
+    const bookingLimitsBtn = document.getElementById('admin-booking-limits-btn');
+    if (bookingLimitsBtn) {
+        if (isAdmin()) bookingLimitsBtn.classList.remove('hidden');
+        else bookingLimitsBtn.classList.add('hidden');
+    }
+
+    // Rider Day-Off button is always visible to all riders[cite: 32]
+    const riderDayOffBtn = document.getElementById('btn-rider-dayoff');
+    if (riderDayOffBtn) {
+        riderDayOffBtn.classList.remove('hidden');
+    }
+
     const commissionSettingsBtn = document.getElementById('admin-commission-settings-btn');
     if (commissionSettingsBtn) {
         if (isAdmin()) commissionSettingsBtn.classList.remove('hidden');
@@ -89,7 +117,7 @@ export function updateRosterUI() {
         else forceAllBtn.classList.add('hidden');
     }
 
-    const myRecord = rosterMembers.find(m => (m.telegramId || "").toString() === myId);
+    const myRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === myId);
     if (myRecord) {
         if (myRecord.status === 'Catering') {
             try { autoStartLiveGpsSession(myRecord.customerName || "Customer"); } catch(e) {}
@@ -115,7 +143,7 @@ export function updateRosterUI() {
         btnBreak.style.opacity = isEnded ? '0.3' : '1';
     }
 
-    // SORT BY LOWEST GROSS INCOME FIRST
+    // LINEUP SORTED FROM LOWEST TO HIGHEST GROSS INCOME[cite: 32]
     const availableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
 
     checkFirstInLineAlarm(availableRiders);
@@ -124,14 +152,33 @@ export function updateRosterUI() {
     const breakRiders = rosterMembers.filter(m => m.status === 'Break');
     const cooldownRiders = rosterMembers.filter(m => m.status === 'Cooldown');
 
+    const allDayOffs = globalState.riderDayOffs || {};
+    const todayDayOfWeek = new Date().getDay();
+
+    const getRiderDayOffBadge = (mId, mName) => {
+        const cleanName = (mName || "").toLowerCase().trim();
+        const rec = allDayOffs[mId] || allDayOffs[cleanName] || null;
+        if (!rec || rec.dayOfWeek === undefined || rec.dayOfWeek === null) return "";
+
+        const dIdx = parseInt(rec.dayOfWeek);
+        if (isNaN(dIdx)) return "";
+
+        if (dIdx === todayDayOfWeek) {
+            return `<span class="text-[9px] font-black text-teal-300 bg-teal-500/20 px-1.5 py-0.5 rounded border border-teal-500/40" title="Day-Off Scheduled Today">🏝️ DAY OFF TODAY</span>`;
+        }
+
+        return `<span class="text-[9px] font-bold text-gray-400 bg-gray-800/80 px-1.5 py-0.5 rounded border border-gray-700/50" title="Weekly Day-Off: Every ${DAYS_SHORT[dIdx]}">🏖️ ${DAYS_SHORT[dIdx]}</span>`;
+    };
+
     let availHtml = [], busyHtml = [], brkHtml = [], cdHtml = [];
     let availCounter = 1;
 
-    // 1. AVAILABLE QUEUE RIDERS (LOWEST TO HIGHEST GROSS INCOME DISPLAY)
+    // 1. AVAILABLE QUEUE RIDERS (LOWEST TO HIGHEST GROSS INCOME DISPLAY)[cite: 32]
     availableRiders.forEach((m) => {
-        const mId = (m.telegramId || "").toString();
+        const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
         const todayGross = getRiderTodayGross(mName, mId);
+        const dayOffBadge = getRiderDayOffBadge(mId, mName);
         let nameStr = escapeHtml(mName);
 
         if (showControls) {
@@ -150,21 +197,24 @@ export function updateRosterUI() {
             <div class="inline-flex items-center bg-white dark:bg-white/5 border border-gray-200 dark:border-gray-700/60 rounded-xl px-2.5 py-1 text-xs shadow-xs transition hover:border-emerald-500 gap-1.5">
                 <span class="font-black text-emerald-600 dark:text-green-400">${availCounter++}.</span>
                 <span class="font-bold text-gray-900 dark:text-gray-100 flex items-center">${nameStr}</span>
+                ${dayOffBadge}
                 <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
             </div>
         `);
     });
 
-    // 2. CATERING RIDERS (WITH GROSS INCOME BADGE)
+    // 2. CATERING RIDERS (WITH GROSS INCOME BADGE)[cite: 32]
     cateringRiders.forEach(m => {
-        const mId = (m.telegramId || "").toString();
+        const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
         const todayGross = getRiderTodayGross(mName, mId);
+        const dayOffBadge = getRiderDayOffBadge(mId, mName);
         let cardHtml = `
         <div class="flex flex-col py-1.5 border-b border-gray-200 dark:border-gray-800/60 last:border-0 gap-1">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-1.5">
                     <span class="font-black text-xs text-gray-900 dark:text-white">${escapeHtml(mName)}</span>
+                    ${dayOffBadge}
                     <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
                 </div>`;
 
@@ -221,11 +271,12 @@ export function updateRosterUI() {
         busyHtml.push(cardHtml);
     });
 
-    // 3. BREAK RIDERS (WITH GROSS INCOME BADGE)
+    // 3. BREAK RIDERS (WITH GROSS INCOME BADGE)[cite: 32]
     breakRiders.forEach(m => {
-        const mId = (m.telegramId || "").toString();
+        const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
         const todayGross = getRiderTodayGross(mName, mId);
+        const dayOffBadge = getRiderDayOffBadge(mId, mName);
         let nameStr = escapeHtml(mName);
 
         if (showControls) {
@@ -236,17 +287,19 @@ export function updateRosterUI() {
             <div class="flex items-center justify-between py-1 text-xs font-bold text-gray-900 dark:text-gray-200">
                 <div class="flex items-center gap-1.5">
                     <span>${nameStr}</span>
+                    ${dayOffBadge}
                     <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
                 </div>
             </div>
         `);
     });
 
-    // 4. COOLDOWN RIDERS (WITH GROSS INCOME BADGE)
+    // 4. COOLDOWN RIDERS (WITH GROSS INCOME BADGE)[cite: 32]
     cooldownRiders.forEach(m => {
-        const mId = (m.telegramId || "").toString();
+        const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
         const todayGross = getRiderTodayGross(mName, mId);
+        const dayOffBadge = getRiderDayOffBadge(mId, mName);
         let nameStr = escapeHtml(mName);
 
         let remSecs = m.cooldownUntil ? Math.max(0, Math.ceil((m.cooldownUntil - Date.now()) / 1000)) : 0;
@@ -263,21 +316,49 @@ export function updateRosterUI() {
             <div class="flex items-center justify-between py-1 text-xs font-bold text-gray-900 dark:text-gray-200">
                 <div class="flex items-center gap-1.5">
                     <span>${nameStr}</span>
+                    ${dayOffBadge}
                     <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
                 </div>
             </div>
         `);
     });
 
+    // 5. RIDERS CURRENTLY ON DAY OFF TODAY (DEDICATED SECTION)[cite: 32]
+    let dayOffHtml = [];
+    const dayOffRiderKeys = new Set();
+
+    Object.entries(allDayOffs).forEach(([key, rec]) => {
+        if (!rec || rec.dayOfWeek === undefined || rec.dayOfWeek === null) return;
+        if (parseInt(rec.dayOfWeek) === todayDayOfWeek) {
+            const riderName = rec.riderName || key;
+            const riderId = rec.riderId || key;
+            const uniqueKey = (riderId || riderName).toString().toLowerCase().trim();
+
+            if (!dayOffRiderKeys.has(uniqueKey)) {
+                dayOffRiderKeys.add(uniqueKey);
+                dayOffHtml.push(`
+                    <div class="inline-flex items-center bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-500/30 rounded-xl px-2.5 py-1 text-xs shadow-xs gap-1.5">
+                        <span class="text-teal-700 dark:text-teal-300 font-bold flex items-center gap-1">
+                            <i class="fa-solid fa-umbrella-beach text-[10px] text-teal-500"></i> ${escapeHtml(riderName)}
+                        </span>
+                        <span class="text-[9px] font-mono font-black text-teal-800 dark:text-teal-200 bg-teal-100 dark:bg-teal-500/20 px-1.5 py-0.5 rounded border border-teal-300 dark:border-teal-500/40">Today</span>
+                    </div>
+                `);
+            }
+        }
+    });
+
     const elAvail = document.getElementById('home-roster-avail');
     const elBusy = document.getElementById('home-roster-busy');
     const elBreak = document.getElementById('home-roster-break');
     const elCooldown = document.getElementById('home-roster-cooldown');
+    const elDayoff = document.getElementById('home-roster-dayoff');
 
     if (elAvail) elAvail.innerHTML = availHtml.length ? availHtml.join('') : '(Walang naka-duty)';
     if (elBusy) elBusy.innerHTML = busyHtml.length ? busyHtml.join('') : '(Walang bumibiyahe)';
     if (elBreak) elBreak.innerHTML = brkHtml.length ? brkHtml.join('') : '(Walang naka-break)';
     if (elCooldown) elCooldown.innerHTML = cdHtml.length ? cdHtml.join('') : '(Walang naka-cooldown)';
+    if (elDayoff) elDayoff.innerHTML = dayOffHtml.length ? dayOffHtml.join('') : '(Walang naka-day off)';
 }
 
 export function loadGlobalCateredList() {

@@ -1,332 +1,618 @@
-// src/features/roster/rosterAdmin.js
+// src/features/roster/rosterAdminOps.js
+import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
-import { escapeHtml, isSameDate, getLocalTodayStr } from '../../utils/helpers.js';
+import { API_URL } from '../../config/constants.js';
+import { showToast, showSideNotification } from '../../ui/notifications.js';
+import { openSlideDeleteModal, closeAdminCateringModal } from '../../ui/modals.js';
+import { getLocalTodayStr, isSameDate, escapeHtml } from '../../utils/helpers.js';
+import { populateCateringCustomerDropdown } from '../chat/index.js';
 import { 
-    loadRosterCache, 
-    canManageRoster, 
     parseQueueTime, 
-    getElapsedCateringTime, 
-    checkFirstInLineAlarm,
-    calculateSplitDuration,
-    isAdmin,
+    isAdmin, 
+    canManageRoster, 
+    canForceCaterTarget,
     archiveRiderCateringIfNeeded,
-    getRiderTodayGross,
-    sortAvailableRidersByGross 
+    saveRosterCache 
 } from './rosterUtils.js';
-import { autoStartLiveGpsSession, endLiveGpsSession } from '../liveTracker.js';
-import { openMapPicker } from '../maps.js';
+import { updateRosterUI } from './rosterUI.js';
+import { getTopQueueTime, updateRosterStatus, updateRosterStatusData, voidSingleCateringCustomer } from './rosterStatus.js';
 
-export function openFindRidersMap() {
-    openMapPicker('roster');
+let pendingAdminTarget = null;
+
+// TOGGLE ADMIN CONTROLS SWITCH
+export function toggleAdminControls(enabled) {
+    if (!canManageRoster()) {
+        globalState.adminControlsEnabled = false;
+        const toggle = document.getElementById('admin-controls-toggle');
+        if (toggle) toggle.checked = false;
+        showToast("⚠️ Unauthorized: Only Admin or Team Lead (TL) can enable Admin Controls.");
+        updateRosterUI();
+        return;
+    }
+
+    globalState.adminControlsEnabled = !!enabled;
+    showToast(`Admin Safety Controls: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    updateRosterUI();
 }
 
-export function updateRosterUI() {
-    if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
-        loadRosterCache();
+// OPEN ADMIN FORCE CATERING MODAL
+export function openAdminCateringModal(id, name) {
+    if (!canManageRoster()) {
+        return showToast("⚠️ Unauthorized: Admin or TL access required.");
+    }
+
+    pendingAdminTarget = { id, name };
+
+    const idInput = document.getElementById('admin-cater-target-rider-id');
+    const nameInputHidden = document.getElementById('admin-cater-target-rider-name');
+    const custInput = document.getElementById('admin-cater-cust-name');
+    const custSelect = document.getElementById('admin-cater-customer-select');
+
+    if (idInput) idInput.value = id || "";
+    if (nameInputHidden) nameInputHidden.value = name || "";
+    if (custInput) custInput.value = "";
+
+    if (custSelect) {
+        if (typeof populateCateringCustomerDropdown === 'function') {
+            populateCateringCustomerDropdown('admin-cater-customer-select');
+        }
+    }
+
+    const modal = document.getElementById('admin-catering-modal');
+    if (modal) modal.classList.remove('hidden');
+    if (custInput) custInput.focus();
+}
+
+export async function submitAdminForceCatering() {
+    if (!canManageRoster()) {
+        return showToast("⚠️ Unauthorized: Admin or TL access required.");
+    }
+
+    const idInput = document.getElementById('admin-cater-target-rider-id');
+    const nameInputHidden = document.getElementById('admin-cater-target-rider-name');
+    const custInput = document.getElementById('admin-cater-cust-name');
+
+    let targetId = idInput ? idInput.value.trim() : "";
+    let targetName = nameInputHidden ? nameInputHidden.value.trim() : "";
+
+    if (!targetId && pendingAdminTarget && pendingAdminTarget.id) {
+        targetId = pendingAdminTarget.id;
+        targetName = pendingAdminTarget.name;
+    }
+
+    const custName = custInput ? custInput.value.trim() : "";
+
+    if (!targetId) return showToast("⚠️ Target rider missing!");
+    if (!custName) return showToast("⚠️ Please select or enter customer name!");
+
+    const rosterMembers = globalState.rosterMembers || [];
+    const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === targetId.toString());
+
+    let existingCustomers = [];
+    let existingTimes = [];
+
+    if (targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
+        existingCustomers = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+        existingTimes = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
+    }
+
+    const startTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (!existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase())) {
+        existingCustomers.push(custName);
+        existingTimes.push(startTime);
+    }
+
+    closeAdminCateringModal();
+
+    if (db && custName) {
+        const cleanSearchName = custName.toLowerCase().trim();
+        db.ref('customerChats').once('value', (snapshot) => {
+            const chats = snapshot.val();
+            if (chats) {
+                Object.keys(chats).forEach(custId => {
+                    const meta = chats[custId]?.metadata || chats[custId] || {};
+                    const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
+                    if (chatCustName && chatCustName === cleanSearchName) {
+                        db.ref(`customerChats/${custId}/metadata`).update({
+                            folder: 'catering',
+                            cateredByRiderId: targetId,
+                            cateredByRiderName: targetName,
+                            cateredBy: targetName,
+                            lastUpdated: Date.now()
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    await updateRosterStatusData(
+        'Catering', 
+        existingCustomers.join(', '), 
+        existingTimes.join(', '), 
+        targetRecord ? parseQueueTime(targetRecord.queueTime) : Date.now(),
+        targetId,
+        targetName
+    );
+
+    showToast(`⚡ Admin Force Catered ${custName} to ${targetName}`);
+    showSideNotification("FORCE CATER", `Assigned ${custName} to ${targetName}`, "fa-user-gear", "text-amber-400", "border-amber-500");
+}
+
+// ADMIN FORCE STATUS
+export async function adminForceStatus(id, name, actionValue) {
+    if (!canManageRoster()) {
+        return showToast("⚠️ Unauthorized: Admin or TL access required.");
     }
 
     const rosterMembers = globalState.rosterMembers || [];
-    const myId = (appState.telegramId || "").toString();
+    const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === id.toString());
+    const targetType = targetRecord ? targetRecord.userType : "";
 
-    const adminToggle = document.getElementById('admin-controls-toggle');
-    if (adminToggle) {
-        globalState.adminControlsEnabled = adminToggle.checked;
+    if (!canForceCaterTarget(targetType)) {
+        return showToast("⚠️ TL cannot force cater an Admin or TL.");
     }
 
-    const showControls = globalState.adminControlsEnabled && canManageRoster();
-
-    const forceAllBtn = document.getElementById('admin-force-all-btn');
-    if (forceAllBtn) {
-        if (showControls) forceAllBtn.classList.remove('hidden');
-        else forceAllBtn.classList.add('hidden');
+    if (actionValue === 'Catering') {
+        openAdminCateringModal(id, name);
+        return;
     }
 
-    const myRecord = rosterMembers.find(m => (m.telegramId || "").toString() === myId);
-    if (myRecord) {
-        if (myRecord.status === 'Catering') {
-            try { autoStartLiveGpsSession(myRecord.customerName || "Customer"); } catch(e) {}
+    if (actionValue === 'VoidActive') {
+        openSlideDeleteModal(`Void Order for ${name}?`, `Sigurado ka bang nais i-void ang active order ni ${name}? Malilipat sya sa #1 SPOT ng Available queue.`, async () => {
+            const topQueueTime = getTopQueueTime();
+            showSideNotification("ORDER VOIDED", `Voided order for ${name} — placed in Queue`, "fa-ban", "text-red-400", "border-red-500");
+            await updateRosterStatusData('Available', '', '', topQueueTime, id, name);
+            showToast(`🚫 Voided order for ${name}. Placed in Available queue!`);
+        });
+        return;
+    }
+
+    openSlideDeleteModal(`Force Status: ${actionValue}?`, `Force change status of ${name} to [${actionValue}]?`, async () => {
+        if (actionValue === 'Available') {
+            const currentRoster = globalState.rosterMembers || [];
+            const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== id.toString());
+            let maxTime = Date.now();
+            availableRiders.forEach(r => {
+                const t = parseQueueTime(r.queueTime);
+                if (t > maxTime) maxTime = t;
+            });
+            await updateRosterStatus('Available', id, name, maxTime + 1000);
         } else {
-            if (localStorage.getItem('lokalex_active_live_session')) {
-                endLiveGpsSession();
+            await updateRosterStatus(actionValue, id, name);
+        }
+        showToast(`⚡ Force updated ${name} to ${actionValue}`);
+    });
+}
+
+// ADMIN VOID SPECIFIC CATERING CUSTOMER
+export async function adminVoidSpecificCustomer(targetId, targetName, custNameToVoid) {
+    if (!canManageRoster()) {
+        return showToast("⚠️ Unauthorized: Admin or TL access required.");
+    }
+
+    if (!targetId || !custNameToVoid) return;
+
+    openSlideDeleteModal(`Void Customer: ${custNameToVoid}?`, `Sigurado ka bang nais i-void si ${custNameToVoid} para kay ${targetName}?`, async () => {
+        await voidSingleCateringCustomer(targetId, targetName, custNameToVoid);
+    });
+}
+
+// ADMIN VOID COMPLETED CATERED RECORD
+export function promptVoidCustomer(riderName, customerName, completedDate = "", startTime = "") {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+
+    openSlideDeleteModal(
+        `Void Catered Record?`,
+        `Sigurado ka bang nais mong burahin ang record ni [${customerName}] na inihatid ni ${riderName}?`,
+        async () => {
+            await executeVoidCateredCustomer(riderName, customerName, completedDate, startTime);
+        }
+    );
+}
+
+export async function executeVoidCateredCustomer(riderName, customerName, completedDate = "", startTime = "") {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+
+    try {
+        if (db) {
+            const snap = await db.ref('cateredHistory').once('value');
+            const data = snap.val() || {};
+            
+            let targetKey = null;
+            const entries = Object.entries(data);
+
+            for (let i = entries.length - 1; i >= 0; i--) {
+                const [k, v] = entries[i];
+                const rMatch = (v.riderName || "").trim().toLowerCase() === (riderName || "").trim().toLowerCase();
+                const cMatch = (v.customerName || "").trim().toLowerCase() === (customerName || "").trim().toLowerCase();
+                const dMatch = !completedDate || isSameDate(v.completedDate, completedDate);
+                const sMatch = !startTime || (v.startTime || "").trim() === startTime.trim();
+
+                if (rMatch && cMatch && dMatch && sMatch) {
+                    targetKey = k;
+                    break;
+                }
+            }
+
+            if (!targetKey) {
+                for (let i = entries.length - 1; i >= 0; i--) {
+                    const [k, v] = entries[i];
+                    const rMatch = (v.riderName || "").trim().toLowerCase() === (riderName || "").trim().toLowerCase();
+                    const cMatch = (v.customerName || "").trim().toLowerCase() === (customerName || "").trim().toLowerCase();
+                    const dMatch = !completedDate || isSameDate(v.completedDate, completedDate);
+
+                    if (rMatch && cMatch && dMatch) {
+                        targetKey = k;
+                        break;
+                    }
+                }
+            }
+
+            if (targetKey) {
+                await db.ref(`cateredHistory/${targetKey}`).remove();
             }
         }
-    }
 
-    const adminToggleWrapper = document.getElementById('admin-toggle-wrapper');
-    if (adminToggleWrapper) {
-        if (canManageRoster()) adminToggleWrapper.classList.remove('hidden');
-        else adminToggleWrapper.classList.add('hidden');
-    }
-
-    const findRidersBtn = document.getElementById('admin-find-riders-btn');
-    if (findRidersBtn) {
-        if (canManageRoster()) findRidersBtn.classList.remove('hidden');
-        else findRidersBtn.classList.add('hidden');
-    }
-
-    const isEnded = myRecord && myRecord.status === 'End';
-    const isOnBreak = myRecord && myRecord.status === 'Break';
-
-    const btnCater = document.getElementById('btn-status-cater');
-    const btnBreak = document.getElementById('btn-status-break');
-
-    if (btnCater) {
-        btnCater.disabled = isEnded || isOnBreak;
-        btnCater.style.opacity = (isEnded || isOnBreak) ? '0.3' : '1';
-    }
-    if (btnBreak) {
-        btnBreak.disabled = isEnded;
-        btnBreak.style.opacity = isEnded ? '0.3' : '1';
-    }
-
-    // SORT BY LOWEST GROSS INCOME FIRST
-    const availableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
-
-    checkFirstInLineAlarm(availableRiders);
-
-    const cateringRiders = rosterMembers.filter(m => m.status === 'Catering');
-    const breakRiders = rosterMembers.filter(m => m.status === 'Break');
-    const cooldownRiders = rosterMembers.filter(m => m.status === 'Cooldown');
-
-    let availHtml = [], busyHtml = [], brkHtml = [], cdHtml = [];
-    let availCounter = 1;
-
-    // 1. AVAILABLE RIDERS (WITH GROSS INCOME)
-    availableRiders.forEach((m) => {
-        const mId = (m.telegramId || "").toString();
-        const mName = m.riderName || m.name || "Rider";
-        const todayGross = getRiderTodayGross(mName, mId);
-        let nameStr = escapeHtml(mName);
-
-        if (showControls) {
-            nameStr += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
-
-            nameStr += `
-            <div class="inline-flex gap-1 ml-2 text-[10px] align-middle">
-                <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_top')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Top">⬆️</button>
-                <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_up')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Up (+1)">▲</button>
-                <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_down')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Down (-1)">▼</button>
-                <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_bottom')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1 py-0.5 rounded font-bold" title="Move Bottom">⬇️</button>
-            </div>`;
+        if (globalState.globalCateredHistory) {
+            const idx = globalState.globalCateredHistory.findIndex(h => 
+                (h.riderName || "").trim().toLowerCase() === (riderName || "").trim().toLowerCase() &&
+                (h.customerName || "").trim().toLowerCase() === (customerName || "").trim().toLowerCase() &&
+                (!completedDate || isSameDate(h.completedDate, completedDate))
+            );
+            if (idx !== -1) {
+                globalState.globalCateredHistory.splice(idx, 1);
+            }
         }
 
-        availHtml.push(`
-            <div class="flex items-center justify-between py-1">
-                <span class="font-bold text-green-400 mr-2">${availCounter++}.</span>
-                <span class="flex-1">${nameStr}</span>
-                <span class="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/30">₱${todayGross.toFixed(0)}</span>
-            </div>
-        `);
-    });
+        saveRosterCache();
+        if (typeof window.loadGlobalCateredList === 'function') {
+            window.loadGlobalCateredList();
+        }
 
-    // 2. CATERING RIDERS (WITH GROSS INCOME)
-    cateringRiders.forEach(m => {
-        const mId = (m.telegramId || "").toString();
-        const mName = m.riderName || m.name || "Rider";
-        const todayGross = getRiderTodayGross(mName, mId);
-        let cardHtml = `
-        <div class="flex flex-col py-1.5 border-b border-gray-800/60 last:border-0 gap-1">
+        showToast(`🗑️ Voided catered record for ${customerName}.`);
+        showSideNotification("RECORD VOIDED", `Voided catered entry for ${customerName}`, "fa-trash", "text-red-400", "border-red-500");
+    } catch(e) {
+        console.error("Void catered record error:", e);
+        showToast("❌ Failed to void catered customer record.");
+    }
+}
+
+export function adminShiftRiderQueue(riderId, moveAction) {
+    if (!canManageRoster()) {
+        return showToast("⚠️ Unauthorized: Admin or TL access required.");
+    }
+
+    const availableRiders = globalState.rosterMembers ? globalState.rosterMembers.filter(m => m.status === 'Available').sort((a,b) => parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime)) : [];
+    const idx = availableRiders.findIndex(r => (r.telegramId || "").toString() === riderId.toString());
+
+    if (idx === -1) return showToast("Rider must be in Available status to shift queue.");
+
+    let targetQueueTime = parseQueueTime(availableRiders[idx].queueTime);
+    const rider = availableRiders[idx];
+
+    if (moveAction === 'move_top') {
+        targetQueueTime = parseQueueTime(availableRiders[0].queueTime) - 1000;
+    } else if (moveAction === 'move_bottom') {
+        targetQueueTime = parseQueueTime(availableRiders[availableRiders.length - 1].queueTime) + 1000;
+    } else if (moveAction === 'move_up' && idx > 0) {
+        targetQueueTime = parseQueueTime(availableRiders[idx - 1].queueTime) - 100;
+    } else if (moveAction === 'move_down' && idx < availableRiders.length - 1) {
+        targetQueueTime = parseQueueTime(availableRiders[idx + 1].queueTime) + 100;
+    } else {
+        return showToast("Cannot move further in queue.");
+    }
+
+    showSideNotification("LINEUP SHIFTED", `Adjusted lineup position for ${rider.riderName}`, "fa-arrow-up-1-9", "text-blue-400", "border-blue-500");
+    updateRosterStatusData('Available', "", "", targetQueueTime, rider.telegramId, rider.riderName);
+}
+
+export async function forceAllEndShift() {
+    if (!canManageRoster()) {
+        return showToast("⚠️ Unauthorized: Admin or TL access required.");
+    }
+
+    openSlideDeleteModal("Sigurado ka bang nais mong i-force end shift ang lahat ng riders?", async () => {
+        showSideNotification("FORCE ALL END", "Ending shift for all roster riders...", "fa-power-off", "text-red-400", "border-red-500");
+        
+        const rosterMembers = globalState.rosterMembers || [];
+        for (const m of rosterMembers) {
+            if (m.telegramId) {
+                await archiveRiderCateringIfNeeded(m);
+                db.ref('roster/' + m.telegramId).update({ 
+                    status: 'End', 
+                    customerName: "", 
+                    startTime: "", 
+                    pendingPenaltyMinutes: 0, 
+                    cooldownUntil: 0,
+                    lastActiveTimestamp: Date.now()
+                });
+            }
+        }
+
+        try {
+            await fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: "roster", action: "force_all_end" }) });
+        } catch(e) {}
+    });
+}
+
+// ============================================================================
+// HYBRID RIDER TIME-IN SCHEDULE & EARLY PASS CONTROLS
+// ============================================================================
+export function openAdminTimeInScheduleModal() {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+
+    const modal = document.getElementById('admin-timein-schedule-modal');
+    const masterToggle = document.getElementById('admin-schedule-master-enabled');
+    const defaultTimeInput = document.getElementById('admin-schedule-default-time');
+
+    const config = globalState.timeInSchedule || {};
+
+    if (masterToggle) masterToggle.checked = !!config.enabled;
+    if (defaultTimeInput) defaultTimeInput.value = config.defaultTimeIn || "08:00";
+
+    renderAdminTimeInScheduleList();
+
+    if (modal) modal.classList.remove('hidden');
+}
+
+export function closeAdminTimeInScheduleModal() {
+    const modal = document.getElementById('admin-timein-schedule-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export function renderAdminTimeInScheduleList() {
+    const container = document.getElementById('admin-schedule-riders-list');
+    if (!container) return;
+
+    const roster = globalState.rosterMembers || [];
+    const config = globalState.timeInSchedule || {};
+    const defaultTime = config.defaultTimeIn || "08:00";
+    const riderSchedules = config.riderSchedules || {};
+    const todayStr = getLocalTodayStr();
+
+    if (roster.length === 0) {
+        container.innerHTML = `<div class="text-center text-gray-500 italic py-6 text-xs">No registered riders in roster.</div>`;
+        return;
+    }
+
+    container.innerHTML = roster.map(r => {
+        const rId = (r.telegramId || "").toString().trim();
+        const rName = r.riderName || r.name || "Rider";
+        const sched = riderSchedules[rId] || riderSchedules[rName.toLowerCase()] || {};
+
+        const customTime = sched.allowedTimeIn || "";
+        const isEarlyPassActive = sched.earlyPassGranted && isSameDate(sched.earlyPassDate, todayStr);
+
+        return `
+        <div class="bg-cardBg border border-gray-200 dark:border-gray-800 p-3 rounded-2xl flex flex-col gap-2 shadow-xs">
             <div class="flex items-center justify-between">
-                <div class="flex items-center gap-1.5">
-                    <span class="font-bold text-white">${escapeHtml(mName)}</span>
-                    <span class="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/30">₱${todayGross.toFixed(0)}</span>
-                </div>`;
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="font-bold text-xs text-gray-900 dark:text-white truncate">
+                        <i class="fa-solid fa-motorcycle text-blue-500 mr-1"></i>${escapeHtml(rName)}
+                    </span>
+                    <span class="text-[9px] text-gray-400 font-mono">(${escapeHtml(rId)})</span>
+                </div>
+                ${isEarlyPassActive 
+                    ? `<span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[9px] font-black px-2 py-0.5 rounded-full animate-pulse">⚡ EARLY PASS TODAY</span>`
+                    : `<span class="text-[9px] text-gray-400 font-bold">${customTime ? `Custom (${customTime})` : `Default (${defaultTime})`}</span>`}
+            </div>
 
-        if (showControls) {
-            cardHtml += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer shrink-0"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void All Orders</option></select>`;
-        }
-        cardHtml += `</div>`;
+            <div class="flex items-center justify-between gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
+                <div class="flex items-center gap-1.5 flex-1">
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase shrink-0">Time-In:</label>
+                    <input type="time" id="rider-sched-time-${escapeHtml(rId)}" value="${customTime}" placeholder="${defaultTime}" class="bg-inputBg text-xs font-mono font-bold rounded-xl p-1.5 px-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white flex-1 max-w-[120px]">
+                    <button type="button" onclick="document.getElementById('rider-sched-time-${escapeHtml(rId)}').value = ''; showToast('Cleared custom schedule. Will follow default.');" class="text-gray-400 hover:text-red-400 p-1 text-xs" title="Reset to Default Time">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                </div>
 
-        if (m.customerName) {
-            const custs = m.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-            const times = m.startTime ? m.startTime.split(', ').map(t => t.trim()) : [];
+                <div class="flex items-center gap-1 shrink-0">
+                    ${isEarlyPassActive 
+                        ? `<button type="button" onclick="window.revokeRiderEarlyPass('${escapeHtml(rId)}', '${escapeHtml(rName)}')" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 dark:bg-red-900/30 dark:hover:bg-red-800 dark:text-red-300 text-[10px] font-bold px-2 py-1 rounded-xl transition active:scale-95">
+                                Revoke Pass
+                           </button>`
+                        : `<button type="button" onclick="window.grantRiderEarlyPass('${escapeHtml(rId)}', '${escapeHtml(rName)}')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 text-[10px] font-bold px-2 py-1 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-xs">
+                                <i class="fa-solid fa-bolt text-[9px]"></i> Early Pass
+                           </button>`}
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
 
-            cardHtml += `<div class="flex flex-col gap-1 pl-2 text-[11px]">`;
-            custs.forEach((cName, idx) => {
-                const cTime = times[idx] || times[0] || '';
-                const timeDetails = getElapsedCateringTime(cTime);
-                const isMyLine = mId === myId || (appState.riderName && mName.toLowerCase() === appState.riderName.toLowerCase());
-                const canSwap = isMyLine || showControls;
+export async function grantRiderEarlyPass(riderId, riderName) {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
-                cardHtml += `
-                <div class="flex flex-wrap items-center justify-between gap-1 bg-black/30 p-1.5 rounded-lg border border-gray-800">
-                    <span class="text-orange-300 font-medium">👤 ${escapeHtml(cName)} <span class="text-gray-400 text-[10px]">${timeDetails}</span></span>
-                    
-                    <div class="flex items-center gap-1">
-                        ${isMyLine ? `
-                            <button onclick="window.copyCustomerTrackingLink && window.copyCustomerTrackingLink('${escapeHtml(cName)}')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Send Track Link">🔗 Link</button>
-                            <button onclick="window.openLiveCustomerMap && window.openLiveCustomerMap('${escapeHtml(cName)}')" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Open Live Map">🗺️ Map</button>
-                        ` : ''}
+    const todayStr = getLocalTodayStr();
+    const config = globalState.timeInSchedule || {};
+    const riderSchedules = config.riderSchedules || {};
 
-                        ${canSwap ? `
-                            <button onclick="window.openSwapCustomerModal && window.openSwapCustomerModal('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-purple-600/30 hover:bg-purple-600 text-purple-300 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Swap customer with another rider">
-                                🔀 Swap
-                            </button>
-                        ` : ''}
+    const existing = riderSchedules[riderId] || {};
+    existing.riderName = riderName;
+    existing.earlyPassGranted = true;
+    existing.earlyPassDate = todayStr;
+    existing.passGrantedAt = Date.now();
+    existing.passGrantedBy = appState.riderName || "Admin";
 
-                        ${!isMyLine ? `
-                            <button onclick="window.claimCustomerFromRider && window.claimCustomerFromRider('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Request to get this customer">
-                                📥 Get
-                            </button>
-                        ` : ''}
+    riderSchedules[riderId] = existing;
+    config.riderSchedules = riderSchedules;
+    globalState.timeInSchedule = config;
 
-                        ${showControls ? `
-                            <button onclick="window.adminVoidSpecificCustomer && window.adminVoidSpecificCustomer('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700/50 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Void specific customer">
-                                🚫 Void
-                            </button>
-                        ` : ''}
-                    </div>
-                </div>`;
+    try {
+        if (db) {
+            await db.ref(`settings/timeInSchedule/riderSchedules/${riderId}`).update({
+                riderName,
+                earlyPassGranted: true,
+                earlyPassDate: todayStr,
+                passGrantedAt: Date.now(),
+                passGrantedBy: appState.riderName || "Admin"
             });
-            cardHtml += `</div>`;
         }
 
-        cardHtml += `</div>`;
-        busyHtml.push(cardHtml);
-    });
-
-    // 3. BREAK RIDERS (WITH GROSS INCOME)
-    breakRiders.forEach(m => {
-        const mId = (m.telegramId || "").toString();
-        const mName = m.riderName || m.name || "Rider";
-        const todayGross = getRiderTodayGross(mName, mId);
-        let nameStr = escapeHtml(mName);
-
-        if (showControls) {
-            nameStr += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void Order</option></select>`;
-        }
-
-        brkHtml.push(`
-            <div class="flex items-center justify-between py-1 text-xs">
-                <div class="flex items-center gap-1.5">
-                    <span>${nameStr}</span>
-                    <span class="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/30">₱${todayGross.toFixed(0)}</span>
-                </div>
-            </div>
-        `);
-    });
-
-    // 4. COOLDOWN RIDERS (WITH GROSS INCOME)
-    cooldownRiders.forEach(m => {
-        const mId = (m.telegramId || "").toString();
-        const mName = m.riderName || m.name || "Rider";
-        const todayGross = getRiderTodayGross(mName, mId);
-        let nameStr = escapeHtml(mName);
-
-        let remSecs = m.cooldownUntil ? Math.max(0, Math.ceil((m.cooldownUntil - Date.now()) / 1000)) : 0;
-        let mins = String(Math.floor(remSecs / 60)).padStart(2, '0');
-        let secs = String(remSecs % 60).padStart(2, '0');
-
-        nameStr += ` <span class="text-yellow-400 font-mono text-[10px]">(${mins}:${secs} remaining)</span>`;
-
-        if (showControls) {
-            nameStr += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-black text-[10px] text-yellow-400 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
-        }
-
-        cdHtml.push(`
-            <div class="flex items-center justify-between py-1 text-xs">
-                <div class="flex items-center gap-1.5">
-                    <span>${nameStr}</span>
-                    <span class="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/30">₱${todayGross.toFixed(0)}</span>
-                </div>
-            </div>
-        `);
-    });
-
-    const elAvail = document.getElementById('home-roster-avail');
-    const elBusy = document.getElementById('home-roster-busy');
-    const elBreak = document.getElementById('home-roster-break');
-    const elCooldown = document.getElementById('home-roster-cooldown');
-
-    if (elAvail) elAvail.innerHTML = availHtml.length ? availHtml.join('') : '(Walang naka-duty)';
-    if (elBusy) elBusy.innerHTML = busyHtml.length ? busyHtml.join('') : '(Walang bumibiyahe)';
-    if (elBreak) elBreak.innerHTML = brkHtml.length ? brkHtml.join('') : '(Walang naka-break)';
-    if (elCooldown) elCooldown.innerHTML = cdHtml.length ? cdHtml.join('') : '(Walang naka-cooldown)';
+        renderAdminTimeInScheduleList();
+        showToast(`⚡ Granted 1-Day Early Time-In Pass for ${riderName}!`);
+        showSideNotification("EARLY PASS GRANTED", `${riderName} can now time-in immediately today`, "fa-bolt", "text-emerald-400", "border-emerald-500");
+    } catch(e) {
+        showToast("❌ Failed to grant early pass.");
+    }
 }
 
-export function loadGlobalCateredList() {
-    const feed = document.getElementById('catered-customers-feed');
-    const badge = document.getElementById('catered-count-badge');
-    if (!feed) return;
+export async function revokeRiderEarlyPass(riderId, riderName) {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
-    const todayStr = getLocalTodayStr();
-    const todayHistory = globalState.globalCateredHistory ? globalState.globalCateredHistory.filter(h => isSameDate(h.completedDate, todayStr)) : [];
+    const config = globalState.timeInSchedule || {};
+    const riderSchedules = config.riderSchedules || {};
 
-    if (badge) badge.innerText = `${todayHistory.length} recorded`;
-
-    if (todayHistory.length === 0) {
-        feed.innerHTML = `<div class="text-gray-500 italic text-center py-4">No completed catered customers yet today.</div>`;
-        return;
+    if (riderSchedules[riderId]) {
+        riderSchedules[riderId].earlyPassGranted = false;
+        riderSchedules[riderId].earlyPassDate = null;
     }
 
-    feed.innerHTML = todayHistory.slice().reverse().map(h => {
-        let voidBtn = "";
-        if (isAdmin()) {
-            voidBtn = `<button onclick="window.promptVoidCustomer && window.promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate)}')" class="bg-red-900/40 text-red-400 hover:bg-red-800 text-[10px] font-bold px-2 py-1 rounded border border-red-700/50 transition active:scale-95"><i class="fa-solid fa-ban"></i> Void</button>`;
+    config.riderSchedules = riderSchedules;
+    globalState.timeInSchedule = config;
+
+    try {
+        if (db) {
+            await db.ref(`settings/timeInSchedule/riderSchedules/${riderId}`).update({
+                earlyPassGranted: false,
+                earlyPassDate: null
+            });
         }
 
-        let durationStr = h.duration || "";
-        if (!durationStr && h.startTime && h.completedTime) {
-            durationStr = calculateSplitDuration(h.startTime, h.completedTime, h.customerCount || 1);
-        }
-
-        let timeInfo = `Started: ${escapeHtml(h.startTime)}`;
-        if (h.completedTime) {
-            timeInfo += ` → ${escapeHtml(h.completedTime)}`;
-        }
-        if (durationStr) {
-            timeInfo += ` <span class="text-emerald-400 font-bold">[${escapeHtml(durationStr)}]</span>`;
-        }
-
-        return `
-        <div class="bg-gray-800/40 border border-gray-700/60 p-2.5 rounded-lg flex justify-between items-center">
-            <div>
-                <div class="font-bold text-orange-400"><i class="fa-solid fa-user"></i> ${escapeHtml(h.customerName)}</div>
-                <div class="text-[10px] text-gray-400">Rider: <span class="text-blue-400">${escapeHtml(h.riderName)}</span></div>
-            </div>
-            <div class="flex items-center gap-3">
-                <div class="text-[10px] text-gray-400 font-mono text-right">
-                    ${timeInfo}
-                </div>
-                ${voidBtn}
-            </div>
-        </div>`;
-    }).join('');
+        renderAdminTimeInScheduleList();
+        showToast(`🚫 Revoked early pass for ${riderName}.`);
+    } catch(e) {
+        showToast("❌ Failed to revoke early pass.");
+    }
 }
 
-export function loadGlobalLoginList() {
-    const feed = document.getElementById('login-list-feed');
-    const badge = document.getElementById('login-count-badge');
-    if (!feed) return;
+export async function saveAdminTimeInScheduleSettings() {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
-    const todayStr = getLocalTodayStr();
-    const todayLogins = globalState.globalLogins ? globalState.globalLogins.filter(l => isSameDate(l.date, todayStr)) : [];
+    const masterToggle = document.getElementById('admin-schedule-master-enabled');
+    const defaultTimeInput = document.getElementById('admin-schedule-default-time');
 
-    if (badge) badge.innerText = `${todayLogins.length} logins`;
+    const enabled = masterToggle ? masterToggle.checked : false;
+    const defaultTimeIn = defaultTimeInput?.value ? defaultTimeInput.value.trim() : "08:00";
 
-    if (todayLogins.length === 0) {
-        feed.innerHTML = `<div class="text-gray-500 italic text-center py-2">No logins recorded yet today.</div>`;
-        return;
-    }
+    const config = globalState.timeInSchedule || {};
+    const riderSchedules = config.riderSchedules || {};
 
-    feed.innerHTML = todayLogins.slice().reverse().map(l => {
-        let mapBtn = "";
-        if (l.location) {
-            mapBtn = `<a href="${escapeHtml(l.location)}" target="_blank" class="text-[10px] text-emerald-400 font-bold underline flex items-center gap-1 mt-0.5 active:opacity-60"><i class="fa-solid fa-location-dot text-red-500"></i> View Pin Location</a>`;
+    // Collect custom inputs per rider
+    document.querySelectorAll('[id^="rider-sched-time-"]').forEach(input => {
+        const rId = input.id.replace('rider-sched-time-', '').trim();
+        const customTime = input.value.trim();
+        
+        if (!riderSchedules[rId]) riderSchedules[rId] = {};
+        riderSchedules[rId].allowedTimeIn = customTime || "";
+    });
+
+    const payload = {
+        enabled,
+        defaultTimeIn,
+        riderSchedules,
+        updatedBy: appState.riderName || "Admin",
+        updatedAt: Date.now()
+    };
+
+    globalState.timeInSchedule = payload;
+    try {
+        localStorage.setItem('lokalex_timein_schedule_cache', JSON.stringify(payload));
+    } catch(e) {}
+
+    try {
+        if (db) {
+            await db.ref('settings/timeInSchedule').set(payload);
         }
-        const clockOutTxt = l.clockOutTime ? `<span class="text-red-400 ml-1">(Out: ${escapeHtml(l.clockOutTime)})</span>` : '';
-        return `
-        <div class="bg-gray-800/30 border border-gray-700/40 p-2 rounded-lg flex justify-between items-center">
-            <div class="flex flex-col">
-                <span class="font-bold text-blue-400"><i class="fa-solid fa-motorcycle"></i> ${escapeHtml(l.riderName)}</span>
-                ${mapBtn}
-            </div>
-            <div class="text-[10px] text-gray-400 font-mono text-right">
-                <span>In: ${escapeHtml(l.loginTime)}</span>
-                ${clockOutTxt}
-            </div>
-        </div>`;
-    }).join('');
+
+        closeAdminTimeInScheduleModal();
+        showToast(`⚙️ Rider Time-In Schedule saved (${enabled ? 'Active' : 'Disabled'})!`);
+        showSideNotification("SCHEDULE SAVED", `Default: ${defaultTimeIn} • Restriction ${enabled ? 'ENABLED' : 'DISABLED'}`, "fa-clock", "text-purple-400", "border-purple-500");
+    } catch(e) {
+        showToast("❌ Failed to save time-in schedule settings.");
+    }
+}
+
+export function listenToTimeInSchedule() {
+    if (!db) return;
+
+    try {
+        const cached = localStorage.getItem('lokalex_timein_schedule_cache');
+        if (cached) globalState.timeInSchedule = JSON.parse(cached);
+    } catch(e) {}
+
+    db.ref('settings/timeInSchedule').on('value', (snap) => {
+        const data = snap.val();
+        if (data) {
+            globalState.timeInSchedule = data;
+            try {
+                localStorage.setItem('lokalex_timein_schedule_cache', JSON.stringify(data));
+            } catch(e) {}
+        }
+    });
+}
+
+// ============================================================================
+// ADMIN AUTO END SHIFT CONFIGURATION & SCHEDULER
+// ============================================================================
+export function openAdminAutoEndShiftModal() {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    const modal = document.getElementById('admin-auto-endshift-modal');
+    if (!modal) return;
+
+    if (db) {
+        db.ref('settings/autoEndShift').once('value', (snap) => {
+            const data = snap.val() || {};
+            const enabledToggle = document.getElementById('auto-endshift-enabled');
+            const timeInput = document.getElementById('auto-endshift-time');
+            const statusDesc = document.getElementById('auto-endshift-status-desc');
+
+            if (enabledToggle) enabledToggle.checked = !!data.enabled;
+            if (timeInput) timeInput.value = data.time || "03:00";
+            if (statusDesc) {
+                statusDesc.innerText = data.enabled 
+                    ? `Active: Scheduled daily at ${data.time || '03:00'}`
+                    : "Disabled: No auto end shift will occur.";
+            }
+        });
+    }
+    modal.classList.remove('hidden');
+}
+
+export function closeAdminAutoEndShiftModal() {
+    const modal = document.getElementById('admin-auto-endshift-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export async function saveAdminAutoEndShiftSettings() {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    const enabledToggle = document.getElementById('auto-endshift-enabled');
+    const timeInput = document.getElementById('auto-endshift-time');
+
+    const isEnabled = enabledToggle ? enabledToggle.checked : false;
+    let setTime = timeInput ? timeInput.value.trim() : "03:00";
+    if (!setTime) setTime = "03:00";
+
+    const payload = {
+        enabled: isEnabled,
+        time: setTime,
+        updatedBy: appState.riderName || "Admin",
+        updatedAt: Date.now()
+    };
+
+    try {
+        if (db) {
+            await db.ref('settings/autoEndShift').update(payload);
+        }
+
+        closeAdminAutoEndShiftModal();
+        showToast(`⚙️ Auto End Shift ${isEnabled ? `set to ${setTime}` : 'Disabled'}!`);
+        showSideNotification("SETTINGS SAVED", `Auto End Shift: ${isEnabled ? setTime : 'DISABLED'}`, "fa-clock", "text-purple-400", "border-purple-500");
+    } catch(e) {
+        showToast("❌ Failed to update auto end shift settings.");
+    }
 }
 
 export async function checkAndTriggerAutoEndShift() {
@@ -407,8 +693,27 @@ export async function executeAutoEndShift() {
 }
 
 if (typeof window !== 'undefined') {
-    window.openFindRidersMap = openFindRidersMap;
-    window.updateRosterUI = updateRosterUI;
-    window.loadGlobalCateredList = loadGlobalCateredList;
-    window.loadGlobalLoginList = loadGlobalLoginList;
+    window.toggleAdminControls = toggleAdminControls;
+    window.openAdminCateringModal = openAdminCateringModal;
+    window.submitAdminForceCatering = submitAdminForceCatering;
+    window.adminForceStatus = adminForceStatus;
+    window.adminVoidSpecificCustomer = adminVoidSpecificCustomer;
+    window.promptVoidCustomer = promptVoidCustomer;
+    window.executeVoidCateredCustomer = executeVoidCateredCustomer;
+    window.adminShiftRiderQueue = adminShiftRiderQueue;
+    window.forceAllEndShift = forceAllEndShift;
+    window.openAdminAutoEndShiftModal = openAdminAutoEndShiftModal;
+    window.closeAdminAutoEndShiftModal = closeAdminAutoEndShiftModal;
+    window.saveAdminAutoEndShiftSettings = saveAdminAutoEndShiftSettings;
+    window.checkAndTriggerAutoEndShift = checkAndTriggerAutoEndShift;
+    window.executeAutoEndShift = executeAutoEndShift;
+
+    window.openAdminTimeInScheduleModal = openAdminTimeInScheduleModal;
+    window.closeAdminTimeInScheduleModal = closeAdminTimeInScheduleModal;
+    window.saveAdminTimeInScheduleSettings = saveAdminTimeInScheduleSettings;
+    window.grantRiderEarlyPass = grantRiderEarlyPass;
+    window.revokeRiderEarlyPass = revokeRiderEarlyPass;
+    window.renderAdminTimeInScheduleList = renderAdminTimeInScheduleList;
+
+    listenToTimeInSchedule();
 }

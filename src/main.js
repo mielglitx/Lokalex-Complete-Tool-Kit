@@ -41,7 +41,7 @@ window.unlockAudioContext = unlockAudioContext;
 let isReconnecting = false;
 let lastHeartbeatTime = Date.now();
 
-// SERVICE WORKER REGISTRATION & FCM PUSH NOTIFICATIONS
+// SERVICE WORKER REGISTRATION & FCM PUSH NOTIFICATIONS[cite: 37]
 export function registerServiceWorker() {
     if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
         navigator.serviceWorker.register('/sw.js').then((reg) => {
@@ -130,7 +130,7 @@ export function updateNetworkStatus(forcedState = null) {
     }
 }
 
-// FORCE RECONNECT FIREBASE WEBSOCKET ON APP RESUME
+// FORCE RECONNECT FIREBASE WEBSOCKET ON APP RESUME[cite: 37]
 export function forceReconnectFirebase() {
     if (isReconnecting) return;
     isReconnecting = true;
@@ -144,7 +144,17 @@ export function forceReconnectFirebase() {
                 updateNetworkStatus(true);
 
                 db.ref('roster').once('value', (snapshot) => {
-                    globalState.rosterMembers = snapshot.val() ? Object.values(snapshot.val()) : [];
+                    const val = snapshot.val();
+                    if (val) {
+                        globalState.rosterMembers = Object.entries(val).map(([key, item]) => ({
+                            ...item,
+                            telegramId: (item.telegramId || item.id || key).toString().trim(),
+                            id: (item.telegramId || item.id || key).toString().trim()
+                        }));
+                    } else {
+                        globalState.rosterMembers = [];
+                    }
+
                     if (roster && roster.saveRosterCache) roster.saveRosterCache();
                     if (roster && roster.updateRosterUI) roster.updateRosterUI();
                 });
@@ -202,7 +212,7 @@ window.addEventListener('pageshow', handleAppVisibilityChange);
 window.addEventListener('focus', handleAppVisibilityChange);
 window.addEventListener('resume', handleAppVisibilityChange);
 
-// TIMER DRIFT WATCHDOG
+// TIMER DRIFT WATCHDOG[cite: 37]
 setInterval(() => {
     const now = Date.now();
     const drift = now - lastHeartbeatTime;
@@ -218,18 +228,17 @@ function bootApp() {
         registerServiceWorker();
         updateNetworkStatus();
 
-        // Remove lingering floating chat widget elements if present in DOM
         const legacyWidget = document.getElementById('floating-chat-container');
         if (legacyWidget) legacyWidget.remove();
 
-        // 1. INSTANT LOCAL CACHE HYDRATION (Zero latency)
+        // 1. INSTANT LOCAL CACHE HYDRATION (Zero latency)[cite: 37]
         if (roster && roster.loadRosterCache) roster.loadRosterCache();
         if (roster && roster.updateRosterUI) roster.updateRosterUI();
         if (commission && commission.loadCommissionSettingsCache) commission.loadCommissionSettingsCache();
         if (directory && directory.loadDirectoryCache) directory.loadDirectoryCache();
         if (cart && cart.loadCartState) cart.loadCartState();
 
-        // 2. BACKGROUND FIREBASE SYNC
+        // 2. BACKGROUND FIREBASE SYNC[cite: 37]
         initRealtimeFirebaseListeners();
 
         if (commission && commission.fetchCommissionSettings) commission.fetchCommissionSettings();
@@ -355,10 +364,12 @@ function initRealtimeFirebaseListeners() {
                 Object.entries(val).forEach(([id, rider]) => {
                     const name = (rider.riderName || rider.name || "").toLowerCase().trim();
                     const type = (rider.userType || rider.type || "rider").toLowerCase().trim();
-                    if (name) userTypes[name] = type;
-                    if (id) userTypes[id] = type;
+                    const cleanId = (rider.telegramId || rider.id || id).toString().trim();
 
-                    if (myId && id.toString().trim() === myId) {
+                    if (name) userTypes[name] = type;
+                    if (cleanId) userTypes[cleanId] = type;
+
+                    if (myId && cleanId === myId) {
                         appState.userType = type;
                         localStorage.setItem('userType', type);
                     }
@@ -371,8 +382,19 @@ function initRealtimeFirebaseListeners() {
             if (commission && commission.refreshCommissionView) commission.refreshCommissionView();
         });
 
+        // ROSTER LISTENER GUARANTEES TELEGRAM_ID IS NEVER EMPTY[cite: 37]
         db.ref('roster').on('value', (snapshot) => {
-            globalState.rosterMembers = snapshot.val() ? Object.values(snapshot.val()) : [];
+            const val = snapshot.val();
+            if (val) {
+                globalState.rosterMembers = Object.entries(val).map(([key, item]) => ({
+                    ...item,
+                    telegramId: (item.telegramId || item.id || key).toString().trim(),
+                    id: (item.telegramId || item.id || key).toString().trim()
+                }));
+            } else {
+                globalState.rosterMembers = [];
+            }
+
             if (roster && roster.saveRosterCache) roster.saveRosterCache();
             window.dispatchEvent(new Event('rosterUpdated'));
         });
