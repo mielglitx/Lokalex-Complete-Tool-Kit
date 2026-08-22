@@ -43,72 +43,72 @@ export function updateRosterUI() {
 
     const showControls = globalState.adminControlsEnabled && canManage;
 
+    // Toggle switch wrapper is visible if the user is an Admin or TL
     const adminToggleWrapper = document.getElementById('admin-toggle-wrapper');
     if (adminToggleWrapper) {
         if (canManage) adminToggleWrapper.classList.remove('hidden');
         else adminToggleWrapper.classList.add('hidden');
     }
 
-    const findRidersBtn = document.getElementById('admin-find-riders-btn');
-    if (findRidersBtn) {
-        if (canManage) findRidersBtn.classList.remove('hidden');
-        else findRidersBtn.classList.add('hidden');
-    }
-
-    const storeHubBtn = document.getElementById('admin-store-hub-btn');
-    if (storeHubBtn) {
-        if (isAdmin()) storeHubBtn.classList.remove('hidden');
-        else storeHubBtn.classList.add('hidden');
-    }
-
-    const manageRidersBtn = document.getElementById('admin-manage-riders-btn');
-    if (manageRidersBtn) {
-        if (isAdmin()) manageRidersBtn.classList.remove('hidden');
-        else manageRidersBtn.classList.add('hidden');
-    }
-
-    const scheduleSettingsBtn = document.getElementById('admin-schedule-settings-btn');
-    if (scheduleSettingsBtn) {
-        if (isAdmin()) scheduleSettingsBtn.classList.remove('hidden');
-        else scheduleSettingsBtn.classList.add('hidden');
-    }
-
-    // Admin Day-off Rules & Quota manager button (Admin Exclusive)[cite: 32]
-    const dayOffSettingsBtn = document.getElementById('admin-dayoff-settings-btn');
-    if (dayOffSettingsBtn) {
-        if (isAdmin()) dayOffSettingsBtn.classList.remove('hidden');
-        else dayOffSettingsBtn.classList.add('hidden');
-    }
-
-    // Admin Max Active Bookings Limit Button (Admin Exclusive)
-    const bookingLimitsBtn = document.getElementById('admin-booking-limits-btn');
-    if (bookingLimitsBtn) {
-        if (isAdmin()) bookingLimitsBtn.classList.remove('hidden');
-        else bookingLimitsBtn.classList.add('hidden');
-    }
-
-    // Rider Day-Off button is always visible to all riders[cite: 32]
+    // 1. Rider Day-Off button is always visible to all riders
     const riderDayOffBtn = document.getElementById('btn-rider-dayoff');
     if (riderDayOffBtn) {
         riderDayOffBtn.classList.remove('hidden');
     }
 
+    // 2. All Admin Tool buttons are strictly visible ONLY when Admin Mode Toggle is ON and user has Admin rights
+    const storeHubBtn = document.getElementById('admin-store-hub-btn');
+    if (storeHubBtn) {
+        if (showControls && isAdmin()) storeHubBtn.classList.remove('hidden');
+        else storeHubBtn.classList.add('hidden');
+    }
+
+    const manageRidersBtn = document.getElementById('admin-manage-riders-btn');
+    if (manageRidersBtn) {
+        if (showControls && isAdmin()) manageRidersBtn.classList.remove('hidden');
+        else manageRidersBtn.classList.add('hidden');
+    }
+
+    const scheduleSettingsBtn = document.getElementById('admin-schedule-settings-btn');
+    if (scheduleSettingsBtn) {
+        if (showControls && isAdmin()) scheduleSettingsBtn.classList.remove('hidden');
+        else scheduleSettingsBtn.classList.add('hidden');
+    }
+
+    const dayOffSettingsBtn = document.getElementById('admin-dayoff-settings-btn');
+    if (dayOffSettingsBtn) {
+        if (showControls && isAdmin()) dayOffSettingsBtn.classList.remove('hidden');
+        else dayOffSettingsBtn.classList.add('hidden');
+    }
+
+    const bookingLimitsBtn = document.getElementById('admin-booking-limits-btn');
+    if (bookingLimitsBtn) {
+        if (showControls && isAdmin()) bookingLimitsBtn.classList.remove('hidden');
+        else bookingLimitsBtn.classList.add('hidden');
+    }
+
     const commissionSettingsBtn = document.getElementById('admin-commission-settings-btn');
     if (commissionSettingsBtn) {
-        if (isAdmin()) commissionSettingsBtn.classList.remove('hidden');
+        if (showControls && isAdmin()) commissionSettingsBtn.classList.remove('hidden');
         else commissionSettingsBtn.classList.add('hidden');
     }
 
     const autoEndShiftBtn = document.getElementById('admin-auto-endshift-btn');
     if (autoEndShiftBtn) {
-        if (isAdmin()) autoEndShiftBtn.classList.remove('hidden');
+        if (showControls && isAdmin()) autoEndShiftBtn.classList.remove('hidden');
         else autoEndShiftBtn.classList.add('hidden');
     }
 
     const blockBtn = document.getElementById('admin-block-btn');
     if (blockBtn) {
-        if (isAdmin()) blockBtn.classList.remove('hidden');
+        if (showControls && isAdmin()) blockBtn.classList.remove('hidden');
         else blockBtn.classList.add('hidden');
+    }
+
+    const findRidersBtn = document.getElementById('admin-find-riders-btn');
+    if (findRidersBtn) {
+        if (showControls) findRidersBtn.classList.remove('hidden');
+        else findRidersBtn.classList.add('hidden');
     }
 
     const forceAllBtn = document.getElementById('admin-force-all-btn');
@@ -143,7 +143,7 @@ export function updateRosterUI() {
         btnBreak.style.opacity = isEnded ? '0.3' : '1';
     }
 
-    // LINEUP SORTED FROM LOWEST TO HIGHEST GROSS INCOME[cite: 32]
+    // LINEUP SORTED FROM LOWEST TO HIGHEST GROSS INCOME[cite: 24]
     const availableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
 
     checkFirstInLineAlarm(availableRiders);
@@ -173,7 +173,7 @@ export function updateRosterUI() {
     let availHtml = [], busyHtml = [], brkHtml = [], cdHtml = [];
     let availCounter = 1;
 
-    // 1. AVAILABLE QUEUE RIDERS (LOWEST TO HIGHEST GROSS INCOME DISPLAY)[cite: 32]
+    // 1. AVAILABLE QUEUE RIDERS (LOWEST TO HIGHEST GROSS INCOME DISPLAY)[cite: 24]
     availableRiders.forEach((m) => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -203,7 +203,7 @@ export function updateRosterUI() {
         `);
     });
 
-    // 2. CATERING RIDERS (WITH GROSS INCOME BADGE)[cite: 32]
+    // 2. CATERING RIDERS (WITH GROSS INCOME BADGE)[cite: 24]
     cateringRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -271,7 +271,7 @@ export function updateRosterUI() {
         busyHtml.push(cardHtml);
     });
 
-    // 3. BREAK RIDERS (WITH GROSS INCOME BADGE)[cite: 32]
+    // 3. BREAK RIDERS (WITH GROSS INCOME BADGE)[cite: 24]
     breakRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -294,7 +294,7 @@ export function updateRosterUI() {
         `);
     });
 
-    // 4. COOLDOWN RIDERS (WITH GROSS INCOME BADGE)[cite: 32]
+    // 4. COOLDOWN RIDERS (WITH GROSS INCOME BADGE)[cite: 24]
     cooldownRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -323,7 +323,7 @@ export function updateRosterUI() {
         `);
     });
 
-    // 5. RIDERS CURRENTLY ON DAY OFF TODAY (DEDICATED SECTION)[cite: 32]
+    // 5. RIDERS CURRENTLY ON DAY OFF TODAY (DEDICATED SECTION)[cite: 24]
     let dayOffHtml = [];
     const dayOffRiderKeys = new Set();
 
