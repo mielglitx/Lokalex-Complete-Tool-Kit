@@ -1,7 +1,10 @@
 // src/features/chat/riderThreadActions.js
 import { db } from '../../config/firebase.js';
+import { appState } from '../../store/state.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
+import { openSlideDeleteModal } from '../../ui/modals.js';
 import { toggleBodyScroll, compressAndResizeImage } from './chatUtils.js';
+import { voidSingleCateringCustomer } from '../roster/rosterStatus.js';
 
 let stagedPodImageBase64 = null;
 
@@ -154,7 +157,6 @@ export async function submitProofOfDelivery(withPhoto = true) {
     closePodModal();
 
     if (withPhoto && stagedPodImageBase64 && db && custId) {
-        // Send POD photo to the customer chat thread
         const podMsg = {
             sender: riderName,
             senderType: 'rider',
@@ -173,7 +175,6 @@ export async function submitProofOfDelivery(withPhoto = true) {
         await updateOrderMilestone('delivered', orderId, stagedPodImageBase64);
     }
 
-    // Execute standard thread done logic
     executeThreadDone();
 }
 
@@ -181,7 +182,6 @@ export function markThreadDone() {
     const meta = window.getCurrentRiderChatMeta ? window.getCurrentRiderChatMeta() : {};
     const orderId = meta?.latestOrderId;
 
-    // Prompt for POD if order is actively connected
     if (orderId) {
         openPodModal();
     } else {
@@ -200,10 +200,6 @@ export function executeThreadDone() {
             cateredBy: null,
             folder: 'done'
         });
-    }
-
-    if (typeof window.setAvailableStatus === 'function') {
-        window.setAvailableStatus();
     }
 
     document.getElementById('rider-chat-cancel-btn')?.classList.add('hidden');
@@ -243,27 +239,39 @@ export function markThreadFollowUp() {
     showToast("📌 Moved chat to Follow Up & loaded Advance Order form!");
 }
 
+// VOID SPECIFIC CUSTOMER WITHOUT CANCELING OTHER ACTIVE BOOKINGS
 export function cancelCustomerThread() {
     const custId = window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null;
-    if (!custId) return;
+    const meta = window.getCurrentRiderChatMeta ? window.getCurrentRiderChatMeta() : {};
+    const custName = document.getElementById('rider-chat-cust-name')?.innerText?.trim() || meta?.customerName || "";
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = appState.riderName || localStorage.getItem('riderName') || "Rider";
 
-    if (db) {
-        db.ref(`customerChats/${custId}/metadata`).update({
-            cateredByRiderId: null,
-            cateredByRiderName: null,
-            cateredBy: null,
-            folder: 'done',
-            status: 'cancelled'
-        });
-    }
+    if (!custId && !custName) return;
 
-    if (typeof window.setAvailableStatus === 'function') {
-        window.setAvailableStatus();
-    }
+    openSlideDeleteModal(
+        `Cancel & Void Customer?`,
+        `Sigurado ka bang nais i-void si [${custName || 'Customer'}]?\nKung may iba ka pang dalang customer, mananatili ka sa Catering.`,
+        async () => {
+            if (db && custId) {
+                db.ref(`customerChats/${custId}/metadata`).update({
+                    cateredByRiderId: null,
+                    cateredByRiderName: null,
+                    cateredBy: null,
+                    folder: 'done',
+                    status: 'cancelled',
+                    lastUpdated: Date.now()
+                });
+            }
 
-    document.getElementById('rider-chat-cancel-btn')?.classList.add('hidden');
-    showToast("🚫 Catering cancelled & released!");
-    if (window.closeRiderCustomerChatModal) window.closeRiderCustomerChatModal();
+            if (custName && myId) {
+                await voidSingleCateringCustomer(myId, myName, custName);
+            }
+
+            document.getElementById('rider-chat-cancel-btn')?.classList.add('hidden');
+            if (window.closeRiderCustomerChatModal) window.closeRiderCustomerChatModal();
+        }
+    );
 }
 
 // -------------------------------------------------------------

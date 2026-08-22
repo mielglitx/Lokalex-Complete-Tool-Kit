@@ -18,12 +18,13 @@ import {
     getUserType,
     saveRosterCache,
     setLineAlarmConfirmed,
-    archiveRiderCateringIfNeeded
+    archiveRiderCateringIfNeeded,
+    getRiderTodayGross,
+    sortAvailableRidersByGross
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 import { requestClaimCustomer } from './rosterSwap.js';
 
-// CALCULATE QUEUE TIME TO PLACE RIDER AT #1 SPOT IN AVAILABLE QUEUE
 export function getTopQueueTime() {
     const rosterMembers = globalState.rosterMembers || [];
     const availableRiders = rosterMembers
@@ -38,7 +39,6 @@ export function getTopQueueTime() {
     return Date.now() - 1000;
 }
 
-// DISMISS QUEUE ALARM & MODAL
 export function dismissQueueAlarm() {
     setLineAlarmConfirmed(true);
     stopLineAlarm();
@@ -46,13 +46,10 @@ export function dismissQueueAlarm() {
     if (modal) modal.classList.add('hidden');
 }
 
-// CHECK IF RIDER IS FIRST IN LINE & SHOW MODAL / PLAY ALARM
+// CHECK IF RIDER IS FIRST IN LINE (LOWEST GROSS EARNINGS)
 export function checkFirstInLineNotification() {
     const rosterMembers = globalState.rosterMembers || [];
-    const availableRiders = rosterMembers
-        .filter(m => m.status === 'Available')
-        .sort((a, b) => parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime));
-
+    const availableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
     const myId = (appState.telegramId || "").toString();
 
     if (myId && availableRiders.length > 0 && (availableRiders[0].telegramId || "").toString() === myId) {
@@ -64,7 +61,65 @@ export function checkFirstInLineNotification() {
     }
 }
 
-// STATUS SLIDER HANDLER
+// VOID SINGLE CUSTOMER WITHOUT WIPING SIBLING BOOKINGS
+export async function voidSingleCateringCustomer(targetId, targetName, custNameToVoid) {
+    const rosterMembers = globalState.rosterMembers || [];
+    const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString().trim() === targetId.toString().trim());
+    if (!targetRecord) return;
+
+    let remainingCusts = [];
+    let remainingTimes = [];
+
+    if (targetRecord.customerName) {
+        const custs = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+        const times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
+
+        custs.forEach((c, idx) => {
+            if (c.toLowerCase().trim() !== custNameToVoid.toLowerCase().trim()) {
+                remainingCusts.push(c);
+                remainingTimes.push(times[idx] || times[0] || "");
+            }
+        });
+    }
+
+    const cleanVoidCust = custNameToVoid.toLowerCase().trim();
+    if (db) {
+        db.ref('customerChats').once('value', (snapshot) => {
+            const chats = snapshot.val() || {};
+            Object.keys(chats).forEach(custId => {
+                const meta = chats[custId]?.metadata || chats[custId] || {};
+                const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
+                if (chatCustName && chatCustName === cleanVoidCust) {
+                    db.ref(`customerChats/${custId}/metadata`).update({
+                        folder: 'done',
+                        status: 'cancelled',
+                        cateredByRiderId: null,
+                        cateredByRiderName: null,
+                        cateredBy: null,
+                        lastUpdated: Date.now()
+                    });
+                }
+            });
+        });
+
+        const cleanCustKey = cleanVoidCust.replace(/[^a-z0-9]/g, '');
+        if (cleanCustKey) {
+            db.ref(`roster/${targetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
+        }
+    }
+
+    if (remainingCusts.length > 0) {
+        await updateRosterStatusData('Catering', remainingCusts.join(', '), remainingTimes.join(', '), parseQueueTime(targetRecord.queueTime), targetId, targetName);
+        showToast(`🚫 Voided [${custNameToVoid}]. ${remainingCusts.length} active customer(s) remaining.`);
+        showSideNotification("CUSTOMER VOIDED", `Removed ${custNameToVoid}. ${remainingCusts.length} remaining`, "fa-ban", "text-amber-400", "border-amber-500");
+    } else {
+        const topQueueTime = getTopQueueTime();
+        await updateRosterStatusData('Available', '', '', topQueueTime, targetId, targetName);
+        showToast(`🚫 Voided [${custNameToVoid}]. Moved to Available queue!`);
+        showSideNotification("ALL VOIDED", `Placed in Available queue`, "fa-user-check", "text-emerald-400", "border-emerald-500");
+    }
+}
+
 export async function triggerStatusWithSlide(targetStatus) {
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
@@ -102,7 +157,6 @@ export async function triggerStatusWithSlide(targetStatus) {
             return;
         }
 
-        // STRICT RECEIPT CHECK BEFORE ALLOWING AVAILABLE
         const activeCustList = getActiveCateringCustomersWithTimes();
         if (activeCustList.length > 0) {
             let missingReceiptCust = null;
@@ -114,7 +168,7 @@ export async function triggerStatusWithSlide(targetStatus) {
             }
 
             if (missingReceiptCust) {
-                showToast(`⚠️ Paki-gawaan muna ng resibo si ${missingReceiptCust.name} bago mag-Available!`);
+                showToast(`⚠️ Paki-gawaan muna ng resibo si ${missingReceiptCust.name} (o i-void kung cancel) bago mag-Available!`);
                 
                 if (multiCarts && activeCartSlot) {
                     multiCarts[activeCartSlot].customerName = missingReceiptCust.name;
@@ -126,7 +180,6 @@ export async function triggerStatusWithSlide(targetStatus) {
             }
         }
 
-        // 1. INSTANT QUEUE LOCKING
         const currentRoster = globalState.rosterMembers || [];
         const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== myId);
         let maxTime = new Date().getTime();
@@ -136,12 +189,11 @@ export async function triggerStatusWithSlide(targetStatus) {
         });
         const lockedQueueTime = maxTime + 1000;
 
-        // 2. INSTANT STATUS & UI UPDATE
         endLiveGpsSession();
         dismissQueueAlarm();
         updateRosterStatus('Available', null, null, lockedQueueTime);
 
-        showSideNotification("RECORDING STATUS", `Marking ${appState.riderName} Available — queue position secured`, "fa-user-check", "text-green-400", "border-green-500");
+        showSideNotification("RECORDING STATUS", `Marking ${appState.riderName} Available — lineup calculated by gross earnings`, "fa-user-check", "text-green-400", "border-green-500");
 
         if (window.clearAllCartSlots) {
             window.clearAllCartSlots();
@@ -149,7 +201,6 @@ export async function triggerStatusWithSlide(targetStatus) {
             window.clearCartSlot();
         }
 
-        // 3. BACKGROUND GPS CALIBRATION
         showToast("📡 Calibrating GPS location in background...");
         calibrateGPS((accuracy) => {
             showToast(`📡 Calibrating GPS: ±${Math.round(accuracy)}m`);
@@ -200,12 +251,14 @@ export function promptCateringStatus() {
     }
 
     const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
-    const availableRiders = rosterMembers.filter(m => m.status === 'Available').sort((a, b) => parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime));
+    const availableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
 
     if (!amIAlreadyCatering && availableRiders.length > 0) {
         const firstAvailable = availableRiders[0];
         if ((firstAvailable?.telegramId || "").toString() !== myId) {
-            return showToast("⚠️ Hindi ikaw ang nasa unahan ng queue. Maghintay muna sa iyong turn.");
+            const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId);
+            const myGross = getRiderTodayGross(myRecord?.riderName || myRecord?.name, myId);
+            return showToast(`⚠️ 1st in line: ${firstAvailable.riderName || 'Rider'} (Kita: ₱${firstGross.toFixed(0)}) vs Iyo (₱${myGross.toFixed(0)}). Maghintay sa iyong turn.`);
         }
     }
 
@@ -311,12 +364,10 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
     let recordLogin = false;
     const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === tId.toString());
 
-    // Automatically archive catering sessions into cateredHistory & release chat lock when changing status
     if (status !== 'Catering' && targetRecord) {
         await archiveRiderCateringIfNeeded(targetRecord);
     }
 
-    // ONLY record a new login if the rider is transitioning from 'End' or offline to 'Available' (Shift Start)
     const isStartingShift = !targetRecord || !targetRecord.status || targetRecord.status === 'End';
     if (status === 'Available' && isStartingShift) {
         recordLogin = true;
@@ -365,7 +416,10 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     if (!globalState.rosterMembers) globalState.rosterMembers = [];
     const existingIdx = globalState.rosterMembers.findIndex(m => (m.telegramId || "").toString() === tId.toString());
     if (existingIdx !== -1) {
-        globalState.rosterMembers[existingIdx] = rosterData;
+        globalState.rosterMembers[existingIdx] = {
+            ...globalState.rosterMembers[existingIdx],
+            ...rosterData
+        };
     } else {
         globalState.rosterMembers.push(rosterData);
     }
@@ -375,7 +429,7 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
 
     if (db) {
         const rosterRef = db.ref('roster/' + tId);
-        await rosterRef.set(rosterData);
+        await rosterRef.update(rosterData);
 
         rosterRef.onDisconnect().update({
             lastActiveTimestamp: firebase.database.ServerValue.TIMESTAMP
@@ -389,7 +443,6 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         try {
             const loginSnap = await db.ref('logins/' + tId).once('value');
             const existingLogin = loginSnap.val();
-            // Preserve the original login time if already logged in today without an active clockOutTime
             if (existingLogin && isSameDate(existingLogin.date, todayStr) && existingLogin.loginTime && !existingLogin.clockOutTime) {
                 finalLoginTime = existingLogin.loginTime;
             }

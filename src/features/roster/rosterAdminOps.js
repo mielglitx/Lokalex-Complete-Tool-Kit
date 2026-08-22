@@ -15,7 +15,7 @@ import {
     saveRosterCache 
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
-import { getTopQueueTime, updateRosterStatus, updateRosterStatusData } from './rosterStatus.js';
+import { getTopQueueTime, updateRosterStatus, updateRosterStatusData, voidSingleCateringCustomer } from './rosterStatus.js';
 
 let pendingAdminTarget = null;
 
@@ -186,7 +186,7 @@ export async function adminForceStatus(id, name, actionValue) {
     });
 }
 
-// ADMIN VOID ACTIVE CATERING CUSTOMER
+// ADMIN VOID SPECIFIC CATERING CUSTOMER
 export async function adminVoidSpecificCustomer(targetId, targetName, custNameToVoid) {
     if (!canManageRoster()) {
         return showToast("⚠️ Unauthorized: Admin or TL access required.");
@@ -195,34 +195,7 @@ export async function adminVoidSpecificCustomer(targetId, targetName, custNameTo
     if (!targetId || !custNameToVoid) return;
 
     openSlideDeleteModal(`Void Customer: ${custNameToVoid}?`, `Sigurado ka bang nais i-void si ${custNameToVoid} para kay ${targetName}?`, async () => {
-        const rosterMembers = globalState.rosterMembers || [];
-        const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === targetId.toString());
-
-        if (!targetRecord) return;
-
-        let remainingCusts = [];
-        let remainingTimes = [];
-
-        if (targetRecord.customerName) {
-            const custs = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-            const times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
-
-            custs.forEach((c, idx) => {
-                if (c.toLowerCase() !== custNameToVoid.toLowerCase()) {
-                    remainingCusts.push(c);
-                    remainingTimes.push(times[idx] || times[0] || "");
-                }
-            });
-        }
-
-        if (remainingCusts.length > 0) {
-            await updateRosterStatusData('Catering', remainingCusts.join(', '), remainingTimes.join(', '), parseQueueTime(targetRecord.queueTime), targetId, targetName);
-            showToast(`🚫 Voided ${custNameToVoid} for ${targetName}.`);
-        } else {
-            const topQueueTime = getTopQueueTime();
-            await updateRosterStatusData('Available', '', '', topQueueTime, targetId, targetName);
-            showToast(`🚫 Voided ${custNameToVoid}. ${targetName} moved to #1 spot in Available queue!`);
-        }
+        await voidSingleCateringCustomer(targetId, targetName, custNameToVoid);
     });
 }
 

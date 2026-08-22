@@ -171,11 +171,22 @@ export async function silentSyncDirectory() {
     }
 }
 
-// DUAL-SOURCE DATA SYNC WITH OFFLINE MERGE
+// DUAL-SOURCE DATA SYNC WITH LIVE VISUAL FEEDBACK & TOAST ALERTS
 export async function syncData(isSilent = false) {
     const type = globalState.currentType || 'customers';
     const listEl = document.getElementById('record-list');
     
+    // Animate all directory refresh icons during sync
+    const refreshIcons = document.querySelectorAll('#view-directory .fa-rotate, #view-directory .fa-arrows-rotate, button[onclick*="syncData"] i');
+    refreshIcons.forEach(icon => icon.classList.add('fa-spin'));
+
+    const displayTypeLabel = type === 'stores' ? 'Store' : (type === 'customers' ? 'Customer' : 'Barangay Rates');
+
+    if (!isSilent) {
+        showToast(`🔄 Syncing latest ${displayTypeLabel} records...`);
+        showSideNotification("SYNCING DIRECTORY", `Fetching latest ${displayTypeLabel} data...`, "fa-rotate", "text-blue-400", "border-blue-500");
+    }
+
     loadDirectoryCache();
     const hasExistingLocal = (globalState.records || []).some(r => (r.type || 'customers') === type);
 
@@ -183,7 +194,7 @@ export async function syncData(isSilent = false) {
         listEl.innerHTML = `
         <div class="text-center text-blue-400 font-bold py-16 text-xs flex flex-col items-center justify-center gap-2">
             <i class="fa-solid fa-rotate fa-spin text-2xl"></i>
-            <span>Syncing ${type.toUpperCase()} records...</span>
+            <span>Syncing ${displayTypeLabel.toUpperCase()} records...</span>
         </div>`;
     }
 
@@ -245,21 +256,28 @@ export async function syncData(isSilent = false) {
         } catch(e) {}
     }
 
-    if (fetchedRecords.length > 0) {
-        const otherTypeRecords = (globalState.records || []).filter(r => r.type !== type);
-        globalState.records = [...otherTypeRecords, ...fetchedRecords];
-        saveDirectoryCache();
+    try {
+        if (fetchedRecords.length > 0) {
+            const otherTypeRecords = (globalState.records || []).filter(r => r.type !== type);
+            globalState.records = [...otherTypeRecords, ...fetchedRecords];
+            saveDirectoryCache();
 
-        if (!isSilent) {
-            showToast(`✅ Synced ${fetchedRecords.length} ${type} records!`);
+            if (!isSilent) {
+                showToast(`✅ ${displayTypeLabel} Directory updated (${fetchedRecords.length} records)!`);
+                showSideNotification("SYNC COMPLETE", `${fetchedRecords.length} ${displayTypeLabel} records loaded`, "fa-circle-check", "text-emerald-400", "border-emerald-500");
+            }
+        } else if (!isSilent) {
+            const localCount = (globalState.records || []).filter(r => (r.type || 'customers') === type).length;
+            showToast(`📁 Loaded ${localCount} ${displayTypeLabel} records from offline cache.`);
+            showSideNotification("OFFLINE CACHE", `${localCount} records loaded from storage`, "fa-box-archive", "text-amber-400", "border-amber-500");
         }
-    } else if (!isSilent) {
-        showToast(`📁 Loaded from offline cache.`);
-    }
 
-    const currentViewEl = document.querySelector('main > section:not(.hidden)');
-    if (currentViewEl && currentViewEl.id === 'view-directory') {
-        renderDirectoryList();
+        const currentViewEl = document.querySelector('main > section:not(.hidden)');
+        if (currentViewEl && currentViewEl.id === 'view-directory') {
+            renderDirectoryList();
+        }
+    } finally {
+        refreshIcons.forEach(icon => icon.classList.remove('fa-spin'));
     }
 }
 

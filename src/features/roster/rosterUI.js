@@ -8,12 +8,13 @@ import {
     parseQueueTime, 
     getElapsedCateringTime, 
     checkFirstInLineAlarm,
-    calculateSplitDuration 
+    calculateSplitDuration,
+    getRiderTodayGross,
+    sortAvailableRidersByGross
 } from './rosterUtils.js';
 import { autoStartLiveGpsSession, endLiveGpsSession } from '../liveTracker.js';
 import { openMapPicker } from '../maps.js';
 
-// FIND RIDERS MAP WIDGET LAUNCHER
 export function openFindRidersMap() {
     openMapPicker('roster');
 }
@@ -25,10 +26,8 @@ export function updateRosterUI() {
 
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
-
     const canManage = canManageRoster();
 
-    // STRICT PERMISSION GUARD: Ordinary riders can NEVER enable admin controls
     if (!canManage) {
         globalState.adminControlsEnabled = false;
         const adminToggle = document.getElementById('admin-controls-toggle');
@@ -42,7 +41,6 @@ export function updateRosterUI() {
 
     const showControls = globalState.adminControlsEnabled && canManage;
 
-    // HIDE / SHOW ADMIN CONTROL UI ELEMENTS STRICTLY BASED ON PERMISSIONS
     const adminToggleWrapper = document.getElementById('admin-toggle-wrapper');
     if (adminToggleWrapper) {
         if (canManage) adminToggleWrapper.classList.remove('hidden');
@@ -117,9 +115,8 @@ export function updateRosterUI() {
         btnBreak.style.opacity = isEnded ? '0.3' : '1';
     }
 
-    const availableRiders = rosterMembers
-        .filter(m => m.status === 'Available')
-        .sort((a, b) => parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime));
+    // SORT BY LOWEST GROSS INCOME FIRST
+    const availableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
 
     checkFirstInLineAlarm(availableRiders);
 
@@ -130,10 +127,11 @@ export function updateRosterUI() {
     let availHtml = [], busyHtml = [], brkHtml = [], cdHtml = [];
     let availCounter = 1;
 
-    // 1. AVAILABLE QUEUE RIDERS (COMPACT HORIZONTAL CHIPS FROM LEFT TO RIGHT)
+    // 1. AVAILABLE QUEUE RIDERS (LOWEST TO HIGHEST GROSS INCOME DISPLAY)
     availableRiders.forEach((m) => {
         const mId = (m.telegramId || "").toString();
         const mName = m.riderName || m.name || "Rider";
+        const todayGross = getRiderTodayGross(mName, mId);
         let nameStr = escapeHtml(mName);
 
         if (showControls) {
@@ -149,18 +147,26 @@ export function updateRosterUI() {
         }
 
         availHtml.push(`
-            <div class="inline-flex items-center bg-white dark:bg-white/5 border border-gray-200 dark:border-gray-700/60 rounded-xl px-2.5 py-1 text-xs shadow-xs transition hover:border-emerald-500">
-                <span class="font-black text-emerald-600 dark:text-green-400 mr-1.5">${availCounter++}.</span>
+            <div class="inline-flex items-center bg-white dark:bg-white/5 border border-gray-200 dark:border-gray-700/60 rounded-xl px-2.5 py-1 text-xs shadow-xs transition hover:border-emerald-500 gap-1.5">
+                <span class="font-black text-emerald-600 dark:text-green-400">${availCounter++}.</span>
                 <span class="font-bold text-gray-900 dark:text-gray-100 flex items-center">${nameStr}</span>
+                <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
             </div>
         `);
     });
 
-    // 2. CATERING RIDERS
+    // 2. CATERING RIDERS (WITH GROSS INCOME BADGE)
     cateringRiders.forEach(m => {
         const mId = (m.telegramId || "").toString();
         const mName = m.riderName || m.name || "Rider";
-        let cardHtml = `<div class="flex flex-col py-1.5 border-b border-gray-200 dark:border-gray-800/60 last:border-0 gap-1"><div class="flex items-center justify-between"><span class="font-black text-xs text-gray-900 dark:text-white">${escapeHtml(mName)}</span>`;
+        const todayGross = getRiderTodayGross(mName, mId);
+        let cardHtml = `
+        <div class="flex flex-col py-1.5 border-b border-gray-200 dark:border-gray-800/60 last:border-0 gap-1">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                    <span class="font-black text-xs text-gray-900 dark:text-white">${escapeHtml(mName)}</span>
+                    <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
+                </div>`;
 
         if (showControls) {
             cardHtml += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer shrink-0"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void All Orders</option></select>`;
@@ -176,7 +182,6 @@ export function updateRosterUI() {
                 const cTime = times[idx] || times[0] || '';
                 const timeDetails = getElapsedCateringTime(cTime);
                 const isMyLine = mId === myId || (appState.riderName && mName.toLowerCase() === appState.riderName.toLowerCase());
-
                 const canSwap = isMyLine || showControls;
 
                 cardHtml += `
@@ -216,22 +221,32 @@ export function updateRosterUI() {
         busyHtml.push(cardHtml);
     });
 
-    // 3. BREAK RIDERS
+    // 3. BREAK RIDERS (WITH GROSS INCOME BADGE)
     breakRiders.forEach(m => {
         const mId = (m.telegramId || "").toString();
         const mName = m.riderName || m.name || "Rider";
+        const todayGross = getRiderTodayGross(mName, mId);
         let nameStr = escapeHtml(mName);
 
         if (showControls) {
             nameStr += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
         }
-        brkHtml.push(`<div class="flex items-center justify-between py-1 text-xs font-bold text-gray-900 dark:text-gray-200">${nameStr}</div>`);
+
+        brkHtml.push(`
+            <div class="flex items-center justify-between py-1 text-xs font-bold text-gray-900 dark:text-gray-200">
+                <div class="flex items-center gap-1.5">
+                    <span>${nameStr}</span>
+                    <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
+                </div>
+            </div>
+        `);
     });
 
-    // 4. COOLDOWN RIDERS
+    // 4. COOLDOWN RIDERS (WITH GROSS INCOME BADGE)
     cooldownRiders.forEach(m => {
         const mId = (m.telegramId || "").toString();
         const mName = m.riderName || m.name || "Rider";
+        const todayGross = getRiderTodayGross(mName, mId);
         let nameStr = escapeHtml(mName);
 
         let remSecs = m.cooldownUntil ? Math.max(0, Math.ceil((m.cooldownUntil - Date.now()) / 1000)) : 0;
@@ -243,7 +258,15 @@ export function updateRosterUI() {
         if (showControls) {
             nameStr += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
         }
-        cdHtml.push(`<div class="flex items-center justify-between py-1 text-xs font-bold text-gray-900 dark:text-gray-200">${nameStr}</div>`);
+
+        cdHtml.push(`
+            <div class="flex items-center justify-between py-1 text-xs font-bold text-gray-900 dark:text-gray-200">
+                <div class="flex items-center gap-1.5">
+                    <span>${nameStr}</span>
+                    <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
+                </div>
+            </div>
+        `);
     });
 
     const elAvail = document.getElementById('home-roster-avail');

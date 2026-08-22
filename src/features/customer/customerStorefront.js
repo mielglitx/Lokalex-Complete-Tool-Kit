@@ -14,6 +14,17 @@ let customizerQty = 1;
 let stagedCustomerAvatarData = '';
 let activeCustomerOrderListener = null;
 
+let savedAddressesCache = {};
+let selectedAddressId = localStorage.getItem('lokalex_selected_address_id') || null;
+let checkoutPaymentMode = 'cod';
+
+let customerLiveMapObj = null;
+let customerRiderMarker = null;
+let customerDestMarker = null;
+let customerDirectionsService = null;
+let customerDirectionsRenderer = null;
+let lastCustRouteCalcTime = 0;
+
 // Load cached store state from localStorage immediately
 try {
     const cachedStores = localStorage.getItem('lokalex_cached_stores_v1');
@@ -163,6 +174,11 @@ export function initCustomerStorefront() {
                 localStorage.setItem('customerAvatarUrl', data.avatarUrl);
                 localStorage.setItem('lokalex_customer_avatar', data.avatarUrl);
             }
+            if (data.savedAddresses) {
+                savedAddressesCache = data.savedAddresses;
+                renderSavedAddressesList();
+                updateCheckoutSelectedAddressUI();
+            }
             renderCustomerHeaderProfile();
         });
 
@@ -173,7 +189,162 @@ export function initCustomerStorefront() {
 }
 
 // -------------------------------------------------------------
-// LIVE CUSTOMER ORDER MILESTONE PROGRESS TRACKER
+// 1. SAVED MULTI-ADDRESS BOOK & CHECKOUT SELECTOR
+// -------------------------------------------------------------
+export function openAddressBookModal() {
+    const modal = document.getElementById('cust-address-book-modal');
+    if (modal) modal.classList.remove('hidden');
+    renderSavedAddressesList();
+}
+
+export function closeAddressBookModal() {
+    const modal = document.getElementById('cust-address-book-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export function setAddressLabelPreset(label) {
+    const input = document.getElementById('new-addr-label');
+    if (input) input.value = label;
+}
+
+export function renderSavedAddressesList() {
+    const container = document.getElementById('cust-saved-addresses-list');
+    if (!container) return;
+
+    const entries = Object.entries(savedAddressesCache || {});
+    if (entries.length === 0) {
+        container.innerHTML = `<div class="text-center text-gray-400 italic py-6 text-xs">No saved addresses yet. Add one below!</div>`;
+        return;
+    }
+
+    container.innerHTML = entries.map(([id, addr]) => {
+        const isSelected = selectedAddressId === id;
+        return `
+        <div onclick="window.selectAddressForCheckout('${id}')" class="p-2.5 rounded-2xl border ${isSelected ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20' : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-cardBg'} flex items-start justify-between gap-2 cursor-pointer transition active:scale-[0.99] shadow-xs">
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-1.5 font-black text-xs text-gray-900 dark:text-white">
+                    <i class="fa-solid fa-location-dot text-emerald-500 text-[10px]"></i>
+                    <span class="truncate">${escapeHtml(addr.label || 'Address')}</span>
+                    ${isSelected ? '<span class="bg-emerald-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full">ACTIVE</span>' : ''}
+                </div>
+                <div class="text-[11px] text-gray-700 dark:text-gray-300 font-medium mt-0.5 truncate">${escapeHtml(addr.addressText || '')}</div>
+                ${addr.landmark ? `<div class="text-[9.5px] text-gray-500 dark:text-gray-400 italic mt-0.5">Note: "${escapeHtml(addr.landmark)}"</div>` : ''}
+            </div>
+            <button type="button" onclick="event.stopPropagation(); window.deleteSavedAddress('${id}', '${escapeHtml(addr.label || 'Address')}')" class="text-gray-400 hover:text-red-500 p-1 text-xs" title="Delete Address">
+                <i class="fa-solid fa-trash"></i>
+            </button>
+        </div>`;
+    }).join('');
+}
+
+export function selectAddressForCheckout(id) {
+    selectedAddressId = id;
+    localStorage.setItem('lokalex_selected_address_id', id);
+    renderSavedAddressesList();
+    updateCheckoutSelectedAddressUI();
+    closeAddressBookModal();
+    showToast("📍 Delivery address selected!");
+}
+
+export function updateCheckoutSelectedAddressUI() {
+    const box = document.getElementById('checkout-selected-address-box');
+    if (!box) return;
+
+    if (selectedAddressId && savedAddressesCache[selectedAddressId]) {
+        const addr = savedAddressesCache[selectedAddressId];
+        box.innerHTML = `
+            <div class="font-bold text-gray-900 dark:text-white flex items-center gap-1">
+                <span>${escapeHtml(addr.label || 'Delivery Address')}</span>
+            </div>
+            <div class="text-[10px] text-gray-600 dark:text-gray-300 truncate">${escapeHtml(addr.addressText || '')}</div>
+        `;
+    } else {
+        const firstAddr = Object.values(savedAddressesCache)[0];
+        if (firstAddr) {
+            box.innerHTML = `
+                <div class="font-bold text-gray-900 dark:text-white">${escapeHtml(firstAddr.label || 'Address')}</div>
+                <div class="text-[10px] text-gray-600 dark:text-gray-300 truncate">${escapeHtml(firstAddr.addressText || '')}</div>
+            `;
+        } else {
+            box.innerHTML = `<span class="text-gray-400 italic">No address selected. Tap Change to pick.</span>`;
+        }
+    }
+}
+
+export async function submitSaveNewAddress() {
+    const label = document.getElementById('new-addr-label')?.value.trim() || "Address";
+    const addressText = document.getElementById('new-addr-text')?.value.trim();
+    const landmark = document.getElementById('new-addr-landmark')?.value.trim();
+
+    if (!addressText) return showToast("⚠️ Address description is required!");
+
+    let rawCustId = localStorage.getItem('lokalex_customer_fb_id') || localStorage.getItem('customerId') || appState.customerFacebookId;
+    const custId = cleanFirebasePathKey(rawCustId);
+    const addrId = `ADDR_${Date.now().toString(36).toUpperCase()}`;
+
+    const newAddrObj = {
+        id: addrId,
+        label,
+        addressText,
+        landmark: landmark || "",
+        lat: appState.lat || 15.6881,
+        lng: appState.lon || 120.4144,
+        createdAt: Date.now()
+    };
+
+    if (db && custId) {
+        await db.ref(`customers/${custId}/savedAddresses/${addrId}`).set(newAddrObj);
+    }
+
+    selectedAddressId = addrId;
+    localStorage.setItem('lokalex_selected_address_id', addrId);
+
+    const lInput = document.getElementById('new-addr-label');
+    const aInput = document.getElementById('new-addr-text');
+    const lmInput = document.getElementById('new-addr-landmark');
+    if (lInput) lInput.value = '';
+    if (aInput) aInput.value = '';
+    if (lmInput) lmInput.value = '';
+
+    showToast("✅ Delivery Address saved!");
+    renderSavedAddressesList();
+    updateCheckoutSelectedAddressUI();
+}
+
+export function deleteSavedAddress(id, label) {
+    let rawCustId = localStorage.getItem('lokalex_customer_fb_id') || localStorage.getItem('customerId') || appState.customerFacebookId;
+    const custId = cleanFirebasePathKey(rawCustId);
+
+    openSlideDeleteModal(`Delete address [${label}]?`, async () => {
+        if (db && custId) {
+            await db.ref(`customers/${custId}/savedAddresses/${id}`).remove();
+        }
+        if (selectedAddressId === id) {
+            selectedAddressId = null;
+            localStorage.removeItem('lokalex_selected_address_id');
+        }
+        showToast("🗑️ Address removed.");
+        renderSavedAddressesList();
+        updateCheckoutSelectedAddressUI();
+    });
+}
+
+export function setCheckoutPaymentMode(mode) {
+    checkoutPaymentMode = mode;
+    const codBtn = document.getElementById('pay-mode-cod');
+    const gcashBtn = document.getElementById('pay-mode-gcash');
+
+    if (mode === 'cod') {
+        if (codBtn) codBtn.className = "px-2.5 py-1 rounded-lg font-bold text-[10px] bg-blue-600 text-white transition shadow-xs";
+        if (gcashBtn) gcashBtn.className = "px-2.5 py-1 rounded-lg font-bold text-[10px] text-gray-500 dark:text-gray-400 hover:text-white transition";
+    } else {
+        if (gcashBtn) gcashBtn.className = "px-2.5 py-1 rounded-lg font-bold text-[10px] bg-blue-600 text-white transition shadow-xs";
+        if (codBtn) codBtn.className = "px-2.5 py-1 rounded-lg font-bold text-[10px] text-gray-500 dark:text-gray-400 hover:text-white transition";
+    }
+}
+
+// -------------------------------------------------------------
+// 2. LIVE CUSTOMER ORDER MILESTONE PROGRESS TRACKER & MAP
 // -------------------------------------------------------------
 export function listenToActiveCustomerOrderStatus(custId) {
     if (!db || !custId) return;
@@ -213,7 +384,7 @@ function renderCustomerMilestoneCard(orderData) {
     if (!trackerContainer && customerHome) {
         trackerContainer = document.createElement('div');
         trackerContainer.id = 'cust-active-order-milestone-dock';
-        trackerContainer.className = 'w-full px-3 py-1';
+        trackerContainer.className = 'w-full flex flex-col gap-2 shrink-0';
         customerHome.insertBefore(trackerContainer, customerHome.firstChild);
     }
 
@@ -222,6 +393,7 @@ function renderCustomerMilestoneCard(orderData) {
     const status = orderData.status || 'placed';
     const orderId = orderData.orderId || 'ORD';
     const riderName = orderData.assignedRiderName || 'Assigning Rider...';
+    const riderId = (orderData.assignedRiderId || '').toString().trim();
 
     const stages = [
         { key: 'placed', label: 'Placed', icon: 'fa-receipt' },
@@ -248,8 +420,36 @@ function renderCustomerMilestoneCard(orderData) {
         <div class="flex-1 h-0.5 bg-gray-200 dark:bg-gray-800 self-center -mt-3"></div>
     `);
 
+    // IN-APP SUBSTITUTION ALERT BANNER
+    let subAlertHtml = '';
+    if (orderData.stores) {
+        Object.values(orderData.stores).forEach(st => {
+            if (st.substitutionAlert) {
+                const sub = st.substitutionAlert;
+                subAlertHtml = `
+                <div class="bg-red-500/10 border border-red-500/40 p-2.5 rounded-2xl flex flex-col gap-1.5 animate-bounce">
+                    <div class="flex items-center gap-1.5 font-black text-red-500 text-xs">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>Item Unavailable: ${escapeHtml(sub.itemName)}</span>
+                    </div>
+                    <p class="text-[10px] text-gray-300 leading-snug">
+                        Store suggested: <strong>${escapeHtml(sub.replacement)}</strong>${sub.notes ? ` ("${escapeHtml(sub.notes)}")` : ''}
+                    </p>
+                    <div class="flex gap-1.5 mt-1">
+                        <button onclick="window.resolveSubstitution('${orderId}', '${st.storeId}', true, '${escapeHtml(sub.replacement)}')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-1 rounded-xl text-[10px] font-bold transition active:scale-95">
+                            Accept Swap
+                        </button>
+                        <button onclick="window.resolveSubstitution('${orderId}', '${st.storeId}', false, '${escapeHtml(sub.itemName)}')" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 py-1 rounded-xl text-[10px] font-bold transition active:scale-95">
+                            Decline & Remove
+                        </button>
+                    </div>
+                </div>`;
+            }
+        });
+    }
+
     trackerContainer.innerHTML = `
-        <div class="bg-cardBg border border-emerald-500/40 rounded-2xl p-3 shadow-md flex flex-col gap-2.5">
+        <div class="bg-cardBg border border-emerald-500/40 rounded-3xl p-3 shadow-md flex flex-col gap-2.5">
             <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-1.5">
                 <div class="flex items-center gap-2">
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -257,13 +457,128 @@ function renderCustomerMilestoneCard(orderData) {
                 </div>
                 <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold font-mono">🛵 ${escapeHtml(riderName)}</span>
             </div>
+
+            ${subAlertHtml}
+
             <div class="flex items-center justify-between w-full px-1">
                 ${stepperHtml}
+            </div>
+
+            <!-- IN-APP LIVE MAP EMBED -->
+            <div class="w-full h-36 rounded-2xl overflow-hidden border border-emerald-500/30 relative mt-1 shadow-inner">
+                <div id="cust-live-embed-map" class="w-full h-full"></div>
+                <div id="cust-map-live-eta" class="absolute bottom-2 left-2 right-2 bg-black/80 backdrop-blur-sm border border-emerald-500/40 py-1 px-2.5 rounded-xl flex items-center justify-between text-[10px] text-white font-bold">
+                    <span><i class="fa-solid fa-motorcycle text-emerald-400"></i> ${escapeHtml(riderName)}</span>
+                    <span id="cust-dynamic-eta-text" class="text-emerald-400 font-mono">Tracking rider GPS...</span>
+                </div>
             </div>
         </div>
     `;
 
     trackerContainer.classList.remove('hidden');
+
+    if (riderId) {
+        initCustomerLiveEmbedMap(riderId, orderData);
+    }
+}
+
+function initCustomerLiveEmbedMap(riderId, orderData) {
+    const mapEl = document.getElementById('cust-live-embed-map');
+    if (!mapEl || typeof google === 'undefined' || !google.maps) return;
+
+    const defaultLoc = { lat: 15.6881, lng: 120.4144 };
+
+    if (!customerLiveMapObj) {
+        customerLiveMapObj = new google.maps.Map(mapEl, {
+            center: defaultLoc,
+            zoom: 15,
+            disableDefaultUI: true,
+            zoomControl: false
+        });
+    }
+
+    if (!customerDirectionsService) customerDirectionsService = new google.maps.DirectionsService();
+    if (!customerDirectionsRenderer) {
+        customerDirectionsRenderer = new google.maps.DirectionsRenderer({
+            map: customerLiveMapObj,
+            suppressMarkers: true,
+            polylineOptions: { strokeColor: '#10B981', strokeWeight: 5, strokeOpacity: 0.85 }
+        });
+    }
+
+    db.ref(`roster/${riderId}`).on('value', (snap) => {
+        const rider = snap.val();
+        if (!rider || !rider.lat || !rider.lng) return;
+
+        const riderPos = { lat: parseFloat(rider.lat), lng: parseFloat(rider.lng) };
+        const destPos = { lat: appState.lat || 15.6881, lng: appState.lon || 120.4144 };
+
+        if (!customerRiderMarker) {
+            customerRiderMarker = new google.maps.Marker({
+                position: riderPos,
+                map: customerLiveMapObj,
+                icon: { url: "https://img.icons8.com/color/48/motorcycle.png", scaledSize: new google.maps.Size(32, 32) }
+            });
+        } else {
+            customerRiderMarker.setPosition(riderPos);
+        }
+
+        if (!customerDestMarker) {
+            customerDestMarker = new google.maps.Marker({
+                position: destPos,
+                map: customerLiveMapObj,
+                icon: { url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png" }
+            });
+        }
+
+        const now = Date.now();
+        if (now - lastCustRouteCalcTime >= 10000 || lastCustRouteCalcTime === 0) {
+            lastCustRouteCalcTime = now;
+            customerDirectionsService.route({
+                origin: riderPos,
+                destination: destPos,
+                travelMode: google.maps.TravelMode.DRIVING
+            }, (res, status) => {
+                if (status === google.maps.DirectionsStatus.OK && res.routes[0]?.legs[0]) {
+                    customerDirectionsRenderer.setDirections(res);
+                    const leg = res.routes[0].legs[0];
+                    const etaEl = document.getElementById('cust-dynamic-eta-text');
+                    if (etaEl) etaEl.innerText = `${leg.duration.text} (${leg.distance.text})`;
+                }
+            });
+        }
+    });
+}
+
+// -------------------------------------------------------------
+// 3. RESOLVE ITEM SUBSTITUTION ALERT
+// -------------------------------------------------------------
+export async function resolveSubstitution(orderId, storeId, accepted, itemNameOrReplacement) {
+    const custName = localStorage.getItem('customerName') || "Customer";
+    const cleanOrderId = cleanFirebasePathKey(orderId);
+    const cleanStoreId = cleanFirebasePathKey(storeId);
+    const now = Date.now();
+
+    if (!cleanOrderId || !cleanStoreId || !db) return;
+
+    try {
+        const statusText = accepted 
+            ? `✅ Customer APPROVED substitution: [${itemNameOrReplacement}]` 
+            : `🚫 Customer DECLINED substitution for [${itemNameOrReplacement}]. Please remove from order.`;
+
+        await db.ref(`storeRiderChats/${cleanOrderId}_${cleanStoreId}/messages`).push(sanitizeForFirebase({
+            sender: custName,
+            senderType: 'customer',
+            senderName: custName,
+            text: statusText,
+            timestamp: now
+        }));
+
+        await db.ref(`storeOrders/${cleanStoreId}/${cleanOrderId}/substitutionAlert`).remove();
+        showToast(accepted ? "✅ Substitution confirmed!" : "🚫 Substitution declined.");
+    } catch(e) {
+        showToast("❌ Failed to update substitution choice.");
+    }
 }
 
 export function renderCustomerHeaderProfile() {
@@ -442,26 +757,6 @@ export function openCustomerStoresModal() {
 
     renderStoresGrid('');
     updateFloatingCartBadge();
-
-    if (db) {
-        db.ref('stores').once('value', (snap) => {
-            const data = snap.val();
-            if (data && Object.keys(data).length > 0) {
-                storesCache = data;
-                try { localStorage.setItem('lokalex_cached_stores_v1', JSON.stringify(data)); } catch(e){}
-                renderStoresGrid(searchInput?.value || '');
-            } else {
-                db.ref('directory/stores').once('value', (dirSnap) => {
-                    const dirData = dirSnap.val();
-                    if (dirData && Object.keys(dirData).length > 0) {
-                        storesCache = dirData;
-                        try { localStorage.setItem('lokalex_cached_stores_v1', JSON.stringify(dirData)); } catch(e){}
-                    }
-                    renderStoresGrid(searchInput?.value || '');
-                }).catch(() => {});
-            }
-        }).catch(() => {});
-    }
 }
 
 export function closeCustomerStoresModal() {
@@ -531,7 +826,7 @@ export function renderStoresGrid(searchQuery = '') {
                 </div>
                 <div class="min-w-0 flex-1 flex items-center gap-1.5">
                     <span class="w-1.5 h-1.5 rounded-full ${isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'} shrink-0"></span>
-                    <span class="font-bold text-xs text-gray-900 dark:text-white group-hover:text-orange-600 dark:group-hover:text-orange-400 transition">${escapeHtml(storeName)}</span>
+                    <span class="font-bold text-xs text-gray-900 dark:text-white truncate group-hover:text-orange-600 dark:group-hover:text-orange-400 transition">${escapeHtml(storeName)}</span>
                     <span class="text-[9px] text-gray-400 dark:text-gray-500 truncate hidden sm:inline">• ${escapeHtml(address)}</span>
                 </div>
             </div>
@@ -677,7 +972,7 @@ export function openItemCustomizerModal(storeId, itemId) {
 
     const sizesWrapper = document.getElementById('customizer-sizes-wrapper');
     const sizesOptions = document.getElementById('customizer-sizes-options');
-    const sizes = item.sizes || [];
+    const sizes = (item.sizes || []).filter(s => s.isAvailable !== false);
 
     if (sizes.length > 0) {
         sizesWrapper.classList.remove('hidden');
@@ -697,7 +992,7 @@ export function openItemCustomizerModal(storeId, itemId) {
 
     const addonsWrapper = document.getElementById('customizer-addons-wrapper');
     const addonsOptions = document.getElementById('customizer-addons-options');
-    const addons = item.addons || [];
+    const addons = (item.addons || []).filter(a => a.isAvailable !== false);
 
     if (addons.length > 0) {
         addonsWrapper.classList.remove('hidden');
@@ -889,6 +1184,8 @@ export function openCustomerCartModal() {
     const container = document.getElementById('cust-cart-stores-container');
     if (!container) return;
 
+    updateCheckoutSelectedAddressUI();
+
     const cart = getCustomerCart();
     const storeIds = Object.keys(cart).filter(id => cart[id] && Array.isArray(cart[id].items) && cart[id].items.length > 0);
 
@@ -1012,6 +1309,9 @@ function updateCartCalculations(itemsSubtotal) {
     if (grandTotalEl) grandTotalEl.innerText = itemsSubtotal.toFixed(2);
 }
 
+// -------------------------------------------------------------
+// 4. DISPATCH MULTI-STORE ORDER WITH SAVED DESTINATION
+// -------------------------------------------------------------
 export async function sendMultiStoreOrderToRiders() {
     const cart = getCustomerCart();
     const storeIds = Object.keys(cart).filter(id => cart[id] && Array.isArray(cart[id].items) && cart[id].items.length > 0);
@@ -1036,7 +1336,11 @@ export async function sendMultiStoreOrderToRiders() {
         sendBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> SENDING ORDER...`;
     }
 
-    let orderSummaryText = `📋 *Order ID:* #${orderId}\n👤 *Customer:* ${custName}\n\n`;
+    // Resolve Target Delivery Address
+    let targetAddressObj = selectedAddressId && savedAddressesCache[selectedAddressId] ? savedAddressesCache[selectedAddressId] : Object.values(savedAddressesCache)[0];
+    const deliveryAddressStr = targetAddressObj ? `${targetAddressObj.addressText}${targetAddressObj.landmark ? ` (Landmark: ${targetAddressObj.landmark})` : ''}` : "Delivery Location Pinned";
+
+    let orderSummaryText = `📋 *Order ID:* #${orderId}\n👤 *Customer:* ${custName}\n📍 *Deliver To:* ${deliveryAddressStr}\n💳 *Payment:* ${checkoutPaymentMode.toUpperCase()}\n\n`;
     let grandItemsTotal = 0;
     const now = Date.now();
 
@@ -1096,6 +1400,7 @@ export async function sendMultiStoreOrderToRiders() {
                 customerFbId: custId,
                 latestOrderId: orderId,
                 orderedStoreIds: storeIds.map(s => cleanFirebasePathKey(s)),
+                deliveryAddress: deliveryAddressStr,
                 folder: 'inbox',
                 status: 'active',
                 orderStatus: 'placed',
@@ -1132,6 +1437,9 @@ export async function sendMultiStoreOrderToRiders() {
                 orderId: orderId,
                 customerId: custId,
                 customerName: custName,
+                deliveryAddress: deliveryAddressStr,
+                paymentMode: checkoutPaymentMode,
+                destinationCoords: targetAddressObj ? { lat: targetAddressObj.lat, lng: targetAddressObj.lng } : null,
                 stores: orderStoresPayload,
                 storeIds: storeIds.map(s => cleanFirebasePathKey(s)),
                 itemsTotal: parseFloat(grandItemsTotal) || 0,
@@ -1199,6 +1507,15 @@ if (typeof window !== 'undefined') {
     window.removeCustomerCartItem = removeCustomerCartItem;
     window.sendMultiStoreOrderToRiders = sendMultiStoreOrderToRiders;
     window.listenToActiveCustomerOrderStatus = listenToActiveCustomerOrderStatus;
+
+    window.openAddressBookModal = openAddressBookModal;
+    window.closeAddressBookModal = closeAddressBookModal;
+    window.setAddressLabelPreset = setAddressLabelPreset;
+    window.selectAddressForCheckout = selectAddressForCheckout;
+    window.submitSaveNewAddress = submitSaveNewAddress;
+    window.deleteSavedAddress = deleteSavedAddress;
+    window.setCheckoutPaymentMode = setCheckoutPaymentMode;
+    window.resolveSubstitution = resolveSubstitution;
 
     window.addEventListener('viewChanged', (e) => {
         if (e.detail === 'view-customer-home') {

@@ -26,6 +26,9 @@
 
         <!-- COMPACT ACTION BUTTONS -->
         <div class="flex items-center gap-1.5 shrink-0">
+            <button onclick="window.openAddressBookModal && window.openAddressBookModal()" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/20 dark:hover:bg-emerald-600/30 dark:text-emerald-300 dark:border-emerald-500/40 text-[11px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1" title="Manage Saved Delivery Addresses">
+                <i class="fa-solid fa-location-dot text-[10px]"></i> Addresses
+            </button>
             <button onclick="window.openEditCustomerProfileModal && window.openEditCustomerProfileModal()" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/20 dark:hover:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40 text-[11px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1">
                 <i class="fa-solid fa-user-pen text-[10px]"></i> Edit
             </button>
@@ -44,9 +47,11 @@
         <i class="fa-solid fa-chevron-right text-[9px] text-blue-500 dark:text-blue-400 shrink-0"></i>
     </button>
 
+    <!-- LIVE ACTIVE ORDER MILESTONE & IN-APP MAP TRACKER DOCK -->
+    <div id="cust-active-order-milestone-dock" class="hidden w-full flex flex-col gap-2 shrink-0"></div>
+
     <!-- STORE POPUP ACTION STRIP & VIEW CART -->
     <div class="flex items-center gap-2 shrink-0">
-        <!-- BUTTON TO OPEN POPUP STORE DIRECTORY -->
         <button type="button" onclick="window.openCustomerStoresModal && window.openCustomerStoresModal()" class="flex-1 bg-orange-50 hover:bg-orange-100 border border-orange-200 dark:bg-cardBg dark:hover:bg-orange-950/20 dark:border-orange-500/40 p-2.5 rounded-2xl flex items-center justify-between transition active:scale-95 text-left group">
             <div class="flex items-center gap-2.5 min-w-0">
                 <div class="w-8 h-8 rounded-xl bg-orange-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
@@ -145,7 +150,7 @@
         </button>
     </div>
 
-    <!-- 1. DEDICATED POPUP: ULTRA-COMPACT STORE DIRECTORY MODAL -->
+    <!-- 1. DEDICATED POPUP: STORE DIRECTORY MODAL -->
     <div id="cust-stores-popup-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
         <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-4 flex flex-col gap-2.5 max-h-[85vh] overflow-hidden">
             <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5 shrink-0">
@@ -159,7 +164,6 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
-                    <!-- JUMP TO CART BUTTON -->
                     <button type="button" onclick="window.openCustomerCartModal && window.openCustomerCartModal()" class="bg-orange-50 hover:bg-orange-100 dark:bg-orange-500/10 dark:hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/30 text-[11px] font-bold px-2.5 py-1 rounded-xl transition active:scale-95 flex items-center gap-1.5" title="Jump to Cart">
                         <i class="fa-solid fa-cart-shopping text-xs"></i>
                         <span class="cust-modal-cart-count font-mono font-bold">0</span>
@@ -176,7 +180,7 @@
                 <input type="text" id="cust-store-search-input" oninput="window.filterCustomerStores && window.filterCustomerStores(this.value)" placeholder="Search store name, burger, milk tea..." class="w-full bg-inputBg text-xs rounded-xl pl-8 pr-3 py-1.5 outline-none border border-gray-300 dark:border-gray-800 focus:border-orange-500 text-gray-900 dark:text-white">
             </div>
 
-            <!-- ULTRA-COMPACT STORES LIST CONTAINER -->
+            <!-- STORES LIST CONTAINER -->
             <div id="cust-stores-grid" class="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5 max-h-[60vh]">
                 <div class="text-center text-gray-500 italic py-6 text-xs flex flex-col items-center gap-1.5">
                     <i class="fa-solid fa-spinner fa-spin text-sm text-orange-500 dark:text-orange-400"></i>
@@ -265,7 +269,6 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
-                    <!-- JUMP TO CART BUTTON -->
                     <button type="button" onclick="window.openCustomerCartModal && window.openCustomerCartModal()" class="bg-orange-50 hover:bg-orange-100 dark:bg-orange-500/10 dark:hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/30 text-[11px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5" title="Jump to Cart">
                         <i class="fa-solid fa-cart-shopping text-xs"></i>
                         <span class="cust-modal-cart-count font-mono font-bold">0</span>
@@ -334,7 +337,7 @@
         </div>
     </div>
 
-    <!-- 5. MULTI-STORE CART MODAL -->
+    <!-- 5. MULTI-STORE CART MODAL WITH ADDRESS SELECTOR & PAYMENT SELECTOR -->
     <div id="cust-cart-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
         <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-4 flex flex-col gap-3 max-h-[92vh] overflow-hidden">
             <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5 shrink-0">
@@ -352,8 +355,38 @@
                 </button>
             </div>
 
-            <div id="cust-cart-stores-container" class="flex-1 overflow-y-auto flex flex-col gap-2.5 min-h-[180px] pr-1"></div>
+            <!-- DELIVERY DESTINATION SELECTOR -->
+            <div class="bg-gray-50 dark:bg-black/30 border border-gray-200 dark:border-gray-800 p-2.5 rounded-2xl flex flex-col gap-1.5 shrink-0">
+                <div class="flex justify-between items-center text-xs">
+                    <span class="font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                        <i class="fa-solid fa-location-dot text-red-500"></i> Deliver To:
+                    </span>
+                    <button type="button" onclick="window.openAddressBookModal && window.openAddressBookModal()" class="text-[10px] text-blue-600 dark:text-blue-400 font-bold hover:underline">
+                        Change / Manage
+                    </button>
+                </div>
+                <div id="checkout-selected-address-box" class="text-[11px] text-gray-900 dark:text-white font-medium truncate bg-white dark:bg-cardBg p-2 rounded-xl border border-gray-200 dark:border-gray-800">
+                    <span class="text-gray-400 italic">No address selected. Tap Change to pick.</span>
+                </div>
+            </div>
 
+            <!-- CART STORES CONTAINER -->
+            <div id="cust-cart-stores-container" class="flex-1 overflow-y-auto flex flex-col gap-2.5 min-h-[140px] pr-1"></div>
+
+            <!-- PAYMENT METHOD TOGGLE (COD vs GCASH) -->
+            <div class="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-gray-800 p-2.5 rounded-2xl flex items-center justify-between shrink-0 text-xs">
+                <span class="font-bold text-gray-700 dark:text-gray-300">Payment:</span>
+                <div class="flex items-center gap-1">
+                    <button type="button" id="pay-mode-cod" onclick="window.setCheckoutPaymentMode('cod')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] bg-blue-600 text-white transition shadow-xs">
+                        Cash on Delivery
+                    </button>
+                    <button type="button" id="pay-mode-gcash" onclick="window.setCheckoutPaymentMode('gcash')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] text-gray-500 dark:text-gray-400 hover:text-white transition">
+                        GCash
+                    </button>
+                </div>
+            </div>
+
+            <!-- GRAND TOTAL & DISPATCH -->
             <div class="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-gray-800 p-3 rounded-2xl flex items-center justify-between shrink-0 text-xs">
                 <span class="font-bold text-xs text-gray-700 dark:text-gray-300">Expected Items Total:</span>
                 <span class="font-mono text-emerald-600 dark:text-emerald-400 text-sm font-black">₱<span id="cust-cart-grand-total">0.00</span></span>
@@ -362,6 +395,53 @@
             <button id="cust-send-order-btn" onclick="window.sendMultiStoreOrderToRiders && window.sendMultiStoreOrderToRiders()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 shrink-0 text-xs shadow-md">
                 <i class="fa-solid fa-paper-plane"></i> SEND ORDER TO RIDERS
             </button>
+        </div>
+    </div>
+
+    <!-- 6. SAVED MULTI-ADDRESS BOOK MODAL -->
+    <div id="cust-address-book-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-4 flex flex-col gap-3 max-h-[90vh] overflow-hidden">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5 shrink-0">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm font-bold">
+                        <i class="fa-solid fa-map-location-dot"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-black text-sm text-gray-900 dark:text-white">Saved Delivery Addresses</h3>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Save Home, Work, and landmark pins</p>
+                    </div>
+                </div>
+                <button onclick="window.closeAddressBookModal && window.closeAddressBookModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- SAVED ADDRESSES FEED -->
+            <div id="cust-saved-addresses-list" class="flex-1 overflow-y-auto flex flex-col gap-2 min-h-[140px] pr-1"></div>
+
+            <!-- ADD NEW ADDRESS ACCORDION / FORM -->
+            <div class="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-gray-800 p-3 rounded-2xl flex flex-col gap-2 shrink-0 text-xs">
+                <span class="font-bold text-[10px] text-gray-600 dark:text-gray-400 uppercase tracking-wider">+ Add New Delivery Pin</span>
+                
+                <div class="grid grid-cols-3 gap-1.5">
+                    <button type="button" onclick="window.setAddressLabelPreset('Home')" class="py-1 rounded-lg border border-gray-300 dark:border-gray-700 text-[10px] font-bold hover:border-emerald-500 transition">🏠 Home</button>
+                    <button type="button" onclick="window.setAddressLabelPreset('Work')" class="py-1 rounded-lg border border-gray-300 dark:border-gray-700 text-[10px] font-bold hover:border-emerald-500 transition">💼 Work</button>
+                    <button type="button" onclick="window.setAddressLabelPreset('Other')" class="py-1 rounded-lg border border-gray-300 dark:border-gray-700 text-[10px] font-bold hover:border-emerald-500 transition">📍 Other</button>
+                </div>
+
+                <input type="text" id="new-addr-label" placeholder="Address Label (e.g. Home / Dorm / Office)" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold">
+                <input type="text" id="new-addr-text" placeholder="Street / Barangay / Municipality" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white">
+                <input type="text" id="new-addr-landmark" placeholder="Landmark note (e.g. Gray gate beside bakery)" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white">
+
+                <div class="flex gap-2 items-center">
+                    <button type="button" onclick="window.openMapPicker && window.openMapPicker('address-book')" class="flex-1 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-crosshairs text-emerald-500"></i> Pin on Map
+                    </button>
+                    <button type="button" id="save-new-addr-btn" onclick="window.submitSaveNewAddress && window.submitSaveNewAddress()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold transition shadow-xs flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-floppy-disk"></i> Save Address
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 </section>
