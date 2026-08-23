@@ -1154,8 +1154,8 @@ export async function saveAdminBookingLimitsSettings() {
 
         closeAdminBookingLimitsModal();
         if (isAuto) {
-            showToast("⚙️ Auto Dynamic Booking Limits ENABLED (1–4 bookings based on gross income)!");
-            showSideNotification("AUTO LIMITS ACTIVE", "Catering capacity scaled dynamically by gross income rank", "fa-layer-group", "text-rose-400", "border-rose-500");
+            showToast("⚙️ Auto Dynamic Booking Limits ENABLED (Activates when 3+ active riders are on duty)!");
+            showSideNotification("AUTO LIMITS ACTIVE", "Scaled by gross income rank when 3+ riders are on duty", "fa-layer-group", "text-rose-400", "border-rose-500");
         } else {
             showToast(`⚙️ Fixed max active bookings per rider set to ${maxVal}!`);
             showSideNotification("BOOKING LIMIT SAVED", `Riders max simultaneous orders: ${maxVal}`, "fa-layer-group", "text-rose-400", "border-rose-500");

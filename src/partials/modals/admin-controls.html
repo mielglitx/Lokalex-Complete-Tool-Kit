@@ -197,7 +197,7 @@
                     <div class="font-bold text-white text-xs flex items-center gap-1.5">
                         <i class="fa-solid fa-wand-magic-sparkles text-rose-400"></i> Auto Income-Based Dynamic Limits
                     </div>
-                    <div class="text-[10px] text-gray-400 mt-0.5">Scale bookings dynamically based on today's gross rank</div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Scale bookings dynamically based on today's gross rank (3+ riders)</div>
                 </div>
                 <input type="checkbox" id="admin-booking-limits-auto-toggle" onchange="window.toggleBookingLimitsModeUI && window.toggleBookingLimitsModeUI(this.checked)" class="w-5 h-5 accent-rose-500 cursor-pointer shrink-0">
             </label>
@@ -205,7 +205,7 @@
             <!-- AUTO TIERING BREAKDOWN CARD -->
             <div id="admin-booking-limits-auto-section" class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex flex-col gap-2 transition duration-200">
                 <div class="text-[10px] font-black uppercase text-rose-300 tracking-wider flex items-center gap-1.5">
-                    <i class="fa-solid fa-chart-simple text-rose-400"></i> Dynamic Auto-Tier Distribution
+                    <i class="fa-solid fa-chart-simple text-rose-400"></i> Dynamic Auto-Tier Distribution (3+ Active Riders)
                 </div>
                 <div class="flex flex-col gap-1.5 text-[11px]">
                     <div class="flex justify-between items-center bg-black/40 p-2 rounded-xl border border-emerald-500/30">
@@ -221,6 +221,9 @@
                         <span class="bg-red-500/20 text-red-300 border border-red-500/40 px-2 py-0.5 rounded-lg font-black text-[10px]">Max 1 Booking</span>
                     </div>
                 </div>
+                <div class="text-[9px] text-gray-400 italic mt-0.5">
+                    * Kapag 1 o 2 riders lang ang active sa roster, kusa itong babalik sa <strong>Manual Fixed Limit</strong>.
+                </div>
             </div>
 
             <!-- MANUAL FIXED ORDERS SECTION -->
@@ -229,7 +232,7 @@
                     <div class="font-bold text-white text-xs flex items-center gap-1.5">
                         <i class="fa-solid fa-user-tag text-gray-300"></i> Manual Fixed Limit
                     </div>
-                    <div class="text-[10px] text-gray-400 mt-0.5">Applied when Auto mode is disabled</div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Applied when Auto mode is disabled or < 3 riders</div>
                 </div>
                 <div class="flex items-center gap-1">
                     <input type="number" min="1" max="20" id="admin-max-active-bookings" value="2" class="w-16 bg-inputBg text-sm text-center font-mono font-black text-rose-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-rose-500">

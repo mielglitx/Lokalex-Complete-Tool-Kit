@@ -33,11 +33,16 @@ export function calculateAutoBookingLimit(targetId = null, targetName = null) {
     const myId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const myName = (targetName || appState.riderName || localStorage.getItem('riderName') || "").trim().toLowerCase();
 
-    // Only active duty riders are evaluated for tier calculation
+    // Only active duty riders (Available, Catering, Break, Cooldown) are evaluated
     const rosterMembers = (globalState.rosterMembers || []).filter(m => m && m.status !== 'End');
-    if (rosterMembers.length <= 1) return 4;
+    
+    // Auto tiering requires at least 3 active riders on roster; fallback to fixed limit otherwise
+    if (rosterMembers.length < 3) {
+        const fallback = globalState.bookingLimits?.maxActiveBookings;
+        return (fallback !== undefined && fallback !== null) ? parseInt(fallback) : 2;
+    }
 
-    // Map each rider with today's gross income and sort ascending (lowest first, highest last)[cite: 19]
+    // Map each rider with today's gross income and sort ascending (lowest first, highest last)[cite: 31]
     const ridersWithGross = rosterMembers.map(m => {
         const rId = (m.telegramId || m.id || "").toString().trim();
         const rName = (m.riderName || m.name || "").trim();
@@ -76,7 +81,10 @@ export function calculateAutoBookingLimit(targetId = null, targetName = null) {
 
 export function getMaxActiveBookingsLimit(targetId = null, targetName = null) {
     const limitConfig = globalState.bookingLimits || {};
-    if (limitConfig.autoEnabled) {
+    const activeRosterCount = (globalState.rosterMembers || []).filter(m => m && m.status !== 'End').length;
+
+    // Auto Dynamic Limit activates ONLY when 3 or more riders are on duty
+    if (limitConfig.autoEnabled && activeRosterCount >= 3) {
         return calculateAutoBookingLimit(targetId, targetName);
     }
     return (limitConfig.maxActiveBookings !== undefined && limitConfig.maxActiveBookings !== null) 
@@ -101,8 +109,9 @@ export function canRiderTakeMoreBookings(targetId = null, targetName = null) {
         activeCount = record.customerName.split(', ').map(c => c.trim()).filter(Boolean).length;
     }
 
+    const activeRosterCount = rosterMembers.filter(m => m && m.status !== 'End').length;
     const maxAllowed = getMaxActiveBookingsLimit(myId, myName);
-    const isAuto = Boolean(globalState.bookingLimits?.autoEnabled);
+    const isAuto = Boolean(globalState.bookingLimits?.autoEnabled) && activeRosterCount >= 3;
 
     if (activeCount >= maxAllowed) {
         return {
