@@ -43,20 +43,20 @@ export function updateRosterUI() {
 
     const showControls = globalState.adminControlsEnabled && canManage;
 
-    // Toggle switch wrapper is visible if the user is an Admin or TL
+    // Toggle switch wrapper is visible if the user is an Admin or TL[cite: 22]
     const adminToggleWrapper = document.getElementById('admin-toggle-wrapper');
     if (adminToggleWrapper) {
         if (canManage) adminToggleWrapper.classList.remove('hidden');
         else adminToggleWrapper.classList.add('hidden');
     }
 
-    // 1. Rider Day-Off button is always visible to all riders
+    // 1. Rider Day-Off button is always visible to all riders[cite: 22]
     const riderDayOffBtn = document.getElementById('btn-rider-dayoff');
     if (riderDayOffBtn) {
         riderDayOffBtn.classList.remove('hidden');
     }
 
-    // 2. All Admin Tool buttons are strictly visible ONLY when Admin Mode Toggle is ON and user has Admin rights
+    // 2. All Admin Tool buttons are strictly visible ONLY when Admin Mode Toggle is ON and user has Admin rights[cite: 22]
     const storeHubBtn = document.getElementById('admin-store-hub-btn');
     if (storeHubBtn) {
         if (showControls && isAdmin()) storeHubBtn.classList.remove('hidden');
@@ -143,7 +143,7 @@ export function updateRosterUI() {
         btnBreak.style.opacity = isEnded ? '0.3' : '1';
     }
 
-    // LINEUP SORTED FROM LOWEST TO HIGHEST GROSS INCOME
+    // LINEUP SORTED FROM LOWEST TO HIGHEST GROSS INCOME[cite: 22]
     const availableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
 
     checkFirstInLineAlarm(availableRiders);
@@ -173,7 +173,7 @@ export function updateRosterUI() {
     let availHtml = [], busyHtml = [], brkHtml = [], cdHtml = [];
     let availCounter = 1;
 
-    // 1. AVAILABLE QUEUE RIDERS (LOWEST TO HIGHEST GROSS INCOME DISPLAY)
+    // 1. AVAILABLE QUEUE RIDERS (LOWEST TO HIGHEST GROSS INCOME DISPLAY)[cite: 22]
     availableRiders.forEach((m) => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -203,7 +203,7 @@ export function updateRosterUI() {
         `);
     });
 
-    // 2. CATERING RIDERS (WITH GROSS INCOME BADGE)
+    // 2. CATERING RIDERS (WITH GROSS INCOME BADGE)[cite: 22]
     cateringRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -271,7 +271,7 @@ export function updateRosterUI() {
         busyHtml.push(cardHtml);
     });
 
-    // 3. BREAK RIDERS (WITH GROSS INCOME BADGE)
+    // 3. BREAK RIDERS (WITH GROSS INCOME BADGE)[cite: 22]
     breakRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -294,7 +294,7 @@ export function updateRosterUI() {
         `);
     });
 
-    // 4. COOLDOWN RIDERS (WITH GROSS INCOME BADGE)
+    // 4. COOLDOWN RIDERS (WITH GROSS INCOME BADGE)[cite: 22]
     cooldownRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -323,7 +323,7 @@ export function updateRosterUI() {
         `);
     });
 
-    // 5. RIDERS CURRENTLY ON DAY OFF TODAY (DEDICATED SECTION)
+    // 5. RIDERS CURRENTLY ON DAY OFF TODAY (DEDICATED SECTION)[cite: 22]
     let dayOffHtml = [];
     const dayOffRiderKeys = new Set();
 
@@ -387,25 +387,33 @@ export function loadGlobalCateredList() {
             durationStr = calculateSplitDuration(h.startTime, h.completedTime, h.customerCount || 1);
         }
 
-        let timeInfo = `Started: ${escapeHtml(h.startTime)}`;
+        let timeRange = `🕒 ${escapeHtml(h.startTime)}`;
         if (h.completedTime) {
-            timeInfo += ` → ${escapeHtml(h.completedTime)}`;
-        }
-        if (durationStr) {
-            timeInfo += ` <span class="text-emerald-600 dark:text-emerald-400 font-bold">[${escapeHtml(durationStr)}]</span>`;
+            timeRange += ` → ${escapeHtml(h.completedTime)}`;
         }
 
+        const durationBadge = durationStr 
+            ? `<span class="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 px-1.5 py-0.5 rounded font-black text-[9px] font-mono tracking-wide">[${escapeHtml(durationStr)}]</span>` 
+            : '';
+
         return `
-        <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-xl flex justify-between items-center gap-2 shadow-xs">
-            <div class="min-w-0 flex-1">
-                <div class="font-black text-xs text-gray-900 dark:text-white truncate flex items-center gap-1.5"><i class="fa-solid fa-user text-orange-600 dark:text-orange-400 text-[10px]"></i> <span>${escapeHtml(h.customerName)}</span></div>
-                <div class="text-[10px] text-gray-600 dark:text-gray-400 mt-0.5 font-medium">Rider: <span class="text-blue-600 dark:text-blue-400 font-bold">${escapeHtml(h.riderName)}</span></div>
-            </div>
-            <div class="flex items-center gap-2.5 shrink-0">
-                <div class="text-[10px] text-gray-800 dark:text-gray-200 font-mono text-right font-medium">
-                    ${timeInfo}
+        <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-2xl flex flex-col gap-1.5 shadow-xs">
+            <!-- TOP ROW: CUSTOMER NAME & RIDER BADGE + VOID BUTTON (PREVENTS SQUEEZING) -->
+            <div class="flex items-center justify-between gap-2">
+                <div class="font-black text-xs text-gray-900 dark:text-white flex items-center gap-1.5 min-w-0 flex-1">
+                    <i class="fa-solid fa-user text-orange-600 dark:text-orange-400 text-[11px] shrink-0"></i> 
+                    <span class="truncate">${escapeHtml(h.customerName)}</span>
                 </div>
-                ${voidBtn}
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <span class="text-[10px] text-gray-600 dark:text-gray-400 font-medium">Rider: <span class="text-blue-600 dark:text-blue-400 font-bold">${escapeHtml(h.riderName)}</span></span>
+                    ${voidBtn}
+                </div>
+            </div>
+
+            <!-- BOTTOM ROW: FULL TIMESTAMPS & SPLIT TIME CALCULATION PILL -->
+            <div class="flex flex-wrap items-center justify-between gap-1 pt-1 border-t border-gray-100 dark:border-gray-800/60 text-[10px] font-mono">
+                <span class="text-gray-600 dark:text-gray-400 font-medium">${timeRange}</span>
+                ${durationBadge}
             </div>
         </div>`;
     }).join('');
