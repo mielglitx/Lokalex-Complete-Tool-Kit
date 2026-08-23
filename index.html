@@ -16,6 +16,129 @@
 
     <!-- HEAD PARTIAL (TAILWIND, FONTAWESOME & MAPS) -->
     <load src="src/partials/head.html" />
+
+    <!-- GLOBAL HIGH-CONTRAST LIGHT MODE ENFORCEMENT -->
+    <style>
+        html:not(.dark) {
+            color-scheme: light;
+        }
+        html:not(.dark) body {
+            background-color: #f8fafc !important;
+            color: #0f172a !important;
+        }
+        html:not(.dark) .bg-cardBg {
+            background-color: #ffffff !important;
+            border-color: #e2e8f0 !important;
+            color: #0f172a !important;
+        }
+        html:not(.dark) .bg-darkBg {
+            background-color: #f1f5f9 !important;
+            border-color: #e2e8f0 !important;
+            color: #0f172a !important;
+        }
+        html:not(.dark) .bg-inputBg {
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
+        }
+        html:not(.dark) input,
+        html:not(.dark) select,
+        html:not(.dark) textarea {
+            color: #0f172a !important;
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+        }
+        html:not(.dark) input::placeholder,
+        html:not(.dark) textarea::placeholder {
+            color: #64748b !important;
+        }
+        /* Modal dialog backgrounds in light mode */
+        html:not(.dark) [id$="-modal"] .bg-cardBg,
+        html:not(.dark) [id$="-modal"] .bg-\[\#1E1A1A\] {
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+        }
+        /* High contrast text overrides for light mode */
+        html:not(.dark) .text-white {
+            color: #0f172a !important;
+        }
+        html:not(.dark) .text-gray-200,
+        html:not(.dark) .text-gray-300 {
+            color: #1e293b !important;
+        }
+        html:not(.dark) .text-gray-400 {
+            color: #475569 !important;
+        }
+        html:not(.dark) .text-gray-500 {
+            color: #64748b !important;
+        }
+        /* Saturated readable accents in light mode */
+        html:not(.dark) .text-purple-300,
+        html:not(.dark) .text-purple-400 {
+            color: #7e22ce !important;
+            font-weight: 700 !important;
+        }
+        html:not(.dark) .text-emerald-300,
+        html:not(.dark) .text-emerald-400 {
+            color: #047857 !important;
+            font-weight: 700 !important;
+        }
+        html:not(.dark) .text-blue-300,
+        html:not(.dark) .text-blue-400 {
+            color: #1d4ed8 !important;
+            font-weight: 700 !important;
+        }
+        html:not(.dark) .text-amber-300,
+        html:not(.dark) .text-amber-400 {
+            color: #b45309 !important;
+            font-weight: 700 !important;
+        }
+        html:not(.dark) .text-orange-300,
+        html:not(.dark) .text-orange-400 {
+            color: #c2410c !important;
+            font-weight: 700 !important;
+        }
+        html:not(.dark) .text-red-300,
+        html:not(.dark) .text-red-400 {
+            color: #b91c1c !important;
+            font-weight: 700 !important;
+        }
+        html:not(.dark) .text-teal-300,
+        html:not(.dark) .text-teal-400 {
+            color: #0f766e !important;
+            font-weight: 700 !important;
+        }
+        html:not(.dark) .text-rose-300,
+        html:not(.dark) .text-rose-400 {
+            color: #be123c !important;
+            font-weight: 700 !important;
+        }
+        /* Fix dark translucent inner cards in light mode */
+        html:not(.dark) .bg-black\/40,
+        html:not(.dark) .bg-black\/30,
+        html:not(.dark) .bg-darkBg\/60 {
+            background-color: #f8fafc !important;
+            border-color: #e2e8f0 !important;
+        }
+        /* Primary action button text preservation */
+        html:not(.dark) button.bg-blue-600,
+        html:not(.dark) button.bg-emerald-600,
+        html:not(.dark) button.bg-red-600,
+        html:not(.dark) button.bg-purple-600,
+        html:not(.dark) button.bg-teal-600,
+        html:not(.dark) button.bg-rose-600,
+        html:not(.dark) button.bg-amber-500,
+        html:not(.dark) .bg-blue-600.text-white,
+        html:not(.dark) .bg-emerald-600.text-white,
+        html:not(.dark) .bg-red-600.text-white,
+        html:not(.dark) .bg-purple-600.text-white,
+        html:not(.dark) .bg-teal-600.text-white,
+        html:not(.dark) .bg-rose-600.text-white {
+            color: #ffffff !important;
+        }
+    </style>
 </head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-darkBg text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative">
 

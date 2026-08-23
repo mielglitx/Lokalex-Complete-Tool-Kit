@@ -1,33 +1,34 @@
-<section id="view-cart" class="hidden flex-1 flex flex-col">
-    <div class="bg-cardBg border-b border-gray-800 p-2 grid grid-cols-4 gap-1.5 shrink-0" id="cart-tabs-header"></div>
+<!-- src/partials/views/cart.html -->
+<section id="view-cart" class="hidden flex-1 flex flex-col text-gray-900 dark:text-white">
+    <div class="bg-white dark:bg-cardBg border-b border-gray-200 dark:border-gray-800 p-2 grid grid-cols-4 gap-1.5 shrink-0" id="cart-tabs-header"></div>
 
-    <div class="bg-inputBg/80 px-3 py-2 border-b border-gray-800 flex items-center justify-between gap-2 shrink-0">
-        <span class="text-xs font-bold text-amber-400 shrink-0 flex items-center gap-1.5">
+    <div class="bg-gray-50 dark:bg-inputBg/80 px-3 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0">
+        <span class="text-xs font-bold text-amber-700 dark:text-amber-400 shrink-0 flex items-center gap-1.5">
             <i class="fa-solid fa-user-check"></i> Assign Client:
         </span>
         <div id="cart-customer-selector-container" class="flex-1 flex items-center"></div>
     </div>
 
-    <div class="bg-black/40 p-3 px-4 flex justify-between items-center text-sm border-b border-gray-800 shrink-0">
-        <span class="text-gray-400"><span id="cart-slot-label" class="font-bold text-white">Cart 1</span> Subtotal:</span>
-        <span class="text-lg font-bold text-green-400">₱<span id="cart-subtotal-display">0.00</span></span>
+    <div class="bg-gray-100 dark:bg-black/40 p-3 px-4 flex justify-between items-center text-sm border-b border-gray-200 dark:border-gray-800 shrink-0">
+        <span class="text-gray-600 dark:text-gray-400 font-bold"><span id="cart-slot-label" class="font-black text-gray-900 dark:text-white">Cart 1</span> Subtotal:</span>
+        <span class="text-lg font-black text-emerald-600 dark:text-green-400 font-mono">₱<span id="cart-subtotal-display">0.00</span></span>
     </div>
     
     <div class="p-3 flex justify-between gap-2 shrink-0 flex-wrap" id="cart-actions-toolbar">
-        <button onclick="window.showBulkAddModal && window.showBulkAddModal()" class="flex-1 bg-blue-600/20 text-blue-400 text-xs font-bold py-2 rounded-lg border border-blue-600/30 transition active:scale-95">
+        <button onclick="window.showBulkAddModal && window.showBulkAddModal()" class="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/20 dark:text-blue-400 dark:border-blue-600/30 text-xs font-bold py-2 rounded-xl transition active:scale-95 shadow-xs flex items-center justify-center gap-1.5">
             <i class="fa-solid fa-list-check"></i> Paste List
         </button>
         <div id="delete-selected-btn-container" class="contents"></div>
-        <button id="cart-action-btn" onclick="window.handleCartActionBtn && window.handleCartActionBtn()" class="flex-1 bg-red-600/20 text-red-400 text-xs font-bold py-2 rounded-lg border border-red-600/30 transition active:scale-95">
+        <button id="cart-action-btn" onclick="window.handleCartActionBtn && window.handleCartActionBtn()" class="flex-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-600/20 dark:text-red-400 dark:border-red-600/30 text-xs font-bold py-2 rounded-xl transition active:scale-95 shadow-xs flex items-center justify-center gap-1.5">
             <i class="fa-solid fa-trash-can"></i> Clear Cart 1
         </button>
     </div>
 
     <div id="cart-items-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 pb-20"></div>
 
-    <div class="p-4 bg-darkBg border-t border-gray-800 shrink-0">
-        <button onclick="window.validateAndProceedToWizard && window.validateAndProceedToWizard()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold p-3.5 rounded-xl shadow-lg transition active:scale-95">
-            Create Receipt (<span id="btn-cart-slot-label">Cart 1</span>)
+    <div class="p-4 bg-gray-50 dark:bg-darkBg border-t border-gray-200 dark:border-gray-800 shrink-0">
+        <button onclick="window.validateAndProceedToWizard && window.validateAndProceedToWizard()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black p-3.5 rounded-2xl shadow-lg transition active:scale-95 text-xs flex items-center justify-center gap-2">
+            <i class="fa-solid fa-receipt"></i> Create Receipt (<span id="btn-cart-slot-label">Cart 1</span>)
         </button>
     </div>
 </section>

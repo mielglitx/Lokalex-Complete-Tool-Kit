@@ -153,14 +153,14 @@ export function switchAdvTab(tab) {
     const addContent = document.getElementById('adv-tab-add-content');
 
     if (tab === 'list') {
-        if (listBtn) listBtn.className = "flex-1 py-1.5 rounded-lg bg-purple-600 text-white transition";
-        if (addBtn) addBtn.className = "flex-1 py-1.5 rounded-lg text-gray-400 transition";
+        if (listBtn) listBtn.className = "flex-1 py-1.5 rounded-lg bg-purple-600 text-white font-bold transition shadow";
+        if (addBtn) addBtn.className = "flex-1 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition";
         if (listContent) listContent.classList.remove('hidden'); 
         if (addContent) addContent.classList.add('hidden');
         renderAdvancedOrdersList();
     } else {
-        if (addBtn) addBtn.className = "flex-1 py-1.5 rounded-lg bg-purple-600 text-white transition";
-        if (listBtn) listBtn.className = "flex-1 py-1.5 rounded-lg text-gray-400 transition";
+        if (addBtn) addBtn.className = "flex-1 py-1.5 rounded-lg bg-purple-600 text-white font-bold transition shadow";
+        if (listBtn) listBtn.className = "flex-1 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition";
         if (addContent) addContent.classList.remove('hidden'); 
         if (listContent) listContent.classList.add('hidden');
 
@@ -187,37 +187,37 @@ export function renderAdvancedOrdersList() {
         const displayDate = ord.dateToReceive || getLocalTodayStr();
 
         if (status === 'Pending') {
-            statusBadge = `<span class="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-500/30">⏳ Pending</span>`;
+            statusBadge = `<span class="bg-amber-50 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-200 dark:border-amber-500/30">⏳ Pending</span>`;
             actionBtns = `
                 <div class="flex gap-1 items-center">
-                    <button onclick="addOrderToPhoneCalendar('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', '${escapeHtml(ord.address || '')}', '${escapeHtml(displayDate)}')" class="bg-blue-600/30 border border-blue-500/50 text-blue-300 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-bell"></i> Alarm</button>
-                    <button onclick="takeAdvancedOrder('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}')" class="bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-motorcycle"></i> Cater Order</button>
-                    <button onclick="changeAdvOrderStatus('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', 'Cancelled')" class="bg-red-900/40 border border-red-700/50 text-red-400 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-ban"></i> Cancel</button>
+                    <button onclick="addOrderToPhoneCalendar('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', '${escapeHtml(ord.address || '')}', '${escapeHtml(displayDate)}')" class="bg-blue-50 dark:bg-blue-600/30 border border-blue-200 dark:border-blue-500/50 text-blue-700 dark:text-blue-300 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-bell"></i> Alarm</button>
+                    <button onclick="takeAdvancedOrder('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}')" class="bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95 shadow"><i class="fa-solid fa-motorcycle"></i> Cater Order</button>
+                    <button onclick="changeAdvOrderStatus('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', 'Cancelled')" class="bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-ban"></i> Cancel</button>
                 </div>`;
         } else if (status === 'Catering') {
-            statusBadge = `<span class="bg-orange-500/20 text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded border border-orange-500/30 animate-pulse">🛵 Catering by ${escapeHtml(ord.cateredBy)}</span>`;
+            statusBadge = `<span class="bg-orange-50 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded border border-orange-200 dark:border-orange-500/30 animate-pulse">🛵 Catering by ${escapeHtml(ord.cateredBy)}</span>`;
             actionBtns = `
                 <div class="flex gap-1">
-                    <button onclick="changeAdvOrderStatus('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', 'Catered')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-check"></i> Complete</button>
-                    <button onclick="changeAdvOrderStatus('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', 'Cancelled')" class="bg-red-900/40 border border-red-700/50 text-red-400 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-ban"></i> Cancel</button>
+                    <button onclick="changeAdvOrderStatus('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', 'Catered')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95 shadow"><i class="fa-solid fa-check"></i> Complete</button>
+                    <button onclick="changeAdvOrderStatus('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', 'Cancelled')" class="bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-ban"></i> Cancel</button>
                 </div>`;
         } else if (status === 'Catered') {
-            statusBadge = `<span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-500/30"><i class="fa-solid fa-check-double"></i> Catered by ${escapeHtml(ord.cateredBy)}</span>`;
-            actionBtns = `<span class="text-[10px] text-gray-400 font-bold">Done</span>`;
+            statusBadge = `<span class="bg-emerald-50 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30"><i class="fa-solid fa-check-double"></i> Catered by ${escapeHtml(ord.cateredBy)}</span>`;
+            actionBtns = `<span class="text-[10px] text-gray-600 dark:text-gray-400 font-bold">Done</span>`;
         } else if (status === 'Cancelled') {
-            statusBadge = `<span class="bg-red-500/20 text-red-400 text-[10px] font-bold px-2 py-0.5 rounded border border-red-500/30"><i class="fa-solid fa-xmark"></i> Cancelled</span>`;
+            statusBadge = `<span class="bg-red-50 dark:bg-red-500/20 text-red-700 dark:text-red-400 text-[10px] font-bold px-2 py-0.5 rounded border border-red-200 dark:border-red-500/30"><i class="fa-solid fa-xmark"></i> Cancelled</span>`;
             actionBtns = `<span class="text-[10px] text-gray-500 italic">Order Cancelled</span>`;
         }
 
         return `
-        <div class="bg-cardBg border ${status === 'Pending' ? 'border-purple-500/40' : status === 'Catering' ? 'border-orange-500/50' : 'border-gray-800 opacity-70'} p-3 rounded-xl flex flex-col gap-1.5 text-xs">
+        <div class="bg-white dark:bg-cardBg border ${status === 'Pending' ? 'border-purple-300 dark:border-purple-500/40' : status === 'Catering' ? 'border-orange-300 dark:border-orange-500/50' : 'border-gray-200 dark:border-gray-800'} p-3 rounded-2xl flex flex-col gap-1.5 text-xs shadow-xs">
             <div class="flex justify-between items-center font-bold">
-                <span class="text-purple-300"><i class="fa-solid fa-user"></i> ${escapeHtml(ord.custName)}</span>
-                <span class="text-emerald-400 font-mono"><i class="fa-solid fa-calendar-day"></i> ${escapeHtml(displayDate)} <i class="fa-solid fa-clock ml-1"></i> ${escapeHtml(ord.timeToReceive)}</span>
+                <span class="text-purple-700 dark:text-purple-300 text-sm font-black flex items-center gap-1.5"><i class="fa-solid fa-user text-[11px]"></i> ${escapeHtml(ord.custName)}</span>
+                <span class="text-emerald-700 dark:text-emerald-400 font-mono font-bold"><i class="fa-solid fa-calendar-day"></i> ${escapeHtml(displayDate)} <i class="fa-solid fa-clock ml-1"></i> ${escapeHtml(ord.timeToReceive)}</span>
             </div>
-            ${ord.receiver ? `<div class="text-[10px] text-gray-400">Receiver: ${escapeHtml(ord.receiver)}</div>` : ''}
-            ${ord.address ? `<div class="text-[10px] text-gray-300"><i class="fa-solid fa-location-dot text-red-500"></i> ${escapeHtml(ord.address)}</div>` : ''}
-            <div class="flex justify-between items-center mt-1 pt-1.5 border-t border-gray-800">
+            ${ord.receiver ? `<div class="text-[10px] text-gray-600 dark:text-gray-400 font-medium">Receiver: <span class="text-gray-900 dark:text-gray-200 font-bold">${escapeHtml(ord.receiver)}</span></div>` : ''}
+            ${ord.address ? `<div class="text-[10px] text-gray-700 dark:text-gray-300 font-medium flex items-center gap-1"><i class="fa-solid fa-location-dot text-red-500 text-[9px]"></i> ${escapeHtml(ord.address)}</div>` : ''}
+            <div class="flex justify-between items-center mt-1 pt-1.5 border-t border-gray-100 dark:border-gray-800">
                 ${statusBadge} ${actionBtns}
             </div>
         </div>`;

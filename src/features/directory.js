@@ -54,7 +54,6 @@ export function loadDirectoryCache() {
             }
         }
         
-        // Ensure default barangay data exists if no barangays are cached
         const hasBarangays = (globalState.records || []).some(r => r.type === 'barangays');
         if (!hasBarangays) {
             const defaultBarangays = BARANGAY_DATA.map(b => ({
@@ -91,7 +90,7 @@ export async function openDirectory(type) {
     renderDirectoryList();
 }
 
-// SILENT BACKGROUND SYNC ON APP STARTUP & RESUME (SYNCS ALL DIRECTORIES & REGISTERED CUSTOMERS)
+// SILENT BACKGROUND SYNC ON APP STARTUP & RESUME
 export async function silentSyncDirectory() {
     if (!db) return;
 
@@ -99,7 +98,6 @@ export async function silentSyncDirectory() {
         const types = ['customers', 'stores', 'barangays'];
         let updatedRecordsMap = new Map();
 
-        // 1. Seed existing local records into map
         (globalState.records || []).forEach(r => {
             if (r && r.name) {
                 const key = `${r.type || 'customers'}_${r.name.toLowerCase().trim()}`;
@@ -107,7 +105,6 @@ export async function silentSyncDirectory() {
             }
         });
 
-        // 2. Sync directory nodes from Firebase
         for (const type of types) {
             const snap = await db.ref(`directory/${type}`).once('value');
             const fbData = snap.val();
@@ -131,7 +128,6 @@ export async function silentSyncDirectory() {
             }
         }
 
-        // 3. Merge registered customer accounts into customer directory
         try {
             const custSnap = await db.ref('customers').once('value');
             const custVal = custSnap.val();
@@ -171,12 +167,11 @@ export async function silentSyncDirectory() {
     }
 }
 
-// DUAL-SOURCE DATA SYNC WITH LIVE VISUAL FEEDBACK & TOAST ALERTS
+// DUAL-SOURCE DATA SYNC WITH LIVE VISUAL FEEDBACK
 export async function syncData(isSilent = false) {
     const type = globalState.currentType || 'customers';
     const listEl = document.getElementById('record-list');
     
-    // Animate all directory refresh icons during sync
     const refreshIcons = document.querySelectorAll('#view-directory .fa-rotate, #view-directory .fa-arrows-rotate, button[onclick*="syncData"] i');
     refreshIcons.forEach(icon => icon.classList.add('fa-spin'));
 
@@ -192,7 +187,7 @@ export async function syncData(isSilent = false) {
 
     if (!isSilent && !hasExistingLocal && listEl) {
         listEl.innerHTML = `
-        <div class="text-center text-blue-400 font-bold py-16 text-xs flex flex-col items-center justify-center gap-2">
+        <div class="text-center text-blue-600 dark:text-blue-400 font-bold py-16 text-xs flex flex-col items-center justify-center gap-2">
             <i class="fa-solid fa-rotate fa-spin text-2xl"></i>
             <span>Syncing ${displayTypeLabel.toUpperCase()} records...</span>
         </div>`;
@@ -285,7 +280,6 @@ export function filterDirectoryRecords() {
     renderDirectoryList();
 }
 
-// COPY BARANGAY RATE WITH CUSTOMER FEE TEMPLATE
 export function copyBarangayRate(barangayName, rawRate) {
     let rateNum = parseFloat((rawRate || "").replace(/[^0-9.]/g, ''));
     let amountStr = !isNaN(rateNum) ? rateNum.toFixed(0) : (rawRate || '0').replace(/[^0-9.]/g, '');
@@ -360,43 +354,43 @@ export function renderDirectoryList() {
             const headerLabel = letterHeader === "#" ? "# (Special & Foreign)" : letterHeader;
 
             htmlBuilder += `
-            <div id="dir-section-${letterHeader === "#" ? "SPECIAL" : letterHeader}" data-section="${letterHeader}" class="sticky top-0 z-10 bg-darkBg/95 backdrop-blur-md text-amber-400 font-black text-xs px-2 py-1.5 border-b border-gray-800/80 my-1 flex items-center justify-between">
+            <div id="dir-section-${letterHeader === "#" ? "SPECIAL" : letterHeader}" data-section="${letterHeader}" class="sticky top-0 z-10 bg-gray-100/95 dark:bg-darkBg/95 backdrop-blur-md text-amber-700 dark:text-amber-400 font-black text-xs px-2.5 py-1.5 border-b border-gray-200 dark:border-gray-800/80 my-1 flex items-center justify-between">
                 <span>${headerLabel}</span>
-                <span class="text-[9px] text-gray-500 font-normal">Section Header</span>
+                <span class="text-[9px] text-gray-500 dark:text-gray-400 font-medium">Section Header</span>
             </div>`;
         }
 
         let mapBtn = '';
         if (r.lat_lon_link) {
-            mapBtn = `<a href="${escapeHtml(r.lat_lon_link)}" target="_blank" class="text-xs text-blue-400 font-bold underline flex items-center gap-1 mt-1"><i class="fa-solid fa-map-location-dot"></i> View Location</a>`;
+            mapBtn = `<a href="${escapeHtml(r.lat_lon_link)}" target="_blank" class="text-xs text-blue-600 dark:text-blue-400 font-bold underline flex items-center gap-1 mt-1"><i class="fa-solid fa-map-location-dot"></i> View Location</a>`;
         }
 
         const deleteBtnHtml = isAdminUser 
-            ? `<button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-red-400 p-2 rounded-lg text-xs transition active:scale-90" title="Delete">
+            ? `<button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-red-600 dark:text-red-400 p-2 rounded-lg text-xs transition active:scale-90" title="Delete">
                     <i class="fa-solid fa-trash"></i>
                </button>`
             : '';
 
         const recordedByText = escapeHtml(r.recorded_by || "System");
         const recordedAtText = r.recorded_at ? ` • ${escapeHtml(r.recorded_at)}` : '';
-        const metaInfoHtml = `<div class="text-[10px] text-gray-500 mt-1.5 flex items-center gap-1"><i class="fa-solid fa-user-pen text-[9px]"></i> Recorded by <span class="text-gray-300 font-semibold">${recordedByText}</span>${recordedAtText}</div>`;
+        const metaInfoHtml = `<div class="text-[10px] text-gray-500 dark:text-gray-400 mt-1.5 flex items-center gap-1"><i class="fa-solid fa-user-pen text-[9px]"></i> Recorded by <span class="text-gray-800 dark:text-gray-300 font-bold">${recordedByText}</span>${recordedAtText}</div>`;
 
         if (isBarangay) {
             let rateNum = parseFloat((r.rate || r.address || "").replace(/[^0-9.]/g, ''));
             let displayRate = !isNaN(rateNum) ? `₱${rateNum.toFixed(2)}` : (r.rate || r.address || '₱0.00');
 
             htmlBuilder += `
-            <div class="bg-cardBg border border-gray-800 p-3.5 rounded-xl flex justify-between items-center gap-2 shadow-sm my-1">
+            <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-3.5 rounded-2xl flex justify-between items-center gap-2 shadow-xs my-1">
                 <div class="flex-1 min-w-0">
-                    <div class="font-bold text-sm text-white truncate"><i class="fa-solid fa-map-location-dot text-emerald-400 mr-1.5"></i> ${escapeHtml(r.name)}</div>
-                    <div class="text-xs font-mono text-emerald-400 font-bold mt-1">Delivery Rate: ${escapeHtml(displayRate)}</div>
+                    <div class="font-black text-sm text-gray-900 dark:text-white truncate flex items-center gap-1.5"><i class="fa-solid fa-map-location-dot text-emerald-600 dark:text-emerald-400"></i> <span>${escapeHtml(r.name)}</span></div>
+                    <div class="text-xs font-mono text-emerald-700 dark:text-emerald-400 font-black mt-1">Delivery Rate: ${escapeHtml(displayRate)}</div>
                     ${metaInfoHtml}
                 </div>
                 <div class="flex gap-1.5 shrink-0">
-                    <button onclick="copyBarangayRate('${escapeHtml(r.name)}', '${escapeHtml(displayRate)}')" class="bg-blue-600/30 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1" title="Copy Rate Message">
+                    <button onclick="copyBarangayRate('${escapeHtml(r.name)}', '${escapeHtml(displayRate)}')" class="bg-blue-50 hover:bg-blue-100 dark:bg-blue-600/30 dark:hover:bg-blue-600 text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-white border border-blue-200 dark:border-blue-500/50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1" title="Copy Rate Message">
                         <i class="fa-solid fa-copy"></i> Copy
                     </button>
-                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
+                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
                     ${deleteBtnHtml}
@@ -404,16 +398,16 @@ export function renderDirectoryList() {
             </div>`;
         } else {
             htmlBuilder += `
-            <div class="bg-cardBg border border-gray-800 p-3.5 rounded-xl flex justify-between items-start gap-2 shadow-sm my-1">
+            <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-3.5 rounded-2xl flex justify-between items-start gap-2 shadow-xs my-1">
                 <div class="flex-1 min-w-0">
-                    <div class="font-bold text-sm text-white truncate">${escapeHtml(r.name)}</div>
-                    ${r.contact ? `<div class="text-xs text-gray-400 mt-0.5"><i class="fa-solid fa-phone text-[10px]"></i> ${escapeHtml(r.contact)}</div>` : ''}
-                    ${r.address ? `<div class="text-xs text-gray-400 mt-0.5"><i class="fa-solid fa-location-dot text-[10px]"></i> ${escapeHtml(r.address)}</div>` : ''}
+                    <div class="font-black text-sm text-gray-900 dark:text-white truncate">${escapeHtml(r.name)}</div>
+                    ${r.contact ? `<div class="text-xs text-gray-700 dark:text-gray-400 mt-0.5 font-bold font-mono"><i class="fa-solid fa-phone text-[10px] text-blue-500"></i> ${escapeHtml(r.contact)}</div>` : ''}
+                    ${r.address ? `<div class="text-xs text-gray-700 dark:text-gray-300 mt-0.5 font-medium"><i class="fa-solid fa-location-dot text-[10px] text-red-500"></i> ${escapeHtml(r.address)}</div>` : ''}
                     ${mapBtn}
                     ${metaInfoHtml}
                 </div>
                 <div class="flex gap-1 shrink-0">
-                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
+                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
                     ${deleteBtnHtml}
@@ -443,7 +437,7 @@ export function setupAlphabetScrubber(availableLetters) {
 
     scrubberContainer.innerHTML = alphabet.map(char => {
         const hasRecords = availableLetters.includes(char);
-        const opacityClass = hasRecords ? "text-blue-400 font-black" : "text-gray-600 opacity-40 font-semibold";
+        const opacityClass = hasRecords ? "text-blue-600 dark:text-blue-400 font-black" : "text-gray-400 dark:text-gray-600 opacity-40 font-semibold";
         return `<span data-letter="${char}" class="scrubber-letter py-0.5 px-1 cursor-pointer transition-transform duration-75 text-[10px] select-none block text-center ${opacityClass}">${char}</span>`;
     }).join('');
 
@@ -481,7 +475,7 @@ export function setupAlphabetScrubber(availableLetters) {
                 const translateX = -(factor * 16);
 
                 node.style.transform = `scale(${scale}) translateX(${translateX}px)`;
-                node.style.color = '#38bdf8';
+                node.style.color = '#0284c7';
 
                 if (dist < 15) {
                     activeChar = node.dataset.letter;
@@ -574,7 +568,6 @@ export function editDirectoryRecord(name) {
     if (record) openForm(record);
 }
 
-// SLIDE TO CONFIRM DIRECTORY DELETE FOR ADMINS
 export function promptDeleteDirectoryRecord(name) {
     if (!checkAdminAccess()) {
         return showToast("⚠️ Admin access required to delete directory records.");
@@ -589,7 +582,6 @@ export function promptDeleteDirectoryRecord(name) {
     );
 }
 
-// INSTANT OFFLINE DELETE WITH BACKGROUND SYNC
 export function executeDeleteDirectoryRecord(name) {
     const type = globalState.currentType || 'customers';
     
@@ -619,7 +611,6 @@ export function executeDeleteDirectoryRecord(name) {
     } catch(e) {}
 }
 
-// INSTANT OFFLINE SAVE & EDIT WITH BACKGROUND SYNC
 export async function submitForm() {
     const nameInput = document.getElementById('form-name');
     const contactInput = document.getElementById('form-contact');
