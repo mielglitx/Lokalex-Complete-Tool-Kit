@@ -41,7 +41,7 @@ window.unlockAudioContext = unlockAudioContext;
 let isReconnecting = false;
 let lastHeartbeatTime = Date.now();
 
-// SERVICE WORKER REGISTRATION & FCM PUSH NOTIFICATIONS[cite: 37]
+// SERVICE WORKER REGISTRATION & FCM PUSH NOTIFICATIONS
 export function registerServiceWorker() {
     if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
         navigator.serviceWorker.register('/sw.js').then((reg) => {
@@ -130,7 +130,7 @@ export function updateNetworkStatus(forcedState = null) {
     }
 }
 
-// FORCE RECONNECT FIREBASE WEBSOCKET ON APP RESUME[cite: 37]
+// FORCE RECONNECT FIREBASE WEBSOCKET ON APP RESUME
 export function forceReconnectFirebase() {
     if (isReconnecting) return;
     isReconnecting = true;
@@ -212,7 +212,7 @@ window.addEventListener('pageshow', handleAppVisibilityChange);
 window.addEventListener('focus', handleAppVisibilityChange);
 window.addEventListener('resume', handleAppVisibilityChange);
 
-// TIMER DRIFT WATCHDOG[cite: 37]
+// TIMER DRIFT WATCHDOG
 setInterval(() => {
     const now = Date.now();
     const drift = now - lastHeartbeatTime;
@@ -231,24 +231,25 @@ function bootApp() {
         const legacyWidget = document.getElementById('floating-chat-container');
         if (legacyWidget) legacyWidget.remove();
 
-        // 1. INSTANT LOCAL CACHE HYDRATION (Zero latency)[cite: 37]
+        // 1. INSTANT LOCAL CACHE HYDRATION (Zero latency)
         if (roster && roster.loadRosterCache) roster.loadRosterCache();
         if (roster && roster.updateRosterUI) roster.updateRosterUI();
         if (commission && commission.loadCommissionSettingsCache) commission.loadCommissionSettingsCache();
         if (directory && directory.loadDirectoryCache) directory.loadDirectoryCache();
         if (cart && cart.loadCartState) cart.loadCartState();
 
-        // 2. BACKGROUND FIREBASE SYNC[cite: 37]
+        // 2. BACKGROUND FIREBASE SYNC
         initRealtimeFirebaseListeners();
 
         if (commission && commission.fetchCommissionSettings) commission.fetchCommissionSettings();
         if (directory && directory.silentSyncDirectory) directory.silentSyncDirectory();
 
+        // Continuous precision check for Auto End Shift every 15 seconds
         setInterval(() => {
             if (roster && roster.checkAndTriggerAutoEndShift) {
                 roster.checkAndTriggerAutoEndShift();
             }
-        }, 30000);
+        }, 15000);
 
         const urlParams = new URLSearchParams(window.location.search);
         
@@ -347,6 +348,22 @@ function initRealtimeFirebaseListeners() {
             roster.listenToSwapRequests();
         }
 
+        if (roster && roster.listenToTimeInSchedule) {
+            roster.listenToTimeInSchedule();
+        }
+
+        if (roster && roster.listenToDayOffData) {
+            roster.listenToDayOffData();
+        }
+
+        if (roster && roster.listenToBookingLimits) {
+            roster.listenToBookingLimits();
+        }
+
+        if (roster && roster.listenToAutoEndShift) {
+            roster.listenToAutoEndShift();
+        }
+
         if (chat && chat.listenToCustomerRiderChat) {
             chat.listenToCustomerRiderChat();
         }
@@ -382,7 +399,7 @@ function initRealtimeFirebaseListeners() {
             if (commission && commission.refreshCommissionView) commission.refreshCommissionView();
         });
 
-        // ROSTER LISTENER GUARANTEES TELEGRAM_ID IS NEVER EMPTY[cite: 37]
+        // ROSTER LISTENER GUARANTEES TELEGRAM_ID IS NEVER EMPTY
         db.ref('roster').on('value', (snapshot) => {
             const val = snapshot.val();
             if (val) {

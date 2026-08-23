@@ -721,7 +721,6 @@ export function renderRiderDayOffPicker() {
         badgeEl.innerHTML = `Changes: <span class="${changesMade >= maxChanges ? 'text-red-400 font-black' : 'text-teal-300 font-black'}">${changesMade}/${maxChanges}</span> this month`;
     }
 
-    // Collect occupants for each day of the week
     const occupantsPerDay = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
     const countedRiders = new Set();
 
@@ -1193,22 +1192,19 @@ export function openAdminAutoEndShiftModal() {
     const modal = document.getElementById('admin-auto-endshift-modal');
     if (!modal) return;
 
-    if (db) {
-        db.ref('settings/autoEndShift').once('value', (snap) => {
-            const data = snap.val() || {};
-            const enabledToggle = document.getElementById('auto-endshift-enabled');
-            const timeInput = document.getElementById('auto-endshift-time');
-            const statusDesc = document.getElementById('auto-endshift-status-desc');
+    const data = globalState.autoEndShift || {};
+    const enabledToggle = document.getElementById('auto-endshift-enabled');
+    const timeInput = document.getElementById('auto-endshift-time');
+    const statusDesc = document.getElementById('auto-endshift-status-desc');
 
-            if (enabledToggle) enabledToggle.checked = !!data.enabled;
-            if (timeInput) timeInput.value = data.time || "03:00";
-            if (statusDesc) {
-                statusDesc.innerText = data.enabled 
-                    ? `Active: Scheduled daily at ${data.time || '03:00'}`
-                    : "Disabled: No auto end shift will occur.";
-            }
-        });
+    if (enabledToggle) enabledToggle.checked = !!data.enabled;
+    if (timeInput) timeInput.value = data.time || "03:00";
+    if (statusDesc) {
+        statusDesc.innerText = data.enabled 
+            ? `Active: Scheduled daily at ${data.time || '03:00'}`
+            : "Disabled: No auto end shift will occur.";
     }
+
     modal.classList.remove('hidden');
 }
 
@@ -1226,16 +1222,22 @@ export async function saveAdminAutoEndShiftSettings() {
     let setTime = timeInput ? timeInput.value.trim() : "03:00";
     if (!setTime) setTime = "03:00";
 
-    const payload = {
-        enabled: isEnabled,
+    const payload = sanitizeForFirebase({
+        enabled: Boolean(isEnabled),
         time: setTime,
+        lastTriggeredDate: globalState.autoEndShift?.lastTriggeredDate || "",
         updatedBy: appState.riderName || "Admin",
         updatedAt: Date.now()
-    };
+    });
+
+    globalState.autoEndShift = payload;
+    try {
+        localStorage.setItem('lokalex_auto_endshift_cache', JSON.stringify(payload));
+    } catch(e) {}
 
     try {
         if (db) {
-            await db.ref('settings/autoEndShift').update(payload);
+            await db.ref('settings/autoEndShift').set(payload);
         }
 
         closeAdminAutoEndShiftModal();
@@ -1246,11 +1248,29 @@ export async function saveAdminAutoEndShiftSettings() {
     }
 }
 
+export function listenToAutoEndShift() {
+    if (!db) return;
+
+    try {
+        const cached = localStorage.getItem('lokalex_auto_endshift_cache');
+        if (cached) globalState.autoEndShift = JSON.parse(cached);
+    } catch(e) {}
+
+    db.ref('settings/autoEndShift').on('value', (snap) => {
+        const data = snap.val();
+        if (data) {
+            globalState.autoEndShift = data;
+            try {
+                localStorage.setItem('lokalex_auto_endshift_cache', JSON.stringify(data));
+            } catch(e) {}
+        }
+    });
+}
+
 export async function checkAndTriggerAutoEndShift() {
     if (!db) return;
     try {
-        const snap = await db.ref('settings/autoEndShift').once('value');
-        const config = snap.val();
+        const config = globalState.autoEndShift;
         if (!config || !config.enabled || !config.time) return;
 
         const todayStr = getLocalTodayStr();
@@ -1264,16 +1284,24 @@ export async function checkAndTriggerAutoEndShift() {
         const currentTotalMins = currentHour * 60 + currentMinute;
         const targetTotalMins = targetHour * 60 + targetMinute;
 
+        // Trigger if current clock time is equal to or past the scheduled minute
         if (currentTotalMins >= targetTotalMins) {
-            const updateRes = await db.ref('settings/autoEndShift').transaction((current) => {
-                if (!current || !current.enabled || current.lastTriggeredDate === todayStr) {
-                    return;
+            let committed = false;
+            await db.ref('settings/autoEndShift/lastTriggeredDate').transaction((current) => {
+                if (current === todayStr) {
+                    return; // Already triggered by another client today
                 }
-                current.lastTriggeredDate = todayStr;
-                return current;
+                committed = true;
+                return todayStr;
             });
 
-            if (updateRes.committed) {
+            if (committed) {
+                if (!globalState.autoEndShift) globalState.autoEndShift = {};
+                globalState.autoEndShift.lastTriggeredDate = todayStr;
+                try {
+                    localStorage.setItem('lokalex_auto_endshift_cache', JSON.stringify(globalState.autoEndShift));
+                } catch(e) {}
+
                 await executeAutoEndShift();
             }
         }
@@ -1283,36 +1311,48 @@ export async function checkAndTriggerAutoEndShift() {
 }
 
 export async function executeAutoEndShift() {
-    showSideNotification("AUTO END SHIFT", "System auto end shift triggered for all active riders", "fa-power-off", "text-red-400", "border-red-500");
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const nowTimestamp = Date.now();
 
-    if (db) {
-        const rosterSnap = await db.ref('roster').once('value');
-        const roster = rosterSnap.val() || {};
+    showSideNotification("AUTO END SHIFT", "System auto end shift triggered for all active riders", "fa-power-off", "text-red-400", "border-red-500");
 
-        const updates = {};
-        const loginUpdates = {};
+    const rosterMembers = globalState.rosterMembers || [];
+    const activeRiders = rosterMembers.filter(m => m && m.status !== 'End');
 
-        for (const riderId of Object.keys(roster)) {
-            const m = roster[riderId];
-            if (m && m.status !== 'End') {
-                await archiveRiderCateringIfNeeded(m);
-                updates[`roster/${riderId}/status`] = 'End';
-                updates[`roster/${riderId}/customerName`] = '';
-                updates[`roster/${riderId}/startTime`] = '';
-                updates[`roster/${riderId}/pendingPenaltyMinutes`] = 0;
-                updates[`roster/${riderId}/cooldownUntil`] = 0;
-                updates[`roster/${riderId}/lastUpdated`] = timeStr;
-                updates[`roster/${riderId}/lastActiveTimestamp`] = Date.now();
+    for (const m of activeRiders) {
+        const rId = (m.telegramId || m.id || "").toString().trim();
+        if (!rId) continue;
 
-                loginUpdates[`logins/${riderId}/clockOutTime`] = timeStr;
-            }
+        await archiveRiderCateringIfNeeded(m);
+
+        // Update individual rider nodes directly to prevent root multi-path permission errors
+        if (db) {
+            db.ref('roster/' + rId).update({
+                status: 'End',
+                customerName: '',
+                startTime: '',
+                pendingPenaltyMinutes: 0,
+                cooldownUntil: 0,
+                lastUpdated: timeStr,
+                lastActiveTimestamp: nowTimestamp
+            }).catch(() => {});
+
+            db.ref('logins/' + rId).update({
+                clockOutTime: timeStr
+            }).catch(() => {});
         }
 
-        if (Object.keys(updates).length > 0) {
-            await db.ref().update({ ...updates, ...loginUpdates });
-        }
+        m.status = 'End';
+        m.customerName = '';
+        m.startTime = '';
+        m.pendingPenaltyMinutes = 0;
+        m.cooldownUntil = 0;
+        m.lastUpdated = timeStr;
+        m.lastActiveTimestamp = nowTimestamp;
     }
+
+    saveRosterCache();
+    updateRosterUI();
 
     try {
         await fetch(API_URL, {
@@ -1338,6 +1378,7 @@ if (typeof window !== 'undefined') {
     window.saveAdminAutoEndShiftSettings = saveAdminAutoEndShiftSettings;
     window.checkAndTriggerAutoEndShift = checkAndTriggerAutoEndShift;
     window.executeAutoEndShift = executeAutoEndShift;
+    window.listenToAutoEndShift = listenToAutoEndShift;
 
     window.openAdminTimeInScheduleModal = openAdminTimeInScheduleModal;
     window.closeAdminTimeInScheduleModal = closeAdminTimeInScheduleModal;
@@ -1364,4 +1405,5 @@ if (typeof window !== 'undefined') {
     listenToTimeInSchedule();
     listenToDayOffData();
     listenToBookingLimits();
+    listenToAutoEndShift();
 }
