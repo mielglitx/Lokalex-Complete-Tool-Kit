@@ -41,7 +41,7 @@ function getRiderStorageKey(riderId, riderName) {
     return (riderName || "unknown").toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
 }
 
-// TOGGLE ADMIN CONTROLS SWITCH[cite: 34]
+// TOGGLE ADMIN CONTROLS SWITCH
 export function toggleAdminControls(enabled) {
     if (!canManageRoster()) {
         globalState.adminControlsEnabled = false;
@@ -57,7 +57,7 @@ export function toggleAdminControls(enabled) {
     updateRosterUI();
 }
 
-// OPEN ADMIN FORCE CATERING MODAL[cite: 34]
+// OPEN ADMIN FORCE CATERING MODAL
 export function openAdminCateringModal(id, name) {
     if (!canManageRoster()) {
         return showToast("⚠️ Unauthorized: Admin or TL access required.");
@@ -162,7 +162,6 @@ export async function submitAdminForceCatering() {
         targetName
     );
 
-    // Save pending penalty cooldown if set by TL / Admin[cite: 34]
     if (penaltyMins > 0 && db && targetId) {
         await db.ref(`roster/${targetId}`).update({
             pendingPenaltyMinutes: penaltyMins
@@ -180,7 +179,7 @@ export async function submitAdminForceCatering() {
     showSideNotification("FORCE CATER", `Assigned ${custName} to ${targetName}${penaltyNotice}`, "fa-user-gear", "text-amber-400", "border-amber-500");
 }
 
-// ADMIN FORCE STATUS[cite: 34]
+// ADMIN FORCE STATUS
 export async function adminForceStatus(id, name, actionValue) {
     if (!canManageRoster()) {
         return showToast("⚠️ Unauthorized: Admin or TL access required.");
@@ -226,7 +225,7 @@ export async function adminForceStatus(id, name, actionValue) {
     });
 }
 
-// ADMIN VOID SPECIFIC CATERING CUSTOMER[cite: 34]
+// ADMIN VOID SPECIFIC CATERING CUSTOMER
 export async function adminVoidSpecificCustomer(targetId, targetName, custNameToVoid) {
     if (!canManageRoster()) {
         return showToast("⚠️ Unauthorized: Admin or TL access required.");
@@ -239,7 +238,7 @@ export async function adminVoidSpecificCustomer(targetId, targetName, custNameTo
     });
 }
 
-// ADMIN VOID COMPLETED CATERED RECORD[cite: 34]
+// ADMIN VOID COMPLETED CATERED RECORD
 export function promptVoidCustomer(riderName, customerName, completedDate = "", startTime = "") {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
@@ -379,7 +378,7 @@ export async function forceAllEndShift() {
 }
 
 // ============================================================================
-// HYBRID RIDER TIME-IN SCHEDULE & PERMANENT EARLY PASS CONTROLS[cite: 34]
+// HYBRID RIDER TIME-IN SCHEDULE & PERMANENT EARLY PASS CONTROLS
 // ============================================================================
 export async function openAdminTimeInScheduleModal() {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
@@ -662,7 +661,7 @@ export function listenToTimeInSchedule() {
 }
 
 // ============================================================================
-// 1. RIDER DAY-OFF SELECTION CONTROLS (FOR INDIVIDUAL RIDERS)[cite: 34]
+// 1. RIDER DAY-OFF SELECTION CONTROLS (FOR INDIVIDUAL RIDERS)
 // ============================================================================
 export function openRiderDayOffModal() {
     const modal = document.getElementById('rider-dayoff-modal');
@@ -702,8 +701,11 @@ export function renderRiderDayOffPicker() {
         changesMade = myDayOffRecord.changesThisMonth || 0;
     }
 
-    const maxChanges = config.maxChangesPerMonth !== undefined ? config.maxChangesPerMonth : 2;
-    const canChange = !config.enabled || isAdmin() || (changesMade < maxChanges);
+    const maxChanges = (config.maxChangesPerMonth !== undefined && config.maxChangesPerMonth !== null) 
+        ? parseInt(config.maxChangesPerMonth) 
+        : 2;
+
+    const canChange = !config.enabled || (changesMade < maxChanges);
 
     if (displayEl) {
         if (myDayOffRecord && myDayOffRecord.dayOfWeek !== undefined && myDayOffRecord.dayOfWeek !== null && parseInt(myDayOffRecord.dayOfWeek) >= 0) {
@@ -719,34 +721,38 @@ export function renderRiderDayOffPicker() {
         badgeEl.innerHTML = `Changes: <span class="${changesMade >= maxChanges ? 'text-red-400 font-black' : 'text-teal-300 font-black'}">${changesMade}/${maxChanges}</span> this month`;
     }
 
-    const occupiedSlots = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+    // Collect occupants for each day of the week
+    const occupantsPerDay = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
     const countedRiders = new Set();
 
     Object.entries(allDayOffs).forEach(([key, rec]) => {
         if (!rec || rec.dayOfWeek === undefined || rec.dayOfWeek === null) return;
-        const riderIdKey = rec.riderId || rec.riderName || key;
-        if (!countedRiders.has(riderIdKey)) {
-            countedRiders.add(riderIdKey);
+        const riderIdKey = (rec.riderId || rec.riderName || key).toString().trim();
+        const riderName = rec.riderName || key;
+
+        if (!countedRiders.has(riderIdKey.toLowerCase())) {
+            countedRiders.add(riderIdKey.toLowerCase());
             const d = parseInt(rec.dayOfWeek);
-            if (!isNaN(d) && d >= 0 && occupiedSlots[d] !== undefined) {
-                occupiedSlots[d]++;
+            if (!isNaN(d) && d >= 0 && occupantsPerDay[d] !== undefined) {
+                occupantsPerDay[d].push({ id: riderIdKey, name: riderName });
             }
         }
     });
 
     container.innerHTML = DAYS_NAMES.map((dayName, dayIdx) => {
-        const isMyCurrent = myDayOffRecord && parseInt(myDayOffRecord.dayOfWeek) === dayIdx;
+        const isMyCurrent = myDayOffRecord && myDayOffRecord.dayOfWeek !== undefined && myDayOffRecord.dayOfWeek !== null && parseInt(myDayOffRecord.dayOfWeek) === dayIdx;
+        const occupants = occupantsPerDay[dayIdx] || [];
+        const taken = occupants.length;
         const quota = (config.quotas && config.quotas[dayIdx] !== undefined) ? parseInt(config.quotas[dayIdx]) : 3;
-        const taken = occupiedSlots[dayIdx] || 0;
-        const isFull = config.enabled && taken >= quota && !isMyCurrent && !isAdmin();
+        const isFull = config.enabled && taken >= quota && !isMyCurrent;
 
         let actionHtml = "";
         if (isMyCurrent) {
             actionHtml = `<span class="bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[10px] font-black px-2.5 py-1 rounded-xl flex items-center gap-1"><i class="fa-solid fa-circle-check"></i> Current Day-Off</span>`;
-        } else if (isFull) {
-            actionHtml = `<span class="bg-red-500/10 text-red-400 border border-red-500/30 text-[10px] font-bold px-2 py-1 rounded-xl">Full Slots</span>`;
         } else if (!canChange) {
-            actionHtml = `<span class="bg-gray-800 text-gray-400 text-[10px] font-bold px-2 py-1 rounded-xl">Limit Reached</span>`;
+            actionHtml = `<span class="bg-gray-800 text-gray-400 text-[10px] font-bold px-2.5 py-1 rounded-xl border border-gray-700 select-none">Limit Reached</span>`;
+        } else if (isFull) {
+            actionHtml = `<span class="bg-red-500/10 text-red-400 border border-red-500/30 text-[10px] font-bold px-2.5 py-1 rounded-xl select-none">Full Slots</span>`;
         } else {
             actionHtml = `
             <button onclick="window.selectRiderDayOff && window.selectRiderDayOff(${dayIdx})" class="bg-teal-600 hover:bg-teal-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 shadow flex items-center gap-1">
@@ -754,14 +760,37 @@ export function renderRiderDayOffPicker() {
             </button>`;
         }
 
+        let occupantsHtml = "";
+        if (occupants.length > 0) {
+            occupantsHtml = `
+            <div class="flex flex-wrap items-center gap-1 mt-1">
+                ${occupants.map(occ => {
+                    const isMe = occ.id.toLowerCase() === myId.toLowerCase() || occ.name.toLowerCase() === myName.toLowerCase();
+                    return `<span class="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-lg border ${
+                        isMe 
+                            ? 'bg-teal-500/20 border-teal-500/40 text-teal-300 font-black' 
+                            : 'bg-black/40 border-gray-700/60 text-gray-300'
+                    }"><i class="fa-solid fa-user text-[8px] opacity-70"></i> ${escapeHtml(occ.name)}</span>`;
+                }).join('')}
+            </div>`;
+        } else {
+            occupantsHtml = `<div class="text-[9px] text-gray-500 italic mt-0.5">Walang naka-schedule na rider.</div>`;
+        }
+
         return `
-        <div class="bg-darkBg border ${isMyCurrent ? 'border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.15)]' : 'border-gray-800'} p-2.5 rounded-2xl flex items-center justify-between gap-2 transition">
-            <div class="flex flex-col min-w-0">
-                <span class="font-bold text-xs ${isMyCurrent ? 'text-teal-300 font-black' : 'text-white'}">${dayName}</span>
-                <span class="text-[9px] font-mono ${taken >= quota ? 'text-red-400' : 'text-gray-400'}">Slots: ${taken}/${quota} occupied</span>
+        <div class="bg-darkBg border ${isMyCurrent ? 'border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.15)]' : 'border-gray-800'} p-2.5 rounded-2xl flex flex-col gap-1.5 transition">
+            <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="font-bold text-xs ${isMyCurrent ? 'text-teal-300 font-black' : 'text-white'}">${dayName}</span>
+                    <span class="text-[9px] font-mono ${taken >= quota ? 'text-red-400 font-black' : 'text-gray-400 font-bold'}">(${taken}/${quota} occupied)</span>
+                </div>
+                <div class="shrink-0">
+                    ${actionHtml}
+                </div>
             </div>
-            <div class="shrink-0">
-                ${actionHtml}
+            <div class="border-t border-gray-800/60 pt-1.5">
+                <div class="text-[8px] font-bold uppercase tracking-wider text-gray-400">Riders on this day:</div>
+                ${occupantsHtml}
             </div>
         </div>`;
     }).join('');
@@ -784,15 +813,39 @@ export async function selectRiderDayOff(dayIndex) {
     const allDayOffs = globalState.riderDayOffs || {};
     const existing = allDayOffs[myId] || allDayOffs[storageKey] || allDayOffs[myName.toLowerCase().trim()] || {};
 
+    if (existing && existing.dayOfWeek !== undefined && existing.dayOfWeek !== null && parseInt(existing.dayOfWeek) === parseInt(dayIndex)) {
+        return showToast("⚠️ Ito na ang iyong kasalukuyang Day-Off.");
+    }
+
     let changesMade = 0;
     if (existing && existing.lastChangedMonth === currentMonthStr) {
         changesMade = existing.changesThisMonth || 0;
     }
 
-    const maxChanges = config.maxChangesPerMonth !== undefined ? config.maxChangesPerMonth : 2;
+    const maxChanges = (config.maxChangesPerMonth !== undefined && config.maxChangesPerMonth !== null) 
+        ? parseInt(config.maxChangesPerMonth) 
+        : 2;
 
-    if (config.enabled && !isAdmin() && changesMade >= maxChanges) {
-        return showToast(`⚠️ Naabot mo na ang limit na ${maxChanges} day-off changes para sa buwang ito.`);
+    if (config.enabled && changesMade >= maxChanges) {
+        return showToast(`⚠️ Naabot mo na ang limit na ${maxChanges} day-off change(s) para sa buwang ito.`);
+    }
+
+    if (config.enabled) {
+        const targetQuota = (config.quotas && config.quotas[dayIndex] !== undefined) ? parseInt(config.quotas[dayIndex]) : 3;
+        let taken = 0;
+        const counted = new Set();
+        Object.entries(allDayOffs).forEach(([k, r]) => {
+            if (!r || r.dayOfWeek === undefined || r.dayOfWeek === null) return;
+            const rKey = r.riderId || r.riderName || k;
+            if (rKey !== storageKey && rKey !== myId && !counted.has(rKey)) {
+                counted.add(rKey);
+                if (parseInt(r.dayOfWeek) === parseInt(dayIndex)) taken++;
+            }
+        });
+
+        if (taken >= targetQuota) {
+            return showToast(`⚠️ Puno na ang slots (${taken}/${targetQuota}) para sa ${DAYS_NAMES[dayIndex]}.`);
+        }
     }
 
     const payload = sanitizeForFirebase({
@@ -832,7 +885,7 @@ export async function selectRiderDayOff(dayIndex) {
 }
 
 // ============================================================================
-// 2. ADMIN DAY-OFF SETTINGS & QUOTA CONTROLS (FOR ADMINS)[cite: 34]
+// 2. ADMIN DAY-OFF SETTINGS & QUOTA CONTROLS (FOR ADMINS)
 // ============================================================================
 export function openAdminDayOffSettingsModal() {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
@@ -848,7 +901,7 @@ export function openAdminDayOffSettingsModal() {
     };
 
     if (masterToggle) masterToggle.checked = !!config.enabled;
-    if (maxChangesInput) maxChangesInput.value = config.maxChangesPerMonth !== undefined ? config.maxChangesPerMonth : 2;
+    if (maxChangesInput) maxChangesInput.value = (config.maxChangesPerMonth !== undefined && config.maxChangesPerMonth !== null) ? config.maxChangesPerMonth : 2;
 
     for (let d = 0; d <= 6; d++) {
         const qInput = document.getElementById(`admin-quota-day-${d}`);
@@ -968,12 +1021,12 @@ export async function saveAdminDayOffSettings() {
     const maxChangesInput = document.getElementById('admin-dayoff-max-changes');
 
     const enabled = masterToggle ? masterToggle.checked : true;
-    const maxChangesPerMonth = maxChangesInput ? parseInt(maxChangesInput.value) || 2 : 2;
+    const maxChangesPerMonth = maxChangesInput && maxChangesInput.value !== "" ? parseInt(maxChangesInput.value) : 2;
 
     const quotas = {};
     for (let d = 0; d <= 6; d++) {
         const qInput = document.getElementById(`admin-quota-day-${d}`);
-        quotas[d] = qInput ? parseInt(qInput.value) || 2 : 2;
+        quotas[d] = qInput && qInput.value !== "" ? parseInt(qInput.value) : 2;
     }
 
     const payload = sanitizeForFirebase({
@@ -1028,20 +1081,27 @@ export function listenToDayOffData() {
 }
 
 // ============================================================================
-// 3. ADMIN MAXIMUM ACTIVE BOOKING LIMITS CONTROLS (ADMIN ONLY)
+// 3. ADMIN MAXIMUM ACTIVE BOOKINGS LIMIT CONTROLS (AUTO + MANUAL)
 // ============================================================================
 export function openAdminBookingLimitsModal() {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
     const modal = document.getElementById('admin-booking-limits-modal');
+    const autoToggle = document.getElementById('admin-booking-limits-auto-toggle');
     const input = document.getElementById('admin-max-active-bookings');
 
-    const config = globalState.bookingLimits || { maxActiveBookings: 2 };
+    const config = globalState.bookingLimits || { autoEnabled: false, maxActiveBookings: 2 };
+    
+    if (autoToggle) {
+        autoToggle.checked = Boolean(config.autoEnabled);
+    }
     if (input) {
         input.value = (config.maxActiveBookings !== undefined && config.maxActiveBookings !== null) 
             ? config.maxActiveBookings 
             : 2;
     }
+
+    toggleBookingLimitsModeUI(Boolean(config.autoEnabled));
 
     if (modal) modal.classList.remove('hidden');
 }
@@ -1051,14 +1111,32 @@ export function closeAdminBookingLimitsModal() {
     if (modal) modal.classList.add('hidden');
 }
 
+export function toggleBookingLimitsModeUI(isAuto) {
+    const manualSection = document.getElementById('admin-booking-limits-manual-section');
+    const autoSection = document.getElementById('admin-booking-limits-auto-section');
+    if (manualSection && autoSection) {
+        if (isAuto) {
+            manualSection.classList.add('opacity-40', 'pointer-events-none');
+            autoSection.classList.remove('opacity-40');
+        } else {
+            manualSection.classList.remove('opacity-40', 'pointer-events-none');
+            autoSection.classList.add('opacity-40');
+        }
+    }
+}
+
 export async function saveAdminBookingLimitsSettings() {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
+    const autoToggle = document.getElementById('admin-booking-limits-auto-toggle');
     const input = document.getElementById('admin-max-active-bookings');
+
+    const isAuto = autoToggle ? autoToggle.checked : false;
     const val = input ? parseInt(input.value) || 2 : 2;
     const maxVal = Math.max(1, val);
 
     const payload = sanitizeForFirebase({
+        autoEnabled: Boolean(isAuto),
         maxActiveBookings: maxVal,
         updatedBy: appState.riderName || "Admin",
         updatedAt: Date.now()
@@ -1075,8 +1153,13 @@ export async function saveAdminBookingLimitsSettings() {
         }
 
         closeAdminBookingLimitsModal();
-        showToast(`⚙️ Max active bookings per rider set to ${maxVal}!`);
-        showSideNotification("BOOKING LIMIT SAVED", `Riders max simultaneous orders: ${maxVal}`, "fa-layer-group", "text-rose-400", "border-rose-500");
+        if (isAuto) {
+            showToast("⚙️ Auto Dynamic Booking Limits ENABLED (1–4 bookings based on gross income)!");
+            showSideNotification("AUTO LIMITS ACTIVE", "Catering capacity scaled dynamically by gross income rank", "fa-layer-group", "text-rose-400", "border-rose-500");
+        } else {
+            showToast(`⚙️ Fixed max active bookings per rider set to ${maxVal}!`);
+            showSideNotification("BOOKING LIMIT SAVED", `Riders max simultaneous orders: ${maxVal}`, "fa-layer-group", "text-rose-400", "border-rose-500");
+        }
     } catch(e) {
         console.error("Save booking limits error:", e);
         showToast("❌ Failed to save booking limits.");
@@ -1103,7 +1186,7 @@ export function listenToBookingLimits() {
 }
 
 // ============================================================================
-// ADMIN AUTO END SHIFT CONFIGURATION & SCHEDULER[cite: 34]
+// ADMIN AUTO END SHIFT CONFIGURATION & SCHEDULER
 // ============================================================================
 export function openAdminAutoEndShiftModal() {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
@@ -1275,6 +1358,7 @@ if (typeof window !== 'undefined') {
 
     window.openAdminBookingLimitsModal = openAdminBookingLimitsModal;
     window.closeAdminBookingLimitsModal = closeAdminBookingLimitsModal;
+    window.toggleBookingLimitsModeUI = toggleBookingLimitsModeUI;
     window.saveAdminBookingLimitsSettings = saveAdminBookingLimitsSettings;
 
     listenToTimeInSchedule();

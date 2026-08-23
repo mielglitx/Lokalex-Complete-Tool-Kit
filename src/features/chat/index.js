@@ -7,8 +7,10 @@ import * as riderChat from './riderChat.js';
 import * as riderStoreChat from './riderStoreChat.js';
 import * as riderThreadActions from './riderThreadActions.js';
 import * as teamComms from './teamComms.js';
-import { globalState } from '../../store/state.js';
+import { globalState, appState } from '../../store/state.js';
 import { escapeHtml } from '../../utils/helpers.js';
+import { showToast } from '../../ui/notifications.js';
+import { canRiderTakeMoreBookings } from '../roster/rosterStatus.js';
 
 export * from './chatUtils.js';
 export * from './imageEditor.js';
@@ -19,7 +21,7 @@ export * from './riderStoreChat.js';
 export * from './riderThreadActions.js';
 export * from './teamComms.js';
 
-// Bind all chat functions to global window object
+// Bind all chat functions to global window object with max booking limit safety
 if (typeof window !== 'undefined') {
     const modules = [
         chatUtils, 
@@ -35,7 +37,21 @@ if (typeof window !== 'undefined') {
         if (mod) {
             Object.keys(mod).forEach(fn => {
                 if (typeof mod[fn] === 'function') {
-                    window[fn] = mod[fn];
+                    // Wrap catering triggers to enforce the max booking limit
+                    if (fn === 'caterCustomerThread' || fn === 'caterCustomerOrder') {
+                        const originalFn = mod[fn];
+                        window[fn] = function(...args) {
+                            const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+                            const myName = (appState.riderName || localStorage.getItem('riderName') || "Rider").trim();
+                            const limitCheck = canRiderTakeMoreBookings(myId, myName);
+                            if (!limitCheck.allowed) {
+                                return showToast(`⚠️ Naabot mo na ang limit na ${limitCheck.maxAllowed} active booking(s).`);
+                            }
+                            return originalFn.apply(this, args);
+                        };
+                    } else {
+                        window[fn] = mod[fn];
+                    }
                 }
             });
         }

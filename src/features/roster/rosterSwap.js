@@ -3,8 +3,9 @@ import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { escapeHtml } from '../../utils/helpers.js';
-import { parseQueueTime } from './rosterUtils.js';
+import { parseQueueTime, isAdmin } from './rosterUtils.js';
 import { autoStartLiveGpsSession } from '../liveTracker.js';
+import { canRiderTakeMoreBookings, getMaxActiveBookingsLimit } from './rosterStatus.js';
 
 let activeSwapData = null;
 let currentPendingSwapRequest = null;
@@ -52,7 +53,7 @@ export function renderSwapRidersAccordion() {
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
     
     const otherRiders = roster.filter(m => {
-        const mId = (m.telegramId || "").toString().trim();
+        const mId = (m.telegramId || m.id || "").toString().trim();
         const mName = (m.riderName || m.name || "").trim().toLowerCase();
         const srcId = (activeSwapData.sourceRiderId || "").toString().trim();
         const srcName = (activeSwapData.sourceRiderName || "").trim().toLowerCase();
@@ -69,7 +70,7 @@ export function renderSwapRidersAccordion() {
     }
 
     container.innerHTML = otherRiders.map((rider, idx) => {
-        const targetId = (rider.telegramId || "").toString();
+        const targetId = (rider.telegramId || rider.id || "").toString();
         const targetName = rider.riderName || rider.name || "Rider";
         const rStatus = rider.status || "Offline";
         const isCatering = rStatus === 'Catering';
@@ -79,6 +80,9 @@ export function renderSwapRidersAccordion() {
         const statusBadge = isCatering 
             ? `<span class="bg-red-600/30 text-red-300 border border-red-500/40 text-[9px] font-bold px-2 py-0.5 rounded">Catering (${custs.length})</span>`
             : (isAvailable ? `<span class="bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold px-2 py-0.5 rounded">Available</span>` : `<span class="bg-gray-700 text-gray-400 text-[9px] font-bold px-2 py-0.5 rounded">${escapeHtml(rStatus)}</span>`);
+
+        const limitCheck = canRiderTakeMoreBookings(targetId, targetName);
+        const isTargetAtLimit = !limitCheck.allowed;
 
         let expandableItemsHtml = "";
         if (isCatering && custs.length > 0) {
@@ -91,13 +95,21 @@ export function renderSwapRidersAccordion() {
                 </div>
             `).join('');
         } else if (isAvailable) {
-            expandableItemsHtml = `
-                <div class="flex items-center justify-between bg-black/40 p-2 rounded-xl border border-gray-800 text-xs">
-                    <span class="text-emerald-400 text-[11px]">Ipasasa ang order kay ${escapeHtml(targetName)} (Available)</span>
-                    <button onclick="window.requestCustomerSwap && window.requestCustomerSwap('${targetId}', '${escapeHtml(targetName)}', '')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shadow">
-                        <i class="fa-solid fa-share"></i> Request Transfer
-                    </button>
-                </div>`;
+            if (isTargetAtLimit) {
+                expandableItemsHtml = `
+                    <div class="flex items-center justify-between bg-black/40 p-2 rounded-xl border border-gray-800 text-xs">
+                        <span class="text-red-400 text-[11px]">Naabot na ni ${escapeHtml(targetName)} ang limitasyon (${limitCheck.maxAllowed} bookings).</span>
+                        <span class="bg-red-500/10 text-red-400 border border-red-500/30 text-[9px] font-bold px-2 py-0.5 rounded">Max Limit Reached</span>
+                    </div>`;
+            } else {
+                expandableItemsHtml = `
+                    <div class="flex items-center justify-between bg-black/40 p-2 rounded-xl border border-gray-800 text-xs">
+                        <span class="text-emerald-400 text-[11px]">Ipasasa ang order kay ${escapeHtml(targetName)} (Available)</span>
+                        <button onclick="window.requestCustomerSwap && window.requestCustomerSwap('${targetId}', '${escapeHtml(targetName)}', '')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shadow">
+                            <i class="fa-solid fa-share"></i> Request Transfer
+                        </button>
+                    </div>`;
+            }
         } else {
             expandableItemsHtml = `<div class="text-gray-500 italic text-[10px] p-2 text-center">Naka-${escapeHtml(rStatus)} ang rider na ito.</div>`;
         }
@@ -133,6 +145,15 @@ export async function requestCustomerSwap(targetRiderId, targetRiderName, target
     if (!activeSwapData) return;
 
     const { sourceRiderId, sourceRiderName, sourceCustomerName } = activeSwapData;
+
+    // IF PURE TRANSFER (NOT A 1-FOR-1 SWAP), CHECK TARGET'S BOOKING LIMIT
+    if (!targetCustomerName) {
+        const limitCheck = canRiderTakeMoreBookings(targetRiderId, targetRiderName);
+        if (!limitCheck.allowed) {
+            return showToast(`⚠️ Hindi maaring i-transfer: Naabot na ni ${targetRiderName} ang limit na ${limitCheck.maxAllowed} active booking(s).`);
+        }
+    }
+
     closeSwapCustomerModal();
 
     if (!db) return;
@@ -170,6 +191,12 @@ export async function requestClaimCustomer(targetRiderId, targetRiderName, targe
 
     if (!myId) return showToast("⚠️ Rider ID missing.");
     if (targetRiderId.toString().trim() === myId) return showToast("⚠️ Iyo na ang customer na ito.");
+
+    // ENFORCE BOOKING LIMIT ON CLAIMER
+    const limitCheck = canRiderTakeMoreBookings(myId, myName);
+    if (!limitCheck.allowed) {
+        return showToast(`⚠️ Hindi mo ma-claim: Naabot mo na ang limit na ${limitCheck.maxAllowed} active booking(s).`);
+    }
 
     if (!db) return;
 
@@ -339,6 +366,19 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
 
         let targetCusts = targetRec.customerName ? targetRec.customerName.split(', ').map(c => c.trim()).filter(Boolean) : [];
         let targetTimes = targetRec.startTime ? targetRec.startTime.split(', ').map(t => t.trim()) : [];
+
+        // LIMIT CHECK BEFORE MUTATING
+        if (isClaim) {
+            const limitCheck = canRiderTakeMoreBookings(sourceRiderId, sourceRiderName);
+            if (!limitCheck.allowed && !sourceCusts.some(c => c.toLowerCase() === targetCustomerName.toLowerCase())) {
+                return showToast(`⚠️ Hindi ma-claim: Naabot na ni ${sourceRiderName} ang max limit na ${limitCheck.maxAllowed} bookings.`);
+            }
+        } else if (!targetCustomerName) {
+            const limitCheck = canRiderTakeMoreBookings(targetRiderId, targetRiderName);
+            if (!limitCheck.allowed && !targetCusts.some(c => c.toLowerCase() === sourceCustomerName.toLowerCase())) {
+                return showToast(`⚠️ Hindi ma-transfer: Naabot na ni ${targetRiderName} ang max limit na ${limitCheck.maxAllowed} bookings.`);
+            }
+        }
 
         const atomicUpdates = {};
 

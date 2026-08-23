@@ -143,7 +143,7 @@ export function updateRosterUI() {
         btnBreak.style.opacity = isEnded ? '0.3' : '1';
     }
 
-    // LINEUP SORTED FROM LOWEST TO HIGHEST GROSS INCOME[cite: 24]
+    // LINEUP SORTED FROM LOWEST TO HIGHEST GROSS INCOME
     const availableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
 
     checkFirstInLineAlarm(availableRiders);
@@ -173,7 +173,7 @@ export function updateRosterUI() {
     let availHtml = [], busyHtml = [], brkHtml = [], cdHtml = [];
     let availCounter = 1;
 
-    // 1. AVAILABLE QUEUE RIDERS (LOWEST TO HIGHEST GROSS INCOME DISPLAY)[cite: 24]
+    // 1. AVAILABLE QUEUE RIDERS (LOWEST TO HIGHEST GROSS INCOME DISPLAY)
     availableRiders.forEach((m) => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -203,7 +203,7 @@ export function updateRosterUI() {
         `);
     });
 
-    // 2. CATERING RIDERS (WITH GROSS INCOME BADGE)[cite: 24]
+    // 2. CATERING RIDERS (WITH GROSS INCOME BADGE)
     cateringRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -271,7 +271,7 @@ export function updateRosterUI() {
         busyHtml.push(cardHtml);
     });
 
-    // 3. BREAK RIDERS (WITH GROSS INCOME BADGE)[cite: 24]
+    // 3. BREAK RIDERS (WITH GROSS INCOME BADGE)
     breakRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -294,7 +294,7 @@ export function updateRosterUI() {
         `);
     });
 
-    // 4. COOLDOWN RIDERS (WITH GROSS INCOME BADGE)[cite: 24]
+    // 4. COOLDOWN RIDERS (WITH GROSS INCOME BADGE)
     cooldownRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -323,7 +323,7 @@ export function updateRosterUI() {
         `);
     });
 
-    // 5. RIDERS CURRENTLY ON DAY OFF TODAY (DEDICATED SECTION)[cite: 24]
+    // 5. RIDERS CURRENTLY ON DAY OFF TODAY (DEDICATED SECTION)
     let dayOffHtml = [];
     const dayOffRiderKeys = new Set();
 

@@ -27,6 +27,101 @@ import { updateRosterUI } from './rosterUI.js';
 import { requestClaimCustomer } from './rosterSwap.js';
 
 // ============================================================================
+// AUTO DYNAMIC & MANUAL ACTIVE BOOKING LIMIT CALCULATION
+// ============================================================================
+export function calculateAutoBookingLimit(targetId = null, targetName = null) {
+    const myId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (targetName || appState.riderName || localStorage.getItem('riderName') || "").trim().toLowerCase();
+
+    // Only active duty riders are evaluated for tier calculation
+    const rosterMembers = (globalState.rosterMembers || []).filter(m => m && m.status !== 'End');
+    if (rosterMembers.length <= 1) return 4;
+
+    // Map each rider with today's gross income and sort ascending (lowest first, highest last)[cite: 19]
+    const ridersWithGross = rosterMembers.map(m => {
+        const rId = (m.telegramId || m.id || "").toString().trim();
+        const rName = (m.riderName || m.name || "").trim();
+        return {
+            id: rId,
+            name: rName.toLowerCase(),
+            gross: getRiderTodayGross(rName, rId)
+        };
+    }).sort((a, b) => a.gross - b.gross);
+
+    const total = ridersWithGross.length;
+    const myIdx = ridersWithGross.findIndex(r => (myId && r.id === myId) || (myName && r.name === myName));
+    if (myIdx === -1) return 2;
+
+    const myGross = ridersWithGross[myIdx].gross;
+
+    // Tier 1 threshold: Lowest 33% gross income
+    const lowCutIdx = Math.max(0, Math.ceil(total / 3) - 1);
+    const lowCutGross = ridersWithGross[lowCutIdx].gross;
+
+    // Tier 3 threshold: Top 33% gross income
+    const highCutIdx = Math.min(total - 1, Math.floor((2 * total) / 3));
+    const highCutGross = ridersWithGross[highCutIdx].gross;
+
+    // Lowest earners: Up to 4 active bookings
+    if (myGross <= lowCutGross) {
+        return 4;
+    }
+    // Top earners: Up to 1 active booking
+    if (myGross >= highCutGross && highCutGross > lowCutGross) {
+        return 1;
+    }
+    // Mid earners: Up to 2 active bookings
+    return 2;
+}
+
+export function getMaxActiveBookingsLimit(targetId = null, targetName = null) {
+    const limitConfig = globalState.bookingLimits || {};
+    if (limitConfig.autoEnabled) {
+        return calculateAutoBookingLimit(targetId, targetName);
+    }
+    return (limitConfig.maxActiveBookings !== undefined && limitConfig.maxActiveBookings !== null) 
+        ? parseInt(limitConfig.maxActiveBookings) 
+        : 2;
+}
+
+export function canRiderTakeMoreBookings(targetId = null, targetName = null) {
+    if (isAdmin()) return { allowed: true, currentCount: 0, maxAllowed: 999, isAuto: false };
+
+    const myId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (targetName || appState.riderName || localStorage.getItem('riderName') || "").trim().toLowerCase();
+    
+    const rosterMembers = globalState.rosterMembers || [];
+    const record = rosterMembers.find(m => 
+        (m.telegramId || m.id || "").toString().trim() === myId ||
+        (m.riderName || m.name || "").toLowerCase().trim() === myName
+    );
+
+    let activeCount = 0;
+    if (record && record.status === 'Catering' && record.customerName) {
+        activeCount = record.customerName.split(', ').map(c => c.trim()).filter(Boolean).length;
+    }
+
+    const maxAllowed = getMaxActiveBookingsLimit(myId, myName);
+    const isAuto = Boolean(globalState.bookingLimits?.autoEnabled);
+
+    if (activeCount >= maxAllowed) {
+        return {
+            allowed: false,
+            currentCount: activeCount,
+            maxAllowed: maxAllowed,
+            isAuto
+        };
+    }
+
+    return {
+        allowed: true,
+        currentCount: activeCount,
+        maxAllowed: maxAllowed,
+        isAuto
+    };
+}
+
+// ============================================================================
 // TIME-IN SCHEDULE & PERMANENT EARLY PASS VALIDATION HELPER
 // ============================================================================
 export function checkRiderTimeInAllowed(targetId = null, targetName = null) {
@@ -34,7 +129,6 @@ export function checkRiderTimeInAllowed(targetId = null, targetName = null) {
     const myName = (targetName || appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
     const myNameKey = myName.toLowerCase().replace(/[^a-z0-9]/g, '_');
 
-    // Admins and Managers are always exempt from schedule restrictions[cite: 33]
     if (isAdmin()) return { allowed: true, reason: 'admin' };
 
     const config = globalState.timeInSchedule || {};
@@ -46,7 +140,6 @@ export function checkRiderTimeInAllowed(targetId = null, targetName = null) {
                        (myNameKey && riderSchedules[myNameKey]) || 
                        null;
 
-    // Permanent Early Pass Bypass Check (Bypasses schedule restriction permanently until revoked by Admin)[cite: 33]
     if (riderSched && riderSched.earlyPassGranted === true) {
         return { allowed: true, earlyPass: true };
     }
@@ -91,7 +184,6 @@ export function dismissQueueAlarm() {
     if (modal) modal.classList.add('hidden');
 }
 
-// CHECK IF RIDER IS FIRST IN LINE (LOWEST GROSS EARNINGS)[cite: 33]
 export function checkFirstInLineNotification() {
     const rosterMembers = globalState.rosterMembers || [];
     const availableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
@@ -106,7 +198,6 @@ export function checkFirstInLineNotification() {
     }
 }
 
-// VOID SINGLE CUSTOMER WITHOUT WIPING SIBLING BOOKINGS[cite: 33]
 export async function voidSingleCateringCustomer(targetId, targetName, custNameToVoid) {
     const rosterMembers = globalState.rosterMembers || [];
     const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString().trim() === targetId.toString().trim());
@@ -176,7 +267,6 @@ export async function triggerStatusWithSlide(targetStatus) {
     }
 
     if (targetStatus === 'Available') {
-        // ENFORCE ADMIN TIME-IN SCHEDULE AND PERMANENT EARLY PASS CHECK[cite: 33]
         const timeCheck = checkRiderTimeInAllowed(appState.telegramId, appState.riderName);
         if (!timeCheck.allowed) {
             showToast(`🚫 Bawal pa mag-Time In: Ang iyong allowed time-in ay ${timeCheck.allowedTime}. Humingi ng Early Time-In pass sa Admin.`);
@@ -315,15 +405,11 @@ export function promptCateringStatus() {
         }
     }
 
-    // DYNAMIC ADMIN-CONFIGURED ACTIVE BOOKING LIMIT (EXEMPTING ADMINS)
-    const limitConfig = globalState.bookingLimits || {};
-    const maxActive = (limitConfig.maxActiveBookings !== undefined && limitConfig.maxActiveBookings !== null) ? parseInt(limitConfig.maxActiveBookings) : 4;
-
-    if (myRecord && myRecord.customerName && !isAdmin()) {
-        const activeCusts = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-        if (activeCusts.length >= maxActive) {
-            return showToast(`⚠️ Reached maximum limit of ${maxActive} active catering customer(s)!`);
-        }
+    // ENFORCE ACTIVE BOOKING LIMIT (MANUAL OR AUTO DYNAMIC TIER)
+    const limitCheck = canRiderTakeMoreBookings(myId, appState.riderName);
+    if (!limitCheck.allowed) {
+        const modeLabel = limitCheck.isAuto ? " (Auto Tier based on today's gross income)" : "";
+        return showToast(`⚠️ Reached maximum limit of ${limitCheck.maxAllowed} active catering customer(s)${modeLabel}!`);
     }
 
     if (typeof populateCateringCustomerDropdown === 'function') {
@@ -354,12 +440,15 @@ export async function confirmCateringStatus() {
         existingTimes = myRecord.startTime ? myRecord.startTime.split(', ').map(t => t.trim()) : [];
     }
 
-    // ENFORCE DYNAMIC MAXIMUM ACTIVE BOOKING LIMIT (EXEMPTING ADMINS)
-    const limitConfig = globalState.bookingLimits || {};
-    const maxActive = (limitConfig.maxActiveBookings !== undefined && limitConfig.maxActiveBookings !== null) ? parseInt(limitConfig.maxActiveBookings) : 4;
+    const isAlreadyInList = existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase());
 
-    if (!isAdmin() && existingCustomers.length >= maxActive && !existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase())) {
-        return showToast(`⚠️ Reached maximum limit of ${maxActive} active catering customer(s)!`);
+    // ENFORCE ACTIVE BOOKING LIMIT
+    if (!isAlreadyInList) {
+        const limitCheck = canRiderTakeMoreBookings(myId, myName);
+        if (!limitCheck.allowed) {
+            const modeLabel = limitCheck.isAuto ? " (Auto Income Tier Limit)" : "";
+            return showToast(`⚠️ Reached maximum limit of ${limitCheck.maxAllowed} active catering customer(s)${modeLabel}!`);
+        }
     }
 
     closeCateringModal();
@@ -367,7 +456,7 @@ export async function confirmCateringStatus() {
 
     const startTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    if (!existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase())) {
+    if (!isAlreadyInList) {
         existingCustomers.push(custName);
         existingTimes.push(startTime);
     }
@@ -407,6 +496,12 @@ export function claimCustomerFromRider(fromRiderId, fromRiderName, custName) {
 
     if (!myId) return showToast("⚠️ Rider ID missing.");
     if (fromRiderId.toString().trim() === myId) return showToast("⚠️ Iyo na ang customer na ito.");
+
+    const limitCheck = canRiderTakeMoreBookings(myId, myName);
+    if (!limitCheck.allowed) {
+        const modeLabel = limitCheck.isAuto ? " (Auto Income Tier)" : "";
+        return showToast(`⚠️ Hindi mo ma-claim: Naabot mo na ang limit na ${limitCheck.maxAllowed} active booking(s)${modeLabel}.`);
+    }
 
     openSlideDeleteModal(
         `Request Customer: ${custName}?`,
