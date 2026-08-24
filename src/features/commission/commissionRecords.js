@@ -6,7 +6,6 @@ import { showToast } from '../../ui/notifications.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
 import { isAdmin as checkIsAdmin } from '../roster/rosterUtils.js';
 import { getCleanRiderList, refreshCommissionView, viewSettings } from './commissionUI.js';
-import { saveCommissionSettingsCache } from './commissionRates.js';
 
 export function openAdminPenaltyModal() {
     const modal = document.getElementById('admin-penalty-modal');
@@ -120,7 +119,7 @@ export function closeAdminAddCommModal() {
     if (modal) modal.classList.add('hidden');
 }
 
-export function submitAdminAddCommissionRecord() {
+export async function submitAdminAddCommissionRecord() {
     const riderSelect = document.getElementById('manual-comm-rider-select');
     const custInput = document.getElementById('manual-comm-cust-input');
     const feeInput = document.getElementById('manual-comm-fee-input');
@@ -135,59 +134,67 @@ export function submitAdminAddCommissionRecord() {
     if (!cNameInput) return showToast("⚠️ Please enter customer name.");
     if (isNaN(grossFee) || grossFee <= 0) return showToast("⚠️ Please enter a valid gross fee.");
 
-    // Resolve rider telegramId to prevent broken filter matching
-    let targetTelegramId = "";
-    const rosterMatch = (globalState.rosterMembers || []).find(m => 
-        (m.riderName || m.name || "").toLowerCase().trim() === rNameInput.toLowerCase().trim()
-    );
-    if (rosterMatch && rosterMatch.telegramId) {
-        targetTelegramId = rosterMatch.telegramId.toString();
-    }
-
     const timeVal = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const cleanRiderKey = rNameInput.toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanCustKey = cNameInput.toLowerCase().replace(/[^a-z0-9]/g, '');
     const txId = `RCPT_MANUAL_${cleanRiderKey}_${cleanCustKey}_${Date.now()}`;
 
+    const rosterMem = (globalState.rosterMembers || []).find(m => (m.riderName || m.name || "").toLowerCase().trim() === rNameInput.toLowerCase().trim());
+    const rId = rosterMem ? (rosterMem.telegramId || rosterMem.id || "") : cleanRiderKey;
+
     const newRecord = {
-        id: txId,
         type: "receipts",
         transactionId: txId,
-        telegramId: targetTelegramId,
+        telegramId: rId,
         riderName: rNameInput,
         customerName: cNameInput,
         cateringStartTime: timeVal,
-        startTime: timeVal,
-        completedTime: timeVal,
-        completedDate: dateVal,
         totalFees: grossFee,
         date: dateVal,
-        fees: { delivery: grossFee, handling: 0, market: 0, multistore: 0, discount: 0 }
+        fees: { delivery: grossFee }
     };
 
     if (!globalState.globalDailyReceipts) globalState.globalDailyReceipts = [];
-    const rIdx = globalState.globalDailyReceipts.findIndex(r => r.transactionId === txId || r.id === txId);
-    if (rIdx !== -1) globalState.globalDailyReceipts[rIdx] = newRecord;
-    else globalState.globalDailyReceipts.push(newRecord);
-
-    if (!globalState.globalCateredHistory) globalState.globalCateredHistory = [];
-    const cIdx = globalState.globalCateredHistory.findIndex(c => c.transactionId === txId || c.id === txId);
-    if (cIdx !== -1) globalState.globalCateredHistory[cIdx] = newRecord;
-    else globalState.globalCateredHistory.push(newRecord);
+    globalState.globalDailyReceipts.push(newRecord);
 
     if (db) {
-        db.ref('receipts/' + txId).set(newRecord);
-        db.ref('cateredHistory/' + txId).set(newRecord);
+        await db.ref('receipts/' + txId).set(newRecord);
+
+        // Atomic Ledger Update
+        const targetSummaryId = rId || cleanRiderKey;
+        const summaryRef = db.ref(`daily_rider_summaries/${dateVal}/${targetSummaryId}`);
+        await summaryRef.transaction((current) => {
+            if (!current) {
+                return {
+                    riderName: rNameInput,
+                    grossIncome: grossFee,
+                    deliveryFees: grossFee,
+                    handlingFees: 0,
+                    marketFees: 0,
+                    multistoreFees: 0,
+                    discounts: 0,
+                    completedReceipts: 1,
+                    updatedAt: Date.now()
+                };
+            }
+            return {
+                riderName: rNameInput || current.riderName || "",
+                grossIncome: (Number(current.grossIncome) || 0) + grossFee,
+                deliveryFees: (Number(current.deliveryFees) || 0) + grossFee,
+                handlingFees: Number(current.handlingFees) || 0,
+                marketFees: Number(current.marketFees) || 0,
+                multistoreFees: Number(current.multistoreFees) || 0,
+                discounts: Number(current.discounts) || 0,
+                completedReceipts: (Number(current.completedReceipts) || 0) + 1,
+                updatedAt: Date.now()
+            };
+        });
     }
 
-    saveCommissionSettingsCache();
     closeAdminAddCommModal();
-
-    window.dispatchEvent(new CustomEvent('receiptsUpdated'));
-    window.dispatchEvent(new CustomEvent('cateredUpdated'));
-
     showToast(`✅ Added ₱${grossFee.toFixed(2)} for ${cNameInput} (${rNameInput})`);
     refreshCommissionView();
+    window.dispatchEvent(new CustomEvent('rosterUpdated'));
 }
 
 export function promptAdminDeleteCommissionRecord(riderName, customerName, dateVal, txId) {
@@ -202,27 +209,42 @@ export function promptAdminDeleteCommissionRecord(riderName, customerName, dateV
     );
 }
 
-export function executeDeleteCommissionRecord(riderName, customerName, dateVal, txId) {
+export async function executeDeleteCommissionRecord(riderName, customerName, dateVal, txId) {
     const cleanRider = (riderName || "").toLowerCase().trim();
     const cleanCust = (customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+    let deletedAmount = 0;
 
     if (globalState.globalDailyReceipts) {
         globalState.globalDailyReceipts = globalState.globalDailyReceipts.filter(rc => {
-            if (txId && (rc.transactionId === txId || rc.id === txId)) return false;
+            if (txId && rc.transactionId === txId) {
+                deletedAmount = parseFloat(rc.totalFees) || 0;
+                return false;
+            }
             const matchRider = (rc.riderName || "").toLowerCase().trim() === cleanRider;
             const matchCust = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
             const matchDate = (rc.date || rc.completedDate) === dateVal;
-            return !(matchRider && matchCust && matchDate);
+            if (matchRider && matchCust && matchDate) {
+                deletedAmount = parseFloat(rc.totalFees) || 0;
+                return false;
+            }
+            return true;
         });
     }
 
     if (globalState.globalCateredHistory) {
         globalState.globalCateredHistory = globalState.globalCateredHistory.filter(ch => {
-            if (txId && (ch.transactionId === txId || ch.id === txId)) return false;
+            if (txId && ch.transactionId === txId) {
+                if (!deletedAmount) deletedAmount = parseFloat(ch.totalFees) || 0;
+                return false;
+            }
             const matchRider = (ch.riderName || "").toLowerCase().trim() === cleanRider;
             const matchCust = (ch.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
             const matchDate = (ch.completedDate || ch.date) === dateVal;
-            return !(matchRider && matchCust && matchDate);
+            if (matchRider && matchCust && matchDate) {
+                if (!deletedAmount) deletedAmount = parseFloat(ch.totalFees) || 0;
+                return false;
+            }
+            return true;
         });
     }
 
@@ -264,14 +286,26 @@ export function executeDeleteCommissionRecord(riderName, customerName, dateVal, 
                 });
             }
         });
-    }
 
-    saveCommissionSettingsCache();
-    window.dispatchEvent(new CustomEvent('receiptsUpdated'));
-    window.dispatchEvent(new CustomEvent('cateredUpdated'));
+        // Deduct from Daily Summary Node
+        const rosterMem = (globalState.rosterMembers || []).find(m => (m.riderName || m.name || "").toLowerCase().trim() === cleanRider);
+        const rId = rosterMem ? (rosterMem.telegramId || rosterMem.id || "") : cleanRider;
+        if (rId && deletedAmount > 0) {
+            db.ref(`daily_rider_summaries/${dateVal}/${rId}`).transaction((curr) => {
+                if (!curr) return null;
+                return {
+                    ...curr,
+                    grossIncome: Math.max(0, (Number(curr.grossIncome) || 0) - deletedAmount),
+                    completedReceipts: Math.max(0, (Number(curr.completedReceipts) || 1) - 1),
+                    updatedAt: Date.now()
+                };
+            });
+        }
+    }
 
     showToast("🗑️ Record deleted successfully!");
     refreshCommissionView();
+    window.dispatchEvent(new CustomEvent('rosterUpdated'));
 }
 
 export function promptAdminEditCustomerFee(riderName, customerName, dateVal, currentGross) {
@@ -282,6 +316,9 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
 
     const parsedFee = parseFloat(newFeeInput);
     if (isNaN(parsedFee) || parsedFee < 0) return showToast("⚠️ Invalid fee amount entered.");
+
+    const oldGross = parseFloat(currentGross) || 0;
+    const diff = parsedFee - oldGross;
 
     const cleanCustKey = customerName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanRider = riderName.toLowerCase().trim();
@@ -330,12 +367,23 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
                 });
             }
         });
-    }
 
-    saveCommissionSettingsCache();
-    window.dispatchEvent(new CustomEvent('receiptsUpdated'));
-    window.dispatchEvent(new CustomEvent('cateredUpdated'));
+        // Update Daily Summary Node with Delta
+        const rosterMem = (globalState.rosterMembers || []).find(m => (m.riderName || m.name || "").toLowerCase().trim() === cleanRider);
+        const rId = rosterMem ? (rosterMem.telegramId || rosterMem.id || "") : cleanRider;
+        if (rId && diff !== 0) {
+            db.ref(`daily_rider_summaries/${dateVal}/${rId}`).transaction((curr) => {
+                if (!curr) return null;
+                return {
+                    ...curr,
+                    grossIncome: Math.max(0, (Number(curr.grossIncome) || 0) + diff),
+                    updatedAt: Date.now()
+                };
+            });
+        }
+    }
 
     showToast(`✅ Fee updated to ₱${parsedFee.toFixed(2)} for ${customerName}!`);
     refreshCommissionView();
+    window.dispatchEvent(new CustomEvent('rosterUpdated'));
 }
