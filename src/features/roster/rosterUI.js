@@ -43,20 +43,17 @@ export function updateRosterUI() {
 
     const showControls = globalState.adminControlsEnabled && canManage;
 
-    // Toggle switch wrapper is visible if the user is an Admin or TL[cite: 22]
     const adminToggleWrapper = document.getElementById('admin-toggle-wrapper');
     if (adminToggleWrapper) {
         if (canManage) adminToggleWrapper.classList.remove('hidden');
         else adminToggleWrapper.classList.add('hidden');
     }
 
-    // 1. Rider Day-Off button is always visible to all riders[cite: 22]
     const riderDayOffBtn = document.getElementById('btn-rider-dayoff');
     if (riderDayOffBtn) {
         riderDayOffBtn.classList.remove('hidden');
     }
 
-    // 2. All Admin Tool buttons are strictly visible ONLY when Admin Mode Toggle is ON and user has Admin rights[cite: 22]
     const storeHubBtn = document.getElementById('admin-store-hub-btn');
     if (storeHubBtn) {
         if (showControls && isAdmin()) storeHubBtn.classList.remove('hidden');
@@ -143,7 +140,6 @@ export function updateRosterUI() {
         btnBreak.style.opacity = isEnded ? '0.3' : '1';
     }
 
-    // LINEUP SORTED FROM LOWEST TO HIGHEST GROSS INCOME[cite: 22]
     const availableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
 
     checkFirstInLineAlarm(availableRiders);
@@ -173,7 +169,6 @@ export function updateRosterUI() {
     let availHtml = [], busyHtml = [], brkHtml = [], cdHtml = [];
     let availCounter = 1;
 
-    // 1. AVAILABLE QUEUE RIDERS (LOWEST TO HIGHEST GROSS INCOME DISPLAY)[cite: 22]
     availableRiders.forEach((m) => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -203,7 +198,6 @@ export function updateRosterUI() {
         `);
     });
 
-    // 2. CATERING RIDERS (WITH GROSS INCOME BADGE)[cite: 22]
     cateringRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -271,7 +265,6 @@ export function updateRosterUI() {
         busyHtml.push(cardHtml);
     });
 
-    // 3. BREAK RIDERS (WITH GROSS INCOME BADGE)[cite: 22]
     breakRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -294,7 +287,6 @@ export function updateRosterUI() {
         `);
     });
 
-    // 4. COOLDOWN RIDERS (WITH GROSS INCOME BADGE)[cite: 22]
     cooldownRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -323,7 +315,6 @@ export function updateRosterUI() {
         `);
     });
 
-    // 5. RIDERS CURRENTLY ON DAY OFF TODAY (DEDICATED SECTION)[cite: 22]
     let dayOffHtml = [];
     const dayOffRiderKeys = new Set();
 
@@ -367,7 +358,30 @@ export function loadGlobalCateredList() {
     if (!feed) return;
 
     const todayStr = getLocalTodayStr();
-    const todayHistory = globalState.globalCateredHistory ? globalState.globalCateredHistory.filter(h => isSameDate(h.completedDate, todayStr)) : [];
+    const rawHistory = globalState.globalCateredHistory ? globalState.globalCateredHistory.filter(h => isSameDate(h.completedDate || h.date, todayStr)) : [];
+
+    // DEDUPLICATE: Map by (rider + customer + startTime + date) so duplicate writes render once
+    const dedupMap = new Map();
+    rawHistory.forEach(h => {
+        if (!h) return;
+        const rName = (h.riderName || "").trim().toLowerCase();
+        const cName = (h.customerName || "").trim().toLowerCase();
+        const sTime = (h.startTime || "").trim().toLowerCase();
+        const cDate = (h.completedDate || h.date || todayStr).trim();
+        const dedupKey = `${rName}_${cName}_${sTime}_${cDate}`;
+
+        if (!dedupMap.has(dedupKey)) {
+            dedupMap.set(dedupKey, h);
+        } else {
+            const existing = dedupMap.get(dedupKey);
+            // Prioritize the entry that has fee breakdown or completed time
+            if ((!existing.totalFees && h.totalFees) || (!existing.completedTime && h.completedTime)) {
+                dedupMap.set(dedupKey, h);
+            }
+        }
+    });
+
+    const todayHistory = Array.from(dedupMap.values());
 
     if (badge) badge.innerText = `${todayHistory.length} recorded`;
 
@@ -378,8 +392,9 @@ export function loadGlobalCateredList() {
 
     feed.innerHTML = todayHistory.slice().reverse().map(h => {
         let voidBtn = "";
+        const recordTxId = h.transactionId || h.id || "";
         if (isAdmin()) {
-            voidBtn = `<button onclick="window.promptVoidCustomer && window.promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate)}')" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-400 dark:border-red-700/50 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shrink-0"><i class="fa-solid fa-ban"></i> Void</button>`;
+            voidBtn = `<button onclick="window.promptVoidCustomer && window.promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate || '')}', '${escapeHtml(h.startTime || '')}', '${escapeHtml(recordTxId)}')" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-400 dark:border-red-700/50 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shrink-0"><i class="fa-solid fa-ban"></i> Void</button>`;
         }
 
         let durationStr = h.duration || "";
@@ -398,7 +413,6 @@ export function loadGlobalCateredList() {
 
         return `
         <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-2xl flex flex-col gap-1.5 shadow-xs">
-            <!-- TOP ROW: CUSTOMER NAME & RIDER BADGE + VOID BUTTON (PREVENTS SQUEEZING) -->
             <div class="flex items-center justify-between gap-2">
                 <div class="font-black text-xs text-gray-900 dark:text-white flex items-center gap-1.5 min-w-0 flex-1">
                     <i class="fa-solid fa-user text-orange-600 dark:text-orange-400 text-[11px] shrink-0"></i> 
@@ -410,7 +424,6 @@ export function loadGlobalCateredList() {
                 </div>
             </div>
 
-            <!-- BOTTOM ROW: FULL TIMESTAMPS & SPLIT TIME CALCULATION PILL -->
             <div class="flex flex-wrap items-center justify-between gap-1 pt-1 border-t border-gray-100 dark:border-gray-800/60 text-[10px] font-mono">
                 <span class="text-gray-600 dark:text-gray-400 font-medium">${timeRange}</span>
                 ${durationBadge}

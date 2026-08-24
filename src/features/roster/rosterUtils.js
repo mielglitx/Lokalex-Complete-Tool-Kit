@@ -14,13 +14,21 @@ export function setLineAlarmConfirmed(val) {
 
 const ROSTER_CACHE_KEY = 'lokalex_roster_cache';
 const LOGINS_CACHE_KEY = 'lokalex_logins_cache';
-const CATERED_CACHE_KEY = 'lokalex_catered_cache';
+const CATERED_CACHE_KEY = 'lokalex_catered_cache_v2';
+const RECEIPTS_CACHE_KEY = 'lokalex_receipts_cache_v2';
+const SUMMARIES_CACHE_KEY = 'lokalex_daily_summaries_cache';
 
 export function saveRosterCache() {
     try {
         localStorage.setItem(ROSTER_CACHE_KEY, JSON.stringify(globalState.rosterMembers || []));
         localStorage.setItem(LOGINS_CACHE_KEY, JSON.stringify(globalState.globalLogins || []));
         localStorage.setItem(CATERED_CACHE_KEY, JSON.stringify(globalState.globalCateredHistory || []));
+        if (globalState.globalDailyReceipts) {
+            localStorage.setItem(RECEIPTS_CACHE_KEY, JSON.stringify(globalState.globalDailyReceipts));
+        }
+        if (globalState.dailyRiderSummaries) {
+            localStorage.setItem(SUMMARIES_CACHE_KEY, JSON.stringify(globalState.dailyRiderSummaries));
+        }
     } catch(e) {}
 }
 
@@ -34,12 +42,23 @@ export function loadRosterCache() {
         if (savedLogins && (!globalState.globalLogins || globalState.globalLogins.length === 0)) {
             globalState.globalLogins = JSON.parse(savedLogins);
         }
-        const savedCatered = localStorage.getItem(CATERED_CACHE_KEY);
+        const savedCatered = localStorage.getItem(CATERED_CACHE_KEY) || localStorage.getItem('lokalex_catered_cache');
         if (savedCatered && (!globalState.globalCateredHistory || globalState.globalCateredHistory.length === 0)) {
             globalState.globalCateredHistory = JSON.parse(savedCatered);
         }
+        const savedReceipts = localStorage.getItem(RECEIPTS_CACHE_KEY);
+        if (savedReceipts && (!globalState.globalDailyReceipts || globalState.globalDailyReceipts.length === 0)) {
+            globalState.globalDailyReceipts = JSON.parse(savedReceipts);
+        }
+        const savedSummaries = localStorage.getItem(SUMMARIES_CACHE_KEY);
+        if (savedSummaries && !globalState.dailyRiderSummaries) {
+            globalState.dailyRiderSummaries = JSON.parse(savedSummaries);
+        }
     } catch(e) {}
 }
+
+// Ensure cache is loaded immediately
+loadRosterCache();
 
 export function getUserType() {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
@@ -145,57 +164,178 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
 }
 
 // -------------------------------------------------------------
-// LOWEST GROSS INCOME LINEUP CALCULATOR
+// CENTRALIZED COMMISSION & ROSTER DEDUPLICATION ENGINE
 // -------------------------------------------------------------
+export function findReceiptFeeForCustomer(rName, cName, rDate) {
+    const cleanRider = (rName || "").toLowerCase().trim();
+    const cleanCust = (cName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const receipts = globalState.globalDailyReceipts || [];
+    for (let rc of receipts) {
+        if (!rc) continue;
+        const rcRider = (rc.riderName || "").toLowerCase().trim();
+        const rcCust = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const rcDate = rc.date || rc.completedDate;
+
+        if (rcRider === cleanRider && rcCust === cleanCust && isSameDate(rcDate, rDate)) {
+            let gross = parseFloat(rc.totalFees);
+            if (!isNaN(gross) && gross > 0) return gross;
+        }
+    }
+    return 0;
+}
+
+export function getMergedDeduplicatedCommissionList() {
+    const mergedMap = new Map();
+
+    (globalState.globalDailyReceipts || []).forEach(rc => {
+        if (!rc) return;
+        const cleanRider = (rc.riderName || "").toLowerCase().trim();
+        const cleanCust = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const date = rc.date || rc.completedDate || getLocalTodayStr();
+        const time = rc.cateringStartTime || rc.startTime || "";
+        const txId = rc.transactionId || rc.id || `${cleanRider}_${cleanCust}_${date}_${time}`;
+
+        let gross = parseFloat(rc.totalFees);
+        if (isNaN(gross) || gross === 0) {
+            let f = rc.fees;
+            if (typeof f === 'string') {
+                try { f = JSON.parse(f); } catch(e) { f = null; }
+            }
+            if (f) {
+                const hf = parseFloat(f.handling) || 0;
+                const mf = parseFloat(f.market) || 0;
+                const ms = parseFloat(f.multistore || f.multistop) || 0;
+                const rdf = parseFloat(f.delivery) || 0;
+                const epay = parseFloat(f.epaymentFee) || 0;
+                const disc = parseFloat(f.discount) || 0;
+                gross = Math.max(0, hf + mf + ms + rdf + epay - disc);
+            } else {
+                gross = 0;
+            }
+        }
+
+        const dedupKey = txId || `${cleanRider}_${cleanCust}_${date}_${time}`;
+        if (!mergedMap.has(dedupKey) || (mergedMap.get(dedupKey).totalFees < gross)) {
+            mergedMap.set(dedupKey, {
+                transactionId: txId,
+                telegramId: rc.telegramId || rc.riderId,
+                riderName: rc.riderName || "Rider",
+                customerName: rc.customerName || "Customer",
+                date: date,
+                time: time,
+                totalFees: gross,
+                isReceipt: true
+            });
+        }
+    });
+
+    (globalState.globalCateredHistory || []).forEach(ch => {
+        if (!ch) return;
+        const cleanRider = (ch.riderName || "").toLowerCase().trim();
+        const cleanCust = (ch.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const date = ch.completedDate || ch.date || getLocalTodayStr();
+        const time = ch.startTime || ch.completedTime || "";
+
+        let gross = parseFloat(ch.totalFees);
+        if (isNaN(gross) || gross === 0) {
+            let f = ch.fees;
+            if (typeof f === 'string') {
+                try { f = JSON.parse(f); } catch(e) { f = null; }
+            }
+            if (f) {
+                const hf = parseFloat(f.handling) || 0;
+                const mf = parseFloat(f.market) || 0;
+                const ms = parseFloat(f.multistore || f.multistop) || 0;
+                const rdf = parseFloat(f.delivery) || 0;
+                const epay = parseFloat(f.epaymentFee) || 0;
+                const disc = parseFloat(f.discount) || 0;
+                gross = Math.max(0, hf + mf + ms + rdf + epay - disc);
+            }
+        }
+        if (isNaN(gross) || gross === 0) {
+            gross = findReceiptFeeForCustomer(cleanRider, cleanCust, date);
+        }
+
+        const dedupKey = ch.transactionId || ch.id || `${cleanRider}_${cleanCust}_${date}_${time}`;
+
+        if (gross > 0 && !mergedMap.has(dedupKey)) {
+            let matchedInMap = false;
+            for (let [k, val] of mergedMap.entries()) {
+                if (val.riderName.toLowerCase().trim() === cleanRider && 
+                    val.customerName.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust && 
+                    isSameDate(val.date, date)) {
+                    matchedInMap = true;
+                    break;
+                }
+            }
+
+            if (!matchedInMap) {
+                mergedMap.set(dedupKey, {
+                    transactionId: ch.transactionId || ch.id || dedupKey,
+                    telegramId: ch.telegramId || ch.riderId,
+                    riderName: ch.riderName || "Rider",
+                    customerName: ch.customerName || "Customer",
+                    date: date,
+                    time: time,
+                    startTime: ch.startTime || "",
+                    completedTime: ch.completedTime || "",
+                    duration: ch.duration || "",
+                    totalFees: gross,
+                    isReceipt: false
+                });
+            }
+        }
+    });
+
+    return Array.from(mergedMap.values());
+}
+
+// 100% UNIFIED RIDER GROSS (EXACT ALIGNMENT WITH COMMISSION VIEW)
 export function getRiderTodayGross(riderName, telegramId) {
     const todayStr = getLocalTodayStr();
     const rName = (riderName || "").trim().toLowerCase();
     const tId = (telegramId || "").toString().trim();
 
-    let totalGross = 0;
-    const countedTx = new Set();
+    if (!rName && !tId) return 0;
 
-    if (globalState.globalDailyReceipts) {
-        globalState.globalDailyReceipts.forEach(rc => {
-            if (!rc) return;
-            const rcDate = rc.date || rc.completedDate;
-            if (!isSameDate(rcDate, todayStr)) return;
-
-            const rcRiderName = (rc.riderName || "").trim().toLowerCase();
-            const rcTelegramId = (rc.telegramId || "").toString().trim();
-
-            const isMatch = (tId && rcTelegramId && tId === rcTelegramId) || (rName && rcRiderName && rName === rcRiderName);
-            if (isMatch) {
-                const txId = rc.transactionId || `${rcRiderName}_${rc.customerName}_${rc.totalFees}_${rcDate}`;
-                if (!countedTx.has(txId)) {
-                    countedTx.add(txId);
-                    totalGross += (parseFloat(rc.totalFees) || 0);
-                }
-            }
-        });
+    // 1. Primary: Pre-aggregated daily summaries ledger
+    if (globalState.dailyRiderSummaries && globalState.dailyRiderSummaries[todayStr]) {
+        const dayMap = globalState.dailyRiderSummaries[todayStr];
+        if (tId && dayMap[tId] && dayMap[tId].grossIncome !== undefined) {
+            return parseFloat(dayMap[tId].grossIncome) || 0;
+        }
+        if (rName && dayMap[rName] && dayMap[rName].grossIncome !== undefined) {
+            return parseFloat(dayMap[rName].grossIncome) || 0;
+        }
     }
 
-    if (globalState.globalCateredHistory) {
-        globalState.globalCateredHistory.forEach(ch => {
-            if (!ch) return;
-            const chDate = ch.completedDate || ch.date;
-            if (!isSameDate(chDate, todayStr)) return;
+    // 2. Direct Single Source of Truth from Unified Commission Dataset
+    const mergedList = getMergedDeduplicatedCommissionList();
+    let total = 0;
 
-            const chRiderName = (ch.riderName || "").trim().toLowerCase();
-            const chTelegramId = (ch.telegramId || "").toString().trim();
+    mergedList.forEach(rec => {
+        const recDate = rec.date || getLocalTodayStr();
+        if (!isSameDate(recDate, todayStr)) return;
 
-            const isMatch = (tId && chTelegramId && tId === chTelegramId) || (rName && chRiderName && rName === chRiderName);
-            if (isMatch) {
-                const txId = ch.transactionId || `${chRiderName}_${ch.customerName}_${ch.totalFees}_${chDate}`;
-                if (!countedTx.has(txId)) {
-                    countedTx.add(txId);
-                    totalGross += (parseFloat(ch.totalFees) || 0);
-                }
-            }
-        });
-    }
+        let recId = (rec.telegramId || "").toString().trim();
+        const recName = (rec.riderName || "").trim().toLowerCase();
 
-    return totalGross;
+        if (!recId) {
+            const rosterRec = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").toLowerCase() === recName);
+            if (rosterRec && rosterRec.telegramId) recId = rosterRec.telegramId.toString().trim();
+            else recId = recName;
+        }
+
+        const matchId = tId && recId && tId === recId;
+        const matchName = rName && recName && rName === recName;
+
+        if (matchId || matchName) {
+            total += (parseFloat(rec.totalFees) || 0);
+        }
+    });
+
+    return total;
 }
 
 export function sortAvailableRidersByGross(availableList) {
@@ -204,15 +344,13 @@ export function sortAvailableRidersByGross(availableList) {
         const grossB = getRiderTodayGross(b.riderName || b.name, b.telegramId);
 
         if (grossA !== grossB) {
-            return grossA - grossB; // Lowest gross income first (Ascending)
+            return grossA - grossB;
         }
 
-        // Tie-breaker: FIFO queueTime (earlier queue time first)
         return parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime);
     });
 }
 
-// ROBUST ARCHIVING WITH RECEIPT LOOKUP FALLBACK
 export async function archiveRiderCateringIfNeeded(targetRecord) {
     if (!targetRecord || targetRecord.status !== 'Catering' || !targetRecord.customerName) return;
 
@@ -223,6 +361,7 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
     const tId = (targetRecord.telegramId || "").toString().trim();
     const tName = targetRecord.riderName || targetRecord.name || "Rider";
     const todayStr = getLocalTodayStr();
+    const todayClean = todayStr.replace(/-/g, '');
 
     if (db && custs.length > 0) {
         db.ref('customerChats').once('value', (snapshot) => {
@@ -260,15 +399,21 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
     for (let i = 0; i < custs.length; i++) {
         const cName = custs[i];
         const cleanCustKey = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanRiderKey = tName.toLowerCase().replace(/[^a-z0-9]/g, '');
         const sTime = times[i] || times[0] || 'N/A';
+        const cleanTimeKey = sTime.replace(/[^a-z0-9]/gi, '');
         const splitDuration = calculateSplitDuration(sTime, completedTimeStr, custCount);
 
         let finalFees = 0;
         let finalFeeDetails = null;
+        let targetTxId = `RCPT_${cleanRiderKey}_${cleanCustKey}_${todayClean}_${cleanTimeKey || '1'}`;
 
         if (targetRecord.customerFees && cleanCustKey && targetRecord.customerFees[cleanCustKey]) {
             finalFees = parseFloat(targetRecord.customerFees[cleanCustKey].totalFees) || 0;
             finalFeeDetails = targetRecord.customerFees[cleanCustKey].fees || null;
+            if (targetRecord.customerFees[cleanCustKey].transactionId) {
+                targetTxId = targetRecord.customerFees[cleanCustKey].transactionId;
+            }
         }
 
         if (finalFees <= 0 && globalState.globalDailyReceipts) {
@@ -283,6 +428,7 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             if (matchReceipt) {
                 finalFees = parseFloat(matchReceipt.totalFees) || 0;
                 finalFeeDetails = matchReceipt.fees || null;
+                targetTxId = matchReceipt.transactionId || matchReceipt.id || targetTxId;
             }
         }
 
@@ -298,6 +444,7 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             if (fbMatch) {
                 finalFees = parseFloat(fbMatch.totalFees) || 0;
                 finalFeeDetails = fbMatch.fees || null;
+                targetTxId = fbMatch.transactionId || fbMatch.id || targetTxId;
             }
         }
 
@@ -306,23 +453,46 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             finalFeeDetails = targetRecord.lastReceiptFees || null;
         }
 
-        const hItem = {
-            riderName: tName,
-            telegramId: tId,
-            customerName: cName,
-            startTime: sTime,
-            completedTime: completedTimeStr,
-            completedDate: todayStr,
-            customerCount: custCount,
-            duration: splitDuration,
-            totalFees: finalFees,
-            fees: finalFeeDetails
-        };
+        const cleanSTime = (sTime || '').trim().toLowerCase();
+        const alreadyInHistory = (globalState.globalCateredHistory || []).some(h => {
+            if (!h) return false;
+            const hTxId = (h.transactionId || h.id || "").toString();
+            if (targetTxId && hTxId === targetTxId) return true;
 
-        if (db) db.ref('cateredHistory').push(hItem);
+            const hRider = (h.riderName || "").trim().toLowerCase();
+            const hCust = (h.customerName || "").trim().toLowerCase();
+            const hDate = h.completedDate || h.date;
+            const hSTime = (h.startTime || "").trim().toLowerCase();
 
-        if (!globalState.globalCateredHistory) globalState.globalCateredHistory = [];
-        globalState.globalCateredHistory.push(hItem);
+            const isSameRider = hRider === cleanRiderKey || hRider === tName.toLowerCase();
+            const isSameCustomer = hCust === cleanCustKey || hCust === cName.toLowerCase();
+            const isDateMatch = isSameDate(hDate, todayStr);
+            const isTimeMatch = !cleanSTime || cleanSTime === 'n/a' || !hSTime || hSTime === 'n/a' || hSTime === cleanSTime;
+
+            return isSameRider && isSameCustomer && isDateMatch && isTimeMatch;
+        });
+
+        if (!alreadyInHistory) {
+            const hItem = {
+                id: targetTxId,
+                transactionId: targetTxId,
+                riderName: tName,
+                telegramId: tId,
+                customerName: cName,
+                startTime: sTime,
+                completedTime: completedTimeStr,
+                completedDate: todayStr,
+                customerCount: custCount,
+                duration: splitDuration,
+                totalFees: finalFees,
+                fees: finalFeeDetails
+            };
+
+            if (db) db.ref(`cateredHistory/${targetTxId}`).set(hItem);
+
+            if (!globalState.globalCateredHistory) globalState.globalCateredHistory = [];
+            globalState.globalCateredHistory.push(hItem);
+        }
     }
 
     if (db && tId) {

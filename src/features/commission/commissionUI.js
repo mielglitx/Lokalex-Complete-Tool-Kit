@@ -3,7 +3,7 @@ import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { getLocalTodayStr, copyText, getWeekString, getMonthString, escapeHtml } from '../../utils/helpers.js';
 import { switchView } from '../../ui/router.js';
-import { isAdmin as checkIsAdmin } from '../roster/rosterUtils.js';
+import { isAdmin as checkIsAdmin, getMergedDeduplicatedCommissionList } from '../roster/rosterUtils.js';
 import { getCommissionRates, fetchCommissionSettings } from './commissionRates.js';
 
 export let viewSettings = {
@@ -106,113 +106,6 @@ export function setCommissionPeriod(period) {
     });
 
     refreshCommissionView();
-}
-
-export function findReceiptFeeForCustomer(rName, cName, rDate) {
-    const cleanRider = (rName || "").toLowerCase().trim();
-    const cleanCust = (cName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-
-    const receipts = globalState.globalDailyReceipts || [];
-    for (let rc of receipts) {
-        const rcRider = (rc.riderName || "").toLowerCase().trim();
-        const rcCust = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-        const rcDate = rc.date || rc.completedDate;
-
-        if (rcRider === cleanRider && rcCust === cleanCust && rcDate === rDate) {
-            let gross = parseFloat(rc.totalFees);
-            if (!isNaN(gross) && gross > 0) return gross;
-        }
-    }
-    return 0;
-}
-
-export function getMergedDeduplicatedCommissionList() {
-    const mergedMap = new Map();
-
-    (globalState.globalDailyReceipts || []).forEach(rc => {
-        const cleanRider = (rc.riderName || "").toLowerCase().trim();
-        const cleanCust = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-        const date = rc.date || rc.completedDate || getLocalTodayStr();
-        const time = rc.cateringStartTime || rc.startTime || "";
-        const txId = rc.transactionId || `${cleanRider}_${cleanCust}_${date}_${time}`;
-
-        let gross = parseFloat(rc.totalFees);
-        if (isNaN(gross) || gross === 0) {
-            let f = rc.fees;
-            if (typeof f === 'string') {
-                try { f = JSON.parse(f); } catch(e) { f = null; }
-            }
-            if (f) {
-                const hf = parseFloat(f.handling) || 0;
-                const mf = parseFloat(f.market) || 0;
-                const ms = parseFloat(f.multistore || f.multistop) || 0;
-                const rdf = parseFloat(f.delivery) || 0;
-                const epay = parseFloat(f.epaymentFee) || 0;
-                const disc = parseFloat(f.discount) || 0;
-                gross = hf + mf + ms + rdf + epay - disc;
-            } else {
-                gross = 0;
-            }
-        }
-
-        const dedupKey = txId || `${cleanRider}_${cleanCust}_${date}_${time}`;
-        if (!mergedMap.has(dedupKey) || (mergedMap.get(dedupKey).totalFees < gross)) {
-            mergedMap.set(dedupKey, {
-                transactionId: txId,
-                telegramId: rc.telegramId || rc.riderId,
-                riderName: rc.riderName || "Rider",
-                customerName: rc.customerName || "Customer",
-                date: date,
-                time: time,
-                totalFees: gross,
-                isReceipt: true
-            });
-        }
-    });
-
-    (globalState.globalCateredHistory || []).forEach(ch => {
-        const cleanRider = (ch.riderName || "").toLowerCase().trim();
-        const cleanCust = (ch.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-        const date = ch.completedDate || ch.date || getLocalTodayStr();
-        const time = ch.startTime || ch.completedTime || "";
-
-        let gross = parseFloat(ch.totalFees);
-        if (isNaN(gross) || gross === 0) {
-            gross = findReceiptFeeForCustomer(cleanRider, cleanCust, date);
-        }
-
-        const dedupKey = ch.transactionId || `${cleanRider}_${cleanCust}_${date}_${time}`;
-
-        if (gross > 0 && !mergedMap.has(dedupKey)) {
-            let matchedInMap = false;
-            for (let [k, val] of mergedMap.entries()) {
-                if (val.riderName.toLowerCase().trim() === cleanRider && 
-                    val.customerName.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust && 
-                    val.date === date) {
-                    matchedInMap = true;
-                    break;
-                }
-            }
-
-            if (!matchedInMap) {
-                mergedMap.set(dedupKey, {
-                    transactionId: ch.transactionId || dedupKey,
-                    telegramId: ch.telegramId || ch.riderId,
-                    riderName: ch.riderName || "Rider",
-                    customerName: ch.customerName || "Customer",
-                    date: date,
-                    time: time,
-                    startTime: ch.startTime || "",
-                    completedTime: ch.completedTime || "",
-                    duration: ch.duration || "",
-                    totalFees: gross,
-                    isReceipt: false
-                });
-            }
-        }
-    });
-
-    return Array.from(mergedMap.values());
 }
 
 export function refreshCommissionView() {
@@ -642,5 +535,17 @@ export async function openCommissionScreen() {
 
     setupAdminControls();
     await fetchCommissionSettings();
+
+    // Listen to pre-aggregated daily summaries
+    if (db) {
+        const todayStr = getLocalTodayStr();
+        db.ref(`daily_rider_summaries/${todayStr}`).on('value', (snap) => {
+            if (!globalState.dailyRiderSummaries) globalState.dailyRiderSummaries = {};
+            globalState.dailyRiderSummaries[todayStr] = snap.val() || {};
+            refreshCommissionView();
+            window.dispatchEvent(new CustomEvent('rosterUpdated'));
+        });
+    }
+
     refreshCommissionView();
 }

@@ -238,76 +238,105 @@ export async function adminVoidSpecificCustomer(targetId, targetName, custNameTo
     });
 }
 
-// ADMIN VOID COMPLETED CATERED RECORD
-export function promptVoidCustomer(riderName, customerName, completedDate = "", startTime = "") {
+// ADMIN VOID COMPLETED CATERED RECORD & DUAL LOGGING REMOVAL
+export function promptVoidCustomer(riderName, customerName, completedDate = "", startTime = "", transactionId = "") {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
     openSlideDeleteModal(
         `Void Catered Record?`,
         `Sigurado ka bang nais mong burahin ang record ni [${customerName}] na inihatid ni ${riderName}?`,
         async () => {
-            await executeVoidCateredCustomer(riderName, customerName, completedDate, startTime);
+            await executeVoidCateredCustomer(riderName, customerName, completedDate, startTime, transactionId);
         }
     );
 }
 
-export async function executeVoidCateredCustomer(riderName, customerName, completedDate = "", startTime = "") {
+export async function executeVoidCateredCustomer(riderName, customerName, completedDate = "", startTime = "", transactionId = "") {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+
+    const cleanRider = (riderName || "").trim().toLowerCase();
+    const cleanCust = (customerName || "").trim().toLowerCase();
+    const cleanCustKey = cleanCust.replace(/[^a-z0-9]/g, '');
 
     try {
         if (db) {
+            // 1. Direct removal by transactionId if provided
+            if (transactionId) {
+                await db.ref(`cateredHistory/${transactionId}`).remove().catch(() => {});
+                await db.ref(`receipts/${transactionId}`).remove().catch(() => {});
+            }
+
+            // 2. Comprehensive cleanup of matching cateredHistory records
             const snap = await db.ref('cateredHistory').once('value');
             const data = snap.val() || {};
-            
-            let targetKey = null;
-            const entries = Object.entries(data);
+            const deletePromises = [];
 
-            for (let i = entries.length - 1; i >= 0; i--) {
-                const [k, v] = entries[i];
-                const rMatch = (v.riderName || "").trim().toLowerCase() === (riderName || "").trim().toLowerCase();
-                const cMatch = (v.customerName || "").trim().toLowerCase() === (customerName || "").trim().toLowerCase();
-                const dMatch = !completedDate || isSameDate(v.completedDate, completedDate);
+            Object.entries(data).forEach(([key, v]) => {
+                const rMatch = (v.riderName || "").trim().toLowerCase() === cleanRider;
+                const cMatch = (v.customerName || "").trim().toLowerCase() === cleanCust;
+                const dMatch = !completedDate || isSameDate(v.completedDate || v.date, completedDate);
                 const sMatch = !startTime || (v.startTime || "").trim() === startTime.trim();
+                const txMatch = transactionId && (v.transactionId === transactionId || v.id === transactionId || key === transactionId);
 
-                if (rMatch && cMatch && dMatch && sMatch) {
-                    targetKey = k;
-                    break;
+                if (txMatch || (rMatch && cMatch && (dMatch || sMatch))) {
+                    deletePromises.push(db.ref(`cateredHistory/${key}`).remove());
                 }
-            }
+            });
 
-            if (!targetKey) {
-                for (let i = entries.length - 1; i >= 0; i--) {
-                    const [k, v] = entries[i];
-                    const rMatch = (v.riderName || "").trim().toLowerCase() === (riderName || "").trim().toLowerCase();
-                    const cMatch = (v.customerName || "").trim().toLowerCase() === (customerName || "").trim().toLowerCase();
-                    const dMatch = !completedDate || isSameDate(v.completedDate, completedDate);
+            // 3. Comprehensive cleanup of matching receipts
+            const rcptSnap = await db.ref('receipts').once('value');
+            const rcptData = rcptSnap.val() || {};
+            Object.entries(rcptData).forEach(([key, r]) => {
+                const rMatch = (r.riderName || "").trim().toLowerCase() === cleanRider;
+                const cMatch = (r.customerName || "").trim().toLowerCase() === cleanCust;
+                const dMatch = !completedDate || isSameDate(r.date || r.completedDate, completedDate);
+                const txMatch = transactionId && (r.transactionId === transactionId || key === transactionId);
 
-                    if (rMatch && cMatch && dMatch) {
-                        targetKey = k;
-                        break;
-                    }
+                if (txMatch || (rMatch && cMatch && dMatch)) {
+                    deletePromises.push(db.ref(`receipts/${key}`).remove());
                 }
+            });
+
+            // 4. Remove from active roster customerFees
+            const targetRoster = (globalState.rosterMembers || []).find(m => (m.riderName || m.name || "").trim().toLowerCase() === cleanRider);
+            if (targetRoster && (targetRoster.telegramId || targetRoster.id) && cleanCustKey) {
+                const tId = targetRoster.telegramId || targetRoster.id;
+                deletePromises.push(db.ref(`roster/${tId}/customerFees/${cleanCustKey}`).remove());
             }
 
-            if (targetKey) {
-                await db.ref(`cateredHistory/${targetKey}`).remove();
-            }
+            await Promise.all(deletePromises);
         }
 
+        // 5. In-memory array filtering
         if (globalState.globalCateredHistory) {
-            const idx = globalState.globalCateredHistory.findIndex(h => 
-                (h.riderName || "").trim().toLowerCase() === (riderName || "").trim().toLowerCase() &&
-                (h.customerName || "").trim().toLowerCase() === (customerName || "").trim().toLowerCase() &&
-                (!completedDate || isSameDate(h.completedDate, completedDate))
-            );
-            if (idx !== -1) {
-                globalState.globalCateredHistory.splice(idx, 1);
-            }
+            globalState.globalCateredHistory = globalState.globalCateredHistory.filter(h => {
+                const txMatch = transactionId && (h.transactionId === transactionId || h.id === transactionId);
+                const match = (h.riderName || "").trim().toLowerCase() === cleanRider &&
+                              (h.customerName || "").trim().toLowerCase() === cleanCust &&
+                              (!completedDate || isSameDate(h.completedDate || h.date, completedDate));
+                return !(txMatch || match);
+            });
+        }
+
+        if (globalState.globalDailyReceipts) {
+            globalState.globalDailyReceipts = globalState.globalDailyReceipts.filter(r => {
+                const txMatch = transactionId && (r.transactionId === transactionId || r.id === transactionId);
+                const match = (r.riderName || "").trim().toLowerCase() === cleanRider &&
+                              (r.customerName || "").trim().toLowerCase() === cleanCust &&
+                              (!completedDate || isSameDate(r.date || r.completedDate, completedDate));
+                return !(txMatch || match);
+            });
         }
 
         saveRosterCache();
         if (typeof window.loadGlobalCateredList === 'function') {
             window.loadGlobalCateredList();
+        }
+        if (typeof window.updateRosterUI === 'function') {
+            window.updateRosterUI();
+        }
+        if (typeof window.refreshCommissionView === 'function') {
+            window.refreshCommissionView();
         }
 
         showToast(`🗑️ Voided catered record for ${customerName}.`);
@@ -320,7 +349,7 @@ export async function executeVoidCateredCustomer(riderName, customerName, comple
 
 export function adminShiftRiderQueue(riderId, moveAction) {
     if (!canManageRoster()) {
-        return showToast("⚠️ Unauthorized: Admin or TL access required.");
+        return showToast("⚠️ Unauthorized: Admin access required.");
     }
 
     const availableRiders = globalState.rosterMembers ? globalState.rosterMembers.filter(m => m.status === 'Available').sort((a,b) => parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime)) : [];
@@ -349,7 +378,7 @@ export function adminShiftRiderQueue(riderId, moveAction) {
 
 export async function forceAllEndShift() {
     if (!canManageRoster()) {
-        return showToast("⚠️ Unauthorized: Admin or TL access required.");
+        return showToast("⚠️ Unauthorized: Admin access required.");
     }
 
     openSlideDeleteModal("Sigurado ka bang nais mong i-force end shift ang lahat ng riders?", async () => {
@@ -1284,12 +1313,11 @@ export async function checkAndTriggerAutoEndShift() {
         const currentTotalMins = currentHour * 60 + currentMinute;
         const targetTotalMins = targetHour * 60 + targetMinute;
 
-        // Trigger if current clock time is equal to or past the scheduled minute
         if (currentTotalMins >= targetTotalMins) {
             let committed = false;
             await db.ref('settings/autoEndShift/lastTriggeredDate').transaction((current) => {
                 if (current === todayStr) {
-                    return; // Already triggered by another client today
+                    return;
                 }
                 committed = true;
                 return todayStr;
@@ -1325,7 +1353,6 @@ export async function executeAutoEndShift() {
 
         await archiveRiderCateringIfNeeded(m);
 
-        // Update individual rider nodes directly to prevent root multi-path permission errors
         if (db) {
             db.ref('roster/' + rId).update({
                 status: 'End',

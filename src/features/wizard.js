@@ -1,11 +1,11 @@
 // src/features/wizard.js
 import { appState, globalState, wizState } from '../store/state.js';
 import { db } from '../config/firebase.js';
-import { getLocalTodayStr, copyText, escapeHtml } from '../utils/helpers.js';
+import { getLocalTodayStr, copyText, escapeHtml, isSameDate } from '../utils/helpers.js';
 import { showToast, showSideNotification } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
 import { saveCartState, getCurrentCart, clearCartSlot, getEffectiveCartClient, renderCartItems, renderCartTabs } from './cart.js';
-import { getActiveCateringCustomersWithTimes } from './roster/index.js';
+import { getActiveCateringCustomersWithTimes, saveRosterCache, updateRosterUI } from './roster/index.js';
 
 let currentReceiptTransactionId = "";
 
@@ -139,7 +139,6 @@ export function adjustStoreCount(delta) {
     calculateGrandTotal();
 }
 
-// TOGGLE DISCOUNT MODE (FIXED AMOUNT VS PERCENTAGE)
 export function toggleDiscountType(type) {
     if (type) {
         wizState.discountType = type;
@@ -193,11 +192,8 @@ export function calculateGrandTotal() {
     }
 
     const subtotal = Math.max(0, wizState.subtotal || 0);
-
-    // 1. Calculate the total of all service and delivery fees strictly (excluding items)
     const totalFeesBeforeDiscount = hFee + mFee + multistop + dFee;
 
-    // 2. Apply discount strictly against the fees
     let calculatedDiscount = 0;
     if (wizState.discountType === 'percent') {
         calculatedDiscount = (totalFeesBeforeDiscount * Math.min(100, rawDiscountInput)) / 100;
@@ -205,10 +201,8 @@ export function calculateGrandTotal() {
         calculatedDiscount = rawDiscountInput;
     }
 
-    // Cap the discount so it cannot exceed total fees
     calculatedDiscount = Math.min(totalFeesBeforeDiscount, Math.max(0, calculatedDiscount));
 
-    // 3. Compute Net Fees and Grand COD Total
     const netFees = Math.max(0, totalFeesBeforeDiscount - calculatedDiscount);
     let codTotal = Math.max(0, subtotal + netFees);
 
@@ -293,21 +287,22 @@ async function saveReceiptToDatabase(customerName) {
         return;
     }
 
-    const cName = customerName.trim().toLowerCase();
-    const cleanCustKey = cName.replace(/[^a-z0-9]/g, '');
-    const rName = (appState.riderName || "").trim().toLowerCase();
-    const cleanRiderKey = rName.replace(/[^a-z0-9]/g, '');
+    const cName = customerName.trim();
+    const cleanCustKey = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const rName = (appState.riderName || "").trim();
+    const cleanRiderKey = rName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const todayStr = getLocalTodayStr();
     const todayClean = todayStr.replace(/-/g, '');
+    const currentTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const activeCustList = getActiveCateringCustomersWithTimes();
-    const match = activeCustList.find(i => i.name.trim().toLowerCase() === cName);
-    const sTime = match ? match.startTime.trim() : "";
+    const match = activeCustList.find(i => i.name.trim().toLowerCase() === cName.toLowerCase());
+    const sTime = match ? match.startTime.trim() : currentTimeStr;
     const cleanTimeKey = sTime.replace(/[^a-z0-9]/gi, '');
 
-    const sessionKey = `receipt_done_${rName}_${cName}_${sTime}_${todayStr}`;
+    const sessionKey = `receipt_done_${cleanRiderKey}_${cleanCustKey}_${sTime}_${todayStr}`;
     localStorage.setItem(sessionKey, 'true');
-    localStorage.setItem(`receipt_done_${rName}_${cName}_${todayStr}`, 'true');
+    localStorage.setItem(`receipt_done_${cleanRiderKey}_${cleanCustKey}_${todayStr}`, 'true');
 
     const totalFees = Math.max(0, (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0));
 
@@ -317,12 +312,14 @@ async function saveReceiptToDatabase(customerName) {
     if (!globalState.cartTxIds) globalState.cartTxIds = ["", "", "", ""];
     globalState.cartTxIds[activeCartIdx] = currentReceiptTransactionId;
 
-    const payload = {
+    const receiptPayload = {
+        id: currentReceiptTransactionId,
+        key: currentReceiptTransactionId,
         type: "receipts",
         transactionId: currentReceiptTransactionId,
-        telegramId: appState.telegramId || "",
-        riderName: appState.riderName || "",
-        customerName: customerName,
+        telegramId: (appState.telegramId || "").toString().trim(),
+        riderName: rName,
+        customerName: cName,
         cateringStartTime: sTime,
         fees: {
             handling: wizState.finalHFee || 0,
@@ -337,25 +334,104 @@ async function saveReceiptToDatabase(customerName) {
         date: todayStr
     };
 
-    try {
-        if (currentReceiptTransactionId && db) {
-            db.ref('receipts/' + currentReceiptTransactionId).set(payload);
-        }
-        if (appState.telegramId && db) {
-            db.ref('roster/' + appState.telegramId).update({
-                lastReceiptFees: payload.fees,
-                lastReceiptTotalFees: totalFees
-            });
+    const cateredHistoryItem = {
+        id: currentReceiptTransactionId,
+        key: currentReceiptTransactionId,
+        transactionId: currentReceiptTransactionId,
+        riderName: rName,
+        telegramId: (appState.telegramId || "").toString().trim(),
+        customerName: cName,
+        startTime: sTime,
+        completedTime: currentTimeStr,
+        completedDate: todayStr,
+        customerCount: activeCustList.length || 1,
+        duration: "Just now",
+        totalFees: totalFees,
+        fees: receiptPayload.fees
+    };
 
-            if (cleanCustKey) {
-                db.ref(`roster/${appState.telegramId}/customerFees/${cleanCustKey}`).set({
-                    customerName: customerName,
-                    totalFees: totalFees,
-                    fees: payload.fees,
-                    transactionId: currentReceiptTransactionId
+    try {
+        if (db) {
+            // 1. Save receipt record immediately
+            await db.ref('receipts/' + currentReceiptTransactionId).set(receiptPayload);
+
+            // 2. Save catered history record immediately
+            await db.ref('cateredHistory/' + currentReceiptTransactionId).set(cateredHistoryItem);
+
+            // 3. Update active roster record fees
+            if (appState.telegramId) {
+                db.ref('roster/' + appState.telegramId).update({
+                    lastReceiptFees: receiptPayload.fees,
+                    lastReceiptTotalFees: totalFees
+                });
+
+                if (cleanCustKey) {
+                    db.ref(`roster/${appState.telegramId}/customerFees/${cleanCustKey}`).set({
+                        customerName: cName,
+                        totalFees: totalFees,
+                        fees: receiptPayload.fees,
+                        transactionId: currentReceiptTransactionId
+                    });
+                }
+            }
+
+            // 4. Atomic Daily Summary Ledger Node Update
+            const targetSummaryId = (appState.telegramId || cleanRiderKey).toString().trim();
+            if (targetSummaryId) {
+                const summaryRef = db.ref(`daily_rider_summaries/${todayStr}/${targetSummaryId}`);
+                await summaryRef.transaction((current) => {
+                    const handling = wizState.finalHFee || 0;
+                    const market = wizState.finalMFee || 0;
+                    const multistore = wizState.finalMulti || 0;
+                    const delivery = wizState.deliveryFee || 0;
+                    const discount = wizState.discount || 0;
+
+                    if (!current) {
+                        return {
+                            riderName: rName,
+                            grossIncome: totalFees,
+                            deliveryFees: delivery,
+                            handlingFees: handling,
+                            marketFees: market,
+                            multistoreFees: multistore,
+                            discounts: discount,
+                            completedReceipts: 1,
+                            updatedAt: Date.now()
+                        };
+                    }
+
+                    return {
+                        riderName: rName || current.riderName || "",
+                        grossIncome: (Number(current.grossIncome) || 0) + totalFees,
+                        deliveryFees: (Number(current.deliveryFees) || 0) + delivery,
+                        handlingFees: (Number(current.handlingFees) || 0) + handling,
+                        marketFees: (Number(current.marketFees) || 0) + market,
+                        multistoreFees: (Number(current.multistoreFees) || 0) + multistore,
+                        discounts: (Number(current.discounts) || 0) + discount,
+                        completedReceipts: (Number(current.completedReceipts) || 0) + 1,
+                        updatedAt: Date.now()
+                    };
                 });
             }
         }
+
+        // 5. Update in-memory state immediately so gross and history reflect without waiting
+        if (!globalState.globalDailyReceipts) globalState.globalDailyReceipts = [];
+        const rIdx = globalState.globalDailyReceipts.findIndex(r => (r.transactionId === currentReceiptTransactionId || r.id === currentReceiptTransactionId));
+        if (rIdx !== -1) globalState.globalDailyReceipts[rIdx] = receiptPayload;
+        else globalState.globalDailyReceipts.push(receiptPayload);
+
+        if (!globalState.globalCateredHistory) globalState.globalCateredHistory = [];
+        const cIdx = globalState.globalCateredHistory.findIndex(h => (h.transactionId === currentReceiptTransactionId || h.id === currentReceiptTransactionId));
+        if (cIdx !== -1) globalState.globalCateredHistory[cIdx] = cateredHistoryItem;
+        else globalState.globalCateredHistory.push(cateredHistoryItem);
+
+        saveRosterCache();
+        updateRosterUI();
+
+        window.dispatchEvent(new CustomEvent('cateredUpdated'));
+        window.dispatchEvent(new CustomEvent('receiptsUpdated'));
+        window.dispatchEvent(new CustomEvent('rosterUpdated'));
     } catch (e) {
         console.error("Firebase write error:", e);
     }
