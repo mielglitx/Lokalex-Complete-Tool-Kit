@@ -14,13 +14,17 @@ export function setLineAlarmConfirmed(val) {
 
 const ROSTER_CACHE_KEY = 'lokalex_roster_cache';
 const LOGINS_CACHE_KEY = 'lokalex_logins_cache';
-const CATERED_CACHE_KEY = 'lokalex_catered_cache';
+const CATERED_CACHE_KEY = 'lokalex_catered_cache_v2';
+const RECEIPTS_CACHE_KEY = 'lokalex_receipts_cache_v2';
 
 export function saveRosterCache() {
     try {
         localStorage.setItem(ROSTER_CACHE_KEY, JSON.stringify(globalState.rosterMembers || []));
         localStorage.setItem(LOGINS_CACHE_KEY, JSON.stringify(globalState.globalLogins || []));
         localStorage.setItem(CATERED_CACHE_KEY, JSON.stringify(globalState.globalCateredHistory || []));
+        if (globalState.globalDailyReceipts) {
+            localStorage.setItem(RECEIPTS_CACHE_KEY, JSON.stringify(globalState.globalDailyReceipts));
+        }
     } catch(e) {}
 }
 
@@ -34,12 +38,19 @@ export function loadRosterCache() {
         if (savedLogins && (!globalState.globalLogins || globalState.globalLogins.length === 0)) {
             globalState.globalLogins = JSON.parse(savedLogins);
         }
-        const savedCatered = localStorage.getItem(CATERED_CACHE_KEY);
+        const savedCatered = localStorage.getItem(CATERED_CACHE_KEY) || localStorage.getItem('lokalex_catered_cache');
         if (savedCatered && (!globalState.globalCateredHistory || globalState.globalCateredHistory.length === 0)) {
             globalState.globalCateredHistory = JSON.parse(savedCatered);
         }
+        const savedReceipts = localStorage.getItem(RECEIPTS_CACHE_KEY);
+        if (savedReceipts && (!globalState.globalDailyReceipts || globalState.globalDailyReceipts.length === 0)) {
+            globalState.globalDailyReceipts = JSON.parse(savedReceipts);
+        }
     } catch(e) {}
 }
+
+// Ensure cache is loaded immediately
+loadRosterCache();
 
 export function getUserType() {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
@@ -144,95 +155,95 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     return durationText;
 }
 
+// 100% UNIFIED RIDER GROSS (EXACT ALIGNMENT WITH COMMISSION VIEW)
 export function getRiderTodayGross(riderName, telegramId) {
     const todayStr = getLocalTodayStr();
     const rName = (riderName || "").trim().toLowerCase();
     const tId = (telegramId || "").toString().trim();
 
-    const dedupMap = new Map();
-
-    // 1. Process Receipts (source of truth for settled fees)
-    if (globalState.globalDailyReceipts) {
-        globalState.globalDailyReceipts.forEach(rc => {
-            if (!rc) return;
-            const rcDate = rc.date || rc.completedDate || todayStr;
-            if (!isSameDate(rcDate, todayStr)) return;
-
-            const rcRiderName = (rc.riderName || "").trim().toLowerCase();
-            const rcTelegramId = (rc.telegramId || "").toString().trim();
-
-            const isMatch = (tId && rcTelegramId && tId === rcTelegramId) || (rName && rcRiderName && rName === rcRiderName);
-            if (!isMatch) return;
-
-            let gross = parseFloat(rc.totalFees) || 0;
-            if (gross === 0 && rc.fees) {
-                let f = rc.fees;
-                if (typeof f === 'string') {
-                    try { f = JSON.parse(f); } catch(e) { f = null; }
-                }
-                if (f) {
-                    gross = (parseFloat(f.delivery) || 0) + 
-                            (parseFloat(f.handling) || 0) + 
-                            (parseFloat(f.market) || 0) + 
-                            (parseFloat(f.multistore || f.multistop) || 0) + 
-                            (parseFloat(f.epaymentFee) || 0) - 
-                            (parseFloat(f.discount) || 0);
-                }
-            }
-
-            const cleanCust = (rc.customerName || "Customer").toLowerCase().replace(/[^a-z0-9]/g, '');
-            const timeKey = (rc.cateringStartTime || rc.startTime || "").trim().toLowerCase();
-            const dedupKey = `${cleanCust}_${rcDate}_${timeKey || rc.transactionId || rc.id || '1'}`;
-
-            if (!dedupMap.has(dedupKey) || dedupMap.get(dedupKey) < gross) {
-                dedupMap.set(dedupKey, gross);
-            }
-        });
-    }
-
-    // 2. Process Catered History without double-counting settled receipts
-    if (globalState.globalCateredHistory) {
-        globalState.globalCateredHistory.forEach(ch => {
-            if (!ch) return;
-            const chDate = ch.completedDate || ch.date || todayStr;
-            if (!isSameDate(chDate, todayStr)) return;
-
-            const chRiderName = (ch.riderName || "").trim().toLowerCase();
-            const chTelegramId = (ch.telegramId || "").toString().trim();
-
-            const isMatch = (tId && chTelegramId && tId === chTelegramId) || (rName && chRiderName && rName === chRiderName);
-            if (!isMatch) return;
-
-            const cleanCust = (ch.customerName || "Customer").toLowerCase().replace(/[^a-z0-9]/g, '');
-            const timeKey = (ch.startTime || ch.completedTime || "").trim().toLowerCase();
-            const dedupKey = `${cleanCust}_${chDate}_${timeKey || ch.transactionId || ch.id || '1'}`;
-
-            if (!dedupMap.has(dedupKey)) {
-                let gross = parseFloat(ch.totalFees) || 0;
-                if (gross === 0 && ch.fees) {
-                    let f = ch.fees;
-                    if (typeof f === 'string') {
-                        try { f = JSON.parse(f); } catch(e) { f = null; }
-                    }
-                    if (f) {
-                        gross = (parseFloat(f.delivery) || 0) + 
-                                (parseFloat(f.handling) || 0) + 
-                                (parseFloat(f.market) || 0) + 
-                                (parseFloat(f.multistore || f.multistop) || 0) + 
-                                (parseFloat(f.epaymentFee) || 0) - 
-                                (parseFloat(f.discount) || 0);
-                    }
-                }
-                if (gross > 0) {
-                    dedupMap.set(dedupKey, gross);
-                }
-            }
-        });
-    }
+    if (!rName && !tId) return 0;
 
     let totalGross = 0;
-    dedupMap.forEach(fee => {
+    const matchedReceiptKeys = [];
+    const usedReceiptTxIds = new Set();
+
+    const isRiderMatch = (recRiderName, recTelegramId) => {
+        const cleanRecRider = (recRiderName || "").trim().toLowerCase();
+        const cleanRecId = (recTelegramId || "").toString().trim();
+        if (tId && cleanRecId && tId === cleanRecId) return true;
+        if (rName && cleanRecRider && rName === cleanRecRider) return true;
+        return false;
+    };
+
+    const extractFee = (rec) => {
+        let gross = parseFloat(rec.totalFees) || 0;
+        if (gross === 0 && rec.fees) {
+            let f = rec.fees;
+            if (typeof f === 'string') {
+                try { f = JSON.parse(f); } catch(e) { f = null; }
+            }
+            if (f) {
+                gross = (parseFloat(f.delivery) || 0) + 
+                        (parseFloat(f.handling) || 0) + 
+                        (parseFloat(f.market) || 0) + 
+                        (parseFloat(f.multistore || f.multistop) || 0) + 
+                        (parseFloat(f.epaymentFee) || 0) - 
+                        (parseFloat(f.discount) || 0);
+            }
+        }
+        return Math.max(0, gross);
+    };
+
+    // 1. Process Receipts FIRST (Source of truth)
+    (globalState.globalDailyReceipts || []).forEach(rc => {
+        if (!rc) return;
+        const rcDate = rc.date || rc.completedDate || todayStr;
+        if (!isSameDate(rcDate, todayStr)) return;
+        if (!isRiderMatch(rc.riderName, rc.telegramId)) return;
+
+        const fee = extractFee(rc);
+        const txId = (rc.transactionId || rc.id || "").toString().trim();
+        if (txId) usedReceiptTxIds.add(txId);
+
+        const cleanCust = (rc.customerName || "customer").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const timeVal = (rc.cateringStartTime || rc.startTime || rc.completedTime || "").trim().toLowerCase().replace(/[^0-9apm]/g, '');
+
+        matchedReceiptKeys.push({
+            custKey: cleanCust,
+            timeKey: timeVal,
+            txId: txId,
+            fee: fee
+        });
+
         totalGross += fee;
+    });
+
+    // 2. Process Catered History (Avoid double counting items already settled in receipts)
+    (globalState.globalCateredHistory || []).forEach(ch => {
+        if (!ch) return;
+        const chDate = ch.completedDate || ch.date || todayStr;
+        if (!isSameDate(chDate, todayStr)) return;
+        if (!isRiderMatch(ch.riderName, ch.telegramId)) return;
+
+        const txId = (ch.transactionId || ch.id || "").toString().trim();
+        if (txId && usedReceiptTxIds.has(txId)) return;
+
+        const cleanCust = (ch.customerName || "customer").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const timeVal = (ch.startTime || ch.completedTime || "").trim().toLowerCase().replace(/[^0-9apm]/g, '');
+
+        // If customer was already settled in receipts for today, skip duplicate record
+        const receiptMatchIdx = matchedReceiptKeys.findIndex(r => {
+            if (r.custKey !== cleanCust) return false;
+            if (r.timeKey && timeVal && r.timeKey !== timeVal) return false;
+            return true;
+        });
+
+        if (receiptMatchIdx !== -1) return;
+
+        const fee = extractFee(ch);
+        if (fee > 0) {
+            totalGross += fee;
+        }
     });
 
     return totalGross;
@@ -353,7 +364,6 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             finalFeeDetails = targetRecord.lastReceiptFees || null;
         }
 
-        // Strict Check: Match by transactionId OR session (Rider + Customer + Date + StartTime)
         const cleanSTime = (sTime || '').trim().toLowerCase();
         const alreadyInHistory = (globalState.globalCateredHistory || []).some(h => {
             if (!h) return false;
