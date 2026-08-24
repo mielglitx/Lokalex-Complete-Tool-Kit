@@ -166,7 +166,7 @@ export function getRiderTodayGross(riderName, telegramId) {
 
             const isMatch = (tId && rcTelegramId && tId === rcTelegramId) || (rName && rcRiderName && rName === rcRiderName);
             if (isMatch) {
-                const txId = rc.transactionId || `${rcRiderName}_${rc.customerName}_${rc.totalFees}_${rcDate}`;
+                const txId = rc.transactionId || rc.id || `${rcRiderName}_${rc.customerName}_${rc.totalFees}_${rcDate}`;
                 if (!countedTx.has(txId)) {
                     countedTx.add(txId);
                     totalGross += (parseFloat(rc.totalFees) || 0);
@@ -186,7 +186,7 @@ export function getRiderTodayGross(riderName, telegramId) {
 
             const isMatch = (tId && chTelegramId && tId === chTelegramId) || (rName && chRiderName && rName === chRiderName);
             if (isMatch) {
-                const txId = ch.transactionId || `${chRiderName}_${ch.customerName}_${ch.totalFees}_${chDate}`;
+                const txId = ch.transactionId || ch.id || `${chRiderName}_${ch.customerName}_${ch.totalFees}_${chDate}`;
                 if (!countedTx.has(txId)) {
                     countedTx.add(txId);
                     totalGross += (parseFloat(ch.totalFees) || 0);
@@ -212,7 +212,7 @@ export function sortAvailableRidersByGross(availableList) {
     });
 }
 
-// ROBUST ARCHIVING WITH RECEIPT LOOKUP FALLBACK
+// ROBUST ARCHIVING WITH DEDUPLICATION (PREVENTS DUPLICATE RECEIPTS ON AVAILABLE)
 export async function archiveRiderCateringIfNeeded(targetRecord) {
     if (!targetRecord || targetRecord.status !== 'Catering' || !targetRecord.customerName) return;
 
@@ -220,7 +220,7 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
     const times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
     const custCount = custs.length || 1;
     const completedTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const tId = (targetRecord.telegramId || "").toString().trim();
+    const tId = (targetRecord.telegramId || targetRecord.id || "").toString().trim();
     const tName = targetRecord.riderName || targetRecord.name || "Rider";
     const todayStr = getLocalTodayStr();
 
@@ -252,7 +252,7 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             const rcptSnap = await db.ref('receipts').once('value');
             const rcptVal = rcptSnap.val();
             if (rcptVal) {
-                firebaseReceiptsList = Object.values(rcptVal);
+                firebaseReceiptsList = Object.entries(rcptVal).map(([k, v]) => ({ id: k, ...v }));
             }
         } catch(e) {}
     }
@@ -265,10 +265,12 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
 
         let finalFees = 0;
         let finalFeeDetails = null;
+        let matchedTxId = "";
 
         if (targetRecord.customerFees && cleanCustKey && targetRecord.customerFees[cleanCustKey]) {
             finalFees = parseFloat(targetRecord.customerFees[cleanCustKey].totalFees) || 0;
             finalFeeDetails = targetRecord.customerFees[cleanCustKey].fees || null;
+            matchedTxId = targetRecord.customerFees[cleanCustKey].transactionId || "";
         }
 
         if (finalFees <= 0 && globalState.globalDailyReceipts) {
@@ -283,6 +285,7 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             if (matchReceipt) {
                 finalFees = parseFloat(matchReceipt.totalFees) || 0;
                 finalFeeDetails = matchReceipt.fees || null;
+                matchedTxId = matchReceipt.transactionId || matchReceipt.id || "";
             }
         }
 
@@ -298,6 +301,7 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             if (fbMatch) {
                 finalFees = parseFloat(fbMatch.totalFees) || 0;
                 finalFeeDetails = fbMatch.fees || null;
+                matchedTxId = fbMatch.transactionId || fbMatch.id || "";
             }
         }
 
@@ -306,7 +310,12 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             finalFeeDetails = targetRecord.lastReceiptFees || null;
         }
 
+        const recordKey = matchedTxId || `CAT_${(tName).toLowerCase().replace(/[^a-z0-9]/g, '')}_${cleanCustKey}_${todayStr.replace(/-/g, '')}`;
+
         const hItem = {
+            id: recordKey,
+            key: recordKey,
+            transactionId: matchedTxId || recordKey,
             riderName: tName,
             telegramId: tId,
             customerName: cName,
@@ -319,10 +328,17 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             fees: finalFeeDetails
         };
 
-        if (db) db.ref('cateredHistory').push(hItem);
+        if (db) {
+            db.ref(`cateredHistory/${recordKey}`).set(hItem);
+        }
 
         if (!globalState.globalCateredHistory) globalState.globalCateredHistory = [];
-        globalState.globalCateredHistory.push(hItem);
+        const existingIdx = globalState.globalCateredHistory.findIndex(h => (h.id === recordKey || h.transactionId === recordKey || (h.customerName.toLowerCase() === cName.toLowerCase() && isSameDate(h.completedDate, todayStr))));
+        if (existingIdx !== -1) {
+            globalState.globalCateredHistory[existingIdx] = { ...globalState.globalCateredHistory[existingIdx], ...hItem };
+        } else {
+            globalState.globalCateredHistory.push(hItem);
+        }
     }
 
     if (db && tId) {
@@ -334,6 +350,7 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
     saveRosterCache();
     window.dispatchEvent(new CustomEvent('cateredUpdated'));
     window.dispatchEvent(new CustomEvent('receiptsUpdated'));
+    window.dispatchEvent(new CustomEvent('rosterUpdated'));
 }
 
 export function getElapsedCateringTime(startTimeStr) {
@@ -376,7 +393,7 @@ export function getElapsedCateringTime(startTimeStr) {
 
 export function getActiveCateringCustomersWithTimes() {
     const myId = (appState.telegramId || "").toString();
-    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === myId) : null;
+    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || m.id || "").toString() === myId) : null;
     if (!myRecord || myRecord.status !== 'Catering' || !myRecord.customerName) return [];
 
     const custs = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
@@ -420,7 +437,7 @@ export function hasReceiptForActiveSession(custName, custStartTime) {
 
     if (hasReceiptRecord) return true;
 
-    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === (appState.telegramId || "").toString()) : null;
+    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || m.id || "").toString() === (appState.telegramId || "").toString()) : null;
     if (myRecord && myRecord.customerFees && cleanCName && myRecord.customerFees[cleanCName]) {
         return true;
     }
