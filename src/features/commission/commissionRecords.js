@@ -1,11 +1,12 @@
 // src/features/commission/commissionRecords.js
 import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
-import { getLocalTodayStr } from '../../utils/helpers.js';
+import { getLocalTodayStr, escapeHtml } from '../../utils/helpers.js';
 import { showToast } from '../../ui/notifications.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
 import { isAdmin as checkIsAdmin } from '../roster/rosterUtils.js';
 import { getCleanRiderList, refreshCommissionView, viewSettings } from './commissionUI.js';
+import { saveCommissionSettingsCache } from './commissionRates.js';
 
 export function openAdminPenaltyModal() {
     const modal = document.getElementById('admin-penalty-modal');
@@ -134,29 +135,57 @@ export function submitAdminAddCommissionRecord() {
     if (!cNameInput) return showToast("⚠️ Please enter customer name.");
     if (isNaN(grossFee) || grossFee <= 0) return showToast("⚠️ Please enter a valid gross fee.");
 
+    // Resolve rider telegramId to prevent broken filter matching
+    let targetTelegramId = "";
+    const rosterMatch = (globalState.rosterMembers || []).find(m => 
+        (m.riderName || m.name || "").toLowerCase().trim() === rNameInput.toLowerCase().trim()
+    );
+    if (rosterMatch && rosterMatch.telegramId) {
+        targetTelegramId = rosterMatch.telegramId.toString();
+    }
+
     const timeVal = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const cleanRiderKey = rNameInput.toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanCustKey = cNameInput.toLowerCase().replace(/[^a-z0-9]/g, '');
     const txId = `RCPT_MANUAL_${cleanRiderKey}_${cleanCustKey}_${Date.now()}`;
 
     const newRecord = {
+        id: txId,
         type: "receipts",
         transactionId: txId,
-        telegramId: "",
+        telegramId: targetTelegramId,
         riderName: rNameInput,
         customerName: cNameInput,
         cateringStartTime: timeVal,
+        startTime: timeVal,
+        completedTime: timeVal,
+        completedDate: dateVal,
         totalFees: grossFee,
         date: dateVal,
-        fees: { delivery: grossFee }
+        fees: { delivery: grossFee, handling: 0, market: 0, multistore: 0, discount: 0 }
     };
 
     if (!globalState.globalDailyReceipts) globalState.globalDailyReceipts = [];
-    globalState.globalDailyReceipts.push(newRecord);
+    const rIdx = globalState.globalDailyReceipts.findIndex(r => r.transactionId === txId || r.id === txId);
+    if (rIdx !== -1) globalState.globalDailyReceipts[rIdx] = newRecord;
+    else globalState.globalDailyReceipts.push(newRecord);
 
-    if (db) db.ref('receipts/' + txId).set(newRecord);
+    if (!globalState.globalCateredHistory) globalState.globalCateredHistory = [];
+    const cIdx = globalState.globalCateredHistory.findIndex(c => c.transactionId === txId || c.id === txId);
+    if (cIdx !== -1) globalState.globalCateredHistory[cIdx] = newRecord;
+    else globalState.globalCateredHistory.push(newRecord);
 
+    if (db) {
+        db.ref('receipts/' + txId).set(newRecord);
+        db.ref('cateredHistory/' + txId).set(newRecord);
+    }
+
+    saveCommissionSettingsCache();
     closeAdminAddCommModal();
+
+    window.dispatchEvent(new CustomEvent('receiptsUpdated'));
+    window.dispatchEvent(new CustomEvent('cateredUpdated'));
+
     showToast(`✅ Added ₱${grossFee.toFixed(2)} for ${cNameInput} (${rNameInput})`);
     refreshCommissionView();
 }
@@ -179,7 +208,7 @@ export function executeDeleteCommissionRecord(riderName, customerName, dateVal, 
 
     if (globalState.globalDailyReceipts) {
         globalState.globalDailyReceipts = globalState.globalDailyReceipts.filter(rc => {
-            if (txId && rc.transactionId === txId) return false;
+            if (txId && (rc.transactionId === txId || rc.id === txId)) return false;
             const matchRider = (rc.riderName || "").toLowerCase().trim() === cleanRider;
             const matchCust = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
             const matchDate = (rc.date || rc.completedDate) === dateVal;
@@ -189,7 +218,7 @@ export function executeDeleteCommissionRecord(riderName, customerName, dateVal, 
 
     if (globalState.globalCateredHistory) {
         globalState.globalCateredHistory = globalState.globalCateredHistory.filter(ch => {
-            if (txId && ch.transactionId === txId) return false;
+            if (txId && (ch.transactionId === txId || ch.id === txId)) return false;
             const matchRider = (ch.riderName || "").toLowerCase().trim() === cleanRider;
             const matchCust = (ch.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
             const matchDate = (ch.completedDate || ch.date) === dateVal;
@@ -236,6 +265,10 @@ export function executeDeleteCommissionRecord(riderName, customerName, dateVal, 
             }
         });
     }
+
+    saveCommissionSettingsCache();
+    window.dispatchEvent(new CustomEvent('receiptsUpdated'));
+    window.dispatchEvent(new CustomEvent('cateredUpdated'));
 
     showToast("🗑️ Record deleted successfully!");
     refreshCommissionView();
@@ -298,6 +331,10 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
             }
         });
     }
+
+    saveCommissionSettingsCache();
+    window.dispatchEvent(new CustomEvent('receiptsUpdated'));
+    window.dispatchEvent(new CustomEvent('cateredUpdated'));
 
     showToast(`✅ Fee updated to ₱${parsedFee.toFixed(2)} for ${customerName}!`);
     refreshCommissionView();
