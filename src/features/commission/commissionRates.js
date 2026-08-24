@@ -5,6 +5,8 @@ import { ADMIN_IDS } from '../../config/constants.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
 
 export const SETTINGS_CACHE_KEY = 'lokalex_commission_settings_cache_v2';
+export const RECEIPTS_CACHE_KEY = 'lokalex_receipts_cache_v2';
+export const CATERED_CACHE_KEY = 'lokalex_catered_cache_v2';
 
 export let defaultCommissionRate = 10;
 export function setDefaultCommissionRate(val) { defaultCommissionRate = val; }
@@ -22,18 +24,28 @@ export function setRecurringDiscount(val) { recurringDiscount = val; }
 export let specialDateDiscounts = {};
 export function setSpecialDateDiscounts(val) { specialDateDiscounts = val; }
 
-// LOAD COMMISSION SETTINGS FROM LOCAL CACHE
+// LOAD COMMISSION SETTINGS & DATA FROM LOCAL CACHE
 export function loadCommissionSettingsCache() {
     try {
-        const saved = localStorage.getItem(SETTINGS_CACHE_KEY);
-        if (saved) {
-            const data = JSON.parse(saved);
+        const savedSettings = localStorage.getItem(SETTINGS_CACHE_KEY);
+        if (savedSettings) {
+            const data = JSON.parse(savedSettings);
             if (data) {
                 if (data.defaultPercentage !== undefined) defaultCommissionRate = parseFloat(data.defaultPercentage);
                 if (data.riderRates) customRiderRates = data.riderRates;
                 if (data.recurringDiscount) recurringDiscount = data.recurringDiscount;
                 if (data.specialDateDiscounts) specialDateDiscounts = data.specialDateDiscounts;
             }
+        }
+
+        const savedReceipts = localStorage.getItem(RECEIPTS_CACHE_KEY);
+        if (savedReceipts && (!globalState.globalDailyReceipts || globalState.globalDailyReceipts.length === 0)) {
+            globalState.globalDailyReceipts = JSON.parse(savedReceipts);
+        }
+
+        const savedCatered = localStorage.getItem(CATERED_CACHE_KEY);
+        if (savedCatered && (!globalState.globalCateredHistory || globalState.globalCateredHistory.length === 0)) {
+            globalState.globalCateredHistory = JSON.parse(savedCatered);
         }
     } catch(e) {}
 }
@@ -47,6 +59,12 @@ export function saveCommissionSettingsCache() {
             specialDateDiscounts: specialDateDiscounts
         };
         localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(payload));
+        if (globalState.globalDailyReceipts) {
+            localStorage.setItem(RECEIPTS_CACHE_KEY, JSON.stringify(globalState.globalDailyReceipts));
+        }
+        if (globalState.globalCateredHistory) {
+            localStorage.setItem(CATERED_CACHE_KEY, JSON.stringify(globalState.globalCateredHistory));
+        }
     } catch(e) {}
 }
 
@@ -234,6 +252,22 @@ export async function fetchCommissionSettings() {
 
         db.ref('commissionPenalties').on('value', (snapshot) => {
             globalState.globalCommissionPenalties = snapshot.val() || {};
+            if (window.refreshCommissionView) window.refreshCommissionView();
+        });
+
+        // REALTIME LISTENER FOR RECEIPTS
+        db.ref('receipts').on('value', (snapshot) => {
+            const val = snapshot.val();
+            globalState.globalDailyReceipts = val ? Object.values(val) : [];
+            saveCommissionSettingsCache();
+            if (window.refreshCommissionView) window.refreshCommissionView();
+        });
+
+        // REALTIME LISTENER FOR CATERED HISTORY
+        db.ref('cateredHistory').on('value', (snapshot) => {
+            const val = snapshot.val();
+            globalState.globalCateredHistory = val ? Object.values(val) : [];
+            saveCommissionSettingsCache();
             if (window.refreshCommissionView) window.refreshCommissionView();
         });
     }
