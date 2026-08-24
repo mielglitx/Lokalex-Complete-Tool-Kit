@@ -195,6 +195,7 @@ export async function submitAdminAddCommissionRecord() {
     showToast(`✅ Added ₱${grossFee.toFixed(2)} for ${cNameInput} (${rNameInput})`);
     refreshCommissionView();
     window.dispatchEvent(new CustomEvent('rosterUpdated'));
+    window.dispatchEvent(new CustomEvent('receiptsUpdated'));
 }
 
 export function promptAdminDeleteCommissionRecord(riderName, customerName, dateVal, txId) {
@@ -216,7 +217,7 @@ export async function executeDeleteCommissionRecord(riderName, customerName, dat
 
     if (globalState.globalDailyReceipts) {
         globalState.globalDailyReceipts = globalState.globalDailyReceipts.filter(rc => {
-            if (txId && rc.transactionId === txId) {
+            if (txId && (rc.transactionId === txId || rc.id === txId)) {
                 deletedAmount = parseFloat(rc.totalFees) || 0;
                 return false;
             }
@@ -233,7 +234,7 @@ export async function executeDeleteCommissionRecord(riderName, customerName, dat
 
     if (globalState.globalCateredHistory) {
         globalState.globalCateredHistory = globalState.globalCateredHistory.filter(ch => {
-            if (txId && ch.transactionId === txId) {
+            if (txId && (ch.transactionId === txId || ch.id === txId)) {
                 if (!deletedAmount) deletedAmount = parseFloat(ch.totalFees) || 0;
                 return false;
             }
@@ -306,6 +307,8 @@ export async function executeDeleteCommissionRecord(riderName, customerName, dat
     showToast("🗑️ Record deleted successfully!");
     refreshCommissionView();
     window.dispatchEvent(new CustomEvent('rosterUpdated'));
+    window.dispatchEvent(new CustomEvent('cateredUpdated'));
+    window.dispatchEvent(new CustomEvent('receiptsUpdated'));
 }
 
 export function promptAdminEditCustomerFee(riderName, customerName, dateVal, currentGross) {
@@ -386,4 +389,6 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
     showToast(`✅ Fee updated to ₱${parsedFee.toFixed(2)} for ${customerName}!`);
     refreshCommissionView();
     window.dispatchEvent(new CustomEvent('rosterUpdated'));
+    window.dispatchEvent(new CustomEvent('cateredUpdated'));
+    window.dispatchEvent(new CustomEvent('receiptsUpdated'));
 }
