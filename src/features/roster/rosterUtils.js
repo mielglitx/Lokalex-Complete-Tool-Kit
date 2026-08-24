@@ -149,48 +149,91 @@ export function getRiderTodayGross(riderName, telegramId) {
     const rName = (riderName || "").trim().toLowerCase();
     const tId = (telegramId || "").toString().trim();
 
-    let totalGross = 0;
-    const countedTx = new Set();
+    const dedupMap = new Map();
 
+    // 1. Process Receipts (source of truth for settled fees)
     if (globalState.globalDailyReceipts) {
         globalState.globalDailyReceipts.forEach(rc => {
             if (!rc) return;
-            const rcDate = rc.date || rc.completedDate;
+            const rcDate = rc.date || rc.completedDate || todayStr;
             if (!isSameDate(rcDate, todayStr)) return;
 
             const rcRiderName = (rc.riderName || "").trim().toLowerCase();
             const rcTelegramId = (rc.telegramId || "").toString().trim();
 
             const isMatch = (tId && rcTelegramId && tId === rcTelegramId) || (rName && rcRiderName && rName === rcRiderName);
-            if (isMatch) {
-                const txId = rc.transactionId || rc.id || `${rcRiderName}_${rc.customerName}_${rc.totalFees}_${rcDate}`;
-                if (!countedTx.has(txId)) {
-                    countedTx.add(txId);
-                    totalGross += (parseFloat(rc.totalFees) || 0);
+            if (!isMatch) return;
+
+            let gross = parseFloat(rc.totalFees) || 0;
+            if (gross === 0 && rc.fees) {
+                let f = rc.fees;
+                if (typeof f === 'string') {
+                    try { f = JSON.parse(f); } catch(e) { f = null; }
                 }
+                if (f) {
+                    gross = (parseFloat(f.delivery) || 0) + 
+                            (parseFloat(f.handling) || 0) + 
+                            (parseFloat(f.market) || 0) + 
+                            (parseFloat(f.multistore || f.multistop) || 0) + 
+                            (parseFloat(f.epaymentFee) || 0) - 
+                            (parseFloat(f.discount) || 0);
+                }
+            }
+
+            const cleanCust = (rc.customerName || "Customer").toLowerCase().replace(/[^a-z0-9]/g, '');
+            const timeKey = (rc.cateringStartTime || rc.startTime || "").trim().toLowerCase();
+            const dedupKey = `${cleanCust}_${rcDate}_${timeKey || rc.transactionId || rc.id || '1'}`;
+
+            if (!dedupMap.has(dedupKey) || dedupMap.get(dedupKey) < gross) {
+                dedupMap.set(dedupKey, gross);
             }
         });
     }
 
+    // 2. Process Catered History without double-counting settled receipts
     if (globalState.globalCateredHistory) {
         globalState.globalCateredHistory.forEach(ch => {
             if (!ch) return;
-            const chDate = ch.completedDate || ch.date;
+            const chDate = ch.completedDate || ch.date || todayStr;
             if (!isSameDate(chDate, todayStr)) return;
 
             const chRiderName = (ch.riderName || "").trim().toLowerCase();
             const chTelegramId = (ch.telegramId || "").toString().trim();
 
             const isMatch = (tId && chTelegramId && tId === chTelegramId) || (rName && chRiderName && rName === chRiderName);
-            if (isMatch) {
-                const txId = ch.transactionId || ch.id || `${chRiderName}_${ch.customerName}_${ch.totalFees}_${chDate}`;
-                if (!countedTx.has(txId)) {
-                    countedTx.add(txId);
-                    totalGross += (parseFloat(ch.totalFees) || 0);
+            if (!isMatch) return;
+
+            const cleanCust = (ch.customerName || "Customer").toLowerCase().replace(/[^a-z0-9]/g, '');
+            const timeKey = (ch.startTime || ch.completedTime || "").trim().toLowerCase();
+            const dedupKey = `${cleanCust}_${chDate}_${timeKey || ch.transactionId || ch.id || '1'}`;
+
+            if (!dedupMap.has(dedupKey)) {
+                let gross = parseFloat(ch.totalFees) || 0;
+                if (gross === 0 && ch.fees) {
+                    let f = ch.fees;
+                    if (typeof f === 'string') {
+                        try { f = JSON.parse(f); } catch(e) { f = null; }
+                    }
+                    if (f) {
+                        gross = (parseFloat(f.delivery) || 0) + 
+                                (parseFloat(f.handling) || 0) + 
+                                (parseFloat(f.market) || 0) + 
+                                (parseFloat(f.multistore || f.multistop) || 0) + 
+                                (parseFloat(f.epaymentFee) || 0) - 
+                                (parseFloat(f.discount) || 0);
+                    }
+                }
+                if (gross > 0) {
+                    dedupMap.set(dedupKey, gross);
                 }
             }
         });
     }
+
+    let totalGross = 0;
+    dedupMap.forEach(fee => {
+        totalGross += fee;
+    });
 
     return totalGross;
 }
