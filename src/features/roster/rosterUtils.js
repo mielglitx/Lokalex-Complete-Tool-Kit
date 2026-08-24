@@ -16,7 +16,6 @@ const ROSTER_CACHE_KEY = 'lokalex_roster_cache';
 const LOGINS_CACHE_KEY = 'lokalex_logins_cache';
 const CATERED_CACHE_KEY = 'lokalex_catered_cache_v2';
 const RECEIPTS_CACHE_KEY = 'lokalex_receipts_cache_v2';
-const SUMMARIES_CACHE_KEY = 'lokalex_daily_summaries_cache';
 
 export function saveRosterCache() {
     try {
@@ -25,9 +24,6 @@ export function saveRosterCache() {
         localStorage.setItem(CATERED_CACHE_KEY, JSON.stringify(globalState.globalCateredHistory || []));
         if (globalState.globalDailyReceipts) {
             localStorage.setItem(RECEIPTS_CACHE_KEY, JSON.stringify(globalState.globalDailyReceipts));
-        }
-        if (globalState.dailyRiderSummaries) {
-            localStorage.setItem(SUMMARIES_CACHE_KEY, JSON.stringify(globalState.dailyRiderSummaries));
         }
     } catch(e) {}
 }
@@ -50,14 +46,9 @@ export function loadRosterCache() {
         if (savedReceipts && (!globalState.globalDailyReceipts || globalState.globalDailyReceipts.length === 0)) {
             globalState.globalDailyReceipts = JSON.parse(savedReceipts);
         }
-        const savedSummaries = localStorage.getItem(SUMMARIES_CACHE_KEY);
-        if (savedSummaries && !globalState.dailyRiderSummaries) {
-            globalState.dailyRiderSummaries = JSON.parse(savedSummaries);
-        }
     } catch(e) {}
 }
 
-// Ensure cache is loaded immediately
 loadRosterCache();
 
 export function getUserType() {
@@ -163,9 +154,6 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     return durationText;
 }
 
-// -------------------------------------------------------------
-// CENTRALIZED COMMISSION & ROSTER DEDUPLICATION ENGINE
-// -------------------------------------------------------------
 export function findReceiptFeeForCustomer(rName, cName, rDate) {
     const cleanRider = (rName || "").toLowerCase().trim();
     const cleanCust = (cName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -190,10 +178,10 @@ export function getMergedDeduplicatedCommissionList() {
 
     (globalState.globalDailyReceipts || []).forEach(rc => {
         if (!rc) return;
-        const cleanRider = (rc.riderName || "").toLowerCase().trim();
-        const cleanCust = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanRider = (rc.riderName || "Rider").toLowerCase().trim();
+        const cleanCust = (rc.customerName || "Customer").toLowerCase().replace(/[^a-z0-9]/g, '');
         const date = rc.date || rc.completedDate || getLocalTodayStr();
-        const time = rc.cateringStartTime || rc.startTime || "";
+        const time = rc.cateringStartTime || rc.startTime || rc.time || "";
         const txId = rc.transactionId || rc.id || `${cleanRider}_${cleanCust}_${date}_${time}`;
 
         let gross = parseFloat(rc.totalFees);
@@ -215,11 +203,11 @@ export function getMergedDeduplicatedCommissionList() {
             }
         }
 
-        const dedupKey = txId || `${cleanRider}_${cleanCust}_${date}_${time}`;
+        const dedupKey = txId;
         if (!mergedMap.has(dedupKey) || (mergedMap.get(dedupKey).totalFees < gross)) {
             mergedMap.set(dedupKey, {
                 transactionId: txId,
-                telegramId: rc.telegramId || rc.riderId,
+                telegramId: (rc.telegramId || rc.riderId || "").toString().trim(),
                 riderName: rc.riderName || "Rider",
                 customerName: rc.customerName || "Customer",
                 date: date,
@@ -232,10 +220,10 @@ export function getMergedDeduplicatedCommissionList() {
 
     (globalState.globalCateredHistory || []).forEach(ch => {
         if (!ch) return;
-        const cleanRider = (ch.riderName || "").toLowerCase().trim();
-        const cleanCust = (ch.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanRider = (ch.riderName || "Rider").toLowerCase().trim();
+        const cleanCust = (ch.customerName || "Customer").toLowerCase().replace(/[^a-z0-9]/g, '');
         const date = ch.completedDate || ch.date || getLocalTodayStr();
-        const time = ch.startTime || ch.completedTime || "";
+        const time = ch.startTime || ch.completedTime || ch.time || "";
 
         let gross = parseFloat(ch.totalFees);
         if (isNaN(gross) || gross === 0) {
@@ -257,23 +245,30 @@ export function getMergedDeduplicatedCommissionList() {
             gross = findReceiptFeeForCustomer(cleanRider, cleanCust, date);
         }
 
-        const dedupKey = ch.transactionId || ch.id || `${cleanRider}_${cleanCust}_${date}_${time}`;
+        const txId = ch.transactionId || ch.id || `${cleanRider}_${cleanCust}_${date}_${time}`;
 
-        if (gross > 0 && !mergedMap.has(dedupKey)) {
-            let matchedInMap = false;
-            for (let [k, val] of mergedMap.entries()) {
-                if (val.riderName.toLowerCase().trim() === cleanRider && 
-                    val.customerName.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust && 
-                    isSameDate(val.date, date)) {
-                    matchedInMap = true;
-                    break;
+        if (gross > 0) {
+            let alreadyExists = false;
+            if (mergedMap.has(txId)) {
+                alreadyExists = true;
+            } else {
+                for (let [k, val] of mergedMap.entries()) {
+                    if (val.riderName.toLowerCase().trim() === cleanRider && 
+                        val.customerName.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust && 
+                        isSameDate(val.date, date)) {
+                        alreadyExists = true;
+                        if (val.totalFees < gross) {
+                            val.totalFees = gross;
+                        }
+                        break;
+                    }
                 }
             }
 
-            if (!matchedInMap) {
-                mergedMap.set(dedupKey, {
-                    transactionId: ch.transactionId || ch.id || dedupKey,
-                    telegramId: ch.telegramId || ch.riderId,
+            if (!alreadyExists) {
+                mergedMap.set(txId, {
+                    transactionId: txId,
+                    telegramId: (ch.telegramId || ch.riderId || "").toString().trim(),
                     riderName: ch.riderName || "Rider",
                     customerName: ch.customerName || "Customer",
                     date: date,
@@ -291,7 +286,6 @@ export function getMergedDeduplicatedCommissionList() {
     return Array.from(mergedMap.values());
 }
 
-// 100% UNIFIED RIDER GROSS (EXACT ALIGNMENT WITH COMMISSION VIEW)
 export function getRiderTodayGross(riderName, telegramId) {
     const todayStr = getLocalTodayStr();
     const rName = (riderName || "").trim().toLowerCase();
@@ -299,18 +293,6 @@ export function getRiderTodayGross(riderName, telegramId) {
 
     if (!rName && !tId) return 0;
 
-    // 1. Primary: Pre-aggregated daily summaries ledger
-    if (globalState.dailyRiderSummaries && globalState.dailyRiderSummaries[todayStr]) {
-        const dayMap = globalState.dailyRiderSummaries[todayStr];
-        if (tId && dayMap[tId] && dayMap[tId].grossIncome !== undefined) {
-            return parseFloat(dayMap[tId].grossIncome) || 0;
-        }
-        if (rName && dayMap[rName] && dayMap[rName].grossIncome !== undefined) {
-            return parseFloat(dayMap[rName].grossIncome) || 0;
-        }
-    }
-
-    // 2. Direct Single Source of Truth from Unified Commission Dataset
     const mergedList = getMergedDeduplicatedCommissionList();
     let total = 0;
 
@@ -327,7 +309,7 @@ export function getRiderTodayGross(riderName, telegramId) {
             else recId = recName;
         }
 
-        const matchId = tId && recId && tId === recId;
+        const matchId = tId && recId && tId.toLowerCase() === recId.toLowerCase();
         const matchName = rName && recName && rName === recName;
 
         if (matchId || matchName) {

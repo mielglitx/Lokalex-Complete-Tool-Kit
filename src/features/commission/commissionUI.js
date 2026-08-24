@@ -1,9 +1,9 @@
 // src/features/commission/commissionUI.js
 import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
-import { getLocalTodayStr, copyText, getWeekString, getMonthString, escapeHtml } from '../../utils/helpers.js';
+import { getLocalTodayStr, copyText, getWeekString, getMonthString, escapeHtml, isSameDate } from '../../utils/helpers.js';
 import { switchView } from '../../ui/router.js';
-import { isAdmin as checkIsAdmin, getMergedDeduplicatedCommissionList } from '../roster/rosterUtils.js';
+import { isAdmin as checkIsAdmin, getMergedDeduplicatedCommissionList, saveRosterCache } from '../roster/rosterUtils.js';
 import { getCommissionRates, fetchCommissionSettings } from './commissionRates.js';
 
 export let viewSettings = {
@@ -11,6 +11,79 @@ export let viewSettings = {
     period: 'daily',
     dateValue: getLocalTodayStr()
 };
+
+let isCommissionListenerActive = false;
+
+export function initCommissionLiveListeners() {
+    if (isCommissionListenerActive || !db) return;
+    isCommissionListenerActive = true;
+
+    // Real-time receipts synchronization
+    db.ref('receipts').on('value', (snapshot) => {
+        const val = snapshot.val();
+        if (val) {
+            globalState.globalDailyReceipts = Object.entries(val).map(([k, v]) => ({
+                id: k,
+                transactionId: v.transactionId || k,
+                ...v
+            }));
+        } else {
+            globalState.globalDailyReceipts = [];
+        }
+        saveRosterCache();
+        refreshCommissionView();
+        window.dispatchEvent(new CustomEvent('rosterUpdated'));
+    });
+
+    // Real-time catered history synchronization
+    db.ref('cateredHistory').on('value', (snapshot) => {
+        const val = snapshot.val();
+        if (val) {
+            globalState.globalCateredHistory = Object.entries(val).map(([k, v]) => ({
+                id: k,
+                transactionId: v.transactionId || k,
+                ...v
+            }));
+        } else {
+            globalState.globalCateredHistory = [];
+        }
+        saveRosterCache();
+        refreshCommissionView();
+        window.dispatchEvent(new CustomEvent('rosterUpdated'));
+    });
+}
+
+export async function fetchCommissionData() {
+    if (!db) return;
+    try {
+        const [rcptSnap, catSnap] = await Promise.all([
+            db.ref('receipts').once('value'),
+            db.ref('cateredHistory').once('value')
+        ]);
+
+        const rcptVal = rcptSnap.val();
+        if (rcptVal) {
+            globalState.globalDailyReceipts = Object.entries(rcptVal).map(([k, v]) => ({
+                id: k,
+                transactionId: v.transactionId || k,
+                ...v
+            }));
+        }
+
+        const catVal = catSnap.val();
+        if (catVal) {
+            globalState.globalCateredHistory = Object.entries(catVal).map(([k, v]) => ({
+                id: k,
+                transactionId: v.transactionId || k,
+                ...v
+            }));
+        }
+
+        saveRosterCache();
+    } catch (e) {
+        console.warn("Could not fetch commission records:", e);
+    }
+}
 
 export function getCleanRiderList() {
     let riderMap = new Map();
@@ -40,22 +113,24 @@ export function setupAdminControls() {
     const filterBox = document.getElementById('admin-commission-filter-box');
     const select = document.getElementById('admin-rider-select');
     
-    if (isAdmin) {
+    if (isAdmin && filterBox && select) {
         filterBox.classList.remove('hidden');
         filterBox.classList.add('flex');
         
         const cleanRiders = getCleanRiderList();
+        let currentSelected = select.value || "ALL";
         
         let options = `<option value="ALL">All Riders (Combined)</option>`;
         cleanRiders.forEach(name => {
-            const isSelected = select.value === name ? "selected" : "";
+            const isSelected = currentSelected === name ? "selected" : "";
             options += `<option value="${escapeHtml(name)}" ${isSelected}>${escapeHtml(name)}</option>`;
         });
         
         select.innerHTML = options;
+        select.value = currentSelected;
 
         let addBtn = document.getElementById('admin-add-comm-btn');
-        if (!addBtn && filterBox) {
+        if (!addBtn) {
             const btnHtml = `
             <div class="flex gap-2 mt-2">
                 <button id="admin-add-comm-btn" onclick="promptAdminAddCommissionRecord()" class="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-emerald-500/50 text-[11px] font-bold py-2 px-2 rounded-xl transition active:scale-95 flex items-center justify-center gap-1 shadow-xs">
@@ -67,7 +142,7 @@ export function setupAdminControls() {
             </div>`;
             filterBox.insertAdjacentHTML('beforeend', btnHtml);
         }
-    } else {
+    } else if (filterBox) {
         filterBox.classList.add('hidden');
         filterBox.classList.remove('flex');
     }
@@ -80,11 +155,11 @@ export function setCommissionMode(mode) {
     const btnCompany = document.getElementById('comm-mode-company');
     
     if (mode === 'earned') {
-        btnEarned.className = "flex-1 py-2 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 dark:bg-emerald-600/20 dark:text-emerald-400 dark:border-emerald-500/50 font-black transition shadow-xs";
-        btnCompany.className = "flex-1 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition";
+        if (btnEarned) btnEarned.className = "flex-1 py-2 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 dark:bg-emerald-600/20 dark:text-emerald-400 dark:border-emerald-500/50 font-black transition shadow-xs";
+        if (btnCompany) btnCompany.className = "flex-1 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition";
     } else {
-        btnCompany.className = "flex-1 py-2 rounded-lg bg-red-50 text-red-800 border border-red-300 dark:bg-red-600/20 dark:text-red-400 dark:border-red-500/50 font-black transition shadow-xs";
-        btnEarned.className = "flex-1 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition";
+        if (btnCompany) btnCompany.className = "flex-1 py-2 rounded-lg bg-red-50 text-red-800 border border-red-300 dark:bg-red-600/20 dark:text-red-400 dark:border-red-500/50 font-black transition shadow-xs";
+        if (btnEarned) btnEarned.className = "flex-1 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition";
     }
     
     refreshCommissionView();
@@ -97,11 +172,11 @@ export function setCommissionPeriod(period) {
         const btn = document.getElementById(`comm-period-${p}`);
         const input = document.getElementById(`comm-input-${p}`);
         if (p === period) {
-            btn.className = "py-1.5 rounded-lg bg-blue-600 text-white font-bold transition shadow";
-            input.classList.remove('hidden');
+            if (btn) btn.className = "py-1.5 rounded-lg bg-blue-600 text-white font-bold transition shadow";
+            if (input) input.classList.remove('hidden');
         } else {
-            btn.className = "py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition";
-            input.classList.add('hidden');
+            if (btn) btn.className = "py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition";
+            if (input) input.classList.add('hidden');
         }
     });
 
@@ -110,12 +185,26 @@ export function setCommissionPeriod(period) {
 
 export function refreshCommissionView() {
     const isUserAdmin = checkIsAdmin();
-    let targetRiderFilter = isUserAdmin ? document.getElementById('admin-rider-select')?.value : appState.telegramId;
-    if (targetRiderFilter === "ALL") targetRiderFilter = null; 
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+
+    let targetRiderFilter = null;
+    if (isUserAdmin) {
+        const adminSelect = document.getElementById('admin-rider-select');
+        targetRiderFilter = adminSelect ? adminSelect.value : "ALL";
+    } else {
+        targetRiderFilter = myId || myName;
+    }
+
+    if (targetRiderFilter === "ALL") targetRiderFilter = null;
 
     const dateInput = document.getElementById(`comm-input-${viewSettings.period}`);
-    if (dateInput) viewSettings.dateValue = dateInput.value;
-    if (!viewSettings.dateValue) return;
+    if (dateInput && dateInput.value) {
+        viewSettings.dateValue = dateInput.value;
+    }
+    if (!viewSettings.dateValue) {
+        viewSettings.dateValue = getLocalTodayStr();
+    }
 
     const mergedList = getMergedDeduplicatedCommissionList();
 
@@ -123,14 +212,14 @@ export function refreshCommissionView() {
         let rDate = record.date || getLocalTodayStr();
         
         if (viewSettings.period === 'daily') {
-            return rDate === viewSettings.dateValue;
+            return isSameDate(rDate, viewSettings.dateValue);
         }
         if (viewSettings.period === 'weekly') {
             const d = new Date(rDate + "T00:00:00");
             return getWeekString(d.getTime()) === viewSettings.dateValue;
         }
         if (viewSettings.period === 'monthly') {
-            return rDate.substring(0, 7) === viewSettings.dateValue;
+            return rDate.substring(0, 7) === viewSettings.dateValue.substring(0, 7);
         }
         return false;
     });
@@ -138,7 +227,7 @@ export function refreshCommissionView() {
     let riderTotals = {}; 
 
     filteredHistory.forEach(r => {
-        let rId = (r.telegramId || "").toString();
+        let rId = (r.telegramId || "").toString().trim();
         let rName = r.riderName || "Unknown Rider";
         let cName = r.customerName || "Customer";
         let rDate = r.date || getLocalTodayStr();
@@ -185,11 +274,19 @@ export function refreshCommissionView() {
         if (riderTotals[rId].gross <= 0 || riderTotals[rId].customers.length === 0) continue;
 
         if (targetRiderFilter && targetRiderFilter !== "ALL") {
-            const myRoster = globalState.rosterMembers?.find(m => (m.telegramId || "").toString() === targetRiderFilter.toString());
-            const targetName = myRoster ? (myRoster.riderName || myRoster.name || "").toLowerCase() : targetRiderFilter.toLowerCase();
-            
-            const isIdMatch = rId.toString() === targetRiderFilter.toString();
-            const isNameMatch = riderTotals[rId].name.toLowerCase() === targetName;
+            const cleanTarget = targetRiderFilter.toString().trim().toLowerCase();
+            const rIdClean = rId.toString().trim().toLowerCase();
+            const rNameClean = (riderTotals[rId].name || "").toString().trim().toLowerCase();
+
+            const targetRoster = (globalState.rosterMembers || []).find(m => 
+                (m.telegramId || "").toString().trim().toLowerCase() === cleanTarget ||
+                (m.riderName || m.name || "").toString().trim().toLowerCase() === cleanTarget
+            );
+            const targetRosterId = targetRoster ? (targetRoster.telegramId || "").toString().trim().toLowerCase() : "";
+            const targetRosterName = targetRoster ? (targetRoster.riderName || targetRoster.name || "").toString().trim().toLowerCase() : "";
+
+            const isIdMatch = (cleanTarget && rIdClean === cleanTarget) || (targetRosterId && rIdClean === targetRosterId) || (myId && rIdClean === myId.toLowerCase());
+            const isNameMatch = (cleanTarget && rNameClean === cleanTarget) || (targetRosterName && rNameClean === targetRosterName) || (myName && rNameClean === myName);
 
             if (!isIdMatch && !isNameMatch) continue;
             selectedRiderRates = riderTotals[rId].lastRates;
@@ -203,7 +300,7 @@ export function refreshCommissionView() {
 
     if (targetRiderFilter && targetRiderFilter !== "ALL" && !selectedRiderRates) {
         const myRoster = globalState.rosterMembers?.find(m => (m.telegramId || "").toString() === targetRiderFilter.toString());
-        const rName = myRoster ? (myRoster.riderName || myRoster.name || "") : appState.riderName;
+        const rName = myRoster ? (myRoster.riderName || myRoster.name || "") : (appState.riderName || myName);
         selectedRiderRates = getCommissionRates(viewSettings.dateValue, rName, targetRiderFilter);
     }
 
@@ -284,7 +381,7 @@ export function checkSettlementStatus(riderId, period, dateVal, isAdmin) {
 
 export function toggleSettlementStatus() {
     const select = document.getElementById('admin-rider-select');
-    const riderId = select ? select.value : appState.telegramId;
+    const riderId = select ? select.value : (appState.telegramId || appState.riderName);
     const dateVal = viewSettings.dateValue || getLocalTodayStr();
     const settlementKey = `${riderId}_${viewSettings.period}_${dateVal}`;
     
@@ -432,25 +529,25 @@ export function renderRiderSummaryList(riderListArray) {
 
 export function generateDailyReportText() {
     const isUserAdmin = checkIsAdmin();
-    let targetRiderFilter = isUserAdmin ? document.getElementById('admin-rider-select')?.value : appState.telegramId;
+    let targetRiderFilter = isUserAdmin ? document.getElementById('admin-rider-select')?.value : (appState.telegramId || appState.riderName);
     if (targetRiderFilter === "ALL") targetRiderFilter = null;
 
     const mergedList = getMergedDeduplicatedCommissionList();
 
     let filteredHistory = mergedList.filter(record => {
         let rDate = record.date || getLocalTodayStr();
-        if (viewSettings.period === 'daily') return rDate === viewSettings.dateValue;
+        if (viewSettings.period === 'daily') return isSameDate(rDate, viewSettings.dateValue);
         if (viewSettings.period === 'weekly') {
             const d = new Date(rDate + "T00:00:00");
             return getWeekString(d.getTime()) === viewSettings.dateValue;
         }
-        if (viewSettings.period === 'monthly') return rDate.substring(0, 7) === viewSettings.dateValue;
+        if (viewSettings.period === 'monthly') return rDate.substring(0, 7) === viewSettings.dateValue.substring(0, 7);
         return false;
     });
 
     let riderTotals = {}; 
     filteredHistory.forEach(r => {
-        let rId = (r.telegramId || "").toString();
+        let rId = (r.telegramId || "").toString().trim();
         let rName = r.riderName || "Unknown";
         let cName = r.customerName || "Customer";
         let rDate = r.date || getLocalTodayStr();
@@ -480,11 +577,19 @@ export function generateDailyReportText() {
         if (riderTotals[rId].gross <= 0) continue;
 
         if (targetRiderFilter && targetRiderFilter !== "ALL") {
-            const myRoster = globalState.rosterMembers?.find(m => (m.telegramId || "").toString() === targetRiderFilter.toString());
-            const targetName = myRoster ? (myRoster.riderName || myRoster.name || "").toLowerCase() : targetRiderFilter.toLowerCase();
-            
-            const isIdMatch = rId.toString() === targetRiderFilter.toString();
-            const isNameMatch = riderTotals[rId].name.toLowerCase() === targetName;
+            const cleanTarget = targetRiderFilter.toString().trim().toLowerCase();
+            const rIdClean = rId.toString().trim().toLowerCase();
+            const rNameClean = (riderTotals[rId].name || "").toString().trim().toLowerCase();
+
+            const targetRoster = (globalState.rosterMembers || []).find(m => 
+                (m.telegramId || "").toString().trim().toLowerCase() === cleanTarget ||
+                (m.riderName || m.name || "").toString().trim().toLowerCase() === cleanTarget
+            );
+            const targetRosterId = targetRoster ? (targetRoster.telegramId || "").toString().trim().toLowerCase() : "";
+            const targetRosterName = targetRoster ? (targetRoster.riderName || targetRoster.name || "").toString().trim().toLowerCase() : "";
+
+            const isIdMatch = (cleanTarget && rIdClean === cleanTarget) || (targetRosterId && rIdClean === targetRosterId);
+            const isNameMatch = (cleanTarget && rNameClean === cleanTarget) || (targetRosterName && rNameClean === targetRosterName);
 
             if (!isIdMatch && !isNameMatch) continue;
         }
@@ -526,26 +631,22 @@ export function generateDailyReportText() {
 export async function openCommissionScreen() {
     switchView('view-commission');
     
-    if (!document.getElementById('comm-input-daily').value) {
-        const today = new Date();
-        document.getElementById('comm-input-daily').value = getLocalTodayStr();
-        document.getElementById('comm-input-weekly').value = getWeekString(today.getTime());
-        document.getElementById('comm-input-monthly').value = getMonthString(today.getTime());
-    }
+    const today = new Date();
+    const todayStr = getLocalTodayStr();
 
+    const dailyInput = document.getElementById('comm-input-daily');
+    const weeklyInput = document.getElementById('comm-input-weekly');
+    const monthlyInput = document.getElementById('comm-input-monthly');
+
+    if (dailyInput && !dailyInput.value) dailyInput.value = todayStr;
+    if (weeklyInput && !weeklyInput.value) weeklyInput.value = getWeekString(today.getTime());
+    if (monthlyInput && !monthlyInput.value) monthlyInput.value = getMonthString(today.getTime());
+
+    if (!viewSettings.dateValue) viewSettings.dateValue = todayStr;
+
+    initCommissionLiveListeners();
     setupAdminControls();
     await fetchCommissionSettings();
-
-    // Listen to pre-aggregated daily summaries
-    if (db) {
-        const todayStr = getLocalTodayStr();
-        db.ref(`daily_rider_summaries/${todayStr}`).on('value', (snap) => {
-            if (!globalState.dailyRiderSummaries) globalState.dailyRiderSummaries = {};
-            globalState.dailyRiderSummaries[todayStr] = snap.val() || {};
-            refreshCommissionView();
-            window.dispatchEvent(new CustomEvent('rosterUpdated'));
-        });
-    }
-
+    await fetchCommissionData();
     refreshCommissionView();
 }
