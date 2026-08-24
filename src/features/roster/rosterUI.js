@@ -358,7 +358,30 @@ export function loadGlobalCateredList() {
     if (!feed) return;
 
     const todayStr = getLocalTodayStr();
-    const todayHistory = globalState.globalCateredHistory ? globalState.globalCateredHistory.filter(h => isSameDate(h.completedDate || h.date, todayStr)) : [];
+    const rawHistory = globalState.globalCateredHistory ? globalState.globalCateredHistory.filter(h => isSameDate(h.completedDate || h.date, todayStr)) : [];
+
+    // DEDUPLICATE: Map by (rider + customer + startTime + date) so duplicate writes render once
+    const dedupMap = new Map();
+    rawHistory.forEach(h => {
+        if (!h) return;
+        const rName = (h.riderName || "").trim().toLowerCase();
+        const cName = (h.customerName || "").trim().toLowerCase();
+        const sTime = (h.startTime || "").trim().toLowerCase();
+        const cDate = (h.completedDate || h.date || todayStr).trim();
+        const dedupKey = `${rName}_${cName}_${sTime}_${cDate}`;
+
+        if (!dedupMap.has(dedupKey)) {
+            dedupMap.set(dedupKey, h);
+        } else {
+            const existing = dedupMap.get(dedupKey);
+            // Prioritize the entry that has fee breakdown or completed time
+            if ((!existing.totalFees && h.totalFees) || (!existing.completedTime && h.completedTime)) {
+                dedupMap.set(dedupKey, h);
+            }
+        }
+    });
+
+    const todayHistory = Array.from(dedupMap.values());
 
     if (badge) badge.innerText = `${todayHistory.length} recorded`;
 
@@ -390,7 +413,6 @@ export function loadGlobalCateredList() {
 
         return `
         <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-2xl flex flex-col gap-1.5 shadow-xs">
-            <!-- TOP ROW: CUSTOMER NAME & RIDER BADGE + VOID BUTTON -->
             <div class="flex items-center justify-between gap-2">
                 <div class="font-black text-xs text-gray-900 dark:text-white flex items-center gap-1.5 min-w-0 flex-1">
                     <i class="fa-solid fa-user text-orange-600 dark:text-orange-400 text-[11px] shrink-0"></i> 
@@ -402,7 +424,6 @@ export function loadGlobalCateredList() {
                 </div>
             </div>
 
-            <!-- BOTTOM ROW: FULL TIMESTAMPS & SPLIT TIME CALCULATION PILL -->
             <div class="flex flex-wrap items-center justify-between gap-1 pt-1 border-t border-gray-100 dark:border-gray-800/60 text-[10px] font-mono">
                 <span class="text-gray-600 dark:text-gray-400 font-medium">${timeRange}</span>
                 ${durationBadge}
