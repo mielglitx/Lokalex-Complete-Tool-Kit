@@ -144,9 +144,6 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     return durationText;
 }
 
-// -------------------------------------------------------------
-// LOWEST GROSS INCOME LINEUP CALCULATOR
-// -------------------------------------------------------------
 export function getRiderTodayGross(riderName, telegramId) {
     const todayStr = getLocalTodayStr();
     const rName = (riderName || "").trim().toLowerCase();
@@ -204,15 +201,13 @@ export function sortAvailableRidersByGross(availableList) {
         const grossB = getRiderTodayGross(b.riderName || b.name, b.telegramId);
 
         if (grossA !== grossB) {
-            return grossA - grossB; // Lowest gross income first (Ascending)
+            return grossA - grossB;
         }
 
-        // Tie-breaker: FIFO queueTime (earlier queue time first)
         return parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime);
     });
 }
 
-// ROBUST ARCHIVING WITH DEDUPLICATION (PREVENTS DUPLICATE RECEIPTS ON AVAILABLE)
 export async function archiveRiderCateringIfNeeded(targetRecord) {
     if (!targetRecord || targetRecord.status !== 'Catering' || !targetRecord.customerName) return;
 
@@ -220,9 +215,10 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
     const times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
     const custCount = custs.length || 1;
     const completedTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const tId = (targetRecord.telegramId || targetRecord.id || "").toString().trim();
+    const tId = (targetRecord.telegramId || "").toString().trim();
     const tName = targetRecord.riderName || targetRecord.name || "Rider";
     const todayStr = getLocalTodayStr();
+    const todayClean = todayStr.replace(/-/g, '');
 
     if (db && custs.length > 0) {
         db.ref('customerChats').once('value', (snapshot) => {
@@ -252,7 +248,7 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             const rcptSnap = await db.ref('receipts').once('value');
             const rcptVal = rcptSnap.val();
             if (rcptVal) {
-                firebaseReceiptsList = Object.entries(rcptVal).map(([k, v]) => ({ id: k, ...v }));
+                firebaseReceiptsList = Object.values(rcptVal);
             }
         } catch(e) {}
     }
@@ -260,17 +256,21 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
     for (let i = 0; i < custs.length; i++) {
         const cName = custs[i];
         const cleanCustKey = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanRiderKey = tName.toLowerCase().replace(/[^a-z0-9]/g, '');
         const sTime = times[i] || times[0] || 'N/A';
+        const cleanTimeKey = sTime.replace(/[^a-z0-9]/gi, '');
         const splitDuration = calculateSplitDuration(sTime, completedTimeStr, custCount);
 
         let finalFees = 0;
         let finalFeeDetails = null;
-        let matchedTxId = "";
+        let targetTxId = `RCPT_${cleanRiderKey}_${cleanCustKey}_${todayClean}_${cleanTimeKey || '1'}`;
 
         if (targetRecord.customerFees && cleanCustKey && targetRecord.customerFees[cleanCustKey]) {
             finalFees = parseFloat(targetRecord.customerFees[cleanCustKey].totalFees) || 0;
             finalFeeDetails = targetRecord.customerFees[cleanCustKey].fees || null;
-            matchedTxId = targetRecord.customerFees[cleanCustKey].transactionId || "";
+            if (targetRecord.customerFees[cleanCustKey].transactionId) {
+                targetTxId = targetRecord.customerFees[cleanCustKey].transactionId;
+            }
         }
 
         if (finalFees <= 0 && globalState.globalDailyReceipts) {
@@ -285,7 +285,7 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             if (matchReceipt) {
                 finalFees = parseFloat(matchReceipt.totalFees) || 0;
                 finalFeeDetails = matchReceipt.fees || null;
-                matchedTxId = matchReceipt.transactionId || matchReceipt.id || "";
+                targetTxId = matchReceipt.transactionId || matchReceipt.id || targetTxId;
             }
         }
 
@@ -301,7 +301,7 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             if (fbMatch) {
                 finalFees = parseFloat(fbMatch.totalFees) || 0;
                 finalFeeDetails = fbMatch.fees || null;
-                matchedTxId = fbMatch.transactionId || fbMatch.id || "";
+                targetTxId = fbMatch.transactionId || fbMatch.id || targetTxId;
             }
         }
 
@@ -310,33 +310,45 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             finalFeeDetails = targetRecord.lastReceiptFees || null;
         }
 
-        const recordKey = matchedTxId || `CAT_${(tName).toLowerCase().replace(/[^a-z0-9]/g, '')}_${cleanCustKey}_${todayStr.replace(/-/g, '')}`;
+        // Strict Check: Match by transactionId OR session (Rider + Customer + Date + StartTime)
+        const cleanSTime = (sTime || '').trim().toLowerCase();
+        const alreadyInHistory = (globalState.globalCateredHistory || []).some(h => {
+            if (!h) return false;
+            const hTxId = (h.transactionId || h.id || "").toString();
+            if (targetTxId && hTxId === targetTxId) return true;
 
-        const hItem = {
-            id: recordKey,
-            key: recordKey,
-            transactionId: matchedTxId || recordKey,
-            riderName: tName,
-            telegramId: tId,
-            customerName: cName,
-            startTime: sTime,
-            completedTime: completedTimeStr,
-            completedDate: todayStr,
-            customerCount: custCount,
-            duration: splitDuration,
-            totalFees: finalFees,
-            fees: finalFeeDetails
-        };
+            const hRider = (h.riderName || "").trim().toLowerCase();
+            const hCust = (h.customerName || "").trim().toLowerCase();
+            const hDate = h.completedDate || h.date;
+            const hSTime = (h.startTime || "").trim().toLowerCase();
 
-        if (db) {
-            db.ref(`cateredHistory/${recordKey}`).set(hItem);
-        }
+            const isSameRider = hRider === cleanRiderKey || hRider === tName.toLowerCase();
+            const isSameCustomer = hCust === cleanCustKey || hCust === cName.toLowerCase();
+            const isDateMatch = isSameDate(hDate, todayStr);
+            const isTimeMatch = !cleanSTime || cleanSTime === 'n/a' || !hSTime || hSTime === 'n/a' || hSTime === cleanSTime;
 
-        if (!globalState.globalCateredHistory) globalState.globalCateredHistory = [];
-        const existingIdx = globalState.globalCateredHistory.findIndex(h => (h.id === recordKey || h.transactionId === recordKey || (h.customerName.toLowerCase() === cName.toLowerCase() && isSameDate(h.completedDate, todayStr))));
-        if (existingIdx !== -1) {
-            globalState.globalCateredHistory[existingIdx] = { ...globalState.globalCateredHistory[existingIdx], ...hItem };
-        } else {
+            return isSameRider && isSameCustomer && isDateMatch && isTimeMatch;
+        });
+
+        if (!alreadyInHistory) {
+            const hItem = {
+                id: targetTxId,
+                transactionId: targetTxId,
+                riderName: tName,
+                telegramId: tId,
+                customerName: cName,
+                startTime: sTime,
+                completedTime: completedTimeStr,
+                completedDate: todayStr,
+                customerCount: custCount,
+                duration: splitDuration,
+                totalFees: finalFees,
+                fees: finalFeeDetails
+            };
+
+            if (db) db.ref(`cateredHistory/${targetTxId}`).set(hItem);
+
+            if (!globalState.globalCateredHistory) globalState.globalCateredHistory = [];
             globalState.globalCateredHistory.push(hItem);
         }
     }
@@ -350,7 +362,6 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
     saveRosterCache();
     window.dispatchEvent(new CustomEvent('cateredUpdated'));
     window.dispatchEvent(new CustomEvent('receiptsUpdated'));
-    window.dispatchEvent(new CustomEvent('rosterUpdated'));
 }
 
 export function getElapsedCateringTime(startTimeStr) {
@@ -393,7 +404,7 @@ export function getElapsedCateringTime(startTimeStr) {
 
 export function getActiveCateringCustomersWithTimes() {
     const myId = (appState.telegramId || "").toString();
-    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || m.id || "").toString() === myId) : null;
+    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === myId) : null;
     if (!myRecord || myRecord.status !== 'Catering' || !myRecord.customerName) return [];
 
     const custs = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
@@ -437,7 +448,7 @@ export function hasReceiptForActiveSession(custName, custStartTime) {
 
     if (hasReceiptRecord) return true;
 
-    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || m.id || "").toString() === (appState.telegramId || "").toString()) : null;
+    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === (appState.telegramId || "").toString()) : null;
     if (myRecord && myRecord.customerFees && cleanCName && myRecord.customerFees[cleanCName]) {
         return true;
     }
