@@ -154,133 +154,105 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     return durationText;
 }
 
-export function findReceiptFeeForCustomer(rName, cName, rDate) {
-    const cleanRider = (rName || "").toLowerCase().trim();
-    const cleanCust = (cName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-
-    const receipts = globalState.globalDailyReceipts || [];
-    for (let rc of receipts) {
-        if (!rc) continue;
-        const rcRider = (rc.riderName || "").toLowerCase().trim();
-        const rcCust = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-        const rcDate = rc.date || rc.completedDate;
-
-        if (rcRider === cleanRider && rcCust === cleanCust && isSameDate(rcDate, rDate)) {
-            let gross = parseFloat(rc.totalFees);
-            if (!isNaN(gross) && gross > 0) return gross;
-        }
-    }
-    return 0;
+export function isSameDateStr(date1, date2) {
+    if (!date1 || !date2) return false;
+    const s1 = String(date1).trim().split('T')[0].split(' ')[0].replace(/\//g, '-');
+    const s2 = String(date2).trim().split('T')[0].split(' ')[0].replace(/\//g, '-');
+    if (!s1 || !s2) return false;
+    return s1 === s2;
 }
 
+export function parseItemGross(item) {
+    if (!item) return 0;
+    let gross = parseFloat(item.totalFees || item.gross || item.amount || item.total);
+    if (isNaN(gross) || gross <= 0) {
+        let f = item.fees;
+        if (typeof f === 'string') {
+            try { f = JSON.parse(f); } catch(e) { f = null; }
+        }
+        if (f && typeof f === 'object') {
+            const hf = parseFloat(f.handling) || 0;
+            const mf = parseFloat(f.market) || 0;
+            const ms = parseFloat(f.multistore || f.multistop || f.multistoreFees) || 0;
+            const rdf = parseFloat(f.delivery || f.deliveryFees || f.riderFee) || 0;
+            const epay = parseFloat(f.epaymentFee || f.epay) || 0;
+            const disc = parseFloat(f.discount) || 0;
+            gross = Math.max(0, hf + mf + ms + rdf + epay - disc);
+        }
+    }
+    return isNaN(gross) ? 0 : gross;
+}
+
+export function isCustomerMatch(cust1 = "", cust2 = "") {
+    const c1 = (cust1 || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+    const c2 = (cust2 || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!c1 || !c2) return false;
+    if (c1 === c2) return true;
+    if (c1.length >= 4 && c2.includes(c1)) return true;
+    if (c2.length >= 4 && c1.includes(c2)) return true;
+    return false;
+}
+
+// 100% FINANCIAL & ROSTER SOURCE OF TRUTH (CROSS-REFERENCED DURATION & TIME)
 export function getMergedDeduplicatedCommissionList() {
     const mergedMap = new Map();
 
     (globalState.globalDailyReceipts || []).forEach(rc => {
         if (!rc) return;
-        const cleanRider = (rc.riderName || "Rider").toLowerCase().trim();
-        const cleanCust = (rc.customerName || "Customer").toLowerCase().replace(/[^a-z0-9]/g, '');
-        const date = rc.date || rc.completedDate || getLocalTodayStr();
-        const time = rc.cateringStartTime || rc.startTime || rc.time || "";
-        const txId = rc.transactionId || rc.id || `${cleanRider}_${cleanCust}_${date}_${time}`;
+        const cName = (rc.customerName || "Customer").trim();
+        if (!cName || cName.toLowerCase() === 'sample') return;
 
-        let gross = parseFloat(rc.totalFees);
-        if (isNaN(gross) || gross === 0) {
-            let f = rc.fees;
-            if (typeof f === 'string') {
-                try { f = JSON.parse(f); } catch(e) { f = null; }
-            }
-            if (f) {
-                const hf = parseFloat(f.handling) || 0;
-                const mf = parseFloat(f.market) || 0;
-                const ms = parseFloat(f.multistore || f.multistop) || 0;
-                const rdf = parseFloat(f.delivery) || 0;
-                const epay = parseFloat(f.epaymentFee) || 0;
-                const disc = parseFloat(f.discount) || 0;
-                gross = Math.max(0, hf + mf + ms + rdf + epay - disc);
-            } else {
-                gross = 0;
-            }
-        }
+        const rcDate = rc.date || rc.completedDate;
+        if (!rcDate) return;
 
-        const dedupKey = txId;
-        if (!mergedMap.has(dedupKey) || (mergedMap.get(dedupKey).totalFees < gross)) {
-            mergedMap.set(dedupKey, {
-                transactionId: txId,
-                telegramId: (rc.telegramId || rc.riderId || "").toString().trim(),
-                riderName: rc.riderName || "Rider",
-                customerName: rc.customerName || "Customer",
-                date: date,
-                time: time,
-                totalFees: gross,
-                isReceipt: true
+        const rName = (rc.riderName || "Rider").trim();
+        const cleanRider = rName.toLowerCase();
+        const sTime = rc.cateringStartTime || rc.startTime || rc.time || "";
+        let cTime = rc.completedTime || "";
+        let cCount = parseInt(rc.customerCount) || 1;
+        let dur = rc.duration || "";
+        const txId = (rc.transactionId || rc.id || `${cleanRider}_${cName}_${rcDate}_${sTime}`).toString().trim();
+
+        // Cross-reference cateredHistory if duration or completion timestamp was missing on receipt
+        if (!dur || !cTime || dur === "Just now") {
+            const chMatch = (globalState.globalCateredHistory || []).find(ch => {
+                if (!ch) return false;
+                if (txId && (ch.transactionId === txId || ch.id === txId)) return true;
+                const sameRider = (ch.riderName || "").trim().toLowerCase() === cleanRider;
+                const sameCust = isCustomerMatch(ch.customerName, cName);
+                const sameDate = isSameDateStr(ch.completedDate || ch.date, rcDate);
+                return sameRider && sameCust && sameDate;
             });
-        }
-    });
 
-    (globalState.globalCateredHistory || []).forEach(ch => {
-        if (!ch) return;
-        const cleanRider = (ch.riderName || "Rider").toLowerCase().trim();
-        const cleanCust = (ch.customerName || "Customer").toLowerCase().replace(/[^a-z0-9]/g, '');
-        const date = ch.completedDate || ch.date || getLocalTodayStr();
-        const time = ch.startTime || ch.completedTime || ch.time || "";
-
-        let gross = parseFloat(ch.totalFees);
-        if (isNaN(gross) || gross === 0) {
-            let f = ch.fees;
-            if (typeof f === 'string') {
-                try { f = JSON.parse(f); } catch(e) { f = null; }
-            }
-            if (f) {
-                const hf = parseFloat(f.handling) || 0;
-                const mf = parseFloat(f.market) || 0;
-                const ms = parseFloat(f.multistore || f.multistop) || 0;
-                const rdf = parseFloat(f.delivery) || 0;
-                const epay = parseFloat(f.epaymentFee) || 0;
-                const disc = parseFloat(f.discount) || 0;
-                gross = Math.max(0, hf + mf + ms + rdf + epay - disc);
+            if (chMatch) {
+                if (!cTime) cTime = chMatch.completedTime || "";
+                if (cCount === 1 && chMatch.customerCount) cCount = parseInt(chMatch.customerCount) || 1;
+                if (!dur || dur === "Just now") dur = chMatch.duration || "";
             }
         }
-        if (isNaN(gross) || gross === 0) {
-            gross = findReceiptFeeForCustomer(cleanRider, cleanCust, date);
+
+        if ((!dur || dur === "Just now") && sTime && cTime && sTime !== cTime) {
+            dur = calculateSplitDuration(sTime, cTime, cCount);
         }
 
-        const txId = ch.transactionId || ch.id || `${cleanRider}_${cleanCust}_${date}_${time}`;
+        const gross = parseItemGross(rc);
+        if (gross <= 0) return;
 
-        if (gross > 0) {
-            let alreadyExists = false;
-            if (mergedMap.has(txId)) {
-                alreadyExists = true;
-            } else {
-                for (let [k, val] of mergedMap.entries()) {
-                    if (val.riderName.toLowerCase().trim() === cleanRider && 
-                        val.customerName.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust && 
-                        isSameDate(val.date, date)) {
-                        alreadyExists = true;
-                        if (val.totalFees < gross) {
-                            val.totalFees = gross;
-                        }
-                        break;
-                    }
-                }
-            }
-
-            if (!alreadyExists) {
-                mergedMap.set(txId, {
-                    transactionId: txId,
-                    telegramId: (ch.telegramId || ch.riderId || "").toString().trim(),
-                    riderName: ch.riderName || "Rider",
-                    customerName: ch.customerName || "Customer",
-                    date: date,
-                    time: time,
-                    startTime: ch.startTime || "",
-                    completedTime: ch.completedTime || "",
-                    duration: ch.duration || "",
-                    totalFees: gross,
-                    isReceipt: false
-                });
-            }
-        }
+        mergedMap.set(txId, {
+            transactionId: txId,
+            id: txId,
+            telegramId: (rc.telegramId || rc.riderId || "").toString().trim(),
+            riderName: rName,
+            customerName: cName,
+            date: rcDate,
+            time: sTime,
+            startTime: sTime,
+            completedTime: cTime,
+            customerCount: cCount,
+            duration: dur,
+            totalFees: gross,
+            isReceipt: true
+        });
     });
 
     return Array.from(mergedMap.values());
@@ -297,8 +269,8 @@ export function getRiderTodayGross(riderName, telegramId) {
     let total = 0;
 
     mergedList.forEach(rec => {
-        const recDate = rec.date || getLocalTodayStr();
-        if (!isSameDate(recDate, todayStr)) return;
+        const recDate = rec.date || rec.completedDate;
+        if (!isSameDateStr(recDate, todayStr)) return;
 
         let recId = (rec.telegramId || "").toString().trim();
         const recName = (rec.riderName || "").trim().toLowerCase();
@@ -367,17 +339,6 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
         });
     }
 
-    let firebaseReceiptsList = [];
-    if (db) {
-        try {
-            const rcptSnap = await db.ref('receipts').once('value');
-            const rcptVal = rcptSnap.val();
-            if (rcptVal) {
-                firebaseReceiptsList = Object.values(rcptVal);
-            }
-        } catch(e) {}
-    }
-
     for (let i = 0; i < custs.length; i++) {
         const cName = custs[i];
         const cleanCustKey = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -401,38 +362,16 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
         if (finalFees <= 0 && globalState.globalDailyReceipts) {
             const matchReceipt = globalState.globalDailyReceipts.find(rc => {
                 const rMatch = (rc.riderName || "").trim().toLowerCase() === tName.toLowerCase();
-                const cMatch = (rc.customerName || "").trim().toLowerCase() === cName.toLowerCase() ||
-                              (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
-                const dMatch = isSameDate(rc.date || rc.completedDate, todayStr);
+                const cMatch = isCustomerMatch(rc.customerName, cName);
+                const dMatch = isSameDateStr(rc.date || rc.completedDate, todayStr);
                 return rMatch && cMatch && dMatch;
             });
 
             if (matchReceipt) {
-                finalFees = parseFloat(matchReceipt.totalFees) || 0;
+                finalFees = parseItemGross(matchReceipt);
                 finalFeeDetails = matchReceipt.fees || null;
                 targetTxId = matchReceipt.transactionId || matchReceipt.id || targetTxId;
             }
-        }
-
-        if (finalFees <= 0 && firebaseReceiptsList.length > 0) {
-            const fbMatch = firebaseReceiptsList.find(rc => {
-                const rMatch = (rc.riderName || "").trim().toLowerCase() === tName.toLowerCase();
-                const cMatch = (rc.customerName || "").trim().toLowerCase() === cName.toLowerCase() ||
-                              (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
-                const dMatch = isSameDate(rc.date || rc.completedDate, todayStr);
-                return rMatch && cMatch && dMatch;
-            });
-
-            if (fbMatch) {
-                finalFees = parseFloat(fbMatch.totalFees) || 0;
-                finalFeeDetails = fbMatch.fees || null;
-                targetTxId = fbMatch.transactionId || fbMatch.id || targetTxId;
-            }
-        }
-
-        if (finalFees <= 0 && targetRecord.lastReceiptTotalFees) {
-            finalFees = parseFloat(targetRecord.lastReceiptTotalFees) || 0;
-            finalFeeDetails = targetRecord.lastReceiptFees || null;
         }
 
         const cleanSTime = (sTime || '').trim().toLowerCase();
@@ -447,8 +386,8 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             const hSTime = (h.startTime || "").trim().toLowerCase();
 
             const isSameRider = hRider === cleanRiderKey || hRider === tName.toLowerCase();
-            const isSameCustomer = hCust === cleanCustKey || hCust === cName.toLowerCase();
-            const isDateMatch = isSameDate(hDate, todayStr);
+            const isSameCustomer = isCustomerMatch(hCust, cName);
+            const isDateMatch = isSameDateStr(hDate, todayStr);
             const isTimeMatch = !cleanSTime || cleanSTime === 'n/a' || !hSTime || hSTime === 'n/a' || hSTime === cleanSTime;
 
             return isSameRider && isSameCustomer && isDateMatch && isTimeMatch;
@@ -544,7 +483,6 @@ export function hasReceiptForActiveSession(custName, custStartTime) {
     if (!custName || custName.toLowerCase() === 'sample') return true;
     const rName = (appState.riderName || "").trim().toLowerCase();
     const cName = custName.trim().toLowerCase();
-    const cleanCName = cName.replace(/[^a-z0-9]/g, '');
     const sTime = (custStartTime || "").trim();
     const todayStr = getLocalTodayStr();
 
@@ -561,18 +499,17 @@ export function hasReceiptForActiveSession(custName, custStartTime) {
     const receipts = globalState.globalDailyReceipts || [];
     const hasReceiptRecord = receipts.some(rc => {
         const rcRider = (rc.riderName || "").trim().toLowerCase();
-        const rcCust = (rc.customerName || "").trim().toLowerCase();
-        const cleanRcCust = rcCust.replace(/[^a-z0-9]/g, '');
         const rcDate = rc.date || rc.completedDate;
 
         return rcRider === rName && 
-               (rcCust === cName || cleanRcCust === cleanCName) && 
-               isSameDate(rcDate, todayStr);
+               isCustomerMatch(rc.customerName, custName) && 
+               isSameDateStr(rcDate, todayStr);
     });
 
     if (hasReceiptRecord) return true;
 
     const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === (appState.telegramId || "").toString()) : null;
+    const cleanCName = cName.replace(/[^a-z0-9]/g, '');
     if (myRecord && myRecord.customerFees && cleanCName && myRecord.customerFees[cleanCName]) {
         return true;
     }

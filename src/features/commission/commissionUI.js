@@ -1,9 +1,9 @@
 // src/features/commission/commissionUI.js
 import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
-import { getLocalTodayStr, copyText, getWeekString, getMonthString, escapeHtml, isSameDate } from '../../utils/helpers.js';
+import { getLocalTodayStr, copyText, getWeekString, getMonthString, escapeHtml } from '../../utils/helpers.js';
 import { switchView } from '../../ui/router.js';
-import { isAdmin as checkIsAdmin, getMergedDeduplicatedCommissionList, saveRosterCache } from '../roster/rosterUtils.js';
+import { isAdmin as checkIsAdmin, getMergedDeduplicatedCommissionList, isSameDateStr, saveRosterCache } from '../roster/rosterUtils.js';
 import { getCommissionRates, fetchCommissionSettings } from './commissionRates.js';
 
 export let viewSettings = {
@@ -18,7 +18,6 @@ export function initCommissionLiveListeners() {
     if (isCommissionListenerActive || !db) return;
     isCommissionListenerActive = true;
 
-    // Real-time receipts synchronization
     db.ref('receipts').on('value', (snapshot) => {
         const val = snapshot.val();
         if (val) {
@@ -35,7 +34,6 @@ export function initCommissionLiveListeners() {
         window.dispatchEvent(new CustomEvent('rosterUpdated'));
     });
 
-    // Real-time catered history synchronization
     db.ref('cateredHistory').on('value', (snapshot) => {
         const val = snapshot.val();
         if (val) {
@@ -52,6 +50,8 @@ export function initCommissionLiveListeners() {
         window.dispatchEvent(new CustomEvent('rosterUpdated'));
     });
 }
+
+initCommissionLiveListeners();
 
 export async function fetchCommissionData() {
     if (!db) return;
@@ -128,6 +128,7 @@ export function setupAdminControls() {
         
         select.innerHTML = options;
         select.value = currentSelected;
+        select.onchange = () => refreshCommissionView();
 
         let addBtn = document.getElementById('admin-add-comm-btn');
         if (!addBtn) {
@@ -209,17 +210,18 @@ export function refreshCommissionView() {
     const mergedList = getMergedDeduplicatedCommissionList();
 
     let filteredHistory = mergedList.filter(record => {
-        let rDate = record.date || getLocalTodayStr();
+        let rDate = record.date || record.completedDate;
+        if (!rDate) return false;
         
         if (viewSettings.period === 'daily') {
-            return isSameDate(rDate, viewSettings.dateValue);
+            return isSameDateStr(rDate, viewSettings.dateValue);
         }
         if (viewSettings.period === 'weekly') {
-            const d = new Date(rDate + "T00:00:00");
+            const d = new Date(rDate.includes('-') || rDate.includes('/') ? rDate : Number(rDate));
             return getWeekString(d.getTime()) === viewSettings.dateValue;
         }
         if (viewSettings.period === 'monthly') {
-            return rDate.substring(0, 7) === viewSettings.dateValue.substring(0, 7);
+            return String(rDate).substring(0, 7) === String(viewSettings.dateValue).substring(0, 7);
         }
         return false;
     });
@@ -230,7 +232,7 @@ export function refreshCommissionView() {
         let rId = (r.telegramId || "").toString().trim();
         let rName = r.riderName || "Unknown Rider";
         let cName = r.customerName || "Customer";
-        let rDate = r.date || getLocalTodayStr();
+        let rDate = r.date || r.completedDate;
 
         if (!rId) {
             const rosterRec = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").toLowerCase() === rName.toLowerCase());
@@ -464,16 +466,16 @@ export function renderRiderSummaryList(riderListArray) {
                     : ``;
 
                 return `
-                <div class="bg-white dark:bg-black/40 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800/80 flex justify-between items-center text-xs shadow-xs">
+                <div class="bg-white dark:bg-zinc-900/90 p-2.5 rounded-xl border border-gray-200 dark:border-zinc-700/60 flex justify-between items-center text-xs shadow-xs">
                     <div class="flex flex-col gap-0.5 min-w-0 flex-1">
-                        <span class="font-black text-xs text-orange-700 dark:text-orange-300 flex items-center gap-1.5 truncate">
+                        <span class="font-black text-xs text-orange-700 dark:text-orange-400 flex items-center gap-1.5 truncate">
                             <i class="fa-solid fa-user text-[10px]"></i> ${escapeHtml(c.customerName)} ${editBtn} ${deleteBtn}
                         </span>
-                        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-mono">${escapeHtml(dateTimeStr)}</span>
+                        <span class="text-[10px] text-gray-500 dark:text-gray-300 font-mono font-medium">${escapeHtml(dateTimeStr)}</span>
                     </div>
                     <div class="text-right shrink-0">
                         <div class="font-black ${colorClass}">${cAmt}</div>
-                        <div class="text-[9px] text-gray-500 dark:text-gray-400 font-mono font-bold">Paid: ₱${c.gross.toFixed(2)}</div>
+                        <div class="text-[9px] text-gray-600 dark:text-gray-200 font-mono font-bold">Paid: ₱${c.gross.toFixed(2)}</div>
                     </div>
                 </div>`;
             }).join('');
@@ -513,12 +515,12 @@ export function renderRiderSummaryList(riderListArray) {
                     </div>
                 </div>
 
-                <div id="box-${uid}" class="hidden bg-gray-50 dark:bg-darkBg/60 p-3 border-t border-gray-200 dark:border-gray-800/80 flex flex-col gap-2">
+                <div id="box-${uid}" class="hidden bg-gray-50 dark:bg-zinc-950/80 p-3 border-t border-gray-200 dark:border-gray-800/80 flex flex-col gap-2">
                     ${penaltyBadge}
                     ${promoBadge}
                     <div class="text-[10px] text-amber-700 dark:text-amber-400 font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
                         <span><i class="fa-solid fa-list-check"></i> Customer Breakdown (${viewSettings.period.toUpperCase()})</span>
-                        <span class="text-gray-600 dark:text-gray-400 font-mono font-black">Total Paid: ₱${rider.gross.toFixed(2)}</span>
+                        <span class="text-gray-700 dark:text-gray-200 font-mono font-black">Total Paid: ₱${rider.gross.toFixed(2)}</span>
                     </div>
                     ${customerItemsHtml}
                 </div>
@@ -535,13 +537,14 @@ export function generateDailyReportText() {
     const mergedList = getMergedDeduplicatedCommissionList();
 
     let filteredHistory = mergedList.filter(record => {
-        let rDate = record.date || getLocalTodayStr();
-        if (viewSettings.period === 'daily') return isSameDate(rDate, viewSettings.dateValue);
+        let rDate = record.date || record.completedDate;
+        if (!rDate) return false;
+        if (viewSettings.period === 'daily') return isSameDateStr(rDate, viewSettings.dateValue);
         if (viewSettings.period === 'weekly') {
-            const d = new Date(rDate + "T00:00:00");
+            const d = new Date(rDate.includes('-') || rDate.includes('/') ? rDate : Number(rDate));
             return getWeekString(d.getTime()) === viewSettings.dateValue;
         }
-        if (viewSettings.period === 'monthly') return rDate.substring(0, 7) === viewSettings.dateValue.substring(0, 7);
+        if (viewSettings.period === 'monthly') return String(rDate).substring(0, 7) === String(viewSettings.dateValue).substring(0, 7);
         return false;
     });
 
@@ -550,7 +553,7 @@ export function generateDailyReportText() {
         let rId = (r.telegramId || "").toString().trim();
         let rName = r.riderName || "Unknown";
         let cName = r.customerName || "Customer";
-        let rDate = r.date || getLocalTodayStr();
+        let rDate = r.date || r.completedDate;
 
         if (!rId) {
             const rosterRec = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").toLowerCase() === rName.toLowerCase());
@@ -638,9 +641,18 @@ export async function openCommissionScreen() {
     const weeklyInput = document.getElementById('comm-input-weekly');
     const monthlyInput = document.getElementById('comm-input-monthly');
 
-    if (dailyInput && !dailyInput.value) dailyInput.value = todayStr;
-    if (weeklyInput && !weeklyInput.value) weeklyInput.value = getWeekString(today.getTime());
-    if (monthlyInput && !monthlyInput.value) monthlyInput.value = getMonthString(today.getTime());
+    if (dailyInput && !dailyInput.value) {
+        dailyInput.value = todayStr;
+        dailyInput.onchange = () => refreshCommissionView();
+    }
+    if (weeklyInput && !weeklyInput.value) {
+        weeklyInput.value = getWeekString(today.getTime());
+        weeklyInput.onchange = () => refreshCommissionView();
+    }
+    if (monthlyInput && !monthlyInput.value) {
+        monthlyInput.value = getMonthString(today.getTime());
+        monthlyInput.onchange = () => refreshCommissionView();
+    }
 
     if (!viewSettings.dateValue) viewSettings.dateValue = todayStr;
 

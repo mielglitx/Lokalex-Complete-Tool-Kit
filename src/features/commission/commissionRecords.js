@@ -4,7 +4,7 @@ import { db } from '../../config/firebase.js';
 import { getLocalTodayStr, escapeHtml } from '../../utils/helpers.js';
 import { showToast } from '../../ui/notifications.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
-import { isAdmin as checkIsAdmin } from '../roster/rosterUtils.js';
+import { isAdmin as checkIsAdmin, isCustomerMatch, isSameDateStr, saveRosterCache } from '../roster/rosterUtils.js';
 import { getCleanRiderList, refreshCommissionView, viewSettings } from './commissionUI.js';
 
 export function openAdminPenaltyModal() {
@@ -143,6 +143,7 @@ export async function submitAdminAddCommissionRecord() {
     const rId = rosterMem ? (rosterMem.telegramId || rosterMem.id || "") : cleanRiderKey;
 
     const newRecord = {
+        id: txId,
         type: "receipts",
         transactionId: txId,
         telegramId: rId,
@@ -159,43 +160,15 @@ export async function submitAdminAddCommissionRecord() {
 
     if (db) {
         await db.ref('receipts/' + txId).set(newRecord);
-
-        // Atomic Ledger Update
-        const targetSummaryId = rId || cleanRiderKey;
-        const summaryRef = db.ref(`daily_rider_summaries/${dateVal}/${targetSummaryId}`);
-        await summaryRef.transaction((current) => {
-            if (!current) {
-                return {
-                    riderName: rNameInput,
-                    grossIncome: grossFee,
-                    deliveryFees: grossFee,
-                    handlingFees: 0,
-                    marketFees: 0,
-                    multistoreFees: 0,
-                    discounts: 0,
-                    completedReceipts: 1,
-                    updatedAt: Date.now()
-                };
-            }
-            return {
-                riderName: rNameInput || current.riderName || "",
-                grossIncome: (Number(current.grossIncome) || 0) + grossFee,
-                deliveryFees: (Number(current.deliveryFees) || 0) + grossFee,
-                handlingFees: Number(current.handlingFees) || 0,
-                marketFees: Number(current.marketFees) || 0,
-                multistoreFees: Number(current.multistoreFees) || 0,
-                discounts: Number(current.discounts) || 0,
-                completedReceipts: (Number(current.completedReceipts) || 0) + 1,
-                updatedAt: Date.now()
-            };
-        });
     }
 
+    saveRosterCache();
     closeAdminAddCommModal();
     showToast(`✅ Added ₱${grossFee.toFixed(2)} for ${cNameInput} (${rNameInput})`);
     refreshCommissionView();
     window.dispatchEvent(new CustomEvent('rosterUpdated'));
     window.dispatchEvent(new CustomEvent('receiptsUpdated'));
+    window.dispatchEvent(new CustomEvent('cateredUpdated'));
 }
 
 export function promptAdminDeleteCommissionRecord(riderName, customerName, dateVal, txId) {
@@ -210,100 +183,84 @@ export function promptAdminDeleteCommissionRecord(riderName, customerName, dateV
     );
 }
 
+// STRICT SINGLE-ID DELETION: Never deletes other records of the same customer/rider
 export async function executeDeleteCommissionRecord(riderName, customerName, dateVal, txId) {
     const cleanRider = (riderName || "").toLowerCase().trim();
-    const cleanCust = (customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-    let deletedAmount = 0;
 
-    if (globalState.globalDailyReceipts) {
-        globalState.globalDailyReceipts = globalState.globalDailyReceipts.filter(rc => {
-            if (txId && (rc.transactionId === txId || rc.id === txId)) {
-                deletedAmount = parseFloat(rc.totalFees) || 0;
-                return false;
-            }
-            const matchRider = (rc.riderName || "").toLowerCase().trim() === cleanRider;
-            const matchCust = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
-            const matchDate = (rc.date || rc.completedDate) === dateVal;
-            if (matchRider && matchCust && matchDate) {
-                deletedAmount = parseFloat(rc.totalFees) || 0;
-                return false;
-            }
-            return true;
-        });
-    }
+    if (txId) {
+        if (globalState.globalDailyReceipts) {
+            globalState.globalDailyReceipts = globalState.globalDailyReceipts.filter(rc => rc.transactionId !== txId && rc.id !== txId);
+        }
+        if (globalState.globalCateredHistory) {
+            globalState.globalCateredHistory = globalState.globalCateredHistory.filter(ch => ch.transactionId !== txId && ch.id !== txId);
+        }
 
-    if (globalState.globalCateredHistory) {
-        globalState.globalCateredHistory = globalState.globalCateredHistory.filter(ch => {
-            if (txId && (ch.transactionId === txId || ch.id === txId)) {
-                if (!deletedAmount) deletedAmount = parseFloat(ch.totalFees) || 0;
-                return false;
-            }
-            const matchRider = (ch.riderName || "").toLowerCase().trim() === cleanRider;
-            const matchCust = (ch.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
-            const matchDate = (ch.completedDate || ch.date) === dateVal;
-            if (matchRider && matchCust && matchDate) {
-                if (!deletedAmount) deletedAmount = parseFloat(ch.totalFees) || 0;
-                return false;
-            }
-            return true;
-        });
-    }
+        if (db) {
+            await db.ref('receipts/' + txId).remove();
+            await db.ref('cateredHistory/' + txId).remove();
 
-    if (db) {
-        db.ref('receipts').once('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                Object.keys(data).forEach(key => {
-                    const item = data[key];
-                    if (txId && (item.transactionId === txId || key === txId)) {
-                        db.ref('receipts/' + key).remove();
-                    } else {
+            // In case Firebase key differs from txId
+            db.ref('receipts').orderByChild('transactionId').equalTo(txId).once('value', (snap) => {
+                snap.forEach(child => child.ref.remove());
+            });
+            db.ref('cateredHistory').orderByChild('transactionId').equalTo(txId).once('value', (snap) => {
+                snap.forEach(child => child.ref.remove());
+            });
+        }
+    } else {
+        // Fallback ONLY when txId is not provided
+        if (globalState.globalDailyReceipts) {
+            globalState.globalDailyReceipts = globalState.globalDailyReceipts.filter(rc => {
+                const matchRider = (rc.riderName || "").toLowerCase().trim() === cleanRider;
+                const matchCust = isCustomerMatch(rc.customerName, customerName);
+                const matchDate = isSameDateStr(rc.date || rc.completedDate, dateVal);
+                return !(matchRider && matchCust && matchDate);
+            });
+        }
+
+        if (globalState.globalCateredHistory) {
+            globalState.globalCateredHistory = globalState.globalCateredHistory.filter(ch => {
+                const matchRider = (ch.riderName || "").toLowerCase().trim() === cleanRider;
+                const matchCust = isCustomerMatch(ch.customerName, customerName);
+                const matchDate = isSameDateStr(ch.completedDate || ch.date, dateVal);
+                return !(matchRider && matchCust && matchDate);
+            });
+        }
+
+        if (db) {
+            db.ref('receipts').once('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    Object.keys(data).forEach(key => {
+                        const item = data[key];
                         const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
-                        const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
-                        const matchDate = (item.date || item.completedDate) === dateVal;
+                        const matchCust = isCustomerMatch(item.customerName, customerName);
+                        const matchDate = isSameDateStr(item.date || item.completedDate, dateVal);
                         if (matchRider && matchCust && matchDate) {
                             db.ref('receipts/' + key).remove();
                         }
-                    }
-                });
-            }
-        });
+                    });
+                }
+            });
 
-        db.ref('cateredHistory').once('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                Object.keys(data).forEach(key => {
-                    const item = data[key];
-                    if (txId && (item.transactionId === txId || key === txId)) {
-                        db.ref('cateredHistory/' + key).remove();
-                    } else {
+            db.ref('cateredHistory').once('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    Object.keys(data).forEach(key => {
+                        const item = data[key];
                         const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
-                        const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCust;
-                        const matchDate = (item.completedDate || item.date) === dateVal;
+                        const matchCust = isCustomerMatch(item.customerName, customerName);
+                        const matchDate = isSameDateStr(item.completedDate || item.date, dateVal);
                         if (matchRider && matchCust && matchDate) {
                             db.ref('cateredHistory/' + key).remove();
                         }
-                    }
-                });
-            }
-        });
-
-        // Deduct from Daily Summary Node
-        const rosterMem = (globalState.rosterMembers || []).find(m => (m.riderName || m.name || "").toLowerCase().trim() === cleanRider);
-        const rId = rosterMem ? (rosterMem.telegramId || rosterMem.id || "") : cleanRider;
-        if (rId && deletedAmount > 0) {
-            db.ref(`daily_rider_summaries/${dateVal}/${rId}`).transaction((curr) => {
-                if (!curr) return null;
-                return {
-                    ...curr,
-                    grossIncome: Math.max(0, (Number(curr.grossIncome) || 0) - deletedAmount),
-                    completedReceipts: Math.max(0, (Number(curr.completedReceipts) || 1) - 1),
-                    updatedAt: Date.now()
-                };
+                    });
+                }
             });
         }
     }
 
+    saveRosterCache();
     showToast("🗑️ Record deleted successfully!");
     refreshCommissionView();
     window.dispatchEvent(new CustomEvent('rosterUpdated'));
@@ -320,25 +277,14 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
     const parsedFee = parseFloat(newFeeInput);
     if (isNaN(parsedFee) || parsedFee < 0) return showToast("⚠️ Invalid fee amount entered.");
 
-    const oldGross = parseFloat(currentGross) || 0;
-    const diff = parsedFee - oldGross;
-
-    const cleanCustKey = customerName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanRider = riderName.toLowerCase().trim();
 
     (globalState.globalDailyReceipts || []).forEach(rc => {
         const matchRider = (rc.riderName || "").toLowerCase().trim() === cleanRider;
-        const matchCust = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
-        if (matchRider && matchCust) {
+        const matchCust = isCustomerMatch(rc.customerName, customerName);
+        const matchDate = isSameDateStr(rc.date || rc.completedDate, dateVal);
+        if (matchRider && matchCust && matchDate) {
             rc.totalFees = parsedFee;
-        }
-    });
-
-    (globalState.globalCateredHistory || []).forEach(ch => {
-        const matchRider = (ch.riderName || "").toLowerCase().trim() === cleanRider;
-        const matchCust = (ch.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
-        if (matchRider && matchCust) {
-            ch.totalFees = parsedFee;
         }
     });
 
@@ -349,43 +295,17 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
                 Object.keys(data).forEach(key => {
                     const item = data[key];
                     const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
-                    const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
-                    if (matchRider && matchCust) {
+                    const matchCust = isCustomerMatch(item.customerName, customerName);
+                    const matchDate = isSameDateStr(item.date || item.completedDate, dateVal);
+                    if (matchRider && matchCust && matchDate) {
                         db.ref('receipts/' + key).update({ totalFees: parsedFee });
                     }
                 });
             }
         });
-
-        db.ref('cateredHistory').once('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                Object.keys(data).forEach(key => {
-                    const item = data[key];
-                    const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
-                    const matchCust = (item.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '') === cleanCustKey;
-                    if (matchRider && matchCust) {
-                        db.ref('cateredHistory/' + key).update({ totalFees: parsedFee });
-                    }
-                });
-            }
-        });
-
-        // Update Daily Summary Node with Delta
-        const rosterMem = (globalState.rosterMembers || []).find(m => (m.riderName || m.name || "").toLowerCase().trim() === cleanRider);
-        const rId = rosterMem ? (rosterMem.telegramId || rosterMem.id || "") : cleanRider;
-        if (rId && diff !== 0) {
-            db.ref(`daily_rider_summaries/${dateVal}/${rId}`).transaction((curr) => {
-                if (!curr) return null;
-                return {
-                    ...curr,
-                    grossIncome: Math.max(0, (Number(curr.grossIncome) || 0) + diff),
-                    updatedAt: Date.now()
-                };
-            });
-        }
     }
 
+    saveRosterCache();
     showToast(`✅ Fee updated to ₱${parsedFee.toFixed(2)} for ${customerName}!`);
     refreshCommissionView();
     window.dispatchEvent(new CustomEvent('rosterUpdated'));

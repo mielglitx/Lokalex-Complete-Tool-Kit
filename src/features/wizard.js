@@ -5,7 +5,7 @@ import { getLocalTodayStr, copyText, escapeHtml, isSameDate } from '../utils/hel
 import { showToast, showSideNotification } from '../ui/notifications.js';
 import { switchView } from '../ui/router.js';
 import { saveCartState, getCurrentCart, clearCartSlot, getEffectiveCartClient, renderCartItems, renderCartTabs } from './cart.js';
-import { getActiveCateringCustomersWithTimes, saveRosterCache, updateRosterUI } from './roster/index.js';
+import { getActiveCateringCustomersWithTimes, calculateSplitDuration, saveRosterCache, updateRosterUI } from './roster/index.js';
 
 let currentReceiptTransactionId = "";
 
@@ -299,6 +299,8 @@ async function saveReceiptToDatabase(customerName) {
     const match = activeCustList.find(i => i.name.trim().toLowerCase() === cName.toLowerCase());
     const sTime = match ? match.startTime.trim() : currentTimeStr;
     const cleanTimeKey = sTime.replace(/[^a-z0-9]/gi, '');
+    const custCount = Math.max(1, activeCustList.length || 1);
+    const splitDuration = calculateSplitDuration(sTime, currentTimeStr, custCount);
 
     const sessionKey = `receipt_done_${cleanRiderKey}_${cleanCustKey}_${sTime}_${todayStr}`;
     localStorage.setItem(sessionKey, 'true');
@@ -321,6 +323,10 @@ async function saveReceiptToDatabase(customerName) {
         riderName: rName,
         customerName: cName,
         cateringStartTime: sTime,
+        startTime: sTime,
+        completedTime: currentTimeStr,
+        customerCount: custCount,
+        duration: splitDuration,
         fees: {
             handling: wizState.finalHFee || 0,
             market: wizState.finalMFee || 0,
@@ -344,21 +350,17 @@ async function saveReceiptToDatabase(customerName) {
         startTime: sTime,
         completedTime: currentTimeStr,
         completedDate: todayStr,
-        customerCount: activeCustList.length || 1,
-        duration: "Just now",
+        customerCount: custCount,
+        duration: splitDuration,
         totalFees: totalFees,
         fees: receiptPayload.fees
     };
 
     try {
         if (db) {
-            // 1. Save receipt record immediately
             await db.ref('receipts/' + currentReceiptTransactionId).set(receiptPayload);
-
-            // 2. Save catered history record immediately
             await db.ref('cateredHistory/' + currentReceiptTransactionId).set(cateredHistoryItem);
 
-            // 3. Update active roster record fees
             if (appState.telegramId) {
                 db.ref('roster/' + appState.telegramId).update({
                     lastReceiptFees: receiptPayload.fees,
@@ -374,48 +376,8 @@ async function saveReceiptToDatabase(customerName) {
                     });
                 }
             }
-
-            // 4. Atomic Daily Summary Ledger Node Update
-            const targetSummaryId = (appState.telegramId || cleanRiderKey).toString().trim();
-            if (targetSummaryId) {
-                const summaryRef = db.ref(`daily_rider_summaries/${todayStr}/${targetSummaryId}`);
-                await summaryRef.transaction((current) => {
-                    const handling = wizState.finalHFee || 0;
-                    const market = wizState.finalMFee || 0;
-                    const multistore = wizState.finalMulti || 0;
-                    const delivery = wizState.deliveryFee || 0;
-                    const discount = wizState.discount || 0;
-
-                    if (!current) {
-                        return {
-                            riderName: rName,
-                            grossIncome: totalFees,
-                            deliveryFees: delivery,
-                            handlingFees: handling,
-                            marketFees: market,
-                            multistoreFees: multistore,
-                            discounts: discount,
-                            completedReceipts: 1,
-                            updatedAt: Date.now()
-                        };
-                    }
-
-                    return {
-                        riderName: rName || current.riderName || "",
-                        grossIncome: (Number(current.grossIncome) || 0) + totalFees,
-                        deliveryFees: (Number(current.deliveryFees) || 0) + delivery,
-                        handlingFees: (Number(current.handlingFees) || 0) + handling,
-                        marketFees: (Number(current.marketFees) || 0) + market,
-                        multistoreFees: (Number(current.multistoreFees) || 0) + multistore,
-                        discounts: (Number(current.discounts) || 0) + discount,
-                        completedReceipts: (Number(current.completedReceipts) || 0) + 1,
-                        updatedAt: Date.now()
-                    };
-                });
-            }
         }
 
-        // 5. Update in-memory state immediately so gross and history reflect without waiting
         if (!globalState.globalDailyReceipts) globalState.globalDailyReceipts = [];
         const rIdx = globalState.globalDailyReceipts.findIndex(r => (r.transactionId === currentReceiptTransactionId || r.id === currentReceiptTransactionId));
         if (rIdx !== -1) globalState.globalDailyReceipts[rIdx] = receiptPayload;

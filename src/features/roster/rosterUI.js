@@ -9,8 +9,11 @@ import {
     getElapsedCateringTime, 
     checkFirstInLineAlarm,
     calculateSplitDuration,
+    parseTimeToMinutes,
     getRiderTodayGross,
-    sortAvailableRidersByGross
+    sortAvailableRidersByGross,
+    getMergedDeduplicatedCommissionList,
+    isSameDateStr
 } from './rosterUtils.js';
 import { autoStartLiveGpsSession, endLiveGpsSession } from '../liveTracker.js';
 import { openMapPicker } from '../maps.js';
@@ -352,36 +355,26 @@ export function updateRosterUI() {
     if (elDayoff) elDayoff.innerHTML = dayOffHtml.length ? dayOffHtml.join('') : '(Walang naka-day off)';
 }
 
+// UNIFIED: Sorted Chronologically by Catering Start Time (Earliest to Latest) with Dynamic Split Minutes
 export function loadGlobalCateredList() {
     const feed = document.getElementById('catered-customers-feed');
     const badge = document.getElementById('catered-count-badge');
     if (!feed) return;
 
     const todayStr = getLocalTodayStr();
-    const rawHistory = globalState.globalCateredHistory ? globalState.globalCateredHistory.filter(h => isSameDate(h.completedDate || h.date, todayStr)) : [];
+    const mergedList = getMergedDeduplicatedCommissionList();
 
-    // DEDUPLICATE: Map by (rider + customer + startTime + date) so duplicate writes render once
-    const dedupMap = new Map();
-    rawHistory.forEach(h => {
-        if (!h) return;
-        const rName = (h.riderName || "").trim().toLowerCase();
-        const cName = (h.customerName || "").trim().toLowerCase();
-        const sTime = (h.startTime || "").trim().toLowerCase();
-        const cDate = (h.completedDate || h.date || todayStr).trim();
-        const dedupKey = `${rName}_${cName}_${sTime}_${cDate}`;
-
-        if (!dedupMap.has(dedupKey)) {
-            dedupMap.set(dedupKey, h);
-        } else {
-            const existing = dedupMap.get(dedupKey);
-            // Prioritize the entry that has fee breakdown or completed time
-            if ((!existing.totalFees && h.totalFees) || (!existing.completedTime && h.completedTime)) {
-                dedupMap.set(dedupKey, h);
-            }
-        }
+    const todayHistory = mergedList.filter(item => {
+        const itemDate = item.date || item.completedDate;
+        return itemDate && isSameDateStr(itemDate, todayStr);
     });
 
-    const todayHistory = Array.from(dedupMap.values());
+    // Sort chronologically based on when catering started
+    todayHistory.sort((a, b) => {
+        const timeA = parseTimeToMinutes(a.startTime || a.cateringStartTime || a.time || "") ?? 9999;
+        const timeB = parseTimeToMinutes(b.startTime || b.cateringStartTime || b.time || "") ?? 9999;
+        return timeA - timeB;
+    });
 
     if (badge) badge.innerText = `${todayHistory.length} recorded`;
 
@@ -390,26 +383,43 @@ export function loadGlobalCateredList() {
         return;
     }
 
-    feed.innerHTML = todayHistory.slice().reverse().map(h => {
+    feed.innerHTML = todayHistory.map(h => {
         let voidBtn = "";
         const recordTxId = h.transactionId || h.id || "";
+        const cDate = h.date || h.completedDate || todayStr;
+
         if (isAdmin()) {
-            voidBtn = `<button onclick="window.promptVoidCustomer && window.promptVoidCustomer('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(h.completedDate || '')}', '${escapeHtml(h.startTime || '')}', '${escapeHtml(recordTxId)}')" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-400 dark:border-red-700/50 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shrink-0"><i class="fa-solid fa-ban"></i> Void</button>`;
+            voidBtn = `<button onclick="window.promptAdminDeleteCommissionRecord && window.promptAdminDeleteCommissionRecord('${escapeHtml(h.riderName)}', '${escapeHtml(h.customerName)}', '${escapeHtml(cDate)}', '${escapeHtml(recordTxId)}')" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-400 dark:border-red-700/50 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shrink-0"><i class="fa-solid fa-ban"></i> Void</button>`;
         }
 
+        const sTime = h.startTime || h.cateringStartTime || h.time || "";
+        const cTime = h.completedTime || "";
+        const cCount = parseInt(h.customerCount) || 1;
         let durationStr = h.duration || "";
-        if (!durationStr && h.startTime && h.completedTime) {
-            durationStr = calculateSplitDuration(h.startTime, h.completedTime, h.customerCount || 1);
+
+        // Calculate and format split minutes if multiple customers catered together
+        if ((!durationStr || durationStr === "Just now") && sTime && cTime && sTime !== cTime) {
+            durationStr = calculateSplitDuration(sTime, cTime, cCount);
+        } else if (durationStr && cCount > 1 && !durationStr.includes('÷')) {
+            const startMins = parseTimeToMinutes(sTime);
+            const endMins = parseTimeToMinutes(cTime);
+            if (startMins !== null && endMins !== null) {
+                let totalMins = endMins - startMins;
+                if (totalMins < 0) totalMins += 24 * 60;
+                const splitMins = Math.round(totalMins / cCount);
+                durationStr = `${splitMins}m (${totalMins}m ÷ ${cCount})`;
+            }
         }
 
-        let timeRange = `🕒 ${escapeHtml(h.startTime)}`;
-        if (h.completedTime) {
-            timeRange += ` → ${escapeHtml(h.completedTime)}`;
+        let timeRange = sTime ? `🕒 ${escapeHtml(sTime)}` : `🕒 Completed`;
+        if (cTime && cTime !== sTime) {
+            timeRange += ` → ${escapeHtml(cTime)}`;
         }
 
-        const durationBadge = durationStr 
-            ? `<span class="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 px-1.5 py-0.5 rounded font-black text-[9px] font-mono tracking-wide">[${escapeHtml(durationStr)}]</span>` 
-            : '';
+        let durationBadge = "";
+        if (durationStr) {
+            durationBadge = `<span class="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 px-1.5 py-0.5 rounded font-black text-[9px] font-mono tracking-wide">[${escapeHtml(durationStr)}]</span>`;
+        }
 
         return `
         <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-2xl flex flex-col gap-1.5 shadow-xs">
@@ -475,5 +485,6 @@ if (typeof window !== 'undefined') {
 
     window.addEventListener('rosterUpdated', updateRosterUI);
     window.addEventListener('cateredUpdated', loadGlobalCateredList);
+    window.addEventListener('receiptsUpdated', loadGlobalCateredList);
     window.addEventListener('loginsUpdated', loadGlobalLoginList);
 }
