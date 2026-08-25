@@ -186,7 +186,7 @@ export async function adminForceStatus(id, name, actionValue) {
     }
 
     const rosterMembers = globalState.rosterMembers || [];
-    const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === id.toString());
+    const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === id.toString());
     const targetType = targetRecord ? targetRecord.userType : "";
 
     if (!canForceCaterTarget(targetType)) {
@@ -211,7 +211,7 @@ export async function adminForceStatus(id, name, actionValue) {
     openSlideDeleteModal(`Force Status: ${actionValue}?`, `Force change status of ${name} to [${actionValue}]?`, async () => {
         if (actionValue === 'Available') {
             const currentRoster = globalState.rosterMembers || [];
-            const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || m.id || "").toString() !== id.toString());
+            const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== id.toString());
             let maxTime = Date.now();
             availableRiders.forEach(r => {
                 const t = parseQueueTime(r.queueTime);

@@ -11,6 +11,7 @@ import { populateCateringCustomerDropdown } from '../chat/index.js';
 import { 
     parseQueueTime, 
     calculateSplitDuration, 
+    parseTimeToMinutes,
     getActiveCateringCustomersWithTimes, 
     hasReceiptForActiveSession, 
     stopLineAlarm, 
@@ -131,7 +132,7 @@ export function canRiderTakeMoreBookings(targetId = null, targetName = null) {
 }
 
 // ============================================================================
-// TIME-IN SCHEDULE & PERMANENT EARLY PASS VALIDATION HELPER
+// TIME-IN SCHEDULE & EARLY PASS VALIDATION HELPER (FIXED 12H/24H PARSING)
 // ============================================================================
 export function checkRiderTimeInAllowed(targetId = null, targetName = null) {
     const myId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
@@ -144,18 +145,34 @@ export function checkRiderTimeInAllowed(targetId = null, targetName = null) {
     if (!config.enabled) return { allowed: true, reason: 'disabled' };
 
     const riderSchedules = config.riderSchedules || {};
-    const riderSched = (myId && riderSchedules[myId]) || 
-                       (myName && riderSchedules[myName.toLowerCase()]) || 
-                       (myNameKey && riderSchedules[myNameKey]) || 
-                       null;
+    
+    // Look up schedule by telegramId, name, clean key, or nested rider properties
+    let riderSched = (myId && riderSchedules[myId]) || 
+                     (myName && riderSchedules[myName.toLowerCase()]) || 
+                     (myNameKey && riderSchedules[myNameKey]) || 
+                     null;
+
+    if (!riderSched) {
+        const foundKey = Object.keys(riderSchedules).find(k => {
+            const item = riderSchedules[k];
+            if (!item) return false;
+            const rName = (item.riderName || item.name || k || "").toString().toLowerCase().trim();
+            const rId = (item.riderId || item.telegramId || item.id || k || "").toString().trim();
+            return (myId && rId === myId) || (myName && rName === myName.toLowerCase());
+        });
+        if (foundKey) riderSched = riderSchedules[foundKey];
+    }
 
     if (riderSched && riderSched.earlyPassGranted === true) {
         return { allowed: true, earlyPass: true };
     }
 
     const allowedTimeStr = (riderSched && riderSched.allowedTimeIn) ? riderSched.allowedTimeIn : (config.defaultTimeIn || "08:00");
-    const [schedH, schedM] = allowedTimeStr.split(':').map(Number);
-    const schedTotalMins = (schedH * 60) + (schedM || 0);
+    const schedTotalMins = parseTimeToMinutes(allowedTimeStr);
+
+    if (schedTotalMins === null) {
+        return { allowed: true, allowedTime: allowedTimeStr };
+    }
 
     const now = new Date();
     const currentTotalMins = (now.getHours() * 60) + now.getMinutes();
