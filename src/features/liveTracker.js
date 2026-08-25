@@ -1,7 +1,15 @@
 // src/features/liveTracker.js
 import { db } from '../config/firebase.js';
 import { appState, globalState } from '../store/state.js';
-import { showToast, showSideNotification } from '../ui/notifications.js';
+import { 
+    showToast, 
+    showSideNotification, 
+    notifyUser, 
+    requestWakeLock, 
+    releaseWakeLock, 
+    startBackgroundAudioPulse, 
+    stopBackgroundAudioPulse 
+} from '../ui/notifications.js';
 import { copyText, escapeHtml } from '../utils/helpers.js';
 import { openSlideDeleteModal } from '../ui/modals.js';
 
@@ -16,13 +24,16 @@ let liveDirectionsRenderer = null;
 let lastRouteCalcTime = 0;
 
 let lastPushTime = 0;
-const PUSH_TICK_INTERVAL_MS = 15000; // 15 seconds throttled tick for both Rider & Customer
-const ROUTE_THROTTLE_MS = 10000;     // 10 seconds throttle for Directions Service API
+const PUSH_TICK_INTERVAL_MS = 15000; // 15 seconds throttled tick for both Rider & Customer[cite: 24]
+const ROUTE_THROTTLE_MS = 10000;     // 10 seconds throttle for Directions Service API[cite: 24]
 
 // --- AUTOMATED BACKGROUND LIVE GPS INITIATOR ---
 export async function autoStartLiveGpsSession(custName = "Customer") {
     let existingKey = localStorage.getItem('lokalex_active_live_session');
     
+    await requestWakeLock();
+    startBackgroundAudioPulse();
+
     if (existingKey) {
         activeSessionKey = existingKey;
         startRiderGpsTracking(existingKey);
@@ -67,13 +78,16 @@ export function copyLiveGpsLink(custName = "Customer", sessionKey = activeSessio
     const message = `Magandang araw po ${custName}! 👋\n\nNagsimula na po ang ating Mutual Live GPS Tracking! Pwede niyo pong subaybayan ang aking lokasyon habang papalapit sa inyo at makikita rin natin ang isa't isa sa mapa sa pamamagitan ng link na ito:\n\n${fullUrl}\n\n⚠️ PAALALA:\nKung binuksan nyo po sa Messenger, paki-pindot ang 3 dots (...) at piliin ang "Open in Chrome" o "Open in Safari". Paki-allow din po ang Location Access. Maraming salamat po! 🛵💙`;
 
     copyText(message);
-    showToast("🔗 Live GPS message & link copied!");
+    notifyUser("LIVE GPS LINK", `Message & link copied for ${custName}`, { icon: "fa-link", textColor: "text-blue-400" });
 }
 
 export function startRiderGpsTracking(sessionKey) {
     if (!sessionKey) return;
     if (riderGpsWatchId) navigator.geolocation.clearWatch(riderGpsWatchId);
     if (!navigator.geolocation) return;
+
+    requestWakeLock();
+    startBackgroundAudioPulse();
 
     // Immediately record initial position
     navigator.geolocation.getCurrentPosition((pos) => {
@@ -227,6 +241,9 @@ export function startMutualCustomerLocationSharing() {
 
     if (mapBox) mapBox.classList.remove('hidden');
     if (step2Pointer) step2Pointer.classList.add('hidden');
+
+    requestWakeLock();
+    startBackgroundAudioPulse();
 
     customerGpsWatchId = navigator.geolocation.watchPosition(
         (pos) => {
@@ -391,10 +408,13 @@ export async function endLiveGpsSession() {
         riderGpsWatchId = null;
     }
 
+    releaseWakeLock();
+    stopBackgroundAudioPulse();
+
     activeSessionKey = "";
     localStorage.removeItem('lokalex_active_live_session');
     closeLiveGpsManageModal();
-    showSideNotification("GPS SESSION ENDED", "Live GPS session has been closed", "fa-power-off", "text-red-400", "border-red-500");
+    notifyUser("GPS SESSION ENDED", "Live GPS session has been closed", { icon: "fa-power-off", textColor: "text-red-400", borderColor: "border-red-500" });
 }
 
 if (typeof window !== 'undefined') {

@@ -2,7 +2,12 @@
 import { escapeHtml } from '../utils/helpers.js';
 
 let audioCtxInstance = null;
+let wakeLockInstance = null;
+let backgroundAudioInterval = null;
 
+// ============================================================================
+// AUDIO CONTEXT & BACKGROUND AUDITORY PULSE
+// ============================================================================
 export function unlockAudioContext() {
     try {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -15,6 +20,65 @@ export function unlockAudioContext() {
     } catch(e) {}
 }
 
+// Background audio pulse keeps mobile browsers from killing background JS execution
+export function startBackgroundAudioPulse() {
+    if (backgroundAudioInterval) return;
+    unlockAudioContext();
+
+    backgroundAudioInterval = setInterval(() => {
+        try {
+            if (audioCtxInstance && audioCtxInstance.state === 'running') {
+                const osc = audioCtxInstance.createOscillator();
+                const gain = audioCtxInstance.createGain();
+                gain.gain.setValueAtTime(0.0001, audioCtxInstance.currentTime);
+                osc.connect(gain);
+                gain.connect(audioCtxInstance.destination);
+                osc.start();
+                osc.stop(audioCtxInstance.currentTime + 0.05);
+            }
+        } catch(e) {}
+    }, 25000);
+}
+
+export function stopBackgroundAudioPulse() {
+    if (backgroundAudioInterval) {
+        clearInterval(backgroundAudioInterval);
+        backgroundAudioInterval = null;
+    }
+}
+
+// ============================================================================
+// WAKE LOCK API (PREVENT SCREEN & THREAD SLEEP)
+// ============================================================================
+export async function requestWakeLock() {
+    try {
+        if ('wakeLock' in navigator && !wakeLockInstance) {
+            wakeLockInstance = await navigator.wakeLock.request('screen');
+            wakeLockInstance.addEventListener('release', () => {
+                wakeLockInstance = null;
+            });
+        }
+    } catch (err) {}
+}
+
+export async function releaseWakeLock() {
+    try {
+        if (wakeLockInstance) {
+            await wakeLockInstance.release();
+            wakeLockInstance = null;
+        }
+    } catch (err) {}
+}
+
+document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && localStorage.getItem('lokalex_active_live_session')) {
+        await requestWakeLock();
+    }
+});
+
+// ============================================================================
+// TOAST & MICRO SIDE NOTIFICATIONS
+// ============================================================================
 export function showToast(message, duration = 2500) {
     let toastContainer = document.getElementById('toast-container');
     if (!toastContainer) {
@@ -42,7 +106,6 @@ export function showToast(message, duration = 2500) {
     }, duration);
 }
 
-// ULTRA-COMPACT MICRO SIDE NOTIFICATION (90% SMALLER FOOTPRINT)
 export function showSideNotification(title, message, icon = 'fa-bell', textColor = 'text-blue-400', borderColor = 'border-blue-500', duration = 3000) {
     let container = document.getElementById('side-notification-container');
     if (!container) {
@@ -81,8 +144,69 @@ export function showSideNotification(title, message, icon = 'fa-bell', textColor
     }, duration);
 }
 
+// ============================================================================
+// UNIFIED SMART NOTIFIER (FOREGROUND TOAST + BACKGROUND SYSTEM NOTIFICATION)
+// ============================================================================
+export async function requestNotificationPermission() {
+    if (!('Notification' in window)) return 'unsupported';
+    if (Notification.permission === 'granted') return 'granted';
+    if (Notification.permission !== 'denied') {
+        const permission = await Notification.requestPermission();
+        return permission;
+    }
+    return Notification.permission;
+}
+
+export function notifyUser(title, message, options = {}) {
+    showToast(message);
+    showSideNotification(title, message, options.icon || 'fa-bell', options.textColor || 'text-blue-400', options.borderColor || 'border-blue-500');
+
+    // If app is running in background or screen locked, dispatch native notification
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({
+                type: 'SHOW_NATIVE_NOTIFICATION',
+                title: title,
+                body: message,
+                icon: options.iconUrl || '/icons/icon-192x192.png',
+                tag: options.tag || 'lokalex-smart-alert',
+                data: options.data || { url: '/' }
+            });
+        } else {
+            try {
+                new Notification(title, {
+                    body: message,
+                    icon: options.iconUrl || '/icons/icon-192x192.png',
+                    tag: options.tag || 'lokalex-smart-alert'
+                });
+            } catch(e) {}
+        }
+    }
+}
+
+// ============================================================================
+// SERVICE WORKER FOREGROUND BRIDGE
+// ============================================================================
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'SW_NOTIFICATION_RECEIVED') {
+            const data = event.data.payload || {};
+            const title = data.title || data.notification?.title || 'Lokalex Update';
+            const body = data.body || data.notification?.body || 'New background alert received.';
+            showToast(body);
+            showSideNotification(title, body, 'fa-bell', 'text-amber-400', 'border-amber-500');
+        }
+    });
+}
+
 if (typeof window !== 'undefined') {
     window.showToast = showToast;
     window.showSideNotification = showSideNotification;
+    window.notifyUser = notifyUser;
     window.unlockAudioContext = unlockAudioContext;
+    window.requestWakeLock = requestWakeLock;
+    window.releaseWakeLock = releaseWakeLock;
+    window.startBackgroundAudioPulse = startBackgroundAudioPulse;
+    window.stopBackgroundAudioPulse = stopBackgroundAudioPulse;
+    window.requestNotificationPermission = requestNotificationPermission;
 }

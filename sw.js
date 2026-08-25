@@ -30,14 +30,26 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 
+// Forward background notification payloads to active window clients for in-app toasts
+async function notifyClients(payload) {
+    const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clientsList) {
+        client.postMessage({
+            type: 'SW_NOTIFICATION_RECEIVED',
+            payload: payload
+        });
+    }
+}
+
 try {
     const messaging = firebase.messaging();
 
     // Background push handler when browser is minimized or screen is locked
     messaging.onBackgroundMessage((payload) => {
         const title = payload.notification?.title || payload.data?.title || 'Lokalex Alert';
+        const body = payload.notification?.body || payload.data?.body || 'New update available.';
         const options = {
-            body: payload.notification?.body || payload.data?.body || 'New update available.',
+            body: body,
             icon: payload.notification?.icon || payload.data?.icon || '/icons/icon-192x192.png',
             badge: '/icons/icon-192x192.png',
             vibrate: [300, 100, 300, 100, 400],
@@ -50,6 +62,7 @@ try {
             }
         };
 
+        notifyClients({ title, body, ...payload });
         return self.registration.showNotification(title, options);
     });
 } catch(e) {
@@ -124,8 +137,9 @@ self.addEventListener('push', (event) => {
     try {
         const payload = event.data.json();
         const title = payload.title || payload.notification?.title || 'Lokalex Notification';
+        const body = payload.body || payload.notification?.body || 'You have a new update.';
         const options = {
-            body: payload.body || payload.notification?.body || 'You have a new update.',
+            body: body,
             icon: payload.icon || '/icons/icon-192x192.png',
             badge: '/icons/icon-192x192.png',
             vibrate: [250, 100, 250, 100, 350],
@@ -134,11 +148,14 @@ self.addEventListener('push', (event) => {
             data: payload.data || { url: '/' }
         };
 
+        notifyClients({ title, body, ...payload });
         event.waitUntil(self.registration.showNotification(title, options));
     } catch(e) {
+        const text = event.data.text();
+        notifyClients({ title: 'Lokalex', body: text });
         event.waitUntil(
             self.registration.showNotification('Lokalex', {
-                body: event.data.text(),
+                body: text,
                 icon: '/icons/icon-192x192.png'
             })
         );
@@ -165,4 +182,21 @@ self.addEventListener('notificationclick', (event) => {
             }
         })
     );
+});
+
+// 6. CLIENT MESSAGES: Background trigger from app
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'SHOW_NATIVE_NOTIFICATION') {
+        const title = event.data.title || 'Lokalex Alert';
+        const options = {
+            body: event.data.body || '',
+            icon: event.data.icon || '/icons/icon-192x192.png',
+            badge: '/icons/icon-192x192.png',
+            vibrate: [200, 100, 200],
+            tag: event.data.tag || 'lokalex-local-alert',
+            renotify: true,
+            data: event.data.data || { url: '/' }
+        };
+        self.registration.showNotification(title, options);
+    }
 });

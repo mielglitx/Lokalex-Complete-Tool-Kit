@@ -8,6 +8,7 @@ import { getLocalTodayStr, isSameDate, escapeHtml } from '../../utils/helpers.js
 import { populateCateringCustomerDropdown } from '../chat/index.js';
 import { 
     parseQueueTime, 
+    parseTimeToMinutes,
     isAdmin, 
     canManageRoster, 
     canForceCaterTarget,
@@ -18,6 +19,7 @@ import { updateRosterUI } from './rosterUI.js';
 import { getTopQueueTime, updateRosterStatus, updateRosterStatusData, voidSingleCateringCustomer } from './rosterStatus.js';
 
 let pendingAdminTarget = null;
+let autoEndShiftTimer = null;
 
 const DAYS_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -1214,7 +1216,7 @@ export function listenToBookingLimits() {
 }
 
 // ============================================================================
-// ADMIN AUTO END SHIFT CONFIGURATION & SCHEDULER
+// ADMIN AUTO END SHIFT CONFIGURATION & RELIABLE BACKGROUND SCHEDULER
 // ============================================================================
 export function openAdminAutoEndShiftModal() {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
@@ -1254,7 +1256,8 @@ export async function saveAdminAutoEndShiftSettings() {
     const payload = sanitizeForFirebase({
         enabled: Boolean(isEnabled),
         time: setTime,
-        lastTriggeredDate: globalState.autoEndShift?.lastTriggeredDate || "",
+        lastTriggeredSlot: "", // Cleared so updated schedule can trigger immediately
+        lastTriggeredDate: "",
         updatedBy: appState.riderName || "Admin",
         updatedAt: Date.now()
     });
@@ -1272,9 +1275,18 @@ export async function saveAdminAutoEndShiftSettings() {
         closeAdminAutoEndShiftModal();
         showToast(`⚙️ Auto End Shift ${isEnabled ? `set to ${setTime}` : 'Disabled'}!`);
         showSideNotification("SETTINGS SAVED", `Auto End Shift: ${isEnabled ? setTime : 'DISABLED'}`, "fa-clock", "text-purple-400", "border-purple-500");
+        checkAndTriggerAutoEndShift();
     } catch(e) {
         showToast("❌ Failed to update auto end shift settings.");
     }
+}
+
+export function startAutoEndShiftScheduler() {
+    if (autoEndShiftTimer) clearInterval(autoEndShiftTimer);
+    autoEndShiftTimer = setInterval(() => {
+        checkAndTriggerAutoEndShift();
+    }, 10000); // Evaluates clock every 10 seconds in background
+    checkAndTriggerAutoEndShift();
 }
 
 export function listenToAutoEndShift() {
@@ -1292,8 +1304,11 @@ export function listenToAutoEndShift() {
             try {
                 localStorage.setItem('lokalex_auto_endshift_cache', JSON.stringify(data));
             } catch(e) {}
+            checkAndTriggerAutoEndShift();
         }
     });
+
+    startAutoEndShiftScheduler();
 }
 
 export async function checkAndTriggerAutoEndShift() {
@@ -1303,28 +1318,31 @@ export async function checkAndTriggerAutoEndShift() {
         if (!config || !config.enabled || !config.time) return;
 
         const todayStr = getLocalTodayStr();
-        if (config.lastTriggeredDate === todayStr) return;
+        const currentSlotKey = `${todayStr}_${config.time}`;
+
+        // Prevent repeated execution for the exact same scheduled slot today
+        if (config.lastTriggeredSlot === currentSlotKey) return;
+
+        const targetMins = parseTimeToMinutes(config.time);
+        if (targetMins === null) return;
 
         const now = new Date();
-        const [targetHour, targetMinute] = config.time.split(':').map(Number);
-        const currentHour = now.getHours();
-        const currentMinute = now.getMinutes();
+        const currentTotalMins = (now.getHours() * 60) + now.getMinutes();
 
-        const currentTotalMins = currentHour * 60 + currentMinute;
-        const targetTotalMins = targetHour * 60 + targetMinute;
-
-        if (currentTotalMins >= targetTotalMins) {
+        if (currentTotalMins >= targetMins) {
             let committed = false;
-            await db.ref('settings/autoEndShift/lastTriggeredDate').transaction((current) => {
-                if (current === todayStr) {
-                    return;
-                }
+            await db.ref('settings/autoEndShift').transaction((current) => {
+                if (!current || !current.enabled) return;
+                if (current.lastTriggeredSlot === currentSlotKey) return;
+                current.lastTriggeredSlot = currentSlotKey;
+                current.lastTriggeredDate = todayStr;
                 committed = true;
-                return todayStr;
+                return current;
             });
 
             if (committed) {
                 if (!globalState.autoEndShift) globalState.autoEndShift = {};
+                globalState.autoEndShift.lastTriggeredSlot = currentSlotKey;
                 globalState.autoEndShift.lastTriggeredDate = todayStr;
                 try {
                     localStorage.setItem('lokalex_auto_endshift_cache', JSON.stringify(globalState.autoEndShift));
@@ -1344,50 +1362,59 @@ export async function executeAutoEndShift() {
 
     showSideNotification("AUTO END SHIFT", "System auto end shift triggered for all active riders", "fa-power-off", "text-red-400", "border-red-500");
 
-    const rosterMembers = globalState.rosterMembers || [];
-    const activeRiders = rosterMembers.filter(m => m && m.status !== 'End');
-
-    for (const m of activeRiders) {
-        const rId = (m.telegramId || m.id || "").toString().trim();
-        if (!rId) continue;
-
-        await archiveRiderCateringIfNeeded(m);
-
+    try {
         if (db) {
-            db.ref('roster/' + rId).update({
-                status: 'End',
-                customerName: '',
-                startTime: '',
-                pendingPenaltyMinutes: 0,
-                cooldownUntil: 0,
-                lastUpdated: timeStr,
-                lastActiveTimestamp: nowTimestamp
-            }).catch(() => {});
+            const rosterSnap = await db.ref('roster').once('value');
+            const dbRoster = rosterSnap.val() || {};
 
-            db.ref('logins/' + rId).update({
-                clockOutTime: timeStr
-            }).catch(() => {});
+            for (const riderId of Object.keys(dbRoster)) {
+                const m = dbRoster[riderId];
+                if (m && m.status !== 'End') {
+                    await archiveRiderCateringIfNeeded(m);
+                    await db.ref('roster/' + riderId).update({
+                        status: 'End',
+                        customerName: '',
+                        startTime: '',
+                        pendingPenaltyMinutes: 0,
+                        cooldownUntil: 0,
+                        lastUpdated: timeStr,
+                        lastActiveTimestamp: nowTimestamp
+                    }).catch(() => {});
+
+                    await db.ref('logins/' + riderId).update({
+                        clockOutTime: timeStr
+                    }).catch(() => {});
+                }
+            }
         }
 
-        m.status = 'End';
-        m.customerName = '';
-        m.startTime = '';
-        m.pendingPenaltyMinutes = 0;
-        m.cooldownUntil = 0;
-        m.lastUpdated = timeStr;
-        m.lastActiveTimestamp = nowTimestamp;
-    }
-
-    saveRosterCache();
-    updateRosterUI();
-
-    try {
-        await fetch(API_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            body: JSON.stringify({ type: "roster", action: "auto_end_shift", time: timeStr })
+        const rosterMembers = globalState.rosterMembers || [];
+        rosterMembers.forEach(m => {
+            if (m && m.status !== 'End') {
+                m.status = 'End';
+                m.customerName = '';
+                m.startTime = '';
+                m.pendingPenaltyMinutes = 0;
+                m.cooldownUntil = 0;
+                m.lastUpdated = timeStr;
+                m.lastActiveTimestamp = nowTimestamp;
+            }
         });
-    } catch(e) {}
+
+        saveRosterCache();
+        updateRosterUI();
+        window.dispatchEvent(new CustomEvent('rosterUpdated'));
+
+        try {
+            await fetch(API_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                body: JSON.stringify({ type: "roster", action: "auto_end_shift", time: timeStr })
+            });
+        } catch(e) {}
+    } catch(err) {
+        console.error("Execute auto end shift error:", err);
+    }
 }
 
 if (typeof window !== 'undefined') {

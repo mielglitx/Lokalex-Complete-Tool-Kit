@@ -18,7 +18,14 @@ import * as customerStorefront from './features/customer/customerStorefront.js';
 import * as modals from './ui/modals.js';
 import * as router from './ui/router.js';
 import * as helpers from './utils/helpers.js';
-import { unlockAudioContext, showToast, showSideNotification } from './ui/notifications.js';
+import { 
+    unlockAudioContext, 
+    showToast, 
+    showSideNotification, 
+    notifyUser, 
+    startBackgroundAudioPulse, 
+    requestWakeLock 
+} from './ui/notifications.js';
 
 const allModules = [
     authFeature, cart, chat, roster, directory, commission, 
@@ -85,10 +92,11 @@ export async function initFCMNotifications(registration) {
                 const title = payload.notification?.title || payload.data?.title || 'Lokalex Alert';
                 const body = payload.notification?.body || payload.data?.body || 'New notification received.';
                 
-                showToast(`🔔 ${title}: ${body}`);
-                if (showSideNotification) {
-                    showSideNotification(title, body, 'fa-bell', 'text-amber-400', 'border-amber-500');
-                }
+                notifyUser(title, body, {
+                    icon: 'fa-bell',
+                    textColor: 'text-amber-400',
+                    borderColor: 'border-amber-500'
+                });
 
                 if (typeof window.playLineAlarm === 'function') {
                     window.playLineAlarm();
@@ -244,12 +252,16 @@ function bootApp() {
         if (commission && commission.fetchCommissionSettings) commission.fetchCommissionSettings();
         if (directory && directory.silentSyncDirectory) directory.silentSyncDirectory();
 
-        // Continuous precision check for Auto End Shift every 15 seconds
-        setInterval(() => {
-            if (roster && roster.checkAndTriggerAutoEndShift) {
-                roster.checkAndTriggerAutoEndShift();
-            }
-        }, 15000);
+        // Continuous precision check for Auto End Shift every 10 seconds in background
+        if (roster && roster.startAutoEndShiftScheduler) {
+            roster.startAutoEndShiftScheduler();
+        } else {
+            setInterval(() => {
+                if (roster && roster.checkAndTriggerAutoEndShift) {
+                    roster.checkAndTriggerAutoEndShift();
+                }
+            }, 10000);
+        }
 
         const urlParams = new URLSearchParams(window.location.search);
         
@@ -272,6 +284,8 @@ function bootApp() {
         if (appState.telegramId) {
             history.replaceState({ view: 'view-home' }, '', '#view-home');
             router.renderViewUI('view-home');
+            startBackgroundAudioPulse();
+            requestWakeLock();
         } else if (appState.merchantAccountId && appState.merchantStoreId) {
             history.replaceState({ view: 'view-store-hub' }, '', '#view-store-hub');
             router.renderViewUI('view-store-hub');
@@ -321,6 +335,8 @@ window.addEventListener('loginSuccess', () => {
         navigator.serviceWorker.ready.then(reg => initFCMNotifications(reg));
     }
 
+    startBackgroundAudioPulse();
+    requestWakeLock();
     initRealtimeFirebaseListeners();
 });
 
