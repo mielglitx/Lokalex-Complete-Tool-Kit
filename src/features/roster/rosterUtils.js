@@ -51,6 +51,16 @@ export function loadRosterCache() {
 
 loadRosterCache();
 
+// Philippine Standard Time (PST/PHT, UTC+8) Date Helper
+export function getPHTDate() {
+    try {
+        const phtString = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
+        return new Date(phtString);
+    } catch(e) {
+        return new Date();
+    }
+}
+
 export function getUserType() {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
@@ -75,19 +85,24 @@ export function getUserType() {
 }
 
 export function isAdmin() {
+    const t = getUserType();
+    
+    if (t === 'rider') return false;
+
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
 
-    if (myId && ADMIN_IDS.some(id => id.toString().trim() === myId)) return true;
-    if (myName && ADMIN_IDS.some(id => id.toString().toLowerCase().trim() === myName)) return true;
+    if (myId && ADMIN_IDS.some(id => id.toString().trim() === myId && id.toString().trim() !== "1234")) return true;
+    if (myName && ADMIN_IDS.some(id => id.toString().toLowerCase().trim() === myName && id.toString().toLowerCase().trim() !== "regular")) return true;
 
-    const t = getUserType();
-    return t === "admin" || t === "owner" || t === "manager" || t.includes("admin");
+    const validAdminTypes = ['admin', 'owner', 'manager', 'superadmin', 'administrator'];
+    return validAdminTypes.includes(t);
 }
 
 export function isTL() {
     const t = getUserType();
-    return t === "tl" || t === "lead" || t.includes("tl") || t.includes("lead") || t.includes("leader");
+    const validTlTypes = ['tl', 'lead', 'teamlead', 'leader'];
+    return validTlTypes.includes(t);
 }
 
 export function canManageRoster() {
@@ -98,7 +113,8 @@ export function canForceCaterTarget(targetType) {
     if (isAdmin()) return true;
     if (isTL()) {
         const t = (targetType || "").toString().toLowerCase().trim();
-        return !t.includes("admin") && !t.includes("owner") && !t.includes("manager");
+        const adminTypes = ['admin', 'owner', 'manager', 'superadmin', 'administrator', 'tl', 'lead', 'teamlead', 'leader'];
+        return !adminTypes.includes(t);
     }
     return false;
 }
@@ -209,7 +225,7 @@ export function isCustomerMatch(cust1 = "", cust2 = "") {
     return false;
 }
 
-// 100% FINANCIAL & ROSTER SOURCE OF TRUTH (MERGES RECEIPTS & CATERED HISTORY SEAMLESSLY)
+// 100% FINANCIAL & ROSTER SOURCE OF TRUTH
 export function getMergedDeduplicatedCommissionList() {
     if ((!globalState.globalDailyReceipts || globalState.globalDailyReceipts.length === 0) &&
         (!globalState.globalCateredHistory || globalState.globalCateredHistory.length === 0)) {
@@ -219,7 +235,6 @@ export function getMergedDeduplicatedCommissionList() {
     const mergedMap = new Map();
     const processedSignatures = new Set();
 
-    // 1. Process Official Receipts (Primary Financial Ledger)
     (globalState.globalDailyReceipts || []).forEach(rc => {
         if (!rc) return;
         const cName = (rc.customerName || "Customer").trim();
@@ -260,7 +275,6 @@ export function getMergedDeduplicatedCommissionList() {
         });
     });
 
-    // 2. Process Catered History (Captures trips completed or archived directly)
     (globalState.globalCateredHistory || []).forEach(ch => {
         if (!ch) return;
         const cName = (ch.customerName || "Customer").trim();
@@ -496,7 +510,7 @@ export function getElapsedCateringTime(startTimeStr) {
     if (ampm === "PM" && hours < 12) hours += 12;
     if (ampm === "AM" && hours === 12) hours = 0;
 
-    const now = new Date();
+    const now = getPHTDate();
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0);
 
     let diffMs = now - start;
