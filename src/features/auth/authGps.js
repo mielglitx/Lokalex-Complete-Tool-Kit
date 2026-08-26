@@ -10,24 +10,25 @@ const GPS_ROSTER_PULSE_MS = 25000;
 export function calibrateGPS(onProgress) {
     return new Promise((resolve) => {
         if (!navigator.geolocation) {
-            return resolve({ lat: 0, lon: 0, accuracy: 999 });
+            return resolve({ lat: 0, lon: 0, accuracy: 999, success: false });
         }
 
         let bestFix = null;
         let sampleCount = 0;
         const maxSamples = 4;
-        const timeoutDuration = 6000;
+        const timeoutDuration = 8000;
 
         const timeoutTimer = setTimeout(() => {
             if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-            if (bestFix) {
+            if (bestFix && bestFix.coords && bestFix.coords.latitude && bestFix.coords.longitude) {
                 resolve({
                     lat: bestFix.coords.latitude,
                     lon: bestFix.coords.longitude,
-                    accuracy: bestFix.coords.accuracy
+                    accuracy: bestFix.coords.accuracy || 50,
+                    success: true
                 });
             } else {
-                resolve({ lat: 0, lon: 0, accuracy: 999 });
+                resolve({ lat: 0, lon: 0, accuracy: 999, success: false });
             }
         }, timeoutDuration);
 
@@ -44,18 +45,21 @@ export function calibrateGPS(onProgress) {
                     onProgress(acc, sampleCount);
                 }
 
-                if (acc <= 15 || sampleCount >= maxSamples) {
+                if (acc <= 20 || sampleCount >= maxSamples) {
                     clearTimeout(timeoutTimer);
                     navigator.geolocation.clearWatch(watchId);
                     resolve({
                         lat: bestFix.coords.latitude,
                         lon: bestFix.coords.longitude,
-                        accuracy: bestFix.coords.accuracy
+                        accuracy: bestFix.coords.accuracy,
+                        success: true
                     });
                 }
             },
-            (err) => {},
-            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+            (err) => {
+                console.warn("GPS Calibration Notice:", err.message || err);
+            },
+            { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
         );
     });
 }
@@ -68,7 +72,6 @@ export function startBackgroundRosterGpsTracker() {
         backgroundGpsWatchId = null;
     }
 
-    // Force an immediate one-shot GPS update upon resume
     navigator.geolocation.getCurrentPosition(
         (pos) => {
             const now = Date.now();

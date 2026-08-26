@@ -4,6 +4,8 @@ import * as imageEditor from './imageEditor.js';
 import * as imageViewer from './imageViewer.js';
 import * as customerChat from './customerChat.js';
 import * as riderChat from './riderChat.js';
+import * as riderChatFeed from './riderChatFeed.js';
+import * as riderChatRender from './riderChatRender.js';
 import * as riderStoreChat from './riderStoreChat.js';
 import * as riderThreadActions from './riderThreadActions.js';
 import * as teamComms from './teamComms.js';
@@ -17,6 +19,8 @@ export * from './imageEditor.js';
 export * from './imageViewer.js';
 export * from './customerChat.js';
 export * from './riderChat.js';
+export * from './riderChatFeed.js';
+export * from './riderChatRender.js';
 export * from './riderStoreChat.js';
 export * from './riderThreadActions.js';
 export * from './teamComms.js';
@@ -29,6 +33,8 @@ if (typeof window !== 'undefined') {
         imageViewer, 
         customerChat, 
         riderChat, 
+        riderChatFeed,
+        riderChatRender,
         riderStoreChat, 
         riderThreadActions, 
         teamComms

@@ -165,6 +165,7 @@ export function forceReconnectFirebase() {
 
                     if (roster && roster.saveRosterCache) roster.saveRosterCache();
                     if (roster && roster.updateRosterUI) roster.updateRosterUI();
+                    if (roster && roster.loadGlobalCateredList) roster.loadGlobalCateredList();
                 });
 
                 if (chat && chat.listenToAllCustomerChatsForRider) {
@@ -242,6 +243,8 @@ function bootApp() {
         // 1. INSTANT LOCAL CACHE HYDRATION (Zero latency)
         if (roster && roster.loadRosterCache) roster.loadRosterCache();
         if (roster && roster.updateRosterUI) roster.updateRosterUI();
+        if (roster && roster.loadGlobalCateredList) roster.loadGlobalCateredList();
+        if (roster && roster.loadGlobalLoginList) roster.loadGlobalLoginList();
         if (commission && commission.loadCommissionSettingsCache) commission.loadCommissionSettingsCache();
         if (directory && directory.loadDirectoryCache) directory.loadDirectoryCache();
         if (cart && cart.loadCartState) cart.loadCartState();

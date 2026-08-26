@@ -22,7 +22,8 @@ import {
     setLineAlarmConfirmed,
     archiveRiderCateringIfNeeded,
     getRiderTodayGross,
-    sortAvailableRidersByGross
+    sortAvailableRidersByGross,
+    isSameDateStr
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 import { requestClaimCustomer } from './rosterSwap.js';
@@ -34,16 +35,13 @@ export function calculateAutoBookingLimit(targetId = null, targetName = null) {
     const myId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const myName = (targetName || appState.riderName || localStorage.getItem('riderName') || "").trim().toLowerCase();
 
-    // Only active duty riders (Available, Catering, Break, Cooldown) are evaluated
     const rosterMembers = (globalState.rosterMembers || []).filter(m => m && m.status !== 'End');
     
-    // Auto tiering requires at least 3 active riders on roster; fallback to fixed limit otherwise
     if (rosterMembers.length < 3) {
         const fallback = globalState.bookingLimits?.maxActiveBookings;
         return (fallback !== undefined && fallback !== null) ? parseInt(fallback) : 2;
     }
 
-    // Map each rider with today's gross income and sort ascending (lowest first, highest last)[cite: 31]
     const ridersWithGross = rosterMembers.map(m => {
         const rId = (m.telegramId || m.id || "").toString().trim();
         const rName = (m.riderName || m.name || "").trim();
@@ -60,23 +58,18 @@ export function calculateAutoBookingLimit(targetId = null, targetName = null) {
 
     const myGross = ridersWithGross[myIdx].gross;
 
-    // Tier 1 threshold: Lowest 33% gross income
     const lowCutIdx = Math.max(0, Math.ceil(total / 3) - 1);
     const lowCutGross = ridersWithGross[lowCutIdx].gross;
 
-    // Tier 3 threshold: Top 33% gross income
     const highCutIdx = Math.min(total - 1, Math.floor((2 * total) / 3));
     const highCutGross = ridersWithGross[highCutIdx].gross;
 
-    // Lowest earners: Up to 4 active bookings
     if (myGross <= lowCutGross) {
         return 4;
     }
-    // Top earners: Up to 1 active booking
     if (myGross >= highCutGross && highCutGross > lowCutGross) {
         return 1;
     }
-    // Mid earners: Up to 2 active bookings
     return 2;
 }
 
@@ -84,7 +77,6 @@ export function getMaxActiveBookingsLimit(targetId = null, targetName = null) {
     const limitConfig = globalState.bookingLimits || {};
     const activeRosterCount = (globalState.rosterMembers || []).filter(m => m && m.status !== 'End').length;
 
-    // Auto Dynamic Limit activates ONLY when 3 or more riders are on duty
     if (limitConfig.autoEnabled && activeRosterCount >= 3) {
         return calculateAutoBookingLimit(targetId, targetName);
     }
@@ -132,21 +124,37 @@ export function canRiderTakeMoreBookings(targetId = null, targetName = null) {
 }
 
 // ============================================================================
-// TIME-IN SCHEDULE & EARLY PASS VALIDATION HELPER (FIXED 12H/24H PARSING)
+// TIME-IN SCHEDULE & EARLY PASS VALIDATION HELPER
 // ============================================================================
 export function checkRiderTimeInAllowed(targetId = null, targetName = null) {
     const myId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const myName = (targetName || appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
     const myNameKey = myName.toLowerCase().replace(/[^a-z0-9]/g, '_');
 
-    if (isAdmin()) return { allowed: true, reason: 'admin' };
+    // Strict role check: Only bypass gate if userType is explicitly an admin/owner role
+    const rosterRec = (globalState.rosterMembers || []).find(m => 
+        ((m.telegramId || m.id || "").toString().trim() === myId) ||
+        ((m.riderName || m.name || "").toLowerCase().trim() === myName.toLowerCase().trim())
+    );
+    const explicitRole = (rosterRec?.userType || globalState.userTypesMap?.[myId] || globalState.userTypesMap?.[myName.toLowerCase()] || appState.userType || "").toLowerCase().trim();
+    const isTrueAdmin = ['admin', 'owner', 'manager', 'superadmin', 'administrator'].includes(explicitRole);
 
-    const config = globalState.timeInSchedule || {};
-    if (!config.enabled) return { allowed: true, reason: 'disabled' };
+    if (isTrueAdmin) {
+        return { allowed: true, reason: 'admin' };
+    }
+
+    let config = globalState.timeInSchedule;
+    if (!config || typeof config !== 'object') {
+        try {
+            const cached = localStorage.getItem('lokalex_timein_schedule_cache');
+            if (cached) config = JSON.parse(cached);
+        } catch(e) {}
+    }
+
+    if (!config || config.enabled !== true) return { allowed: true, reason: 'disabled' };
 
     const riderSchedules = config.riderSchedules || {};
     
-    // Look up schedule by telegramId, name, clean key, or nested rider properties
     let riderSched = (myId && riderSchedules[myId]) || 
                      (myName && riderSchedules[myName.toLowerCase()]) || 
                      (myNameKey && riderSchedules[myNameKey]) || 
@@ -349,6 +357,27 @@ export async function triggerStatusWithSlide(targetStatus) {
             }
         }
 
+        const isStartingShift = !myRecord || !myRecord.status || myRecord.status === 'End';
+        if (isStartingShift) {
+            showToast("📡 Kinukuha ang GPS Location bago mag-Time In...");
+            showSideNotification("GPS CHECK", "Calibrating GPS pin location...", "fa-location-crosshairs", "text-blue-400", "border-blue-500");
+
+            const coords = await calibrateGPS((acc, count) => {
+                showToast(`📡 Calibrating GPS: ±${Math.round(acc)}m (Fix ${count}/4)`);
+            });
+
+            if (!coords || !coords.lat || !coords.lon || coords.accuracy > 500) {
+                showToast("❌ Bigo ang GPS. Paki-enable ang Location Access bago mag-Time In!");
+                showSideNotification("GPS REQUIRED", "Cannot Time-In without GPS location pin", "fa-location-dot", "text-red-400", "border-red-500");
+                return;
+            }
+
+            appState.lat = coords.lat;
+            appState.lon = coords.lon;
+            appState.gpsAccuracy = coords.accuracy;
+            showToast(`✅ GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
+        }
+
         const currentRoster = globalState.rosterMembers || [];
         const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || m.id || "").toString() !== myId);
         let maxTime = new Date().getTime();
@@ -360,7 +389,7 @@ export async function triggerStatusWithSlide(targetStatus) {
 
         endLiveGpsSession();
         dismissQueueAlarm();
-        updateRosterStatus('Available', null, null, lockedQueueTime);
+        await updateRosterStatus('Available', null, null, lockedQueueTime);
 
         showSideNotification("RECORDING STATUS", `Marking ${appState.riderName} Available — lineup calculated by gross earnings`, "fa-user-check", "text-green-400", "border-green-500");
 
@@ -370,40 +399,20 @@ export async function triggerStatusWithSlide(targetStatus) {
             window.clearCartSlot();
         }
 
-        showToast("📡 Calibrating GPS location in background...");
-        calibrateGPS((accuracy) => {
-            showToast(`📡 Calibrating GPS: ±${Math.round(accuracy)}m`);
-        }).then((coords) => {
-            if (coords) {
-                appState.lat = coords.lat || appState.lat || 0;
-                appState.lon = coords.lon || appState.lon || 0;
-                showToast(`✅ GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
-
-                if (db && appState.telegramId) {
-                    db.ref('roster/' + appState.telegramId).update({
-                        lat: appState.lat,
-                        lng: appState.lon,
-                        accuracy: coords.accuracy,
-                        lastActiveTimestamp: Date.now()
-                    }).catch(() => {});
-                }
-            }
-        });
-
     } else if (targetStatus === 'End') {
         openSlideDeleteModal(`Sigurado ka bang mag-End Shift?`, async () => {
             dismissQueueAlarm();
             showSideNotification("CLOCK OUT", `Clocking out ${appState.riderName}...`, "fa-power-off", "text-red-400", "border-red-500");
             endLiveGpsSession();
             await clockOutRider();
-            updateRosterStatus('End');
+            await updateRosterStatus('End');
         });
     } else {
-        openSlideDeleteModal(`Sigurado ka bang mag-iiba ng status sa [${targetStatus}]?`, () => {
+        openSlideDeleteModal(`Sigurado ka bang mag-iiba ng status sa [${targetStatus}]?`, async () => {
             dismissQueueAlarm();
             showSideNotification("RECORDING STATUS", `Setting status to ${targetStatus} for ${appState.riderName}...`, "fa-user-clock", "text-amber-400", "border-amber-500");
             if (targetStatus === 'Break') endLiveGpsSession();
-            updateRosterStatus(targetStatus);
+            await updateRosterStatus(targetStatus);
         });
     }
 }
@@ -431,7 +440,6 @@ export function promptCateringStatus() {
         }
     }
 
-    // ENFORCE ACTIVE BOOKING LIMIT (MANUAL OR AUTO DYNAMIC TIER)
     const limitCheck = canRiderTakeMoreBookings(myId, appState.riderName);
     if (!limitCheck.allowed) {
         const modeLabel = limitCheck.isAuto ? " (Auto Tier based on today's gross income)" : "";
@@ -468,7 +476,6 @@ export async function confirmCateringStatus() {
 
     const isAlreadyInList = existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase());
 
-    // ENFORCE ACTIVE BOOKING LIMIT
     if (!isAlreadyInList) {
         const limitCheck = canRiderTakeMoreBookings(myId, myName);
         if (!limitCheck.allowed) {
@@ -539,15 +546,19 @@ export function claimCustomerFromRider(fromRiderId, fromRiderName, custName) {
 }
 
 export async function updateRosterStatus(status, targetId = null, targetName = null, precalculatedQueueTime = null) {
-    const tId = targetId || appState.telegramId;
-    const tName = targetName || appState.riderName;
+    const tId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const tName = targetName || appState.riderName || "Rider";
     const rosterMembers = globalState.rosterMembers || [];
 
     let recordLogin = false;
-    const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === tId.toString());
+    const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === tId);
 
     if (status !== 'Catering' && targetRecord) {
         await archiveRiderCateringIfNeeded(targetRecord);
+    }
+
+    if (status === 'End') {
+        await clockOutRider(tId);
     }
 
     const isStartingShift = !targetRecord || !targetRecord.status || targetRecord.status === 'End';
@@ -562,7 +573,7 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     let newQueueTime = precalculatedQueueTime !== null ? precalculatedQueueTime : 0;
     if (status === 'Available' && precalculatedQueueTime === null) {
-        const availableRiders = rosterMembers.filter(m => m.status === 'Available' && (m.telegramId || m.id || "").toString() !== tId.toString());
+        const availableRiders = rosterMembers.filter(m => m.status === 'Available' && (m.telegramId || m.id || "").toString() !== tId);
         let maxTime = new Date().getTime();
         availableRiders.forEach(r => {
             const t = parseQueueTime(r.queueTime);
@@ -575,8 +586,8 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 }
 
 export async function updateRosterStatusData(status, customerName, startTime, queueTime = 0, specificId = null, specificName = null, completedHistory = [], recordLogin = false, locationLink = "") {
-    const tId = specificId || appState.telegramId;
-    const tName = specificName || appState.riderName;
+    const tId = (specificId || appState.telegramId || "").toString().trim();
+    const tName = specificName || appState.riderName || "Rider";
 
     if (!tId) return;
 
@@ -598,7 +609,7 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     };
 
     if (!globalState.rosterMembers) globalState.rosterMembers = [];
-    const existingIdx = globalState.rosterMembers.findIndex(m => (m.telegramId || m.id || "").toString() === tId.toString());
+    const existingIdx = globalState.rosterMembers.findIndex(m => (m.telegramId || m.id || "").toString() === tId);
     if (existingIdx !== -1) {
         globalState.rosterMembers[existingIdx] = {
             ...globalState.rosterMembers[existingIdx],
@@ -627,26 +638,74 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         try {
             const loginSnap = await db.ref('logins/' + tId).once('value');
             const existingLogin = loginSnap.val();
-            if (existingLogin && isSameDate(existingLogin.date, todayStr) && existingLogin.loginTime && !existingLogin.clockOutTime) {
+            if (existingLogin && isSameDateStr(existingLogin.date, todayStr) && existingLogin.loginTime) {
                 finalLoginTime = existingLogin.loginTime;
             }
         } catch(e) {}
 
         const loginEntry = {
+            riderId: tId,
+            id: tId,
             riderName: tName,
             loginTime: finalLoginTime,
             clockOutTime: "",
             date: todayStr,
-            location: locationLink
+            location: locationLink || ""
         };
         await db.ref('logins/' + tId).set(loginEntry);
+
+        if (!globalState.globalLogins) globalState.globalLogins = [];
+        const exIdx = globalState.globalLogins.findIndex(l => (l.riderId || l.id || "").toString() === tId);
+        if (exIdx !== -1) {
+            globalState.globalLogins[exIdx] = loginEntry;
+        } else {
+            globalState.globalLogins.push(loginEntry);
+        }
+        saveRosterCache();
+        window.dispatchEvent(new CustomEvent('loginsUpdated'));
     }
 }
 
-export async function clockOutRider() {
+export async function clockOutRider(targetId = null) {
+    const tId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (db && appState.telegramId) {
-        await db.ref('logins/' + appState.telegramId).update({ clockOutTime: timeStr });
-        await db.ref('roster/' + appState.telegramId).update({ lastActiveTimestamp: Date.now() });
+    const todayStr = getLocalTodayStr();
+
+    if (db && tId) {
+        try {
+            const loginSnap = await db.ref('logins/' + tId).once('value');
+            const existingLogin = loginSnap.val();
+
+            if (existingLogin) {
+                await db.ref('logins/' + tId).update({ clockOutTime: timeStr });
+            } else {
+                const rosterMem = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === tId);
+                const rName = rosterMem ? (rosterMem.riderName || rosterMem.name || "Rider") : (appState.riderName || "Rider");
+                await db.ref('logins/' + tId).set({
+                    riderId: tId,
+                    id: tId,
+                    riderName: rName,
+                    loginTime: timeStr,
+                    clockOutTime: timeStr,
+                    date: todayStr,
+                    location: ""
+                });
+            }
+        } catch(e) {}
+
+        await db.ref('roster/' + tId).update({ 
+            status: 'End',
+            lastActiveTimestamp: Date.now(),
+            lastUpdated: timeStr
+        }).catch(() => {});
     }
+
+    if (globalState.globalLogins) {
+        const lIdx = globalState.globalLogins.findIndex(l => (l.riderId || l.id || "").toString() === tId);
+        if (lIdx !== -1) {
+            globalState.globalLogins[lIdx].clockOutTime = timeStr;
+        }
+    }
+    saveRosterCache();
+    window.dispatchEvent(new CustomEvent('loginsUpdated'));
 }

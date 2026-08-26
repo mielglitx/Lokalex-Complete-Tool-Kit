@@ -156,10 +156,26 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
 
 export function isSameDateStr(date1, date2) {
     if (!date1 || !date2) return false;
-    const s1 = String(date1).trim().split('T')[0].split(' ')[0].replace(/\//g, '-');
-    const s2 = String(date2).trim().split('T')[0].split(' ')[0].replace(/\//g, '-');
+    const s1 = String(date1).trim();
+    const s2 = String(date2).trim();
     if (!s1 || !s2) return false;
-    return s1 === s2;
+    if (s1 === s2) return true;
+
+    const clean1 = s1.split('T')[0].split(' ')[0].replace(/\//g, '-');
+    const clean2 = s2.split('T')[0].split(' ')[0].replace(/\//g, '-');
+    if (clean1 === clean2) return true;
+
+    try {
+        const p1 = new Date(s1.includes('-') || s1.includes('/') ? s1 : Number(s1));
+        const p2 = new Date(s2.includes('-') || s2.includes('/') ? s2 : Number(s2));
+        if (!isNaN(p1.getTime()) && !isNaN(p2.getTime())) {
+            return p1.getFullYear() === p2.getFullYear() &&
+                   p1.getMonth() === p2.getMonth() &&
+                   p1.getDate() === p2.getDate();
+        }
+    } catch(e) {}
+
+    return false;
 }
 
 export function parseItemGross(item) {
@@ -193,10 +209,17 @@ export function isCustomerMatch(cust1 = "", cust2 = "") {
     return false;
 }
 
-// 100% FINANCIAL & ROSTER SOURCE OF TRUTH (CROSS-REFERENCED DURATION & TIME)
+// 100% FINANCIAL & ROSTER SOURCE OF TRUTH (MERGES RECEIPTS & CATERED HISTORY SEAMLESSLY)
 export function getMergedDeduplicatedCommissionList() {
-    const mergedMap = new Map();
+    if ((!globalState.globalDailyReceipts || globalState.globalDailyReceipts.length === 0) &&
+        (!globalState.globalCateredHistory || globalState.globalCateredHistory.length === 0)) {
+        loadRosterCache();
+    }
 
+    const mergedMap = new Map();
+    const processedSignatures = new Set();
+
+    // 1. Process Official Receipts (Primary Financial Ledger)
     (globalState.globalDailyReceipts || []).forEach(rc => {
         if (!rc) return;
         const cName = (rc.customerName || "Customer").trim();
@@ -207,36 +230,18 @@ export function getMergedDeduplicatedCommissionList() {
 
         const rName = (rc.riderName || "Rider").trim();
         const cleanRider = rName.toLowerCase();
+        const cleanCust = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
         const sTime = rc.cateringStartTime || rc.startTime || rc.time || "";
         let cTime = rc.completedTime || "";
         let cCount = parseInt(rc.customerCount) || 1;
         let dur = rc.duration || "";
-        const txId = (rc.transactionId || rc.id || `${cleanRider}_${cName}_${rcDate}_${sTime}`).toString().trim();
-
-        // Cross-reference cateredHistory if duration or completion timestamp was missing on receipt
-        if (!dur || !cTime || dur === "Just now") {
-            const chMatch = (globalState.globalCateredHistory || []).find(ch => {
-                if (!ch) return false;
-                if (txId && (ch.transactionId === txId || ch.id === txId)) return true;
-                const sameRider = (ch.riderName || "").trim().toLowerCase() === cleanRider;
-                const sameCust = isCustomerMatch(ch.customerName, cName);
-                const sameDate = isSameDateStr(ch.completedDate || ch.date, rcDate);
-                return sameRider && sameCust && sameDate;
-            });
-
-            if (chMatch) {
-                if (!cTime) cTime = chMatch.completedTime || "";
-                if (cCount === 1 && chMatch.customerCount) cCount = parseInt(chMatch.customerCount) || 1;
-                if (!dur || dur === "Just now") dur = chMatch.duration || "";
-            }
-        }
-
-        if ((!dur || dur === "Just now") && sTime && cTime && sTime !== cTime) {
-            dur = calculateSplitDuration(sTime, cTime, cCount);
-        }
+        const txId = (rc.transactionId || rc.id || `${cleanRider}_${cleanCust}_${rcDate}_${sTime}`).toString().trim();
 
         const gross = parseItemGross(rc);
-        if (gross <= 0) return;
+
+        const sigKey = `${cleanRider}_${cleanCust}_${rcDate}`;
+        processedSignatures.add(sigKey);
+        if (txId) processedSignatures.add(txId);
 
         mergedMap.set(txId, {
             transactionId: txId,
@@ -252,6 +257,54 @@ export function getMergedDeduplicatedCommissionList() {
             duration: dur,
             totalFees: gross,
             isReceipt: true
+        });
+    });
+
+    // 2. Process Catered History (Captures trips completed or archived directly)
+    (globalState.globalCateredHistory || []).forEach(ch => {
+        if (!ch) return;
+        const cName = (ch.customerName || "Customer").trim();
+        if (!cName || cName.toLowerCase() === 'sample') return;
+
+        const chDate = ch.completedDate || ch.date;
+        if (!chDate) return;
+
+        const rName = (ch.riderName || "Rider").trim();
+        const cleanRider = rName.toLowerCase();
+        const cleanCust = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const sTime = ch.startTime || ch.cateringStartTime || ch.time || "";
+        const cTime = ch.completedTime || "";
+        const cCount = parseInt(ch.customerCount) || 1;
+        const dur = ch.duration || "";
+        const txId = (ch.transactionId || ch.id || `${cleanRider}_${cleanCust}_${chDate}_${sTime}`).toString().trim();
+
+        const sigKey = `${cleanRider}_${cleanCust}_${chDate}`;
+        if (processedSignatures.has(sigKey) || (txId && processedSignatures.has(txId))) {
+            if (txId && mergedMap.has(txId)) {
+                const existing = mergedMap.get(txId);
+                if (!existing.completedTime && cTime) existing.completedTime = cTime;
+                if (!existing.duration && dur) existing.duration = dur;
+                if (existing.customerCount === 1 && cCount > 1) existing.customerCount = cCount;
+            }
+            return;
+        }
+
+        const gross = parseItemGross(ch);
+
+        mergedMap.set(txId, {
+            transactionId: txId,
+            id: txId,
+            telegramId: (ch.telegramId || ch.riderId || "").toString().trim(),
+            riderName: rName,
+            customerName: cName,
+            date: chDate,
+            time: sTime,
+            startTime: sTime,
+            completedTime: cTime,
+            customerCount: cCount,
+            duration: dur,
+            totalFees: gross,
+            isReceipt: false
         });
     });
 

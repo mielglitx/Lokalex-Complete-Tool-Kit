@@ -353,6 +353,8 @@ export function updateRosterUI() {
     if (elBreak) elBreak.innerHTML = brkHtml.length ? brkHtml.join('') : '(Walang naka-break)';
     if (elCooldown) elCooldown.innerHTML = cdHtml.length ? cdHtml.join('') : '(Walang naka-cooldown)';
     if (elDayoff) elDayoff.innerHTML = dayOffHtml.length ? dayOffHtml.join('') : '(Walang naka-day off)';
+
+    loadGlobalCateredList();
 }
 
 // UNIFIED: Sorted Chronologically by Catering Start Time (Earliest to Latest) with Dynamic Split Minutes
@@ -360,6 +362,11 @@ export function loadGlobalCateredList() {
     const feed = document.getElementById('catered-customers-feed');
     const badge = document.getElementById('catered-count-badge');
     if (!feed) return;
+
+    if ((!globalState.globalDailyReceipts || globalState.globalDailyReceipts.length === 0) &&
+        (!globalState.globalCateredHistory || globalState.globalCateredHistory.length === 0)) {
+        loadRosterCache();
+    }
 
     const todayStr = getLocalTodayStr();
     const mergedList = getMergedDeduplicatedCommissionList();
@@ -369,7 +376,6 @@ export function loadGlobalCateredList() {
         return itemDate && isSameDateStr(itemDate, todayStr);
     });
 
-    // Sort chronologically based on when catering started
     todayHistory.sort((a, b) => {
         const timeA = parseTimeToMinutes(a.startTime || a.cateringStartTime || a.time || "") ?? 9999;
         const timeB = parseTimeToMinutes(b.startTime || b.cateringStartTime || b.time || "") ?? 9999;
@@ -397,7 +403,6 @@ export function loadGlobalCateredList() {
         const cCount = parseInt(h.customerCount) || 1;
         let durationStr = h.duration || "";
 
-        // Calculate and format split minutes if multiple customers catered together
         if ((!durationStr || durationStr === "Just now") && sTime && cTime && sTime !== cTime) {
             durationStr = calculateSplitDuration(sTime, cTime, cCount);
         } else if (durationStr && cCount > 1 && !durationStr.includes('÷')) {
@@ -447,10 +452,14 @@ export function loadGlobalLoginList() {
     const badge = document.getElementById('login-count-badge');
     if (!feed) return;
 
-    const todayStr = getLocalTodayStr();
-    const todayLogins = globalState.globalLogins ? globalState.globalLogins.filter(l => isSameDate(l.date, todayStr)) : [];
+    if (!globalState.globalLogins || globalState.globalLogins.length === 0) {
+        loadRosterCache();
+    }
 
-    if (badge) badge.innerText = `${todayLogins.length} logins`;
+    const todayStr = getLocalTodayStr();
+    const todayLogins = globalState.globalLogins ? globalState.globalLogins.filter(l => l && isSameDateStr(l.date, todayStr)) : [];
+
+    if (badge) badge.innerText = `${todayLogins.length} ${todayLogins.length === 1 ? 'login' : 'logins'}`;
 
     if (todayLogins.length === 0) {
         feed.innerHTML = `<div class="text-gray-500 dark:text-gray-400 italic text-center py-2 text-xs">No logins recorded yet today.</div>`;
@@ -466,11 +475,11 @@ export function loadGlobalLoginList() {
         return `
         <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-xl flex justify-between items-center gap-2 shadow-xs">
             <div class="flex flex-col min-w-0 flex-1">
-                <span class="font-black text-xs text-gray-900 dark:text-white truncate flex items-center gap-1.5"><i class="fa-solid fa-motorcycle text-blue-600 dark:text-blue-400 text-[10px]"></i> <span>${escapeHtml(l.riderName)}</span></span>
+                <span class="font-black text-xs text-gray-900 dark:text-white truncate flex items-center gap-1.5"><i class="fa-solid fa-motorcycle text-blue-600 dark:text-blue-400 text-[10px]"></i> <span>${escapeHtml(l.riderName || 'Rider')}</span></span>
                 ${mapBtn}
             </div>
             <div class="text-[10px] text-gray-800 dark:text-gray-200 font-mono text-right shrink-0 font-medium">
-                <span>In: ${escapeHtml(l.loginTime)}</span>
+                <span>In: ${escapeHtml(l.loginTime || 'N/A')}</span>
                 ${clockOutTxt}
             </div>
         </div>`;
@@ -487,4 +496,14 @@ if (typeof window !== 'undefined') {
     window.addEventListener('cateredUpdated', loadGlobalCateredList);
     window.addEventListener('receiptsUpdated', loadGlobalCateredList);
     window.addEventListener('loginsUpdated', loadGlobalLoginList);
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            loadGlobalCateredList();
+            loadGlobalLoginList();
+        });
+    } else {
+        loadGlobalCateredList();
+        loadGlobalLoginList();
+    }
 }
