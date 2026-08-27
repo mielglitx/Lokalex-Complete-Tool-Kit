@@ -4,17 +4,6 @@ import { db } from '../../config/firebase.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { escapeHtml } from '../../utils/helpers.js';
 
-export const PRESET_AVATARS = [
-    { name: "Red Rider", url: "https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=150&auto=format&fit=crop&q=80" },
-    { name: "Speed Helmet", url: "https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?w=150&auto=format&fit=crop&q=80" },
-    { name: "Urban Courier", url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80" },
-    { name: "Cool Moto", url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80" },
-    { name: "Pro Delivery", url: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80" },
-    { name: "Fast Express", url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80" },
-    { name: "Night Runner", url: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80" },
-    { name: "Lokalex Initial", url: "" }
-];
-
 let selectedAvatarUrl = "";
 
 export function getRiderAvatarUrl(rider = null) {
@@ -74,72 +63,98 @@ function compressAvatarImage(file, maxSize = 256, quality = 0.85) {
     });
 }
 
-export async function openAvatarPickerModal() {
+export function openAvatarPickerModal() {
     const modal = document.getElementById('avatar-picker-modal');
     const previewImg = document.getElementById('avatar-picker-preview');
     const nameBadge = document.getElementById('avatar-picker-rider-name-badge');
+    const phoneBadgeText = document.getElementById('avatar-picker-rider-phone-text');
     const nameInput = document.getElementById('rider-profile-name-input');
     const phoneInput = document.getElementById('rider-profile-phone-input');
     const pass1 = document.getElementById('rider-profile-pass-1');
     const pass2 = document.getElementById('rider-profile-pass-2');
     const errBox = document.getElementById('rider-profile-error-msg');
-    const presetsGrid = document.getElementById('avatar-presets-grid');
     const labelEl = document.getElementById('avatar-upload-label');
     const fileInput = document.getElementById('avatar-file-input');
 
     if (fileInput) fileInput.value = "";
     if (labelEl) labelEl.innerText = "Upload Custom Photo / Camera";
+    
+    // Always leave password fields blank
     if (pass1) pass1.value = "";
     if (pass2) pass2.value = "";
     if (errBox) errBox.classList.add('hidden');
 
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || '').toString().trim();
-    const myName = appState.riderName || localStorage.getItem('riderName') || 'Rider';
-    const currentAvatar = getRiderAvatarUrl();
+    
+    // Synchronous population from app state, local cache, and roster records
+    let myName = appState.riderName || localStorage.getItem('riderName') || 'Rider';
+    let currentAvatar = getRiderAvatarUrl();
+    let currentPhone = appState.phoneNumber || localStorage.getItem('lokalex_rider_phone') || localStorage.getItem('phoneNumber') || '';
+
+    if (globalState.rosterMembers && myId) {
+        const rosterRec = globalState.rosterMembers.find(m => (m.telegramId || m.id || '').toString() === myId);
+        if (rosterRec) {
+            if (rosterRec.riderName || rosterRec.name) myName = rosterRec.riderName || rosterRec.name;
+            if (rosterRec.photoUrl) currentAvatar = rosterRec.photoUrl;
+            if (rosterRec.phoneNumber) currentPhone = rosterRec.phoneNumber;
+        }
+    }
+
     selectedAvatarUrl = currentAvatar;
 
+    // Display values immediately
     if (previewImg) previewImg.src = currentAvatar;
     if (nameBadge) nameBadge.innerText = myName;
+    if (phoneBadgeText) phoneBadgeText.innerText = currentPhone || 'No Contact Number';
     if (nameInput) nameInput.value = myName;
-
-    // Load existing phone from state/cache/Firebase
-    let currentPhone = appState.phoneNumber || localStorage.getItem('lokalex_rider_phone') || '';
-    if (!currentPhone && db && myId) {
-        try {
-            const snap = await db.ref(`riders/${myId}/phoneNumber`).once('value');
-            if (snap.val()) currentPhone = snap.val();
-        } catch(e) {}
-    }
     if (phoneInput) phoneInput.value = currentPhone;
 
-    if (presetsGrid) {
-        const dynamicInitialUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(myName)}&background=0284c7&color=ffffff&bold=true&size=128`;
-        
-        presetsGrid.innerHTML = PRESET_AVATARS.map((preset) => {
-            const finalUrl = preset.url || dynamicInitialUrl;
-            return `
-            <button type="button" onclick="window.selectPresetAvatar('${escapeHtml(finalUrl)}')" class="relative group rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 hover:border-emerald-500 transition active:scale-95 focus:outline-none focus:border-emerald-500 shadow-xs">
-                <img src="${escapeHtml(finalUrl)}" alt="${escapeHtml(preset.name)}" class="w-full h-14 object-cover">
-                <span class="absolute bottom-0 inset-x-0 bg-black/60 text-[8px] font-bold text-white text-center py-0.5 truncate px-1">${escapeHtml(preset.name)}</span>
-            </button>`;
-        }).join('');
+    // Real-time synchronization as the user types
+    if (nameInput) {
+        nameInput.oninput = () => {
+            const typedName = nameInput.value.trim() || 'Rider Name';
+            if (nameBadge) nameBadge.innerText = typedName;
+        };
     }
 
+    if (phoneInput) {
+        phoneInput.oninput = () => {
+            const typedPhone = phoneInput.value.trim() || 'No Contact Number';
+            if (phoneBadgeText) phoneBadgeText.innerText = typedPhone;
+        };
+    }
+
+    // Open modal immediately
     if (modal) modal.classList.remove('hidden');
+
+    // Background asynchronous fetch to sync persistent Firebase data
+    if (db && myId) {
+        db.ref(`riders/${myId}`).once('value').then((snap) => {
+            const rData = snap.val();
+            if (rData) {
+                if (rData.name || rData.riderName) {
+                    myName = rData.name || rData.riderName;
+                    if (nameInput && nameInput.value === '') nameInput.value = myName;
+                    if (nameBadge) nameBadge.innerText = myName;
+                }
+                if (rData.phoneNumber || rData.phone) {
+                    currentPhone = rData.phoneNumber || rData.phone;
+                    if (phoneInput && phoneInput.value === '') phoneInput.value = currentPhone;
+                    if (phoneBadgeText) phoneBadgeText.innerText = currentPhone;
+                }
+                if (rData.photoUrl || rData.avatar || rData.profilePic) {
+                    currentAvatar = rData.photoUrl || rData.avatar || rData.profilePic;
+                    selectedAvatarUrl = currentAvatar;
+                    if (previewImg) previewImg.src = currentAvatar;
+                }
+            }
+        }).catch(() => {});
+    }
 }
 
 export function closeAvatarPickerModal() {
     const modal = document.getElementById('avatar-picker-modal');
     if (modal) modal.classList.add('hidden');
-}
-
-export function selectPresetAvatar(url) {
-    selectedAvatarUrl = url.trim();
-    const previewImg = document.getElementById('avatar-picker-preview');
-    const labelEl = document.getElementById('avatar-upload-label');
-    
-    if (previewImg) previewImg.src = selectedAvatarUrl;
-    if (labelEl) labelEl.innerText = "Upload Custom Photo / Camera";
 }
 
 export async function handleAvatarFileUpload(event) {
@@ -259,7 +274,7 @@ export async function saveRiderProfileSettings() {
                 name: newName,
                 riderName: newName,
                 photoUrl: selectedAvatarUrl,
-                hasPassword: true
+                ...(p1 ? { hasPassword: true } : {})
             }).catch(() => {});
         }
 
@@ -288,7 +303,6 @@ export async function saveSelectedAvatar() {
 if (typeof window !== 'undefined') {
     window.openAvatarPickerModal = openAvatarPickerModal;
     window.closeAvatarPickerModal = closeAvatarPickerModal;
-    window.selectPresetAvatar = selectPresetAvatar;
     window.handleAvatarFileUpload = handleAvatarFileUpload;
     window.saveSelectedAvatar = saveSelectedAvatar;
     window.saveRiderProfileSettings = saveRiderProfileSettings;
