@@ -15,6 +15,7 @@ import {
     getMergedDeduplicatedCommissionList,
     isSameDateStr
 } from './rosterUtils.js';
+import { syncHeaderUserProfile } from './rosterAvatar.js';
 import { autoStartLiveGpsSession, endLiveGpsSession } from '../liveTracker.js';
 import { openMapPicker } from '../maps.js';
 
@@ -28,6 +29,9 @@ export function updateRosterUI() {
     if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
         loadRosterCache();
     }
+
+    // Sync header profile photo & welcome message
+    syncHeaderUserProfile();
 
     const rosterMembers = globalState.rosterMembers || [];
     const myId = (appState.telegramId || "").toString();
@@ -172,6 +176,7 @@ export function updateRosterUI() {
     let availHtml = [], busyHtml = [], brkHtml = [], cdHtml = [];
     let availCounter = 1;
 
+    // 1. Available List (No profile picture, scannable line)
     availableRiders.forEach((m) => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -201,6 +206,7 @@ export function updateRosterUI() {
         `);
     });
 
+    // 2. Catering List (No profile picture)
     cateringRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -268,6 +274,7 @@ export function updateRosterUI() {
         busyHtml.push(cardHtml);
     });
 
+    // 3. Break List (No profile picture)
     breakRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -290,6 +297,7 @@ export function updateRosterUI() {
         `);
     });
 
+    // 4. Cooldown List (No profile picture)
     cooldownRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = m.riderName || m.name || "Rider";
@@ -486,6 +494,7 @@ export function loadGlobalLoginList() {
     }).join('');
 }
 
+// Global window attachments
 if (typeof window !== 'undefined') {
     window.openFindRidersMap = openFindRidersMap;
     window.updateRosterUI = updateRosterUI;

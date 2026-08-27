@@ -2,7 +2,7 @@
 import { db } from '../../config/firebase.js';
 import { appState, globalState, multiCarts, activeCartSlot } from '../../store/state.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
-import { openSlideDeleteModal, closeCateringModal } from '../../ui/modals.js';
+import { openSlideDeleteModal, closeCateringModal, openRiderPasswordSetupModal } from '../../ui/modals.js';
 import { calibrateGPS } from '../auth/index.js';
 import { getLocalTodayStr, escapeHtml, isSameDate } from '../../utils/helpers.js';
 import { switchView } from '../../ui/router.js';
@@ -131,7 +131,6 @@ export function checkRiderTimeInAllowed(targetId = null, targetName = null) {
     const myName = (targetName || appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
     const myNameKey = myName.toLowerCase().replace(/[^a-z0-9]/g, '_');
 
-    // Strict role check: Only bypass gate if userType is explicitly an admin/owner role
     const rosterRec = (globalState.rosterMembers || []).find(m => 
         ((m.telegramId || m.id || "").toString().trim() === myId) ||
         ((m.riderName || m.name || "").toLowerCase().trim() === myName.toLowerCase().trim())
@@ -301,6 +300,26 @@ export async function triggerStatusWithSlide(targetStatus) {
     }
 
     if (targetStatus === 'Available') {
+        const isStartingShift = !myRecord || !myRecord.status || myRecord.status === 'End';
+        if (isStartingShift && db && myId) {
+            const isSkippedLocal = localStorage.getItem(`lokalex_skip_pass_${myId}`) === 'true';
+            if (!isSkippedLocal) {
+                try {
+                    const passSnap = await db.ref(`riders/${myId}`).once('value');
+                    const rVal = passSnap.val() || {};
+                    const hasPass = !!(rVal.password || rVal.pass);
+                    const dbSkipped = !!rVal.skipPasswordSetup;
+
+                    if (!hasPass && !dbSkipped) {
+                        openRiderPasswordSetupModal(myId, appState.riderName, () => {
+                            triggerStatusWithSlide('Available');
+                        });
+                        return;
+                    }
+                } catch(e) {}
+            }
+        }
+
         const timeCheck = checkRiderTimeInAllowed(appState.telegramId, appState.riderName);
         if (!timeCheck.allowed) {
             showToast(`🚫 Bawal pa mag-Time In: Ang iyong allowed time-in ay ${timeCheck.allowedTime}. Humingi ng Early Time-In pass sa Admin.`);
@@ -357,7 +376,6 @@ export async function triggerStatusWithSlide(targetStatus) {
             }
         }
 
-        const isStartingShift = !myRecord || !myRecord.status || myRecord.status === 'End';
         if (isStartingShift) {
             showToast("📡 Kinukuha ang GPS Location bago mag-Time In...");
             showSideNotification("GPS CHECK", "Calibrating GPS pin location...", "fa-location-crosshairs", "text-blue-400", "border-blue-500");
@@ -592,11 +610,15 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     if (!tId) return;
 
     const nowTimestamp = Date.now();
+    const existingRec = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === tId);
+    const photoUrl = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || existingRec?.photoUrl || "";
+
     const rosterData = {
         telegramId: tId.toString(),
         id: tId.toString(),
         riderName: tName,
         name: tName,
+        photoUrl: photoUrl,
         userType: getUserType(),
         status: status,
         customerName: customerName || "",
