@@ -1,11 +1,18 @@
 {
+  "id": "lokalex-hub-pwa",
   "name": "Lokalex Hub",
   "short_name": "Lokalex",
   "description": "Lokalex Delivery & Live Tracking Portal",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#121212",
-  "theme_color": "#1E1E1E",
+  "display_override": [
+    "standalone",
+    "fullscreen",
+    "window-controls-overlay"
+  ],
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
   "orientation": "portrait",
   "icons": [
     {

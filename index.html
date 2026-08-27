@@ -3,15 +3,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Lokalex Toolkit</title>
 
-    <!-- PWA & MOBILE APP CAPABILITIES -->
+    <!-- PWA & MOBILE APP STANDALONE CAPABILITIES (REMOVES ADDRESS BAR) -->
     <meta name="theme-color" content="#09090b">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Lokalex Hub">
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="apple-touch-icon" href="https://i.imgur.com/dbomHa2.png">
 
     <!-- CONTENT SECURITY POLICY -->
     <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; font-src * data:; img-src * data: blob:;">
@@ -156,7 +158,7 @@
     <load src="src/partials/header.html" />
 
     <!-- MAIN APP VIEWS -->
-    <main class="flex-1 max-w-md w-full mx-auto flex flex-col relative pb-20">
+    <main class="flex-1 max-w-md w-full mx-auto flex flex-col relative pb-20 px-3">
         <load src="src/partials/views/login.html" />
         <load src="src/partials/views/customer-home.html" />
         <load src="src/partials/views/home-dashboard.html" />
@@ -180,6 +182,8 @@
     <load src="src/partials/modals/system-dialogs.html" />
     <load src="src/partials/modals/store-account-modal.html" />
     <load src="src/partials/modals/store-item-modal.html" />
+    <load src="src/partials/modals/avatar-modal.html" />
+    <load src="src/partials/modals/rider-password-modal.html" />
 
     <!-- ESM ENTRY POINT -->
     <script type="module" src="/src/main.js"></script>

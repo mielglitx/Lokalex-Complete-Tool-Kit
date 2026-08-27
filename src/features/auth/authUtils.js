@@ -53,22 +53,66 @@ export function switchCustomerAuthTab(tabName) {
 }
 
 export function formatPhoneNumber(phone) {
-    let clean = (phone || '').replace(/[^0-9+]/g, '').trim();
-    if (clean.startsWith('+')) return clean;
-    if (clean.startsWith('09') && clean.length === 11) return '+63' + clean.substring(1);
-    if (clean.startsWith('9') && clean.length === 10) return '+63' + clean;
+    let clean = (phone || '').replace(/[^0-9]/g, '').trim();
+    if (!clean) return '';
+
+    // Handle 639XXXXXXXXX (12 digits)
+    if (clean.startsWith('63') && clean.length === 12) {
+        return '+' + clean;
+    }
+    // Handle 09XXXXXXXXX (11 digits)
+    if (clean.startsWith('09') && clean.length === 11) {
+        return '+63' + clean.substring(1);
+    }
+    // Handle 9XXXXXXXXX (10 digits)
+    if (clean.startsWith('9') && clean.length === 10) {
+        return '+63' + clean;
+    }
+    // Handle generic leading 0
+    if (clean.startsWith('0')) {
+        return '+63' + clean.substring(1);
+    }
+    // Handle cases where 63 was passed without plus
+    if (clean.startsWith('63')) {
+        return '+' + clean;
+    }
+
     return '+' + clean;
 }
 
-export function initRecaptcha() {
-    if (!window.recaptchaVerifier && typeof firebase !== 'undefined') {
+export function initRecaptcha(containerId = 'recaptcha-container') {
+    if (typeof firebase === 'undefined' || !firebase.auth) return null;
+
+    if (!window.recaptchaVerifiers) {
+        window.recaptchaVerifiers = {};
+    }
+
+    // 1. Clear previous verifier instance for this container if present
+    if (window.recaptchaVerifiers[containerId]) {
         try {
-            window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-                'size': 'invisible',
-                'callback': () => {}
-            });
-        } catch (e) {
-            console.error("Recaptcha init error:", e);
-        }
+            window.recaptchaVerifiers[containerId].clear();
+        } catch (e) {}
+        delete window.recaptchaVerifiers[containerId];
+    }
+
+    // 2. Cleanly reset the container DOM element to clear previous grecaptcha iframe state
+    const container = document.getElementById(containerId);
+    if (container) {
+        container.innerHTML = '';
+    }
+
+    // 3. Initialize fresh RecaptchaVerifier
+    try {
+        const verifier = new firebase.auth.RecaptchaVerifier(containerId, {
+            size: 'invisible',
+            callback: () => {}
+        });
+
+        window.recaptchaVerifiers[containerId] = verifier;
+        window.recaptchaVerifier = verifier;
+        return verifier;
+    } catch (e) {
+        console.error("Recaptcha init error:", e);
+        return null;
     }
 }

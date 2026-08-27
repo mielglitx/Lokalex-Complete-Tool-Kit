@@ -2,7 +2,7 @@
 import { appState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { showToast, unlockAudioContext } from '../../ui/notifications.js';
-import { fetchGCashDetails } from '../../ui/modals.js';
+import { fetchGCashDetails, openRiderPasswordSetupModal } from '../../ui/modals.js';
 import { renderViewUI } from '../../ui/router.js';
 import { calibrateGPS, startBackgroundRosterGpsTracker, stopBackgroundRosterGpsTracker } from './authGps.js';
 import { isUserBlocked } from './authAdmin.js';
@@ -40,6 +40,8 @@ export function closePwaInstallModal() {
 export async function processLogin() {
     unlockAudioContext();
     const idInput = document.getElementById('login-id')?.value.trim();
+    const passInput = document.getElementById('login-pass')?.value.trim() || '';
+
     if (!idInput) return showToast("Please enter a valid Rider ID");
 
     if (isUserBlocked(idInput)) {
@@ -48,12 +50,11 @@ export async function processLogin() {
 
     const btn = document.getElementById('login-btn');
     if (btn) {
-        btn.innerHTML = `<i class="fa-solid fa-satellite-dish fa-spin"></i> Calibrating GPS...`;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Checking Account...`;
         btn.disabled = true;
     }
 
     try {
-        let authorized = false;
         let riderRecord = null;
 
         if (db) {
@@ -66,59 +67,106 @@ export async function processLogin() {
             }
         }
 
-        if (riderRecord) {
-            const cleanName = riderRecord.name || riderRecord.riderName || idInput;
-            const cleanUserType = (riderRecord.userType || riderRecord.type || "rider").toLowerCase().trim();
+        if (!riderRecord) {
+            throw new Error("Access Denied: Rider ID not found in database.");
+        }
 
-            if (isUserBlocked(cleanName)) {
-                throw new Error("🚫 Access Denied: Account blocked.");
-            }
+        const cleanName = riderRecord.name || riderRecord.riderName || idInput;
+        const cleanUserType = (riderRecord.userType || riderRecord.type || "rider").toLowerCase().trim();
 
-            // SCHEDULE TIME-IN AND PERMANENT EARLY PASS VALIDATION GATE[cite: 51]
-            const isUserAdmin = cleanUserType === 'admin' || cleanUserType === 'owner' || cleanUserType === 'manager';
-            if (!isUserAdmin) {
-                const timeCheck = checkRiderTimeInAllowed(idInput, cleanName);
-                if (!timeCheck.allowed) {
-                    throw new Error(`🚫 Bawal pa mag-Time In: Ang iyong allowed time-in ay ${timeCheck.allowedTime}. Humingi ng Early Time-In pass sa Admin.`);
+        if (isUserBlocked(cleanName)) {
+            throw new Error("🚫 Access Denied: Account blocked.");
+        }
+
+        const existingPassword = riderRecord.password || riderRecord.pass || null;
+        const isSkipped = localStorage.getItem(`lokalex_skip_pass_${idInput}`) === 'true' || riderRecord.skipPasswordSetup === true;
+
+        if (!existingPassword) {
+            if (!isSkipped) {
+                if (btn) {
+                    btn.innerHTML = "LOGIN & MARK AVAILABLE";
+                    btn.disabled = false;
                 }
+                openRiderPasswordSetupModal(idInput, cleanName, async () => {
+                    await executeRiderLoginSequence(idInput, cleanName, cleanUserType, riderRecord);
+                });
+                return;
             }
-
-            appState.riderName = cleanName;
-            appState.telegramId = idInput;
-            appState.userType = cleanUserType;
-            authorized = true;
-        }
-
-        if (authorized) {
-            showToast("📡 Calibrating GPS location...");
-            const coords = await calibrateGPS((accuracy) => {
-                showToast(`📡 Calibrating GPS: ±${Math.round(accuracy)}m`);
-            });
-
-            if (coords.lat === 0 && coords.lon === 0) {
-                showToast("⚠️ GPS Signal weak. Turn on location services.");
-            } else {
-                showToast(`✅ GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
-            }
-
-            appState.lat = coords.lat;
-            appState.lon = coords.lon;
-            appState.gpsAccuracy = coords.accuracy;
-
-            localStorage.setItem('telegramId', appState.telegramId);
-            localStorage.setItem('riderName', appState.riderName);
-            localStorage.setItem('userType', appState.userType || "");
-            showToast("Login Successful!");
-
-            fetchGCashDetails();
-            startBackgroundRosterGpsTracker();
-
-            history.replaceState({ view: 'view-home' }, '', '#view-home');
-            renderViewUI('view-home');
-            window.dispatchEvent(new CustomEvent('loginSuccess'));
         } else {
-            showToast("Access Denied: Rider ID not found in database.");
+            if (!passInput) {
+                throw new Error("⚠️ Paki-lagay ang iyong Rider Password.");
+            }
+
+            if (passInput !== existingPassword.toString()) {
+                throw new Error("❌ Mali ang iyong Rider Password. Paki-ulit.");
+            }
         }
+
+        await executeRiderLoginSequence(idInput, cleanName, cleanUserType, riderRecord);
+    } catch (err) {
+        showToast(err.message || "Error during login");
+        if (btn) {
+            btn.innerHTML = "LOGIN & MARK AVAILABLE";
+            btn.disabled = false;
+        }
+    }
+}
+
+export async function executeRiderLoginSequence(idInput, cleanName, cleanUserType, riderRecord = {}) {
+    const btn = document.getElementById('login-btn');
+    if (btn) {
+        btn.innerHTML = `<i class="fa-solid fa-satellite-dish fa-spin"></i> Calibrating GPS...`;
+        btn.disabled = true;
+    }
+
+    try {
+        const isUserAdmin = cleanUserType === 'admin' || cleanUserType === 'owner' || cleanUserType === 'manager';
+        if (!isUserAdmin) {
+            const timeCheck = checkRiderTimeInAllowed(idInput, cleanName);
+            if (!timeCheck.allowed) {
+                throw new Error(`🚫 Bawal pa mag-Time In: Ang iyong allowed time-in ay ${timeCheck.allowedTime}. Humingi ng Early Time-In pass sa Admin.`);
+            }
+        }
+
+        appState.riderName = cleanName;
+        appState.telegramId = idInput;
+        appState.userType = cleanUserType;
+        if (riderRecord.photoUrl) {
+            appState.photoUrl = riderRecord.photoUrl;
+            localStorage.setItem('lokalex_photo_url', riderRecord.photoUrl);
+            localStorage.setItem('riderPhotoUrl', riderRecord.photoUrl);
+        }
+        if (riderRecord.phoneNumber) {
+            appState.phoneNumber = riderRecord.phoneNumber;
+            localStorage.setItem('lokalex_rider_phone', riderRecord.phoneNumber);
+        }
+
+        showToast("📡 Calibrating GPS location...");
+        const coords = await calibrateGPS((accuracy) => {
+            showToast(`📡 Calibrating GPS: ±${Math.round(accuracy)}m`);
+        });
+
+        if (coords.lat === 0 && coords.lon === 0) {
+            showToast("⚠️ GPS Signal weak. Turn on location services.");
+        } else {
+            showToast(`✅ GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
+        }
+
+        appState.lat = coords.lat;
+        appState.lon = coords.lon;
+        appState.gpsAccuracy = coords.accuracy;
+
+        localStorage.setItem('telegramId', appState.telegramId);
+        localStorage.setItem('riderName', appState.riderName);
+        localStorage.setItem('userType', appState.userType || "");
+        showToast("Login Successful!");
+
+        fetchGCashDetails();
+        startBackgroundRosterGpsTracker();
+
+        history.replaceState({ view: 'view-home' }, '', '#view-home');
+        renderViewUI('view-home');
+        window.dispatchEvent(new CustomEvent('loginSuccess'));
     } catch (err) {
         showToast(err.message || "Error during login");
     } finally {

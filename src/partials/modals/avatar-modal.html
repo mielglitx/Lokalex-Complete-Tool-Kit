@@ -1,0 +1,103 @@
+<!-- src/partials/modals/avatar-modal.html -->
+<div id="avatar-picker-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+    <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 relative max-h-[90vh] overflow-y-auto">
+        <!-- HEADER -->
+        <div class="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-500 text-sm shrink-0">
+                    <i class="fa-solid fa-user-gear"></i>
+                </div>
+                <div>
+                    <h3 class="font-extrabold text-sm text-gray-900 dark:text-white">Rider Account Settings</h3>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Edit your photo, username, phone, and password</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeAvatarPickerModal && window.closeAvatarPickerModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white p-1 text-sm transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- CURRENT PREVIEW -->
+        <div class="flex flex-col items-center justify-center py-2.5 bg-gray-50 dark:bg-black/30 rounded-2xl border border-gray-200 dark:border-gray-800/80 gap-1.5">
+            <div class="relative">
+                <img id="avatar-picker-preview" src="https://ui-avatars.com/api/?name=Rider&background=0284c7&color=ffffff&bold=true&size=128" alt="Preview" class="w-18 h-18 rounded-full object-cover border-4 border-emerald-500 shadow-md">
+                <button type="button" onclick="document.getElementById('avatar-file-input').click()" class="absolute -bottom-1 -right-1 bg-gray-900 text-white rounded-full p-1.5 text-[9px] border border-gray-700 shadow hover:scale-105 transition" title="Upload Photo">
+                    <i class="fa-solid fa-camera"></i>
+                </button>
+            </div>
+            <span id="avatar-picker-rider-name-badge" class="font-black text-xs text-gray-900 dark:text-white mt-0.5">Rider Name</span>
+        </div>
+
+        <!-- SECTION 1: EDIT USERNAME & PHONE NUMBER -->
+        <div class="flex flex-col gap-2.5">
+            <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                    <i class="fa-solid fa-signature text-emerald-500"></i> Rider Username / Display Name:
+                </label>
+                <input type="text" id="rider-profile-name-input" placeholder="Enter rider name" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold">
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                    <i class="fa-solid fa-phone text-emerald-500"></i> Mobile / Phone Number:
+                </label>
+                <input type="tel" id="rider-profile-phone-input" placeholder="09xxxxxxxxx or +639xxxxxxxxx" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-mono">
+            </div>
+        </div>
+
+        <!-- SECTION 2: CHOOSE / UPLOAD PHOTO -->
+        <div class="flex flex-col gap-1.5 pt-1 border-t border-gray-100 dark:border-gray-800">
+            <label class="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                <i class="fa-solid fa-image text-emerald-500"></i> Preset Avatars:
+            </label>
+            <div id="avatar-presets-grid" class="grid grid-cols-4 gap-2 max-h-36 overflow-y-auto p-1">
+                <!-- Preset items rendered dynamically via rosterAvatar.js -->
+            </div>
+
+            <input type="file" id="avatar-file-input" accept="image/*" class="hidden" onchange="window.handleAvatarFileUpload && window.handleAvatarFileUpload(event)">
+            <button type="button" onclick="document.getElementById('avatar-file-input').click()" class="w-full mt-1 py-2 px-3 bg-gray-100 dark:bg-gray-800/80 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-700 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-xs">
+                <i class="fa-solid fa-cloud-arrow-up text-emerald-500"></i>
+                <span id="avatar-upload-label">Upload Custom Photo / Camera</span>
+            </button>
+        </div>
+
+        <!-- SECTION 3: CHANGE PASSWORD (OPTIONAL) -->
+        <div class="flex flex-col gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+            <div class="flex items-center justify-between">
+                <label class="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                    <i class="fa-solid fa-key text-emerald-500"></i> Account Password:
+                </label>
+                <span class="text-[9px] text-gray-400 italic">(Leave blank to keep unchanged)</span>
+            </div>
+
+            <div class="relative">
+                <input type="password" id="rider-profile-pass-1" placeholder="New Password (optional)" class="w-full bg-inputBg text-xs rounded-xl p-2.5 pr-9 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-mono">
+                <button type="button" onclick="window.toggleRiderPassVisibility && window.toggleRiderPassVisibility('rider-profile-pass-1', this)" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white text-xs">
+                    <i class="fa-solid fa-eye"></i>
+                </button>
+            </div>
+
+            <div class="relative">
+                <input type="password" id="rider-profile-pass-2" placeholder="Confirm New Password" class="w-full bg-inputBg text-xs rounded-xl p-2.5 pr-9 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-mono">
+                <button type="button" onclick="window.toggleRiderPassVisibility && window.toggleRiderPassVisibility('rider-profile-pass-2', this)" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-white text-xs">
+                    <i class="fa-solid fa-eye"></i>
+                </button>
+            </div>
+
+            <div id="rider-profile-error-msg" class="hidden text-[11px] font-bold text-red-500 flex items-center gap-1.5">
+                <i class="fa-solid fa-circle-exclamation"></i>
+                <span id="rider-profile-error-text">Passwords do not match.</span>
+            </div>
+        </div>
+
+        <!-- ACTION BUTTONS -->
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+            <button type="button" onclick="window.closeAvatarPickerModal && window.closeAvatarPickerModal()" class="px-4 py-2.5 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition">
+                Cancel
+            </button>
+            <button type="button" id="save-rider-profile-btn" onclick="window.saveRiderProfileSettings && window.saveRiderProfileSettings()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center gap-1.5">
+                <i class="fa-solid fa-check"></i> Save All Changes
+            </button>
+        </div>
+    </div>
+</div>

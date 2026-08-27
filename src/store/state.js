@@ -3,10 +3,12 @@ export const appState = {
     telegramId: localStorage.getItem('telegramId') || "",
     riderName: localStorage.getItem('riderName') || "",
     userType: localStorage.getItem('userType') || "",
+    photoUrl: localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || "",
     gcashNo: localStorage.getItem('lokalex_gcash_no') || "",
     gcashName: localStorage.getItem('lokalex_gcash_name') || "",
     themePreference: localStorage.getItem('lokalex_theme_preference') || "system",
-    lat: 0, lon: 0
+    lat: 0, 
+    lon: 0
 };
 
 // Starts with 1 Cart by default
