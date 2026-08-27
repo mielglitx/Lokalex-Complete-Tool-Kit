@@ -17,15 +17,19 @@
             </button>
         </div>
 
-        <!-- CURRENT PREVIEW -->
-        <div class="flex flex-col items-center justify-center py-2.5 bg-gray-50 dark:bg-black/30 rounded-2xl border border-gray-200 dark:border-gray-800/80 gap-1.5">
+        <!-- CURRENT PREVIEW PANEL -->
+        <div class="flex flex-col items-center justify-center py-3 bg-gray-50 dark:bg-black/30 rounded-2xl border border-gray-200 dark:border-gray-800/80 gap-1.5">
             <div class="relative">
-                <img id="avatar-picker-preview" src="https://ui-avatars.com/api/?name=Rider&background=0284c7&color=ffffff&bold=true&size=128" alt="Preview" class="w-18 h-18 rounded-full object-cover border-4 border-emerald-500 shadow-md">
-                <button type="button" onclick="document.getElementById('avatar-file-input').click()" class="absolute -bottom-1 -right-1 bg-gray-900 text-white rounded-full p-1.5 text-[9px] border border-gray-700 shadow hover:scale-105 transition" title="Upload Photo">
+                <img id="avatar-picker-preview" src="https://ui-avatars.com/api/?name=Rider&background=0284c7&color=ffffff&bold=true&size=128" alt="Preview" class="w-20 h-20 rounded-full object-cover border-4 border-emerald-500 shadow-md">
+                <button type="button" onclick="document.getElementById('avatar-file-input').click()" class="absolute -bottom-1 -right-1 bg-gray-900 text-white rounded-full p-1.5 text-[10px] border border-gray-700 shadow hover:scale-105 transition active:scale-95" title="Upload Photo">
                     <i class="fa-solid fa-camera"></i>
                 </button>
             </div>
-            <span id="avatar-picker-rider-name-badge" class="font-black text-xs text-gray-900 dark:text-white mt-0.5">Rider Name</span>
+            <span id="avatar-picker-rider-name-badge" class="font-black text-sm text-gray-900 dark:text-white mt-1">Rider Name</span>
+            <div id="avatar-picker-rider-phone-badge" class="text-xs text-emerald-600 dark:text-emerald-400 font-mono font-bold flex items-center gap-1.5 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                <i class="fa-solid fa-phone text-[10px]"></i>
+                <span id="avatar-picker-rider-phone-text">No Contact Number</span>
+            </div>
         </div>
 
         <!-- SECTION 1: EDIT USERNAME & PHONE NUMBER -->
@@ -45,17 +49,10 @@
             </div>
         </div>
 
-        <!-- SECTION 2: CHOOSE / UPLOAD PHOTO -->
+        <!-- SECTION 2: UPLOAD PHOTO / CAMERA -->
         <div class="flex flex-col gap-1.5 pt-1 border-t border-gray-100 dark:border-gray-800">
-            <label class="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                <i class="fa-solid fa-image text-emerald-500"></i> Preset Avatars:
-            </label>
-            <div id="avatar-presets-grid" class="grid grid-cols-4 gap-2 max-h-36 overflow-y-auto p-1">
-                <!-- Preset items rendered dynamically via rosterAvatar.js -->
-            </div>
-
             <input type="file" id="avatar-file-input" accept="image/*" class="hidden" onchange="window.handleAvatarFileUpload && window.handleAvatarFileUpload(event)">
-            <button type="button" onclick="document.getElementById('avatar-file-input').click()" class="w-full mt-1 py-2 px-3 bg-gray-100 dark:bg-gray-800/80 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-700 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-xs">
+            <button type="button" onclick="document.getElementById('avatar-file-input').click()" class="w-full py-2.5 px-3 bg-gray-100 dark:bg-gray-800/80 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-700 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 shadow-xs">
                 <i class="fa-solid fa-cloud-arrow-up text-emerald-500"></i>
                 <span id="avatar-upload-label">Upload Custom Photo / Camera</span>
             </button>

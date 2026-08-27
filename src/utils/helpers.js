@@ -12,6 +12,14 @@ export function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
+export function formatTitleCase(str) {
+    if (!str) return "";
+    return String(str)
+        .toLowerCase()
+        .trim()
+        .replace(/(?:^|\s|-|\/|\.)\S/g, (char) => char.toUpperCase());
+}
+
 export function copyText(text) {
     const textArea = document.createElement("textarea");
     textArea.value = text;
@@ -132,6 +140,7 @@ export function updateThemeToggleUI(activePref = 'system') {
 
 // Auto-run theme initialization
 if (typeof window !== 'undefined') {
+    window.formatTitleCase = formatTitleCase;
     window.initTheme = initTheme;
     window.setTheme = setTheme;
     window.applyTheme = applyTheme;

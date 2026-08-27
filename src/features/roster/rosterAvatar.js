@@ -2,7 +2,7 @@
 import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
-import { escapeHtml } from '../../utils/helpers.js';
+import { escapeHtml, formatTitleCase } from '../../utils/helpers.js';
 
 let selectedAvatarUrl = "";
 
@@ -11,14 +11,14 @@ export function getRiderAvatarUrl(rider = null) {
     if (photo && typeof photo === 'string' && photo.trim() !== '') {
         return photo.trim();
     }
-    const name = (rider?.riderName || rider?.name || appState.riderName || localStorage.getItem('riderName') || 'Rider').trim();
+    const name = formatTitleCase(rider?.riderName || rider?.name || appState.riderName || localStorage.getItem('riderName') || 'Rider');
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0284c7&color=ffffff&bold=true&size=128`;
 }
 
 export function syncHeaderUserProfile() {
     const avatarEl = document.getElementById('header-user-avatar');
     const nameEl = document.getElementById('header-user-name');
-    const myName = appState.riderName || localStorage.getItem('riderName') || 'Rider';
+    const myName = formatTitleCase(appState.riderName || localStorage.getItem('riderName') || 'Rider');
     const myPhoto = getRiderAvatarUrl();
 
     if (avatarEl) avatarEl.src = myPhoto;
@@ -87,14 +87,14 @@ export function openAvatarPickerModal() {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || '').toString().trim();
     
     // Synchronous population from app state, local cache, and roster records
-    let myName = appState.riderName || localStorage.getItem('riderName') || 'Rider';
+    let myName = formatTitleCase(appState.riderName || localStorage.getItem('riderName') || 'Rider');
     let currentAvatar = getRiderAvatarUrl();
     let currentPhone = appState.phoneNumber || localStorage.getItem('lokalex_rider_phone') || localStorage.getItem('phoneNumber') || '';
 
     if (globalState.rosterMembers && myId) {
         const rosterRec = globalState.rosterMembers.find(m => (m.telegramId || m.id || '').toString() === myId);
         if (rosterRec) {
-            if (rosterRec.riderName || rosterRec.name) myName = rosterRec.riderName || rosterRec.name;
+            if (rosterRec.riderName || rosterRec.name) myName = formatTitleCase(rosterRec.riderName || rosterRec.name);
             if (rosterRec.photoUrl) currentAvatar = rosterRec.photoUrl;
             if (rosterRec.phoneNumber) currentPhone = rosterRec.phoneNumber;
         }
@@ -112,7 +112,7 @@ export function openAvatarPickerModal() {
     // Real-time synchronization as the user types
     if (nameInput) {
         nameInput.oninput = () => {
-            const typedName = nameInput.value.trim() || 'Rider Name';
+            const typedName = formatTitleCase(nameInput.value.trim()) || 'Rider Name';
             if (nameBadge) nameBadge.innerText = typedName;
         };
     }
@@ -133,7 +133,7 @@ export function openAvatarPickerModal() {
             const rData = snap.val();
             if (rData) {
                 if (rData.name || rData.riderName) {
-                    myName = rData.name || rData.riderName;
+                    myName = formatTitleCase(rData.name || rData.riderName);
                     if (nameInput && nameInput.value === '') nameInput.value = myName;
                     if (nameBadge) nameBadge.innerText = myName;
                 }
@@ -196,7 +196,8 @@ export async function saveRiderProfileSettings() {
     const errTxt = document.getElementById('rider-profile-error-text');
     const saveBtn = document.getElementById('save-rider-profile-btn');
 
-    const newName = nameInput ? nameInput.value.trim() : '';
+    const rawName = nameInput ? nameInput.value.trim() : '';
+    const newName = formatTitleCase(rawName);
     const newPhone = phoneInput ? phoneInput.value.trim() : '';
     const p1 = pass1 ? pass1.value.trim() : '';
     const p2 = pass2 ? pass2.value.trim() : '';

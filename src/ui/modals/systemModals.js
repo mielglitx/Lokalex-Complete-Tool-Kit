@@ -15,20 +15,6 @@ export function dismissQueueAlarm() {
     }
 }
 
-export function openAvatarPickerModal() {
-    if (typeof window.openAvatarPickerModal === 'function' && window.openAvatarPickerModal !== openAvatarPickerModal) {
-        window.openAvatarPickerModal();
-        return;
-    }
-    const modal = document.getElementById('avatar-picker-modal');
-    if (modal) modal.classList.remove('hidden');
-}
-
-export function closeAvatarPickerModal() {
-    const modal = document.getElementById('avatar-picker-modal');
-    if (modal) modal.classList.add('hidden');
-}
-
 export function openSampleReceiptModal() {
     const modal = document.getElementById('sample-receipt-modal');
     if (modal) modal.classList.remove('hidden');

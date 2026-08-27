@@ -32,8 +32,6 @@ import {
 
 import {
     dismissQueueAlarm,
-    openAvatarPickerModal,
-    closeAvatarPickerModal,
     openSampleReceiptModal,
     closeSampleReceiptModal,
     openAdvancedOrdersModal,
@@ -52,6 +50,20 @@ import {
     onSlideProgress,
     onSlideEnd
 } from './modals/systemModals.js';
+
+import {
+    openAvatarPickerModal,
+    closeAvatarPickerModal,
+    handleAvatarFileUpload,
+    saveSelectedAvatar,
+    saveRiderProfileSettings,
+    syncHeaderUserProfile
+} from '../features/roster/rosterAvatar.js';
+
+import {
+    openRiderInfoModal,
+    closeRiderInfoModal
+} from '../features/roster/rosterUI.js';
 
 // Re-export named members for static ES Module bundlers
 export {
@@ -80,6 +92,12 @@ export {
     dismissQueueAlarm,
     openAvatarPickerModal,
     closeAvatarPickerModal,
+    openRiderInfoModal,
+    closeRiderInfoModal,
+    handleAvatarFileUpload,
+    saveSelectedAvatar,
+    saveRiderProfileSettings,
+    syncHeaderUserProfile,
     openSampleReceiptModal,
     closeSampleReceiptModal,
     openAdvancedOrdersModal,
@@ -128,9 +146,16 @@ if (typeof window !== 'undefined') {
     window.viewMapCalcRoute = viewMapCalcRoute;
     window.deleteMapCalculation = deleteMapCalculation;
 
-    window.dismissQueueAlarm = dismissQueueAlarm;
     window.openAvatarPickerModal = openAvatarPickerModal;
     window.closeAvatarPickerModal = closeAvatarPickerModal;
+    window.openRiderInfoModal = openRiderInfoModal;
+    window.closeRiderInfoModal = closeRiderInfoModal;
+    window.handleAvatarFileUpload = handleAvatarFileUpload;
+    window.saveSelectedAvatar = saveSelectedAvatar;
+    window.saveRiderProfileSettings = saveRiderProfileSettings;
+    window.syncHeaderUserProfile = syncHeaderUserProfile;
+
+    window.dismissQueueAlarm = dismissQueueAlarm;
     window.openSampleReceiptModal = openSampleReceiptModal;
     window.closeSampleReceiptModal = closeSampleReceiptModal;
     window.openAdvancedOrdersModal = openAdvancedOrdersModal;
