@@ -10,7 +10,7 @@ import * as riderStoreChat from './riderStoreChat.js';
 import * as riderThreadActions from './riderThreadActions.js';
 import * as teamComms from './teamComms.js';
 import { globalState, appState } from '../../store/state.js';
-import { escapeHtml } from '../../utils/helpers.js';
+import { escapeHtml, formatTitleCase } from '../../utils/helpers.js';
 import { showToast } from '../../ui/notifications.js';
 import { canRiderTakeMoreBookings } from '../roster/rosterStatus.js';
 
@@ -142,9 +142,9 @@ export function renderFilteredCustomerChats(targetFolder = 'inbox') {
     // Render list with live catering rider badge
     feedContainer.innerHTML = filtered.map(chat => {
         const meta = chat.metadata || chat;
-        const custName = escapeHtml(meta.customerName || meta.name || "Customer");
+        const custName = escapeHtml(formatTitleCase(meta.customerName || meta.name || "Customer"));
         const lastMsg = escapeHtml(meta.lastMessage || meta.lastMsg || "No messages yet");
-        const riderName = meta.cateredByRiderName || meta.cateredBy || "";
+        const riderName = meta.cateredByRiderName || meta.cateredBy ? formatTitleCase(meta.cateredByRiderName || meta.cateredBy) : "";
 
         return `
         <div onclick="window.openCustomerChatThread && window.openCustomerChatThread('${chat.id}')" class="bg-cardBg border border-gray-800 hover:border-blue-500/50 p-3 rounded-2xl flex items-center justify-between cursor-pointer transition active:scale-[0.98]">

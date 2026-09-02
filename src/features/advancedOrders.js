@@ -86,7 +86,7 @@ export function checkScheduledDeliveryAlerts() {
         );
 
         const diffMins = Math.round((targetDate - now) / 60000);
-        const orderKey = `${ord.custName}_${dateStr}_${ord.timeToReceive}`;
+        const orderKey = ord.id || ord.key || `${ord.custName}_${dateStr}_${ord.timeToReceive}`;
 
         if (diffMins >= -10 && diffMins <= 30) {
             if (diffMins <= 5 && urgentLevel < 3) {
@@ -181,8 +181,10 @@ export function renderAdvancedOrdersList() {
     }
 
     container.innerHTML = globalState.globalAdvancedOrders.slice().reverse().map(ord => {
+        const ordId = (ord.id || ord.key || "").toString();
         const status = ord.status || "Pending";
-        let statusBadge = ""; let actionBtns = "";
+        let statusBadge = ""; 
+        let actionBtns = "";
 
         const displayDate = ord.dateToReceive || getLocalTodayStr();
 
@@ -190,16 +192,16 @@ export function renderAdvancedOrdersList() {
             statusBadge = `<span class="bg-amber-50 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-200 dark:border-amber-500/30">⏳ Pending</span>`;
             actionBtns = `
                 <div class="flex gap-1 items-center">
-                    <button onclick="addOrderToPhoneCalendar('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', '${escapeHtml(ord.address || '')}', '${escapeHtml(displayDate)}')" class="bg-blue-50 dark:bg-blue-600/30 border border-blue-200 dark:border-blue-500/50 text-blue-700 dark:text-blue-300 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-bell"></i> Alarm</button>
-                    <button onclick="takeAdvancedOrder('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}')" class="bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95 shadow"><i class="fa-solid fa-motorcycle"></i> Cater Order</button>
-                    <button onclick="changeAdvOrderStatus('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', 'Cancelled')" class="bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-ban"></i> Cancel</button>
+                    <button onclick="window.addOrderToPhoneCalendar && window.addOrderToPhoneCalendar('${escapeHtml(ordId)}')" class="bg-blue-50 dark:bg-blue-600/30 border border-blue-200 dark:border-blue-500/50 text-blue-700 dark:text-blue-300 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-bell"></i> Alarm</button>
+                    <button onclick="window.takeAdvancedOrder && window.takeAdvancedOrder('${escapeHtml(ordId)}')" class="bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95 shadow"><i class="fa-solid fa-motorcycle"></i> Cater Order</button>
+                    <button onclick="window.changeAdvOrderStatus && window.changeAdvOrderStatus('${escapeHtml(ordId)}', 'Cancelled')" class="bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-ban"></i> Cancel</button>
                 </div>`;
         } else if (status === 'Catering') {
             statusBadge = `<span class="bg-orange-50 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded border border-orange-200 dark:border-orange-500/30 animate-pulse">🛵 Catering by ${escapeHtml(ord.cateredBy)}</span>`;
             actionBtns = `
                 <div class="flex gap-1">
-                    <button onclick="changeAdvOrderStatus('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', 'Catered')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95 shadow"><i class="fa-solid fa-check"></i> Complete</button>
-                    <button onclick="changeAdvOrderStatus('${escapeHtml(ord.custName)}', '${escapeHtml(ord.timeToReceive)}', 'Cancelled')" class="bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-ban"></i> Cancel</button>
+                    <button onclick="window.changeAdvOrderStatus && window.changeAdvOrderStatus('${escapeHtml(ordId)}', 'Catered')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95 shadow"><i class="fa-solid fa-check"></i> Complete</button>
+                    <button onclick="window.changeAdvOrderStatus && window.changeAdvOrderStatus('${escapeHtml(ordId)}', 'Cancelled')" class="bg-red-50 dark:bg-red-900/40 border border-red-200 dark:border-red-700/50 text-red-600 dark:text-red-400 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95"><i class="fa-solid fa-ban"></i> Cancel</button>
                 </div>`;
         } else if (status === 'Catered') {
             statusBadge = `<span class="bg-emerald-50 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30"><i class="fa-solid fa-check-double"></i> Catered by ${escapeHtml(ord.cateredBy)}</span>`;
@@ -247,30 +249,59 @@ export async function submitNewAdvancedOrder() {
         cateredBy: ""
     };
 
-    if (db) db.ref('advancedOrders').push(newOrd);
+    if (db) {
+        const pushRef = db.ref('advancedOrders').push();
+        newOrd.id = pushRef.key;
+        newOrd.key = pushRef.key;
+        await pushRef.set(newOrd);
+    }
 
     document.getElementById('adv-cust-name').value = "";
+    document.getElementById('adv-receiver').value = "";
+    document.getElementById('adv-address').value = "";
+    document.getElementById('adv-contact').value = "";
     document.getElementById('adv-receive-time').value = "";
     document.getElementById('adv-receive-date').value = getLocalTodayStr();
     showToast(`✅ Scheduled order created for ${custName} on ${dateToReceive}!`);
     switchAdvTab('list');
 }
 
-export async function takeAdvancedOrder(custName, timeToReceive) {
+export async function takeAdvancedOrder(orderIdOrCustName, timeToReceive = null) {
     stopReminderAlarm();
-    const targetOrd = globalState.globalAdvancedOrders.find(o => o.custName === custName && o.timeToReceive === timeToReceive);
-    if (targetOrd && targetOrd.status !== 'Pending') return showToast("⚠️ Order was already taken!");
 
-    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => m.telegramId.toString() === appState.telegramId.toString()) : null;
+    let targetOrd = null;
+    let orderId = null;
+
+    if (timeToReceive === null) {
+        orderId = orderIdOrCustName;
+        targetOrd = (globalState.globalAdvancedOrders || []).find(o => o.id === orderId || o.key === orderId);
+    } else {
+        targetOrd = (globalState.globalAdvancedOrders || []).find(o => o.custName === orderIdOrCustName && o.timeToReceive === timeToReceive);
+        if (targetOrd) orderId = targetOrd.id || targetOrd.key;
+    }
+
+    if (!targetOrd) return showToast("⚠️ Scheduled order not found.");
+    if (targetOrd.status && targetOrd.status !== 'Pending') return showToast("⚠️ Order was already taken!");
+
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || m.id || "").toString().trim() === myId) : null;
     if (myRecord && (myRecord.status === 'End' || myRecord.status === 'Break' || myRecord.status === 'Cooldown')) {
         return showToast(`⚠️ You are currently in ${myRecord.status} mode. Please mark as Available first.`);
     }
 
-    if (targetOrd) { targetOrd.status = "Catering"; targetOrd.cateredBy = appState.riderName; }
-    changeAdvOrderStatus(custName, timeToReceive, "Catering");
+    const riderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
+    targetOrd.status = "Catering";
+    targetOrd.cateredBy = riderName;
 
-    let existingCusts = (myRecord && myRecord.status === 'Catering' && myRecord.customerName) ? myRecord.customerName.split(', ').map(c=>c.trim()).filter(Boolean) : [];
-    let existingTimes = (myRecord && myRecord.status === 'Catering' && myRecord.startTime) ? myRecord.startTime.split(', ').map(t=>t.trim()).filter(Boolean) : [];
+    if (orderId) {
+        await changeAdvOrderStatus(orderId, "Catering");
+    } else {
+        await changeAdvOrderStatus(targetOrd.custName, targetOrd.timeToReceive, "Catering");
+    }
+
+    const custName = targetOrd.custName;
+    let existingCusts = (myRecord && myRecord.status === 'Catering' && myRecord.customerName) ? myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean) : [];
+    let existingTimes = (myRecord && myRecord.status === 'Catering' && myRecord.startTime) ? myRecord.startTime.split(', ').map(t => t.trim()).filter(Boolean) : [];
 
     if (!existingCusts.includes(custName)) {
         existingCusts.push(custName);
@@ -286,20 +317,54 @@ export async function takeAdvancedOrder(custName, timeToReceive) {
     }
 }
 
-export async function changeAdvOrderStatus(custName, timeToReceive, newStatus) {
+export async function changeAdvOrderStatus(arg1, arg2, arg3 = null) {
+    let orderId = null;
+    let newStatus = null;
+    let custName = null;
+    let timeToReceive = null;
+
+    if (arg3 !== null) {
+        custName = arg1;
+        timeToReceive = arg2;
+        newStatus = arg3;
+    } else {
+        orderId = arg1;
+        newStatus = arg2;
+    }
+
+    const riderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
+    const updatePayload = {
+        status: newStatus,
+        cateredBy: (newStatus === 'Pending') ? "" : riderName
+    };
+
+    if (globalState.globalAdvancedOrders) {
+        const localOrd = globalState.globalAdvancedOrders.find(o => 
+            (orderId && (o.id === orderId || o.key === orderId)) ||
+            (custName && timeToReceive && o.custName === custName && o.timeToReceive === timeToReceive)
+        );
+        if (localOrd) {
+            localOrd.status = newStatus;
+            localOrd.cateredBy = updatePayload.cateredBy;
+        }
+    }
+    renderAdvancedOrdersList();
+
     if (db) {
-        db.ref('advancedOrders').once('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                Object.keys(data).forEach(key => {
-                    if (data[key].custName === custName && data[key].timeToReceive === timeToReceive) {
-                        db.ref('advancedOrders/' + key).update({
-                            status: newStatus, cateredBy: (newStatus === 'Pending') ? "" : appState.riderName
-                        });
-                    }
-                });
-            }
-        });
+        if (orderId) {
+            await db.ref(`advancedOrders/${orderId}`).update(updatePayload).catch(() => {});
+        } else if (custName && timeToReceive) {
+            db.ref('advancedOrders').once('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    Object.keys(data).forEach(key => {
+                        if (data[key].custName === custName && data[key].timeToReceive === timeToReceive) {
+                            db.ref('advancedOrders/' + key).update(updatePayload);
+                        }
+                    });
+                }
+            });
+        }
     }
 }
 
@@ -345,9 +410,26 @@ export function autoCancelAdvancedOrdersForRider(riderName, customerNameStr = ""
     });
 }
 
-export function addOrderToPhoneCalendar(custName, timeToReceive, address, dateToReceive) {
-    const timeParts = timeToReceive.split(':');
-    const dateStr = dateToReceive || getLocalTodayStr();
+export function addOrderToPhoneCalendar(arg1, timeToReceive = "", address = "", dateToReceive = "") {
+    let custName = arg1;
+    let time = timeToReceive;
+    let addr = address;
+    let date = dateToReceive;
+
+    if (!timeToReceive && globalState.globalAdvancedOrders) {
+        const found = globalState.globalAdvancedOrders.find(o => o.id === arg1 || o.key === arg1);
+        if (found) {
+            custName = found.custName || "Customer";
+            time = found.timeToReceive || "";
+            addr = found.address || "";
+            date = found.dateToReceive || getLocalTodayStr();
+        }
+    }
+
+    if (!time) return showToast("⚠️ No scheduled time for this order.");
+
+    const timeParts = time.split(':');
+    const dateStr = date || getLocalTodayStr();
     const dateParts = dateStr.split('-');
 
     const eventDate = new Date(
@@ -364,13 +446,21 @@ export function addOrderToPhoneCalendar(custName, timeToReceive, address, dateTo
     const endTimeIso = endDate.toISOString().replace(/-|:|\.\d\d\d/g, "");
 
     const title = encodeURIComponent(`🛵 Lokalex Delivery: ${custName}`);
-    const details = encodeURIComponent(`Scheduled Lokalex Order for ${custName} on ${dateStr} at ${timeToReceive}.`);
-    const loc = encodeURIComponent(address || "");
+    const details = encodeURIComponent(`Scheduled Lokalex Order for ${custName} on ${dateStr} at ${time}.`);
+    const loc = encodeURIComponent(addr || "");
 
     window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startTimeIso}/${endTimeIso}&details=${details}&location=${loc}`, '_blank');
 }
 
 if (typeof window !== 'undefined') {
+    window.switchAdvTab = switchAdvTab;
+    window.renderAdvancedOrdersList = renderAdvancedOrdersList;
+    window.submitNewAdvancedOrder = submitNewAdvancedOrder;
+    window.takeAdvancedOrder = takeAdvancedOrder;
+    window.changeAdvOrderStatus = changeAdvOrderStatus;
     window.autoCompleteAdvancedOrdersForRider = autoCompleteAdvancedOrdersForRider;
     window.autoCancelAdvancedOrdersForRider = autoCancelAdvancedOrdersForRider;
+    window.addOrderToPhoneCalendar = addOrderToPhoneCalendar;
+    window.checkScheduledDeliveryAlerts = checkScheduledDeliveryAlerts;
+    window.stopReminderAlarm = stopReminderAlarm;
 }

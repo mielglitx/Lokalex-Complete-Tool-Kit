@@ -6,7 +6,6 @@ import { fetchGCashDetails, openRiderPasswordSetupModal } from '../../ui/modals.
 import { renderViewUI } from '../../ui/router.js';
 import { calibrateGPS, startBackgroundRosterGpsTracker, stopBackgroundRosterGpsTracker } from './authGps.js';
 import { isUserBlocked } from './authAdmin.js';
-import { checkRiderTimeInAllowed } from '../roster/rosterStatus.js';
 
 let deferredPwaPrompt = null;
 
@@ -84,7 +83,7 @@ export async function processLogin() {
         if (!existingPassword) {
             if (!isSkipped) {
                 if (btn) {
-                    btn.innerHTML = "LOGIN & MARK AVAILABLE";
+                    btn.innerHTML = "LOGIN";
                     btn.disabled = false;
                 }
                 openRiderPasswordSetupModal(idInput, cleanName, async () => {
@@ -106,7 +105,7 @@ export async function processLogin() {
     } catch (err) {
         showToast(err.message || "Error during login");
         if (btn) {
-            btn.innerHTML = "LOGIN & MARK AVAILABLE";
+            btn.innerHTML = "LOGIN";
             btn.disabled = false;
         }
     }
@@ -120,14 +119,6 @@ export async function executeRiderLoginSequence(idInput, cleanName, cleanUserTyp
     }
 
     try {
-        const isUserAdmin = cleanUserType === 'admin' || cleanUserType === 'owner' || cleanUserType === 'manager';
-        if (!isUserAdmin) {
-            const timeCheck = checkRiderTimeInAllowed(idInput, cleanName);
-            if (!timeCheck.allowed) {
-                throw new Error(`🚫 Bawal pa mag-Time In: Ang iyong allowed time-in ay ${timeCheck.allowedTime}. Humingi ng Early Time-In pass sa Admin.`);
-            }
-        }
-
         appState.riderName = cleanName;
         appState.telegramId = idInput;
         appState.userType = cleanUserType;
@@ -171,7 +162,7 @@ export async function executeRiderLoginSequence(idInput, cleanName, cleanUserTyp
         showToast(err.message || "Error during login");
     } finally {
         if (btn) {
-            btn.innerHTML = "LOGIN & MARK AVAILABLE";
+            btn.innerHTML = "LOGIN";
             btn.disabled = false;
         }
     }

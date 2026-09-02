@@ -1,3 +1,5 @@
+<!-- src/partials/modals/chat.html -->
+
 <!-- RIDER-TO-CUSTOMER DIRECT CHAT MODAL -->
 <div id="rider-customer-chat-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-3">
     <div class="bg-cardBg border border-blue-500/60 p-4 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-2.5 h-[85vh] max-h-[620px] overflow-hidden">
@@ -46,37 +48,211 @@
     </div>
 </div>
 
-<!-- FLOATING TEAM COMMS CHAT WIDGET -->
-<div id="floating-chat-container" class="fixed right-0 z-50 flex flex-col items-end pointer-events-none" style="top: 80%;">
-    <div id="expanded-chat-window" class="hidden pointer-events-auto bg-cardBg border border-gray-700 rounded-2xl shadow-2xl w-80 sm:w-88 h-96 max-h-[75vh] flex flex-col overflow-hidden mr-3 mb-2 transition-all">
-        <div id="chat-drag-handle" class="bg-gray-800 p-3 flex items-center justify-between select-none border-b border-gray-700 shrink-0">
-            <div class="flex items-center gap-2 font-bold text-xs text-blue-400">
-                <i class="fa-solid fa-comments text-base"></i> Team Comms
-            </div>
-            <button onclick="window.toggleChatWindow && window.toggleChatWindow(false)" class="text-gray-400 hover:text-white text-sm active:scale-90">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
-        </div>
+<!-- ========================================================================= -->
+<!-- COMPLETE TEAM COMMS MULTI-CHANNEL SYSTEM (DRAGGABLE WINDOW & DOCKED BUBBLE)-->
+<!-- ========================================================================= -->
+<div id="floating-chat-container" class="fixed right-0 z-50 flex flex-col items-end pointer-events-none" style="top: 75%;">
+    <!-- EXPANDED TEAM COMMS WINDOW -->
+    <div id="expanded-chat-window" class="hidden pointer-events-auto bg-cardBg border border-gray-700 rounded-3xl shadow-2xl w-[calc(100vw-24px)] sm:w-92 max-w-[390px] h-[520px] max-h-[82vh] flex flex-col overflow-hidden transition-shadow animate-in fade-in zoom-in-95 duration-200 select-none">
         
-        <div id="bubble-chat-messages" class="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col gap-2 text-xs">
-            <div class="text-center text-gray-500 italic py-10">Loading messages...</div>
+        <!-- DRAGGABLE HEADER & ACTIVE CHANNEL TITLE -->
+        <div id="chat-drag-handle" class="bg-darkBg/95 backdrop-blur p-3 flex items-center justify-between border-b border-gray-800 shrink-0 cursor-grab active:cursor-grabbing select-none touch-none">
+            <div class="flex items-center gap-2 min-w-0 pointer-events-none">
+                <button type="button" id="team-comms-back-btn" onclick="event.stopPropagation(); window.returnToChannelList && window.returnToChannelList()" class="hidden pointer-events-auto text-gray-400 hover:text-white p-1 text-xs transition mr-0.5" title="Back to Channels">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <div class="w-8 h-8 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center text-sm font-bold border border-blue-500/30 shrink-0">
+                    <i id="team-comms-header-icon" class="fa-solid fa-comments"></i>
+                </div>
+                <div class="min-w-0">
+                    <h3 id="team-comms-channel-title" class="font-extrabold text-xs text-white truncate">Team Comms</h3>
+                    <p id="team-comms-channel-subtitle" class="text-[9px] text-emerald-400 font-mono truncate">General Lounge (All Riders)</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-1.5 shrink-0 pointer-events-auto">
+                <!-- Group Settings / Manage Members (Only visible inside Group Chat) -->
+                <button type="button" id="team-comms-group-manage-btn" onclick="event.stopPropagation(); window.openManageGroupModal && window.openManageGroupModal()" class="hidden bg-gray-800 hover:bg-gray-700 text-purple-300 border border-purple-500/30 px-2 py-1 rounded-lg text-[10px] font-bold transition active:scale-95" title="Manage Group Members">
+                    <i class="fa-solid fa-users-gear"></i>
+                </button>
+                <!-- Close Comms Window -->
+                <button type="button" onclick="event.stopPropagation(); window.toggleChatWindow && window.toggleChatWindow(false)" class="text-gray-400 hover:text-white p-1 text-sm transition active:scale-90" title="Close">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
         </div>
 
-        <div class="p-2 bg-inputBg border-t border-gray-700 flex flex-col relative shrink-0">
-            <div id="tag-suggestions" class="hidden absolute bottom-full left-0 right-0 bg-cardBg border border-gray-700 rounded-t-xl max-h-32 overflow-y-auto z-20 p-1 text-xs shadow-xl"></div>
-            
-            <div class="flex gap-2 items-center">
-                <input type="text" id="bubble-chat-input" name="bubble_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" oninput="window.handleChatInput && window.handleChatInput(this)" onkeydown="if(event.key==='Enter') window.sendBubbleChatMessage && window.sendBubbleChatMessage()" placeholder="Type a message or @rider..." class="flex-1 bg-darkBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white">
-                <button onclick="window.sendBubbleChatMessage && window.sendBubbleChatMessage()" class="bg-blue-600 hover:bg-blue-500 text-white w-9 h-9 rounded-xl flex items-center justify-center text-xs transition active:scale-90 shrink-0">
-                    <i class="fa-solid fa-paper-plane"></i>
+        <!-- 3-WAY CHANNEL TAB SELECTOR -->
+        <div id="team-comms-tab-bar" class="grid grid-cols-3 bg-black/40 p-1 border-b border-gray-800 shrink-0 text-center select-none">
+            <button type="button" id="team-tab-general" onclick="window.switchTeamCommsTab && window.switchTeamCommsTab('general')" class="py-1.5 rounded-xl text-[11px] font-bold transition bg-blue-600 text-white shadow">
+                🌐 General
+            </button>
+            <button type="button" id="team-tab-dms" onclick="window.switchTeamCommsTab && window.switchTeamCommsTab('dms')" class="py-1.5 rounded-xl text-[11px] font-bold transition text-gray-400 hover:text-white">
+                👤 Direct
+            </button>
+            <button type="button" id="team-tab-groups" onclick="window.switchTeamCommsTab && window.switchTeamCommsTab('groups')" class="py-1.5 rounded-xl text-[11px] font-bold transition text-gray-400 hover:text-white">
+                👥 Groups
+            </button>
+        </div>
+
+        <!-- VIEW 1: DIRECT MESSAGES LIST (LIST OF RIDERS) -->
+        <div id="team-comms-dms-list-view" class="hidden flex-1 min-h-0 overflow-y-auto p-2.5 flex flex-col gap-1.5 select-none">
+            <div class="text-[10px] font-bold uppercase text-gray-400 px-1 pt-1 tracking-wider flex items-center justify-between">
+                <span>Select Rider to Message</span>
+                <span class="text-[9px] text-blue-400 lowercase">1-on-1 private chat</span>
+            </div>
+            <div id="team-comms-riders-feed" class="flex flex-col gap-1.5 min-h-[120px]">
+                <div class="text-center text-gray-500 italic py-8 text-xs">Loading active riders...</div>
+            </div>
+        </div>
+
+        <!-- VIEW 2: GROUPS LIST (LIST OF GROUPS + CREATE BUTTON) -->
+        <div id="team-comms-groups-list-view" class="hidden flex-1 min-h-0 overflow-y-auto p-2.5 flex flex-col gap-2 select-none">
+            <div class="flex items-center justify-between px-1 pt-1">
+                <span class="text-[10px] font-bold uppercase text-gray-400 tracking-wider">My Group Chats</span>
+                <button type="button" onclick="window.openCreateGroupModal && window.openCreateGroupModal()" class="bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-xl transition active:scale-95 shadow flex items-center gap-1">
+                    <i class="fa-solid fa-plus"></i> Create Group
                 </button>
+            </div>
+            <div id="team-comms-groups-feed" class="flex flex-col gap-1.5 min-h-[120px]">
+                <div class="text-center text-gray-500 italic py-8 text-xs">Loading your groups...</div>
+            </div>
+        </div>
+
+        <!-- VIEW 3: LIVE MESSAGE FEED (FOR ACTIVE GENERAL / DM / GROUP) -->
+        <div id="team-comms-messages-view" class="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <!-- MESSAGES CONTAINER -->
+            <div id="bubble-chat-messages" class="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col gap-2 text-xs bg-darkBg/40">
+                <div class="text-center text-gray-500 italic py-12">Loading messages...</div>
+            </div>
+
+            <!-- REPLY PREVIEW BANNER -->
+            <div id="team-chat-reply-banner" class="hidden bg-gray-800/90 border-t border-blue-500/30 px-3 py-1.5 flex items-center justify-between text-[11px] shrink-0">
+                <div class="flex items-center gap-1.5 truncate text-gray-300">
+                    <i class="fa-solid fa-reply text-blue-400 text-xs"></i>
+                    <span class="truncate">Replying to <strong id="team-reply-sender" class="text-blue-300">User</strong>: <span id="team-reply-text" class="italic text-gray-400">...</span></span>
+                </div>
+                <button type="button" onclick="window.cancelTeamReply && window.cancelTeamReply()" class="text-gray-400 hover:text-white p-1 text-xs">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- INPUT BAR -->
+            <div class="p-2 bg-inputBg border-t border-gray-800 flex flex-col relative shrink-0 select-none">
+                <div id="tag-suggestions" class="hidden absolute bottom-full left-0 right-0 bg-cardBg border border-gray-700 rounded-t-2xl max-h-36 overflow-y-auto z-20 p-1 text-xs shadow-2xl"></div>
+                
+                <div class="flex gap-1.5 items-center">
+                    <input type="file" id="team-chat-file-input" accept="image/*" class="hidden" onchange="window.handleTeamChatImageFile && window.handleTeamChatImageFile(event)">
+                    <button type="button" onclick="document.getElementById('team-chat-file-input').click()" class="bg-gray-800 hover:bg-gray-700 text-blue-400 w-9 h-9 rounded-xl flex items-center justify-center text-xs transition active:scale-95 shrink-0" title="Send Image">
+                        <i class="fa-solid fa-image"></i>
+                    </button>
+                    
+                    <input type="text" id="bubble-chat-input" name="bubble_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" oninput="window.handleChatInput && window.handleChatInput(this)" onkeydown="if(event.key==='Enter') window.sendBubbleChatMessage && window.sendBubbleChatMessage()" placeholder="Type a message..." class="flex-1 bg-darkBg text-xs rounded-xl px-3 py-2 outline-none border border-gray-700 focus:border-blue-500 text-white font-medium">
+                    
+                    <button type="button" onclick="window.sendBubbleChatMessage && window.sendBubbleChatMessage()" class="bg-blue-600 hover:bg-blue-500 text-white w-9 h-9 rounded-xl flex items-center justify-center text-xs transition active:scale-90 shrink-0 shadow">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
 
-    <div id="chat-bubble" class="pointer-events-auto relative bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-l-2xl shadow-2xl flex items-center justify-center cursor-pointer transition-all active:scale-90 border-l-2 border-t-2 border-b-2 border-white/20 select-none touch-none">
-        <i class="fa-solid fa-comments text-base"></i>
-        <div id="chat-tag-badge" class="hidden absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-black text-[9px] font-black rounded-full flex items-center justify-center border-2 border-darkBg animate-bounce shadow-md">!</div>
-        <div id="chat-unread-badge" class="hidden absolute -top-1.5 -left-1.5 min-w-[18px] h-4 px-1 bg-red-600 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-darkBg shadow-md">0</div>
+    <!-- DRAGGABLE FLOATING TRIGGER BUBBLE (EDGE-DOCKED) -->
+    <div id="chat-bubble" class="pointer-events-auto relative bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-l-2xl shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing transition-all border-l-2 border-t-2 border-b-2 border-white/20 select-none touch-none">
+        <i class="fa-solid fa-comments text-base pointer-events-none"></i>
+        <div id="chat-tag-badge" class="hidden absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-black text-[9px] font-black rounded-full flex items-center justify-center border-2 border-darkBg animate-bounce shadow-md pointer-events-none">!</div>
+        <div id="chat-unread-badge" class="hidden absolute -top-1.5 -left-1.5 min-w-[18px] h-4 px-1 bg-red-600 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-darkBg shadow-md pointer-events-none">0</div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- CREATE GROUP CHAT MODAL                                                   -->
+<!-- ========================================================================= -->
+<div id="create-group-chat-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-purple-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3.5 max-h-[85vh] overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2.5">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center text-sm font-bold border border-purple-500/30">
+                    <i class="fa-solid fa-users"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-white">Create Group Chat</h3>
+                    <p class="text-[9px] text-purple-400 font-mono">Add riders to your custom team room</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeCreateGroupModal && window.closeCreateGroupModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex flex-col gap-2.5 text-xs flex-1 overflow-y-auto pr-1">
+            <div>
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Group Name *</label>
+                <input type="text" id="create-group-title-input" placeholder="e.g. Morning Shift Squad" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold mt-1">
+            </div>
+
+            <div class="flex flex-col gap-1 mt-1">
+                <label class="text-[10px] text-gray-400 font-bold uppercase">Select Group Members *</label>
+                <div id="create-group-members-checklist" class="flex flex-col gap-1.5 max-h-48 overflow-y-auto p-1 bg-black/30 rounded-2xl border border-gray-800">
+                    <div class="text-center text-gray-500 italic py-4 text-xs">Loading riders...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-2 pt-2 border-t border-gray-800">
+            <button type="button" onclick="window.closeCreateGroupModal && window.closeCreateGroupModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+            <button type="button" onclick="window.submitCreateGroupChat && window.submitCreateGroupChat()" class="flex-1 bg-purple-600 hover:bg-purple-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Create Room</button>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- MANAGE GROUP MEMBERS & ADMIN SETTINGS MODAL                               -->
+<!-- ========================================================================= -->
+<div id="manage-group-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-purple-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3.5 max-h-[85vh] overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2.5">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center text-sm font-bold border border-purple-500/30">
+                    <i class="fa-solid fa-users-gear"></i>
+                </div>
+                <div>
+                    <h3 id="manage-group-modal-title" class="font-bold text-xs text-white">Group Settings</h3>
+                    <p id="manage-group-modal-subtitle" class="text-[9px] text-purple-400 font-mono">Members & Room Controls</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeManageGroupModal && window.closeManageGroupModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex flex-col gap-3 text-xs flex-1 overflow-y-auto pr-1">
+            <!-- ADD NEW MEMBER (ADMIN ONLY) -->
+            <div id="manage-group-add-member-section" class="flex flex-col gap-1.5 bg-black/30 p-2.5 rounded-2xl border border-gray-800">
+                <span class="text-[10px] text-gray-400 font-bold uppercase">Add New Rider to Group</span>
+                <div class="flex gap-1.5">
+                    <select id="manage-group-add-select" class="flex-1 bg-inputBg text-xs rounded-xl p-2 border border-gray-700 outline-none text-white font-bold">
+                        <option value="" disabled selected>-- Select Rider --</option>
+                    </select>
+                    <button type="button" onclick="window.submitAddGroupMember && window.submitAddGroupMember()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl font-bold transition active:scale-95 text-xs shadow">
+                        <i class="fa-solid fa-user-plus"></i> Add
+                    </button>
+                </div>
+            </div>
+
+            <!-- CURRENT MEMBERS LIST -->
+            <div class="flex flex-col gap-1">
+                <span class="text-[10px] text-gray-400 font-bold uppercase">Current Room Members (<span id="manage-group-member-count">0</span>)</span>
+                <div id="manage-group-members-list" class="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
+                    <div class="text-center text-gray-500 italic py-4 text-xs">Loading members...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ACTION BUTTONS (LEAVE / DELETE ROOM) -->
+        <div class="flex gap-2 pt-2 border-t border-gray-800">
+            <button type="button" id="manage-group-leave-btn" onclick="window.leaveOrDeleteGroup && window.leaveOrDeleteGroup()" class="flex-1 bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700/50 py-2.5 rounded-xl text-xs font-bold transition active:scale-95">
+                🚪 Leave Group
+            </button>
+            <button type="button" onclick="window.closeManageGroupModal && window.closeManageGroupModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">
+                Close
+            </button>
+        </div>
     </div>
 </div>

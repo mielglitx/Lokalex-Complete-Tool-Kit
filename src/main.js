@@ -172,6 +172,10 @@ export function forceReconnectFirebase() {
                     chat.listenToAllCustomerChatsForRider();
                 }
 
+                if (chat && chat.listenToFirebaseChat) {
+                    chat.listenToFirebaseChat();
+                }
+
                 if (directory && directory.silentSyncDirectory) {
                     directory.silentSyncDirectory();
                 }
@@ -236,9 +240,6 @@ function bootApp() {
     try {
         registerServiceWorker();
         updateNetworkStatus();
-
-        const legacyWidget = document.getElementById('floating-chat-container');
-        if (legacyWidget) legacyWidget.remove();
 
         // 1. INSTANT LOCAL CACHE HYDRATION (Zero latency)
         if (roster && roster.loadRosterCache) roster.loadRosterCache();
@@ -391,6 +392,10 @@ function initRealtimeFirebaseListeners() {
             chat.listenToAllCustomerChatsForRider();
         }
 
+        if (chat && chat.listenToFirebaseChat) {
+            chat.listenToFirebaseChat();
+        }
+
         db.ref('riders').on('value', (snapshot) => {
             const val = snapshot.val();
             const myId = (appState.telegramId || "").toString().trim();
@@ -470,8 +475,12 @@ function initRealtimeFirebaseListeners() {
             window.dispatchEvent(new Event('chatUpdated'));
         });
 
+        // PRESERVES UNIQUE FIREBASE PUSH ID FOR ADVANCED ORDERS
         db.ref('advancedOrders').on('value', (snapshot) => {
-            globalState.globalAdvancedOrders = snapshot.val() ? Object.values(snapshot.val()) : [];
+            const val = snapshot.val();
+            globalState.globalAdvancedOrders = val 
+                ? Object.entries(val).map(([id, item]) => ({ id, key: id, ...item })) 
+                : [];
             if (advancedOrders.checkScheduledDeliveryAlerts) advancedOrders.checkScheduledDeliveryAlerts();
             if (advancedOrders.renderAdvancedOrdersList) advancedOrders.renderAdvancedOrdersList();
         });
