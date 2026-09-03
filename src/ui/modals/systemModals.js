@@ -2,6 +2,7 @@
 import { showToast } from '../notifications.js';
 
 let slideDeleteCallback = null;
+let isSlideDragValid = false;
 
 export function dismissQueueAlarm() {
     const modal = document.getElementById('first-in-line-modal') || document.getElementById('first-line-modal');
@@ -118,6 +119,7 @@ export function openSlideDeleteModal(title, arg2, arg3) {
     if (subEl) subEl.innerText = subtitle;
     if (rangeEl) rangeEl.value = 0;
 
+    isSlideDragValid = false;
     slideDeleteCallback = callback;
     const modal = document.getElementById('slide-delete-modal');
     if (modal) modal.classList.remove('hidden');
@@ -127,12 +129,51 @@ export function closeSlideDeleteModal() {
     const modal = document.getElementById('slide-delete-modal');
     if (modal) modal.classList.add('hidden');
     slideDeleteCallback = null;
+    isSlideDragValid = false;
+}
+
+export function onSlideStart(e) {
+    const rangeEl = document.getElementById('slide-delete-range');
+    if (!rangeEl) return;
+
+    const rect = rangeEl.getBoundingClientRect();
+    const clientX = (e.touches && e.touches.length > 0) 
+        ? e.touches[0].clientX 
+        : (e.clientX !== undefined ? e.clientX : null);
+
+    if (clientX !== null && rect.width > 0) {
+        const touchPercent = ((clientX - rect.left) / rect.width) * 100;
+        // Rider must initiate touch within the 0% to 12% handle zone
+        if (touchPercent <= 12) {
+            isSlideDragValid = true;
+        } else {
+            isSlideDragValid = false;
+            rangeEl.value = 0;
+            if (e.cancelable) e.preventDefault();
+        }
+    } else {
+        if (parseFloat(rangeEl.value) <= 10) {
+            isSlideDragValid = true;
+        } else {
+            isSlideDragValid = false;
+            rangeEl.value = 0;
+        }
+    }
 }
 
 export function onSlideProgress(val) {
-    if (val >= 90) {
-        const rangeEl = document.getElementById('slide-delete-range');
+    const rangeEl = document.getElementById('slide-delete-range');
+    const num = parseFloat(val) || 0;
+
+    // Block progress if the drag did not start within the 0% to 12% origin zone
+    if (!isSlideDragValid) {
+        if (rangeEl) rangeEl.value = 0;
+        return;
+    }
+
+    if (num >= 92) {
         if (rangeEl) rangeEl.value = 100;
+        isSlideDragValid = false;
         
         if (slideDeleteCallback && typeof slideDeleteCallback === 'function') {
             let cb = slideDeleteCallback;
@@ -144,7 +185,31 @@ export function onSlideProgress(val) {
 
 export function onSlideEnd() {
     const range = document.getElementById('slide-delete-range');
-    if (range && range.value < 90) { 
+    if (range && parseFloat(range.value) < 92) { 
         range.value = 0; 
     }
+    isSlideDragValid = false;
+}
+
+// Global window attachments
+if (typeof window !== 'undefined') {
+    window.dismissQueueAlarm = dismissQueueAlarm;
+    window.openSampleReceiptModal = openSampleReceiptModal;
+    window.closeSampleReceiptModal = closeSampleReceiptModal;
+    window.openAdvancedOrdersModal = openAdvancedOrdersModal;
+    window.closeAdvancedOrdersModal = closeAdvancedOrdersModal;
+    window.showGpsRequiredModal = showGpsRequiredModal;
+    window.closeGpsModal = closeGpsModal;
+    window.closeCateringModal = closeCateringModal;
+    window.closeAdminCateringModal = closeAdminCateringModal;
+    window.openPasswordModal = openPasswordModal;
+    window.closePasswordModal = closePasswordModal;
+    window.showBulkAddModal = showBulkAddModal;
+    window.closeBulkModal = closeBulkModal;
+    window.closeEditItemModal = closeEditItemModal;
+    window.openSlideDeleteModal = openSlideDeleteModal;
+    window.closeSlideDeleteModal = closeSlideDeleteModal;
+    window.onSlideStart = onSlideStart;
+    window.onSlideProgress = onSlideProgress;
+    window.onSlideEnd = onSlideEnd;
 }

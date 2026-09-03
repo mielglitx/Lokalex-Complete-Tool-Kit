@@ -1,0 +1,176 @@
+<!-- src/partials/modals/system-dialogs/customer-modals.html -->
+
+<!-- EDIT CUSTOMER PROFILE MODAL -->
+<div id="edit-customer-profile-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-blue-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-4 relative animate-in fade-in zoom-in duration-200 text-gray-900 dark:text-white">
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold border border-blue-500/30">
+                    <i class="fa-solid fa-user-pen"></i>
+                </div>
+                <h3 class="font-bold text-sm text-gray-900 dark:text-white">Edit Account Details</h3>
+            </div>
+            <button onclick="window.closeEditCustomerProfileModal && window.closeEditCustomerProfileModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="flex flex-col gap-3 text-xs">
+            <div>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Full Name</label>
+                <input type="text" id="edit-cust-fullname" autocomplete="name" placeholder="Full Name" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 font-bold">
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Delivery Address</label>
+                <input type="text" id="edit-cust-address" autocomplete="street-address" placeholder="Address" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 font-bold">
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Mobile Number (Requires OTP if changed)</label>
+                <input type="tel" id="edit-cust-phone" autocomplete="tel" inputmode="tel" placeholder="09123456789 or +1..." class="w-full bg-inputBg text-xs font-mono font-bold rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1">
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Delivery GPS Location Pin</label>
+                <div class="flex gap-1.5 mt-1">
+                    <input type="text" id="edit-cust-gps-link" placeholder="Map Link" readonly class="flex-1 bg-inputBg text-[10px] rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-mono truncate font-bold">
+                    <button type="button" onclick="window.captureEditProfileGPS && window.captureEditProfileGPS()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition active:scale-95 shrink-0">
+                        <i class="fa-solid fa-location-crosshairs"></i> Pin Map
+                    </button>
+                </div>
+                <input type="hidden" id="edit-cust-lat" value="0">
+                <input type="hidden" id="edit-cust-lon" value="0">
+            </div>
+
+            <!-- OTP INPUT BOX (HIDDEN UNTIL PHONE IS CHANGED) -->
+            <div id="edit-cust-otp-box" class="hidden bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-emerald-500/40 flex flex-col gap-2 mt-1">
+                <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">Enter 6-Digit SMS OTP Code</span>
+                <input type="text" id="edit-cust-otp-code" autocomplete="one-time-code" inputmode="numeric" placeholder="123456" maxlength="6" class="w-full bg-inputBg text-center tracking-widest text-base font-black rounded-xl p-2.5 border border-emerald-500/50 outline-none text-gray-900 dark:text-white font-mono">
+                <button type="button" id="edit-cust-verify-otp-btn" onclick="window.verifyAndUpdatePhoneOTP && window.verifyAndUpdatePhoneOTP()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs shadow transition active:scale-95 flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-check-double"></i> VERIFY & SAVE
+                </button>
+            </div>
+        </div>
+
+        <button id="edit-cust-save-btn" onclick="window.saveCustomerProfile && window.saveCustomerProfile()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-2xl text-xs shadow transition active:scale-95 flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-floppy-disk"></i> SAVE PROFILE CHANGES
+        </button>
+    </div>
+</div>
+
+<!-- CUSTOMER GPS PERMISSION REQUEST MODAL -->
+<div id="cust-gps-prompt-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-emerald-500/50 p-6 rounded-3xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-4 animate-in fade-in zoom-in duration-200 text-gray-900 dark:text-white">
+        <div class="w-16 h-16 bg-emerald-500/20 text-emerald-500 rounded-full flex items-center justify-center mx-auto text-3xl shadow-inner animate-pulse">
+            <i class="fa-solid fa-location-crosshairs"></i>
+        </div>
+        <div>
+            <h3 class="font-black text-base text-gray-900 dark:text-white">Enable GPS Location</h3>
+            <p class="text-xs text-gray-600 dark:text-gray-300 mt-2 leading-relaxed">
+                Kailangan ng Lokalex Hub ang iyong <strong>GPS Location</strong> upang mahanap ang tamang delivery pin at ma-track ang biyahe ng rider papunta sa iyo.
+            </p>
+        </div>
+        <div class="flex flex-col gap-2 pt-1">
+            <button onclick="window.requestCustomerGpsPermission && window.requestCustomerGpsPermission()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-2xl shadow-lg transition active:scale-95 text-xs flex items-center justify-center gap-2 ring-2 ring-emerald-400/50">
+                <i class="fa-solid fa-location-arrow"></i> ALLOW GPS LOCATION
+            </button>
+            <button onclick="window.closeCustomerGpsModal && window.closeCustomerGpsModal()" class="w-full bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-400 font-bold py-2.5 rounded-2xl text-xs transition active:scale-95">
+                Mamaya na
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- RIDER-TO-CUSTOMER DIRECT CHAT MODAL WITH INFO BUTTON -->
+<div id="rider-customer-chat-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-3">
+    <div class="bg-cardBg border border-blue-500/60 p-4 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-2.5 h-[85vh] max-h-[620px] overflow-hidden text-gray-900 dark:text-white">
+        <div class="flex flex-col gap-1 border-b border-gray-200 dark:border-gray-800 pb-2 shrink-0">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <img id="rider-chat-cust-avatar" src="" class="w-8 h-8 rounded-full border border-blue-500 object-cover">
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <h3 id="rider-chat-cust-name" class="font-bold text-xs text-gray-900 dark:text-white">Customer Chat</h3>
+                            <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-5 h-5 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-[10px] shadow shrink-0" title="View Customer Profile & GPS Pin">
+                                <i class="fa-solid fa-circle-info"></i>
+                            </button>
+                        </div>
+                        <span class="text-[9px] text-emerald-600 dark:text-emerald-400 font-mono">Real-time Connected</span>
+                    </div>
+                </div>
+                <button onclick="window.closeRiderCustomerChatModal && window.closeRiderCustomerChatModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="rider-chat-lock-banner" class="hidden text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-1.5 rounded-lg text-center font-bold"></div>
+        </div>
+
+        <div id="rider-chat-action-toolbar" class="grid grid-cols-4 gap-1 shrink-0 bg-gray-100 dark:bg-black/30 p-1.5 rounded-xl border border-gray-200 dark:border-gray-800">
+            <button onclick="window.markThreadUndone && window.markThreadUndone()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-700 dark:text-indigo-300 border border-indigo-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move thread back to inbox"><i class="fa-solid fa-rotate-left"></i> Undone </button>
+            <button onclick="window.markThreadFollowUp && window.markThreadFollowUp()" class="bg-amber-600/30 hover:bg-amber-600 text-amber-800 dark:text-amber-300 border border-amber-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move to Follow Up section"><i class="fa-solid fa-bookmark"></i> Follow Up</button>
+            <button onclick="window.markThreadDone && window.markThreadDone()" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-300 border border-emerald-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move to Done section"><i class="fa-solid fa-circle-check"></i> Done</button>
+            <button onclick="window.cancelCustomerThread && window.cancelCustomerThread()" class="bg-red-900/40 hover:bg-red-800 text-red-700 dark:text-red-300 border border-red-700/50 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Cancel & release thread"><i class="fa-solid fa-ban"></i> Cancel</button>
+        </div>
+
+        <div id="rider-cust-chat-messages" class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 p-2 text-xs bg-gray-50 dark:bg-black/30 rounded-2xl border border-gray-200 dark:border-gray-800">
+            <div class="text-center text-gray-500 italic py-10">Loading chat history...</div>
+        </div>
+
+        <div class="flex gap-1.5 items-center shrink-0 pt-1">
+            <input type="file" id="rider-chat-file-input" accept="image/*" class="hidden" onchange="if(this.files[0]) { window.openImageEditorModal && window.openImageEditorModal(this.files[0], 'rider'); this.value = ''; }">
+            <button onclick="document.getElementById('rider-chat-file-input').click()" class="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-blue-600 dark:text-blue-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Attach & Edit Photo"><i class="fa-solid fa-image"></i></button>
+            <button onclick="window.sendRiderLocation && window.sendRiderLocation()" class="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-emerald-600 dark:text-emerald-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Pick Rider Location Pin on Map"><i class="fa-solid fa-location-dot"></i></button>
+
+            <input type="text" id="rider-cust-chat-input" autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true" onkeydown="if(event.key==='Enter') window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" placeholder="Type reply..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white font-medium">
+            <button id="rider-cust-send-btn" onclick="window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>
+    </div>
+</div>
+
+<!-- CUSTOMER DETAILS MODAL (FOR RIDERS) -->
+<div id="customer-details-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-blue-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-4 relative animate-in fade-in zoom-in duration-200 text-gray-900 dark:text-white">
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold border border-blue-500/30">
+                    <i class="fa-solid fa-address-card"></i>
+                </div>
+                <h3 class="font-bold text-sm text-gray-900 dark:text-white">Customer Profile</h3>
+            </div>
+            <button onclick="window.closeCustomerDetailsModal && window.closeCustomerDetailsModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="flex flex-col gap-3 text-xs">
+            <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800">
+                <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Full Name</span>
+                <span id="cust-modal-name" class="font-bold text-sm text-gray-900 dark:text-white mt-0.5 block">Customer Name</span>
+            </div>
+
+            <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex justify-between items-center">
+                <div>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Mobile Number</span>
+                    <a id="cust-modal-phone" href="#" class="font-bold text-blue-600 dark:text-blue-400 font-mono mt-0.5 block hover:underline">---</a>
+                </div>
+            </div>
+
+            <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800">
+                <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Delivery Address</span>
+                <span id="cust-modal-address" class="text-gray-800 dark:text-gray-200 mt-0.5 block leading-relaxed font-medium">---</span>
+            </div>
+
+            <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex flex-col gap-2">
+                <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <i class="fa-solid fa-location-crosshairs"></i> Registered GPS Location Pin
+                </span>
+                <a id="cust-modal-map" href="#" target="_blank" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 text-xs flex items-center justify-center gap-2 shadow">
+                    <i class="fa-solid fa-map-location-dot text-sm"></i> OPEN GPS PIN IN GOOGLE MAPS
+                </a>
+            </div>
+        </div>
+
+        <button onclick="window.closeCustomerDetailsModal && window.closeCustomerDetailsModal()" class="w-full bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-2.5 rounded-2xl text-xs transition active:scale-95">
+            Close
+        </button>
+    </div>
+</div>

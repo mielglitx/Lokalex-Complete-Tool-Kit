@@ -15,8 +15,8 @@
     <link rel="manifest" href="./manifest.json">
     <link rel="apple-touch-icon" href="https://i.imgur.com/dbomHa2.png">
 
-    <!-- CONTENT SECURITY POLICY -->
-    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; font-src * data:; img-src * data: blob:;">
+    <!-- CONTENT SECURITY POLICY ENABLING TESSERACT OCR WORKERS & NETWORK FETCHING -->
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' blob:; worker-src * blob: data: 'unsafe-inline' 'unsafe-eval'; child-src * blob: data:; connect-src * blob: data:; style-src * 'unsafe-inline'; font-src * data:; img-src * data: blob:;">
 
     <!-- FIREBASE CDN SCRIPTS -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
