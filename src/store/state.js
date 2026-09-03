@@ -7,6 +7,8 @@ export const appState = {
     phoneNumber: localStorage.getItem('lokalex_rider_phone') || "",
     gcashNo: localStorage.getItem('lokalex_gcash_no') || "",
     gcashName: localStorage.getItem('lokalex_gcash_name') || "",
+    gcashQrPayload: localStorage.getItem('lokalex_gcash_qr_payload') || "",
+    gcashQrImg: localStorage.getItem('lokalex_gcash_qr_img') || "",
     themePreference: localStorage.getItem('lokalex_theme_preference') || "system",
     lat: 0, 
     lon: 0,
@@ -17,7 +19,7 @@ export const appState = {
 
 // Starts with 1 Cart by default
 export const multiCarts = {
-    1: { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "" }
+    1: { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "", receiptSummary: null }
 };
 
 export let activeCartSlot = 1;

@@ -2,7 +2,7 @@
 import { appState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { showToast } from '../notifications.js';
-import { escapeHtml } from '../../utils/helpers.js';
+import { escapeHtml, copyText } from '../../utils/helpers.js';
 
 export function formatMapCalcDate(ts) {
     if (!ts) return "N/A";
@@ -16,6 +16,12 @@ export function formatMapCalcDate(ts) {
         minute: '2-digit',
         hour12: true
     });
+}
+
+export function getMapCalcShareUrl(calcId) {
+    const origin = window.location.origin;
+    const pathname = window.location.pathname;
+    return `${origin}${pathname}?mapcalc=${calcId}`;
 }
 
 export function openMapCalcBoardModal() {
@@ -58,13 +64,21 @@ export function startMapCalcForCustomer() {
     if (db) {
         const newRef = db.ref('mapCalculations').push();
         const calcId = newRef.key;
+        const dateStr = new Date().toLocaleDateString('en-US', { 
+            month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' 
+        });
 
         const calcRecord = {
             id: calcId,
+            key: calcId,
             customerName: custName,
+            custName: custName,
             createdBy: creatorName,
+            riderName: creatorName,
             createdAt: Date.now(),
-            status: "Awaiting Pin"
+            dateAdded: dateStr,
+            status: "Awaiting Pin",
+            pinCaptured: false
         };
 
         newRef.set(calcRecord).then(() => {
@@ -72,6 +86,8 @@ export function startMapCalcForCustomer() {
             
             appState.mapCalcCustomerName = custName;
             appState.mapCalcId = calcId;
+
+            copyMapCalcLink(calcId, "", custName);
 
             openMapCalcBoardModal();
             fetchAndRenderMapCalculations();
@@ -84,7 +100,7 @@ export function startMapCalcForCustomer() {
 }
 
 export function fetchAndRenderMapCalculations() {
-    const container = document.getElementById('mapcalc-list-container');
+    const container = document.getElementById('mapcalc-list-container') || document.getElementById('mapcalc-board-list');
     if (!container) return;
 
     const topButtonHtml = `
@@ -105,7 +121,7 @@ export function fetchAndRenderMapCalculations() {
             return;
         }
 
-        const list = Object.entries(data).map(([id, val]) => ({ id, ...val }));
+        const list = Object.entries(data).map(([id, val]) => ({ id, key: id, ...val }));
         list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
         if (list.length === 0) {
@@ -114,15 +130,14 @@ export function fetchAndRenderMapCalculations() {
         }
 
         const cardsHtml = list.map(item => {
+            const itemKey = item.id || item.key;
             const custName = item.customerName || item.custName || item.name || "Customer";
-            const creator = item.createdBy || item.riderName || "Amiel";
-            const formattedDate = formatMapCalcDate(item.createdAt);
+            const creator = item.createdBy || item.riderName || "Rider";
+            const formattedDate = item.dateAdded || formatMapCalcDate(item.createdAt);
 
-            const hasPin = !!(item.lat && item.lng) || !!item.pinSaved || !!item.mapLink || !!item.lat_lon_link;
+            const hasPin = !!(item.pinCaptured || item.pinSaved) && item.lat && item.lng;
             const lat = item.lat || item.latitude || "";
             const lng = item.lng || item.longitude || "";
-
-            const rawLink = item.mapLink || item.lat_lon_link || (lat && lng ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}` : `${window.location.origin}/?mapcalc=${item.id}`);
 
             let statusAndActions = '';
 
@@ -133,10 +148,10 @@ export function fetchAndRenderMapCalculations() {
                         <i class="fa-solid fa-location-dot"></i> Pin Saved
                     </span>
                     <div class="flex items-center gap-1.5">
-                        <button onclick="event.stopPropagation(); window.copyMapCalcLink && window.copyMapCalcLink('${item.id}', '${escapeHtml(rawLink)}', '${escapeHtml(custName)}')" class="bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded-xl text-[10px] font-bold flex items-center gap-1 transition active:scale-95 shadow">
+                        <button onclick="event.stopPropagation(); window.copyMapCalcLink && window.copyMapCalcLink('${itemKey}', '', '${escapeHtml(custName)}')" class="bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded-xl text-[10px] font-bold flex items-center gap-1 transition active:scale-95 shadow">
                             <i class="fa-solid fa-link"></i> Copy Link
                         </button>
-                        <button onclick="event.stopPropagation(); window.viewMapCalcRoute && window.viewMapCalcRoute('${item.id}', '${lat}', '${lng}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1.5 rounded-xl text-[10px] font-bold flex items-center gap-1 transition active:scale-95 shadow">
+                        <button onclick="event.stopPropagation(); window.viewMapCalcRoute && window.viewMapCalcRoute('${itemKey}', '${lat}', '${lng}', '${escapeHtml(custName)}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1.5 rounded-xl text-[10px] font-bold flex items-center gap-1 transition active:scale-95 shadow">
                             <i class="fa-solid fa-route"></i> View Route & Distance
                         </button>
                     </div>
@@ -148,7 +163,7 @@ export function fetchAndRenderMapCalculations() {
                         <i class="fa-solid fa-hourglass-half"></i> Awaiting Pin
                     </span>
                     <div class="flex items-center gap-2">
-                        <button onclick="event.stopPropagation(); window.copyMapCalcLink && window.copyMapCalcLink('${item.id}', '${escapeHtml(rawLink)}', '${escapeHtml(custName)}')" class="bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded-xl text-[10px] font-bold flex items-center gap-1 transition active:scale-95 shadow">
+                        <button onclick="event.stopPropagation(); window.copyMapCalcLink && window.copyMapCalcLink('${itemKey}', '', '${escapeHtml(custName)}')" class="bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded-xl text-[10px] font-bold flex items-center gap-1 transition active:scale-95 shadow">
                             <i class="fa-solid fa-link"></i> Copy Link
                         </button>
                         <span class="text-[10px] text-gray-500 italic">No pin captured yet</span>
@@ -157,12 +172,12 @@ export function fetchAndRenderMapCalculations() {
             }
 
             return `
-            <div class="bg-black/30 border border-gray-800/80 p-3.5 rounded-2xl flex flex-col gap-1.5 text-xs shadow-md">
+            <div class="bg-black/30 border border-gray-800/80 p-3.5 rounded-2xl flex flex-col gap-1.5 text-xs shadow-md mb-2">
                 <div class="flex justify-between items-center">
                     <span class="font-bold text-sm text-white flex items-center gap-2">
                         <i class="fa-solid fa-user text-blue-400 text-xs"></i> ${escapeHtml(custName)}
                     </span>
-                    <button onclick="event.stopPropagation(); window.deleteMapCalculation && window.deleteMapCalculation('${item.id}')" class="text-red-400 hover:text-red-300 p-1 text-xs transition active:scale-90" title="Delete Entry">
+                    <button onclick="event.stopPropagation(); window.deleteMapCalculation && window.deleteMapCalculation('${itemKey}', '${escapeHtml(custName)}')" class="text-red-400 hover:text-red-300 p-1 text-xs transition active:scale-90" title="Delete Entry">
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
                 </div>
@@ -177,35 +192,46 @@ export function fetchAndRenderMapCalculations() {
     });
 }
 
-export function copyMapCalcLink(id, rawLink, customerName = "") {
-    const targetLink = rawLink || `${window.location.origin}/?mapcalc=${id}`;
+export function copyMapCalcLink(id, rawLink = "", customerName = "") {
+    const targetLink = getMapCalcShareUrl(id);
     const nameGreeting = customerName ? `Magandang araw po ${customerName}! 👋` : `Magandang araw po! 👋`;
     
     const statement = `${nameGreeting}\n\nIn order for us to calculate your accurate location and delivery fee please click on the link and follow the instructions on the next screen, you can also copy the link below and use google chrome to open the link. please do not use safari:\n\n${targetLink}\n\n⚠️ PAALALA:\nKung binuksan nyo po sa Messenger, paki-pindot ang 3 dots (...) sa itaas at piliin ang "Open in Chrome". Maraming salamat po! 🫡💙`;
 
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(statement).then(() => {
-            showToast("📋 Original message template copied!");
-        }).catch(() => {
-            showToast("📋 Copied message!");
-        });
-    } else {
-        showToast("📋 Copied message!");
-    }
+    copyText(statement);
+    showToast(`🔗 Distance calc message & link copied for ${customerName || 'Customer'}!`);
 }
 
-export function viewMapCalcRoute(id, lat, lng) {
+export function viewMapCalcRoute(id, lat, lng, custName = "Customer") {
     if (lat && lng) {
-        window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
+        if (window.openMapCalcRoute && typeof window.openMapCalcRoute === 'function') {
+            window.openMapCalcRoute(lat, lng, custName);
+        } else {
+            window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
+        }
     } else {
         showToast("⚠️ Pin coordinates missing for this calculation.");
     }
 }
 
-export function deleteMapCalculation(key) {
+export function deleteMapCalculation(key, custName = "Customer") {
     if (db && key) {
         db.ref('mapCalculations/' + key).remove()
-            .then(() => showToast("🗑️ Map calculation removed."))
+            .then(() => showToast(`🗑️ Map calculation removed for ${custName}.`))
             .catch(() => showToast("❌ Failed to delete record."));
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.formatMapCalcDate = formatMapCalcDate;
+    window.getMapCalcShareUrl = getMapCalcShareUrl;
+    window.openMapCalcBoardModal = openMapCalcBoardModal;
+    window.closeMapCalcBoardModal = closeMapCalcBoardModal;
+    window.promptMapCalcCustomerName = promptMapCalcCustomerName;
+    window.closeMapCalcNameModal = closeMapCalcNameModal;
+    window.startMapCalcForCustomer = startMapCalcForCustomer;
+    window.fetchAndRenderMapCalculations = fetchAndRenderMapCalculations;
+    window.copyMapCalcLink = copyMapCalcLink;
+    window.viewMapCalcRoute = viewMapCalcRoute;
+    window.deleteMapCalculation = deleteMapCalculation;
 }

@@ -563,6 +563,153 @@ export function claimCustomerFromRider(fromRiderId, fromRiderName, custName) {
     );
 }
 
+// ============================================================================
+// OCR CLIENT-SIDE CUSTOMER NAME EXTRACTION (2.5x UPSCALE + BINARIZATION)
+// ============================================================================
+function ensureTesseractLoaded() {
+    return new Promise((resolve) => {
+        if (window.Tesseract) return resolve(true);
+
+        const existingScript = document.querySelector('script[src*="tesseract"]');
+        if (existingScript) {
+            existingScript.addEventListener('load', () => resolve(true));
+            setTimeout(() => resolve(!!window.Tesseract), 2500);
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.head.appendChild(script);
+    });
+}
+
+function fileToImage(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = (err) => reject(err);
+            img.src = e.target.result;
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+    });
+}
+
+function extractFirstNameFromOcrText(rawText) {
+    if (!rawText) return "";
+
+    const noiseWords = [
+        "assign", "conversation", "see contact", "contact", "active", "now",
+        "messenger", "message", "messages", "chat", "direct", "meta", "business",
+        "suite", "facebook", "today", "yesterday", "reply", "inbox", "search",
+        "unread", "done", "spam", "follow up", "sent by", "transfer", "completed",
+        "details", "view", "edit", "call", "video", "profile"
+    ];
+
+    const lines = rawText
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .filter(l => l.length > 0);
+
+    for (const line of lines) {
+        const lower = line.toLowerCase();
+        
+        if (noiseWords.some(w => lower.includes(w))) continue;
+        if (!/[a-zA-Z]/.test(line)) continue;
+        if (/^\d{1,2}:\d{2}/.test(line)) continue;
+
+        const cleanedLine = line.replace(/^[^a-zA-Z0-9]+/, '').trim();
+        if (cleanedLine.length < 2) continue;
+
+        const words = cleanedLine
+            .split(/\s+/)
+            .map(w => w.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]/g, ''))
+            .filter(Boolean);
+
+        if (words.length > 0) {
+            const rawFirstName = words[0];
+            return rawFirstName.charAt(0).toUpperCase() + rawFirstName.slice(1).toLowerCase();
+        }
+    }
+
+    return "";
+}
+
+export async function handleCaterScreenshotSelected(event, targetInputId = 'catering-customer-name', targetSelectId = 'catering-customer-select', statusElId = 'cater-ocr-status') {
+    const file = event.target?.files?.[0];
+    if (!file) return;
+
+    const statusEl = document.getElementById(statusElId);
+    const nameInput = document.getElementById(targetInputId);
+    const selectEl = document.getElementById(targetSelectId);
+
+    if (statusEl) statusEl.classList.remove('hidden');
+    showToast("⏳ Sinusuri ang screenshot para sa pangalan ng customer...");
+
+    try {
+        await ensureTesseractLoaded();
+        if (!window.Tesseract) {
+            throw new Error("Tesseract OCR engine unavailable.");
+        }
+
+        const img = await fileToImage(file);
+
+        // Crop the top header ROI (top 15% of image height where chat headers sit)
+        const cropH = Math.round(img.height * 0.15);
+        const cropW = img.width;
+
+        const roiCanvas = document.createElement('canvas');
+        const upscale = 2.5; // High-resolution 2.5x upscaling for precise neural OCR recognition
+        roiCanvas.width = Math.round(cropW * upscale);
+        roiCanvas.height = Math.round(cropH * upscale);
+        
+        const ctx = roiCanvas.getContext('2d', { willReadFrequently: true });
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, roiCanvas.width, roiCanvas.height);
+        ctx.drawImage(img, 0, 0, cropW, cropH, 0, 0, roiCanvas.width, roiCanvas.height);
+
+        const worker = await window.Tesseract.createWorker('eng');
+        const ret = await worker.recognize(roiCanvas);
+        await worker.terminate();
+
+        const detectedName = extractFirstNameFromOcrText(ret?.data?.text || "");
+
+        if (detectedName) {
+            if (nameInput) {
+                nameInput.value = detectedName;
+                nameInput.focus();
+            }
+
+            if (selectEl && selectEl.options) {
+                for (let i = 0; i < selectEl.options.length; i++) {
+                    const optVal = (selectEl.options[i].value || "").toLowerCase();
+                    if (optVal && (optVal.includes(detectedName.toLowerCase()) || detectedName.toLowerCase().includes(optVal))) {
+                        selectEl.selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            showToast(`✅ Customer detected: ${detectedName}`);
+            showSideNotification("NAME DETECTED", `Customer: ${detectedName}`, "fa-user-check", "text-emerald-400", "border-emerald-500");
+        } else {
+            showToast("⚠️ Hindi matukoy ang pangalan. Paki-type nang manual.");
+        }
+    } catch (err) {
+        console.error("Catering screenshot OCR failed:", err);
+        showToast("❌ Bigo ang OCR scan. Paki-type nang manual.");
+    } finally {
+        if (statusEl) statusEl.classList.add('hidden');
+        event.target.value = '';
+    }
+}
+
 export async function updateRosterStatus(status, targetId = null, targetName = null, precalculatedQueueTime = null) {
     const tId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const tName = targetName || appState.riderName || "Rider";
@@ -730,4 +877,23 @@ export async function clockOutRider(targetId = null) {
     }
     saveRosterCache();
     window.dispatchEvent(new CustomEvent('loginsUpdated'));
+}
+
+if (typeof window !== 'undefined') {
+    window.calculateAutoBookingLimit = calculateAutoBookingLimit;
+    window.getMaxActiveBookingsLimit = getMaxActiveBookingsLimit;
+    window.canRiderTakeMoreBookings = canRiderTakeMoreBookings;
+    window.checkRiderTimeInAllowed = checkRiderTimeInAllowed;
+    window.getTopQueueTime = getTopQueueTime;
+    window.dismissQueueAlarm = dismissQueueAlarm;
+    window.checkFirstInLineNotification = checkFirstInLineNotification;
+    window.voidSingleCateringCustomer = voidSingleCateringCustomer;
+    window.triggerStatusWithSlide = triggerStatusWithSlide;
+    window.promptCateringStatus = promptCateringStatus;
+    window.confirmCateringStatus = confirmCateringStatus;
+    window.claimCustomerFromRider = claimCustomerFromRider;
+    window.updateRosterStatus = updateRosterStatus;
+    window.updateRosterStatusData = updateRosterStatusData;
+    window.clockOutRider = clockOutRider;
+    window.handleCaterScreenshotSelected = handleCaterScreenshotSelected;
 }

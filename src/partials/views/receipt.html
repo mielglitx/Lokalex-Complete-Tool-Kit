@@ -1,14 +1,40 @@
-<section id="view-receipt-final" class="hidden flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
-    <div class="flex-1 bg-cardBg border border-gray-800 rounded-xl p-4 overflow-y-auto min-h-[180px]">
-        <pre id="final-receipt-text" class="text-xs font-mono text-gray-300 whitespace-pre-wrap"></pre>
+<!-- src/partials/views/receipt.html -->
+<section id="view-receipt-final" class="hidden flex-1 flex flex-col p-4 gap-3 overflow-y-auto">
+    <!-- IMAGE RECEIPT PREVIEW CONTAINER -->
+    <div class="flex-1 bg-cardBg border border-gray-200 dark:border-gray-800 rounded-2xl p-3 shadow-md flex flex-col items-center justify-center min-h-[340px] overflow-hidden relative">
+        <div id="receipt-image-loading" class="text-center text-blue-500 text-xs font-bold py-16 flex flex-col items-center gap-2">
+            <i class="fa-solid fa-spinner fa-spin text-2xl"></i>
+            <span>Generating Image Receipt...</span>
+        </div>
+
+        <div id="receipt-image-preview-wrapper" class="hidden w-full flex flex-col items-center gap-2 overflow-y-auto max-h-[62vh]">
+            <img id="final-receipt-img" src="" alt="Lokalex Receipt" class="max-w-full rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 select-none">
+        </div>
+
+        <!-- COLLAPSIBLE PLAIN TEXT BACKUP -->
+        <details class="w-full mt-2 pt-2 border-t border-gray-200 dark:border-gray-800 text-xs">
+            <summary class="text-gray-500 dark:text-gray-400 font-bold cursor-pointer hover:text-blue-500 transition select-none">
+                📄 View / Copy Plain Text Version
+            </summary>
+            <div class="mt-2 bg-gray-50 dark:bg-black/50 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 overflow-x-auto max-h-40">
+                <pre id="final-receipt-text" class="text-[11px] font-mono text-gray-800 dark:text-gray-300 whitespace-pre-wrap select-text"></pre>
+            </div>
+        </details>
     </div>
     
-    <div class="flex gap-2">
-        <button onclick="window.copyFinalReceipt && window.copyFinalReceipt()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center items-center gap-2 transition active:scale-95">
-            <i class="fa-solid fa-copy"></i> Copy
+    <!-- ACTION BUTTONS: TIGHT, CENTERED ICON & TEXT LAYOUT -->
+    <div class="grid grid-cols-3 gap-2 shrink-0">
+        <button onclick="window.downloadReceiptImage && window.downloadReceiptImage()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center">
+            <i class="fa-solid fa-image text-xs shrink-0"></i>
+            <span class="text-[11px] leading-tight">Save Receipt Image</span>
         </button>
-        <button onclick="window.completeReceiptDone && window.completeReceiptDone()" class="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center items-center gap-2 transition active:scale-95">
-            <i class="fa-solid fa-check"></i> Done
+        <button onclick="window.copyFinalReceipt && window.copyFinalReceipt()" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2.5 px-1.5 rounded-xl shadow flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center">
+            <i class="fa-solid fa-file-lines text-xs shrink-0"></i>
+            <span class="text-[11px] leading-tight">Copy Text</span>
+        </button>
+        <button onclick="window.completeReceiptDone && window.completeReceiptDone()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center">
+            <i class="fa-solid fa-check-double text-xs shrink-0"></i>
+            <span class="text-[11px] leading-tight">Done</span>
         </button>
     </div>
 </section>

@@ -498,6 +498,12 @@ export async function openLiveCustomerMap(custName) {
 // ============================================================================
 // 3. MAP CALCULATION SYSTEM (?mapcalc=KEY)
 // ============================================================================
+export function getMapCalcShareUrl(calcKey) {
+    const origin = window.location.origin;
+    const pathname = window.location.pathname;
+    return `${origin}${pathname}?mapcalc=${calcKey}`;
+}
+
 export function openMapCalcBoardModal() {
     const modal = document.getElementById('mapcalc-board-modal');
     if (modal) modal.classList.remove('hidden');
@@ -526,7 +532,7 @@ export function closeMapCalcNameModal() {
 export async function confirmGenerateMapCalcLink() {
     const inputEl = document.getElementById('mapcalc-cust-name-input');
     const custName = inputEl ? inputEl.value.trim() : "";
-    if (!custName) return showToast("Paki-lagay ang Customer Name!");
+    if (!custName) return showToast("⚠️ Paki-lagay ang Customer Name!");
 
     closeMapCalcNameModal();
 
@@ -534,25 +540,46 @@ export async function confirmGenerateMapCalcLink() {
     const dateStr = new Date().toLocaleDateString('en-US', { 
         month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' 
     });
+    const creator = appState.riderName || localStorage.getItem('riderName') || "Rider";
 
     const newRecord = {
-        key: calcKey, custName: custName, custMapPin: "", dateAdded: dateStr,
-        createdBy: appState.riderName || "Rider", pinCaptured: false
+        id: calcKey,
+        key: calcKey,
+        custName: custName,
+        customerName: custName,
+        custMapPin: "",
+        mapLink: "",
+        lat_lon_link: "",
+        dateAdded: dateStr,
+        createdAt: Date.now(),
+        createdBy: creator,
+        riderName: creator,
+        status: "Awaiting Pin",
+        pinCaptured: false
     };
 
-    db.ref('mapCalculations/' + calcKey).set(newRecord);
+    if (db) {
+        await db.ref('mapCalculations/' + calcKey).set(newRecord).catch(() => {});
+    }
+
     copyMapCalcCustomerMessage(custName, calcKey);
     showToast(`✅ Map Calc link created for ${custName}!`);
     renderMapCalcBoardList();
 }
 
+export const startMapCalcForCustomer = confirmGenerateMapCalcLink;
+
 export function copyMapCalcCustomerMessage(custName, calcKey) {
     if (!custName) custName = "Customer";
-    const fullUrl = `${window.location.origin}${window.location.pathname}?mapcalc=${calcKey}`;
+    const fullUrl = getMapCalcShareUrl(calcKey);
     const message = `Magandang araw po ${custName}! 👋\n\nIn order for us to calculate your accurate location and delivery fee please click on the link and follow the instructions on the next screen, you can also copy the link below and use google chrome to open the link. please do not use safari:\n\n${fullUrl}\n\n⚠️ PAALALA:\nKung binuksan nyo po sa Messenger, paki-pindot ang 3 dots (...) sa itaas at piliin ang "Open in Chrome". Maraming salamat po! 🛵💙`;
     
     copyText(message);
     showToast(`🔗 Distance calc message & link copied for ${custName}!`);
+}
+
+export function copyMapCalcLink(id, rawLink, customerName = "") {
+    copyMapCalcCustomerMessage(customerName, id);
 }
 
 export function checkAndInitMapCalcPortal() {
@@ -571,33 +598,40 @@ export function startMapCalcLocationSharing() {
     const statusEl = document.getElementById('mapcalc-cust-status');
     const mapBox = document.getElementById('mapcalc-cust-map-box');
 
-    btn.disabled = true;
-    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Capturing GPS...`;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Capturing GPS...`;
+    }
 
     if (!navigator.geolocation) {
-        statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
-        statusEl.innerText = "❌ Hindi suportado ang GPS sa browser na ito.";
+        if (statusEl) {
+            statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
+            statusEl.innerText = "❌ Hindi suportado ang GPS sa browser na ito.";
+        }
         return;
     }
 
-    mapBox.classList.remove('hidden');
+    if (mapBox) mapBox.classList.remove('hidden');
     let shareCount = 0;
 
     const watchId = navigator.geolocation.watchPosition(
         (pos) => {
             const lat = pos.coords.latitude;
             const lng = pos.coords.longitude;
+            const accuracy = Math.round(pos.coords.accuracy || 0);
             shareCount++;
             const custLoc = { lat, lng };
 
             if (!custGoogleMapObj && typeof google !== 'undefined' && google.maps) {
                 const mapEl = document.getElementById('mapcalc-cust-google-map');
-                custGoogleMapObj = new google.maps.Map(mapEl, {
-                    center: custLoc, zoom: 17, disableDefaultUI: true, zoomControl: true
-                });
-                custMarkerObj = new google.maps.Marker({
-                    position: custLoc, map: custGoogleMapObj, title: "Iyong Lokasyon", animation: google.maps.Animation.DROP
-                });
+                if (mapEl) {
+                    custGoogleMapObj = new google.maps.Map(mapEl, {
+                        center: custLoc, zoom: 17, disableDefaultUI: true, zoomControl: true
+                    });
+                    custMarkerObj = new google.maps.Marker({
+                        position: custLoc, map: custGoogleMapObj, title: "Iyong Lokasyon", animation: google.maps.Animation.DROP
+                    });
+                }
             } else if (custGoogleMapObj && custMarkerObj) {
                 custGoogleMapObj.setCenter(custLoc);
                 custMarkerObj.setPosition(custLoc);
@@ -605,84 +639,133 @@ export function startMapCalcLocationSharing() {
 
             const mapPinUrl = `https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lng.toFixed(6)}`;
 
-            db.ref('mapCalculations/' + calcKey).update({
-                lat: lat, lng: lng, custMapPin: mapPinUrl, pinCaptured: true, capturedAt: Date.now()
-            });
+            if (db) {
+                db.ref('mapCalculations/' + calcKey).update({
+                    lat: lat,
+                    lng: lng,
+                    latitude: lat,
+                    longitude: lng,
+                    custMapPin: mapPinUrl,
+                    mapLink: mapPinUrl,
+                    lat_lon_link: mapPinUrl,
+                    pinCaptured: true,
+                    pinSaved: true,
+                    status: "Pin Saved",
+                    accuracy: accuracy,
+                    capturedAt: Date.now()
+                }).catch(() => {});
+            }
 
-            statusEl.className = "text-xs font-bold text-emerald-400 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20";
-            statusEl.innerHTML = `📡 Capturing signal accuracy... (${shareCount}/20)<br><span class="text-gray-300 font-normal">Nasa-save na ang iyong lokasyon...</span>`;
+            if (statusEl) {
+                statusEl.className = "text-xs font-bold text-emerald-400 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20";
+                statusEl.innerHTML = `📡 Signal Accuracy: ±${accuracy}m (Fix ${shareCount})<br><span class="text-gray-300 font-normal">Nasa-save na ang iyong lokasyon...</span>`;
+            }
 
-            if (shareCount >= 20) {
-                navigator.geolocation.clearWatch(watchId);
-                statusEl.innerHTML = "🔒 <strong>Pin Permanently Saved (100%)!</strong><br><span class=\"text-gray-300 font-normal\">Nai-save na ang iyong lokasyon. Pwede mo nang isara ang window na ito.</span>";
-                btn.innerHTML = `<i class="fa-solid fa-check-double"></i> DISTANCE PINNED`;
+            // Immediately mark finalized once accuracy is satisfactory or after 3 valid samples
+            if (accuracy <= 25 || shareCount >= 3) {
+                try { navigator.geolocation.clearWatch(watchId); } catch(e) {}
+                if (statusEl) {
+                    statusEl.innerHTML = `🔒 <strong>Pin Permanently Saved!</strong><br><span class="text-gray-300 font-normal">Nai-save na ang iyong lokasyon (±${accuracy}m). Pwede mo nang isara ang window na ito.</span>`;
+                }
+                if (btn) {
+                    btn.innerHTML = `<i class="fa-solid fa-check-double"></i> DISTANCE PINNED`;
+                }
             }
         },
         (err) => {
-            statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
-            statusEl.innerText = "⚠️ Paki-allow ang GPS Location permission sa iyong browser.";
-            btn.disabled = false;
-            btn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> RETRY LOCATION CAPTURE`;
+            if (statusEl) {
+                statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
+                statusEl.innerText = "⚠️ Paki-allow ang GPS Location permission sa iyong browser.";
+            }
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> RETRY LOCATION CAPTURE`;
+            }
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
     );
 }
 
 export function renderMapCalcBoardList() {
-    const container = document.getElementById('mapcalc-board-list');
+    const container = document.getElementById('mapcalc-board-list') || document.getElementById('mapcalc-list-container');
     if (!container) return;
 
     const list = globalState.globalMapCalculations || [];
+
+    const topButtonHtml = `
+    <button onclick="window.promptMapCalcCustomerName && window.promptMapCalcCustomerName()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-95 mb-3">
+        <i class="fa-solid fa-circle-plus"></i> + Generate Link
+    </button>`;
+
     if (list.length === 0) {
-        container.innerHTML = `<div class="text-center text-gray-500 italic py-10 text-xs">No map calculations created yet.</div>`;
+        container.innerHTML = topButtonHtml + `<div class="text-center text-gray-500 italic py-10 text-xs">No map calculations created yet.</div>`;
         return;
     }
 
     const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
 
-    container.innerHTML = list.slice().reverse().map(item => {
-        const isPinned = item.pinCaptured && item.lat && item.lng;
+    const cardsHtml = list.slice().reverse().map(item => {
+        const itemKey = item.key || item.id;
+        const custName = item.custName || item.customerName || "Customer";
+        const isPinned = !!((item.pinCaptured || item.pinSaved) && item.lat && item.lng);
+
+        const latVal = item.lat || item.latitude || 0;
+        const lngVal = item.lng || item.longitude || 0;
+
         let statusBadge = isPinned 
             ? `<span class="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-500/30">📍 Pin Saved</span>`
             : `<span class="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-500/30">⏳ Awaiting Pin</span>`;
 
         let mapBtn = isPinned 
-            ? `<button onclick="openMapCalcRoute(${item.lat}, ${item.lng}, '${escapeHtml(item.custName)}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95 flex items-center gap-1"><i class="fa-solid fa-route"></i> View Route & Distance</button>`
+            ? `<button onclick="window.openMapCalcRoute && window.openMapCalcRoute('${latVal}', '${lngVal}', '${escapeHtml(custName)}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95 flex items-center gap-1"><i class="fa-solid fa-route"></i> View Route & Distance</button>`
             : `<span class="text-[10px] text-gray-500 italic">No pin captured yet</span>`;
 
         let deleteBtn = isAdmin 
-            ? `<button onclick="deleteMapCalcRecord('${item.key}', '${escapeHtml(item.custName)}')" class="text-red-400 hover:text-red-500 text-xs p-1" title="Delete Record"><i class="fa-solid fa-trash"></i></button>`
+            ? `<button onclick="window.deleteMapCalcRecord && window.deleteMapCalcRecord('${itemKey}', '${escapeHtml(custName)}')" class="text-red-400 hover:text-red-500 text-xs p-1" title="Delete Record"><i class="fa-solid fa-trash"></i></button>`
             : ``;
 
+        const creator = item.createdBy || item.riderName || "Rider";
+        const dateDisplay = item.dateAdded || (item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "");
+
         return `
-        <div class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col gap-1.5 text-xs shadow-sm">
+        <div class="bg-cardBg border border-gray-800 p-3 rounded-xl flex flex-col gap-1.5 text-xs shadow-sm mb-2">
             <div class="flex justify-between items-center font-bold">
-                <span class="text-blue-300 flex items-center gap-1.5"><i class="fa-solid fa-user"></i> ${escapeHtml(item.custName)}</span>
+                <span class="text-blue-300 flex items-center gap-1.5"><i class="fa-solid fa-user"></i> ${escapeHtml(custName)}</span>
                 ${deleteBtn}
             </div>
-            <div class="text-[10px] text-gray-400">Created by: ${escapeHtml(item.createdBy)} • ${escapeHtml(item.dateAdded)}</div>
+            <div class="text-[10px] text-gray-400">Created by: ${escapeHtml(creator)} ${dateDisplay ? `• ${escapeHtml(dateDisplay)}` : ''}</div>
             <div class="flex justify-between items-center mt-1 pt-1.5 border-t border-gray-800">
                 ${statusBadge}
                 <div class="flex items-center gap-1">
-                    <button onclick="copyMapCalcCustomerMessage('${escapeHtml(item.custName)}', '${item.key}')" class="bg-blue-600/30 border border-blue-500/50 text-blue-300 hover:text-white font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95" title="Copy Message & Link">🔗 Copy Link</button>
+                    <button onclick="window.copyMapCalcCustomerMessage && window.copyMapCalcCustomerMessage('${escapeHtml(custName)}', '${itemKey}')" class="bg-blue-600/30 border border-blue-500/50 text-blue-300 hover:text-white font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95" title="Copy Message & Link">🔗 Copy Link</button>
                     ${mapBtn}
                 </div>
             </div>
         </div>`;
     }).join('');
+
+    container.innerHTML = topButtonHtml + cardsHtml;
 }
+
+export const fetchAndRenderMapCalculations = renderMapCalcBoardList;
 
 export function openMapCalcRoute(targetLat, targetLng, custName) {
     closeMapCalcBoardModal();
     switchView('view-map');
     
-    document.getElementById('map-view-title').innerText = `Map Calc: ${custName}`;
+    const titleEl = document.getElementById('map-view-title');
+    if (titleEl) titleEl.innerText = `Map Calc: ${custName || 'Customer'}`;
+
     const searchBarContainer = document.getElementById('map-search-bar-container');
     if (searchBarContainer) searchBarContainer.classList.add('hidden');
     
-    document.getElementById('map-center-pin').classList.add('hidden');
-    document.getElementById('map-confirm-btn').classList.add('hidden');
-    document.getElementById('map-nav-app-btn').classList.remove('hidden');
+    const centerPin = document.getElementById('map-center-pin');
+    const confirmBtn = document.getElementById('map-confirm-btn');
+    const navBtn = document.getElementById('map-nav-app-btn');
+
+    if (centerPin) centerPin.classList.add('hidden');
+    if (confirmBtn) confirmBtn.classList.add('hidden');
+    if (navBtn) navBtn.classList.remove('hidden');
 
     const hubLoc = { lat: HUB_LOCATION.lat, lng: HUB_LOCATION.lng };
     const custLoc = { lat: parseFloat(targetLat), lng: parseFloat(targetLng) };
@@ -717,13 +800,21 @@ export function openMapCalcRoute(targetLat, targetLng, custName) {
     });
 }
 
+export function viewMapCalcRoute(id, lat, lng, custName = "Customer") {
+    openMapCalcRoute(lat, lng, custName);
+}
+
 export function deleteMapCalcRecord(key, custName) {
     openSlideDeleteModal(`Sigurado ka bang nais burahin ang Map Calc record para kay [${custName}]?`, () => {
-        db.ref('mapCalculations/' + key).remove();
+        if (db && key) {
+            db.ref('mapCalculations/' + key).remove();
+        }
         showToast(`Deleted Map Calc record for ${custName}`);
         fetch(API_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: "delete_map_calc", custName: custName }) }).catch(() => {});
     });
 }
+
+export const deleteMapCalculation = deleteMapCalcRecord;
 
 export function openExternalGoogleNav() {
     if (!activeNavTargetCoords) return showToast("No customer GPS pin received yet.");
@@ -735,8 +826,25 @@ if (typeof window !== 'undefined') {
     window.openMapPicker = openMapPicker;
     window.confirmGoogleMapPin = confirmGoogleMapPin;
     window.openExternalGoogleNav = openExternalGoogleNav;
-    window.copyMapCalcCustomerMessage = copyMapCalcCustomerMessage;
     window.openFindRidersModal = openFindRidersModal;
     window.closeFindRidersModal = closeFindRidersModal;
     window.refreshFindRidersMap = refreshFindRidersMap;
+
+    // Map Calc Global Window Bindings
+    window.openMapCalcBoardModal = openMapCalcBoardModal;
+    window.closeMapCalcBoardModal = closeMapCalcBoardModal;
+    window.promptMapCalcCustomerName = promptMapCalcCustomerName;
+    window.closeMapCalcNameModal = closeMapCalcNameModal;
+    window.confirmGenerateMapCalcLink = confirmGenerateMapCalcLink;
+    window.startMapCalcForCustomer = startMapCalcForCustomer;
+    window.copyMapCalcCustomerMessage = copyMapCalcCustomerMessage;
+    window.copyMapCalcLink = copyMapCalcLink;
+    window.checkAndInitMapCalcPortal = checkAndInitMapCalcPortal;
+    window.startMapCalcLocationSharing = startMapCalcLocationSharing;
+    window.renderMapCalcBoardList = renderMapCalcBoardList;
+    window.fetchAndRenderMapCalculations = fetchAndRenderMapCalculations;
+    window.openMapCalcRoute = openMapCalcRoute;
+    window.viewMapCalcRoute = viewMapCalcRoute;
+    window.deleteMapCalcRecord = deleteMapCalcRecord;
+    window.deleteMapCalculation = deleteMapCalculation;
 }

@@ -9,6 +9,7 @@ let editingItemIndex = null;
 let touchStartX = 0;
 let touchCurrentX = 0;
 let activeSwipingCard = null;
+let activeSukliSlot = 1;
 
 // HELPER: GET ONLY THE CURRENTLY LOGGED-IN RIDER'S ACTIVE CATERING CUSTOMERS
 export function getMyCateringCustomers() {
@@ -30,7 +31,7 @@ export function getMyCateringCustomers() {
 
 export function getCurrentCart() {
     if (!multiCarts[activeCartSlot]) {
-        multiCarts[activeCartSlot] = { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "" };
+        multiCarts[activeCartSlot] = { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "", receiptSummary: null };
     }
     return multiCarts[activeCartSlot].items;
 }
@@ -44,7 +45,8 @@ export function saveCartState() {
                 items: multiCarts[key].items || [],
                 customerName: multiCarts[key].customerName || "",
                 isManual: !!multiCarts[key].isManual,
-                txId: multiCarts[key].txId || ""
+                txId: multiCarts[key].txId || "",
+                receiptSummary: multiCarts[key].receiptSummary || null
             };
         }
         localStorage.setItem('lokalex_multi_carts_v2', JSON.stringify(serializable));
@@ -72,7 +74,8 @@ export function loadCartState() {
                     selectedIds: new Set(),
                     customerName: parsed[key].customerName || "",
                     isManual: !!parsed[key].isManual,
-                    txId: parsed[key].txId || ""
+                    txId: parsed[key].txId || "",
+                    receiptSummary: parsed[key].receiptSummary || null
                 };
             }
         }
@@ -143,7 +146,7 @@ export function renderCartCustomerSelector() {
     if (!container) return;
 
     if (!multiCarts[activeCartSlot]) {
-        multiCarts[activeCartSlot] = { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "" };
+        multiCarts[activeCartSlot] = { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "", receiptSummary: null };
     }
 
     const currentCartObj = multiCarts[activeCartSlot];
@@ -179,7 +182,7 @@ export function renderCartCustomerSelector() {
 }
 
 export function onCartCustomerSelected(val) {
-    if (!multiCarts[activeCartSlot]) multiCarts[activeCartSlot] = { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "" };
+    if (!multiCarts[activeCartSlot]) multiCarts[activeCartSlot] = { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "", receiptSummary: null };
     
     const myCustomers = getMyCateringCustomers();
     multiCarts[activeCartSlot].customerName = val;
@@ -228,7 +231,6 @@ export function handleCardTouchMove(e, cardEl) {
     touchCurrentX = e.touches[0].clientX;
     const diffX = touchCurrentX - touchStartX;
 
-    // Dampen resistance past -120px or +120px
     let translateX = diffX;
     if (Math.abs(diffX) > 120) {
         const sign = diffX > 0 ? 1 : -1;
@@ -237,7 +239,6 @@ export function handleCardTouchMove(e, cardEl) {
 
     cardEl.style.transform = `translateX(${translateX}px)`;
     
-    // Visual feedback color changes when approaching deletion trigger
     if (Math.abs(diffX) > 80) {
         cardEl.style.borderColor = '#ef4444';
     } else {
@@ -253,12 +254,10 @@ export function handleCardTouchEnd(e, index) {
     cardEl.style.transition = 'transform 0.2s ease-out, border-color 0.2s ease-out';
 
     if (Math.abs(diffX) >= 80) {
-        // Trigger Slide-to-Confirm Deletion Modal
         deleteSingleCartItem(index);
         cardEl.style.transform = 'translateX(0px)';
         cardEl.style.borderColor = '';
     } else {
-        // Reset card back to original position smoothly
         cardEl.style.transform = 'translateX(0px)';
         cardEl.style.borderColor = '';
     }
@@ -268,7 +267,7 @@ export function handleCardTouchEnd(e, index) {
     touchCurrentX = 0;
 }
 
-// RENDER CART ITEMS OR EMBEDDED LOCK OVERLAY SCREEN
+// RENDER CART ITEMS OR EMBEDDED LOCK OVERLAY WITH TOTALS & SUKLI CALCULATOR
 export function renderCartItems() {
     const container = document.getElementById('cart-items-list');
     const subtotalDisplay = document.getElementById('cart-subtotal-display');
@@ -279,43 +278,88 @@ export function renderCartItems() {
     if (!container) return;
 
     const currentCart = getCurrentCart();
-    const currentCartObj = multiCarts[activeCartSlot];
+    const currentCartObj = multiCarts[activeCartSlot] || {};
     const isLocked = globalState.cartLocked && globalState.cartLocked[activeCartSlot - 1];
 
     let subtotal = 0;
     let selectedCount = currentCartObj.selectedIds ? currentCartObj.selectedIds.size : 0;
 
-    // IF CART IS LOCKED: SHOW EMBEDDED OVERLAY SCREEN WITH SLIDE-TO-UNLOCK SLIDER
+    // IF CART IS LOCKED: SHOW COMPREHENSIVE FINANCIAL SUMMARY & SUKLI BUTTON
     if (isLocked) {
         const clientName = getEffectiveCartClient(activeCartSlot - 1);
+        const summary = currentCartObj.receiptSummary || {};
         
+        const rawSubtotal = currentCart.reduce((sum, item) => sum + (item.isPaid ? 0 : (parseFloat(item.price) || 0)), 0);
+        const subtotalItems = summary.subtotal !== undefined ? parseFloat(summary.subtotal) : rawSubtotal;
+        const totalFees = summary.totalFees !== undefined ? parseFloat(summary.totalFees) : (parseFloat(summary.deliveryFee) || 0);
+        
+        let codTotal = summary.codTotal !== undefined ? parseFloat(summary.codTotal) : (subtotalItems + totalFees);
+        let gcashTotal = summary.gcashTotal !== undefined ? parseFloat(summary.gcashTotal) : (codTotal + (codTotal <= 1000 ? 15 : 15 + Math.ceil((codTotal - 1000) / 500) * 5));
+
         container.innerHTML = `
-            <div class="bg-cardBg border border-emerald-500/50 rounded-2xl p-6 my-auto text-center shadow-2xl flex flex-col items-center justify-center gap-4">
-                <div class="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-3xl">
-                    <i class="fa-solid fa-lock"></i>
-                </div>
-                <div>
-                    <h3 class="font-black text-lg text-emerald-400 uppercase tracking-wide">Naka-Lock ang Cart ${activeCartSlot}</h3>
-                    <p class="text-xs text-gray-300 mt-2 leading-relaxed">
-                        Nagawaan na ng resibo ang order na ito ni <strong>${escapeHtml(clientName)}</strong>.
-                        <br><br>
-                        Kung nais mong baguhin o i-edit muli ang resibo, i-slide ang lock pakanan:
-                    </p>
+            <div class="bg-cardBg border border-emerald-500/50 rounded-2xl p-4 my-auto text-center shadow-2xl flex flex-col items-center justify-center gap-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-10 h-10 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center text-xl shadow-inner border border-emerald-500/40">
+                        <i class="fa-solid fa-lock"></i>
+                    </div>
+                    <div class="text-left">
+                        <h3 class="font-black text-sm text-emerald-400 uppercase tracking-wide">Cart ${activeCartSlot} Finalized</h3>
+                        <p class="text-[11px] text-gray-400">
+                            Customer: <strong class="text-white">${escapeHtml(clientName)}</strong>
+                        </p>
+                    </div>
                 </div>
 
-                <!-- EMBEDDED SLIDE-TO-UNLOCK SLIDER -->
-                <div class="relative w-full max-w-xs h-12 bg-black/60 rounded-full border border-emerald-500/50 flex items-center px-2 overflow-hidden mt-3 shadow-inner">
-                    <span class="absolute inset-0 flex items-center justify-center text-[10px] text-emerald-400/60 font-black tracking-widest pointer-events-none select-none">&gt;&gt;&gt;&gt; SLIDE TO UNLOCK &gt;&gt;&gt;&gt;</span>
-                    <input type="range" min="0" max="100" value="0" 
-                        onmouseup="handleOverlaySlideEnd(this)" 
-                        ontouchend="handleOverlaySlideEnd(this)" 
-                        class="w-full accent-emerald-500 cursor-pointer z-10 opacity-80 h-10">
+                <!-- DETAILED SUMMARY CARD -->
+                <div class="w-full bg-gray-100 dark:bg-black/50 border border-gray-200 dark:border-gray-800 rounded-2xl p-3 flex flex-col gap-1.5 text-xs text-left shadow-inner">
+                    <div class="flex justify-between items-center text-gray-600 dark:text-gray-400 text-[11px]">
+                        <span>Items Subtotal:</span>
+                        <span class="font-mono font-bold text-gray-900 dark:text-gray-200">₱${subtotalItems.toFixed(2)}</span>
+                    </div>
+                    <div class="flex justify-between items-center text-gray-600 dark:text-gray-400 text-[11px]">
+                        <span>Delivery & Service Fees:</span>
+                        <span class="font-mono font-bold text-gray-900 dark:text-gray-200">₱${totalFees.toFixed(2)}</span>
+                    </div>
+                    
+                    <div class="border-t border-gray-200 dark:border-gray-800 my-0.5"></div>
+                    
+                    <!-- COD GRAND TOTAL -->
+                    <div class="flex justify-between items-center bg-emerald-500/10 border border-emerald-500/30 px-3 py-2 rounded-xl">
+                        <span class="font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 text-xs">
+                            <i class="fa-solid fa-money-bill-wave"></i> COD Total (Cash):
+                        </span>
+                        <span class="font-mono font-black text-base text-emerald-600 dark:text-emerald-400">₱${codTotal.toFixed(2)}</span>
+                    </div>
+
+                    <!-- GCASH GRAND TOTAL -->
+                    <div class="flex justify-between items-center bg-blue-500/10 border border-blue-500/30 px-3 py-1.5 rounded-xl">
+                        <span class="font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1.5 text-[11px]">
+                            <i class="fa-solid fa-mobile-screen-button"></i> GCash (+Fee):
+                        </span>
+                        <span class="font-mono font-bold text-xs text-blue-600 dark:text-blue-400">₱${gcashTotal.toFixed(2)}</span>
+                    </div>
+                </div>
+
+                <!-- SUKLI / CHANGE CALCULATOR BUTTON -->
+                <button type="button" onclick="window.openSukliCalculatorModal && window.openSukliCalculatorModal(${activeCartSlot})" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 px-4 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-95 ring-2 ring-emerald-400/40">
+                    <i class="fa-solid fa-calculator text-sm"></i> 💵 SUKLI / CHANGE CALCULATOR
+                </button>
+
+                <!-- SLIDE TO UNLOCK SLIDER -->
+                <div class="w-full flex flex-col items-center gap-1 pt-1 border-t border-gray-200 dark:border-gray-800">
+                    <span class="text-[9.5px] text-gray-500 dark:text-gray-400 font-medium">I-slide pakanan kung nais baguhin ang resibo:</span>
+                    <div class="relative w-full max-w-xs h-11 bg-black/60 rounded-full border border-emerald-500/50 flex items-center px-2 overflow-hidden shadow-inner">
+                        <span class="absolute inset-0 flex items-center justify-center text-[10px] text-emerald-400/60 font-black tracking-widest pointer-events-none select-none">&gt;&gt;&gt;&gt; SLIDE TO UNLOCK &gt;&gt;&gt;&gt;</span>
+                        <input type="range" min="0" max="100" value="0" 
+                            onmouseup="handleOverlaySlideEnd(this)" 
+                            ontouchend="handleOverlaySlideEnd(this)" 
+                            class="w-full accent-emerald-500 cursor-pointer z-10 opacity-80 h-9">
+                    </div>
                 </div>
             </div>`;
 
         if (subtotalDisplay) {
-            const lockedSubtotal = currentCart.reduce((sum, item) => sum + (item.isPaid ? 0 : (parseFloat(item.price) || 0)), 0);
-            subtotalDisplay.innerText = lockedSubtotal.toFixed(2);
+            subtotalDisplay.innerText = codTotal.toFixed(2);
         }
         if (deleteBtnContainer) deleteBtnContainer.innerHTML = "";
         return;
@@ -370,7 +414,6 @@ export function renderCartItems() {
                 <div class="flex items-start gap-2 flex-1 min-w-0">
                     <input type="checkbox" onchange="toggleItemSelect(${index})" ${isSelected ? "checked" : ""} class="w-4 h-4 accent-blue-500 rounded cursor-pointer shrink-0 mt-0.5">
                     <span class="text-[10px] text-gray-500 font-bold shrink-0 mt-0.5">#${index + 1}</span>
-                    <!-- FULL WORD WRAPPING FOR ITEM NAME - NO PERIODS OR TRUNCATION -->
                     <span class="break-words text-wrap font-bold text-sm text-white flex-1 min-w-0">${escapeHtml(item.name)}</span>
                     ${unpricedWarningBadge}
                 </div>
@@ -436,6 +479,7 @@ export function handleCartActionBtn() {
         () => {
             multiCarts[activeCartSlot].items = [];
             multiCarts[activeCartSlot].selectedIds.clear();
+            multiCarts[activeCartSlot].receiptSummary = null;
             saveCartState();
             renderCartItems();
             renderCartTabs();
@@ -626,7 +670,6 @@ export function validateAndProceedToWizard() {
         return showToast("⚠️ I-slide muna ang lock sa overlay screen upang i-unlock ang cart.");
     }
 
-    // STRICT CHECK: Block if any item has price <= 0 and is NOT marked as paid
     const unpricedUnpaidItems = currentCart.filter(i => (parseFloat(i.price) || 0) <= 0 && !i.isPaid);
 
     if (unpricedUnpaidItems.length > 0) {
@@ -664,6 +707,7 @@ export function clearCartSlot() {
         multiCarts[activeCartSlot].selectedIds.clear();
         multiCarts[activeCartSlot].customerName = "";
         multiCarts[activeCartSlot].isManual = false;
+        multiCarts[activeCartSlot].receiptSummary = null;
         saveCartState();
         renderCartItems();
         renderCartTabs();
@@ -678,7 +722,8 @@ export function clearAllCartSlots() {
             selectedIds: new Set(),
             customerName: "",
             isManual: false,
-            txId: ""
+            txId: "",
+            receiptSummary: null
         };
     }
     globalState.cartLocked = [false, false, false, false];
@@ -687,7 +732,102 @@ export function clearAllCartSlots() {
     resetToCartOne();
 }
 
-// AUTO-INITIALIZE SMART CART ON LOAD & VIEW LOAD
+// ============================================================================
+// SUKLI / CASH CHANGE CALCULATOR LOGIC
+// ============================================================================
+export function openSukliCalculatorModal(slot = activeCartSlot) {
+    activeSukliSlot = slot;
+    const modal = document.getElementById('sukli-calculator-modal');
+    const labelEl = document.getElementById('sukli-cart-label');
+    const totalDisplay = document.getElementById('sukli-order-total-display');
+    const cashInput = document.getElementById('sukli-cash-input');
+
+    const cartObj = multiCarts[slot] || {};
+    const summary = cartObj.receiptSummary || {};
+    
+    let codTotal = parseFloat(summary.codTotal) || 0;
+    if (codTotal <= 0 && cartObj.items) {
+        codTotal = cartObj.items.reduce((s, it) => s + (it.isPaid ? 0 : (parseFloat(it.price) || 0)), 0);
+    }
+
+    if (labelEl) labelEl.innerText = `Cart ${slot} (${cartObj.customerName || 'Customer'})`;
+    if (totalDisplay) totalDisplay.innerText = `₱${codTotal.toFixed(2)}`;
+    if (cashInput) cashInput.value = '';
+
+    calculateSukli();
+
+    if (modal) {
+        modal.classList.remove('hidden');
+        if (cashInput) setTimeout(() => cashInput.focus(), 80);
+    }
+}
+
+export function closeSukliCalculatorModal() {
+    const modal = document.getElementById('sukli-calculator-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export function calculateSukli() {
+    const cartObj = multiCarts[activeSukliSlot] || {};
+    const summary = cartObj.receiptSummary || {};
+
+    let codTotal = parseFloat(summary.codTotal) || 0;
+    if (codTotal <= 0 && cartObj.items) {
+        codTotal = cartObj.items.reduce((s, it) => s + (it.isPaid ? 0 : (parseFloat(it.price) || 0)), 0);
+    }
+
+    const cashInput = document.getElementById('sukli-cash-input');
+    const tendered = parseFloat(cashInput?.value) || 0;
+
+    const change = tendered - codTotal;
+    const displayEl = document.getElementById('sukli-amount-display');
+    const shortageEl = document.getElementById('sukli-shortage-msg');
+    const resultBox = document.getElementById('sukli-result-box');
+
+    if (!displayEl) return;
+
+    if (tendered <= 0) {
+        displayEl.innerText = `₱0.00`;
+        if (shortageEl) shortageEl.classList.add('hidden');
+        if (resultBox) {
+            resultBox.className = "bg-gray-100 dark:bg-darkBg border border-gray-200 dark:border-gray-800 p-3 rounded-2xl flex flex-col items-center justify-center text-center";
+        }
+    } else if (change >= 0) {
+        displayEl.innerText = `₱${change.toFixed(2)}`;
+        if (shortageEl) shortageEl.classList.add('hidden');
+        if (resultBox) {
+            resultBox.className = "bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/40 p-3 rounded-2xl flex flex-col items-center justify-center text-center";
+        }
+    } else {
+        displayEl.innerText = `-₱${Math.abs(change).toFixed(2)}`;
+        if (shortageEl) shortageEl.classList.remove('hidden');
+        if (resultBox) {
+            resultBox.className = "bg-red-50 dark:bg-red-950/40 border border-red-500/40 p-3 rounded-2xl flex flex-col items-center justify-center text-center";
+        }
+    }
+}
+
+export function setQuickTendered(val) {
+    const cashInput = document.getElementById('sukli-cash-input');
+    if (!cashInput) return;
+
+    if (val === 'clear') {
+        cashInput.value = '';
+    } else if (val === 'exact') {
+        const cartObj = multiCarts[activeSukliSlot] || {};
+        const summary = cartObj.receiptSummary || {};
+        let codTotal = parseFloat(summary.codTotal) || 0;
+        if (codTotal <= 0 && cartObj.items) {
+            codTotal = cartObj.items.reduce((s, it) => s + (it.isPaid ? 0 : (parseFloat(it.price) || 0)), 0);
+        }
+        cashInput.value = codTotal > 0 ? codTotal.toFixed(2) : '0';
+    } else {
+        cashInput.value = parseFloat(val).toFixed(2);
+    }
+
+    calculateSukli();
+}
+
 loadCartState();
 setTimeout(() => {
     renderCartTabs();
@@ -716,6 +856,11 @@ if (typeof window !== 'undefined') {
     window.handleCardTouchStart = handleCardTouchStart;
     window.handleCardTouchMove = handleCardTouchMove;
     window.handleCardTouchEnd = handleCardTouchEnd;
+
+    window.openSukliCalculatorModal = openSukliCalculatorModal;
+    window.closeSukliCalculatorModal = closeSukliCalculatorModal;
+    window.calculateSukli = calculateSukli;
+    window.setQuickTendered = setQuickTendered;
 }
 
 window.addEventListener('rosterUpdated', renderCartCustomerSelector);
