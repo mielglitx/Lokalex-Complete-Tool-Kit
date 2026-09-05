@@ -1,43 +1,5 @@
 <!-- src/partials/views/customer-home.html -->
 <section id="view-customer-home" class="hidden flex-1 flex flex-col p-3 gap-2 pb-4 relative h-[calc(100vh-65px)] max-h-screen overflow-hidden">
-    <!-- COMPACT CUSTOMER PROFILE HEADER -->
-    <div class="bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-2xl flex items-center justify-between gap-2.5 shrink-0">
-        <div class="flex items-center gap-2.5 min-w-0 flex-1">
-            <!-- CLICKABLE CUSTOMER AVATAR WITH PHOTO UPLOAD BADGE -->
-            <button type="button" onclick="window.openEditCustomerProfileModal && window.openEditCustomerProfileModal()" class="relative group shrink-0" title="Click to change profile picture">
-                <div class="w-9 h-9 rounded-full bg-blue-500/10 dark:bg-blue-600/20 border border-blue-500/40 overflow-hidden flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs relative">
-                    <img id="cust-landing-avatar" src="" alt="Avatar" class="hidden w-full h-full object-cover">
-                    <span id="cust-landing-initials" class="font-black text-xs text-blue-600 dark:text-blue-300">CU</span>
-                    <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] transition">
-                        <i class="fa-solid fa-camera"></i>
-                    </div>
-                </div>
-                <div class="absolute -bottom-0.5 -right-0.5 bg-blue-600 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center text-[7px] border border-cardBg">
-                    <i class="fa-solid fa-pen"></i>
-                </div>
-            </button>
-
-            <!-- CUSTOMER DETAILS -->
-            <div class="min-w-0 flex-1">
-                <div id="cust-landing-name" class="font-black text-xs text-gray-900 dark:text-white truncate">Customer Name</div>
-                <div id="cust-landing-email" class="text-[10px] text-gray-500 dark:text-gray-400 font-mono truncate">+639000000000</div>
-            </div>
-        </div>
-
-        <!-- COMPACT ACTION BUTTONS -->
-        <div class="flex items-center gap-1.5 shrink-0">
-            <button onclick="window.openAddressBookModal && window.openAddressBookModal()" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/20 dark:hover:bg-emerald-600/30 dark:text-emerald-300 dark:border-emerald-500/40 text-[11px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1" title="Manage Saved Delivery Addresses">
-                <i class="fa-solid fa-location-dot text-[10px]"></i> Addresses
-            </button>
-            <button onclick="window.openEditCustomerProfileModal && window.openEditCustomerProfileModal()" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/20 dark:hover:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40 text-[11px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1">
-                <i class="fa-solid fa-user-pen text-[10px]"></i> Edit
-            </button>
-            <button onclick="window.logout && window.logout()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 dark:hover:text-white dark:border-gray-700 text-[11px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95">
-                Log out
-            </button>
-        </div>
-    </div>
-
     <!-- ULTRA-COMPACT INSTALL APP SHORTCUT BAR -->
     <button id="pwa-install-btn" onclick="window.installPwaApp && window.installPwaApp()" class="w-full bg-blue-50/80 hover:bg-blue-100/80 border border-blue-200 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 dark:border-blue-800/60 px-3 py-1.5 rounded-xl flex items-center justify-between transition active:scale-95 text-left shrink-0">
         <div class="flex items-center gap-2 min-w-0">
@@ -50,25 +12,35 @@
     <!-- LIVE ACTIVE ORDER MILESTONE & IN-APP MAP TRACKER DOCK -->
     <div id="cust-active-order-milestone-dock" class="hidden w-full flex flex-col gap-2 shrink-0"></div>
 
-    <!-- STORE POPUP ACTION STRIP & VIEW CART -->
+    <!-- 3-WAY ACTION STRIP: STORES, ADDRESS BOOK, AND VIEW CART -->
     <div class="flex items-center gap-2 shrink-0">
-        <button type="button" onclick="window.openCustomerStoresModal && window.openCustomerStoresModal()" class="flex-1 bg-orange-50 hover:bg-orange-100 border border-orange-200 dark:bg-cardBg dark:hover:bg-orange-950/20 dark:border-orange-500/40 p-2.5 rounded-2xl flex items-center justify-between transition active:scale-95 text-left group">
+        <!-- EXPLORE LOCAL STORES -->
+        <button type="button" onclick="window.openCustomerStoresModal && window.openCustomerStoresModal()" class="flex-1 bg-orange-50 hover:bg-orange-100 border border-orange-200 dark:bg-cardBg dark:hover:bg-orange-950/20 dark:border-orange-500/40 p-2.5 rounded-2xl flex items-center justify-between transition active:scale-95 text-left group min-w-0">
             <div class="flex items-center gap-2.5 min-w-0">
                 <div class="w-8 h-8 rounded-xl bg-orange-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
                     <i class="fa-solid fa-store"></i>
                 </div>
                 <div class="min-w-0">
-                    <h3 class="font-black text-xs text-orange-950 dark:text-white group-hover:text-orange-600 dark:group-hover:text-orange-400 transition truncate">Explore Local Stores</h3>
-                    <p class="text-[9px] text-orange-800/80 dark:text-gray-400 truncate">Tap to browse menus & merchants</p>
+                    <h3 class="font-black text-xs text-orange-950 dark:text-white group-hover:text-orange-600 dark:group-hover:text-orange-400 transition truncate">Explore Stores</h3>
+                    <p class="text-[9px] text-orange-800/80 dark:text-gray-400 truncate">Browse merchant menus</p>
                 </div>
             </div>
-            <span class="bg-orange-100 border border-orange-300 text-orange-800 dark:bg-orange-500/20 dark:border-orange-500/40 dark:text-orange-300 text-[10px] font-bold px-2.5 py-1 rounded-xl shrink-0 flex items-center gap-1">
+            <span class="bg-orange-100 border border-orange-300 text-orange-800 dark:bg-orange-500/20 dark:border-orange-500/40 dark:text-orange-300 text-[10px] font-bold px-2 py-1 rounded-xl shrink-0 flex items-center gap-1">
                 Browse <i class="fa-solid fa-arrow-right text-[8px]"></i>
             </span>
         </button>
 
+        <!-- ADDRESS BOOK QUICK ACCESS BUTTON -->
+        <button type="button" onclick="window.openAddressBookModal && window.openAddressBookModal()" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-emerald-500/50 p-2.5 px-3 rounded-2xl flex flex-col items-center justify-center transition active:scale-95 shrink-0" title="Delivery Address Book">
+            <div class="flex items-center gap-1 text-xs font-black text-emerald-600 dark:text-emerald-400">
+                <i class="fa-solid fa-location-dot"></i>
+                <span id="cust-saved-addr-count" class="font-mono">0</span>
+            </div>
+            <span class="text-[9px] text-gray-600 dark:text-gray-400 font-bold">Places</span>
+        </button>
+
         <!-- VIEW CART BUTTON -->
-        <button onclick="window.openCustomerCartModal && window.openCustomerCartModal()" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-orange-500/50 p-2.5 px-3 rounded-2xl flex flex-col items-center justify-center transition active:scale-95 shrink-0" title="View Shopping Cart">
+        <button type="button" onclick="window.openCustomerCartModal && window.openCustomerCartModal()" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-orange-500/50 p-2.5 px-3 rounded-2xl flex flex-col items-center justify-center transition active:scale-95 shrink-0" title="View Shopping Cart">
             <div class="flex items-center gap-1.5 text-xs font-black text-orange-500 dark:text-orange-400">
                 <i class="fa-solid fa-cart-shopping"></i>
                 <span id="cust-nav-cart-count">0</span>
@@ -407,8 +379,8 @@
                         <i class="fa-solid fa-map-location-dot"></i>
                     </div>
                     <div>
-                        <h3 class="font-black text-sm text-gray-900 dark:text-white">Saved Delivery Addresses</h3>
-                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Save Home, Work, and landmark pins</p>
+                        <h3 class="font-black text-sm text-gray-900 dark:text-white">Delivery Address Book</h3>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Save Home, Work, and custom delivery pins</p>
                     </div>
                 </div>
                 <button onclick="window.closeAddressBookModal && window.closeAddressBookModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
@@ -419,27 +391,43 @@
             <!-- SAVED ADDRESSES FEED -->
             <div id="cust-saved-addresses-list" class="flex-1 overflow-y-auto flex flex-col gap-2 min-h-[140px] pr-1"></div>
 
-            <!-- ADD NEW ADDRESS ACCORDION / FORM -->
+            <!-- ADD NEW ADDRESS FORM -->
             <div class="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-gray-800 p-3 rounded-2xl flex flex-col gap-2 shrink-0 text-xs">
                 <span class="font-bold text-[10px] text-gray-600 dark:text-gray-400 uppercase tracking-wider">+ Add New Delivery Pin</span>
                 
+                <!-- PRESET SELECTION: HOME, WORK, OTHERS (CUSTOM) -->
                 <div class="grid grid-cols-3 gap-1.5">
-                    <button type="button" onclick="window.setAddressLabelPreset('Home')" class="py-1 rounded-lg border border-gray-300 dark:border-gray-700 text-[10px] font-bold hover:border-emerald-500 transition">🏠 Home</button>
-                    <button type="button" onclick="window.setAddressLabelPreset('Work')" class="py-1 rounded-lg border border-gray-300 dark:border-gray-700 text-[10px] font-bold hover:border-emerald-500 transition">💼 Work</button>
-                    <button type="button" onclick="window.setAddressLabelPreset('Other')" class="py-1 rounded-lg border border-gray-300 dark:border-gray-700 text-[10px] font-bold hover:border-emerald-500 transition">📍 Other</button>
+                    <button type="button" id="addr-preset-home" onclick="window.setAddressLabelPreset('Home')" class="py-1.5 rounded-xl border bg-emerald-600 text-white border-emerald-500 shadow-xs text-[10px] font-bold transition">🏠 Home</button>
+                    <button type="button" id="addr-preset-work" onclick="window.setAddressLabelPreset('Work')" class="py-1.5 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-emerald-500 text-[10px] font-bold transition">💼 Work</button>
+                    <button type="button" id="addr-preset-others" onclick="window.setAddressLabelPreset('Others')" class="py-1.5 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-emerald-500 text-[10px] font-bold transition">📍 Others</button>
                 </div>
 
-                <input type="text" id="new-addr-label" placeholder="Address Label (e.g. Home / Dorm / Office)" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold">
-                <input type="text" id="new-addr-text" placeholder="Street / Barangay / Municipality" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white">
-                <input type="text" id="new-addr-landmark" placeholder="Landmark note (e.g. Gray gate beside bakery)" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white">
+                <!-- CUSTOM LABEL INPUT (APPEARS WHEN 'OTHERS' IS CHOSEN) -->
+                <div id="new-addr-custom-label-wrapper" class="hidden">
+                    <label class="text-[9px] text-gray-500 dark:text-gray-400 uppercase font-bold">Custom Location Name *</label>
+                    <input type="text" id="new-addr-label" placeholder="e.g. Mom's House, Dorm, Gym" class="w-full bg-inputBg text-xs rounded-xl p-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold mt-0.5">
+                </div>
 
-                <div class="flex gap-2 items-center">
-                    <button type="button" onclick="window.openMapPicker && window.openMapPicker('address-book')" class="flex-1 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5">
+                <div>
+                    <label class="text-[9px] text-gray-500 dark:text-gray-400 uppercase font-bold">Street / Barangay / Municipality *</label>
+                    <input type="text" id="new-addr-text" placeholder="e.g. Romulo St., Poblacion B, Camiling" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-0.5">
+                </div>
+
+                <div>
+                    <label class="text-[9px] text-gray-500 dark:text-gray-400 uppercase font-bold">Landmark Description (Optional)</label>
+                    <input type="text" id="new-addr-landmark" placeholder="e.g. White gate across convenience store" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-0.5">
+                </div>
+
+                <div class="flex gap-2 items-center pt-1">
+                    <button type="button" onclick="window.openAddressMapPicker && window.openAddressMapPicker()" class="flex-1 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5">
                         <i class="fa-solid fa-crosshairs text-emerald-500"></i> Pin on Map
                     </button>
                     <button type="button" id="save-new-addr-btn" onclick="window.submitSaveNewAddress && window.submitSaveNewAddress()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-bold transition shadow-xs flex items-center justify-center gap-1.5">
                         <i class="fa-solid fa-floppy-disk"></i> Save Address
                     </button>
+                </div>
+                <div class="flex justify-between items-center px-1">
+                    <span id="new-addr-pin-badge" class="text-[9px] font-mono text-gray-400">No pin set</span>
                 </div>
             </div>
         </div>

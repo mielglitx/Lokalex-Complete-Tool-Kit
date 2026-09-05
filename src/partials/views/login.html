@@ -14,15 +14,21 @@
             <button id="auth-tab-register" onclick="window.switchCustomerAuthTab && window.switchCustomerAuthTab('register')" class="flex-1 py-2 rounded-xl text-gray-400 hover:text-white transition">Register</button>
         </div>
 
-        <!-- LOGIN TAB (MOBILE NUMBER + PASSWORD) -->
+        <!-- LOGIN TAB (10-DIGIT MOBILE NUMBER + PASSWORD) -->
         <div id="auth-view-login" class="flex flex-col gap-3">
             <div class="text-xs text-blue-400 font-bold uppercase tracking-wider">
                 <i class="fa-solid fa-right-to-bracket text-base mr-1"></i> Customer Login
             </div>
-            <p class="text-xs text-gray-300 leading-relaxed">I-enter ang iyong Mobile Number at Password.</p>
+            <p class="text-xs text-gray-300 leading-relaxed">I-enter ang iyong 10-digit Mobile Number at Password.</p>
 
             <div id="login-form-container" class="flex flex-col gap-2.5">
-                <input type="tel" id="cust-login-phone" autocomplete="tel" inputmode="tel" placeholder="Mobile Number (e.g. 09123456789)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white font-bold font-mono">
+                <!-- 10-Digit Mobile Input with Visual +63 Prefix -->
+                <div class="flex items-center bg-inputBg rounded-xl border border-gray-700 overflow-hidden focus-within:border-blue-500 transition">
+                    <span class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold px-3 py-3 text-xs font-mono select-none border-r border-gray-300 dark:border-gray-700 flex items-center gap-1 shrink-0">
+                        🇵🇭 +63
+                    </span>
+                    <input type="tel" id="cust-login-phone" autocomplete="tel" inputmode="numeric" maxlength="10" placeholder="9XXXXXXXXX" oninput="window.sanitize10DigitPhone && window.sanitize10DigitPhone(this)" class="flex-1 bg-transparent text-xs p-3 outline-none text-gray-900 dark:text-white font-bold font-mono">
+                </div>
                 
                 <div class="relative">
                     <input type="password" id="cust-login-pass" autocomplete="current-password" placeholder="Password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-700 outline-none text-white font-bold">
@@ -49,7 +55,14 @@
 
             <!-- STEP 1: Phone Verification via SMS OTP -->
             <div id="reg-step-1" class="flex flex-col gap-3">
-                <input type="tel" id="reg-phone-num" autocomplete="tel" inputmode="tel" placeholder="Mobile Number (e.g. 09123456789)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-700 outline-none text-white font-bold font-mono">
+                <!-- 10-Digit Mobile Input with Visual +63 Prefix -->
+                <div class="flex items-center bg-inputBg rounded-xl border border-gray-700 overflow-hidden focus-within:border-emerald-500 transition">
+                    <span class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold px-3 py-3 text-xs font-mono select-none border-r border-gray-300 dark:border-gray-700 flex items-center gap-1 shrink-0">
+                        🇵🇭 +63
+                    </span>
+                    <input type="tel" id="reg-phone-num" autocomplete="tel" inputmode="numeric" maxlength="10" placeholder="9XXXXXXXXX" oninput="window.sanitize10DigitPhone && window.sanitize10DigitPhone(this)" class="flex-1 bg-transparent text-xs p-3 outline-none text-gray-900 dark:text-white font-bold font-mono">
+                </div>
+
                 <button id="reg-send-otp-btn" onclick="window.sendCustomerRegisterOTP && window.sendCustomerRegisterOTP()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs">
                     <i class="fa-solid fa-paper-plane"></i> SEND OTP CODE
                 </button>

@@ -3,7 +3,7 @@ import { appState } from '../../store/state.js';
 import { db, auth } from '../../config/firebase.js';
 import { showToast } from '../../ui/notifications.js';
 import { listenToCustomerRiderChat } from '../chat/index.js';
-import { formatPhoneNumber, initRecaptcha } from './authUtils.js';
+import { formatPhoneNumber, validatePhilippineMobile, initRecaptcha } from './authUtils.js';
 
 let confirmationResultObj = null;
 let pendingRegUser = null;
@@ -57,7 +57,12 @@ export async function saveCustomerProfile() {
     if (!newAddress) return showToast("⚠️ Please enter your Delivery Address.");
     if (!rawPhone) return showToast("⚠️ Please enter your Mobile Number.");
 
-    const formattedNewPhone = formatPhoneNumber(rawPhone);
+    const phoneCheck = validatePhilippineMobile(rawPhone);
+    if (!phoneCheck.isValid) {
+        return showToast(`⚠️ ${phoneCheck.message}`);
+    }
+
+    const formattedNewPhone = phoneCheck.formatted;
 
     const snap = await db.ref(`customers/${uid}`).once('value');
     const currentData = snap.val() || {};
@@ -169,8 +174,13 @@ export async function sendCustomerRegisterOTP() {
     const phoneInput = document.getElementById('reg-phone-num')?.value.trim();
     if (!phoneInput) return showToast("⚠️ Paki-lagay ang iyong Mobile Number!");
 
-    const formattedPhone = formatPhoneNumber(phoneInput);
-    const cleanPhoneKey = formattedPhone.replace(/[^0-9]/g, '');
+    const phoneCheck = validatePhilippineMobile(phoneInput);
+    if (!phoneCheck.isValid) {
+        return showToast(`⚠️ ${phoneCheck.message}`);
+    }
+
+    const formattedPhone = phoneCheck.formatted;
+    const cleanPhoneKey = phoneCheck.cleanKey;
 
     const sendBtn = document.getElementById('reg-send-otp-btn');
     if (sendBtn) {
@@ -336,8 +346,13 @@ export async function processCustomerLogin() {
         return showToast("⚠️ I-enter ang iyong Mobile Number at Password!");
     }
 
-    const formattedPhone = formatPhoneNumber(phoneInput);
-    const cleanPhoneKey = formattedPhone.replace(/[^0-9]/g, '');
+    const phoneCheck = validatePhilippineMobile(phoneInput);
+    if (!phoneCheck.isValid) {
+        return showToast(`⚠️ ${phoneCheck.message}`);
+    }
+
+    const formattedPhone = phoneCheck.formatted;
+    const cleanPhoneKey = phoneCheck.cleanKey;
 
     const btn = document.getElementById('cust-login-submit-btn');
     if (btn) {
@@ -422,7 +437,12 @@ export function sendResetSMS() {
     const phoneInput = document.getElementById('fp-phone-input')?.value.trim();
     if (!phoneInput) return showToast("⚠️ Paki-lagay ang iyong Mobile Number!");
 
-    const formattedPhone = formatPhoneNumber(phoneInput);
+    const phoneCheck = validatePhilippineMobile(phoneInput);
+    if (!phoneCheck.isValid) {
+        return showToast(`⚠️ ${phoneCheck.message}`);
+    }
+
+    const formattedPhone = phoneCheck.formatted;
     const sendBtn = document.getElementById('fp-send-sms-btn');
 
     if (sendBtn) {

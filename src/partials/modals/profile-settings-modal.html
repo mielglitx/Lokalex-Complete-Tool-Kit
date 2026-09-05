@@ -1,0 +1,139 @@
+<!-- src/partials/modals/profile-settings-modal.html -->
+<div id="profile-settings-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-md rounded-3xl p-5 shadow-2xl flex flex-col gap-4 max-h-[92vh] overflow-y-auto">
+        
+        <!-- MODAL HEADER -->
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3 shrink-0">
+            <div class="flex items-center gap-2.5">
+                <div id="prof-modal-role-icon" class="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">
+                    <i class="fa-solid fa-user-gear"></i>
+                </div>
+                <div>
+                    <h3 id="prof-modal-title" class="text-sm font-black text-gray-900 dark:text-white">Profile & Account Settings</h3>
+                    <p id="prof-modal-subtitle" class="text-[10px] text-gray-500 dark:text-gray-400">Manage credentials, contact & map pin</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeProfileSettingsModal && window.closeProfileSettingsModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- AVATAR UPLOADER / PREVIEW -->
+        <div class="flex flex-col items-center justify-center gap-2 bg-gray-50 dark:bg-black/30 p-3.5 rounded-2xl border border-gray-200 dark:border-gray-800 shrink-0">
+            <div class="relative group">
+                <div class="w-20 h-20 rounded-full bg-blue-600/20 border-2 border-emerald-500 overflow-hidden flex items-center justify-center relative shadow-sm">
+                    <img id="prof-modal-avatar-preview" src="" alt="Profile" class="w-full h-full object-cover">
+                </div>
+                <button type="button" onclick="document.getElementById('prof-avatar-file-input')?.click()" class="absolute -bottom-1 -right-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-[10px] border-2 border-cardBg shadow transition active:scale-90" title="Upload Photo">
+                    <i class="fa-solid fa-camera"></i>
+                </button>
+            </div>
+
+            <input type="file" id="prof-avatar-file-input" accept="image/*" class="hidden" onchange="window.handleProfileAvatarFile && window.handleProfileAvatarFile(event)">
+            
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="document.getElementById('prof-avatar-file-input')?.click()" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/20 dark:hover:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/40 text-[10px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Upload Photo
+                </button>
+                <button type="button" onclick="window.resetProfileAvatarToInitials && window.resetProfileAvatarToInitials()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 dark:border-transparent text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95" title="Generate avatar initials">
+                    <i class="fa-solid fa-rotate-left"></i> Reset
+                </button>
+            </div>
+        </div>
+
+        <!-- PROFILE FORM FIELDS -->
+        <div class="flex flex-col gap-3 text-xs">
+            <!-- FULL NAME -->
+            <div>
+                <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Full Name / Store Display Name *</label>
+                <input type="text" id="prof-name-input" placeholder="Enter Full Name" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold mt-1">
+            </div>
+
+            <!-- USERNAME (HIDDEN FOR CUSTOMER MODE - PHONE NUMBER SERVES AS LOGIN IDENTITY) -->
+            <div id="prof-username-wrapper">
+                <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Username *</label>
+                <input type="text" id="prof-username-input" placeholder="e.g. store_name or user123" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-blue-600 dark:text-blue-400 font-mono font-bold mt-1">
+            </div>
+
+            <!-- CONTACT NUMBER (WITH OTP ENFORCEMENT) -->
+            <div>
+                <div class="flex justify-between items-center">
+                    <label id="prof-phone-label" class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Mobile Number (10 digits) *</label>
+                    <span id="prof-phone-status-badge" class="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30">Verified</span>
+                </div>
+                
+                <div class="relative mt-1 flex items-center">
+                    <span class="absolute left-3 text-xs font-mono font-bold text-gray-400 dark:text-gray-500 select-none">+63</span>
+                    <input type="tel" id="prof-phone-input" oninput="window.handleProfilePhoneInput && window.handleProfilePhoneInput(this)" placeholder="9XXXXXXXXX" maxlength="10" class="w-full bg-inputBg text-xs rounded-xl pl-12 pr-20 py-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-mono font-bold">
+                    <button type="button" id="prof-send-otp-btn" onclick="window.sendProfilePhoneChangeOTP && window.sendProfilePhoneChangeOTP()" class="hidden absolute right-1.5 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition active:scale-95 shadow">
+                        Send OTP
+                    </button>
+                </div>
+
+                <!-- OTP INPUT STRIP (Triggered when phone number changes) -->
+                <div id="prof-otp-verify-drawer" class="hidden mt-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 p-2.5 rounded-xl flex flex-col gap-1.5">
+                    <div class="flex items-center justify-between text-[10px] text-blue-700 dark:text-blue-300 font-bold">
+                        <span>Enter 6-Digit OTP Code sent to new number:</span>
+                        <span id="prof-otp-timer" class="font-mono text-gray-400"></span>
+                    </div>
+                    <div class="flex gap-1.5 items-center">
+                        <input type="text" id="prof-otp-input" placeholder="123456" maxlength="6" class="flex-1 bg-inputBg text-xs rounded-lg p-2 border border-gray-300 dark:border-gray-700 outline-none text-center font-mono font-bold tracking-widest text-gray-900 dark:text-white">
+                        <button type="button" id="prof-verify-otp-btn" onclick="window.verifyProfilePhoneChangeOTP && window.verifyProfilePhoneChangeOTP()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold px-3 py-2 rounded-lg transition active:scale-95 shadow">
+                            Verify OTP
+                        </button>
+                    </div>
+                    <div id="prof-recaptcha-container"></div>
+                </div>
+            </div>
+
+            <!-- ADDRESS -->
+            <div>
+                <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Address (Barangay / Street / Municipality) *</label>
+                <input type="text" id="prof-address-input" placeholder="e.g. Romulo St., Camiling, Tarlac" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1">
+            </div>
+
+            <!-- PIN LOCATION (GOOGLE MAPS PICKER) -->
+            <div>
+                <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase flex items-center justify-between">
+                    <span>GPS Pin Location</span>
+                    <span id="prof-coords-badge" class="text-[9px] font-mono text-gray-400 font-normal">Not set</span>
+                </label>
+                
+                <div class="flex gap-2 items-center mt-1">
+                    <input type="text" id="prof-location-input" placeholder="Latitude, Longitude or Maps Link" class="flex-1 bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-mono text-[11px]">
+                    <button type="button" onclick="window.openProfileMapPicker && window.openProfileMapPicker()" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/20 dark:hover:bg-emerald-600/30 dark:text-emerald-300 dark:border-emerald-500/40 text-[11px] font-bold px-3 py-2.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shrink-0 shadow-xs">
+                        <i class="fa-solid fa-location-dot text-red-500"></i> Pin on Map
+                    </button>
+                </div>
+            </div>
+
+            <!-- PASSWORD (OPTIONAL CHANGE) -->
+            <div>
+                <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Password (Leave blank to keep unchanged)</label>
+                <div class="relative mt-1">
+                    <input type="password" id="prof-password-input" placeholder="••••••••" class="w-full bg-inputBg text-xs rounded-xl pl-3 pr-10 py-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-mono">
+                    <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('prof-password-input', 'prof-pass-toggle-icon')" class="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-white text-xs">
+                        <i id="prof-pass-toggle-icon" class="fa-solid fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ACTION BUTTONS -->
+            <div class="flex gap-2 pt-2 border-t border-gray-200 dark:border-gray-800">
+                <button type="button" onclick="window.closeProfileSettingsModal && window.closeProfileSettingsModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 py-3 rounded-xl text-xs font-bold transition active:scale-95">
+                    Cancel
+                </button>
+                <button type="button" id="prof-save-btn" onclick="window.submitSaveProfileSettings && window.submitSaveProfileSettings()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-xl text-xs font-bold shadow-lg transition active:scale-95 flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-floppy-disk"></i> Save Changes
+                </button>
+            </div>
+
+            <!-- UNIVERSAL LOG OUT BUTTON -->
+            <div class="pt-2 border-t border-gray-200 dark:border-gray-800">
+                <button type="button" id="prof-logout-btn" onclick="window.executeUniversalLogout && window.executeUniversalLogout()" class="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 dark:bg-red-950/30 dark:hover:bg-red-900/40 dark:text-red-400 dark:border-red-800/50 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-2 shadow-xs">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i> Log Out of Account
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

@@ -17,6 +17,144 @@ let custChatListener = null;
 // REPLY & REACTION STATE
 let activeCustReplyTarget = null;
 
+// LONG-PRESS & MULTI-TAP ANIMATION STATE
+let longPressTimer = null;
+let startX = 0;
+let startY = 0;
+const tapTrackerMap = new Map();
+
+const FUN_ANIMATIONS = [
+    [
+        { transform: 'scale(1, 1)' },
+        { transform: 'scale(1.22, 0.78)' },
+        { transform: 'scale(0.82, 1.18)' },
+        { transform: 'scale(1.08, 0.94)' },
+        { transform: 'scale(1, 1)' }
+    ],
+    [
+        { transform: 'rotate(0deg)' },
+        { transform: 'rotate(-14deg)' },
+        { transform: 'rotate(12deg)' },
+        { transform: 'rotate(-8deg)' },
+        { transform: 'rotate(4deg)' },
+        { transform: 'rotate(0deg)' }
+    ],
+    [
+        { transform: 'scale(1)' },
+        { transform: 'scale(1.28)' },
+        { transform: 'scale(0.92)' },
+        { transform: 'scale(1.06)' },
+        { transform: 'scale(1)' }
+    ],
+    [
+        { transform: 'translate(0, 0)' },
+        { transform: 'translate(-8px, 2px) rotate(-3deg)' },
+        { transform: 'translate(8px, -2px) rotate(3deg)' },
+        { transform: 'translate(-5px, -1px) rotate(-1deg)' },
+        { transform: 'translate(5px, 1px) rotate(1deg)' },
+        { transform: 'translate(0, 0)' }
+    ],
+    [
+        { transform: 'scale(1)' },
+        { transform: 'scale(1.18)' },
+        { transform: 'scale(0.96)' },
+        { transform: 'scale(1.12)' },
+        { transform: 'scale(1)' }
+    ]
+];
+
+const FUN_EMOJIS = ['⚡', '🔥', '✨', '🎉', '🚀', '💖', '💥', '⭐'];
+
+function triggerRandomBubbleFun(bubbleEl) {
+    if (!bubbleEl) return;
+
+    const randomKeyframes = FUN_ANIMATIONS[Math.floor(Math.random() * FUN_ANIMATIONS.length)];
+    bubbleEl.animate(randomKeyframes, {
+        duration: 400,
+        easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)'
+    });
+
+    const particle = document.createElement('span');
+    particle.className = 'pointer-events-none absolute text-sm select-none z-30';
+    particle.innerText = FUN_EMOJIS[Math.floor(Math.random() * FUN_EMOJIS.length)];
+
+    const rect = bubbleEl.getBoundingClientRect();
+    particle.style.left = `${(rect.width / 2) + (Math.random() * 30 - 15)}px`;
+    particle.style.top = `0px`;
+
+    if (!bubbleEl.style.position || bubbleEl.style.position === 'static') {
+        bubbleEl.style.position = 'relative';
+    }
+
+    bubbleEl.appendChild(particle);
+
+    particle.animate([
+        { transform: 'translateY(0) scale(0.6)', opacity: 1 },
+        { transform: `translateY(-40px) translateX(${Math.random() * 30 - 15}px) scale(1.3)`, opacity: 0 }
+    ], {
+        duration: 650,
+        easing: 'ease-out'
+    }).onfinish = () => particle.remove();
+}
+
+export function handleCustMsgPointerDown(e, msgId, chatType, text, sender) {
+    if (e.button && e.button !== 0) return;
+    if (e.target && e.target.closest('a, button, img')) return;
+
+    startX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
+    startY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
+
+    clearTimeout(longPressTimer);
+
+    longPressTimer = setTimeout(() => {
+        if (navigator.vibrate) {
+            try { navigator.vibrate(40); } catch (_) {}
+        }
+        if (window.openMessageActionPopover) {
+            window.openMessageActionPopover(e, msgId, chatType, text, sender);
+        }
+        longPressTimer = null;
+    }, 450);
+}
+
+export function handleCustMsgPointerMove(e) {
+    if (!longPressTimer) return;
+    const currentX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
+    const currentY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
+
+    if (Math.abs(currentX - startX) > 10 || Math.abs(currentY - startY) > 10) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+    }
+}
+
+export function handleCustMsgPointerUp(e, msgId) {
+    if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+
+        const now = Date.now();
+        const prev = tapTrackerMap.get(msgId) || { count: 0, lastTime: 0 };
+        const isRapid = (now - prev.lastTime) < 450;
+
+        const newCount = isRapid ? prev.count + 1 : 1;
+        tapTrackerMap.set(msgId, { count: newCount, lastTime: now });
+
+        if (newCount >= 2) {
+            const bubbleEl = e?.currentTarget || document.getElementById(`msg-bubble-${msgId}`)?.querySelector('.select-none');
+            triggerRandomBubbleFun(bubbleEl);
+        }
+    }
+}
+
+export function handleCustMsgContextMenu(e, msgId, chatType, text, sender) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.openMessageActionPopover) {
+        window.openMessageActionPopover(e, msgId, chatType, text, sender);
+    }
+}
+
 function sanitizeForFirebase(obj) {
     return JSON.parse(JSON.stringify(obj, (key, value) => {
         return value === undefined ? null : value;
@@ -327,11 +465,20 @@ function renderCustomerMessages(container, isInitialLoad = false, oldScrollHeigh
             </div>`;
         }
 
+        const encodedText = encodeURIComponent(m.text || '');
+        const encodedSender = encodeURIComponent(senderName);
+
         return `
         <div id="msg-bubble-${m.id}" class="flex items-start gap-1.5 ${isRider ? 'flex-row' : 'flex-row-reverse'} my-0.5 group/row">
-            <img src="${senderAvatar}" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1">
-            <div onclick="window.openMessageActionPopover(event, '${m.id}', 'customer', '${encodeURIComponent(m.text || '')}', '${encodeURIComponent(senderName)}')" class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 text-xs ${alignClass} cursor-pointer transition active:scale-[0.98] select-text">
-                <div class="text-[9px] ${isRider ? 'text-blue-600 dark:text-blue-400' : 'text-blue-100'} font-bold flex justify-between gap-3">
+            <img src="${senderAvatar}" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1 pointer-events-none">
+            <div 
+                onpointerdown="window.handleCustMsgPointerDown(event, '${m.id}', 'customer', '${encodedText}', '${encodedSender}')"
+                onpointermove="window.handleCustMsgPointerMove(event)"
+                onpointerup="window.handleCustMsgPointerUp(event, '${m.id}')"
+                onpointercancel="window.handleCustMsgPointerUp(event, '${m.id}')"
+                oncontextmenu="window.handleCustMsgContextMenu(event, '${m.id}', 'customer', '${encodedText}', '${encodedSender}')"
+                class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 text-xs ${alignClass} cursor-pointer transition active:scale-[0.98] select-none">
+                <div class="text-[9px] ${isRider ? 'text-blue-600 dark:text-blue-400' : 'text-blue-100'} font-bold flex justify-between gap-3 pointer-events-none">
                     <span>${escapeHtml(senderName)}</span>
                     <div class="flex items-center gap-1 opacity-80 font-mono">
                         <span>${timeStr}</span>
@@ -339,7 +486,7 @@ function renderCustomerMessages(container, isInitialLoad = false, oldScrollHeigh
                     </div>
                 </div>
                 ${replyBlockHtml}
-                ${(m.text && !imgHtml && !locationHtml) ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${escapeHtml(m.text)}</div>` : ''}
+                ${(m.text && !imgHtml && !locationHtml) ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words pointer-events-none">${escapeHtml(m.text)}</div>` : ''}
                 ${imgHtml}
                 ${locationHtml}
                 ${reactionsHtml}
@@ -569,6 +716,11 @@ export function dispatchBubbleCopy(encodedText) {
 }
 
 if (typeof window !== 'undefined') {
+    window.handleCustMsgPointerDown = handleCustMsgPointerDown;
+    window.handleCustMsgPointerMove = handleCustMsgPointerMove;
+    window.handleCustMsgPointerUp = handleCustMsgPointerUp;
+    window.handleCustMsgContextMenu = handleCustMsgContextMenu;
+
     window.listenToCustomerRiderChat = listenToCustomerRiderChat;
     window.sendCustomerToRiderChat = sendCustomerToRiderChat;
     window.setCustomerReply = setCustomerReply;

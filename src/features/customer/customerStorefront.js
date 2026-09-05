@@ -5,9 +5,23 @@ import { appState } from '../../store/state.js';
 import {
     savedAddressesCache,
     selectedAddressId,
+    setSavedAddressesCache,
+    openAddressBookModal,
+    closeAddressBookModal,
+    setAddressLabelPreset,
+    openAddressMapPicker,
+    renderSavedAddressesList,
+    selectAddressForCheckout,
+    updateCheckoutSelectedAddressUI,
+    submitSaveNewAddress,
+    setDefaultAddress,
+    deleteSavedAddress,
+    updateAddressCountBadge
+} from './customerAddress.js';
+
+import {
     checkoutPaymentMode,
     stagedCustomerAvatarData,
-    setSavedAddressesCache,
     cleanFirebasePathKey,
     compressAvatarImageFile,
     renderCustomerHeaderProfile,
@@ -18,14 +32,6 @@ import {
     onCustomerAvatarUrlInput,
     clearCustomerAvatar,
     submitSaveCustomerProfile,
-    openAddressBookModal,
-    closeAddressBookModal,
-    setAddressLabelPreset,
-    renderSavedAddressesList,
-    selectAddressForCheckout,
-    updateCheckoutSelectedAddressUI,
-    submitSaveNewAddress,
-    deleteSavedAddress,
     setCheckoutPaymentMode
 } from './customerProfile.js';
 
@@ -72,12 +78,14 @@ import {
     sanitizeForFirebase
 } from './customerOrders.js';
 
+export * from './customerAddress.js';
 export * from './customerProfile.js';
 export * from './customerStoresMenu.js';
 export * from './customerOrders.js';
 
 export function initCustomerStorefront() {
     renderCustomerHeaderProfile();
+    updateAddressCountBadge();
 
     if (Object.keys(storesCache).length > 0) {
         renderStoresGrid();
@@ -166,7 +174,7 @@ export function initCustomerStorefront() {
     updateFloatingCartBadge();
 }
 
-// Global window bindings for HTML event listeners
+// Global window bindings for HTML event handlers
 if (typeof window !== 'undefined') {
     window.initCustomerStorefront = initCustomerStorefront;
     window.renderCustomerHeaderProfile = renderCustomerHeaderProfile;
@@ -202,8 +210,10 @@ if (typeof window !== 'undefined') {
     window.openAddressBookModal = openAddressBookModal;
     window.closeAddressBookModal = closeAddressBookModal;
     window.setAddressLabelPreset = setAddressLabelPreset;
+    window.openAddressMapPicker = openAddressMapPicker;
     window.selectAddressForCheckout = selectAddressForCheckout;
     window.submitSaveNewAddress = submitSaveNewAddress;
+    window.setDefaultAddress = setDefaultAddress;
     window.deleteSavedAddress = deleteSavedAddress;
     window.setCheckoutPaymentMode = setCheckoutPaymentMode;
     window.resolveSubstitution = resolveSubstitution;

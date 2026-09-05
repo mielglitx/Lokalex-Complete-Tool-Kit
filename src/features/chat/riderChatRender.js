@@ -4,6 +4,155 @@ import { escapeHtml } from '../../utils/helpers.js';
 
 const MAPS_API_KEY = "AIzaSyBVAwn0UnyHJ926oHeK0k789ncADMzmX80";
 
+let longPressTimer = null;
+let startX = 0;
+let startY = 0;
+
+// RAPID CLICK / TAP TRACKER
+const tapTrackerMap = new Map();
+
+const FUN_ANIMATIONS = [
+    // 1. Jelly Squish & Stretch
+    [
+        { transform: 'scale(1, 1)' },
+        { transform: 'scale(1.22, 0.78)' },
+        { transform: 'scale(0.82, 1.18)' },
+        { transform: 'scale(1.08, 0.94)' },
+        { transform: 'scale(1, 1)' }
+    ],
+    // 2. Playful Wobble Tilt
+    [
+        { transform: 'rotate(0deg)' },
+        { transform: 'rotate(-14deg)' },
+        { transform: 'rotate(12deg)' },
+        { transform: 'rotate(-8deg)' },
+        { transform: 'rotate(4deg)' },
+        { transform: 'rotate(0deg)' }
+    ],
+    // 3. Elastic Spring Pop
+    [
+        { transform: 'scale(1)' },
+        { transform: 'scale(1.28)' },
+        { transform: 'scale(0.92)' },
+        { transform: 'scale(1.06)' },
+        { transform: 'scale(1)' }
+    ],
+    // 4. Kinetic Shake
+    [
+        { transform: 'translate(0, 0)' },
+        { transform: 'translate(-8px, 2px) rotate(-3deg)' },
+        { transform: 'translate(8px, -2px) rotate(3deg)' },
+        { transform: 'translate(-5px, -1px) rotate(-1deg)' },
+        { transform: 'translate(5px, 1px) rotate(1deg)' },
+        { transform: 'translate(0, 0)' }
+    ],
+    // 5. Heartbeat Pulse
+    [
+        { transform: 'scale(1)' },
+        { transform: 'scale(1.18)' },
+        { transform: 'scale(0.96)' },
+        { transform: 'scale(1.12)' },
+        { transform: 'scale(1)' }
+    ]
+];
+
+const FUN_EMOJIS = ['⚡', '🔥', '✨', '🎉', '🚀', '💖', '💥', '⭐'];
+
+function triggerRandomBubbleFun(bubbleEl) {
+    if (!bubbleEl) return;
+
+    // Pick random keyframe animation
+    const randomKeyframes = FUN_ANIMATIONS[Math.floor(Math.random() * FUN_ANIMATIONS.length)];
+    bubbleEl.animate(randomKeyframes, {
+        duration: 400,
+        easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)'
+    });
+
+    // Floating particle particle burst
+    const particle = document.createElement('span');
+    particle.className = 'pointer-events-none absolute text-sm select-none z-30';
+    particle.innerText = FUN_EMOJIS[Math.floor(Math.random() * FUN_EMOJIS.length)];
+
+    const rect = bubbleEl.getBoundingClientRect();
+    const parentRect = bubbleEl.parentElement.getBoundingClientRect();
+
+    particle.style.left = `${(rect.width / 2) + (Math.random() * 30 - 15)}px`;
+    particle.style.top = `0px`;
+
+    if (!bubbleEl.style.position || bubbleEl.style.position === 'static') {
+        bubbleEl.style.position = 'relative';
+    }
+
+    bubbleEl.appendChild(particle);
+
+    particle.animate([
+        { transform: 'translateY(0) scale(0.6)', opacity: 1 },
+        { transform: `translateY(-40px) translateX(${Math.random() * 30 - 15}px) scale(1.3)`, opacity: 0 }
+    ], {
+        duration: 650,
+        easing: 'ease-out'
+    }).onfinish = () => particle.remove();
+}
+
+export function handleMsgPointerDown(e, msgId, chatType, text, sender) {
+    if (e.button && e.button !== 0) return;
+    if (e.target && e.target.closest('a, button, img')) return;
+
+    startX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
+    startY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
+
+    clearTimeout(longPressTimer);
+
+    longPressTimer = setTimeout(() => {
+        if (navigator.vibrate) {
+            try { navigator.vibrate(40); } catch (_) {}
+        }
+        if (window.openMessageActionPopover) {
+            window.openMessageActionPopover(e, msgId, chatType, text, sender);
+        }
+        longPressTimer = null;
+    }, 450);
+}
+
+export function handleMsgPointerMove(e) {
+    if (!longPressTimer) return;
+    const currentX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
+    const currentY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
+
+    if (Math.abs(currentX - startX) > 10 || Math.abs(currentY - startY) > 10) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+    }
+}
+
+export function handleMsgPointerUp(e, msgId) {
+    if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+
+        // Rapid click detection
+        const now = Date.now();
+        const prev = tapTrackerMap.get(msgId) || { count: 0, lastTime: 0 };
+        const isRapid = (now - prev.lastTime) < 450;
+
+        const newCount = isRapid ? prev.count + 1 : 1;
+        tapTrackerMap.set(msgId, { count: newCount, lastTime: now });
+
+        if (newCount >= 2) {
+            const bubbleEl = e?.currentTarget || document.getElementById(`msg-bubble-${msgId}`)?.querySelector('.select-none');
+            triggerRandomBubbleFun(bubbleEl);
+        }
+    }
+}
+
+export function handleMsgContextMenu(e, msgId, chatType, text, sender) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.openMessageActionPopover) {
+        window.openMessageActionPopover(e, msgId, chatType, text, sender);
+    }
+}
+
 export function renderRiderMessageStatusIndicator(msg) {
     const sentTime = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
     const seenTime = msg.seenAt ? new Date(msg.seenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
@@ -178,11 +327,20 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
             </div>`;
         }
 
+        const encodedText = encodeURIComponent(m.text || '');
+        const encodedSender = encodeURIComponent(senderName);
+
         return `
         <div id="msg-bubble-${m.id}" class="flex items-start gap-1.5 ${isRider ? 'flex-row-reverse' : 'flex-row'} my-0.5">
-            <img src="${senderAvatar}" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1">
-            <div onclick="window.openMessageActionPopover(event, '${m.id}', 'rider-cust', '${encodeURIComponent(m.text || '')}', '${encodeURIComponent(senderName)}')" class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 text-xs ${alignClass} cursor-pointer transition active:scale-[0.98] select-text shadow-xs">
-                <div class="text-[9px] ${isRider ? 'text-blue-100' : 'text-blue-600 dark:text-blue-400'} font-bold flex justify-between gap-3">
+            <img src="${senderAvatar}" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1 pointer-events-none">
+            <div 
+                onpointerdown="window.handleMsgPointerDown(event, '${m.id}', 'rider-cust', '${encodedText}', '${encodedSender}')"
+                onpointermove="window.handleMsgPointerMove(event)"
+                onpointerup="window.handleMsgPointerUp(event, '${m.id}')"
+                onpointercancel="window.handleMsgPointerUp(event, '${m.id}')"
+                oncontextmenu="window.handleMsgContextMenu(event, '${m.id}', 'rider-cust', '${encodedText}', '${encodedSender}')"
+                class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 text-xs ${alignClass} cursor-pointer transition active:scale-[0.98] select-none shadow-xs">
+                <div class="text-[9px] ${isRider ? 'text-blue-100' : 'text-blue-600 dark:text-blue-400'} font-bold flex justify-between gap-3 pointer-events-none">
                     <span>${escapeHtml(senderName)}</span>
                     <div class="flex items-center gap-1 opacity-80 font-mono">
                         <span>${timeStr}</span>
@@ -190,7 +348,7 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
                     </div>
                 </div>
                 ${replyBlockHtml}
-                ${(m.text && !imgHtml && !locationHtml) ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${escapeHtml(m.text)}</div>` : ''}
+                ${(m.text && !imgHtml && !locationHtml) ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words pointer-events-none">${escapeHtml(m.text)}</div>` : ''}
                 ${imageMarkup}
                 ${locationHtml}
                 ${reactionsHtml}
@@ -215,4 +373,11 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
         const newScrollHeight = container.scrollHeight;
         container.scrollTop = newScrollHeight - oldScrollHeight;
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.handleMsgPointerDown = handleMsgPointerDown;
+    window.handleMsgPointerMove = handleMsgPointerMove;
+    window.handleMsgPointerUp = handleMsgPointerUp;
+    window.handleMsgContextMenu = handleMsgContextMenu;
 }

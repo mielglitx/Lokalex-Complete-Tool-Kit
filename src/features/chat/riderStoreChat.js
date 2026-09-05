@@ -15,6 +15,144 @@ let activeRiderStoreReplyTarget = null;
 let activeStoreToRiderOrderId = null;
 let activeStoreToRiderChatListener = null;
 
+// LONG-PRESS & MULTI-TAP ANIMATION STATE FOR STORE CHAT
+let longPressTimer = null;
+let startX = 0;
+let startY = 0;
+const tapTrackerMap = new Map();
+
+const FUN_ANIMATIONS = [
+    [
+        { transform: 'scale(1, 1)' },
+        { transform: 'scale(1.22, 0.78)' },
+        { transform: 'scale(0.82, 1.18)' },
+        { transform: 'scale(1.08, 0.94)' },
+        { transform: 'scale(1, 1)' }
+    ],
+    [
+        { transform: 'rotate(0deg)' },
+        { transform: 'rotate(-14deg)' },
+        { transform: 'rotate(12deg)' },
+        { transform: 'rotate(-8deg)' },
+        { transform: 'rotate(4deg)' },
+        { transform: 'rotate(0deg)' }
+    ],
+    [
+        { transform: 'scale(1)' },
+        { transform: 'scale(1.28)' },
+        { transform: 'scale(0.92)' },
+        { transform: 'scale(1.06)' },
+        { transform: 'scale(1)' }
+    ],
+    [
+        { transform: 'translate(0, 0)' },
+        { transform: 'translate(-8px, 2px) rotate(-3deg)' },
+        { transform: 'translate(8px, -2px) rotate(3deg)' },
+        { transform: 'translate(-5px, -1px) rotate(-1deg)' },
+        { transform: 'translate(5px, 1px) rotate(1deg)' },
+        { transform: 'translate(0, 0)' }
+    ],
+    [
+        { transform: 'scale(1)' },
+        { transform: 'scale(1.18)' },
+        { transform: 'scale(0.96)' },
+        { transform: 'scale(1.12)' },
+        { transform: 'scale(1)' }
+    ]
+];
+
+const FUN_EMOJIS = ['⚡', '🔥', '✨', '🎉', '🚀', '💖', '💥', '⭐'];
+
+function triggerRandomBubbleFun(bubbleEl) {
+    if (!bubbleEl) return;
+
+    const randomKeyframes = FUN_ANIMATIONS[Math.floor(Math.random() * FUN_ANIMATIONS.length)];
+    bubbleEl.animate(randomKeyframes, {
+        duration: 400,
+        easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)'
+    });
+
+    const particle = document.createElement('span');
+    particle.className = 'pointer-events-none absolute text-sm select-none z-30';
+    particle.innerText = FUN_EMOJIS[Math.floor(Math.random() * FUN_EMOJIS.length)];
+
+    const rect = bubbleEl.getBoundingClientRect();
+    particle.style.left = `${(rect.width / 2) + (Math.random() * 30 - 15)}px`;
+    particle.style.top = `0px`;
+
+    if (!bubbleEl.style.position || bubbleEl.style.position === 'static') {
+        bubbleEl.style.position = 'relative';
+    }
+
+    bubbleEl.appendChild(particle);
+
+    particle.animate([
+        { transform: 'translateY(0) scale(0.6)', opacity: 1 },
+        { transform: `translateY(-40px) translateX(${Math.random() * 30 - 15}px) scale(1.3)`, opacity: 0 }
+    ], {
+        duration: 650,
+        easing: 'ease-out'
+    }).onfinish = () => particle.remove();
+}
+
+export function handleStoreMsgPointerDown(e, msgId, chatType, text, sender) {
+    if (e.button && e.button !== 0) return;
+    if (e.target && e.target.closest('a, button, img')) return;
+
+    startX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
+    startY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
+
+    clearTimeout(longPressTimer);
+
+    longPressTimer = setTimeout(() => {
+        if (navigator.vibrate) {
+            try { navigator.vibrate(40); } catch (_) {}
+        }
+        if (window.openMessageActionPopover) {
+            window.openMessageActionPopover(e, msgId, chatType, text, sender);
+        }
+        longPressTimer = null;
+    }, 450);
+}
+
+export function handleStoreMsgPointerMove(e) {
+    if (!longPressTimer) return;
+    const currentX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
+    const currentY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
+
+    if (Math.abs(currentX - startX) > 10 || Math.abs(currentY - startY) > 10) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+    }
+}
+
+export function handleStoreMsgPointerUp(e, msgId) {
+    if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+
+        const now = Date.now();
+        const prev = tapTrackerMap.get(msgId) || { count: 0, lastTime: 0 };
+        const isRapid = (now - prev.lastTime) < 450;
+
+        const newCount = isRapid ? prev.count + 1 : 1;
+        tapTrackerMap.set(msgId, { count: newCount, lastTime: now });
+
+        if (newCount >= 2) {
+            const bubbleEl = e?.currentTarget || document.getElementById(`msg-bubble-${msgId}`)?.querySelector('.select-none');
+            triggerRandomBubbleFun(bubbleEl);
+        }
+    }
+}
+
+export function handleStoreMsgContextMenu(e, msgId, chatType, text, sender) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.openMessageActionPopover) {
+        window.openMessageActionPopover(e, msgId, chatType, text, sender);
+    }
+}
+
 function sanitizeForFirebase(obj) {
     return JSON.parse(JSON.stringify(obj, (key, value) => {
         return value === undefined ? null : value;
@@ -30,7 +168,7 @@ function renderReactionsHtml(reactions, msgId) {
     const reactionEntries = Object.entries(reactions);
     if (reactionEntries.length === 0) return '';
 
-    const myId = (appState.telegramId || localStorage.getItem('telegramId') || 'rider').toString();
+    const myId = (appState.telegramId || appState.merchantAccountId || appState.merchantUsername || localStorage.getItem('telegramId') || 'user').toString();
 
     const badges = reactionEntries.map(([emoji, usersMap]) => {
         if (!usersMap || typeof usersMap !== 'object') return '';
@@ -408,13 +546,21 @@ function listenToRiderStoreChat(orderId, storeId) {
             const isRider = m.sender === 'rider' || m.senderType === 'rider';
             const reactionsHtml = renderReactionsHtml(m.reactions, m.id);
             const replyBlockHtml = renderReplyPreviewInsideMessage(m.replyTo);
+            const encodedText = encodeURIComponent(m.text || '');
+            const encodedSender = encodeURIComponent(m.senderName || (isRider ? 'Rider' : 'Store'));
 
             return `
             <div id="msg-bubble-${m.id}" class="flex flex-col ${isRider ? 'items-end' : 'items-start'} gap-1">
-                <span class="text-[9px] text-gray-500 dark:text-gray-400 font-bold">${escapeHtml(m.senderName || (isRider ? 'Rider' : 'Store'))}</span>
-                <div onclick="window.openMessageActionPopover(event, '${m.id}', 'store-rider', '${encodeURIComponent(m.text || '')}', '${encodeURIComponent(m.senderName || (isRider ? 'Rider' : 'Store'))}')" class="max-w-[80%] rounded-2xl px-3 py-2 text-xs ${isRider ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-none border border-gray-200 dark:border-gray-700'} cursor-pointer active:scale-98 transition shadow-xs">
+                <span class="text-[9px] text-gray-500 dark:text-gray-400 font-bold pointer-events-none">${escapeHtml(m.senderName || (isRider ? 'Rider' : 'Store'))}</span>
+                <div 
+                    onpointerdown="window.handleStoreMsgPointerDown(event, '${m.id}', 'store-rider', '${encodedText}', '${encodedSender}')"
+                    onpointermove="window.handleStoreMsgPointerMove(event)"
+                    onpointerup="window.handleStoreMsgPointerUp(event, '${m.id}')"
+                    onpointercancel="window.handleStoreMsgPointerUp(event, '${m.id}')"
+                    oncontextmenu="window.handleStoreMsgContextMenu(event, '${m.id}', 'store-rider', '${encodedText}', '${encodedSender}')"
+                    class="max-w-[80%] rounded-2xl px-3 py-2 text-xs ${isRider ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-none border border-gray-200 dark:border-gray-700'} cursor-pointer active:scale-98 transition shadow-xs select-none">
                     ${replyBlockHtml}
-                    <div>${escapeHtml(m.text || '')}</div>
+                    <div class="pointer-events-none">${escapeHtml(m.text || '')}</div>
                     ${reactionsHtml}
                 </div>
             </div>`;
@@ -532,11 +678,24 @@ function listenToStoreToRiderChat(orderId, storeId) {
 
         container.innerHTML = list.map(m => {
             const isStore = m.sender === 'store' || m.senderType === 'store';
+            const reactionsHtml = renderReactionsHtml(m.reactions, m.id);
+            const replyBlockHtml = renderReplyPreviewInsideMessage(m.replyTo);
+            const encodedText = encodeURIComponent(m.text || '');
+            const encodedSender = encodeURIComponent(m.senderName || (isStore ? 'Store' : 'Rider'));
+
             return `
             <div id="msg-bubble-${m.id}" class="flex flex-col ${isStore ? 'items-end' : 'items-start'} gap-1">
-                <span class="text-[9px] text-gray-500 dark:text-gray-400 font-bold">${escapeHtml(m.senderName || (isStore ? 'Store' : 'Rider'))}</span>
-                <div class="max-w-[80%] rounded-2xl px-3 py-2 text-xs ${isStore ? 'bg-orange-600 text-white rounded-br-none' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-none border border-gray-200 dark:border-gray-700'} shadow-xs">
-                    <div>${escapeHtml(m.text || '')}</div>
+                <span class="text-[9px] text-gray-500 dark:text-gray-400 font-bold pointer-events-none">${escapeHtml(m.senderName || (isStore ? 'Store' : 'Rider'))}</span>
+                <div 
+                    onpointerdown="window.handleStoreMsgPointerDown(event, '${m.id}', 'store-rider', '${encodedText}', '${encodedSender}')"
+                    onpointermove="window.handleStoreMsgPointerMove(event)"
+                    onpointerup="window.handleStoreMsgPointerUp(event, '${m.id}')"
+                    onpointercancel="window.handleStoreMsgPointerUp(event, '${m.id}')"
+                    oncontextmenu="window.handleStoreMsgContextMenu(event, '${m.id}', 'store-rider', '${encodedText}', '${encodedSender}')"
+                    class="max-w-[80%] rounded-2xl px-3 py-2 text-xs ${isStore ? 'bg-orange-600 text-white rounded-br-none' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-none border border-gray-200 dark:border-gray-700'} cursor-pointer active:scale-98 transition shadow-xs select-none">
+                    ${replyBlockHtml}
+                    <div class="pointer-events-none">${escapeHtml(m.text || '')}</div>
+                    ${reactionsHtml}
                 </div>
             </div>`;
         }).join('');
@@ -591,7 +750,7 @@ export async function toggleStoreRiderReaction(msgId, emoji) {
     const orderId = cleanFirebasePathKey(activeRiderStoreChatOrderId || activeStoreToRiderOrderId);
     const rawStoreId = activeRiderStoreChatStoreId || appState.merchantStoreId || localStorage.getItem('lokalex_merchant_store_id');
     const storeId = cleanFirebasePathKey(rawStoreId);
-    const myId = (appState.telegramId || appState.merchantUsername || localStorage.getItem('riderName') || 'user').toString();
+    const myId = (appState.telegramId || appState.merchantAccountId || appState.merchantUsername || localStorage.getItem('telegramId') || 'user').toString();
 
     if (!db || !orderId || !storeId || !msgId || !emoji) return;
 
@@ -632,6 +791,11 @@ export function cancelRiderStoreReply() {
 }
 
 if (typeof window !== 'undefined') {
+    window.handleStoreMsgPointerDown = handleStoreMsgPointerDown;
+    window.handleStoreMsgPointerMove = handleStoreMsgPointerMove;
+    window.handleStoreMsgPointerUp = handleStoreMsgPointerUp;
+    window.handleStoreMsgContextMenu = handleStoreMsgContextMenu;
+
     window.listenToGlobalStoreChats = listenToGlobalStoreChats;
     window.markStoreChatDone = markStoreChatDone;
     window.renderStoreChatsInDashboard = renderStoreChatsInDashboard;

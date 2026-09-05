@@ -51,7 +51,7 @@
 <!-- ========================================================================= -->
 <!-- COMPLETE TEAM COMMS MULTI-CHANNEL SYSTEM (DRAGGABLE WINDOW & DOCKED BUBBLE)-->
 <!-- ========================================================================= -->
-<div id="floating-chat-container" class="fixed right-0 z-50 flex flex-col items-end pointer-events-none" style="top: 75%;">
+<div id="floating-chat-container" class="hidden fixed right-0 z-50 flex flex-col items-end pointer-events-none" style="top: 75%;">
     <!-- EXPANDED TEAM COMMS WINDOW -->
     <div id="expanded-chat-window" class="hidden pointer-events-auto bg-cardBg border border-gray-700 rounded-3xl shadow-2xl w-[calc(100vw-24px)] sm:w-92 max-w-[390px] h-[520px] max-h-[82vh] flex flex-col overflow-hidden transition-shadow animate-in fade-in zoom-in-95 duration-200 select-none">
         
@@ -85,7 +85,7 @@
         <!-- 3-WAY CHANNEL TAB SELECTOR -->
         <div id="team-comms-tab-bar" class="grid grid-cols-3 bg-black/40 p-1 border-b border-gray-800 shrink-0 text-center select-none">
             <button type="button" id="team-tab-general" onclick="window.switchTeamCommsTab && window.switchTeamCommsTab('general')" class="py-1.5 rounded-xl text-[11px] font-bold transition bg-blue-600 text-white shadow">
-                🌐 General
+                💬 General
             </button>
             <button type="button" id="team-tab-dms" onclick="window.switchTeamCommsTab && window.switchTeamCommsTab('dms')" class="py-1.5 rounded-xl text-[11px] font-bold transition text-gray-400 hover:text-white">
                 👤 Direct

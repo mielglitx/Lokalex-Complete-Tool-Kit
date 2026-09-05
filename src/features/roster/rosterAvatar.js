@@ -16,6 +16,15 @@ export function getRiderAvatarUrl(rider = null) {
 }
 
 export function syncHeaderUserProfile() {
+    // Guard: Never touch or overwrite header if user is in customer, merchant, or login views
+    const activeSection = document.querySelector('main > section:not(.hidden)')?.id;
+    const isCustomerSession = !!(appState.customerFacebookId || localStorage.getItem('lokalex_customer_fb_id'));
+    const isMerchantSession = !!(appState.merchantAccountId || localStorage.getItem('lokalex_merchant_account_id'));
+
+    if (activeSection === 'view-customer-home' || activeSection === 'view-store-hub' || activeSection === 'view-login' || (isCustomerSession && !appState.telegramId) || (isMerchantSession && !appState.telegramId)) {
+        return;
+    }
+
     const avatarEl = document.getElementById('header-user-avatar');
     const nameEl = document.getElementById('header-user-name');
     const myName = formatTitleCase(appState.riderName || localStorage.getItem('riderName') || 'Rider');

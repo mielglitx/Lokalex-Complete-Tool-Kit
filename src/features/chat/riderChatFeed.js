@@ -33,6 +33,22 @@ export function setRiderChatFilter(filterMode) {
     }
 }
 
+function getThreadDedupKey(key, meta) {
+    const rawPhone = meta.phoneNumber || meta.phone || meta.customerPhone || 
+                     (typeof key === 'string' && (key.startsWith('+63') || key.startsWith('09') || key.startsWith('63')) ? key : '');
+    const cleanPhone = String(rawPhone).replace(/\D/g, '');
+    if (cleanPhone.length >= 10) {
+        return `phone_${cleanPhone.slice(-10)}`;
+    }
+
+    const cleanName = (meta.customerName || meta.name || '').trim().toLowerCase();
+    if (cleanName && cleanName !== 'customer') {
+        return `name_${cleanName}`;
+    }
+
+    return `id_${key}`;
+}
+
 export function listenToAllCustomerChatsForRider() {
     listenToGlobalStoreChats();
     if (!db) return;
@@ -52,36 +68,79 @@ export function listenToAllCustomerChatsForRider() {
             return;
         }
 
-        let allThreads = Object.keys(data).map(key => {
-            const item = data[key];
+        const threadsMap = new Map();
+
+        Object.keys(data).forEach(key => {
+            const item = data[key] || {};
             const meta = item.metadata || {};
             const msgs = item.messages ? Object.values(item.messages) : [];
-            let isUnread = false;
+            const hasMessages = msgs.length > 0;
+            const rawLastMsg = (meta.lastMessage || '').trim();
+            const hasValidLastMsg = rawLastMsg !== '' && rawLastMsg.toLowerCase() !== 'no messages yet';
 
+            // 1. Exclude ghost threads that contain zero messages and no conversation history
+            if (!hasMessages && !hasValidLastMsg) {
+                return;
+            }
+
+            let isUnread = false;
             if (meta.unreadForRider === true) {
                 isUnread = true;
             } else if (meta.unreadForRider === false) {
                 isUnread = false;
-            } else if (msgs.length > 0) {
+            } else if (hasMessages) {
                 const lastMsg = msgs[msgs.length - 1];
                 isUnread = !lastMsg.isRider && lastMsg.senderType !== 'rider' && lastMsg.status !== 'seen';
-            } else if (meta.lastMessage && !meta.lastMessage.startsWith('You:')) {
+            } else if (rawLastMsg && !rawLastMsg.startsWith('You:')) {
                 isUnread = true;
             }
 
-            return {
+            const fallbackLastMsg = hasMessages 
+                ? (msgs[msgs.length - 1].text || (msgs[msgs.length - 1].imageUrl ? "📷 Photo" : "📍 Location")) 
+                : "No messages yet";
+
+            const threadObj = {
                 custId: key,
                 customerName: meta.customerName || "Customer",
                 avatarUrl: meta.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(meta.customerName || "Customer")}&background=0084FF&color=fff`,
-                lastMessage: meta.lastMessage || "No messages yet",
-                lastUpdated: meta.lastUpdated || 0,
+                lastMessage: rawLastMsg || fallbackLastMsg,
+                lastUpdated: meta.lastUpdated || (hasMessages ? (msgs[msgs.length - 1].timestamp || 0) : 0),
                 folder: meta.folder || 'inbox',
                 cateredByRiderId: meta.cateredByRiderId || null,
                 cateredByRiderName: meta.cateredByRiderName || meta.cateredBy || null,
                 status: meta.status || 'active',
-                isUnread: isUnread
+                isUnread: isUnread,
+                hasRealMessages: hasMessages
             };
+
+            const dedupKey = getThreadDedupKey(key, meta);
+
+            // 2. Deduplicate matching customer accounts: keep the active thread with real messages and latest update
+            if (threadsMap.has(dedupKey)) {
+                const existing = threadsMap.get(dedupKey);
+                const currentScore = (threadObj.hasRealMessages ? 10000000000000 : 0) + (threadObj.lastUpdated || 0);
+                const existingScore = (existing.hasRealMessages ? 10000000000000 : 0) + (existing.lastUpdated || 0);
+
+                if (currentScore > existingScore) {
+                    threadObj.isUnread = threadObj.isUnread || existing.isUnread;
+                    if (!threadObj.cateredByRiderName && existing.cateredByRiderName) {
+                        threadObj.cateredByRiderName = existing.cateredByRiderName;
+                        threadObj.cateredByRiderId = existing.cateredByRiderId;
+                    }
+                    threadsMap.set(dedupKey, threadObj);
+                } else {
+                    existing.isUnread = existing.isUnread || threadObj.isUnread;
+                    if (!existing.cateredByRiderName && threadObj.cateredByRiderName) {
+                        existing.cateredByRiderName = threadObj.cateredByRiderName;
+                        existing.cateredByRiderId = threadObj.cateredByRiderId;
+                    }
+                }
+            } else {
+                threadsMap.set(dedupKey, threadObj);
+            }
         });
+
+        const allThreads = Array.from(threadsMap.values());
 
         const unreadInboxCount = allThreads.filter(t => (!t.folder || t.folder === 'inbox') && !t.cateredByRiderName && t.isUnread).length;
         if (inboxBadge) {

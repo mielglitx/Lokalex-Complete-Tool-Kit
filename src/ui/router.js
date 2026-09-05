@@ -14,6 +14,79 @@ export function switchView(targetViewId, isBackwards = false, replace = false) {
     renderViewUI(targetViewId);
 }
 
+export function handleHeaderUserClick() {
+    if (window.openProfileSettingsModal && typeof window.openProfileSettingsModal === 'function') {
+        window.openProfileSettingsModal();
+    }
+}
+
+export function syncHeaderAndWidgets(targetViewId) {
+    const appHeader = document.getElementById('app-header');
+    const userSection = document.getElementById('header-user-section');
+    const avatarEl = document.getElementById('header-user-avatar');
+    const nameEl = document.getElementById('header-user-name');
+    const roleEl = document.getElementById('header-user-role');
+    const badgeIcon = document.getElementById('header-user-badge-icon');
+    const networkPill = document.getElementById('network-status-pill');
+    const floatingChat = document.getElementById('floating-chat-container');
+
+    const isCustomer = targetViewId === 'view-customer-home' || (!appState.telegramId && !!localStorage.getItem('lokalex_customer_fb_id'));
+    const isMerchant = targetViewId === 'view-store-hub' || (!appState.telegramId && !!localStorage.getItem('lokalex_merchant_account_id'));
+    const isLogin = targetViewId === 'view-login';
+
+    if (isLogin) {
+        if (appHeader) appHeader.classList.add('hidden');
+        if (floatingChat) floatingChat.classList.add('hidden');
+        return;
+    }
+
+    if (appHeader) appHeader.classList.remove('hidden');
+
+    // UNIFIED HEADER: Always show the Welcome! (Username) profile button for all authenticated users
+    if (userSection) userSection.classList.remove('hidden');
+
+    if (targetViewId === 'view-customer-home' || (isCustomer && targetViewId !== 'view-home')) {
+        // Customer Profile in Header
+        const custName = appState.customerName || localStorage.getItem('lokalex_customer_name') || "Customer";
+        const custAvatar = localStorage.getItem('lokalex_customer_avatar') || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=10B981&color=fff&bold=true&size=128`;
+
+        if (avatarEl) avatarEl.src = custAvatar;
+        if (nameEl) nameEl.innerText = custName;
+        if (roleEl) roleEl.innerText = "Welcome!";
+        if (badgeIcon) badgeIcon.className = "fa-solid fa-pen";
+        if (userSection) userSection.title = "Click to edit customer account";
+
+        if (networkPill) networkPill.classList.add('hidden');
+        if (floatingChat) floatingChat.classList.add('hidden');
+    } else if (targetViewId === 'view-store-hub' || (isMerchant && targetViewId !== 'view-home')) {
+        // Merchant Profile in Header
+        const storeName = appState.merchantStoreName || localStorage.getItem('lokalex_merchant_store_name') || "Merchant Store";
+        const storeAvatar = localStorage.getItem('lokalex_merchant_avatar') || `https://ui-avatars.com/api/?name=${encodeURIComponent(storeName)}&background=ea580c&color=fff&bold=true&size=128`;
+
+        if (avatarEl) avatarEl.src = storeAvatar;
+        if (nameEl) nameEl.innerText = storeName;
+        if (roleEl) roleEl.innerText = "Welcome!";
+        if (badgeIcon) badgeIcon.className = "fa-solid fa-shop";
+        if (userSection) userSection.title = "Click to edit merchant store settings";
+
+        if (networkPill) networkPill.classList.add('hidden');
+        if (floatingChat) floatingChat.classList.add('hidden');
+    } else {
+        // Rider Profile in Header
+        const riderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
+        const riderAvatar = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=0284c7&color=ffffff&bold=true&size=128`;
+
+        if (avatarEl) avatarEl.src = riderAvatar;
+        if (nameEl) nameEl.innerText = riderName;
+        if (roleEl) roleEl.innerText = "Welcome!";
+        if (badgeIcon) badgeIcon.className = "fa-solid fa-camera";
+        if (userSection) userSection.title = "Click to change rider profile";
+
+        if (networkPill) networkPill.classList.remove('hidden');
+        if (floatingChat) floatingChat.classList.remove('hidden');
+    }
+}
+
 export function renderViewUI(targetViewId) {
     document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
     const targetEl = document.getElementById(targetViewId);
@@ -51,6 +124,8 @@ export function renderViewUI(targetViewId) {
         if (backBtn) backBtn.classList.remove('hidden');
         if (headerSpacer) headerSpacer.classList.add('hidden');
     }
+
+    syncHeaderAndWidgets(targetViewId);
 
     window.dispatchEvent(new CustomEvent('viewChanged', { detail: targetViewId }));
 }
@@ -114,4 +189,6 @@ if (typeof window !== 'undefined') {
     window.switchView = switchView;
     window.renderViewUI = renderViewUI;
     window.goBack = goBack;
+    window.handleHeaderUserClick = handleHeaderUserClick;
+    window.syncHeaderAndWidgets = syncHeaderAndWidgets;
 }
