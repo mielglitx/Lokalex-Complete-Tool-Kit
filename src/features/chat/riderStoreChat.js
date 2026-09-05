@@ -9,8 +9,11 @@ let activeRiderStoreChatStoreId = null;
 let activeRiderStoreChatStoreName = null;
 let activeRiderStoreChatListener = null;
 let globalStoreChatsListener = null;
+let globalStoresListener = null;
 let cachedStoreChatsData = {};
+let allStoresListCache = [];
 let activeRiderStoreReplyTarget = null;
+let storeSearchQuery = "";
 
 let activeStoreToRiderOrderId = null;
 let activeStoreToRiderChatListener = null;
@@ -163,6 +166,24 @@ function cleanFirebasePathKey(key) {
     return String(key || '').replace(/^#+/, '').replace(/[.#$\[\]\/]/g, '_').trim();
 }
 
+// INITIAL LOCAL CACHE HYDRATION
+try {
+    const rawLocalStores = localStorage.getItem('lokalex_cached_stores_v1');
+    if (rawLocalStores) {
+        const parsed = JSON.parse(rawLocalStores);
+        if (parsed && typeof parsed === 'object') {
+            allStoresListCache = Object.entries(parsed).map(([sId, sData]) => ({
+                storeId: cleanFirebasePathKey(sId),
+                storeName: sData.storeName || sData.name || "Store",
+                address: sData.address || sData.rate || "",
+                isOpen: sData.isOpen !== false && sData.status !== 'closed' && sData.status !== 'inactive',
+                logoUrl: sData.logoUrl || sData.photoUrl || sData.imageUrl || "",
+                contact: sData.contact || sData.phone || ""
+            }));
+        }
+    }
+} catch(e) {}
+
 function renderReactionsHtml(reactions, msgId) {
     if (!reactions || typeof reactions !== 'object') return '';
     const reactionEntries = Object.entries(reactions);
@@ -199,34 +220,60 @@ function renderReplyPreviewInsideMessage(replyTo) {
     </div>`;
 }
 
+// REALTIME LISTENER FOR REGISTERED STORES AND STORE CHATS
 export function listenToGlobalStoreChats() {
-    if (!db || globalStoreChatsListener) return;
+    if (!db) return;
 
-    globalStoreChatsListener = db.ref('storeRiderChats');
-    globalStoreChatsListener.on('value', (snapshot) => {
-        cachedStoreChatsData = snapshot.val() || {};
-        
-        let unreadCount = 0;
-        Object.entries(cachedStoreChatsData).forEach(([key, val]) => {
-            if (val && val.unreadForRider && !val.isDone && val.status !== 'done') {
-                unreadCount++;
+    if (!globalStoresListener) {
+        globalStoresListener = db.ref('stores');
+        globalStoresListener.on('value', (snapshot) => {
+            const val = snapshot.val();
+            if (val && Object.keys(val).length > 0) {
+                allStoresListCache = Object.entries(val).map(([sId, sData]) => ({
+                    storeId: cleanFirebasePathKey(sId),
+                    storeName: sData.storeName || sData.name || "Store",
+                    address: sData.address || sData.rate || "",
+                    isOpen: sData.isOpen !== false && sData.status !== 'closed' && sData.status !== 'inactive',
+                    logoUrl: sData.logoUrl || sData.photoUrl || sData.imageUrl || "",
+                    contact: sData.contact || sData.phone || ""
+                }));
+            } else {
+                allStoresListCache = [];
+            }
+
+            if (window.getActiveRiderChatFilter && window.getActiveRiderChatFilter() === 'stores') {
+                renderStoreChatsInDashboard();
             }
         });
+    }
 
-        const storeBadge = document.getElementById('rider-store-unread-badge');
-        if (storeBadge) {
-            if (unreadCount > 0) {
-                storeBadge.innerText = unreadCount;
-                storeBadge.classList.remove('hidden');
-            } else {
-                storeBadge.classList.add('hidden');
+    if (!globalStoreChatsListener) {
+        globalStoreChatsListener = db.ref('storeRiderChats');
+        globalStoreChatsListener.on('value', (snapshot) => {
+            cachedStoreChatsData = snapshot.val() || {};
+            
+            let unreadCount = 0;
+            Object.entries(cachedStoreChatsData).forEach(([key, val]) => {
+                if (val && val.unreadForRider && !val.isDone && val.status !== 'done') {
+                    unreadCount++;
+                }
+            });
+
+            const storeBadge = document.getElementById('rider-store-unread-badge');
+            if (storeBadge) {
+                if (unreadCount > 0) {
+                    storeBadge.innerText = unreadCount;
+                    storeBadge.classList.remove('hidden');
+                } else {
+                    storeBadge.classList.add('hidden');
+                }
             }
-        }
 
-        if (window.getActiveRiderChatFilter && window.getActiveRiderChatFilter() === 'stores') {
-            renderStoreChatsInDashboard();
-        }
-    });
+            if (window.getActiveRiderChatFilter && window.getActiveRiderChatFilter() === 'stores') {
+                renderStoreChatsInDashboard();
+            }
+        });
+    }
 }
 
 export async function markStoreChatDone(orderId, storeId) {
@@ -255,62 +302,177 @@ export async function markStoreChatDone(orderId, storeId) {
     }
 }
 
+export function filterRiderStoreChats(query) {
+    storeSearchQuery = (query || '').toLowerCase().trim();
+    renderStoreChatsListOnly();
+}
+
+export function clearRiderStoreChatSearch() {
+    storeSearchQuery = '';
+    const input = document.getElementById('rider-store-chat-search');
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
+    renderStoreChatsListOnly();
+}
+
+// RENDER ALL STORES WITH SEARCH BAR AND ALPHABETICAL SORTING
 export function renderStoreChatsInDashboard() {
     const feed = document.getElementById('rider-cust-chats-feed');
-    const badge = document.getElementById('rider-cust-chats-badge');
     if (!feed) return;
 
-    const entries = Object.entries(cachedStoreChatsData || {});
-    const activeEntries = entries.filter(([key, data]) => !data.isDone && data.status !== 'done');
+    const existingContainer = document.getElementById('rider-store-search-container');
+    if (!existingContainer) {
+        feed.innerHTML = `
+        <div id="rider-store-search-container" class="flex flex-col gap-2 w-full">
+            <div class="relative shrink-0">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                <input type="text" id="rider-store-chat-search" 
+                    value="${escapeHtml(storeSearchQuery)}"
+                    oninput="window.filterRiderStoreChats && window.filterRiderStoreChats(this.value)" 
+                    placeholder="Search store name or location..." 
+                    class="w-full bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 focus:border-orange-500 rounded-xl pl-8 pr-8 py-2 text-xs text-gray-900 dark:text-white outline-none transition shadow-xs">
+                <button type="button" onclick="window.clearRiderStoreChatSearch && window.clearRiderStoreChatSearch()" class="absolute right-2.5 top-2 text-gray-400 hover:text-gray-600 dark:hover:text-white text-xs">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div id="rider-store-chats-list" class="flex flex-col gap-1.5"></div>
+        </div>`;
+    }
 
-    if (activeEntries.length === 0) {
-        feed.innerHTML = `<div class="text-gray-400 dark:text-gray-500 italic text-center py-6 text-xs flex flex-col items-center gap-1"><i class="fa-solid fa-store text-base text-orange-500"></i><span>No active store conversations.</span></div>`;
-        if (badge) badge.innerText = "0 stores";
+    renderStoreChatsListOnly();
+}
+
+function renderStoreChatsListOnly() {
+    const listContainer = document.getElementById('rider-store-chats-list');
+    const badge = document.getElementById('rider-cust-chats-badge');
+    if (!listContainer) return;
+
+    const storeMap = new Map();
+
+    // 1. BASE: Only populate registered stores from the stores database
+    allStoresListCache.forEach(store => {
+        storeMap.set(store.storeId, {
+            storeId: store.storeId,
+            storeName: store.storeName || "Store",
+            address: store.address || "",
+            isOpen: store.isOpen !== false,
+            logoUrl: store.logoUrl || "",
+            orderId: 'DIRECT',
+            lastMessage: "Tap to chat with store",
+            lastTimestamp: 0,
+            unread: false
+        });
+    });
+
+    // 2. OVERLAY: Attach chat thread metadata ONLY to existing registered stores
+    Object.entries(cachedStoreChatsData || {}).forEach(([chatKey, data]) => {
+        if (!data) return;
+
+        // Match chat to registered store by ID or chat key suffix
+        let targetStoreId = data.storeId ? cleanFirebasePathKey(data.storeId) : null;
+        if (!targetStoreId || !storeMap.has(targetStoreId)) {
+            const found = allStoresListCache.find(s => chatKey.endsWith(`_${s.storeId}`) || chatKey === s.storeId);
+            if (found) {
+                targetStoreId = found.storeId;
+            }
+        }
+
+        // If the chat belongs to a non-existent or deleted store, ignore it
+        if (!targetStoreId || !storeMap.has(targetStoreId)) {
+            return;
+        }
+
+        const existing = storeMap.get(targetStoreId);
+        const isThreadUnread = !!data.unreadForRider;
+        const threadTime = data.lastTimestamp || 0;
+        const threadMsg = data.lastMessage || "Order Conversation";
+        const orderId = data.orderId || (chatKey.includes(`_${targetStoreId}`) ? chatKey.replace(`_${targetStoreId}`, '') : 'DIRECT');
+
+        if (threadTime >= existing.lastTimestamp) {
+            existing.orderId = orderId;
+            existing.lastMessage = threadMsg;
+            existing.lastTimestamp = threadTime;
+            existing.unread = isThreadUnread;
+        }
+    });
+
+    let allMerged = Array.from(storeMap.values());
+
+    // 3. Sort alphabetically by name
+    allMerged.sort((a, b) => {
+        const nameA = (a.storeName || "").trim();
+        const nameB = (b.storeName || "").trim();
+        return nameA.localeCompare(nameB, 'en', { sensitivity: 'base' });
+    });
+
+    // 4. Apply search filter
+    if (storeSearchQuery) {
+        allMerged = allMerged.filter(s => 
+            (s.storeName || "").toLowerCase().includes(storeSearchQuery) ||
+            (s.address || "").toLowerCase().includes(storeSearchQuery)
+        );
+    }
+
+    if (badge) {
+        badge.innerText = `${allMerged.length} ${allMerged.length === 1 ? 'store' : 'stores'}`;
+    }
+
+    if (allMerged.length === 0) {
+        listContainer.innerHTML = `
+        <div class="text-gray-400 dark:text-gray-500 italic text-center py-8 text-xs flex flex-col items-center gap-1.5">
+            <i class="fa-solid fa-store text-xl text-orange-500/60"></i>
+            <span>${storeSearchQuery ? `No stores found matching "${escapeHtml(storeSearchQuery)}"` : 'No stores registered yet.'}</span>
+            ${storeSearchQuery ? `
+                <button type="button" onclick="window.clearRiderStoreChatSearch && window.clearRiderStoreChatSearch()" class="text-blue-500 font-bold underline text-[11px] mt-1">
+                    Clear Search
+                </button>
+            ` : ''}
+        </div>`;
         return;
     }
 
-    const threads = activeEntries.map(([key, data]) => {
-        const parts = key.split('_');
-        const orderId = parts.slice(0, -2).join('_') || parts[0] || 'ORD';
-        const storeId = parts.slice(-2).join('_') || parts[1] || 'STORE';
+    listContainer.innerHTML = allMerged.map(s => {
+        const timeStr = s.lastTimestamp ? new Date(s.lastTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+        const unreadDot = s.unread ? `<span class="bg-orange-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full animate-pulse shrink-0">NEW</span>` : "";
 
-        return {
-            key,
-            orderId,
-            storeId,
-            storeName: data.storeName || "Store Merchant",
-            lastMessage: data.lastMessage || "No messages yet",
-            lastTimestamp: data.lastTimestamp || 0,
-            unread: !!data.unreadForRider
-        };
-    }).sort((a, b) => (b.lastTimestamp || 0) - (a.lastTimestamp || 0));
+        const openStatusBadge = s.isOpen ? `
+            <span class="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> OPEN
+            </span>
+        ` : `
+            <span class="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/30 text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> CLOSED
+            </span>
+        `;
 
-    if (badge) badge.innerText = `${threads.length} ${threads.length === 1 ? 'store thread' : 'store threads'}`;
-
-    feed.innerHTML = threads.map(t => {
-        const timeStr = t.lastTimestamp ? new Date(t.lastTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
-        const unreadDot = t.unread ? `<span class="bg-orange-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full animate-pulse">NEW UPDATE</span>` : "";
+        const logoHtml = s.logoUrl 
+            ? `<img src="${s.logoUrl}" class="w-9 h-9 rounded-xl object-cover border border-gray-200 dark:border-gray-800 shrink-0">`
+            : `<div class="w-9 h-9 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 flex items-center justify-center text-sm font-black shrink-0">
+                    <i class="fa-solid fa-store"></i>
+               </div>`;
 
         return `
-        <div onclick="window.openRiderToStoreChatModal('${escapeHtml(t.orderId)}', '${escapeHtml(t.storeId)}', '${escapeHtml(t.storeName)}')" class="bg-white dark:bg-cardBg hover:bg-gray-50 dark:hover:bg-black/50 border ${t.unread ? 'border-2 border-orange-500 dark:border-orange-400' : 'border-gray-200 dark:border-gray-800'} p-2.5 rounded-xl flex items-center justify-between cursor-pointer transition active:scale-[0.99] shadow-xs">
+        <div onclick="window.openRiderToStoreChatModal('${escapeHtml(s.orderId)}', '${escapeHtml(s.storeId)}', '${escapeHtml(s.storeName)}')" class="bg-white dark:bg-cardBg hover:bg-gray-50 dark:hover:bg-black/50 border ${s.unread ? 'border-2 border-orange-500 dark:border-orange-400' : 'border-gray-200 dark:border-gray-800'} p-2.5 rounded-2xl flex items-center justify-between cursor-pointer transition active:scale-[0.99] shadow-xs">
             <div class="flex items-center gap-2.5 min-w-0 flex-1">
-                <div class="w-9 h-9 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 flex items-center justify-center text-sm font-black shrink-0">
-                    <i class="fa-solid fa-store"></i>
-                </div>
+                ${logoHtml}
                 <div class="min-w-0 flex-1">
                     <div class="font-black text-gray-900 dark:text-white text-xs truncate flex items-center gap-1.5">
-                        <span class="truncate">${escapeHtml(t.storeName)}</span>
-                        <span class="font-mono text-[10px] text-gray-500 dark:text-gray-400 font-normal">#${escapeHtml(t.orderId)}</span>
+                        <span class="truncate">${escapeHtml(s.storeName)}</span>
+                        ${openStatusBadge}
                         ${unreadDot}
                     </div>
-                    <div class="text-[11px] ${t.unread ? 'text-orange-600 dark:text-orange-400 font-black' : 'text-gray-700 dark:text-gray-300 font-medium'} truncate mt-0.5">${escapeHtml(t.lastMessage)}</div>
+                    <div class="text-[11px] ${s.unread ? 'text-orange-600 dark:text-orange-400 font-bold' : 'text-gray-500 dark:text-gray-400 font-medium'} truncate mt-0.5">${escapeHtml(s.lastMessage)}</div>
+                    ${s.address ? `<div class="text-[10px] text-gray-400 truncate flex items-center gap-1 mt-0.5"><i class="fa-solid fa-location-dot text-[8px] text-red-500"></i> ${escapeHtml(s.address)}</div>` : ''}
                 </div>
             </div>
+
             <div class="flex items-center gap-2 shrink-0 ml-2">
-                <div class="text-[9px] text-gray-500 dark:text-gray-400 font-mono font-medium">${timeStr}</div>
-                <button onclick="event.stopPropagation(); window.markStoreChatDone && window.markStoreChatDone('${escapeHtml(t.orderId)}', '${escapeHtml(t.storeId)}')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-emerald-500/40 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs" title="Mark order chat complete">
-                    <i class="fa-solid fa-circle-check"></i> Done
-                </button>
+                ${timeStr ? `<div class="text-[9px] text-gray-400 font-mono font-medium">${timeStr}</div>` : ''}
+                <div class="bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-200 dark:bg-orange-600/20 dark:hover:bg-orange-600/30 dark:text-orange-300 dark:border-orange-500/40 text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition flex items-center gap-1 shrink-0 shadow-xs">
+                    <i class="fa-solid fa-comments text-[10px]"></i> Chat
+                </div>
             </div>
         </div>`;
     }).join('');
@@ -419,7 +581,7 @@ export function closeRiderStoreChatPicker() {
 export function openRiderToStoreChatModal(orderId, storeId, storeName) {
     closeRiderStoreChatPicker();
 
-    activeRiderStoreChatOrderId = cleanFirebasePathKey(orderId);
+    activeRiderStoreChatOrderId = cleanFirebasePathKey(orderId || 'DIRECT');
     activeRiderStoreChatStoreId = cleanFirebasePathKey(storeId);
     activeRiderStoreChatStoreName = storeName || "Store";
 
@@ -443,11 +605,11 @@ export function openRiderToStoreChatModal(orderId, storeId, storeName) {
                         </div>
                         <div class="min-w-0">
                             <h3 id="r2s-chat-store-name" class="font-bold text-xs text-gray-900 dark:text-white truncate">Store Chat</h3>
-                            <p id="r2s-chat-order-id" class="text-[10px] text-gray-500 dark:text-gray-400 font-mono truncate">Order #ORD_000</p>
+                            <p id="r2s-chat-order-id" class="text-[10px] text-gray-500 dark:text-gray-400 font-mono truncate">Direct Store Chat</p>
                         </div>
                     </div>
                     <div class="flex items-center gap-1.5">
-                        <button onclick="window.markStoreChatDone && window.markStoreChatDone(activeRiderStoreChatOrderId, activeRiderStoreChatStoreId)" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-sm" title="Mark Store Order Complete">
+                        <button id="r2s-chat-done-btn" onclick="window.markStoreChatDone && window.markStoreChatDone(activeRiderStoreChatOrderId, activeRiderStoreChatStoreId)" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-sm" title="Mark Store Order Complete">
                             <i class="fa-solid fa-circle-check"></i> Done
                         </button>
                         <button onclick="window.closeRiderToStoreChatModal && window.closeRiderToStoreChatModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1.5 text-sm transition">
@@ -498,9 +660,21 @@ export function openRiderToStoreChatModal(orderId, storeId, storeName) {
 
     const nameEl = document.getElementById('r2s-chat-store-name');
     const orderEl = document.getElementById('r2s-chat-order-id');
+    const doneBtn = document.getElementById('r2s-chat-done-btn');
 
     if (nameEl) nameEl.innerText = `🏬 ${activeRiderStoreChatStoreName}`;
-    if (orderEl) orderEl.innerText = `Order #${activeRiderStoreChatOrderId}`;
+    if (orderEl) {
+        orderEl.innerText = activeRiderStoreChatOrderId && activeRiderStoreChatOrderId !== 'DIRECT'
+            ? `Order #${activeRiderStoreChatOrderId}`
+            : `Direct Store Chat`;
+    }
+    if (doneBtn) {
+        if (activeRiderStoreChatOrderId && activeRiderStoreChatOrderId !== 'DIRECT') {
+            doneBtn.classList.remove('hidden');
+        } else {
+            doneBtn.classList.add('hidden');
+        }
+    }
 
     cancelRiderStoreReply();
     listenToRiderStoreChat(activeRiderStoreChatOrderId, activeRiderStoreChatStoreId);
@@ -613,6 +787,7 @@ async function postRiderToStoreMessage(text) {
             lastMessage: text.trim(),
             lastTimestamp: Date.now(),
             riderName,
+            storeName: activeRiderStoreChatStoreName,
             unreadForStore: true
         }));
         cancelRiderStoreReply();
@@ -678,24 +853,11 @@ function listenToStoreToRiderChat(orderId, storeId) {
 
         container.innerHTML = list.map(m => {
             const isStore = m.sender === 'store' || m.senderType === 'store';
-            const reactionsHtml = renderReactionsHtml(m.reactions, m.id);
-            const replyBlockHtml = renderReplyPreviewInsideMessage(m.replyTo);
-            const encodedText = encodeURIComponent(m.text || '');
-            const encodedSender = encodeURIComponent(m.senderName || (isStore ? 'Store' : 'Rider'));
-
             return `
             <div id="msg-bubble-${m.id}" class="flex flex-col ${isStore ? 'items-end' : 'items-start'} gap-1">
-                <span class="text-[9px] text-gray-500 dark:text-gray-400 font-bold pointer-events-none">${escapeHtml(m.senderName || (isStore ? 'Store' : 'Rider'))}</span>
-                <div 
-                    onpointerdown="window.handleStoreMsgPointerDown(event, '${m.id}', 'store-rider', '${encodedText}', '${encodedSender}')"
-                    onpointermove="window.handleStoreMsgPointerMove(event)"
-                    onpointerup="window.handleStoreMsgPointerUp(event, '${m.id}')"
-                    onpointercancel="window.handleStoreMsgPointerUp(event, '${m.id}')"
-                    oncontextmenu="window.handleStoreMsgContextMenu(event, '${m.id}', 'store-rider', '${encodedText}', '${encodedSender}')"
-                    class="max-w-[80%] rounded-2xl px-3 py-2 text-xs ${isStore ? 'bg-orange-600 text-white rounded-br-none' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-none border border-gray-200 dark:border-gray-700'} cursor-pointer active:scale-98 transition shadow-xs select-none">
-                    ${replyBlockHtml}
-                    <div class="pointer-events-none">${escapeHtml(m.text || '')}</div>
-                    ${reactionsHtml}
+                <span class="text-[9px] text-gray-500 dark:text-gray-400 font-bold">${escapeHtml(m.senderName || (isStore ? 'Store' : 'Rider'))}</span>
+                <div class="max-w-[80%] rounded-2xl px-3 py-2 text-xs ${isStore ? 'bg-orange-600 text-white rounded-br-none' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-none border border-gray-200 dark:border-gray-700'} shadow-xs">
+                    <div>${escapeHtml(m.text || '')}</div>
                 </div>
             </div>`;
         }).join('');
@@ -799,6 +961,8 @@ if (typeof window !== 'undefined') {
     window.listenToGlobalStoreChats = listenToGlobalStoreChats;
     window.markStoreChatDone = markStoreChatDone;
     window.renderStoreChatsInDashboard = renderStoreChatsInDashboard;
+    window.filterRiderStoreChats = filterRiderStoreChats;
+    window.clearRiderStoreChatSearch = clearRiderStoreChatSearch;
     window.openRiderStoreChatPicker = openRiderStoreChatPicker;
     window.closeRiderStoreChatPicker = closeRiderStoreChatPicker;
     window.openRiderToStoreChatModal = openRiderToStoreChatModal;
