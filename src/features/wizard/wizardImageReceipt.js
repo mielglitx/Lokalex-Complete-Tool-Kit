@@ -7,6 +7,16 @@ import { getDailyRiderId } from './wizardCalc.js';
 export let currentReceiptCanvas = null;
 export let currentReceiptDataUrl = "";
 
+export function toTitleCase(str) {
+    if (!str || typeof str !== 'string') return '';
+    return str
+        .toLowerCase()
+        .split(' ')
+        .filter(Boolean)
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+}
+
 export function ensureQrCodeLibraryLoaded() {
     return new Promise((resolve) => {
         if (window.QRCode) return resolve(true);
@@ -114,8 +124,11 @@ export async function renderReceiptCanvas() {
 
     const currentCart = getCurrentCart() || [];
     const dailyRiderId = getDailyRiderId();
-    const customerName = document.getElementById('rcpt-name')?.value.trim() || appState.selectedCateringClient || "Customer";
-    const riderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
+    const rawCustomerName = document.getElementById('rcpt-name')?.value.trim() || appState.selectedCateringClient || "Customer";
+    const rawRiderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
+
+    const customerName = toTitleCase(rawCustomerName);
+    const riderName = toTitleCase(rawRiderName);
 
     const dateStr = new Date().toLocaleDateString('en-US', {
         year: 'numeric', month: 'short', day: 'numeric',
@@ -135,7 +148,8 @@ export async function renderReceiptCanvas() {
     const epayFee = wizState.finalEpay || (codTotal <= 1000 ? 15 : 15 + Math.ceil((codTotal - 1000) / 500) * 5);
     const gcashTotal = codTotal + epayFee;
 
-    const gcashName = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || "";
+    const rawGcashName = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || "";
+    const gcashName = toTitleCase(rawGcashName);
     const gcashNo = appState.gcashNo || localStorage.getItem('lokalex_gcash_no') || "";
     const gcashQrPayload = appState.gcashQrPayload || localStorage.getItem('lokalex_gcash_qr_payload') || "";
     const gcashQrImg = appState.gcashQrImg || localStorage.getItem('lokalex_gcash_qr_img') || "";
@@ -269,12 +283,13 @@ export async function renderReceiptCanvas() {
             const isPaid = !!item.isPaid || (parseFloat(item.price) || 0) <= 0;
             const priceNum = Math.max(0, parseFloat(item.price) || 0);
             const priceStr = isPaid ? "PAID (₱0.00)" : `₱${priceNum.toFixed(2)}`;
+            const itemName = toTitleCase(item.name || 'Item');
 
             ctx.textAlign = "left";
             ctx.fillStyle = isPaid ? "#64748b" : "#1e293b";
             ctx.font = isPaid ? "600 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" : "700 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
-            ctx.fillText(`•  ${item.name || 'Item'}`, 44, y);
+            ctx.fillText(`•  ${itemName}`, 44, y);
 
             ctx.textAlign = "right";
             ctx.fillStyle = isPaid ? "#059669" : "#0f172a";
