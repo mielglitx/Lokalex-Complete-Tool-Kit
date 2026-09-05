@@ -8,6 +8,7 @@ import { openSlideDeleteModal } from '../ui/modals.js';
 import { calibrateGPS } from './auth/index.js';
 import { escapeHtml, copyText, getLocalTodayStr } from '../utils/helpers.js';
 import { isRiderAdmin } from './commission/index.js';
+import { idbGet, idbSet, prefetchMediaBatch } from '../utils/storageEngine.js';
 
 let editingRecord = null;
 let mapInstance = null;
@@ -16,6 +17,7 @@ let selectedMapLng = 0;
 let lastJumpLetter = "";
 
 const CACHE_KEY = 'lokalex_directory_cache_v2';
+const IDB_KEY = 'all_directory_records';
 
 // CHECK IF CURRENT USER IS AN ADMIN
 export function checkAdminAccess() {
@@ -34,16 +36,17 @@ export function checkAdminAccess() {
     return false;
 }
 
-// PERSIST DIRECTORY RECORDS TO LOCALSTORAGE
+// PERSIST DIRECTORY RECORDS TO LOCALSTORAGE & INDEXEDDB
 export function saveDirectoryCache() {
     try {
         if (globalState.records && globalState.records.length > 0) {
             localStorage.setItem(CACHE_KEY, JSON.stringify(globalState.records));
+            idbSet('directory', IDB_KEY, globalState.records).catch(() => {});
         }
     } catch(e) {}
 }
 
-// LOAD DIRECTORY RECORDS FROM LOCALSTORAGE ON APP BOOT (INSTANT OFFLINE ACCESS)
+// LOAD DIRECTORY RECORDS: SYNCHRONOUS LOCALSTORAGE + ASYNC INDEXEDDB HYDRATION
 export function loadDirectoryCache() {
     try {
         const saved = localStorage.getItem(CACHE_KEY);
@@ -54,6 +57,18 @@ export function loadDirectoryCache() {
             }
         }
         
+        idbGet('directory', IDB_KEY).then(idbRecords => {
+            if (Array.isArray(idbRecords) && idbRecords.length > 0) {
+                if (!globalState.records || idbRecords.length > globalState.records.length) {
+                    globalState.records = idbRecords;
+                    const currentViewEl = document.querySelector('main > section:not(.hidden)');
+                    if (currentViewEl && currentViewEl.id === 'view-directory') {
+                        renderDirectoryList();
+                    }
+                }
+            }
+        }).catch(() => {});
+
         const hasBarangays = (globalState.records || []).some(r => r.type === 'barangays');
         if (!hasBarangays) {
             const defaultBarangays = BARANGAY_DATA.map(b => ({
@@ -145,7 +160,8 @@ export async function silentSyncDirectory() {
                             lat_lon_link: (c.mapPinLink || existing.lat_lon_link || (c.lat && c.lng ? `https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}` : "")).trim(),
                             type: 'customers',
                             recorded_by: existing.recorded_by || "App Registered",
-                            recorded_at: existing.recorded_at || getLocalTodayStr()
+                            recorded_at: existing.recorded_at || getLocalTodayStr(),
+                            photoUrl: c.photoUrl || c.avatarUrl || ""
                         });
                     }
                 });
@@ -156,6 +172,11 @@ export async function silentSyncDirectory() {
         if (finalMerged.length > 0) {
             globalState.records = finalMerged;
             saveDirectoryCache();
+
+            const avatarUrls = finalMerged.map(r => r.photoUrl).filter(Boolean);
+            if (avatarUrls.length > 0) {
+                prefetchMediaBatch(avatarUrls);
+            }
 
             const currentViewEl = document.querySelector('main > section:not(.hidden)');
             if (currentViewEl && currentViewEl.id === 'view-directory') {

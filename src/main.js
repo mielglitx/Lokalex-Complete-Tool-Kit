@@ -15,6 +15,7 @@ import * as liveTracker from './features/liveTracker.js';
 import * as storeHub from './features/storeHub/index.js';
 import * as customerStorefront from './features/customer/customerStorefront.js';
 import * as profileSettings from './features/profile/profileSettings.js';
+import * as storageEngine from './utils/storageEngine.js';
 
 import * as modals from './ui/modals.js';
 import * as router from './ui/router.js';
@@ -31,7 +32,7 @@ import {
 const allModules = [
     authFeature, cart, chat, roster, directory, commission, 
     advancedOrders, maps, wizard, liveTracker, storeHub, 
-    customerStorefront, profileSettings, modals, router, helpers
+    customerStorefront, profileSettings, modals, router, helpers, storageEngine
 ];
 
 allModules.forEach(mod => {
@@ -48,6 +49,7 @@ window.unlockAudioContext = unlockAudioContext;
 
 let isReconnecting = false;
 let lastHeartbeatTime = Date.now();
+let backgroundSyncInProgress = false;
 
 // SERVICE WORKER REGISTRATION & FCM PUSH NOTIFICATIONS
 export function registerServiceWorker() {
@@ -124,18 +126,41 @@ export function syncDeviceFcmToken(token) {
     }
 }
 
+// COLOR-COORDINATED NETWORK INDICATOR: GREEN = ONLINE, RED = OFFLINE, FLASHING ORANGE = CONNECTING
 export function updateNetworkStatus(forcedState = null) {
     const container = document.getElementById('network-status-pill');
     if (!container) return;
 
-    const isOnline = forcedState !== null ? forcedState : (navigator.onLine && document.visibilityState === 'visible');
+    let status = 'online';
 
-    if (isOnline) {
-        container.className = "flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300";
-        container.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span>ONLINE</span>`;
+    if (forcedState === 'connecting') {
+        status = 'connecting';
+    } else if (forcedState === true) {
+        status = 'online';
+    } else if (forcedState === false) {
+        status = navigator.onLine ? 'connecting' : 'offline';
     } else {
-        container.className = "flex items-center gap-1.5 bg-red-500/10 border border-red-500/30 text-red-400 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm transition-all duration-300";
-        container.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500"></span><span>${navigator.onLine ? 'CONNECTING...' : 'OFFLINE'}</span>`;
+        if (!navigator.onLine) {
+            status = 'offline';
+        } else if (document.visibilityState !== 'visible') {
+            status = 'connecting';
+        } else {
+            status = 'online';
+        }
+    }
+
+    if (status === 'online') {
+        container.className = "flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/40 shadow-xs transition-all duration-300 shrink-0";
+        container.title = "Network: Online";
+        container.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>`;
+    } else if (status === 'connecting') {
+        container.className = "flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/10 border border-amber-500/40 animate-pulse shadow-xs transition-all duration-300 shrink-0";
+        container.title = "Network: Connecting...";
+        container.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.8)]"></span>`;
+    } else {
+        container.className = "flex items-center justify-center w-7 h-7 rounded-full bg-red-500/10 border border-red-500/40 shadow-xs transition-all duration-300 shrink-0";
+        container.title = "Network: Offline";
+        container.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"></span>`;
     }
 }
 
@@ -191,10 +216,81 @@ export function initBatteryMonitor() {
     }).catch(() => {});
 }
 
+// FULL BACKGROUND PERSISTENCE & DELTA SYNC ENGINE (TIER 2 & 3)
+export async function runBackgroundPersistenceSync() {
+    if (!db || backgroundSyncInProgress) return;
+    backgroundSyncInProgress = true;
+
+    try {
+        const mediaUrlsToPrefetch = [];
+
+        // 1. SYNC STORES COLLECTION
+        const storesSnap = await db.ref('stores').once('value');
+        const storesData = storesSnap.val();
+        if (storesData && Object.keys(storesData).length > 0) {
+            await storageEngine.idbSet('stores', 'all_stores', storesData);
+            if (customerStorefront.setStoresCache) customerStorefront.setStoresCache(storesData);
+            
+            Object.values(storesData).forEach(s => {
+                if (s.photoUrl) mediaUrlsToPrefetch.push(s.photoUrl);
+                if (s.logoUrl) mediaUrlsToPrefetch.push(s.logoUrl);
+                if (s.imageUrl) mediaUrlsToPrefetch.push(s.imageUrl);
+            });
+        }
+
+        // 2. SYNC STORE MENUS
+        const menusSnap = await db.ref('storeMenus').once('value');
+        const menusData = menusSnap.val();
+        if (menusData && Object.keys(menusData).length > 0) {
+            await storageEngine.idbSet('menus', 'all_menus', menusData);
+            if (customerStorefront.setMenusCache) customerStorefront.setMenusCache(menusData);
+
+            Object.values(menusData).forEach(storeMenu => {
+                if (storeMenu && typeof storeMenu === 'object') {
+                    Object.values(storeMenu).forEach(item => {
+                        if (item && item.imageUrl) mediaUrlsToPrefetch.push(item.imageUrl);
+                    });
+                }
+            });
+        }
+
+        // 3. SYNC CUSTOMER DIRECTORY & PROFILES
+        const custSnap = await db.ref('customers').limitToLast(300).once('value');
+        const custData = custSnap.val();
+        if (custData && Object.keys(custData).length > 0) {
+            await storageEngine.idbSet('customers', 'all_customers', custData);
+            Object.values(custData).forEach(c => {
+                if (c.avatarUrl) mediaUrlsToPrefetch.push(c.avatarUrl);
+                if (c.photoUrl) mediaUrlsToPrefetch.push(c.photoUrl);
+            });
+        }
+
+        // 4. SYNC ACTIVE CHAT THREADS & RECENT HISTORY
+        const chatsSnap = await db.ref('customerChats').limitToLast(60).once('value');
+        const chatsData = chatsSnap.val();
+        if (chatsData && Object.keys(chatsData).length > 0) {
+            await storageEngine.idbSet('chats', 'recent_chats', chatsData);
+            Object.values(chatsData).forEach(thread => {
+                if (thread.metadata?.avatarUrl) mediaUrlsToPrefetch.push(thread.metadata.avatarUrl);
+            });
+        }
+
+        // 5. ASYNC PREFETCH BINARY MEDIA INTO CACHESTORAGE (AVATARS & PHOTOS)
+        if (mediaUrlsToPrefetch.length > 0) {
+            storageEngine.prefetchMediaBatch(mediaUrlsToPrefetch);
+        }
+    } catch (err) {
+        console.warn('Background sync note:', err.message || err);
+    } finally {
+        backgroundSyncInProgress = false;
+    }
+}
+
 // FORCE RECONNECT FIREBASE WEBSOCKET ON APP RESUME
 export function forceReconnectFirebase() {
     if (isReconnecting) return;
     isReconnecting = true;
+    updateNetworkStatus('connecting');
 
     if (db) {
         try {
@@ -248,12 +344,16 @@ export function forceReconnectFirebase() {
                 if (roster && roster.checkAndTriggerAutoEndShift) {
                     roster.checkAndTriggerAutoEndShift();
                 }
+
+                runBackgroundPersistenceSync();
             }, 150);
         } catch (e) {
             isReconnecting = false;
+            updateNetworkStatus(false);
         }
     } else {
         isReconnecting = false;
+        updateNetworkStatus(false);
     }
 }
 
@@ -269,7 +369,7 @@ function handleAppVisibilityChange() {
     if (document.visibilityState === 'visible') {
         forceReconnectFirebase();
     } else {
-        updateNetworkStatus(false);
+        updateNetworkStatus('connecting');
     }
 }
 
@@ -289,13 +389,33 @@ setInterval(() => {
     }
 }, 4000);
 
+async function hydrateInstantLocalStores() {
+    try {
+        const cachedStores = await storageEngine.idbGet('stores', 'all_stores');
+        if (cachedStores && Object.keys(cachedStores).length > 0) {
+            if (customerStorefront.setStoresCache) {
+                customerStorefront.setStoresCache(cachedStores);
+            }
+        }
+
+        const cachedMenus = await storageEngine.idbGet('menus', 'all_menus');
+        if (cachedMenus && Object.keys(cachedMenus).length > 0) {
+            if (customerStorefront.setMenusCache) {
+                customerStorefront.setMenusCache(cachedMenus);
+            }
+        }
+    } catch (_) {}
+}
+
 function bootApp() {
     try {
         registerServiceWorker();
         updateNetworkStatus();
         initBatteryMonitor();
 
-        // 1. INSTANT LOCAL CACHE HYDRATION (Zero latency)
+        // 1. TIER 1: INSTANT LOCAL CACHE HYDRATION (ZERO LATENCY INDEXEDDB + LOCALSTORAGE)
+        hydrateInstantLocalStores();
+
         if (roster && roster.loadRosterCache) roster.loadRosterCache();
         if (roster && roster.updateRosterUI) roster.updateRosterUI();
         if (roster && roster.loadGlobalCateredList) roster.loadGlobalCateredList();
@@ -304,13 +424,17 @@ function bootApp() {
         if (directory && directory.loadDirectoryCache) directory.loadDirectoryCache();
         if (cart && cart.loadCartState) cart.loadCartState();
 
-        // 2. BACKGROUND FIREBASE SYNC
+        // 2. TIER 2: REAL-TIME FIREBASE EVENT BUS
         initRealtimeFirebaseListeners();
 
         if (commission && commission.fetchCommissionSettings) commission.fetchCommissionSettings();
         if (directory && directory.silentSyncDirectory) directory.silentSyncDirectory();
 
-        // Continuous precision check for Auto End Shift every 10 seconds in background
+        // 3. TIER 3: SILENT BACKGROUND SNAPSHOT PERSISTENCE DAEMON
+        setTimeout(() => {
+            runBackgroundPersistenceSync();
+        }, 1200);
+
         if (roster && roster.startAutoEndShiftScheduler) {
             roster.startAutoEndShiftScheduler();
         } else {
@@ -396,6 +520,7 @@ window.addEventListener('loginSuccess', () => {
     startBackgroundAudioPulse();
     requestWakeLock();
     initRealtimeFirebaseListeners();
+    runBackgroundPersistenceSync();
 });
 
 window.addEventListener('viewChanged', (e) => {
@@ -477,7 +602,6 @@ function initRealtimeFirebaseListeners() {
             if (commission && commission.refreshCommissionView) commission.refreshCommissionView();
         });
 
-        // ROSTER LISTENER GUARANTEES TELEGRAM_ID IS NEVER EMPTY
         db.ref('roster').on('value', (snapshot) => {
             const val = snapshot.val();
             if (val) {
@@ -486,6 +610,7 @@ function initRealtimeFirebaseListeners() {
                     telegramId: (item.telegramId || item.id || key).toString().trim(),
                     id: (item.telegramId || item.id || key).toString().trim()
                 }));
+                storageEngine.idbSet('roster', 'active_roster', val).catch(() => {});
             } else {
                 globalState.rosterMembers = [];
             }
@@ -529,7 +654,6 @@ function initRealtimeFirebaseListeners() {
             window.dispatchEvent(new Event('chatUpdated'));
         });
 
-        // PRESERVES UNIQUE FIREBASE PUSH ID FOR ADVANCED ORDERS
         db.ref('advancedOrders').on('value', (snapshot) => {
             const val = snapshot.val();
             globalState.globalAdvancedOrders = val 

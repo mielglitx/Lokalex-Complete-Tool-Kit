@@ -21,7 +21,7 @@
         </div>
     </div>
 
-    <!-- RIGHT: BATTERY INDICATOR, THEME CONTROLS & ONLINE PILL -->
+    <!-- RIGHT: BATTERY INDICATOR, THEME CONTROLS & COLOR-COORDINATED NETWORK INDICATOR -->
     <div class="flex items-center gap-1.5 shrink-0">
         <!-- GLOBAL BATTERY STATUS INDICATOR PILL -->
         <div id="header-battery-pill" class="hidden flex items-center gap-1 bg-gray-100 dark:bg-black/40 border border-gray-300 dark:border-gray-700/60 px-2 py-1 rounded-xl text-[10px] font-mono font-bold text-gray-700 dark:text-gray-300 transition-all select-none shrink-0" title="Device Battery Status">
@@ -42,10 +42,9 @@
             </button>
         </div>
 
-        <!-- NETWORK STATUS PILL (Only visible in Rider views) -->
-        <div id="network-status-pill" class="hidden flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold px-2 py-1 rounded-full transition-all duration-300 shrink-0">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span id="network-status-text">ONLINE</span>
+        <!-- COLOR-COORDINATED NETWORK STATUS INDICATOR (Only visible in Rider views) -->
+        <div id="network-status-pill" class="hidden flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/40 shadow-xs transition-all duration-300 shrink-0" title="Network: Online">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
         </div>
     </div>
 </header>
