@@ -1,6 +1,6 @@
 // src/features/auth/authRider.js
 import { appState } from '../../store/state.js';
-import { db } from '../../config/firebase.js';
+import { db, auth } from '../../config/firebase.js';
 import { showToast, unlockAudioContext } from '../../ui/notifications.js';
 import { fetchGCashDetails, openRiderPasswordSetupModal } from '../../ui/modals.js';
 import { renderViewUI } from '../../ui/router.js';
@@ -147,9 +147,29 @@ export async function executeRiderLoginSequence(idInput, cleanName, cleanUserTyp
         appState.lon = coords.lon;
         appState.gpsAccuracy = coords.accuracy;
 
+        // Set active role explicitly
+        localStorage.setItem('lokalex_active_role', 'rider');
         localStorage.setItem('telegramId', appState.telegramId);
         localStorage.setItem('riderName', appState.riderName);
         localStorage.setItem('userType', appState.userType || "");
+
+        // Purge any lingering customer or merchant credentials
+        const lingeringKeys = [
+            'lokalex_customer_fb_id', 'customerId', 'customerFacebookId',
+            'customerName', 'customerPhone', 'customerAvatarUrl',
+            'lokalex_customer_name', 'lokalex_customer_email', 'lokalex_customer_avatar',
+            'lokalex_customer_address', 'lokalex_customer_pin_coords',
+            'lokalex_merchant_account_id', 'lokalex_merchant_store_id',
+            'lokalex_merchant_store_name', 'lokalex_merchant_username',
+            'lokalex_merchant_avatar', 'merchantAccountId', 'merchantStoreId'
+        ];
+        lingeringKeys.forEach(k => localStorage.removeItem(k));
+
+        appState.customerFacebookId = null;
+        appState.customerName = null;
+        appState.merchantAccountId = null;
+        appState.merchantStoreId = null;
+
         showToast("Login Successful!");
 
         fetchGCashDetails();
@@ -170,6 +190,29 @@ export async function executeRiderLoginSequence(idInput, cleanName, cleanUserTyp
 
 export function logout() { 
     stopBackgroundRosterGpsTracker();
+
+    if (auth && typeof auth.signOut === 'function') {
+        auth.signOut().catch(() => {});
+    }
+
+    const sessionKeysToClear = [
+        'lokalex_active_role',
+        'telegramId', 'riderName', 'userType', 'riderPhotoUrl', 'lokalex_photo_url', 'lokalex_rider_phone',
+        'lokalex_customer_fb_id', 'customerId', 'customerFacebookId', 'customerName', 'customerPhone', 'customerAvatarUrl',
+        'lokalex_customer_name', 'lokalex_customer_email', 'lokalex_customer_avatar', 'lokalex_customer_address', 'lokalex_customer_pin_coords',
+        'lokalex_merchant_account_id', 'lokalex_merchant_store_id', 'lokalex_merchant_store_name', 'lokalex_merchant_username', 'lokalex_merchant_avatar',
+        'merchantAccountId', 'merchantStoreId'
+    ];
+    sessionKeysToClear.forEach(key => localStorage.removeItem(key));
+
+    appState.telegramId = null;
+    appState.riderName = null;
+    appState.userType = null;
+    appState.customerFacebookId = null;
+    appState.customerName = null;
+    appState.merchantAccountId = null;
+    appState.merchantStoreId = null;
+
     localStorage.clear(); 
     location.reload(); 
 }

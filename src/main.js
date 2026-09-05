@@ -413,7 +413,7 @@ function bootApp() {
         updateNetworkStatus();
         initBatteryMonitor();
 
-        // 1. TIER 1: INSTANT LOCAL CACHE HYDRATION (ZERO LATENCY INDEXEDDB + LOCALSTORAGE)
+        // 1. TIER 1: INSTANT LOCAL CACHE HYDRATION
         hydrateInstantLocalStores();
 
         if (roster && roster.loadRosterCache) roster.loadRosterCache();
@@ -458,20 +458,22 @@ function bootApp() {
             return; 
         }
 
+        // ROLE-GATED SESSION ROUTING
+        const activeUserRole = localStorage.getItem('lokalex_active_role');
         const savedCustomerFbId = localStorage.getItem('lokalex_customer_fb_id');
         const savedCustomerName = localStorage.getItem('lokalex_customer_name') || localStorage.getItem('customerName');
         const savedCustomerEmail = localStorage.getItem('lokalex_customer_email') || localStorage.getItem('customerPhone');
         const savedCustomerAvatar = localStorage.getItem('lokalex_customer_avatar') || localStorage.getItem('customerAvatarUrl');
 
-        if (appState.telegramId) {
+        if (appState.telegramId && (!activeUserRole || activeUserRole === 'rider')) {
             history.replaceState({ view: 'view-home' }, '', '#view-home');
             router.renderViewUI('view-home');
             startBackgroundAudioPulse();
             requestWakeLock();
-        } else if (appState.merchantAccountId && appState.merchantStoreId) {
+        } else if (appState.merchantAccountId && appState.merchantStoreId && activeUserRole === 'merchant') {
             history.replaceState({ view: 'view-store-hub' }, '', '#view-store-hub');
             router.renderViewUI('view-store-hub');
-        } else if (savedCustomerFbId) {
+        } else if (savedCustomerFbId && activeUserRole === 'customer') {
             appState.customerFacebookId = savedCustomerFbId;
             appState.customerName = savedCustomerName || "Customer";
 
@@ -494,6 +496,7 @@ function bootApp() {
             history.replaceState({ view: 'view-customer-home' }, '', '#view-customer-home');
             router.renderViewUI('view-customer-home');
         } else {
+            // Default to clean login screen if session is logged out or no active role exists
             history.replaceState({ view: 'view-login' }, '', '#view-login');
             router.renderViewUI('view-login');
         }

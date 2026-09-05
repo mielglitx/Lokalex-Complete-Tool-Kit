@@ -84,30 +84,42 @@ export async function updateStoreOpenStatus(storeId, isOpen) {
     showToast(isOpen ? "🟢 Store is now OPEN for orders" : "🔴 Store is now CLOSED");
 }
 
-export async function updateStoreProfile(storeId, { storeName, address }) {
+export async function updateStoreProfile(storeId, { storeName, address, commissionRate }) {
     if (!db || !storeId) return;
 
     const updates = {};
-    updates[`stores/${storeId}/storeName`] = storeName;
-    updates[`stores/${storeId}/address`] = address;
 
-    const accountId = appState.merchantAccountId || localStorage.getItem('lokalex_merchant_account_id');
-    if (accountId) {
-        updates[`storeAccounts/${accountId}/storeName`] = storeName;
+    if (storeName) {
+        updates[`stores/${storeId}/storeName`] = storeName;
+
+        const accountId = appState.merchantAccountId || localStorage.getItem('lokalex_merchant_account_id');
+        if (accountId) {
+            updates[`storeAccounts/${accountId}/storeName`] = storeName;
+        }
+
+        const dirCleanKey = storeName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        updates[`directory/stores/${dirCleanKey}/name`] = storeName;
+
+        appState.merchantStoreName = storeName;
+        localStorage.setItem('lokalex_merchant_store_name', storeName);
     }
 
-    const dirCleanKey = storeName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    updates[`directory/stores/${dirCleanKey}/name`] = storeName;
-    updates[`directory/stores/${dirCleanKey}/address`] = address;
-    updates[`directory/stores/${dirCleanKey}/rate`] = address;
+    if (address !== undefined) {
+        updates[`stores/${storeId}/address`] = address;
+        const dirName = storeName || appState.merchantStoreName || "store";
+        const dirCleanKey = dirName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        updates[`directory/stores/${dirCleanKey}/address`] = address;
+        updates[`directory/stores/${dirCleanKey}/rate`] = address;
+    }
+
+    if (commissionRate !== undefined && commissionRate !== null && commissionRate !== '' && !isNaN(parseFloat(commissionRate))) {
+        updates[`stores/${storeId}/commissionRate`] = parseFloat(commissionRate);
+    }
 
     await db.ref().update(updates);
 
-    appState.merchantStoreName = storeName;
-    localStorage.setItem('lokalex_merchant_store_name', storeName);
-
     showToast("✅ Store details updated!");
-    showSideNotification("STORE UPDATED", storeName, "fa-store", "text-orange-400", "border-orange-500");
+    showSideNotification("STORE UPDATED", storeName || appState.merchantStoreName || "Store", "fa-store", "text-orange-400", "border-orange-500");
 }
 
 export async function updateStoreLogo(storeId, logoUrl) {

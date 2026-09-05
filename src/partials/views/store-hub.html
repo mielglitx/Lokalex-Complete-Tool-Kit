@@ -17,42 +17,12 @@
         }
     </style>
 
-    <!-- STORE PROFILE & LIVE STATUS CARD -->
+    <!-- STORE LIVE STATUS & CONTROLS CARD -->
     <div class="bg-cardBg border border-gray-200 dark:border-gray-800 rounded-3xl p-4 shadow-sm flex flex-col gap-3">
-        <div class="flex justify-between items-start gap-2">
-            <div class="flex items-center gap-3 min-w-0 flex-1">
-                <!-- CLICKABLE STORE LOGO / AVATAR -->
-                <button type="button" onclick="window.openStoreIconModal && window.openStoreIconModal()" class="relative group shrink-0" title="Click to update Store Icon">
-                    <div id="merch-store-icon-container" class="w-12 h-12 rounded-2xl bg-orange-500/10 border border-orange-500/30 text-orange-600 dark:text-orange-400 flex items-center justify-center text-xl overflow-hidden shadow-inner relative">
-                        <img id="merch-store-avatar-img" src="" alt="Logo" class="hidden w-full h-full object-cover">
-                        <i id="merch-store-avatar-icon" class="fa-solid fa-shop"></i>
-                        <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-bold transition">
-                            <i class="fa-solid fa-camera"></i>
-                        </div>
-                    </div>
-                    <div class="absolute -bottom-1 -right-1 bg-orange-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[8px] border border-white dark:border-darkBg shadow-xs">
-                        <i class="fa-solid fa-pen"></i>
-                    </div>
-                </button>
-
-                <!-- STORE NAME, EDIT BUTTON, USERNAME & LOCATION -->
-                <div class="min-w-0 flex-1">
-                    <div class="flex items-center gap-1.5">
-                        <h2 id="merch-store-display-name" class="text-sm font-black text-gray-900 dark:text-white truncate">Loading Store...</h2>
-                        <button type="button" onclick="window.openEditStoreProfileModal && window.openEditStoreProfileModal()" class="text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 p-1 text-xs transition active:scale-95 shrink-0" title="Edit Store Name & Address">
-                            <i class="fa-solid fa-pen"></i>
-                        </button>
-                    </div>
-                    
-                    <p id="merch-store-username" class="text-[10px] text-gray-500 dark:text-gray-400 font-mono">@merchant</p>
-                    
-                    <!-- STORE LOCATION DISPLAY -->
-                    <div class="flex items-center gap-1 mt-0.5 text-[10px] text-gray-500 dark:text-gray-400 truncate">
-                        <i class="fa-solid fa-location-dot text-red-500 text-[10px] shrink-0"></i>
-                        <span id="merch-store-address-text" class="truncate font-medium">Walang address</span>
-                    </div>
-                </div>
-            </div>
+        <div class="flex justify-between items-center gap-2">
+            <span class="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                <i class="fa-solid fa-store text-orange-500"></i> Store Status & Controls
+            </span>
 
             <div class="flex items-center gap-1.5 shrink-0">
                 <!-- OPERATING HOURS SCHEDULER BUTTON -->
@@ -95,9 +65,6 @@
                 <span id="merch-total-cats-badge" class="bg-gray-100 dark:bg-darkBg px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-800 font-bold text-blue-600 dark:text-blue-400">0 Categories</span>
                 <span id="merch-sales-count" class="text-[9.5px] font-mono text-gray-500 hidden sm:inline">0 orders completed</span>
             </div>
-            <button onclick="window.merchantLogout && window.merchantLogout()" class="text-red-500 hover:text-red-700 dark:text-red-400/70 dark:hover:text-red-400 font-bold flex items-center gap-1 transition">
-                <i class="fa-solid fa-arrow-right-from-bracket"></i> Logout
-            </button>
         </div>
     </div>
 

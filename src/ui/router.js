@@ -30,8 +30,6 @@ export function syncHeaderAndWidgets(targetViewId) {
     const networkPill = document.getElementById('network-status-pill');
     const floatingChat = document.getElementById('floating-chat-container');
 
-    const isCustomer = targetViewId === 'view-customer-home' || (!appState.telegramId && !!localStorage.getItem('lokalex_customer_fb_id'));
-    const isMerchant = targetViewId === 'view-store-hub' || (!appState.telegramId && !!localStorage.getItem('lokalex_merchant_account_id'));
     const isLogin = targetViewId === 'view-login';
 
     if (isLogin) {
@@ -41,25 +39,12 @@ export function syncHeaderAndWidgets(targetViewId) {
     }
 
     if (appHeader) appHeader.classList.remove('hidden');
-
-    // UNIFIED HEADER: Always show the Welcome! (Username) profile button for all authenticated users
     if (userSection) userSection.classList.remove('hidden');
 
-    if (targetViewId === 'view-customer-home' || (isCustomer && targetViewId !== 'view-home')) {
-        // Customer Profile in Header
-        const custName = appState.customerName || localStorage.getItem('lokalex_customer_name') || "Customer";
-        const custAvatar = localStorage.getItem('lokalex_customer_avatar') || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=10B981&color=fff&bold=true&size=128`;
+    const activeRole = localStorage.getItem('lokalex_active_role');
 
-        if (avatarEl) avatarEl.src = custAvatar;
-        if (nameEl) nameEl.innerText = custName;
-        if (roleEl) roleEl.innerText = "Welcome!";
-        if (badgeIcon) badgeIcon.className = "fa-solid fa-pen";
-        if (userSection) userSection.title = "Click to edit customer account";
-
-        if (networkPill) networkPill.classList.add('hidden');
-        if (floatingChat) floatingChat.classList.add('hidden');
-    } else if (targetViewId === 'view-store-hub' || (isMerchant && targetViewId !== 'view-home')) {
-        // Merchant Profile in Header
+    // 1. MERCHANT VIEW / ROLE
+    if (targetViewId === 'view-store-hub' || (!appState.telegramId && activeRole === 'merchant')) {
         const storeName = appState.merchantStoreName || localStorage.getItem('lokalex_merchant_store_name') || "Merchant Store";
         const storeAvatar = localStorage.getItem('lokalex_merchant_avatar') || `https://ui-avatars.com/api/?name=${encodeURIComponent(storeName)}&background=ea580c&color=fff&bold=true&size=128`;
 
@@ -71,8 +56,23 @@ export function syncHeaderAndWidgets(targetViewId) {
 
         if (networkPill) networkPill.classList.add('hidden');
         if (floatingChat) floatingChat.classList.add('hidden');
-    } else {
-        // Rider Profile in Header
+    }
+    // 2. CUSTOMER VIEW / ROLE
+    else if (targetViewId === 'view-customer-home' || (!appState.telegramId && activeRole === 'customer')) {
+        const custName = appState.customerName || localStorage.getItem('lokalex_customer_name') || "Customer";
+        const custAvatar = localStorage.getItem('lokalex_customer_avatar') || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=10B981&color=fff&bold=true&size=128`;
+
+        if (avatarEl) avatarEl.src = custAvatar;
+        if (nameEl) nameEl.innerText = custName;
+        if (roleEl) roleEl.innerText = "Welcome!";
+        if (badgeIcon) badgeIcon.className = "fa-solid fa-pen";
+        if (userSection) userSection.title = "Click to edit customer account";
+
+        if (networkPill) networkPill.classList.add('hidden');
+        if (floatingChat) floatingChat.classList.add('hidden');
+    }
+    // 3. RIDER VIEW / ROLE
+    else {
         const riderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
         const riderAvatar = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=0284c7&color=ffffff&bold=true&size=128`;
 
@@ -146,8 +146,10 @@ export function goBack() {
     if (window.history.length > 1) {
         history.back();
     } else {
-        const isCustomer = !!localStorage.getItem('lokalex_customer_fb_id');
-        const isMerchant = !!localStorage.getItem('lokalex_merchant_account_id');
+        const activeRole = localStorage.getItem('lokalex_active_role');
+        const isCustomer = activeRole === 'customer' || (!appState.telegramId && !!localStorage.getItem('lokalex_customer_fb_id'));
+        const isMerchant = activeRole === 'merchant' || (!appState.telegramId && !!localStorage.getItem('lokalex_merchant_account_id'));
+        
         if (isMerchant) {
             switchView('view-store-hub', true);
         } else {
@@ -174,8 +176,10 @@ window.addEventListener('popstate', function(event) {
         if (event.state && event.state.view) {
             renderViewUI(event.state.view);
         } else {
-            const isCustomer = !!localStorage.getItem('lokalex_customer_fb_id');
-            const isMerchant = !!localStorage.getItem('lokalex_merchant_account_id');
+            const activeRole = localStorage.getItem('lokalex_active_role');
+            const isCustomer = activeRole === 'customer' || (!appState.telegramId && !!localStorage.getItem('lokalex_customer_fb_id'));
+            const isMerchant = activeRole === 'merchant' || (!appState.telegramId && !!localStorage.getItem('lokalex_merchant_account_id'));
+
             if (isMerchant) {
                 renderViewUI('view-store-hub');
             } else {

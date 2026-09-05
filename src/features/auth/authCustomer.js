@@ -557,10 +557,27 @@ export async function completePasswordReset() {
 }
 
 export function finalizeCustomerSession(uid, name, phone, avatarUrl) {
+    localStorage.setItem('lokalex_active_role', 'customer');
     localStorage.setItem('lokalex_customer_fb_id', uid);
     localStorage.setItem('lokalex_customer_name', name);
     localStorage.setItem('lokalex_customer_email', phone);
     localStorage.setItem('lokalex_customer_avatar', avatarUrl);
+
+    // Clear conflicting rider and merchant credentials
+    const conflictingKeys = [
+        'telegramId', 'riderName', 'userType', 'riderPhotoUrl',
+        'lokalex_photo_url', 'lokalex_rider_phone',
+        'lokalex_merchant_account_id', 'lokalex_merchant_store_id',
+        'lokalex_merchant_store_name', 'lokalex_merchant_username',
+        'lokalex_merchant_avatar', 'merchantAccountId', 'merchantStoreId'
+    ];
+    conflictingKeys.forEach(key => localStorage.removeItem(key));
+
+    appState.telegramId = null;
+    appState.riderName = null;
+    appState.userType = null;
+    appState.merchantAccountId = null;
+    appState.merchantStoreId = null;
 
     appState.customerFacebookId = uid;
     appState.customerName = name;

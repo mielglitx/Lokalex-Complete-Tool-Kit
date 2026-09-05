@@ -137,12 +137,10 @@ export function initCustomerStorefront() {
         renderStoresGrid();
     });
 
-    let custId = localStorage.getItem('lokalex_customer_fb_id') || localStorage.getItem('customerId') || appState.customerFacebookId || appState.customerId;
-    if (!custId) {
-        custId = `CUST_${Date.now().toString(36).toUpperCase()}`;
-        localStorage.setItem('lokalex_customer_fb_id', custId);
-        appState.customerFacebookId = custId;
-    }
+    // Only load verified customer ID from storage; do not auto-save guest IDs into localStorage
+    const custId = localStorage.getItem('lokalex_customer_fb_id') || 
+                   localStorage.getItem('customerId') || 
+                   appState.customerFacebookId;
 
     if (custId) {
         const cleanCustId = cleanFirebasePathKey(custId);
