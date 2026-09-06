@@ -44,7 +44,8 @@ export function extractFirstNameFromOcrText(rawText) {
         "unread", "done", "spam", "follow up", "sent by", "transfer", "completed",
         "details", "view", "edit", "call", "video", "profile", "thursday", "friday",
         "saturday", "sunday", "monday", "tuesday", "wednesday", "thu", "fri", "sat",
-        "sun", "mon", "tue", "wed", "reply in messenger", "this is a reply", "an ad"
+        "sun", "mon", "tue", "wed", "reply in messenger", "this is a reply", "an ad",
+        "オンライン中", "アクティブ", "メッセージ", "連絡先", "チャット", "検索", "プロフィール"
     ];
 
     const lines = rawText
@@ -56,22 +57,25 @@ export function extractFirstNameFromOcrText(rawText) {
         const lower = line.toLowerCase();
         
         if (noiseWords.some(w => lower.includes(w))) continue;
-        if (!/[a-zA-Z]/.test(line)) continue;
+        if (!/[\p{L}]/u.test(line)) continue;
         if (/^\d{1,2}:\d{2}/.test(line)) continue;
         if (/^\d+$/.test(line)) continue;
 
-        const cleanedLine = line.replace(/^[^a-zA-Z0-9]+/, '').trim();
+        const cleanedLine = line.replace(/^[^\p{L}\p{N}]+/u, '').replace(/[^\p{L}\p{N}]+$/u, '').trim();
         if (cleanedLine.length < 2) continue;
 
         const words = cleanedLine
             .split(/\s+/)
-            .map(w => w.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, ''))
+            .map(w => w.replace(/[^\p{L}\p{N}'-]/gu, '').trim())
             .filter(Boolean);
 
         if (words.length > 0) {
             let chosenWord = "";
+            const isAsianScript = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7AF]/.test(words[0]);
 
-            if (words.length >= 2 && words[0].length <= 2 && words[1].length >= 3) {
+            if (isAsianScript) {
+                chosenWord = words[0];
+            } else if (words.length >= 2 && words[0].length <= 2 && words[1].length >= 3) {
                 chosenWord = words[1];
             } else if (words.length >= 3 && words[0].length <= 2) {
                 chosenWord = words[1];
@@ -79,8 +83,11 @@ export function extractFirstNameFromOcrText(rawText) {
                 chosenWord = words[0];
             }
 
-            if (chosenWord && chosenWord.length >= 2) {
-                return chosenWord.charAt(0).toUpperCase() + chosenWord.slice(1).toLowerCase();
+            if (chosenWord && chosenWord.length >= 1) {
+                if (/[a-zA-Z]/.test(chosenWord)) {
+                    return chosenWord.charAt(0).toUpperCase() + chosenWord.slice(1).toLowerCase();
+                }
+                return chosenWord;
             }
         }
     }
@@ -97,7 +104,7 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
     const selectEl = document.getElementById(targetSelectId);
 
     if (statusEl) statusEl.classList.remove('hidden');
-    showToast("⏳ Sinusuri ang Messenger header para sa pangalan...");
+    showToast("⏳ Sinusuri ang Messenger header (English & Japanese)...");
 
     try {
         await ensureTesseractLoaded();
@@ -136,9 +143,25 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
 
         const imgData = ctx.getImageData(0, 0, roiCanvas.width, roiCanvas.height);
         const d = imgData.data;
+
+        // Detect whether the cropped header is dark mode or light mode
+        let darkPixelCount = 0;
+        const totalPixels = d.length / 4;
         for (let i = 0; i < d.length; i += 4) {
             const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-            const val = gray < 110 ? 0 : 255;
+            if (gray < 128) darkPixelCount++;
+        }
+        const isDarkTheme = darkPixelCount > totalPixels * 0.5;
+
+        // Binarize so text is always crisp black on pure white
+        for (let i = 0; i < d.length; i += 4) {
+            const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            let val;
+            if (isDarkTheme) {
+                val = gray > 135 ? 0 : 255; // White text becomes black, dark background becomes white
+            } else {
+                val = gray < 115 ? 0 : 255; // Dark text becomes black, light background becomes white
+            }
             d[i] = val;
             d[i + 1] = val;
             d[i + 2] = val;
@@ -146,16 +169,31 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
         ctx.putImageData(imgData, 0, 0);
 
         let rawText = "";
-        if (window.Tesseract && typeof window.Tesseract.recognize === 'function') {
-            const ret = await window.Tesseract.recognize(roiCanvas, 'eng', {
-                logger: () => {}
-            });
-            rawText = ret?.data?.text || "";
-        } else if (window.Tesseract && typeof window.Tesseract.createWorker === 'function') {
-            const worker = await window.Tesseract.createWorker('eng');
-            const ret = await worker.recognize(roiCanvas);
-            await worker.terminate();
-            rawText = ret?.data?.text || "";
+
+        // Execute recognition using dual English + Japanese language model with automatic fallback
+        try {
+            if (window.Tesseract && typeof window.Tesseract.recognize === 'function') {
+                const ret = await window.Tesseract.recognize(roiCanvas, 'eng+jpn', {
+                    logger: () => {}
+                });
+                rawText = ret?.data?.text || "";
+            } else if (window.Tesseract && typeof window.Tesseract.createWorker === 'function') {
+                const worker = await window.Tesseract.createWorker('eng+jpn');
+                const ret = await worker.recognize(roiCanvas);
+                await worker.terminate();
+                rawText = ret?.data?.text || "";
+            }
+        } catch (dualErr) {
+            console.warn("Dual eng+jpn OCR failed, falling back to eng:", dualErr);
+            if (window.Tesseract && typeof window.Tesseract.recognize === 'function') {
+                const ret = await window.Tesseract.recognize(roiCanvas, 'eng', { logger: () => {} });
+                rawText = ret?.data?.text || "";
+            } else if (window.Tesseract && typeof window.Tesseract.createWorker === 'function') {
+                const worker = await window.Tesseract.createWorker('eng');
+                const ret = await worker.recognize(roiCanvas);
+                await worker.terminate();
+                rawText = ret?.data?.text || "";
+            }
         }
 
         const detectedName = extractFirstNameFromOcrText(rawText);
