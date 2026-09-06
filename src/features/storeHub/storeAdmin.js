@@ -166,11 +166,11 @@ export async function submitCreateStoreAccount() {
             type: 'store_credentials'
         });
 
-        // Direct HTTP Dispatch via Resend API using Environment Variable
+        // Direct HTTP Dispatch via Resend API using Environment Variable with Detailed Logging
         try {
             const emailApiKey = import.meta.env.VITE_RESEND_API_KEY;
             
-            await fetch('https://api.resend.com/emails', {
+            const resendResponse = await fetch('https://api.resend.com/emails', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -183,8 +183,15 @@ export async function submitCreateStoreAccount() {
                     text: emailBody
                 })
             });
+
+            const resendData = await resendResponse.json();
+            if (!resendResponse.ok) {
+                console.error("Resend API Error Response:", resendData);
+            } else {
+                console.log("Resend API Success:", resendData);
+            }
         } catch (emailErr) {
-            console.warn("Resend API dispatch warning:", emailErr);
+            console.error("Resend API network/dispatch exception:", emailErr);
         }
 
         showToast(`🎉 Merchant Store account for [${storeName}] created! Email dispatched.`);

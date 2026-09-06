@@ -9,7 +9,8 @@ import { populateCateringCustomerDropdown } from '../chat/index.js';
 import { 
     parseQueueTime, 
     isAdmin, 
-    canManageRoster, 
+    canManageRoster,
+    hasTlPermission,
     canForceCaterTarget,
     archiveRiderCateringIfNeeded,
     saveRosterCache 
@@ -73,7 +74,7 @@ export function toggleAdminControls(enabled) {
         globalState.adminControlsEnabled = false;
         const toggle = document.getElementById('admin-controls-toggle');
         if (toggle) toggle.checked = false;
-        showToast("⚠️ Unauthorized: Only Admin or Team Lead (TL) can enable Admin Controls.");
+        showToast("⚠️ Unauthorized: Only Admin or authorized Team Lead (TL) can enable Admin Controls.");
         updateRosterUI();
         return;
     }
@@ -85,8 +86,8 @@ export function toggleAdminControls(enabled) {
 
 // OPEN ADMIN FORCE CATERING MODAL
 export function openAdminCateringModal(id, name) {
-    if (!canManageRoster()) {
-        return showToast("⚠️ Unauthorized: Admin or TL access required.");
+    if (!hasTlPermission('canForceCater')) {
+        return showToast("⚠️ Unauthorized: You do not have permission to Force Cater.");
     }
 
     pendingAdminTarget = { id, name };
@@ -114,8 +115,8 @@ export function openAdminCateringModal(id, name) {
 }
 
 export async function submitAdminForceCatering() {
-    if (!canManageRoster()) {
-        return showToast("⚠️ Unauthorized: Admin or TL access required.");
+    if (!hasTlPermission('canForceCater')) {
+        return showToast("⚠️ Unauthorized: You do not have permission to Force Cater.");
     }
 
     const idInput = document.getElementById('admin-cater-target-rider-id');
@@ -249,8 +250,16 @@ export async function submitAdminForceCatering() {
 
 // ADMIN FORCE STATUS
 export async function adminForceStatus(id, name, actionValue) {
-    if (!canManageRoster()) {
-        return showToast("⚠️ Unauthorized: Admin or TL access required.");
+    if (actionValue === 'Catering') {
+        if (!hasTlPermission('canForceCater')) {
+            return showToast("⚠️ Unauthorized: You do not have permission to Force Cater.");
+        }
+        openAdminCateringModal(id, name);
+        return;
+    }
+
+    if (!hasTlPermission('canForceStatus')) {
+        return showToast("⚠️ Unauthorized: You do not have permission to Force Status.");
     }
 
     const rosterMembers = globalState.rosterMembers || [];
@@ -258,15 +267,13 @@ export async function adminForceStatus(id, name, actionValue) {
     const targetType = targetRecord ? targetRecord.userType : "";
 
     if (!canForceCaterTarget(targetType)) {
-        return showToast("⚠️ TL cannot force cater an Admin or TL.");
-    }
-
-    if (actionValue === 'Catering') {
-        openAdminCateringModal(id, name);
-        return;
+        return showToast("⚠️ TL cannot modify status of an Admin or TL.");
     }
 
     if (actionValue === 'VoidActive') {
+        if (!hasTlPermission('canVoidCustomer')) {
+            return showToast("⚠️ Unauthorized: You do not have permission to Void Active Orders.");
+        }
         openSlideDeleteModal(`Void Order for ${name}?`, `Sigurado ka bang nais i-void ang active order ni ${name}? Malilipat sya sa #1 SPOT ng Available queue.`, async () => {
             const topQueueTime = getTopQueueTime();
             if (db) {
@@ -315,8 +322,8 @@ export async function adminForceStatus(id, name, actionValue) {
 
 // ADMIN VOID SPECIFIC CATERING CUSTOMER
 export async function adminVoidSpecificCustomer(targetId, targetName, custNameToVoid) {
-    if (!canManageRoster()) {
-        return showToast("⚠️ Unauthorized: Admin or TL access required.");
+    if (!hasTlPermission('canVoidCustomer')) {
+        return showToast("⚠️ Unauthorized: You do not have permission to Void Active Customers.");
     }
 
     if (!targetId || !custNameToVoid) return;
@@ -337,7 +344,7 @@ export async function adminVoidSpecificCustomer(targetId, targetName, custNameTo
     });
 }
 
-// ADMIN VOID COMPLETED CATERED RECORD & DUAL LOGGING REMOVAL
+// ADMIN VOID COMPLETED CATERED RECORD & DUAL LOGGING REMOVAL (STRICT ADMIN ONLY)
 export function promptVoidCustomer(riderName, customerName, completedDate = "", startTime = "", transactionId = "") {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
@@ -442,8 +449,8 @@ export async function executeVoidCateredCustomer(riderName, customerName, comple
 }
 
 export function adminShiftRiderQueue(riderId, moveAction) {
-    if (!canManageRoster()) {
-        return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!hasTlPermission('canShiftQueue')) {
+        return showToast("⚠️ Unauthorized: You do not have permission to Shift Lineup.");
     }
 
     const availableRiders = globalState.rosterMembers ? globalState.rosterMembers.filter(m => m.status === 'Available').sort((a,b) => parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime)) : [];
@@ -470,8 +477,8 @@ export function adminShiftRiderQueue(riderId, moveAction) {
 }
 
 export async function forceAllEndShift() {
-    if (!canManageRoster()) {
-        return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!hasTlPermission('canEndAllShifts')) {
+        return showToast("⚠️ Unauthorized: You do not have permission to Force End Shift for all riders.");
     }
 
     openSlideDeleteModal("Sigurado ka bang nais mong i-force end shift ang lahat ng riders?", async () => {

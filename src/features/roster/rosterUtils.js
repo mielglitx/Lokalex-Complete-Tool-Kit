@@ -105,13 +105,86 @@ export function isTL() {
     return validTlTypes.includes(t);
 }
 
+// Check granular permissions for Team Leads
+export function hasTlPermission(permissionKey) {
+    if (isAdmin()) return true;
+    if (!isTL()) return false;
+
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+    const rosterMembers = globalState.rosterMembers || [];
+
+    const myRecord = rosterMembers.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        return (myId && mId === myId) || (myName && mName === myName);
+    });
+
+    const perms = myRecord?.tlPermissions || {};
+    if (perms[permissionKey] !== undefined) {
+        return perms[permissionKey] === true;
+    }
+
+    // Fallback to legacy master tlAdminPower if granular perms not yet explicitly set
+    if (myRecord && myRecord.tlAdminPower !== undefined) {
+        return myRecord.tlAdminPower === true;
+    }
+
+    const cachedPermsStr = localStorage.getItem(`tl_permissions_${myId}`);
+    if (cachedPermsStr) {
+        try {
+            const parsed = JSON.parse(cachedPermsStr);
+            if (parsed && parsed[permissionKey] !== undefined) {
+                return parsed[permissionKey] === true;
+            }
+        } catch(e) {}
+    }
+
+    const cachedPower = localStorage.getItem(`tl_admin_power_${myId}`);
+    if (cachedPower !== null) {
+        return cachedPower === 'true';
+    }
+
+    return false;
+}
+
 export function canManageRoster() {
-    return isAdmin() || isTL();
+    if (isAdmin()) return true;
+
+    if (isTL()) {
+        const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+        const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+        const rosterMembers = globalState.rosterMembers || [];
+
+        const myRecord = rosterMembers.find(m => {
+            const mId = (m.telegramId || m.id || "").toString().trim();
+            const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+            return (myId && mId === myId) || (myName && mName === myName);
+        });
+
+        const perms = myRecord?.tlPermissions || {};
+        const hasAnyPermission = Object.values(perms).some(val => val === true);
+        if (hasAnyPermission) return true;
+
+        if (myRecord && myRecord.tlAdminPower !== undefined) {
+            return myRecord.tlAdminPower === true;
+        }
+
+        const cachedPower = localStorage.getItem(`tl_admin_power_${myId}`);
+        if (cachedPower !== null) {
+            return cachedPower === 'true';
+        }
+
+        return false;
+    }
+
+    return false;
 }
 
 export function canForceCaterTarget(targetType) {
     if (isAdmin()) return true;
     if (isTL()) {
+        if (!hasTlPermission('canForceCater')) return false;
         const t = (targetType || "").toString().toLowerCase().trim();
         const adminTypes = ['admin', 'owner', 'manager', 'superadmin', 'administrator', 'tl', 'lead', 'teamlead', 'leader'];
         return !adminTypes.includes(t);
