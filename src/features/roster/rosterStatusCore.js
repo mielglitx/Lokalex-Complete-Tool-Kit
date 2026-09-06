@@ -48,7 +48,12 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
         newQueueTime = maxTime + 1000;
     }
 
-    await updateRosterStatusData(status, "", "", newQueueTime, tId, tName, [], recordLogin, locationLink);
+    let extraData = {};
+    if (status === 'Available') {
+        extraData = { forcedCaters: null };
+    }
+
+    await updateRosterStatusData(status, "", "", newQueueTime, tId, tName, [], recordLogin, locationLink, extraData);
 }
 
 export async function updateRosterStatusData(status, customerName, startTime, queueTime = 0, specificId = null, specificName = null, completedHistory = [], recordLogin = false, locationLink = "", extraData = {}) {
@@ -61,7 +66,8 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     const existingRec = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === tId);
     const photoUrl = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || existingRec?.photoUrl || "";
 
-    const currentForcedCaters = extraData.forcedCaters || existingRec?.forcedCaters || null;
+    const hasForcedCaters = extraData.forcedCaters && Object.keys(extraData.forcedCaters).length > 0;
+    const currentForcedCaters = hasForcedCaters ? extraData.forcedCaters : (status === 'Available' ? null : existingRec?.forcedCaters || null);
 
     const rosterData = {
         telegramId: tId.toString(),
@@ -78,12 +84,9 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         lastActiveTimestamp: nowTimestamp,
         lat: appState.lat || 0,
         lng: appState.lon || 0,
-        ...extraData
+        ...extraData,
+        forcedCaters: currentForcedCaters
     };
-
-    if (currentForcedCaters && status === 'Catering') {
-        rosterData.forcedCaters = currentForcedCaters;
-    }
 
     if (!globalState.rosterMembers) globalState.rosterMembers = [];
     const existingIdx = globalState.rosterMembers.findIndex(m => (m.telegramId || m.id || "").toString() === tId);
@@ -91,7 +94,7 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         globalState.rosterMembers[existingIdx] = {
             ...globalState.rosterMembers[existingIdx],
             ...rosterData,
-            forcedCaters: currentForcedCaters || globalState.rosterMembers[existingIdx].forcedCaters || null
+            forcedCaters: currentForcedCaters
         };
     } else {
         globalState.rosterMembers.push(rosterData);

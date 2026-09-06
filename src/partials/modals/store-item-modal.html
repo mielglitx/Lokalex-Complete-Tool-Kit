@@ -1,99 +1,157 @@
 <!-- src/partials/modals/store-item-modal.html -->
 <div id="store-item-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-cardBg border border-gray-800 w-full max-w-md rounded-3xl p-5 shadow-2xl flex flex-col gap-4 max-h-[92vh] overflow-y-auto">
+    <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-md rounded-3xl p-5 shadow-2xl flex flex-col gap-4 max-h-[92vh] overflow-y-auto">
         <!-- HEADER -->
-        <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
             <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-sm font-bold">
+                <div class="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm font-bold">
                     <i class="fa-solid fa-burger"></i>
                 </div>
                 <div>
-                    <h3 id="item-modal-title" class="text-sm font-black text-white">Add Menu Item</h3>
-                    <p class="text-[10px] text-gray-400">Configure item details, sizes, and add-ons</p>
+                    <h3 id="item-modal-title" class="text-sm font-black text-gray-900 dark:text-white">Add Menu Item</h3>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Configure item details, photos, sizes, and add-ons</p>
                 </div>
             </div>
-            <button onclick="window.closeItemEditorModal && window.closeItemEditorModal()" class="text-gray-400 hover:text-white p-1 text-sm transition">
+            <button onclick="window.closeItemEditorModal && window.closeItemEditorModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
 
-        <!-- HIDDEN EDIT ID -->
+        <!-- HIDDEN EDIT ID & STAGED IMAGE DATA -->
         <input type="hidden" id="item-edit-id" value="">
+        <input type="hidden" id="item-staged-image-data" value="">
 
         <!-- BASIC DETAILS FORM -->
         <div class="flex flex-col gap-3 text-xs">
-            <!-- Item Name -->
-            <div>
-                <label class="text-[10px] text-gray-400 font-bold uppercase">Item Name *</label>
-                <input type="text" id="item-input-name" placeholder="e.g. Brown Sugar Boba Milk Tea" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold mt-1">
-            </div>
-
-            <div class="grid grid-cols-2 gap-2">
-                <!-- Base Price -->
-                <div>
-                    <label class="text-[10px] text-gray-400 font-bold uppercase">Base Price (₱) *</label>
-                    <input type="number" id="item-input-price" step="0.01" min="0" placeholder="85.00" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-emerald-400 font-bold font-mono mt-1">
+            <!-- ITEM PHOTO UPLOAD WITH LIVE PREVIEW -->
+            <div class="flex flex-col items-center justify-center gap-2 bg-gray-50 dark:bg-black/30 p-3 rounded-2xl border border-gray-200 dark:border-gray-800">
+                <div class="w-24 h-24 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 overflow-hidden flex items-center justify-center shadow-inner relative">
+                    <img id="item-modal-preview-img" src="" alt="Preview" class="hidden w-full h-full object-cover">
+                    <i id="item-modal-preview-icon" class="fa-solid fa-utensils text-emerald-500 text-2xl"></i>
                 </div>
 
-                <!-- Category -->
+                <input type="file" id="item-photo-file-input" accept="image/*" class="hidden" onchange="window.handleItemPhotoFileSelected && window.handleItemPhotoFileSelected(event)">
+
+                <div class="flex items-center gap-2 w-full">
+                    <button type="button" onclick="document.getElementById('item-photo-file-input')?.click()" class="flex-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 dark:bg-emerald-600/20 dark:hover:bg-emerald-600 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:text-emerald-800 dark:hover:text-white py-2 px-3 rounded-xl font-bold transition active:scale-95 flex items-center justify-center gap-1.5 text-xs">
+                        <i class="fa-solid fa-camera"></i> Upload Photo / Camera
+                    </button>
+                    <button type="button" onclick="window.clearItemPhoto && window.clearItemPhoto()" class="bg-gray-100 hover:bg-gray-200 text-red-600 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-red-400 p-2 rounded-xl text-xs transition active:scale-95" title="Remove Photo">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+
+                <div class="w-full">
+                    <input type="url" id="item-input-image" oninput="window.onItemImageUrlInput && window.onItemImageUrlInput(this.value)" placeholder="or paste image URL (https://...)" class="w-full bg-inputBg text-[10px] rounded-xl p-2 border border-gray-300 dark:border-gray-700 outline-none text-blue-600 dark:text-blue-400 font-mono">
+                </div>
+            </div>
+
+            <!-- Item Name -->
+            <div>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Item Name *</label>
+                <input type="text" id="item-input-name" placeholder="e.g. Brown Sugar Boba Milk Tea" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold mt-1">
+            </div>
+
+            <!-- PRICING & CATEGORY GRID -->
+            <div class="grid grid-cols-3 gap-2">
+                <!-- Regular Base Menu Price -->
                 <div>
-                    <label class="text-[10px] text-gray-400 font-bold uppercase">Category *</label>
-                    <select id="item-input-category" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold mt-1 cursor-pointer">
+                    <label id="item-label-price" class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Menu ₱ *</label>
+                    <div class="relative mt-1">
+                        <input type="number" id="item-input-price" step="0.01" min="0" placeholder="85.00" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-emerald-600 dark:text-emerald-400 font-bold font-mono transition">
+                        <div id="item-price-void-badge" class="hidden absolute inset-0 bg-gray-100/90 dark:bg-gray-800/90 rounded-xl flex items-center justify-center px-1 text-[9px] font-bold text-amber-600 dark:text-amber-400 border border-amber-500/40 backdrop-blur-xs select-none">
+                            <span>Voided</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Add-on Price Override -->
+                <div>
+                    <label class="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase">Add-on ₱</label>
+                    <input type="number" id="item-input-addon-price" step="0.01" min="0" placeholder="0.00 (Opt)" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-amber-300 dark:border-amber-700/60 outline-none text-amber-600 dark:text-amber-400 font-bold font-mono mt-1" title="Price when selected as an add-on in a package (leave blank to match Menu ₱)">
+                </div>
+
+                <!-- Category with Quick Inline Add -->
+                <div>
+                    <div class="flex justify-between items-center">
+                        <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Category *</label>
+                        <button type="button" onclick="window.promptQuickAddCategory && window.promptQuickAddCategory()" class="text-[9px] text-orange-600 dark:text-orange-400 hover:underline font-bold">+ New</button>
+                    </div>
+                    <select id="item-input-category" onchange="window.updateAddonsSectionState && window.updateAddonsSectionState()" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold mt-1 cursor-pointer truncate">
                         <option value="General">General</option>
                     </select>
                 </div>
             </div>
 
-            <!-- Subcategory -->
-            <div>
-                <label class="text-[10px] text-gray-400 font-bold uppercase">Subcategory (Optional)</label>
-                <input type="text" id="item-input-subcategory" placeholder="e.g. Brown Sugar Series / Solo Meals" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1">
-            </div>
+            <!-- STANDALONE VISIBILITY TOGGLE (PREVENTS BUYING P0 COMBO DRINKS STANDALONE) -->
+            <label class="flex items-center gap-2.5 bg-gray-50 dark:bg-black/30 p-2.5 rounded-2xl border border-gray-200 dark:border-gray-800 cursor-pointer select-none">
+                <input type="checkbox" id="item-input-is-addon-only" class="w-4 h-4 accent-amber-500 rounded">
+                <div>
+                    <span class="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                        <i class="fa-solid fa-eye-slash text-amber-500 text-[10px]"></i> Add-on Only (Hide from Standalone Menu)
+                    </span>
+                    <p class="text-[9.5px] text-gray-500 dark:text-gray-400 leading-tight">
+                        Check this if this item is only available as a meal add-on/package option and cannot be bought by itself.
+                    </p>
+                </div>
+            </label>
 
             <!-- Description -->
             <div>
-                <label class="text-[10px] text-gray-400 font-bold uppercase">Description</label>
-                <textarea id="item-input-desc" rows="2" placeholder="Item ingredients, flavors, or serving notes..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white mt-1"></textarea>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Description</label>
+                <textarea id="item-input-desc" rows="2" placeholder="Item ingredients, flavors, or serving notes..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1"></textarea>
             </div>
 
-            <!-- Image URL -->
-            <div>
-                <label class="text-[10px] text-gray-400 font-bold uppercase">Image URL (Optional)</label>
-                <input type="url" id="item-input-image" placeholder="https://image-link.com/photo.jpg" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-blue-400 font-mono text-[11px] mt-1">
-            </div>
-
-            <!-- 1. OPTIONAL UPGRADES: SIZES / UPSIZES (SINGLE CHOICE) -->
-            <div class="bg-black/40 border border-gray-800 p-3 rounded-2xl flex flex-col gap-2">
+            <!-- 1. SIZES OPTIONS (VOIDS BASE PRICE WHEN ADDED) -->
+            <div class="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-gray-800 p-3 rounded-2xl flex flex-col gap-2">
                 <div class="flex justify-between items-center">
-                    <span class="text-[11px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1">
-                        <i class="fa-solid fa-maximize"></i> Sizes / Upsize Options
+                    <span class="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                        <i class="fa-solid fa-maximize"></i> Sizes / Standalone Size Prices
                     </span>
-                    <button type="button" onclick="window.addSizeVariantRow && window.addSizeVariantRow()" class="text-[10px] text-blue-400 hover:text-blue-300 font-bold underline">
+                    <button type="button" onclick="window.addSizeVariantRow && window.addSizeVariantRow()" class="text-[10px] text-blue-600 dark:text-blue-400 hover:underline font-bold">
                         + Add Size
                     </button>
                 </div>
-                <p class="text-[10px] text-gray-400">Single selection sizes with price differences (e.g. Large +₱20.00)</p>
+                <p class="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">
+                    Adding sizes will automatically void Base Price. You can specify a separate Add-on price for each size if upgraded in a package.
+                </p>
 
                 <div id="item-sizes-container" class="flex flex-col gap-1.5 mt-1">
                     <!-- Dynamic Size Rows -->
                 </div>
             </div>
 
-            <!-- 2. OPTIONAL UPGRADES: ADD-ONS (MULTI CHOICE) -->
-            <div class="bg-black/40 border border-gray-800 p-3 rounded-2xl flex flex-col gap-2">
-                <div class="flex justify-between items-center">
-                    <span class="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1">
-                        <i class="fa-solid fa-plus"></i> Add-ons / Extras
+            <!-- 2. ADD-ONS / EXTRAS: CATEGORY-GROUPED CHECKLISTS WITH RULES -->
+            <div id="item-addons-section" class="flex flex-col gap-2.5 transition">
+                <div class="flex justify-between items-center px-1">
+                    <span class="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                        <i class="fa-solid fa-plus"></i> Add-ons & Extras Setup
                     </span>
-                    <button type="button" onclick="window.addAddonRow && window.addAddonRow()" class="text-[10px] text-amber-400 hover:text-amber-300 font-bold underline">
-                        + Add Extra
+                    <button type="button" onclick="window.addCustomAddonRow && window.addCustomAddonRow()" class="text-[10px] text-amber-600 dark:text-amber-400 hover:underline font-bold">
+                        + Custom Extra
                     </button>
                 </div>
-                <p class="text-[10px] text-gray-400">Add-on options customers can add (e.g. Extra Cheese +₱15.00)</p>
 
-                <div id="item-addons-container" class="flex flex-col gap-1.5 mt-1">
-                    <!-- Dynamic Addon Rows -->
+                <!-- DYNAMIC ADD-ON CATEGORY GROUPS CONTAINER -->
+                <div id="item-addon-groups-container" class="flex flex-col gap-2.5">
+                    <!-- Rendered by storeMenuItemEditor.js -->
                 </div>
+
+                <!-- CUSTOM ONE-OFF ADD-ONS CONTAINER -->
+                <div id="item-custom-addons-wrapper" class="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-gray-800 p-3 rounded-2xl flex flex-col gap-1.5">
+                    <span class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase">One-Off Custom Extras:</span>
+                    <div id="item-addons-container" class="flex flex-col gap-1.5 mt-0.5">
+                        <!-- Dynamic Addon Rows -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- DISABLED BANNER FOR ITEMS INSIDE AN ADD-ON CATEGORY TO PREVENT RECURSIVE LOOPS -->
+            <div id="item-addons-disabled-banner" class="hidden bg-gray-50 dark:bg-black/30 border border-dashed border-gray-300 dark:border-gray-800 p-3.5 rounded-2xl flex items-center justify-between gap-2 text-gray-400 dark:text-gray-500 select-none">
+                <span class="text-[11px] font-bold flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                    <i class="fa-solid fa-ban text-amber-500"></i> Add-ons / Extras Disabled
+                </span>
+                <span class="text-[9.5px] italic text-right text-gray-400 dark:text-gray-500">Items in this category cannot have sub-addons</span>
             </div>
 
             <!-- SUBMIT BUTTON -->

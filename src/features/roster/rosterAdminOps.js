@@ -183,14 +183,14 @@ export async function submitAdminForceCatering() {
     const modalGeneral = document.getElementById('catering-modal');
     if (modalGeneral) modalGeneral.classList.add('hidden');
 
+    let forcedCatersMap = targetRecord.forcedCaters ? { ...targetRecord.forcedCaters } : {};
     const forcedPayload = {
         customerName: custName,
         forcedBy: adminName,
         timestamp: Date.now()
     };
-
-    if (!targetRecord.forcedCaters) targetRecord.forcedCaters = {};
-    targetRecord.forcedCaters[cleanCustKey] = forcedPayload;
+    forcedCatersMap[cleanCustKey] = forcedPayload;
+    targetRecord.forcedCaters = forcedCatersMap;
 
     if (db && targetId && cleanCustKey) {
         await db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
@@ -230,7 +230,7 @@ export async function submitAdminForceCatering() {
         [],
         false,
         "",
-        { forcedCaters: targetRecord.forcedCaters }
+        { forcedCaters: forcedCatersMap }
     );
 
     if (penaltyMins > 0 && db && targetId) {
@@ -273,9 +273,9 @@ export async function adminForceStatus(id, name, actionValue) {
                 db.ref(`roster/${id}/forcedCaters`).remove().catch(() => {});
             }
             if (targetRecord) {
-                targetRecord.forcedCaters = {};
+                targetRecord.forcedCaters = null;
             }
-            await updateRosterStatusData('Available', '', '', topQueueTime, id, name);
+            await updateRosterStatusData('Available', '', '', topQueueTime, id, name, [], false, "", { forcedCaters: null });
             showToast(`🚫 Voided order for ${name}. Placed in Available queue!`);
         });
         return;
@@ -287,7 +287,7 @@ export async function adminForceStatus(id, name, actionValue) {
                 db.ref(`roster/${id}/forcedCaters`).remove().catch(() => {});
             }
             if (targetRecord) {
-                targetRecord.forcedCaters = {};
+                targetRecord.forcedCaters = null;
             }
             const currentRoster = globalState.rosterMembers || [];
             const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== id.toString());
@@ -296,13 +296,13 @@ export async function adminForceStatus(id, name, actionValue) {
                 const t = parseQueueTime(r.queueTime);
                 if (t > maxTime) maxTime = t;
             });
-            await updateRosterStatus('Available', id, name, maxTime + 1000);
+            await updateRosterStatusData('Available', '', '', maxTime + 1000, id, name, [], false, "", { forcedCaters: null });
         } else if (actionValue === 'End') {
             if (db) {
                 db.ref(`roster/${id}/forcedCaters`).remove().catch(() => {});
             }
             if (targetRecord) {
-                targetRecord.forcedCaters = {};
+                targetRecord.forcedCaters = null;
             }
             await clockOutRider(id);
             await updateRosterStatus('End', id, name);
@@ -329,6 +329,9 @@ export async function adminVoidSpecificCustomer(targetId, targetName, custNameTo
         const targetRecord = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === targetId.toString());
         if (targetRecord && targetRecord.forcedCaters) {
             delete targetRecord.forcedCaters[cleanCustKey];
+            if (Object.keys(targetRecord.forcedCaters).length === 0) {
+                targetRecord.forcedCaters = null;
+            }
         }
         await voidSingleCateringCustomer(targetId, targetName, custNameToVoid);
     });

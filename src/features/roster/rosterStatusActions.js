@@ -80,6 +80,15 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
     }
 
     const cleanVoidCust = custNameToVoid.toLowerCase().trim();
+    const cleanCustKey = cleanVoidCust.replace(/[^a-z0-9]/g, '');
+
+    if (targetRecord && targetRecord.forcedCaters) {
+        delete targetRecord.forcedCaters[cleanCustKey];
+        if (Object.keys(targetRecord.forcedCaters).length === 0) {
+            targetRecord.forcedCaters = null;
+        }
+    }
+
     if (db) {
         db.ref('customerChats').once('value', (snapshot) => {
             const chats = snapshot.val() || {};
@@ -93,26 +102,33 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
                         cateredByRiderId: null,
                         cateredByRiderName: null,
                         cateredBy: null,
+                        forcedBy: null,
+                        isForcedCater: false,
                         lastUpdated: Date.now()
                     });
                 }
             });
         });
 
-        const cleanCustKey = cleanVoidCust.replace(/[^a-z0-9]/g, '');
         if (cleanCustKey) {
             db.ref(`roster/${targetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
             db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
         }
     }
 
-    if (targetRecord && targetRecord.forcedCaters) {
-        const cleanCustKey = cleanVoidCust.replace(/[^a-z0-9]/g, '');
-        delete targetRecord.forcedCaters[cleanCustKey];
-    }
-
     if (remainingCusts.length > 0) {
-        await updateRosterStatusData('Catering', remainingCusts.join(', '), remainingTimes.join(', '), parseQueueTime(targetRecord.queueTime), targetId, targetName);
+        await updateRosterStatusData(
+            'Catering', 
+            remainingCusts.join(', '), 
+            remainingTimes.join(', '), 
+            parseQueueTime(targetRecord.queueTime), 
+            targetId, 
+            targetName,
+            [],
+            false,
+            "",
+            { forcedCaters: targetRecord.forcedCaters }
+        );
         showToast(`🚫 Voided [${custNameToVoid}]. ${remainingCusts.length} active customer(s) remaining.`);
     } else {
         const topQueueTime = getTopQueueTime();
@@ -120,9 +136,20 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             db.ref(`roster/${targetId}/forcedCaters`).remove().catch(() => {});
         }
         if (targetRecord) {
-            targetRecord.forcedCaters = {};
+            targetRecord.forcedCaters = null;
         }
-        await updateRosterStatusData('Available', '', '', topQueueTime, targetId, targetName);
+        await updateRosterStatusData(
+            'Available', 
+            '', 
+            '', 
+            topQueueTime, 
+            targetId, 
+            targetName,
+            [],
+            false,
+            "",
+            { forcedCaters: null }
+        );
         showToast(`🚫 Voided [${custNameToVoid}]. Moved to Available queue!`);
     }
 }
@@ -179,6 +206,7 @@ export async function triggerStatusWithSlide(targetStatus) {
                     status: 'Cooldown',
                     cooldownUntil: cdUntil,
                     pendingPenaltyMinutes: 0,
+                    forcedCaters: null,
                     lastUpdated: new Date().toLocaleTimeString(),
                     lastActiveTimestamp: Date.now()
                 });
@@ -244,7 +272,7 @@ export async function triggerStatusWithSlide(targetStatus) {
             db.ref(`roster/${myId}/forcedCaters`).remove().catch(() => {});
         }
         if (myRecord) {
-            myRecord.forcedCaters = {};
+            myRecord.forcedCaters = null;
         }
 
         await updateRosterStatus('Available', null, null, lockedQueueTime);
@@ -263,7 +291,7 @@ export async function triggerStatusWithSlide(targetStatus) {
                 db.ref(`roster/${myId}/forcedCaters`).remove().catch(() => {});
             }
             if (myRecord) {
-                myRecord.forcedCaters = {};
+                myRecord.forcedCaters = null;
             }
             await clockOutRider();
             await updateRosterStatus('End');
@@ -323,7 +351,7 @@ export async function promptCateringStatus() {
 
     const limitCheck = canRiderTakeMoreBookings(myId, appState.riderName);
     if (!limitCheck.allowed) {
-        const modeLabel = limitCheck.isAuto ? " (Auto Income Tier based on today's gross income)" : "";
+        const modeLabel = limitCheck.isAuto ? " (Auto Tier based on today's gross income)" : "";
         return showToast(`⚠️ Reached maximum limit of ${limitCheck.maxAllowed} active catering customer(s)${modeLabel}!`);
     }
 
@@ -389,8 +417,6 @@ export async function confirmCateringStatus() {
     const isFirstAvailable = liveAvailableRiders.length > 0 && (liveAvailableRiders[0]?.telegramId || liveAvailableRiders[0]?.id || "").toString().trim() === myId;
 
     const hasPenalty = penaltySelect && parseInt(penaltySelect.value) > 0;
-    
-    // ADMIN / TL CATERING IS ALWAYS TAGGED AS FORCE CATER WHEN NOT STANDARD AVAILABLE 1ST-IN-LINE
     const isForcedByRole = canManageRoster() && (!isFirstAvailable || myRecord?.status !== 'Available' || hasPenalty || canManageRoster());
 
     if (!canManageRoster() && !amIAlreadyCatering && liveAvailableRiders.length > 0 && !isFirstAvailable) {
@@ -433,8 +459,7 @@ export async function confirmCateringStatus() {
 
     const cleanCustKey = custName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    // PERMANENTLY WRITE FORCE CATER AUDIT TAG FOR ADMIN/TL ACTIONS
-    let forcedCatersMap = myRecord?.forcedCaters || {};
+    let forcedCatersMap = myRecord?.forcedCaters ? { ...myRecord.forcedCaters } : {};
     if (isForcedByRole && myId && cleanCustKey) {
         const forcedPayload = {
             customerName: custName,
@@ -486,7 +511,7 @@ export async function confirmCateringStatus() {
         [],
         false,
         "",
-        { forcedCaters: forcedCatersMap }
+        { forcedCaters: Object.keys(forcedCatersMap).length > 0 ? forcedCatersMap : null }
     );
 
     saveRosterCache();
