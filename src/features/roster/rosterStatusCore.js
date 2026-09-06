@@ -51,7 +51,7 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
     await updateRosterStatusData(status, "", "", newQueueTime, tId, tName, [], recordLogin, locationLink);
 }
 
-export async function updateRosterStatusData(status, customerName, startTime, queueTime = 0, specificId = null, specificName = null, completedHistory = [], recordLogin = false, locationLink = "") {
+export async function updateRosterStatusData(status, customerName, startTime, queueTime = 0, specificId = null, specificName = null, completedHistory = [], recordLogin = false, locationLink = "", extraData = {}) {
     const tId = (specificId || appState.telegramId || "").toString().trim();
     const tName = specificName || appState.riderName || "Rider";
 
@@ -60,6 +60,8 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     const nowTimestamp = Date.now();
     const existingRec = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === tId);
     const photoUrl = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || existingRec?.photoUrl || "";
+
+    const currentForcedCaters = extraData.forcedCaters || existingRec?.forcedCaters || null;
 
     const rosterData = {
         telegramId: tId.toString(),
@@ -75,15 +77,21 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         lastUpdated: new Date().toLocaleTimeString(),
         lastActiveTimestamp: nowTimestamp,
         lat: appState.lat || 0,
-        lng: appState.lon || 0
+        lng: appState.lon || 0,
+        ...extraData
     };
+
+    if (currentForcedCaters && status === 'Catering') {
+        rosterData.forcedCaters = currentForcedCaters;
+    }
 
     if (!globalState.rosterMembers) globalState.rosterMembers = [];
     const existingIdx = globalState.rosterMembers.findIndex(m => (m.telegramId || m.id || "").toString() === tId);
     if (existingIdx !== -1) {
         globalState.rosterMembers[existingIdx] = {
             ...globalState.rosterMembers[existingIdx],
-            ...rosterData
+            ...rosterData,
+            forcedCaters: currentForcedCaters || globalState.rosterMembers[existingIdx].forcedCaters || null
         };
     } else {
         globalState.rosterMembers.push(rosterData);
@@ -165,6 +173,7 @@ export async function clockOutRider(targetId = null) {
 
         await db.ref('roster/' + tId).update({ 
             status: 'End',
+            forcedCaters: null,
             lastActiveTimestamp: Date.now(),
             lastUpdated: timeStr
         }).catch(() => {});

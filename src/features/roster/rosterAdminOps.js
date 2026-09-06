@@ -93,9 +93,9 @@ export function openAdminCateringModal(id, name) {
 
     const idInput = document.getElementById('admin-cater-target-rider-id');
     const nameInputHidden = document.getElementById('admin-cater-target-rider-name');
-    const custInput = document.getElementById('admin-cater-cust-name');
-    const custSelect = document.getElementById('admin-cater-customer-select');
-    const penaltySelect = document.getElementById('admin-cater-penalty-select');
+    const custInput = document.getElementById('admin-cater-cust-name') || document.getElementById('catering-customer-name');
+    const custSelect = document.getElementById('admin-cater-customer-select') || document.getElementById('catering-customer-select');
+    const penaltySelect = document.getElementById('admin-cater-penalty-select') || document.getElementById('catering-penalty-select');
 
     if (idInput) idInput.value = id || "";
     if (nameInputHidden) nameInputHidden.value = name || "";
@@ -104,11 +104,11 @@ export function openAdminCateringModal(id, name) {
 
     if (custSelect) {
         if (typeof populateCateringCustomerDropdown === 'function') {
-            populateCateringCustomerDropdown('admin-cater-customer-select');
+            populateCateringCustomerDropdown(custSelect.id);
         }
     }
 
-    const modal = document.getElementById('admin-catering-modal');
+    const modal = document.getElementById('admin-catering-modal') || document.getElementById('catering-modal');
     if (modal) modal.classList.remove('hidden');
     if (custInput) custInput.focus();
 }
@@ -120,23 +120,20 @@ export async function submitAdminForceCatering() {
 
     const idInput = document.getElementById('admin-cater-target-rider-id');
     const nameInputHidden = document.getElementById('admin-cater-target-rider-name');
-    const custInput = document.getElementById('admin-cater-cust-name');
-    const custSelect = document.getElementById('admin-cater-customer-select');
-    const penaltySelect = document.getElementById('admin-cater-penalty-select');
+    const custInput = document.getElementById('admin-cater-cust-name') || document.getElementById('catering-customer-name');
+    const custSelect = document.getElementById('admin-cater-customer-select') || document.getElementById('catering-customer-select');
+    const penaltySelect = document.getElementById('admin-cater-penalty-select') || document.getElementById('catering-penalty-select');
 
-    let targetId = idInput ? idInput.value.trim() : "";
-    let targetName = nameInputHidden ? nameInputHidden.value.trim() : "";
+    let targetId = (idInput ? idInput.value.trim() : "") || (pendingAdminTarget ? pendingAdminTarget.id : "");
+    let targetName = (nameInputHidden ? nameInputHidden.value.trim() : "") || (pendingAdminTarget ? pendingAdminTarget.name : "");
     const penaltyMins = penaltySelect ? parseInt(penaltySelect.value) || 0 : 0;
 
-    if (!targetId && pendingAdminTarget && pendingAdminTarget.id) {
-        targetId = pendingAdminTarget.id;
-        targetName = pendingAdminTarget.name;
+    if (!targetId) {
+        targetId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+        targetName = appState.riderName || localStorage.getItem('riderName') || "Rider";
     }
 
-    let custName = custInput ? custInput.value.trim() : "";
-    if (!custName && custSelect && custSelect.value) {
-        custName = custSelect.value.trim();
-    }
+    let custName = (custInput ? custInput.value.trim() : "") || (custSelect ? custSelect.value.trim() : "");
 
     if (!targetId) return showToast("⚠️ Target rider missing!");
     if (!custName) return showToast("⚠️ Please select or enter customer name!");
@@ -145,7 +142,7 @@ export async function submitAdminForceCatering() {
     const cleanCustKey = custName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
     const rosterMembers = globalState.rosterMembers || [];
-    const targetRecord = rosterMembers.find(m => 
+    let targetRecord = rosterMembers.find(m => 
         (m.telegramId && m.telegramId.toString() === targetId.toString()) ||
         (m.id && m.id.toString() === targetId.toString()) ||
         (m.riderName && targetName && m.riderName.toLowerCase() === targetName.toLowerCase()) ||
@@ -155,6 +152,16 @@ export async function submitAdminForceCatering() {
     if (targetRecord) {
         targetId = (targetRecord.telegramId || targetRecord.id || targetId).toString();
         targetName = targetRecord.riderName || targetRecord.name || targetName;
+    } else {
+        targetRecord = {
+            telegramId: targetId,
+            id: targetId,
+            riderName: targetName,
+            name: targetName,
+            status: 'Catering',
+            forcedCaters: {}
+        };
+        rosterMembers.push(targetRecord);
     }
 
     let existingCustomers = [];
@@ -173,24 +180,22 @@ export async function submitAdminForceCatering() {
     }
 
     closeAdminCateringModal();
+    const modalGeneral = document.getElementById('catering-modal');
+    if (modalGeneral) modalGeneral.classList.add('hidden');
 
-    // 1. Tag Force-Cater Audit Trail in Firebase and local memory
     const forcedPayload = {
         customerName: custName,
         forcedBy: adminName,
         timestamp: Date.now()
     };
 
+    if (!targetRecord.forcedCaters) targetRecord.forcedCaters = {};
+    targetRecord.forcedCaters[cleanCustKey] = forcedPayload;
+
     if (db && targetId && cleanCustKey) {
         await db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
     }
 
-    if (targetRecord) {
-        if (!targetRecord.forcedCaters) targetRecord.forcedCaters = {};
-        targetRecord.forcedCaters[cleanCustKey] = forcedPayload;
-    }
-
-    // 2. Sync to customerChats
     if (db && custName) {
         const cleanSearchName = custName.toLowerCase().trim();
         db.ref('customerChats').once('value', (snapshot) => {
@@ -215,14 +220,17 @@ export async function submitAdminForceCatering() {
         });
     }
 
-    // 3. Update Roster Status
     await updateRosterStatusData(
         'Catering', 
         existingCustomers.join(', '), 
         existingTimes.join(', '), 
         targetRecord ? parseQueueTime(targetRecord.queueTime) : Date.now(),
         targetId,
-        targetName
+        targetName,
+        [],
+        false,
+        "",
+        { forcedCaters: targetRecord.forcedCaters }
     );
 
     if (penaltyMins > 0 && db && targetId) {
@@ -237,10 +245,6 @@ export async function submitAdminForceCatering() {
 
     saveRosterCache();
     updateRosterUI();
-
-    const penaltyNotice = penaltyMins > 0 ? ` with ${penaltyMins}m cooldown penalty` : '';
-    showToast(`⚡ Force Catered ${custName} to ${targetName} (by ${adminName})${penaltyNotice}`);
-    showSideNotification("FORCE CATER", `Assigned ${custName} to ${targetName} by ${adminName}${penaltyNotice}`, "fa-bolt", "text-red-400", "border-red-500");
 }
 
 // ADMIN FORCE STATUS
@@ -271,7 +275,6 @@ export async function adminForceStatus(id, name, actionValue) {
             if (targetRecord) {
                 targetRecord.forcedCaters = {};
             }
-            showSideNotification("ORDER VOIDED", `Voided order for ${name} — placed in Queue`, "fa-ban", "text-red-400", "border-red-500");
             await updateRosterStatusData('Available', '', '', topQueueTime, id, name);
             showToast(`🚫 Voided order for ${name}. Placed in Available queue!`);
         });
@@ -287,7 +290,7 @@ export async function adminForceStatus(id, name, actionValue) {
                 targetRecord.forcedCaters = {};
             }
             const currentRoster = globalState.rosterMembers || [];
-            const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || m.id || "").toString() !== id.toString());
+            const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== id.toString());
             let maxTime = Date.now();
             availableRiders.forEach(r => {
                 const t = parseQueueTime(r.queueTime);
@@ -429,7 +432,6 @@ export async function executeVoidCateredCustomer(riderName, customerName, comple
         }
 
         showToast(`🗑️ Voided catered record for ${customerName}.`);
-        showSideNotification("RECORD VOIDED", `Voided catered entry for ${customerName}`, "fa-trash", "text-red-400", "border-red-500");
     } catch(e) {
         console.error("Void catered record error:", e);
         showToast("❌ Failed to void catered customer record.");
@@ -461,7 +463,6 @@ export function adminShiftRiderQueue(riderId, moveAction) {
         return showToast("Cannot move further in queue.");
     }
 
-    showSideNotification("LINEUP SHIFTED", `Adjusted lineup position for ${rider.riderName}`, "fa-arrow-up-1-9", "text-blue-400", "border-blue-500");
     updateRosterStatusData('Available', "", "", targetQueueTime, rider.telegramId, rider.riderName);
 }
 
@@ -471,8 +472,6 @@ export async function forceAllEndShift() {
     }
 
     openSlideDeleteModal("Sigurado ka bang nais mong i-force end shift ang lahat ng riders?", async () => {
-        showSideNotification("FORCE ALL END", "Ending shift for all roster riders...", "fa-power-off", "text-red-400", "border-red-500");
-        
         const rosterMembers = globalState.rosterMembers || [];
         const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const nowTimestamp = Date.now();
@@ -548,10 +547,9 @@ if (typeof window !== 'undefined') {
     window.selectRiderDayOff = selectRiderDayOff;
     window.openAdminDayOffSettingsModal = openAdminDayOffSettingsModal;
     window.closeAdminDayOffSettingsModal = closeAdminDayOffSettingsModal;
-    window.saveAdminDayOffSettings = saveAdminDayOffSettings;
+    window.renderAdminDayOffSettingsList = renderAdminDayOffSettingsList;
     window.adminReassignRiderDayOff = adminReassignRiderDayOff;
     window.renderRiderDayOffPicker = renderRiderDayOffPicker;
-    window.renderAdminDayOffSettingsList = renderAdminDayOffSettingsList;
 
     window.openAdminBookingLimitsModal = openAdminBookingLimitsModal;
     window.closeAdminBookingLimitsModal = closeAdminBookingLimitsModal;

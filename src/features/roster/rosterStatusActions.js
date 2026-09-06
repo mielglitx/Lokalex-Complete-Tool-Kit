@@ -15,8 +15,11 @@ import {
     playLineAlarm,
     setLineAlarmConfirmed,
     getRiderTodayGross,
-    sortAvailableRidersByGross
+    sortAvailableRidersByGross,
+    canManageRoster,
+    saveRosterCache
 } from './rosterUtils.js';
+import { updateRosterUI } from './rosterUI.js';
 import { requestClaimCustomer } from './rosterSwap.js';
 import { canRiderTakeMoreBookings, checkRiderTimeInAllowed } from './rosterStatusLimits.js';
 import { updateRosterStatus, updateRosterStatusData, clockOutRider } from './rosterStatusCore.js';
@@ -103,15 +106,24 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         }
     }
 
+    if (targetRecord && targetRecord.forcedCaters) {
+        const cleanCustKey = cleanVoidCust.replace(/[^a-z0-9]/g, '');
+        delete targetRecord.forcedCaters[cleanCustKey];
+    }
+
     if (remainingCusts.length > 0) {
         await updateRosterStatusData('Catering', remainingCusts.join(', '), remainingTimes.join(', '), parseQueueTime(targetRecord.queueTime), targetId, targetName);
         showToast(`🚫 Voided [${custNameToVoid}]. ${remainingCusts.length} active customer(s) remaining.`);
-        showSideNotification("CUSTOMER VOIDED", `Removed ${custNameToVoid}. ${remainingCusts.length} remaining`, "fa-ban", "text-amber-400", "border-amber-500");
     } else {
         const topQueueTime = getTopQueueTime();
+        if (db) {
+            db.ref(`roster/${targetId}/forcedCaters`).remove().catch(() => {});
+        }
+        if (targetRecord) {
+            targetRecord.forcedCaters = {};
+        }
         await updateRosterStatusData('Available', '', '', topQueueTime, targetId, targetName);
         showToast(`🚫 Voided [${custNameToVoid}]. Moved to Available queue!`);
-        showSideNotification("ALL VOIDED", `Placed in Available queue`, "fa-user-check", "text-emerald-400", "border-emerald-500");
     }
 }
 
@@ -149,7 +161,6 @@ export async function triggerStatusWithSlide(targetStatus) {
         const timeCheck = checkRiderTimeInAllowed(appState.telegramId, appState.riderName);
         if (!timeCheck.allowed) {
             showToast(`🚫 Bawal pa mag-Time In: Ang iyong allowed time-in ay ${timeCheck.allowedTime}. Humingi ng Early Time-In pass sa Admin.`);
-            showSideNotification("TIME-IN RESTRICTED", `Allowed at ${timeCheck.allowedTime}. Need Admin Early Pass.`, "fa-clock", "text-red-400", "border-red-500");
             return;
         }
 
@@ -162,8 +173,6 @@ export async function triggerStatusWithSlide(targetStatus) {
         if (myRecord && myRecord.pendingPenaltyMinutes && myRecord.pendingPenaltyMinutes > 0) {
             const pMins = parseInt(myRecord.pendingPenaltyMinutes) || 10;
             const cdUntil = Date.now() + (pMins * 60000);
-
-            showSideNotification("PENALTY COOLDOWN", `Starting ${pMins} min penalty cooldown for ${appState.riderName}`, "fa-clock", "text-yellow-400", "border-yellow-500");
 
             if (db && appState.telegramId) {
                 db.ref('roster/' + appState.telegramId).update({
@@ -204,15 +213,12 @@ export async function triggerStatusWithSlide(targetStatus) {
 
         if (isStartingShift) {
             showToast("📡 Kinukuha ang GPS Location bago mag-Time In...");
-            showSideNotification("GPS CHECK", "Calibrating GPS pin location...", "fa-location-crosshairs", "text-blue-400", "border-blue-500");
-
             const coords = await calibrateGPS((acc, count) => {
                 showToast(`📡 Calibrating GPS: ±${Math.round(acc)}m (Fix ${count}/4)`);
             });
 
             if (!coords || !coords.lat || !coords.lon || coords.accuracy > 500) {
                 showToast("❌ Bigo ang GPS. Paki-enable ang Location Access bago mag-Time In!");
-                showSideNotification("GPS REQUIRED", "Cannot Time-In without GPS location pin", "fa-location-dot", "text-red-400", "border-red-500");
                 return;
             }
 
@@ -233,9 +239,15 @@ export async function triggerStatusWithSlide(targetStatus) {
 
         endLiveGpsSession();
         dismissQueueAlarm();
-        await updateRosterStatus('Available', null, null, lockedQueueTime);
 
-        showSideNotification("RECORDING STATUS", `Marking ${appState.riderName} Available — lineup calculated by gross earnings`, "fa-user-check", "text-green-400", "border-green-500");
+        if (db && myId) {
+            db.ref(`roster/${myId}/forcedCaters`).remove().catch(() => {});
+        }
+        if (myRecord) {
+            myRecord.forcedCaters = {};
+        }
+
+        await updateRosterStatus('Available', null, null, lockedQueueTime);
 
         if (window.clearAllCartSlots) {
             window.clearAllCartSlots();
@@ -246,31 +258,31 @@ export async function triggerStatusWithSlide(targetStatus) {
     } else if (targetStatus === 'End') {
         openSlideDeleteModal(`Sigurado ka bang mag-End Shift?`, async () => {
             dismissQueueAlarm();
-            showSideNotification("CLOCK OUT", `Clocking out ${appState.riderName}...`, "fa-power-off", "text-red-400", "border-red-500");
             endLiveGpsSession();
+            if (db && myId) {
+                db.ref(`roster/${myId}/forcedCaters`).remove().catch(() => {});
+            }
+            if (myRecord) {
+                myRecord.forcedCaters = {};
+            }
             await clockOutRider();
             await updateRosterStatus('End');
         });
     } else {
         openSlideDeleteModal(`Sigurado ka bang mag-iiba ng status sa [${targetStatus}]?`, async () => {
             dismissQueueAlarm();
-            showSideNotification("RECORDING STATUS", `Setting status to ${targetStatus} for ${appState.riderName}...`, "fa-user-clock", "text-amber-400", "border-amber-500");
             if (targetStatus === 'Break') endLiveGpsSession();
             await updateRosterStatus(targetStatus);
         });
     }
 }
 
-// -------------------------------------------------------------
-// LIVE GROUND-TRUTH CATERING HANDLERS (ELIMINATES STUCK #1 EXPLOIT)
-// -------------------------------------------------------------
 export async function promptCateringStatus() {
     const myId = (appState.telegramId || "").toString().trim();
     if (!myId) return showToast("⚠️ Missing Rider ID.");
 
     let rosterMembers = globalState.rosterMembers || [];
 
-    // Pre-flight live fetch from Firebase
     if (db) {
         try {
             const snap = await db.ref('roster').once('value');
@@ -290,7 +302,7 @@ export async function promptCateringStatus() {
 
     const myRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString().trim() === myId);
 
-    if (myRecord) {
+    if (myRecord && !canManageRoster()) {
         if (myRecord.status === 'End') return showToast("⚠️ Naka-End Shift ka. Mag-Available muna bago mag-Cater.");
         if (myRecord.status === 'Break') return showToast("⚠️ Naka-Break ka. Mag-Available muna bago mag-Cater.");
         if (myRecord.status === 'Cooldown') return showToast("⚠️ Naka-penalty cooldown ka pa. Maghintay muna matapos.");
@@ -299,8 +311,7 @@ export async function promptCateringStatus() {
     const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
     const liveAvailableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
 
-    // Universal queue priority check
-    if (!amIAlreadyCatering && liveAvailableRiders.length > 0) {
+    if (!canManageRoster() && !amIAlreadyCatering && liveAvailableRiders.length > 0) {
         const firstAvailable = liveAvailableRiders[0];
         const firstId = (firstAvailable?.telegramId || firstAvailable?.id || "").toString().trim();
         if (firstId !== myId) {
@@ -312,7 +323,7 @@ export async function promptCateringStatus() {
 
     const limitCheck = canRiderTakeMoreBookings(myId, appState.riderName);
     if (!limitCheck.allowed) {
-        const modeLabel = limitCheck.isAuto ? " (Auto Tier based on today's gross income)" : "";
+        const modeLabel = limitCheck.isAuto ? " (Auto Income Tier based on today's gross income)" : "";
         return showToast(`⚠️ Reached maximum limit of ${limitCheck.maxAllowed} active catering customer(s)${modeLabel}!`);
     }
 
@@ -320,22 +331,24 @@ export async function promptCateringStatus() {
         populateCateringCustomerDropdown();
     }
 
-    const input = document.getElementById('catering-customer-name');
+    const input = document.getElementById('catering-customer-name') || document.getElementById('admin-cater-cust-name');
     if (input) input.value = "";
-    const modal = document.getElementById('catering-modal');
+    const modal = document.getElementById('catering-modal') || document.getElementById('admin-catering-modal');
     if (modal) modal.classList.remove('hidden');
     if (input) input.focus();
 }
 
 export async function confirmCateringStatus() {
-    const input = document.getElementById('catering-customer-name');
-    const custName = input ? input.value.trim() : "";
-    if (!custName) return showToast("Please enter customer name");
+    const input = document.getElementById('catering-customer-name') || document.getElementById('admin-cater-cust-name');
+    const custSelect = document.getElementById('catering-customer-select') || document.getElementById('admin-cater-customer-select');
+    const penaltySelect = document.getElementById('catering-penalty-select') || document.getElementById('admin-cater-penalty-select');
+
+    let custName = (input && input.value ? input.value.trim() : "") || (custSelect && custSelect.value ? custSelect.value.trim() : "");
+    if (!custName) return showToast("Please enter or select customer name");
 
     const myId = (appState.telegramId || "").toString().trim();
     const myName = appState.riderName || localStorage.getItem('riderName') || "Rider";
 
-    // Re-verify against live Firebase data immediately before writing
     let liveRoster = globalState.rosterMembers || [];
     if (db) {
         try {
@@ -356,7 +369,7 @@ export async function confirmCateringStatus() {
 
     const myRecord = liveRoster.find(m => (m.telegramId || m.id || "").toString().trim() === myId);
 
-    if (myRecord) {
+    if (myRecord && !canManageRoster()) {
         if (myRecord.status === 'End') {
             closeCateringModal();
             return showToast("⚠️ Naka-End Shift ka. Hindi maaaring mag-Cater.");
@@ -373,17 +386,19 @@ export async function confirmCateringStatus() {
 
     const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
     const liveAvailableRiders = sortAvailableRidersByGross(liveRoster.filter(m => m.status === 'Available'));
+    const isFirstAvailable = liveAvailableRiders.length > 0 && (liveAvailableRiders[0]?.telegramId || liveAvailableRiders[0]?.id || "").toString().trim() === myId;
 
-    // Reject out-of-turn execution if superseded in the database
-    if (!amIAlreadyCatering && liveAvailableRiders.length > 0) {
+    const hasPenalty = penaltySelect && parseInt(penaltySelect.value) > 0;
+    
+    // ADMIN / TL CATERING IS ALWAYS TAGGED AS FORCE CATER WHEN NOT STANDARD AVAILABLE 1ST-IN-LINE
+    const isForcedByRole = canManageRoster() && (!isFirstAvailable || myRecord?.status !== 'Available' || hasPenalty || canManageRoster());
+
+    if (!canManageRoster() && !amIAlreadyCatering && liveAvailableRiders.length > 0 && !isFirstAvailable) {
+        closeCateringModal();
         const firstAvailable = liveAvailableRiders[0];
-        const firstId = (firstAvailable?.telegramId || firstAvailable?.id || "").toString().trim();
-        if (firstId !== myId) {
-            closeCateringModal();
-            const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
-            showToast(`🚫 Naunahan ka sa pila: Si ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) ang 1st in line. Na-update ang iyong posisyon.`);
-            return;
-        }
+        const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
+        showToast(`🚫 Naunahan ka sa pila: Si ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) ang 1st in line.`);
+        return;
     }
 
     let existingCustomers = [];
@@ -405,6 +420,8 @@ export async function confirmCateringStatus() {
     }
 
     closeCateringModal();
+    const modalGeneral = document.getElementById('admin-catering-modal');
+    if (modalGeneral) modalGeneral.classList.add('hidden');
     dismissQueueAlarm();
 
     const startTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -412,6 +429,22 @@ export async function confirmCateringStatus() {
     if (!isAlreadyInList) {
         existingCustomers.push(custName);
         existingTimes.push(startTime);
+    }
+
+    const cleanCustKey = custName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // PERMANENTLY WRITE FORCE CATER AUDIT TAG FOR ADMIN/TL ACTIONS
+    let forcedCatersMap = myRecord?.forcedCaters || {};
+    if (isForcedByRole && myId && cleanCustKey) {
+        const forcedPayload = {
+            customerName: custName,
+            forcedBy: myName,
+            timestamp: Date.now()
+        };
+        forcedCatersMap[cleanCustKey] = forcedPayload;
+        if (db) {
+            await db.ref(`roster/${myId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
+        }
     }
 
     if (db && custName) {
@@ -423,24 +456,41 @@ export async function confirmCateringStatus() {
                     const meta = chats[custId]?.metadata || chats[custId] || {};
                     const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
                     if (chatCustName && chatCustName === cleanSearchName) {
-                        db.ref(`customerChats/${custId}/metadata`).update({
+                        const updateObj = {
                             folder: 'catering',
                             cateredByRiderId: myId,
                             cateredByRiderName: myName,
                             cateredBy: myName,
                             lastUpdated: Date.now()
-                        });
+                        };
+                        if (isForcedByRole) {
+                            updateObj.forcedBy = myName;
+                            updateObj.isForcedCater = true;
+                        }
+                        db.ref(`customerChats/${custId}/metadata`).update(updateObj);
                     }
                 });
             }
         });
     }
 
-    showSideNotification("RECORDING CATERING", `Moving to Catering — adding customer ${custName} to ${appState.riderName}`, "fa-motorcycle", "text-red-400", "border-red-500");
-    
     try { autoStartLiveGpsSession(existingCustomers.join(', ')); } catch(e) {}
 
-    await updateRosterStatusData('Catering', existingCustomers.join(', '), existingTimes.join(', '), myRecord ? parseQueueTime(myRecord.queueTime) : 0);
+    await updateRosterStatusData(
+        'Catering', 
+        existingCustomers.join(', '), 
+        existingTimes.join(', '), 
+        myRecord ? parseQueueTime(myRecord.queueTime) : 0,
+        myId,
+        myName,
+        [],
+        false,
+        "",
+        { forcedCaters: forcedCatersMap }
+    );
+
+    saveRosterCache();
+    updateRosterUI();
 }
 
 export function claimCustomerFromRider(fromRiderId, fromRiderName, custName) {

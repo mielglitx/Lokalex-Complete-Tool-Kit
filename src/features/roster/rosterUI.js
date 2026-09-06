@@ -171,7 +171,6 @@ export function updateRosterUI() {
         loadRosterCache();
     }
 
-    // Sync header profile photo & welcome message
     syncHeaderUserProfile();
 
     const rosterMembers = globalState.rosterMembers || [];
@@ -348,7 +347,7 @@ export function updateRosterUI() {
         `);
     });
 
-    // 2. Catering List (With Multi-Customer Support & Force Cater Transparency Badges)
+    // 2. Catering List (With Multi-Customer Support & Universal Force Cater Badges)
     cateringRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = formatTitleCase(m.riderName || m.name || "Rider");
@@ -380,17 +379,31 @@ export function updateRosterUI() {
                 const isMyLine = mId === myId || (appState.riderName && mName.toLowerCase() === appState.riderName.toLowerCase());
                 const canSwap = isMyLine || showControls;
 
-                // Inspect active force-cater audit status
+                // Lookup active Force-Cater audit record with fuzzy lookup
+                const cleanCustKey = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
                 let forcedInfo = null;
-                if (m.forcedCaters && typeof m.forcedCaters === 'object') {
-                    const cleanK = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
-                    forcedInfo = m.forcedCaters[cleanK] || m.forcedCaters[cName.toLowerCase().trim()] || m.forcedCaters[cName];
-                    if (!forcedInfo) {
-                        const foundEntry = Object.values(m.forcedCaters).find(fc => 
-                            fc && fc.customerName && fc.customerName.toLowerCase().trim() === cName.toLowerCase().trim()
-                        );
-                        if (foundEntry) forcedInfo = foundEntry;
+
+                if (m.forcedCaters) {
+                    if (typeof m.forcedCaters === 'object') {
+                        forcedInfo = m.forcedCaters[cleanCustKey] || 
+                                     m.forcedCaters[cName.toLowerCase().trim()] || 
+                                     m.forcedCaters[cName];
+
+                        if (!forcedInfo) {
+                            forcedInfo = Object.values(m.forcedCaters).find(fc => {
+                                if (!fc) return false;
+                                if (fc === true) return true;
+                                const fName = (fc.customerName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                                return fName === cleanCustKey || fName.includes(cleanCustKey) || cleanCustKey.includes(fName);
+                            });
+                        }
+                    } else if (m.forcedCaters === true) {
+                        forcedInfo = { forcedBy: 'Admin' };
                     }
+                }
+
+                if (!forcedInfo && (m.isForcedCater || m.forcedBy)) {
+                    forcedInfo = { forcedBy: m.forcedBy || 'Admin' };
                 }
 
                 const forcedByLabel = forcedInfo ? (typeof forcedInfo === 'object' && forcedInfo.forcedBy ? forcedInfo.forcedBy : 'Admin') : '';
