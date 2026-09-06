@@ -166,9 +166,9 @@ export async function submitCreateStoreAccount() {
             type: 'store_credentials'
         });
 
-        // Direct HTTP Dispatch via Resend API
+        // Direct HTTP Dispatch via Resend API using Environment Variable
         try {
-            const emailApiKey = "re_Xm7stesL_EPxZoNbyNdpTQuYP9KMZa3EL";
+            const emailApiKey = import.meta.env.VITE_RESEND_API_KEY;
             
             await fetch('https://api.resend.com/emails', {
                 method: 'POST',
