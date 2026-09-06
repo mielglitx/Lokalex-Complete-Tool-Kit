@@ -381,10 +381,21 @@ export function updateRosterUI() {
                 const canSwap = isMyLine || showControls;
 
                 // Inspect active force-cater audit status
-                const cleanCustKey = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
-                const forcedInfo = m.forcedCaters?.[cleanCustKey] || m.forcedCaters?.[cName.toLowerCase().trim()];
+                let forcedInfo = null;
+                if (m.forcedCaters && typeof m.forcedCaters === 'object') {
+                    const cleanK = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    forcedInfo = m.forcedCaters[cleanK] || m.forcedCaters[cName.toLowerCase().trim()] || m.forcedCaters[cName];
+                    if (!forcedInfo) {
+                        const foundEntry = Object.values(m.forcedCaters).find(fc => 
+                            fc && fc.customerName && fc.customerName.toLowerCase().trim() === cName.toLowerCase().trim()
+                        );
+                        if (foundEntry) forcedInfo = foundEntry;
+                    }
+                }
+
+                const forcedByLabel = forcedInfo ? (typeof forcedInfo === 'object' && forcedInfo.forcedBy ? forcedInfo.forcedBy : 'Admin') : '';
                 const forcedBadge = forcedInfo 
-                    ? `<span class="inline-flex items-center gap-1 text-[9px] font-black bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/40 px-1.5 py-0.5 rounded shrink-0 shadow-xs" title="Force Catered by ${escapeHtml(forcedInfo.forcedBy || 'Admin')}">⚡ Force Catered (${escapeHtml(forcedInfo.forcedBy || 'Admin')})</span>` 
+                    ? `<span class="inline-flex items-center gap-1 text-[9px] font-black bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/40 px-1.5 py-0.5 rounded shrink-0 shadow-xs" title="Force Catered by ${escapeHtml(forcedByLabel)}"><i class="fa-solid fa-bolt text-[8px] text-amber-500"></i> Force Catered (${escapeHtml(forcedByLabel)})</span>` 
                     : '';
 
                 cardHtml += `

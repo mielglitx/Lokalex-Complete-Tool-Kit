@@ -121,6 +121,7 @@ export async function submitAdminForceCatering() {
     const idInput = document.getElementById('admin-cater-target-rider-id');
     const nameInputHidden = document.getElementById('admin-cater-target-rider-name');
     const custInput = document.getElementById('admin-cater-cust-name');
+    const custSelect = document.getElementById('admin-cater-customer-select');
     const penaltySelect = document.getElementById('admin-cater-penalty-select');
 
     let targetId = idInput ? idInput.value.trim() : "";
@@ -132,7 +133,10 @@ export async function submitAdminForceCatering() {
         targetName = pendingAdminTarget.name;
     }
 
-    const custName = custInput ? custInput.value.trim() : "";
+    let custName = custInput ? custInput.value.trim() : "";
+    if (!custName && custSelect && custSelect.value) {
+        custName = custSelect.value.trim();
+    }
 
     if (!targetId) return showToast("⚠️ Target rider missing!");
     if (!custName) return showToast("⚠️ Please select or enter customer name!");
@@ -141,7 +145,17 @@ export async function submitAdminForceCatering() {
     const cleanCustKey = custName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
     const rosterMembers = globalState.rosterMembers || [];
-    const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === targetId.toString());
+    const targetRecord = rosterMembers.find(m => 
+        (m.telegramId && m.telegramId.toString() === targetId.toString()) ||
+        (m.id && m.id.toString() === targetId.toString()) ||
+        (m.riderName && targetName && m.riderName.toLowerCase() === targetName.toLowerCase()) ||
+        (m.name && targetName && m.name.toLowerCase() === targetName.toLowerCase())
+    );
+
+    if (targetRecord) {
+        targetId = (targetRecord.telegramId || targetRecord.id || targetId).toString();
+        targetName = targetRecord.riderName || targetRecord.name || targetName;
+    }
 
     let existingCustomers = [];
     let existingTimes = [];
@@ -160,22 +174,23 @@ export async function submitAdminForceCatering() {
 
     closeAdminCateringModal();
 
-    // 1. Tag force-cater audit trail in Firebase
-    if (db && targetId && cleanCustKey) {
-        const forcedPayload = {
-            customerName: custName,
-            forcedBy: adminName,
-            timestamp: Date.now()
-        };
-        await db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
+    // 1. Tag Force-Cater Audit Trail in Firebase and local memory
+    const forcedPayload = {
+        customerName: custName,
+        forcedBy: adminName,
+        timestamp: Date.now()
+    };
 
-        if (targetRecord) {
-            if (!targetRecord.forcedCaters) targetRecord.forcedCaters = {};
-            targetRecord.forcedCaters[cleanCustKey] = forcedPayload;
-        }
+    if (db && targetId && cleanCustKey) {
+        await db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
     }
 
-    // 2. Customer chat folder update
+    if (targetRecord) {
+        if (!targetRecord.forcedCaters) targetRecord.forcedCaters = {};
+        targetRecord.forcedCaters[cleanCustKey] = forcedPayload;
+    }
+
+    // 2. Sync to customerChats
     if (db && custName) {
         const cleanSearchName = custName.toLowerCase().trim();
         db.ref('customerChats').once('value', (snapshot) => {
@@ -200,6 +215,7 @@ export async function submitAdminForceCatering() {
         });
     }
 
+    // 3. Update Roster Status
     await updateRosterStatusData(
         'Catering', 
         existingCustomers.join(', '), 
@@ -214,15 +230,16 @@ export async function submitAdminForceCatering() {
             pendingPenaltyMinutes: penaltyMins
         });
 
-        const targetInGlobal = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === targetId.toString());
-        if (targetInGlobal) {
-            targetInGlobal.pendingPenaltyMinutes = penaltyMins;
+        if (targetRecord) {
+            targetRecord.pendingPenaltyMinutes = penaltyMins;
         }
-        saveRosterCache();
     }
 
+    saveRosterCache();
+    updateRosterUI();
+
     const penaltyNotice = penaltyMins > 0 ? ` with ${penaltyMins}m cooldown penalty` : '';
-    showToast(`⚡ Force Catered ${custName} to ${targetName} by ${adminName}${penaltyNotice}`);
+    showToast(`⚡ Force Catered ${custName} to ${targetName} (by ${adminName})${penaltyNotice}`);
     showSideNotification("FORCE CATER", `Assigned ${custName} to ${targetName} by ${adminName}${penaltyNotice}`, "fa-bolt", "text-red-400", "border-red-500");
 }
 
@@ -233,7 +250,7 @@ export async function adminForceStatus(id, name, actionValue) {
     }
 
     const rosterMembers = globalState.rosterMembers || [];
-    const targetRecord = rosterMembers.find(m => (m.telegramId || "").toString() === id.toString());
+    const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === id.toString());
     const targetType = targetRecord ? targetRecord.userType : "";
 
     if (!canForceCaterTarget(targetType)) {
@@ -270,7 +287,7 @@ export async function adminForceStatus(id, name, actionValue) {
                 targetRecord.forcedCaters = {};
             }
             const currentRoster = globalState.rosterMembers || [];
-            const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== id.toString());
+            const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || m.id || "").toString() !== id.toString());
             let maxTime = Date.now();
             availableRiders.forEach(r => {
                 const t = parseQueueTime(r.queueTime);
