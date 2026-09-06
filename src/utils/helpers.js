@@ -75,6 +75,18 @@ export function getDateString(timestamp) {
 }
 
 // -------------------------------------------------------------
+// HARDWARE / PLATFORM DETECTOR (ANDROID vs iOS vs PC/DESKTOP)
+// -------------------------------------------------------------
+export function getDevicePlatform() {
+    if (typeof navigator === 'undefined') return 'pc';
+    const ua = navigator.userAgent || navigator.vendor || window.opera || '';
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (isIOS) return 'ios';
+    if (/android/i.test(ua)) return 'android';
+    return 'pc';
+}
+
+// -------------------------------------------------------------
 // DYNAMIC COLOR SCHEME / THEME CONTROLLER (LIGHT / DARK / SYSTEM)
 // -------------------------------------------------------------
 let systemThemeMediaQuery = null;
@@ -141,6 +153,7 @@ export function updateThemeToggleUI(activePref = 'system') {
 // Auto-run theme initialization
 if (typeof window !== 'undefined') {
     window.formatTitleCase = formatTitleCase;
+    window.getDevicePlatform = getDevicePlatform;
     window.initTheme = initTheme;
     window.setTheme = setTheme;
     window.applyTheme = applyTheme;

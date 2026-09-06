@@ -3,6 +3,7 @@ import { appState, wizState } from '../../store/state.js';
 import { showToast } from '../../ui/notifications.js';
 import { getCurrentCart } from '../cart.js';
 import { getDailyRiderId } from './wizardCalc.js';
+import { getDevicePlatform } from '../../utils/helpers.js';
 
 export let currentReceiptCanvas = null;
 export let currentReceiptDataUrl = "";
@@ -465,6 +466,16 @@ export async function renderReceiptCanvas() {
     if (previewWrapper) previewWrapper.classList.remove('hidden');
 }
 
+function triggerDirectAnchorDownload(url, fileName) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast("💾 High Definition receipt saved to device!");
+}
+
 export async function downloadReceiptImage() {
     if (!currentReceiptDataUrl && !currentReceiptCanvas) {
         return showToast("⚠️ Image receipt not ready yet.");
@@ -472,7 +483,34 @@ export async function downloadReceiptImage() {
 
     const txId = wizState.currentReceiptTransactionId || Date.now().toString(36);
     const fileName = `Lokalex_Receipt_${txId}.png`;
+    const platform = getDevicePlatform();
 
+    // 1. ANDROID & PC: INSTANT DIRECT DOWNLOAD WITHOUT SHARE SHEET
+    if (platform === 'android' || platform === 'pc') {
+        if (currentReceiptCanvas && typeof currentReceiptCanvas.toBlob === 'function') {
+            currentReceiptCanvas.toBlob((blob) => {
+                if (!blob) {
+                    triggerDirectAnchorDownload(currentReceiptDataUrl, fileName);
+                    return;
+                }
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+                showToast("💾 High Definition receipt saved to device!");
+            }, 'image/png');
+            return;
+        }
+
+        triggerDirectAnchorDownload(currentReceiptDataUrl, fileName);
+        return;
+    }
+
+    // 2. IOS (IPHONE / IPAD): WEB SHARE SHEET OR LONG-PRESS SAVE PROMPT
     if (navigator.canShare && currentReceiptCanvas) {
         try {
             const blob = await new Promise(resolve => currentReceiptCanvas.toBlob(resolve, 'image/png'));
@@ -494,45 +532,36 @@ export async function downloadReceiptImage() {
         }
     }
 
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    if (isIOS) {
-        if (window.openImageViewerModal && typeof window.openImageViewerModal === 'function') {
-            window.openImageViewerModal(currentReceiptDataUrl);
-            showToast("ℹ️ Pindutin nang matagal ang resibo at piliin ang 'Save to Photos'.");
-            return;
-        }
-
-        const newTab = window.open();
-        if (newTab) {
-            newTab.document.write(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>${fileName}</title>
-                    <style>
-                        body { margin: 0; background-color: #0f172a; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; box-sizing: border-box; font-family: -apple-system, sans-serif; }
-                        img { max-width: 100%; height: auto; border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
-                        p { color: #94a3b8; font-size: 13px; margin-top: 16px; text-align: center; }
-                        strong { color: #38bdf8; }
-                    </style>
-                </head>
-                <body>
-                    <img src="${currentReceiptDataUrl}" alt="Receipt">
-                    <p>Pindutin nang matagal ang larawan at piliin ang <strong>Save to Photos</strong></p>
-                </body>
-                </html>
-            `);
-            showToast("ℹ️ Pindutin nang matagal ang resibo at piliin ang 'Save to Photos'.");
-            return;
-        }
+    if (window.openImageViewerModal && typeof window.openImageViewerModal === 'function') {
+        window.openImageViewerModal(currentReceiptDataUrl);
+        showToast("ℹ️ Pindutin nang matagal ang resibo at piliin ang 'Save to Photos'.");
+        return;
     }
 
-    const a = document.createElement('a');
-    a.href = currentReceiptDataUrl;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    showToast("💾 High Definition receipt saved to device!");
+    const newTab = window.open();
+    if (newTab) {
+        newTab.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>${fileName}</title>
+                <style>
+                    body { margin: 0; background-color: #0f172a; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; box-sizing: border-box; font-family: -apple-system, sans-serif; }
+                    img { max-width: 100%; height: auto; border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+                    p { color: #94a3b8; font-size: 13px; margin-top: 16px; text-align: center; }
+                    strong { color: #38bdf8; }
+                </style>
+            </head>
+            <body>
+                <img src="${currentReceiptDataUrl}" alt="Receipt">
+                <p>Pindutin nang matagal ang larawan at piliin ang <strong>Save to Photos</strong></p>
+            </body>
+            </html>
+        `);
+        showToast("ℹ️ Pindutin nang matagal ang resibo at piliin ang 'Save to Photos'.");
+        return;
+    }
+
+    triggerDirectAnchorDownload(currentReceiptDataUrl, fileName);
 }
