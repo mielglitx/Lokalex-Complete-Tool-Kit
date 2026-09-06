@@ -1,6 +1,8 @@
 // src/features/roster/rosterCaterOcr.js
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 
+const TESSDATA_FAST_CDN = 'https://cdn.jsdelivr.net/gh/naptha/tessdata@gh-pages/4.0.0_fast';
+
 export function ensureTesseractLoaded() {
     return new Promise((resolve) => {
         if (window.Tesseract) return resolve(true);
@@ -45,7 +47,8 @@ export function extractFirstNameFromOcrText(rawText) {
         "details", "view", "edit", "call", "video", "profile", "thursday", "friday",
         "saturday", "sunday", "monday", "tuesday", "wednesday", "thu", "fri", "sat",
         "sun", "mon", "tue", "wed", "reply in messenger", "this is a reply", "an ad",
-        "オンライン中", "アクティブ", "メッセージ", "連絡先", "チャット", "検索", "プロフィール"
+        "ad_id", "ad id", "transfer requested", "how much", "total price", "sent a photo",
+        "オンライン中", "アクティブ", "メッセージ", "連絡先", "チャット", "検索", "プロフィール", "広告への返信"
     ];
 
     const lines = rawText
@@ -59,10 +62,11 @@ export function extractFirstNameFromOcrText(rawText) {
         if (noiseWords.some(w => lower.includes(w))) continue;
         if (!/[\p{L}]/u.test(line)) continue;
         if (/^\d{1,2}:\d{2}/.test(line)) continue;
+        if (/^ad_id/i.test(line)) continue;
         if (/^\d+$/.test(line)) continue;
 
         const cleanedLine = line.replace(/^[^\p{L}\p{N}]+/u, '').replace(/[^\p{L}\p{N}]+$/u, '').trim();
-        if (cleanedLine.length < 2) continue;
+        if (cleanedLine.length < 1) continue;
 
         const words = cleanedLine
             .split(/\s+/)
@@ -74,6 +78,7 @@ export function extractFirstNameFromOcrText(rawText) {
             const isAsianScript = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7AF]/.test(words[0]);
 
             if (isAsianScript) {
+                // Return exact Katakana / Kanji / Hangul first name
                 chosenWord = words[0];
             } else if (words.length >= 2 && words[0].length <= 2 && words[1].length >= 3) {
                 chosenWord = words[1];
@@ -118,10 +123,11 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
         let startY, cropH, startX, cropW;
 
         if (isMobilePortrait) {
-            startY = Math.round(img.height * 0.052);
-            cropH = Math.round(img.height * 0.063);
-            startX = Math.round(img.width * 0.24);
-            cropW = Math.round(img.width * 0.60);
+            // Isolate the header name line; exclude status bar above and ad_id below
+            startY = Math.round(img.height * 0.046);
+            cropH = Math.round(img.height * 0.048);
+            startX = Math.round(img.width * 0.18);
+            cropW = Math.round(img.width * 0.72);
         } else {
             startY = 0;
             cropH = Math.round(img.height * 0.12);
@@ -129,7 +135,7 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
             cropW = Math.round(img.width * 0.80);
         }
 
-        const upscale = 2;
+        const upscale = 2.5;
         const roiCanvas = document.createElement('canvas');
         roiCanvas.width = Math.round(cropW * upscale);
         roiCanvas.height = Math.round(cropH * upscale);
@@ -144,7 +150,7 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
         const imgData = ctx.getImageData(0, 0, roiCanvas.width, roiCanvas.height);
         const d = imgData.data;
 
-        // Detect whether the cropped header is dark mode or light mode
+        // Determine background theme
         let darkPixelCount = 0;
         const totalPixels = d.length / 4;
         for (let i = 0; i < d.length; i += 4) {
@@ -153,46 +159,49 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
         }
         const isDarkTheme = darkPixelCount > totalPixels * 0.5;
 
-        // Binarize so text is always crisp black on pure white
+        // Smooth contrast enhancement: preserves Katakana anti-aliased subpixels
         for (let i = 0; i < d.length; i += 4) {
-            const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-            let val;
+            let gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
             if (isDarkTheme) {
-                val = gray > 135 ? 0 : 255; // White text becomes black, dark background becomes white
-            } else {
-                val = gray < 115 ? 0 : 255; // Dark text becomes black, light background becomes white
+                gray = 255 - gray; // Invert to black text on white
             }
-            d[i] = val;
-            d[i + 1] = val;
-            d[i + 2] = val;
+            // Linear contrast stretch between [50, 190]
+            const contrast = Math.min(255, Math.max(0, (gray - 50) * (255 / 140)));
+            d[i] = contrast;
+            d[i + 1] = contrast;
+            d[i + 2] = contrast;
         }
         ctx.putImageData(imgData, 0, 0);
 
         let rawText = "";
 
-        // Execute recognition using dual English + Japanese language model with automatic fallback
+        // Use fast 4.0.0_fast dictionary path (2.4MB) with multi-language support
+        let worker = null;
         try {
-            if (window.Tesseract && typeof window.Tesseract.recognize === 'function') {
+            if (typeof window.Tesseract.createWorker === 'function') {
+                worker = await window.Tesseract.createWorker(['eng', 'jpn'], 1, {
+                    langPath: TESSDATA_FAST_CDN,
+                    logger: () => {}
+                });
+                const ret = await worker.recognize(roiCanvas);
+                rawText = ret?.data?.text || "";
+            } else {
                 const ret = await window.Tesseract.recognize(roiCanvas, 'eng+jpn', {
+                    langPath: TESSDATA_FAST_CDN,
                     logger: () => {}
                 });
                 rawText = ret?.data?.text || "";
-            } else if (window.Tesseract && typeof window.Tesseract.createWorker === 'function') {
-                const worker = await window.Tesseract.createWorker('eng+jpn');
-                const ret = await worker.recognize(roiCanvas);
-                await worker.terminate();
-                rawText = ret?.data?.text || "";
             }
-        } catch (dualErr) {
-            console.warn("Dual eng+jpn OCR failed, falling back to eng:", dualErr);
-            if (window.Tesseract && typeof window.Tesseract.recognize === 'function') {
-                const ret = await window.Tesseract.recognize(roiCanvas, 'eng', { logger: () => {} });
-                rawText = ret?.data?.text || "";
-            } else if (window.Tesseract && typeof window.Tesseract.createWorker === 'function') {
-                const worker = await window.Tesseract.createWorker('eng');
-                const ret = await worker.recognize(roiCanvas);
-                await worker.terminate();
-                rawText = ret?.data?.text || "";
+        } catch (workerErr) {
+            console.warn("Primary fast worker OCR failed, trying fallback recognize:", workerErr);
+            const ret = await window.Tesseract.recognize(roiCanvas, 'eng+jpn', {
+                langPath: TESSDATA_FAST_CDN,
+                logger: () => {}
+            });
+            rawText = ret?.data?.text || "";
+        } finally {
+            if (worker) {
+                await worker.terminate().catch(() => {});
             }
         }
 
