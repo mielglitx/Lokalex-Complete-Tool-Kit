@@ -348,7 +348,7 @@ export function updateRosterUI() {
         `);
     });
 
-    // 2. Catering List
+    // 2. Catering List (With Multi-Customer Support & Force Cater Transparency Badges)
     cateringRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const mName = formatTitleCase(m.riderName || m.name || "Rider");
@@ -380,11 +380,21 @@ export function updateRosterUI() {
                 const isMyLine = mId === myId || (appState.riderName && mName.toLowerCase() === appState.riderName.toLowerCase());
                 const canSwap = isMyLine || showControls;
 
+                // Inspect active force-cater audit status
+                const cleanCustKey = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const forcedInfo = m.forcedCaters?.[cleanCustKey] || m.forcedCaters?.[cName.toLowerCase().trim()];
+                const forcedBadge = forcedInfo 
+                    ? `<span class="inline-flex items-center gap-1 text-[9px] font-black bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/40 px-1.5 py-0.5 rounded shrink-0 shadow-xs" title="Force Catered by ${escapeHtml(forcedInfo.forcedBy || 'Admin')}">⚡ Force Catered (${escapeHtml(forcedInfo.forcedBy || 'Admin')})</span>` 
+                    : '';
+
                 cardHtml += `
                 <div class="flex flex-wrap items-center justify-between gap-1 bg-white dark:bg-cardBg p-2 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs">
-                    <span class="text-gray-900 dark:text-orange-300 font-black">👤 ${escapeHtml(formattedCustName)} <span class="text-gray-600 dark:text-gray-400 text-[10px] font-normal font-mono">(${timeDetails})</span></span>
+                    <div class="flex items-center gap-1.5 flex-wrap min-w-0">
+                        <span class="text-gray-900 dark:text-orange-300 font-black">👤 ${escapeHtml(formattedCustName)} <span class="text-gray-600 dark:text-gray-400 text-[10px] font-normal font-mono">(${timeDetails})</span></span>
+                        ${forcedBadge}
+                    </div>
                     
-                    <div class="flex items-center gap-1">
+                    <div class="flex items-center gap-1 shrink-0">
                         ${isMyLine ? `
                             <button onclick="window.copyCustomerTrackingLink && window.copyCustomerTrackingLink('${escapeHtml(cName)}')" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/30 dark:hover:bg-blue-600 dark:text-blue-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Send Track Link">🔗 Link</button>
                             <button onclick="window.openLiveCustomerMap && window.openLiveCustomerMap('${escapeHtml(cName)}')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Open Live Map">🗺️ Map</button>

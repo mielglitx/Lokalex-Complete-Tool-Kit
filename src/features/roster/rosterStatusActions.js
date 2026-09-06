@@ -99,6 +99,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         const cleanCustKey = cleanVoidCust.replace(/[^a-z0-9]/g, '');
         if (cleanCustKey) {
             db.ref(`roster/${targetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
+            db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
         }
     }
 
@@ -260,10 +261,34 @@ export async function triggerStatusWithSlide(targetStatus) {
     }
 }
 
-export function promptCateringStatus() {
-    const rosterMembers = globalState.rosterMembers || [];
-    const myId = (appState.telegramId || "").toString();
-    const myRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === myId);
+// -------------------------------------------------------------
+// LIVE GROUND-TRUTH CATERING HANDLERS (ELIMINATES STUCK #1 EXPLOIT)
+// -------------------------------------------------------------
+export async function promptCateringStatus() {
+    const myId = (appState.telegramId || "").toString().trim();
+    if (!myId) return showToast("⚠️ Missing Rider ID.");
+
+    let rosterMembers = globalState.rosterMembers || [];
+
+    // Pre-flight live fetch from Firebase
+    if (db) {
+        try {
+            const snap = await db.ref('roster').once('value');
+            const liveData = snap.val();
+            if (liveData) {
+                rosterMembers = Object.entries(liveData).map(([id, r]) => ({
+                    telegramId: id,
+                    id: id,
+                    ...r
+                }));
+                globalState.rosterMembers = rosterMembers;
+            }
+        } catch (e) {
+            console.warn("Failed to fetch live roster for queue check:", e);
+        }
+    }
+
+    const myRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString().trim() === myId);
 
     if (myRecord) {
         if (myRecord.status === 'End') return showToast("⚠️ Naka-End Shift ka. Mag-Available muna bago mag-Cater.");
@@ -272,11 +297,13 @@ export function promptCateringStatus() {
     }
 
     const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
-    const availableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
+    const liveAvailableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
 
-    if (!amIAlreadyCatering && availableRiders.length > 0) {
-        const firstAvailable = availableRiders[0];
-        if ((firstAvailable?.telegramId || firstAvailable?.id || "").toString() !== myId) {
+    // Universal queue priority check
+    if (!amIAlreadyCatering && liveAvailableRiders.length > 0) {
+        const firstAvailable = liveAvailableRiders[0];
+        const firstId = (firstAvailable?.telegramId || firstAvailable?.id || "").toString().trim();
+        if (firstId !== myId) {
             const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
             const myGross = getRiderTodayGross(myRecord?.riderName || myRecord?.name, myId);
             return showToast(`⚠️ 1st in line: ${firstAvailable.riderName || 'Rider'} (Kita: ₱${firstGross.toFixed(0)}) vs Iyo (₱${myGross.toFixed(0)}). Maghintay sa iyong turn.`);
@@ -305,9 +332,59 @@ export async function confirmCateringStatus() {
     const custName = input ? input.value.trim() : "";
     if (!custName) return showToast("Please enter customer name");
 
-    const myId = (appState.telegramId || "").toString();
+    const myId = (appState.telegramId || "").toString().trim();
     const myName = appState.riderName || localStorage.getItem('riderName') || "Rider";
-    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || m.id || "").toString() === myId) : null;
+
+    // Re-verify against live Firebase data immediately before writing
+    let liveRoster = globalState.rosterMembers || [];
+    if (db) {
+        try {
+            const snap = await db.ref('roster').once('value');
+            const val = snap.val();
+            if (val) {
+                liveRoster = Object.entries(val).map(([id, r]) => ({
+                    telegramId: id,
+                    id: id,
+                    ...r
+                }));
+                globalState.rosterMembers = liveRoster;
+            }
+        } catch (e) {
+            console.warn("Live roster confirmation check error:", e);
+        }
+    }
+
+    const myRecord = liveRoster.find(m => (m.telegramId || m.id || "").toString().trim() === myId);
+
+    if (myRecord) {
+        if (myRecord.status === 'End') {
+            closeCateringModal();
+            return showToast("⚠️ Naka-End Shift ka. Hindi maaaring mag-Cater.");
+        }
+        if (myRecord.status === 'Break') {
+            closeCateringModal();
+            return showToast("⚠️ Naka-Break ka. Hindi maaaring mag-Cater.");
+        }
+        if (myRecord.status === 'Cooldown') {
+            closeCateringModal();
+            return showToast("⚠️ Naka-penalty cooldown ka pa.");
+        }
+    }
+
+    const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
+    const liveAvailableRiders = sortAvailableRidersByGross(liveRoster.filter(m => m.status === 'Available'));
+
+    // Reject out-of-turn execution if superseded in the database
+    if (!amIAlreadyCatering && liveAvailableRiders.length > 0) {
+        const firstAvailable = liveAvailableRiders[0];
+        const firstId = (firstAvailable?.telegramId || firstAvailable?.id || "").toString().trim();
+        if (firstId !== myId) {
+            closeCateringModal();
+            const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
+            showToast(`🚫 Naunahan ka sa pila: Si ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) ang 1st in line. Na-update ang iyong posisyon.`);
+            return;
+        }
+    }
 
     let existingCustomers = [];
     let existingTimes = [];

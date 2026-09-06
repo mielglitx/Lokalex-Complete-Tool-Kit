@@ -137,6 +137,9 @@ export async function submitAdminForceCatering() {
     if (!targetId) return showToast("⚠️ Target rider missing!");
     if (!custName) return showToast("⚠️ Please select or enter customer name!");
 
+    const adminName = appState.riderName || localStorage.getItem('riderName') || "Admin/TL";
+    const cleanCustKey = custName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
     const rosterMembers = globalState.rosterMembers || [];
     const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === targetId.toString());
 
@@ -157,6 +160,22 @@ export async function submitAdminForceCatering() {
 
     closeAdminCateringModal();
 
+    // 1. Tag force-cater audit trail in Firebase
+    if (db && targetId && cleanCustKey) {
+        const forcedPayload = {
+            customerName: custName,
+            forcedBy: adminName,
+            timestamp: Date.now()
+        };
+        await db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
+
+        if (targetRecord) {
+            if (!targetRecord.forcedCaters) targetRecord.forcedCaters = {};
+            targetRecord.forcedCaters[cleanCustKey] = forcedPayload;
+        }
+    }
+
+    // 2. Customer chat folder update
     if (db && custName) {
         const cleanSearchName = custName.toLowerCase().trim();
         db.ref('customerChats').once('value', (snapshot) => {
@@ -171,6 +190,8 @@ export async function submitAdminForceCatering() {
                             cateredByRiderId: targetId,
                             cateredByRiderName: targetName,
                             cateredBy: targetName,
+                            forcedBy: adminName,
+                            isForcedCater: true,
                             lastUpdated: Date.now()
                         });
                     }
@@ -201,8 +222,8 @@ export async function submitAdminForceCatering() {
     }
 
     const penaltyNotice = penaltyMins > 0 ? ` with ${penaltyMins}m cooldown penalty` : '';
-    showToast(`⚡ Admin Force Catered ${custName} to ${targetName}${penaltyNotice}`);
-    showSideNotification("FORCE CATER", `Assigned ${custName} to ${targetName}${penaltyNotice}`, "fa-user-gear", "text-amber-400", "border-amber-500");
+    showToast(`⚡ Force Catered ${custName} to ${targetName} by ${adminName}${penaltyNotice}`);
+    showSideNotification("FORCE CATER", `Assigned ${custName} to ${targetName} by ${adminName}${penaltyNotice}`, "fa-bolt", "text-red-400", "border-red-500");
 }
 
 // ADMIN FORCE STATUS
@@ -227,6 +248,12 @@ export async function adminForceStatus(id, name, actionValue) {
     if (actionValue === 'VoidActive') {
         openSlideDeleteModal(`Void Order for ${name}?`, `Sigurado ka bang nais i-void ang active order ni ${name}? Malilipat sya sa #1 SPOT ng Available queue.`, async () => {
             const topQueueTime = getTopQueueTime();
+            if (db) {
+                db.ref(`roster/${id}/forcedCaters`).remove().catch(() => {});
+            }
+            if (targetRecord) {
+                targetRecord.forcedCaters = {};
+            }
             showSideNotification("ORDER VOIDED", `Voided order for ${name} — placed in Queue`, "fa-ban", "text-red-400", "border-red-500");
             await updateRosterStatusData('Available', '', '', topQueueTime, id, name);
             showToast(`🚫 Voided order for ${name}. Placed in Available queue!`);
@@ -236,6 +263,12 @@ export async function adminForceStatus(id, name, actionValue) {
 
     openSlideDeleteModal(`Force Status: ${actionValue}?`, `Force change status of ${name} to [${actionValue}]?`, async () => {
         if (actionValue === 'Available') {
+            if (db) {
+                db.ref(`roster/${id}/forcedCaters`).remove().catch(() => {});
+            }
+            if (targetRecord) {
+                targetRecord.forcedCaters = {};
+            }
             const currentRoster = globalState.rosterMembers || [];
             const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== id.toString());
             let maxTime = Date.now();
@@ -245,6 +278,12 @@ export async function adminForceStatus(id, name, actionValue) {
             });
             await updateRosterStatus('Available', id, name, maxTime + 1000);
         } else if (actionValue === 'End') {
+            if (db) {
+                db.ref(`roster/${id}/forcedCaters`).remove().catch(() => {});
+            }
+            if (targetRecord) {
+                targetRecord.forcedCaters = {};
+            }
             await clockOutRider(id);
             await updateRosterStatus('End', id, name);
         } else {
@@ -263,6 +302,14 @@ export async function adminVoidSpecificCustomer(targetId, targetName, custNameTo
     if (!targetId || !custNameToVoid) return;
 
     openSlideDeleteModal(`Void Customer: ${custNameToVoid}?`, `Sigurado ka bang nais i-void si ${custNameToVoid} para kay ${targetName}?`, async () => {
+        const cleanCustKey = custNameToVoid.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (db && cleanCustKey) {
+            db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
+        }
+        const targetRecord = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === targetId.toString());
+        if (targetRecord && targetRecord.forcedCaters) {
+            delete targetRecord.forcedCaters[cleanCustKey];
+        }
         await voidSingleCateringCustomer(targetId, targetName, custNameToVoid);
     });
 }
@@ -327,6 +374,7 @@ export async function executeVoidCateredCustomer(riderName, customerName, comple
             if (targetRoster && (targetRoster.telegramId || targetRoster.id) && cleanCustKey) {
                 const tId = targetRoster.telegramId || targetRoster.id;
                 deletePromises.push(db.ref(`roster/${tId}/customerFees/${cleanCustKey}`).remove());
+                deletePromises.push(db.ref(`roster/${tId}/forcedCaters/${cleanCustKey}`).remove());
             }
 
             await Promise.all(deletePromises);
@@ -425,6 +473,7 @@ export async function forceAllEndShift() {
                         startTime: "", 
                         pendingPenaltyMinutes: 0, 
                         cooldownUntil: 0,
+                        forcedCaters: null,
                         lastUpdated: timeStr,
                         lastActiveTimestamp: nowTimestamp
                     }).catch(() => {});
@@ -435,6 +484,7 @@ export async function forceAllEndShift() {
                 m.startTime = '';
                 m.pendingPenaltyMinutes = 0;
                 m.cooldownUntil = 0;
+                m.forcedCaters = null;
                 m.lastUpdated = timeStr;
                 m.lastActiveTimestamp = nowTimestamp;
             }
