@@ -1,770 +1,120 @@
 // src/features/directory.js
-import { appState, globalState } from '../store/state.js';
-import { db } from '../config/firebase.js';
-import { API_URL, BARANGAY_DATA, ADMIN_IDS } from '../config/constants.js';
-import { showToast, showSideNotification } from '../ui/notifications.js';
-import { switchView, goBack } from '../ui/router.js';
-import { openSlideDeleteModal } from '../ui/modals.js';
-import { calibrateGPS } from './auth/index.js';
-import { escapeHtml, copyText, getLocalTodayStr } from '../utils/helpers.js';
-import { isRiderAdmin } from './commission/index.js';
-import { idbGet, idbSet, prefetchMediaBatch } from '../utils/storageEngine.js';
-
-let editingRecord = null;
-let mapInstance = null;
-let selectedMapLat = 0;
-let selectedMapLng = 0;
-let lastJumpLetter = "";
-
-const CACHE_KEY = 'lokalex_directory_cache_v2';
-const IDB_KEY = 'all_directory_records';
-
-// CHECK IF CURRENT USER IS AN ADMIN
-export function checkAdminAccess() {
-    const uType = (appState.userType || localStorage.getItem('userType') || "").toString().trim().toLowerCase();
-    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
-    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
-
-    if (uType.includes("admin") || uType.includes("owner") || uType.includes("manager") || ADMIN_IDS.includes(myId)) {
-        return true;
-    }
-
-    if (typeof isRiderAdmin === 'function') {
-        return isRiderAdmin(myName, myId);
-    }
-
-    return false;
-}
-
-// PERSIST DIRECTORY RECORDS TO LOCALSTORAGE & INDEXEDDB
-export function saveDirectoryCache() {
-    try {
-        if (globalState.records && globalState.records.length > 0) {
-            localStorage.setItem(CACHE_KEY, JSON.stringify(globalState.records));
-            idbSet('directory', IDB_KEY, globalState.records).catch(() => {});
-        }
-    } catch(e) {}
-}
-
-// LOAD DIRECTORY RECORDS: SYNCHRONOUS LOCALSTORAGE + ASYNC INDEXEDDB HYDRATION
-export function loadDirectoryCache() {
-    try {
-        const saved = localStorage.getItem(CACHE_KEY);
-        if (saved) {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-                globalState.records = parsed;
-            }
-        }
-        
-        idbGet('directory', IDB_KEY).then(idbRecords => {
-            if (Array.isArray(idbRecords) && idbRecords.length > 0) {
-                if (!globalState.records || idbRecords.length > globalState.records.length) {
-                    globalState.records = idbRecords;
-                    const currentViewEl = document.querySelector('main > section:not(.hidden)');
-                    if (currentViewEl && currentViewEl.id === 'view-directory') {
-                        renderDirectoryList();
-                    }
-                }
-            }
-        }).catch(() => {});
-
-        const hasBarangays = (globalState.records || []).some(r => r.type === 'barangays');
-        if (!hasBarangays) {
-            const defaultBarangays = BARANGAY_DATA.map(b => ({
-                name: b.name,
-                contact: "",
-                address: `₱${b.fee.toFixed(2)}`,
-                rate: `₱${b.fee.toFixed(2)}`,
-                lat_lon_link: "",
-                type: 'barangays',
-                recorded_by: "System",
-                recorded_at: getLocalTodayStr()
-            }));
-            globalState.records = [...(globalState.records || []), ...defaultBarangays];
-            saveDirectoryCache();
-        }
-    } catch(e) {
-        if (!globalState.records) globalState.records = [];
-    }
-}
-
-// OPEN DIRECTORY (INSTANT RENDER FROM CACHE)
-export async function openDirectory(type) {
-    globalState.currentType = type || 'customers';
-    switchView('view-directory');
-    
-    const headerTitle = document.getElementById('header-title');
-    if (headerTitle) {
-        if (type === 'customers') headerTitle.innerText = "Customer Directory";
-        else if (type === 'stores') headerTitle.innerText = "Store Directory";
-        else headerTitle.innerText = "Rates & Barangays";
-    }
-
-    loadDirectoryCache();
-    renderDirectoryList();
-}
-
-// SILENT BACKGROUND SYNC ON APP STARTUP & RESUME
-export async function silentSyncDirectory() {
-    if (!db) return;
-
-    try {
-        const types = ['customers', 'stores', 'barangays'];
-        let updatedRecordsMap = new Map();
-
-        (globalState.records || []).forEach(r => {
-            if (r && r.name) {
-                const key = `${r.type || 'customers'}_${r.name.toLowerCase().trim()}`;
-                updatedRecordsMap.set(key, r);
-            }
-        });
-
-        for (const type of types) {
-            const snap = await db.ref(`directory/${type}`).once('value');
-            const fbData = snap.val();
-            if (fbData) {
-                Object.values(fbData).forEach(item => {
-                    const name = (item.name || "").trim();
-                    if (name) {
-                        const key = `${type}_${name.toLowerCase()}`;
-                        updatedRecordsMap.set(key, {
-                            name: name,
-                            contact: (item.contact || "").trim(),
-                            address: (item.address || "").trim(),
-                            rate: (item.rate || item.address || "").toString().trim(),
-                            lat_lon_link: (item.lat_lon_link || "").trim(),
-                            type: item.type || type,
-                            recorded_by: item.recorded_by || "Amiel",
-                            recorded_at: (item.recorded_at || item.recorded_date || item.date || "").toString().trim()
-                        });
-                    }
-                });
-            }
-        }
-
-        try {
-            const custSnap = await db.ref('customers').once('value');
-            const custVal = custSnap.val();
-            if (custVal) {
-                Object.values(custVal).forEach(c => {
-                    const name = (c.name || "").trim();
-                    if (name) {
-                        const key = `customers_${name.toLowerCase()}`;
-                        const existing = updatedRecordsMap.get(key) || {};
-                        updatedRecordsMap.set(key, {
-                            name: name,
-                            contact: (c.phoneNumber || existing.contact || "").trim(),
-                            address: (c.address || existing.address || "").trim(),
-                            rate: existing.rate || "",
-                            lat_lon_link: (c.mapPinLink || existing.lat_lon_link || (c.lat && c.lng ? `https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}` : "")).trim(),
-                            type: 'customers',
-                            recorded_by: existing.recorded_by || "App Registered",
-                            recorded_at: existing.recorded_at || getLocalTodayStr(),
-                            photoUrl: c.photoUrl || c.avatarUrl || ""
-                        });
-                    }
-                });
-            }
-        } catch(e) {}
-
-        const finalMerged = Array.from(updatedRecordsMap.values());
-        if (finalMerged.length > 0) {
-            globalState.records = finalMerged;
-            saveDirectoryCache();
-
-            const avatarUrls = finalMerged.map(r => r.photoUrl).filter(Boolean);
-            if (avatarUrls.length > 0) {
-                prefetchMediaBatch(avatarUrls);
-            }
-
-            const currentViewEl = document.querySelector('main > section:not(.hidden)');
-            if (currentViewEl && currentViewEl.id === 'view-directory') {
-                renderDirectoryList();
-            }
-        }
-    } catch (err) {
-        console.warn("Silent directory sync skipped:", err.message);
-    }
-}
-
-// DUAL-SOURCE DATA SYNC WITH LIVE VISUAL FEEDBACK
-export async function syncData(isSilent = false) {
-    const type = globalState.currentType || 'customers';
-    const listEl = document.getElementById('record-list');
-    
-    const refreshIcons = document.querySelectorAll('#view-directory .fa-rotate, #view-directory .fa-arrows-rotate, button[onclick*="syncData"] i');
-    refreshIcons.forEach(icon => icon.classList.add('fa-spin'));
-
-    const displayTypeLabel = type === 'stores' ? 'Store' : (type === 'customers' ? 'Customer' : 'Barangay Rates');
-
-    if (!isSilent) {
-        showToast(`🔄 Syncing latest ${displayTypeLabel} records...`);
-        showSideNotification("SYNCING DIRECTORY", `Fetching latest ${displayTypeLabel} data...`, "fa-rotate", "text-blue-400", "border-blue-500");
-    }
-
-    loadDirectoryCache();
-    const hasExistingLocal = (globalState.records || []).some(r => (r.type || 'customers') === type);
-
-    if (!isSilent && !hasExistingLocal && listEl) {
-        listEl.innerHTML = `
-        <div class="text-center text-blue-600 dark:text-blue-400 font-bold py-16 text-xs flex flex-col items-center justify-center gap-2">
-            <i class="fa-solid fa-rotate fa-spin text-2xl"></i>
-            <span>Syncing ${displayTypeLabel.toUpperCase()} records...</span>
-        </div>`;
-    }
-
-    let fetchedRecords = [];
-
-    try {
-        const res = await fetch(`${API_URL}?type=${type}`);
-        if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data)) {
-                fetchedRecords = data.map(item => {
-                    const barangayName = item.barangay || item.barangay_name || item.name || item.title || "";
-                    const rateVal = item.rate || item.delivery_rate || item.fee || item.price || item.amount || item.address || item.general_address || "";
-                    const contact = item.contact || item.contact_number || item.phone || item.mobile || "";
-                    const address = item.address || item.general_address || item.location || "";
-                    const lat_lon_link = item.lat_lon_link || item.lat_lon || item.coordinates || item.map || item.map_link || "";
-                    const recorded_at = item.recorded_at || item.recorded_date || item.date_added || item.date || "";
-
-                    const finalName = (type === 'barangays' ? barangayName : (item.name || item.customer_name || item.store_name || barangayName)).trim();
-
-                    return {
-                        name: finalName,
-                        contact: contact.trim(),
-                        address: address.trim(),
-                        rate: rateVal.toString().trim(),
-                        lat_lon_link: lat_lon_link.trim(),
-                        type: item.type || type,
-                        recorded_by: item.recorded_by || item.recordedby || "Amiel",
-                        recorded_at: recorded_at.toString().trim()
-                    };
-                }).filter(r => r.name !== "");
-            }
-        }
-    } catch (err) {
-        console.warn("Offline/Network error syncing directory, preserving local cache...");
-    }
-
-    if (db) {
-        try {
-            const snap = await db.ref(`directory/${type}`).once('value');
-            const fbData = snap.val();
-            if (fbData) {
-                const fbList = Object.values(fbData).map(item => ({
-                    name: (item.name || "").trim(),
-                    contact: (item.contact || "").trim(),
-                    address: (item.address || "").trim(),
-                    rate: (item.rate || item.address || "").toString().trim(),
-                    lat_lon_link: (item.lat_lon_link || "").trim(),
-                    type: item.type || type,
-                    recorded_by: item.recorded_by || "Amiel",
-                    recorded_at: (item.recorded_at || item.recorded_date || item.date || "").toString().trim()
-                })).filter(r => r.name !== "");
-
-                const recordMap = new Map();
-                fetchedRecords.forEach(r => recordMap.set(r.name.toLowerCase(), r));
-                fbList.forEach(r => recordMap.set(r.name.toLowerCase(), r));
-                fetchedRecords = Array.from(recordMap.values());
-            }
-        } catch(e) {}
-    }
-
-    try {
-        if (fetchedRecords.length > 0) {
-            const otherTypeRecords = (globalState.records || []).filter(r => r.type !== type);
-            globalState.records = [...otherTypeRecords, ...fetchedRecords];
-            saveDirectoryCache();
-
-            if (!isSilent) {
-                showToast(`✅ ${displayTypeLabel} Directory updated (${fetchedRecords.length} records)!`);
-                showSideNotification("SYNC COMPLETE", `${fetchedRecords.length} ${displayTypeLabel} records loaded`, "fa-circle-check", "text-emerald-400", "border-emerald-500");
-            }
-        } else if (!isSilent) {
-            const localCount = (globalState.records || []).filter(r => (r.type || 'customers') === type).length;
-            showToast(`📁 Loaded ${localCount} ${displayTypeLabel} records from offline cache.`);
-            showSideNotification("OFFLINE CACHE", `${localCount} records loaded from storage`, "fa-box-archive", "text-amber-400", "border-amber-500");
-        }
-
-        const currentViewEl = document.querySelector('main > section:not(.hidden)');
-        if (currentViewEl && currentViewEl.id === 'view-directory') {
-            renderDirectoryList();
-        }
-    } finally {
-        refreshIcons.forEach(icon => icon.classList.remove('fa-spin'));
-    }
-}
-
-export function filterDirectoryRecords() {
-    renderDirectoryList();
-}
-
-export function copyBarangayRate(barangayName, rawRate) {
-    let rateNum = parseFloat((rawRate || "").replace(/[^0-9.]/g, ''));
-    let amountStr = !isNaN(rateNum) ? rateNum.toFixed(0) : (rawRate || '0').replace(/[^0-9.]/g, '');
-
-    const formattedMessage = `The delivery fee at ${barangayName} starts at ₱${amountStr}\n\n(Note: Other fees may apply for additional stores or extra services!)\n\nWould you like to see our fee guidelines po?`;
-
-    copyText(formattedMessage);
-    showToast(`📋 Copied rate message for ${barangayName}!`);
-}
-
-function getSectionLetter(name) {
-    if (!name) return "#";
-    const firstChar = name.trim().charAt(0).toUpperCase();
-    
-    if (/^[A-Z]$/.test(firstChar)) {
-        return firstChar;
-    }
-    
-    return "#";
-}
-
-// RENDER DIRECTORY LIST
-export function renderDirectoryList() {
-    const listEl = document.getElementById('record-list');
-    const searchVal = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
-    if (!listEl) return;
-
-    if (!globalState.records || globalState.records.length === 0) {
-        loadDirectoryCache();
-    }
-
-    let records = globalState.records ? globalState.records.filter(r => (r.type || 'customers') === globalState.currentType) : [];
-
-    if (searchVal) {
-        records = records.filter(r => 
-            (r.name || '').toLowerCase().includes(searchVal) ||
-            (r.address || '').toLowerCase().includes(searchVal) ||
-            (r.rate || '').toLowerCase().includes(searchVal) ||
-            (r.contact || '').toLowerCase().includes(searchVal)
-        );
-    }
-
-    if (records.length === 0) {
-        listEl.innerHTML = `<div class="text-center text-gray-500 italic py-16 text-xs">No records found. Click + to add or tap 🔄 to refresh.</div>`;
-        setupAlphabetScrubber([]);
-        return;
-    }
-
-    records.sort((a, b) => {
-        const secA = getSectionLetter(a.name);
-        const secB = getSectionLetter(b.name);
-
-        if (secA === "#" && secB !== "#") return -1;
-        if (secA !== "#" && secB === "#") return 1;
-
-        return (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' });
-    });
-
-    const isBarangay = globalState.currentType === 'barangays';
-    const isAdminUser = checkAdminAccess();
-
-    let currentLetterGroup = "";
-    let htmlBuilder = "";
-    let availableLetters = new Set();
-
-    records.forEach(r => {
-        const letterHeader = getSectionLetter(r.name);
-        availableLetters.add(letterHeader);
-
-        if (letterHeader !== currentLetterGroup) {
-            currentLetterGroup = letterHeader;
-            const headerLabel = letterHeader === "#" ? "# (Special & Foreign)" : letterHeader;
-
-            htmlBuilder += `
-            <div id="dir-section-${letterHeader === "#" ? "SPECIAL" : letterHeader}" data-section="${letterHeader}" class="sticky top-0 z-10 bg-gray-100/95 dark:bg-darkBg/95 backdrop-blur-md text-amber-700 dark:text-amber-400 font-black text-xs px-2.5 py-1.5 border-b border-gray-200 dark:border-gray-800/80 my-1 flex items-center justify-between">
-                <span>${headerLabel}</span>
-                <span class="text-[9px] text-gray-500 dark:text-gray-400 font-medium">Section Header</span>
-            </div>`;
-        }
-
-        let mapBtn = '';
-        if (r.lat_lon_link) {
-            mapBtn = `<a href="${escapeHtml(r.lat_lon_link)}" target="_blank" class="text-xs text-blue-600 dark:text-blue-400 font-bold underline flex items-center gap-1 mt-1"><i class="fa-solid fa-map-location-dot"></i> View Location</a>`;
-        }
-
-        const deleteBtnHtml = isAdminUser 
-            ? `<button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-red-600 dark:text-red-400 p-2 rounded-lg text-xs transition active:scale-90" title="Delete">
-                    <i class="fa-solid fa-trash"></i>
-               </button>`
-            : '';
-
-        const recordedByText = escapeHtml(r.recorded_by || "System");
-        const recordedAtText = r.recorded_at ? ` • ${escapeHtml(r.recorded_at)}` : '';
-        const metaInfoHtml = `<div class="text-[10px] text-gray-500 dark:text-gray-400 mt-1.5 flex items-center gap-1"><i class="fa-solid fa-user-pen text-[9px]"></i> Recorded by <span class="text-gray-800 dark:text-gray-300 font-bold">${recordedByText}</span>${recordedAtText}</div>`;
-
-        if (isBarangay) {
-            let rateNum = parseFloat((r.rate || r.address || "").replace(/[^0-9.]/g, ''));
-            let displayRate = !isNaN(rateNum) ? `₱${rateNum.toFixed(2)}` : (r.rate || r.address || '₱0.00');
-
-            htmlBuilder += `
-            <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-3.5 rounded-2xl flex justify-between items-center gap-2 shadow-xs my-1">
-                <div class="flex-1 min-w-0">
-                    <div class="font-black text-sm text-gray-900 dark:text-white truncate flex items-center gap-1.5"><i class="fa-solid fa-map-location-dot text-emerald-600 dark:text-emerald-400"></i> <span>${escapeHtml(r.name)}</span></div>
-                    <div class="text-xs font-mono text-emerald-700 dark:text-emerald-400 font-black mt-1">Delivery Rate: ${escapeHtml(displayRate)}</div>
-                    ${metaInfoHtml}
-                </div>
-                <div class="flex gap-1.5 shrink-0">
-                    <button onclick="copyBarangayRate('${escapeHtml(r.name)}', '${escapeHtml(displayRate)}')" class="bg-blue-50 hover:bg-blue-100 dark:bg-blue-600/30 dark:hover:bg-blue-600 text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-white border border-blue-200 dark:border-blue-500/50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1" title="Copy Rate Message">
-                        <i class="fa-solid fa-copy"></i> Copy
-                    </button>
-                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
-                        <i class="fa-solid fa-pen"></i>
-                    </button>
-                    ${deleteBtnHtml}
-                </div>
-            </div>`;
-        } else {
-            htmlBuilder += `
-            <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-3.5 rounded-2xl flex justify-between items-start gap-2 shadow-xs my-1">
-                <div class="flex-1 min-w-0">
-                    <div class="font-black text-sm text-gray-900 dark:text-white truncate">${escapeHtml(r.name)}</div>
-                    ${r.contact ? `<div class="text-xs text-gray-700 dark:text-gray-400 mt-0.5 font-bold font-mono"><i class="fa-solid fa-phone text-[10px] text-blue-500"></i> ${escapeHtml(r.contact)}</div>` : ''}
-                    ${r.address ? `<div class="text-xs text-gray-700 dark:text-gray-300 mt-0.5 font-medium"><i class="fa-solid fa-location-dot text-[10px] text-red-500"></i> ${escapeHtml(r.address)}</div>` : ''}
-                    ${mapBtn}
-                    ${metaInfoHtml}
-                </div>
-                <div class="flex gap-1 shrink-0">
-                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
-                        <i class="fa-solid fa-pen"></i>
-                    </button>
-                    ${deleteBtnHtml}
-                </div>
-            </div>`;
-        }
-    });
-
-    listEl.innerHTML = htmlBuilder;
-    setupAlphabetScrubber(Array.from(availableLetters));
-}
-
-// ELASTIC ALPHABET SCRUBBER
-export function setupAlphabetScrubber(availableLetters) {
-    const scrubberContainer = document.getElementById('alphabet-scrubber');
-    if (!scrubberContainer) return;
-
-    const alphabet = ['#', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
-
-    let bubbleEl = document.getElementById('scrubber-bubble');
-    if (!bubbleEl) {
-        bubbleEl = document.createElement('div');
-        bubbleEl.id = 'scrubber-bubble';
-        bubbleEl.className = 'fixed right-12 z-50 w-12 h-12 rounded-full bg-blue-600 text-white font-black text-xl flex items-center justify-center shadow-2xl border-2 border-white pointer-events-none transition-opacity duration-150 opacity-0 transform -translate-y-1/2';
-        document.body.appendChild(bubbleEl);
-    }
-
-    scrubberContainer.innerHTML = alphabet.map(char => {
-        const hasRecords = availableLetters.includes(char);
-        const opacityClass = hasRecords ? "text-blue-600 dark:text-blue-400 font-black" : "text-gray-400 dark:text-gray-600 opacity-40 font-semibold";
-        return `<span data-letter="${char}" class="scrubber-letter py-0.5 px-1 cursor-pointer transition-transform duration-75 text-[10px] select-none block text-center ${opacityClass}">${char}</span>`;
-    }).join('');
-
-    const letterNodes = Array.from(scrubberContainer.querySelectorAll('.scrubber-letter'));
-
-    const jumpToSectionLetter = (letter) => {
-        if (!letter || letter === lastJumpLetter) return;
-        lastJumpLetter = letter;
-
-        const sectionId = letter === "#" ? "dir-section-SPECIAL" : `dir-section-${letter}`;
-        let targetEl = document.getElementById(sectionId);
-
-        if (!targetEl) {
-            const allSections = Array.from(document.querySelectorAll('[data-section]'));
-            targetEl = allSections.find(sec => sec.dataset.section.localeCompare(letter) >= 0) || allSections[allSections.length - 1];
-        }
-
-        if (targetEl) {
-            targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-    };
-
-    const updateElasticDistortion = (clientY) => {
-        let activeChar = "";
-        let activeY = clientY;
-
-        letterNodes.forEach((node) => {
-            const rect = node.getBoundingClientRect();
-            const nodeCenterY = rect.top + rect.height / 2;
-            const dist = Math.abs(clientY - nodeCenterY);
-
-            if (dist < 50) {
-                const factor = 1 - (dist / 50);
-                const scale = 1 + (factor * 1.3);
-                const translateX = -(factor * 16);
-
-                node.style.transform = `scale(${scale}) translateX(${translateX}px)`;
-                node.style.color = '#0284c7';
-
-                if (dist < 15) {
-                    activeChar = node.dataset.letter;
-                    activeY = nodeCenterY;
-                }
-            } else {
-                node.style.transform = 'scale(1) translateX(0px)';
-                node.style.color = '';
-            }
-        });
-
-        if (activeChar && bubbleEl) {
-            bubbleEl.innerText = activeChar;
-            bubbleEl.style.top = `${activeY}px`;
-            bubbleEl.style.opacity = '1';
-            jumpToSectionLetter(activeChar);
-        }
-    };
-
-    const resetElasticDistortion = () => {
-        lastJumpLetter = "";
-        letterNodes.forEach(node => {
-            node.style.transform = 'scale(1) translateX(0px)';
-            node.style.color = '';
-        });
-        if (bubbleEl) bubbleEl.style.opacity = '0';
-    };
-
-    scrubberContainer.ontouchstart = (e) => {
-        e.preventDefault();
-        if (e.touches[0]) updateElasticDistortion(e.touches[0].clientY);
-    };
-
-    scrubberContainer.ontouchmove = (e) => {
-        e.preventDefault();
-        if (e.touches[0]) updateElasticDistortion(e.touches[0].clientY);
-    };
-
-    scrubberContainer.ontouchend = () => resetElasticDistortion();
-    scrubberContainer.ontouchcancel = () => resetElasticDistortion();
-
-    scrubberContainer.onmousedown = (e) => {
-        const onMouseMove = (moveEvt) => updateElasticDistortion(moveEvt.clientY);
-        const onMouseUp = () => {
-            resetElasticDistortion();
-            window.removeEventListener('mousemove', onMouseMove);
-            window.removeEventListener('mouseup', onMouseUp);
-        };
-        window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('mouseup', onMouseUp);
-        updateElasticDistortion(e.clientY);
-    };
-}
-
-export function openForm(record = null) {
-    editingRecord = record;
-    switchView('view-form');
-
-    const warningEl = document.getElementById('edit-warning');
-    const warningText = document.getElementById('warning-text');
-    const submitBtn = document.getElementById('form-submit-btn');
-
-    const nameInput = document.getElementById('form-name');
-    const contactInput = document.getElementById('form-contact');
-    const addressInput = document.getElementById('form-address');
-    const latlonInput = document.getElementById('form-latlon');
-
-    if (record) {
-        if (warningEl) warningEl.classList.remove('hidden');
-        if (warningText) warningText.innerText = `Editing record: ${record.name}`;
-        if (submitBtn) submitBtn.innerText = "UPDATE RECORD";
-
-        if (nameInput) nameInput.value = record.name || "";
-        if (contactInput) contactInput.value = record.contact || "";
-        if (addressInput) addressInput.value = record.address || record.rate || "";
-        if (latlonInput) latlonInput.value = record.lat_lon_link || "";
-    } else {
-        if (warningEl) warningEl.classList.add('hidden');
-        if (submitBtn) submitBtn.innerText = "SAVE RECORD";
-
-        if (nameInput) nameInput.value = "";
-        if (contactInput) contactInput.value = "";
-        if (addressInput) addressInput.value = "";
-        if (latlonInput) latlonInput.value = "";
-    }
-}
-
-export function editDirectoryRecord(name) {
-    const record = globalState.records?.find(r => r.name === name);
-    if (record) openForm(record);
-}
-
-export function promptDeleteDirectoryRecord(name) {
-    if (!checkAdminAccess()) {
-        return showToast("⚠️ Admin access required to delete directory records.");
-    }
-
-    openSlideDeleteModal(
-        `Delete Directory Record?`,
-        `Sigurado ka bang nais mong burahin ang record na [${name}]?`,
-        () => {
-            executeDeleteDirectoryRecord(name);
-        }
-    );
-}
-
-export function executeDeleteDirectoryRecord(name) {
-    const type = globalState.currentType || 'customers';
-    
-    if (globalState.records) {
-        globalState.records = globalState.records.filter(r => !(r.name === name && r.type === type));
-    }
-
-    saveDirectoryCache();
-    renderDirectoryList();
-    showToast(`🗑️ Deleted record: ${name}`);
-
-    if (db) {
-        const cleanKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        db.ref(`directory/${type}/${cleanKey}`).remove().catch(() => {});
-    }
-
-    try {
-        fetch(API_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            body: JSON.stringify({
-                type: type,
-                action: 'delete',
-                data: { name: name }
-            })
-        }).catch(() => {});
-    } catch(e) {}
-}
-
-export async function submitForm() {
-    const nameInput = document.getElementById('form-name');
-    const contactInput = document.getElementById('form-contact');
-    const addressInput = document.getElementById('form-address');
-    const latlonInput = document.getElementById('form-latlon');
-
-    const name = nameInput ? nameInput.value.trim() : "";
-    const contact = contactInput ? contactInput.value.trim() : "";
-    const address = addressInput ? addressInput.value.trim() : "";
-    const lat_lon_link = latlonInput ? latlonInput.value.trim() : "";
-
-    if (!name) return showToast("⚠️ Name / Store Name / Barangay is required!");
-
-    showToast("📡 Calibrating GPS location...");
-    const coords = await calibrateGPS((acc) => {
-        showToast(`📡 Checking GPS signal: ±${Math.round(acc)}m`);
-    });
-
-    if (!coords || (coords.lat === 0 && coords.lon === 0) || coords.accuracy > 50) {
-        const gpsModal = document.getElementById('gps-alert-modal');
-        if (gpsModal) gpsModal.classList.remove('hidden');
-        showToast(`⚠️ Cannot save record: Bad GPS signal (±${Math.round(coords ? coords.accuracy : 999)}m)! Move to an open area.`);
-        return;
-    }
-
-    const type = globalState.currentType || 'customers';
-    const isEdit = !!editingRecord;
-    const currentDate = getLocalTodayStr();
-
-    const recordData = {
-        name, contact, address, rate: address, lat_lon_link,
-        type: type,
-        recorded_by: editingRecord ? (editingRecord.recorded_by || appState.riderName || "Amiel") : (appState.riderName || "Amiel"),
-        recorded_at: editingRecord ? (editingRecord.recorded_at || currentDate) : currentDate,
-        originalName: editingRecord ? editingRecord.name : name
-    };
-
-    if (editingRecord) {
-        const idx = globalState.records.findIndex(r => r.name === editingRecord.name && r.type === type);
-        if (idx !== -1) globalState.records[idx] = recordData;
-    } else {
-        if (!globalState.records) globalState.records = [];
-        globalState.records.push(recordData);
-    }
-
-    saveDirectoryCache();
-    editingRecord = null;
-
-    showToast(`✅ Record ${isEdit ? 'updated' : 'saved'} successfully!`);
-
-    if (window.history.state && window.history.state.view === 'view-form') {
-        goBack();
-    } else {
-        openDirectory(type);
-    }
-
-    if (db) {
-        const cleanKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        db.ref(`directory/${type}/${cleanKey}`).set(recordData).catch(() => {});
-    }
-
-    showSideNotification("SAVING RECORD", `Syncing ${name} to ${type}...`, "fa-floppy-disk", "text-emerald-400", "border-emerald-500");
-
-    try {
-        fetch(API_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            body: JSON.stringify({
-                type: type,
-                action: isEdit ? 'edit' : 'add',
-                data: recordData
-            })
-        }).catch(() => {});
-    } catch(e) {}
-}
-
-export async function openMapPicker() {
-    switchView('view-map');
-
-    showToast("📡 Calibrating GPS for map pin...");
-    const coords = await calibrateGPS((acc) => {
-        showToast(`📡 Calibrating Map GPS: ±${Math.round(acc)}m`);
-    });
-
-    if (!coords || (coords.lat === 0 && coords.lon === 0) || coords.accuracy > 50) {
-        showToast(`⚠️ Weak GPS Signal (±${Math.round(coords ? coords.accuracy : 999)}m)! Move to an open area.`);
-    } else {
-        showToast(`✅ Map GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
-    }
-
-    selectedMapLat = coords.lat || 15.6886;
-    selectedMapLng = coords.lon || 120.4131;
-
-    initGoogleMap(selectedMapLat, selectedMapLng);
-}
-
-function initGoogleMap(lat, lng) {
-    const container = document.getElementById('google-map-container');
-    if (!container || !window.google || !window.google.maps) return;
-
-    const latLng = new google.maps.LatLng(lat, lng);
-    mapInstance = new google.maps.Map(container, {
-        center: latLng,
-        zoom: 17,
-        mapTypeId: 'hybrid',
-        disableDefaultUI: false,
-        zoomControl: true
-    });
-
-    mapInstance.addListener('center_changed', () => {
-        const center = mapInstance.getCenter();
-        selectedMapLat = center.lat();
-        selectedMapLng = center.lng();
-    });
-}
-
-export function confirmGoogleMapPin() {
-    const latlonInput = document.getElementById('form-latlon');
-    if (latlonInput && selectedMapLat && selectedMapLng) {
-        latlonInput.value = `https://www.google.com/maps/search/?api=1&query=${selectedMapLat.toFixed(6)},${selectedMapLng.toFixed(6)}`;
-    }
-    switchView('view-form');
-    showToast("📍 Map Pin location confirmed!");
-}
-
+/**
+ * ============================================================================
+ * DIRECTORY MODULE (FACADE / BARREL)
+ * ============================================================================
+ * This file serves as the unified entry point and facade for the Directory
+ * feature. It connects the following modular sub-components:
+ *
+ * 1. directoryPermissions.js:
+ *    - Role & Access Control: Evaluates whether a rider/user possesses admin rights.
+ *    - Key Exports: checkAdminAccess()
+ *
+ * 2. directoryStorage.js:
+ *    - Persistence & Hydration: Manages LocalStorage and IndexedDB offline cache,
+ *      and populates fallback barangay rates.
+ *    - Key Exports: saveDirectoryCache(), loadDirectoryCache(), CACHE_KEY, IDB_KEY
+ *
+ * 3. directorySync.js:
+ *    - Data Synchronization: Handles background silent syncing from Firebase
+ *      and explicit manual two-way synchronization via Google Apps Script and Firebase.
+ *    - Key Exports: silentSyncDirectory(), syncData()
+ *
+ * 4. directoryUi.js:
+ *    - View Rendering & Interactive Scrubber: Handles DOM list construction, 
+ *      sorting, copy actions, and elastic alphabet scrubber distortion.
+ *    - Key Exports: openDirectory(), renderDirectoryList(), setupAlphabetScrubber(),
+ *      filterDirectoryRecords(), copyBarangayRate(), getSectionLetter()
+ *
+ * 5. directoryForm.js:
+ *    - Record Mutations & GPS Validation: Coordinates add/edit forms, 
+ *      GPS accuracy calibration before saving, and record removal.
+ *    - Key Exports: openForm(), editDirectoryRecord(), submitForm(),
+ *      promptDeleteDirectoryRecord(), executeDeleteDirectoryRecord()
+ *
+ * 6. directoryMap.js:
+ *    - Spatial Pinning: Initializes the Google Maps hybrid viewport and captures
+ *      dragged pin coordinates.
+ *    - Key Exports: openMapPicker(), initGoogleMap(), confirmGoogleMapPin()
+ * ============================================================================
+ */
+
+// 1. Permissions
+export { checkAdminAccess } from './directory/directoryPermissions.js';
+
+// 2. Storage & Cache
+export {
+    CACHE_KEY,
+    IDB_KEY,
+    saveDirectoryCache,
+    loadDirectoryCache
+} from './directory/directoryStorage.js';
+
+// 3. Synchronization
+export {
+    silentSyncDirectory,
+    syncData
+} from './directory/directorySync.js';
+
+// 4. UI & Interactive Scrubber
+export {
+    getSectionLetter,
+    openDirectory,
+    filterDirectoryRecords,
+    copyBarangayRate,
+    renderDirectoryList,
+    setupAlphabetScrubber
+} from './directory/directoryUi.js';
+
+// 5. Form & Mutators
+export {
+    openForm,
+    editDirectoryRecord,
+    promptDeleteDirectoryRecord,
+    executeDeleteDirectoryRecord,
+    submitForm
+} from './directory/directoryForm.js';
+
+// 6. Map Picker
+export {
+    openMapPicker,
+    initGoogleMap,
+    confirmGoogleMapPin
+} from './directory/directoryMap.js';
+
+// Internal module imports for bootstrapping and global registration
+import { checkAdminAccess } from './directory/directoryPermissions.js';
+import { saveDirectoryCache, loadDirectoryCache } from './directory/directoryStorage.js';
+import { silentSyncDirectory, syncData } from './directory/directorySync.js';
+import {
+    openDirectory,
+    filterDirectoryRecords,
+    copyBarangayRate,
+    renderDirectoryList
+} from './directory/directoryUi.js';
+import {
+    openForm,
+    editDirectoryRecord,
+    promptDeleteDirectoryRecord,
+    executeDeleteDirectoryRecord,
+    submitForm
+} from './directory/directoryForm.js';
+import {
+    openMapPicker,
+    confirmGoogleMapPin
+} from './directory/directoryMap.js';
+
+// Initialize cache hydration immediately upon evaluation
 loadDirectoryCache();
 
+// Listen for view navigation changes to automatically refresh the directory DOM
 window.addEventListener('viewChanged', (e) => {
     if (e.detail === 'view-directory') {
         renderDirectoryList();
     }
 });
 
+// Attach APIs to the window object to preserve inline onclick HTML attributes
 if (typeof window !== 'undefined') {
     window.openDirectory = openDirectory;
     window.syncData = syncData;
@@ -781,4 +131,5 @@ if (typeof window !== 'undefined') {
     window.loadDirectoryCache = loadDirectoryCache;
     window.saveDirectoryCache = saveDirectoryCache;
     window.checkAdminAccess = checkAdminAccess;
+    window.renderDirectoryList = renderDirectoryList;
 }
