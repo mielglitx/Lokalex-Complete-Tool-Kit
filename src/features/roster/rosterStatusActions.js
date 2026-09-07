@@ -50,25 +50,46 @@ export function checkFirstInLineNotification() {
     const rosterMembers = globalState.rosterMembers || [];
     const availableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
 
-    if (myId && availableRiders.length > 0 && (availableRiders[0].telegramId || "").toString() === myId) {
-        const modal = document.getElementById('first-line-modal') || document.getElementById('first-in-line-modal');
-        if (modal && modal.classList.contains('hidden')) {
-            modal.classList.remove('hidden');
-            playLineAlarm();
+    if (availableRiders.length > 0) {
+        const first = availableRiders[0];
+        const firstId = (first.telegramId || first.id || "").toString().trim();
+        const firstName = (first.riderName || first.name || "").toString().trim().toLowerCase();
+
+        const isMe = (myId && firstId && firstId === myId) || (myName && firstName && firstName === myName);
+        if (isMe) {
+            const modal = document.getElementById('first-line-modal') || document.getElementById('first-in-line-modal');
+            if (modal && modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+                playLineAlarm();
+            }
         }
     }
 }
 
 export async function voidSingleCateringCustomer(targetId, targetName, custNameToVoid) {
     const rosterMembers = globalState.rosterMembers || [];
-    const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString().trim() === targetId.toString().trim());
-    if (!targetRecord) return;
+    const cleanTargetId = (targetId || "").toString().trim();
+    const cleanTargetName = (targetName || "").toString().trim().toLowerCase();
+
+    let targetRecord = rosterMembers.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        if (cleanTargetId && mId && mId === cleanTargetId) return true;
+        if (cleanTargetName && mName && mName === cleanTargetName) return true;
+        return false;
+    });
+
+    const resolvedTargetId = targetRecord ? (targetRecord.telegramId || targetRecord.id || cleanTargetId) : cleanTargetId;
+    const resolvedTargetName = targetRecord ? (targetRecord.riderName || targetRecord.name || targetName) : targetName;
+
+    if (!resolvedTargetId && !targetRecord) return;
 
     let remainingCusts = [];
     let remainingTimes = [];
 
-    if (targetRecord.customerName) {
+    if (targetRecord && targetRecord.customerName) {
         const custs = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
         const times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
 
@@ -85,6 +106,9 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
 
     if (targetRecord && targetRecord.forcedCaters) {
         delete targetRecord.forcedCaters[cleanCustKey];
+        delete targetRecord.forcedCaters[cleanVoidCust];
+        delete targetRecord.forcedCaters[custNameToVoid];
+
         if (Object.keys(targetRecord.forcedCaters).length === 0) {
             targetRecord.forcedCaters = null;
             targetRecord.isForcedCater = false;
@@ -113,9 +137,10 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             });
         });
 
-        if (cleanCustKey) {
-            db.ref(`roster/${targetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
-            db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
+        if (resolvedTargetId && cleanCustKey) {
+            db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
+            db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
+            db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanVoidCust}`).remove().catch(() => {});
         }
     }
 
@@ -124,24 +149,24 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             'Catering', 
             remainingCusts.join(', '), 
             remainingTimes.join(', '), 
-            parseQueueTime(targetRecord.queueTime), 
-            targetId, 
-            targetName,
+            targetRecord ? parseQueueTime(targetRecord.queueTime) : Date.now(), 
+            resolvedTargetId, 
+            resolvedTargetName,
             [],
             false,
             "",
             { 
-                forcedCaters: targetRecord.forcedCaters,
-                forcedBy: targetRecord.forcedBy || null,
-                isForcedCater: !!targetRecord.isForcedCater
+                forcedCaters: targetRecord ? targetRecord.forcedCaters : null,
+                forcedBy: targetRecord ? targetRecord.forcedBy : null,
+                isForcedCater: !!(targetRecord && targetRecord.isForcedCater)
             }
         );
         showToast(`🚫 Voided [${custNameToVoid}]. ${remainingCusts.length} active customer(s) remaining.`);
     } else {
         const topQueueTime = getTopQueueTime();
-        if (db) {
-            db.ref(`roster/${targetId}/forcedCaters`).remove().catch(() => {});
-            db.ref(`roster/${targetId}`).update({
+        if (db && resolvedTargetId) {
+            db.ref(`roster/${resolvedTargetId}/forcedCaters`).remove().catch(() => {});
+            db.ref(`roster/${resolvedTargetId}`).update({
                 forcedBy: null,
                 isForcedCater: false
             }).catch(() => {});
@@ -156,8 +181,8 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             '', 
             '', 
             topQueueTime, 
-            targetId, 
-            targetName,
+            resolvedTargetId, 
+            resolvedTargetName,
             [],
             false,
             "",
@@ -173,8 +198,19 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
 
 export async function triggerStatusWithSlide(targetStatus) {
     const rosterMembers = globalState.rosterMembers || [];
-    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
-    const myRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString().trim() === myId);
+    const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const currentName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+
+    let myRecord = rosterMembers.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        if (currentId && mId && mId === currentId) return true;
+        if (currentName && mName && mName === currentName) return true;
+        return false;
+    });
+
+    const myId = myRecord ? (myRecord.telegramId || myRecord.id || currentId) : currentId;
+    const myName = myRecord ? (myRecord.riderName || myRecord.name || appState.riderName || "Rider") : (appState.riderName || "Rider");
 
     if (myRecord && myRecord.status === 'End' && targetStatus !== 'Available') {
         showToast("⚠️ Naka-End Shift ka. Ang Available button lamang ang maaaring pindutin.");
@@ -193,7 +229,7 @@ export async function triggerStatusWithSlide(targetStatus) {
                     const dbSkipped = !!rVal.skipPasswordSetup;
 
                     if (!hasPass && !dbSkipped) {
-                        openRiderPasswordSetupModal(myId, appState.riderName, () => {
+                        openRiderPasswordSetupModal(myId, myName, () => {
                             triggerStatusWithSlide('Available');
                         });
                         return;
@@ -202,7 +238,7 @@ export async function triggerStatusWithSlide(targetStatus) {
             }
         }
 
-        const timeCheck = checkRiderTimeInAllowed(myId, appState.riderName);
+        const timeCheck = checkRiderTimeInAllowed(myId, myName);
         if (!timeCheck.allowed) {
             showToast(`🚫 Bawal pa mag-Time In: Ang iyong allowed time-in ay ${timeCheck.allowedTime}. Humingi ng Early Time-In pass sa Admin.`);
             return;
@@ -300,7 +336,7 @@ export async function triggerStatusWithSlide(targetStatus) {
             myRecord.isForcedCater = false;
         }
 
-        await updateRosterStatus('Available', myId, appState.riderName, lockedQueueTime);
+        await updateRosterStatus('Available', myId, myName, lockedQueueTime);
 
         if (window.clearAllCartSlots) {
             window.clearAllCartSlots();
@@ -325,21 +361,18 @@ export async function triggerStatusWithSlide(targetStatus) {
                 myRecord.isForcedCater = false;
             }
             await clockOutRider(myId);
-            await updateRosterStatus('End', myId, appState.riderName);
+            await updateRosterStatus('End', myId, myName);
         });
     } else {
         openSlideDeleteModal(`Sigurado ka bang mag-iiba ng status sa [${targetStatus}]?`, async () => {
             dismissQueueAlarm();
             if (targetStatus === 'Break') endLiveGpsSession();
-            await updateRosterStatus(targetStatus, myId, appState.riderName);
+            await updateRosterStatus(targetStatus, myId, myName);
         });
     }
 }
 
 export async function promptCateringStatus() {
-    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
-    if (!myId) return showToast("⚠️ Missing Rider ID.");
-
     let rosterMembers = globalState.rosterMembers || [];
 
     if (db) {
@@ -359,7 +392,21 @@ export async function promptCateringStatus() {
         }
     }
 
-    const myRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString().trim() === myId);
+    const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const currentName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+
+    const myRecord = rosterMembers.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        if (currentId && mId && mId === currentId) return true;
+        if (currentName && mName && mName === currentName) return true;
+        return false;
+    });
+
+    const myId = myRecord ? (myRecord.telegramId || myRecord.id || currentId) : currentId;
+    const myName = myRecord ? (myRecord.riderName || myRecord.name || appState.riderName || "Rider") : (appState.riderName || "Rider");
+
+    if (!myId && !myRecord) return showToast("⚠️ Missing Rider identity.");
 
     if (myRecord && !canManageRoster()) {
         if (myRecord.status === 'End') return showToast("⚠️ Naka-End Shift ka. Mag-Available muna bago mag-Cater.");
@@ -380,7 +427,7 @@ export async function promptCateringStatus() {
         }
     }
 
-    const limitCheck = canRiderTakeMoreBookings(myId, appState.riderName);
+    const limitCheck = canRiderTakeMoreBookings(myId, myName);
     if (!limitCheck.allowed) {
         const modeLabel = limitCheck.isAuto ? " (Auto Tier based on today's gross income)" : "";
         return showToast(`⚠️ Reached maximum limit of ${limitCheck.maxAllowed} active catering customer(s)${modeLabel}!`);
@@ -423,16 +470,24 @@ export async function confirmCateringStatus() {
         }
     }
 
-    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
-    let myRecord = liveRoster.find(m => (m.telegramId || m.id || "").toString().trim() === myId);
+    const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const currentName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
 
-    const myName = appState.riderName || localStorage.getItem('riderName') || myRecord?.riderName || myRecord?.name || "Rider";
+    let myRecord = liveRoster.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        if (currentId && mId && mId === currentId) return true;
+        if (currentName && mName && mName === currentName.toLowerCase()) return true;
+        return false;
+    });
 
-    if (!myId && myRecord) {
-        appState.telegramId = myRecord.telegramId || myRecord.id;
+    const resolvedId = myRecord ? (myRecord.telegramId || myRecord.id || currentId) : currentId;
+    const myName = myRecord ? (myRecord.riderName || myRecord.name || currentName || "Rider") : (currentName || "Rider");
+
+    if (resolvedId && !appState.telegramId) {
+        appState.telegramId = resolvedId;
+        try { localStorage.setItem('telegramId', resolvedId); } catch(e) {}
     }
-
-    const resolvedId = myId || myRecord?.telegramId || myRecord?.id || "";
 
     if (myRecord && !canManageRoster()) {
         if (myRecord.status === 'End') {
@@ -496,8 +551,13 @@ export async function confirmCateringStatus() {
     }
 
     const cleanCustKey = custName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanCustTrimmed = custName.toLowerCase().trim();
 
-    let forcedCatersMap = myRecord?.forcedCaters ? { ...myRecord.forcedCaters } : {};
+    let forcedCatersMap = {};
+    if (myRecord && myRecord.forcedCaters && typeof myRecord.forcedCaters === 'object') {
+        forcedCatersMap = { ...myRecord.forcedCaters };
+    }
+
     if (isForcedByRole && resolvedId && cleanCustKey) {
         const forcedPayload = {
             customerName: custName,
@@ -505,12 +565,16 @@ export async function confirmCateringStatus() {
             isSelfForced: true,
             timestamp: Date.now()
         };
+
         forcedCatersMap[cleanCustKey] = forcedPayload;
+        forcedCatersMap[cleanCustTrimmed] = forcedPayload;
+
         if (myRecord) {
             myRecord.forcedCaters = forcedCatersMap;
             myRecord.forcedBy = myName;
             myRecord.isForcedCater = true;
         }
+
         if (db) {
             await db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
             await db.ref(`roster/${resolvedId}`).update({
@@ -553,7 +617,7 @@ export async function confirmCateringStatus() {
         'Catering', 
         existingCustomers.join(', '), 
         existingTimes.join(', '), 
-        myRecord ? parseQueueTime(myRecord.queueTime) : 0,
+        myRecord ? parseQueueTime(myRecord.queueTime) : Date.now(),
         resolvedId,
         myName,
         [],
@@ -575,11 +639,16 @@ export async function confirmCateringStatus() {
 }
 
 export function claimCustomerFromRider(fromRiderId, fromRiderName, custName) {
-    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
-    const myName = (appState.riderName || localStorage.getItem('riderName') || "Rider").trim();
+    const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const currentName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
+
+    const myId = currentId || currentName;
+    const myName = currentName || "Rider";
 
     if (!myId) return showToast("⚠️ Rider ID missing.");
-    if (fromRiderId.toString().trim() === myId) return showToast("⚠️ Iyo na ang customer na ito.");
+    if (fromRiderId.toString().trim() === myId || fromRiderName.toLowerCase().trim() === myName.toLowerCase()) {
+        return showToast("⚠️ Iyo na ang customer na ito.");
+    }
 
     const limitCheck = canRiderTakeMoreBookings(myId, myName);
     if (!limitCheck.allowed) {

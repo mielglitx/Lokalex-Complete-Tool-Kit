@@ -39,7 +39,8 @@ export function getForcedCaterBadgeHtml(record, customerName, riderName = "") {
                          record.forcedCaters[customerName];
 
             if (!forcedInfo) {
-                forcedInfo = Object.values(record.forcedCaters).find(fc => {
+                const values = Array.isArray(record.forcedCaters) ? record.forcedCaters : Object.values(record.forcedCaters);
+                forcedInfo = values.find(fc => {
                     if (!fc) return false;
                     if (fc === true) return true;
                     const fName = (fc.customerName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -52,21 +53,33 @@ export function getForcedCaterBadgeHtml(record, customerName, riderName = "") {
     }
 
     if (!forcedInfo && (record.isForcedCater || record.forcedBy)) {
-        forcedInfo = { forcedBy: record.forcedBy || 'Admin' };
+        forcedInfo = { 
+            forcedBy: record.forcedBy || 'Admin',
+            isSelfForced: !!record.isSelfForced
+        };
     }
 
     if (!forcedInfo) return "";
 
     let forcedByLabel = "Admin";
-    if (typeof forcedInfo === 'object' && forcedInfo.forcedBy) {
-        forcedByLabel = forcedInfo.forcedBy;
+    let isSelfForced = false;
+
+    if (typeof forcedInfo === 'object') {
+        if (forcedInfo.forcedBy) forcedByLabel = forcedInfo.forcedBy;
+        if (forcedInfo.isSelfForced === true) isSelfForced = true;
     } else if (typeof forcedInfo === 'string') {
         forcedByLabel = forcedInfo;
     }
 
-    const cleanRider = (riderName || record.riderName || record.name || "").trim().toLowerCase();
-    const cleanForcedBy = forcedByLabel.trim().toLowerCase();
-    const isSelfForced = cleanRider && cleanForcedBy && (cleanRider === cleanForcedBy || cleanForcedBy.includes(cleanRider));
+    if (!isSelfForced) {
+        const cleanRider = (riderName || record.riderName || record.name || "").trim().toLowerCase();
+        const cleanForcedBy = forcedByLabel.trim().toLowerCase();
+        if (cleanRider && cleanForcedBy) {
+            if (cleanRider === cleanForcedBy || cleanForcedBy.includes(cleanRider) || cleanRider.includes(cleanForcedBy)) {
+                isSelfForced = true;
+            }
+        }
+    }
 
     const badgeText = isSelfForced ? `Force Catered (Self)` : `Force Catered (${escapeHtml(forcedByLabel)})`;
 
