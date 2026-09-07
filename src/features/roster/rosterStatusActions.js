@@ -510,7 +510,11 @@ export async function confirmCateringStatus() {
 
     const hasPenalty = penaltySelect && parseInt(penaltySelect.value) > 0;
     const isPrivileged = canManageRoster();
-    const isForcedByRole = isPrivileged && (!isFirstAvailable || myRecord?.status !== 'Available' || hasPenalty || isPrivileged);
+
+    // Legitimate turn: if privileged and legitimately taking turn as #1 in line, it is a regular cater
+    const isQueueJump = liveAvailableRiders.length > 0 && !isFirstAvailable && !amIAlreadyCatering;
+    const isBypassingAvailability = !myRecord || (myRecord.status !== 'Available' && !amIAlreadyCatering);
+    const isForcedByRole = isPrivileged && (isQueueJump || isBypassingAvailability || hasPenalty);
 
     if (!isPrivileged && !amIAlreadyCatering && liveAvailableRiders.length > 0 && !isFirstAvailable) {
         closeCateringModal();
@@ -582,6 +586,27 @@ export async function confirmCateringStatus() {
                 isForcedCater: true
             }).catch(() => {});
         }
+    } else if (!isForcedByRole && resolvedId && cleanCustKey) {
+        delete forcedCatersMap[cleanCustKey];
+        delete forcedCatersMap[cleanCustTrimmed];
+
+        if (db) {
+            db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
+            db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustTrimmed}`).remove().catch(() => {});
+        }
+    }
+
+    const hasAnyForcedCaters = Object.keys(forcedCatersMap).length > 0;
+    if (!hasAnyForcedCaters && myRecord) {
+        myRecord.forcedCaters = null;
+        myRecord.forcedBy = null;
+        myRecord.isForcedCater = false;
+        if (db && resolvedId) {
+            db.ref(`roster/${resolvedId}`).update({
+                forcedBy: null,
+                isForcedCater: false
+            }).catch(() => {});
+        }
     }
 
     if (db && custName) {
@@ -603,6 +628,9 @@ export async function confirmCateringStatus() {
                         if (isForcedByRole) {
                             updateObj.forcedBy = myName;
                             updateObj.isForcedCater = true;
+                        } else {
+                            updateObj.forcedBy = null;
+                            updateObj.isForcedCater = false;
                         }
                         db.ref(`customerChats/${custId}/metadata`).update(updateObj);
                     }
@@ -624,9 +652,9 @@ export async function confirmCateringStatus() {
         false,
         "",
         { 
-            forcedCaters: Object.keys(forcedCatersMap).length > 0 ? forcedCatersMap : null,
-            forcedBy: isForcedByRole ? myName : null,
-            isForcedCater: isForcedByRole
+            forcedCaters: hasAnyForcedCaters ? forcedCatersMap : null,
+            forcedBy: hasAnyForcedCaters ? (myRecord?.forcedBy || myName) : null,
+            isForcedCater: hasAnyForcedCaters
         }
     );
 

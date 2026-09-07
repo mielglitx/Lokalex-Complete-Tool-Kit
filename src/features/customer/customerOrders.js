@@ -11,6 +11,7 @@ import {
     updateCheckoutSelectedAddressUI, 
     cleanFirebasePathKey 
 } from './customerProfile.js';
+import { storesCache, isStoreCurrentlyOpen } from './customerStoresMenu.js';
 
 let activeCustomerOrderListener = null;
 let customerLiveMapObj = null;
@@ -241,6 +242,21 @@ export async function sendMultiStoreOrderToRiders() {
 
     if (storeIds.length === 0) return showToast("⚠️ Cart is empty!");
 
+    const sendBtn = document.getElementById('cust-send-order-btn') || document.querySelector('#cust-cart-modal button[onclick*="sendMultiStoreOrderToRiders"]');
+
+    // Dynamic operating schedule check for every store in cart before dispatch
+    for (const sId of storeIds) {
+        const cleanSId = cleanFirebasePathKey(sId);
+        const store = storesCache[cleanSId] || storesCache[sId] || cart[sId];
+        if (!isStoreCurrentlyOpen(store, cleanSId)) {
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> SEND ORDER TO RIDERS`;
+            }
+            return showToast(`⚠️ Hindi maipadala: Kasalukuyang sarado ang [${store.storeName || store.name || 'Store'}]. Paki-check ang schedule.`);
+        }
+    }
+
     const custName = localStorage.getItem('customerName') || localStorage.getItem('lokalex_customer_name') || appState.customerName || "Customer";
     let rawCustId = localStorage.getItem('lokalex_customer_fb_id') || localStorage.getItem('customerId') || appState.customerFacebookId || appState.customerId;
     
@@ -253,7 +269,6 @@ export async function sendMultiStoreOrderToRiders() {
     const custId = cleanFirebasePathKey(rawCustId);
     const orderId = `ORD_${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).slice(-3).toUpperCase()}`;
 
-    const sendBtn = document.getElementById('cust-send-order-btn') || document.querySelector('#cust-cart-modal button[onclick*="sendMultiStoreOrderToRiders"]');
     if (sendBtn) {
         sendBtn.disabled = true;
         sendBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> SENDING ORDER...`;

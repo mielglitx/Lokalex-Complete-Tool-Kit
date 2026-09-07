@@ -7,6 +7,22 @@ import { syncHeaderAndWidgets } from '../../../ui/router.js';
 import { updateStoreOpenStatus, updateStoreProfile, updateStoreLogo } from '../storeMenu.js';
 import { storeHubState, cleanFirebasePathKey, compressImageFile } from './storeHubState.js';
 
+export function parseTimeToMinutes(timeStr) {
+    if (!timeStr) return null;
+    const clean = String(timeStr).trim();
+    const match = clean.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+    if (!match) return null;
+
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const ampm = match[3] ? match[3].toUpperCase() : null;
+
+    if (ampm === "PM" && hours < 12) hours += 12;
+    if (ampm === "AM" && hours === 12) hours = 0;
+
+    return hours * 60 + minutes;
+}
+
 export function checkAndApplyStoreOperatingHours() {
     const storeData = storeHubState.currentStoreData;
     if (!storeData || !storeData.operatingHours || !storeData.operatingHours.enabled) return;
@@ -14,14 +30,13 @@ export function checkAndApplyStoreOperatingHours() {
     const { openTime, closeTime } = storeData.operatingHours;
     if (!openTime || !closeTime) return;
 
+    const openTotalMins = parseTimeToMinutes(openTime);
+    const closeTotalMins = parseTimeToMinutes(closeTime);
+
+    if (openTotalMins === null || closeTotalMins === null) return;
+
     const now = new Date();
     const currentMins = now.getHours() * 60 + now.getMinutes();
-
-    const [openH, openM] = openTime.split(':').map(Number);
-    const [closeH, closeM] = closeTime.split(':').map(Number);
-
-    const openTotalMins = openH * 60 + openM;
-    const closeTotalMins = closeH * 60 + closeM;
 
     let shouldBeOpen = false;
     if (openTotalMins <= closeTotalMins) {
@@ -32,11 +47,13 @@ export function checkAndApplyStoreOperatingHours() {
 
     const currentIsOpen = storeData.isOpen !== false;
     if (shouldBeOpen !== currentIsOpen) {
+        storeData.isOpen = shouldBeOpen;
         const rawStoreId = appState.merchantStoreId || localStorage.getItem('lokalex_merchant_store_id');
         const storeId = cleanFirebasePathKey(rawStoreId);
         if (storeId && db) {
             db.ref(`stores/${storeId}`).update({ isOpen: shouldBeOpen }).catch(() => {});
         }
+        updateStoreStatusButton(shouldBeOpen);
     }
 }
 
@@ -82,6 +99,15 @@ export async function saveOperatingHoursSettings() {
             closeTime,
             updatedAt: Date.now()
         });
+
+        if (storeHubState.currentStoreData) {
+            storeHubState.currentStoreData.operatingHours = {
+                enabled,
+                openTime,
+                closeTime,
+                updatedAt: Date.now()
+            };
+        }
 
         closeOperatingHoursModal();
         showToast(`⚙️ Operating Hours saved (${openTime} - ${closeTime})!`);

@@ -1,4 +1,5 @@
 // src/features/customer/customerStoresMenu.js
+import { db } from '../../config/firebase.js';
 import { escapeHtml } from '../../utils/helpers.js';
 import { showToast } from '../../ui/notifications.js';
 import { cleanFirebasePathKey } from './customerProfile.js';
@@ -34,6 +35,53 @@ export function setStoresCache(data) {
 
 export function setMenusCache(data) {
     menusCache = data || {};
+}
+
+export function parseTimeToMinutes(timeStr) {
+    if (!timeStr) return null;
+    const clean = String(timeStr).trim();
+    const match = clean.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+    if (!match) return null;
+
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const ampm = match[3] ? match[3].toUpperCase() : null;
+
+    if (ampm === "PM" && hours < 12) hours += 12;
+    if (ampm === "AM" && hours === 12) hours = 0;
+
+    return hours * 60 + minutes;
+}
+
+export function isStoreCurrentlyOpen(store, storeId = null) {
+    if (!store) return false;
+
+    const hours = store.operatingHours;
+    if (hours && hours.enabled && hours.openTime && hours.closeTime) {
+        const openMins = parseTimeToMinutes(hours.openTime);
+        const closeMins = parseTimeToMinutes(hours.closeTime);
+
+        if (openMins !== null && closeMins !== null) {
+            const now = new Date();
+            const currentMins = now.getHours() * 60 + now.getMinutes();
+
+            let shouldBeOpen = false;
+            if (openMins <= closeMins) {
+                shouldBeOpen = currentMins >= openMins && currentMins < closeMins;
+            } else {
+                shouldBeOpen = currentMins >= openMins || currentMins < closeMins;
+            }
+
+            if (storeId && db && store.isOpen !== shouldBeOpen) {
+                store.isOpen = shouldBeOpen;
+                db.ref(`stores/${storeId}`).update({ isOpen: shouldBeOpen }).catch(() => {});
+            }
+
+            return shouldBeOpen;
+        }
+    }
+
+    return store.isOpen !== false;
 }
 
 export function openCustomerStoresModal() {
@@ -103,7 +151,7 @@ export function renderStoresGrid(searchQuery = '') {
     }
 
     grid.innerHTML = filtered.map(([storeId, store]) => {
-        const isOpen = store.isOpen !== false;
+        const isOpen = isStoreCurrentlyOpen(store, storeId);
         const storeName = store.storeName || store.name || 'Store';
         const address = store.address || store.rate || 'Poblacion';
 
@@ -173,10 +221,14 @@ export function openCustomerStoreMenu(storeId) {
         }
     }
 
-    const isOpen = store.isOpen !== false;
+    const isOpen = isStoreCurrentlyOpen(store, storeId);
     if (statusBadge) {
+        let scheduleNote = '';
+        if (store.operatingHours && store.operatingHours.enabled && store.operatingHours.openTime && store.operatingHours.closeTime) {
+            scheduleNote = ` <span class="text-[8px] opacity-80">(${escapeHtml(store.operatingHours.openTime)} - ${escapeHtml(store.operatingHours.closeTime)})</span>`;
+        }
         statusBadge.className = `mt-1 inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border ${isOpen ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30' : 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30'}`;
-        statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}"></span> ${isOpen ? 'OPEN FOR ORDERS' : 'STORE CLOSED'}`;
+        statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}"></span> ${isOpen ? 'OPEN FOR ORDERS' : 'STORE CLOSED'}${scheduleNote}`;
     }
 
     renderStoreMenuItems(storeId);
@@ -278,7 +330,7 @@ export function renderStoreMenuItems(storeId) {
     }
 
     const store = storesCache[storeId] || {};
-    const isStoreOpen = store.isOpen !== false;
+    const isStoreOpen = isStoreCurrentlyOpen(store, storeId);
 
     feed.innerHTML = items.map(item => {
         const isAvail = item.isAvailable !== false && isStoreOpen;
@@ -597,6 +649,10 @@ export function submitAddCustomizedItemToCart() {
     const storeId = cleanFirebasePathKey(rawStoreId);
     const store = storesCache[rawStoreId] || storesCache[storeId] || { storeName: "Store", address: "Poblacion" };
 
+    if (!isStoreCurrentlyOpen(store, storeId)) {
+        return showToast(`⚠️ Kasalukuyang sarado ang ${store.storeName || 'Store'}. Hindi maaaring mag-order habang sarado.`);
+    }
+
     const rawSizes = activeCustomizingItem.sizes;
     const sizesList = Array.isArray(rawSizes) 
         ? rawSizes 
@@ -723,4 +779,30 @@ export function submitAddCustomizedItemToCart() {
     closeItemCustomizerModal();
     updateFloatingCartBadge();
     showToast(`🛒 Added ${activeCustomizingItem.name} (${addQty}x) to cart!`);
+}
+
+if (typeof window !== 'undefined' && !window._storeScheduleCustomerInterval) {
+    window._storeScheduleCustomerInterval = setInterval(() => {
+        if (activeViewingStoreId) {
+            const store = storesCache[activeViewingStoreId];
+            if (store) {
+                const isOpen = isStoreCurrentlyOpen(store, activeViewingStoreId);
+                const statusBadge = document.getElementById('cust-menu-store-status-badge');
+                if (statusBadge) {
+                    let scheduleNote = '';
+                    if (store.operatingHours && store.operatingHours.enabled && store.operatingHours.openTime && store.operatingHours.closeTime) {
+                        scheduleNote = ` <span class="text-[8px] opacity-80">(${escapeHtml(store.operatingHours.openTime)} - ${escapeHtml(store.operatingHours.closeTime)})</span>`;
+                    }
+                    statusBadge.className = `mt-1 inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border ${isOpen ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30' : 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30'}`;
+                    statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}"></span> ${isOpen ? 'OPEN FOR ORDERS' : 'STORE CLOSED'}${scheduleNote}`;
+                }
+            }
+        }
+        const grid = document.getElementById('cust-stores-grid');
+        const modal = document.getElementById('cust-stores-popup-modal');
+        if (grid && modal && !modal.classList.contains('hidden')) {
+            const searchInput = document.getElementById('cust-store-search-input');
+            renderStoresGrid(searchInput ? searchInput.value : '');
+        }
+    }, 30000);
 }

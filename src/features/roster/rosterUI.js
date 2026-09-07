@@ -44,7 +44,7 @@ export function getForcedCaterBadgeHtml(record, customerName, riderName = "") {
                     if (!fc) return false;
                     if (fc === true) return true;
                     const fName = (fc.customerName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                    return fName === cleanCustKey || fName.includes(cleanCustKey) || cleanCustKey.includes(fName);
+                    return fName && (fName === cleanCustKey || fName.includes(cleanCustKey) || cleanCustKey.includes(fName));
                 });
             }
         } else if (record.forcedCaters === true) {
@@ -52,7 +52,9 @@ export function getForcedCaterBadgeHtml(record, customerName, riderName = "") {
         }
     }
 
-    if (!forcedInfo && (record.isForcedCater || record.forcedBy)) {
+    // Only allow root-level fallback for historical records; active roster cards require per-customer forcedCaters entry
+    const isHistoryItem = !!(record.transactionId || record.completedDate || record.completedTime);
+    if (!forcedInfo && isHistoryItem && (record.isForcedCater || record.forcedBy)) {
         forcedInfo = { 
             forcedBy: record.forcedBy || 'Admin',
             isSelfForced: !!record.isSelfForced
