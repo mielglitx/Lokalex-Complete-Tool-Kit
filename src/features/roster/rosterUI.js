@@ -25,6 +25,54 @@ export function openFindRidersMap() {
     openMapPicker('roster');
 }
 
+export function getForcedCaterBadgeHtml(record, customerName, riderName = "") {
+    if (!record || !customerName) return "";
+
+    const cleanCustKey = customerName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanCustName = customerName.toLowerCase().trim();
+    let forcedInfo = null;
+
+    if (record.forcedCaters) {
+        if (typeof record.forcedCaters === 'object') {
+            forcedInfo = record.forcedCaters[cleanCustKey] || 
+                         record.forcedCaters[cleanCustName] || 
+                         record.forcedCaters[customerName];
+
+            if (!forcedInfo) {
+                forcedInfo = Object.values(record.forcedCaters).find(fc => {
+                    if (!fc) return false;
+                    if (fc === true) return true;
+                    const fName = (fc.customerName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    return fName === cleanCustKey || fName.includes(cleanCustKey) || cleanCustKey.includes(fName);
+                });
+            }
+        } else if (record.forcedCaters === true) {
+            forcedInfo = { forcedBy: 'Admin' };
+        }
+    }
+
+    if (!forcedInfo && (record.isForcedCater || record.forcedBy)) {
+        forcedInfo = { forcedBy: record.forcedBy || 'Admin' };
+    }
+
+    if (!forcedInfo) return "";
+
+    let forcedByLabel = "Admin";
+    if (typeof forcedInfo === 'object' && forcedInfo.forcedBy) {
+        forcedByLabel = forcedInfo.forcedBy;
+    } else if (typeof forcedInfo === 'string') {
+        forcedByLabel = forcedInfo;
+    }
+
+    const cleanRider = (riderName || record.riderName || record.name || "").trim().toLowerCase();
+    const cleanForcedBy = forcedByLabel.trim().toLowerCase();
+    const isSelfForced = cleanRider && cleanForcedBy && (cleanRider === cleanForcedBy || cleanForcedBy.includes(cleanRider));
+
+    const badgeText = isSelfForced ? `Force Catered (Self)` : `Force Catered (${escapeHtml(forcedByLabel)})`;
+
+    return `<span class="inline-flex items-center gap-1 text-[9px] font-black bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/40 px-1.5 py-0.5 rounded shrink-0 shadow-xs" title="Force Catered by ${escapeHtml(forcedByLabel)}"><i class="fa-solid fa-bolt text-[8px] text-amber-500"></i> ${badgeText}</span>`;
+}
+
 export async function openRiderInfoModal(riderId, riderName = '') {
     const modal = document.getElementById('rider-info-modal');
     if (!modal) return;
@@ -99,11 +147,16 @@ export async function openRiderInfoModal(riderId, riderName = '') {
         );
     }
 
-    // Active catering session orders
+    // Active catering session orders with forced cater badges
     if (cateringWrapper && activeCateringEl) {
         if (status === 'Catering' && rosterRec.customerName) {
             cateringWrapper.classList.remove('hidden');
-            activeCateringEl.innerText = formatTitleCase(rosterRec.customerName);
+            const custs = rosterRec.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+            const custItemsHtml = custs.map(c => {
+                const badge = getForcedCaterBadgeHtml(rosterRec, c, displayName);
+                return `<div class="flex items-center gap-1.5 flex-wrap"><span>👤 ${escapeHtml(formatTitleCase(c))}</span>${badge}</div>`;
+            }).join('');
+            activeCateringEl.innerHTML = custItemsHtml;
         } else {
             cateringWrapper.classList.add('hidden');
         }
@@ -379,37 +432,8 @@ export function updateRosterUI() {
                 const isMyLine = mId === myId || (appState.riderName && mName.toLowerCase() === appState.riderName.toLowerCase());
                 const canSwap = isMyLine || showControls;
 
-                // Lookup active Force-Cater audit record with fuzzy lookup
-                const cleanCustKey = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
-                let forcedInfo = null;
-
-                if (m.forcedCaters) {
-                    if (typeof m.forcedCaters === 'object') {
-                        forcedInfo = m.forcedCaters[cleanCustKey] || 
-                                     m.forcedCaters[cName.toLowerCase().trim()] || 
-                                     m.forcedCaters[cName];
-
-                        if (!forcedInfo) {
-                            forcedInfo = Object.values(m.forcedCaters).find(fc => {
-                                if (!fc) return false;
-                                if (fc === true) return true;
-                                const fName = (fc.customerName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                                return fName === cleanCustKey || fName.includes(cleanCustKey) || cleanCustKey.includes(fName);
-                            });
-                        }
-                    } else if (m.forcedCaters === true) {
-                        forcedInfo = { forcedBy: 'Admin' };
-                    }
-                }
-
-                if (!forcedInfo && (m.isForcedCater || m.forcedBy)) {
-                    forcedInfo = { forcedBy: m.forcedBy || 'Admin' };
-                }
-
-                const forcedByLabel = forcedInfo ? (typeof forcedInfo === 'object' && forcedInfo.forcedBy ? forcedInfo.forcedBy : 'Admin') : '';
-                const forcedBadge = forcedInfo 
-                    ? `<span class="inline-flex items-center gap-1 text-[9px] font-black bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/40 px-1.5 py-0.5 rounded shrink-0 shadow-xs" title="Force Catered by ${escapeHtml(forcedByLabel)}"><i class="fa-solid fa-bolt text-[8px] text-amber-500"></i> Force Catered (${escapeHtml(forcedByLabel)})</span>` 
-                    : '';
+                // Lookup active Force-Cater audit record with universal fallback resolver
+                const forcedBadge = getForcedCaterBadgeHtml(m, cName, mName);
 
                 cardHtml += `
                 <div class="flex flex-wrap items-center justify-between gap-1 bg-white dark:bg-cardBg p-2 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs">
@@ -543,7 +567,7 @@ export function updateRosterUI() {
     loadGlobalCateredList();
 }
 
-// UNIFIED: Sorted Chronologically by Catering Start Time (Earliest to Latest) with Dynamic Split Minutes
+// UNIFIED: Sorted Chronologically by Catering Start Time (Earliest to Latest) with Dynamic Split Minutes & Forced Badges
 export function loadGlobalCateredList() {
     const feed = document.getElementById('catered-customers-feed');
     const badge = document.getElementById('catered-count-badge');
@@ -614,12 +638,15 @@ export function loadGlobalCateredList() {
             durationBadge = `<span class="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 px-1.5 py-0.5 rounded font-black text-[9px] font-mono tracking-wide">[${escapeHtml(durationStr)}]</span>`;
         }
 
+        const historyForcedBadge = getForcedCaterBadgeHtml(h, h.customerName, h.riderName);
+
         return `
         <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-2xl flex flex-col gap-1.5 shadow-xs">
             <div class="flex items-center justify-between gap-2">
-                <div class="font-black text-xs text-gray-900 dark:text-white flex items-center gap-1.5 min-w-0 flex-1">
+                <div class="font-black text-xs text-gray-900 dark:text-white flex items-center gap-1.5 min-w-0 flex-1 flex-wrap">
                     <i class="fa-solid fa-user text-orange-600 dark:text-orange-400 text-[11px] shrink-0"></i> 
                     <span class="truncate">${escapeHtml(customerFormatted)}</span>
+                    ${historyForcedBadge}
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
                     <span class="text-[10px] text-gray-600 dark:text-gray-400 font-medium">Rider: <span class="text-blue-600 dark:text-blue-400 font-bold">${escapeHtml(riderFormatted)}</span></span>
@@ -684,6 +711,7 @@ if (typeof window !== 'undefined') {
     window.updateRosterUI = updateRosterUI;
     window.loadGlobalCateredList = loadGlobalCateredList;
     window.loadGlobalLoginList = loadGlobalLoginList;
+    window.getForcedCaterBadgeHtml = getForcedCaterBadgeHtml;
 
     window.addEventListener('rosterUpdated', updateRosterUI);
     window.addEventListener('cateredUpdated', loadGlobalCateredList);

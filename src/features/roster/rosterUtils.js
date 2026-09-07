@@ -181,10 +181,20 @@ export function canManageRoster() {
     return false;
 }
 
-export function canForceCaterTarget(targetType) {
+export function canForceCaterTarget(targetType, targetId = "") {
     if (isAdmin()) return true;
     if (isTL()) {
         if (!hasTlPermission('canForceCater')) return false;
+
+        const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+        const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+        const tId = (targetId || "").toString().trim();
+
+        // Allow Team Leads to force-cater themselves
+        if ((tId && myId && tId === myId) || (tId && myName && tId.toLowerCase() === myName)) {
+            return true;
+        }
+
         const t = (targetType || "").toString().toLowerCase().trim();
         const adminTypes = ['admin', 'owner', 'manager', 'superadmin', 'administrator', 'tl', 'lead', 'teamlead', 'leader'];
         return !adminTypes.includes(t);

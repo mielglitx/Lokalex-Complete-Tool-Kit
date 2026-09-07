@@ -12,8 +12,8 @@ import {
 import { updateRosterUI } from './rosterUI.js';
 
 export async function updateRosterStatus(status, targetId = null, targetName = null, precalculatedQueueTime = null) {
-    const tId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
-    const tName = targetName || appState.riderName || "Rider";
+    const tId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const tName = targetName || appState.riderName || localStorage.getItem('riderName') || "Rider";
     const rosterMembers = globalState.rosterMembers || [];
 
     let recordLogin = false;
@@ -49,16 +49,20 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
     }
 
     let extraData = {};
-    if (status === 'Available') {
-        extraData = { forcedCaters: null };
+    if (status === 'Available' || status === 'End') {
+        extraData = { 
+            forcedCaters: null,
+            forcedBy: null,
+            isForcedCater: false
+        };
     }
 
     await updateRosterStatusData(status, "", "", newQueueTime, tId, tName, [], recordLogin, locationLink, extraData);
 }
 
 export async function updateRosterStatusData(status, customerName, startTime, queueTime = 0, specificId = null, specificName = null, completedHistory = [], recordLogin = false, locationLink = "", extraData = {}) {
-    const tId = (specificId || appState.telegramId || "").toString().trim();
-    const tName = specificName || appState.riderName || "Rider";
+    const tId = (specificId || appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const tName = specificName || appState.riderName || localStorage.getItem('riderName') || "Rider";
 
     if (!tId) return;
 
@@ -66,8 +70,28 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     const existingRec = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === tId);
     const photoUrl = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || existingRec?.photoUrl || "";
 
-    const hasForcedCaters = extraData.forcedCaters && Object.keys(extraData.forcedCaters).length > 0;
-    const currentForcedCaters = hasForcedCaters ? extraData.forcedCaters : (status === 'Available' ? null : existingRec?.forcedCaters || null);
+    const isResetStatus = status === 'Available' || status === 'End';
+
+    let currentForcedCaters = null;
+    if (extraData.forcedCaters !== undefined) {
+        currentForcedCaters = extraData.forcedCaters;
+    } else if (!isResetStatus && existingRec?.forcedCaters) {
+        currentForcedCaters = existingRec.forcedCaters;
+    }
+
+    let currentForcedBy = null;
+    if (extraData.forcedBy !== undefined) {
+        currentForcedBy = extraData.forcedBy;
+    } else if (!isResetStatus && existingRec?.forcedBy) {
+        currentForcedBy = existingRec.forcedBy;
+    }
+
+    let currentIsForcedCater = false;
+    if (extraData.isForcedCater !== undefined) {
+        currentIsForcedCater = !!extraData.isForcedCater;
+    } else if (!isResetStatus && existingRec?.isForcedCater) {
+        currentIsForcedCater = !!existingRec.isForcedCater;
+    }
 
     const rosterData = {
         telegramId: tId.toString(),
@@ -85,7 +109,9 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         lat: appState.lat || 0,
         lng: appState.lon || 0,
         ...extraData,
-        forcedCaters: currentForcedCaters
+        forcedCaters: currentForcedCaters,
+        forcedBy: currentForcedBy,
+        isForcedCater: currentIsForcedCater
     };
 
     if (!globalState.rosterMembers) globalState.rosterMembers = [];
@@ -94,7 +120,9 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         globalState.rosterMembers[existingIdx] = {
             ...globalState.rosterMembers[existingIdx],
             ...rosterData,
-            forcedCaters: currentForcedCaters
+            forcedCaters: currentForcedCaters,
+            forcedBy: currentForcedBy,
+            isForcedCater: currentIsForcedCater
         };
     } else {
         globalState.rosterMembers.push(rosterData);
@@ -148,7 +176,7 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
 }
 
 export async function clockOutRider(targetId = null) {
-    const tId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const tId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const todayStr = getLocalTodayStr();
 
@@ -177,9 +205,21 @@ export async function clockOutRider(targetId = null) {
         await db.ref('roster/' + tId).update({ 
             status: 'End',
             forcedCaters: null,
+            forcedBy: null,
+            isForcedCater: false,
             lastActiveTimestamp: Date.now(),
             lastUpdated: timeStr
         }).catch(() => {});
+    }
+
+    if (globalState.rosterMembers) {
+        const rMem = globalState.rosterMembers.find(m => (m.telegramId || m.id || "").toString() === tId);
+        if (rMem) {
+            rMem.status = 'End';
+            rMem.forcedCaters = null;
+            rMem.forcedBy = null;
+            rMem.isForcedCater = false;
+        }
     }
 
     if (globalState.globalLogins) {

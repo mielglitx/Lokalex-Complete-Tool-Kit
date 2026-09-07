@@ -90,6 +90,14 @@ export function openAdminCateringModal(id, name) {
         return showToast("⚠️ Unauthorized: You do not have permission to Force Cater.");
     }
 
+    const rosterMembers = globalState.rosterMembers || [];
+    const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === (id || "").toString());
+    const targetType = targetRecord ? targetRecord.userType : "";
+
+    if (id && !canForceCaterTarget(targetType, id)) {
+        return showToast("⚠️ TL cannot force cater an Admin or another TL.");
+    }
+
     pendingAdminTarget = { id, name };
 
     const idInput = document.getElementById('admin-cater-target-rider-id');
@@ -165,6 +173,11 @@ export async function submitAdminForceCatering() {
         rosterMembers.push(targetRecord);
     }
 
+    const targetType = targetRecord ? targetRecord.userType : "";
+    if (!canForceCaterTarget(targetType, targetId)) {
+        return showToast("⚠️ TL cannot force cater an Admin or another TL.");
+    }
+
     let existingCustomers = [];
     let existingTimes = [];
 
@@ -184,17 +197,26 @@ export async function submitAdminForceCatering() {
     const modalGeneral = document.getElementById('catering-modal');
     if (modalGeneral) modalGeneral.classList.add('hidden');
 
+    const isSelfForced = adminName.toLowerCase().trim() === targetName.toLowerCase().trim();
+
     let forcedCatersMap = targetRecord.forcedCaters ? { ...targetRecord.forcedCaters } : {};
     const forcedPayload = {
         customerName: custName,
         forcedBy: adminName,
+        isSelfForced: isSelfForced,
         timestamp: Date.now()
     };
     forcedCatersMap[cleanCustKey] = forcedPayload;
     targetRecord.forcedCaters = forcedCatersMap;
+    targetRecord.forcedBy = adminName;
+    targetRecord.isForcedCater = true;
 
     if (db && targetId && cleanCustKey) {
         await db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
+        await db.ref(`roster/${targetId}`).update({
+            forcedBy: adminName,
+            isForcedCater: true
+        }).catch(() => {});
     }
 
     if (db && custName) {
@@ -231,7 +253,11 @@ export async function submitAdminForceCatering() {
         [],
         false,
         "",
-        { forcedCaters: forcedCatersMap }
+        { 
+            forcedCaters: forcedCatersMap,
+            forcedBy: adminName,
+            isForcedCater: true
+        }
     );
 
     if (penaltyMins > 0 && db && targetId) {
@@ -246,6 +272,10 @@ export async function submitAdminForceCatering() {
 
     saveRosterCache();
     updateRosterUI();
+
+    const notifyLabel = isSelfForced ? `${targetName} (Self)` : targetName;
+    showToast(`⚡ Force Catered ${custName} to ${notifyLabel}`);
+    showSideNotification("FORCE CATER", `Assigned ${custName} to ${notifyLabel}`, "fa-user-gear", "text-amber-400", "border-amber-500");
 }
 
 // ADMIN FORCE STATUS
@@ -266,8 +296,8 @@ export async function adminForceStatus(id, name, actionValue) {
     const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === id.toString());
     const targetType = targetRecord ? targetRecord.userType : "";
 
-    if (!canForceCaterTarget(targetType)) {
-        return showToast("⚠️ TL cannot modify status of an Admin or TL.");
+    if (!canForceCaterTarget(targetType, id)) {
+        return showToast("⚠️ TL cannot modify status of an Admin or another TL.");
     }
 
     if (actionValue === 'VoidActive') {
@@ -500,6 +530,8 @@ export async function forceAllEndShift() {
                         pendingPenaltyMinutes: 0, 
                         cooldownUntil: 0,
                         forcedCaters: null,
+                        forcedBy: null,
+                        isForcedCater: false,
                         lastUpdated: timeStr,
                         lastActiveTimestamp: nowTimestamp
                     }).catch(() => {});
@@ -511,6 +543,8 @@ export async function forceAllEndShift() {
                 m.pendingPenaltyMinutes = 0;
                 m.cooldownUntil = 0;
                 m.forcedCaters = null;
+                m.forcedBy = null;
+                m.isForcedCater = false;
                 m.lastUpdated = timeStr;
                 m.lastActiveTimestamp = nowTimestamp;
             }
