@@ -4,7 +4,83 @@ import { appState } from '../store/state.js';
 
 let backPressCount = 0;
 let backPressTimer = null;
+let headerClockInterval = null;
 
+// ============================================================================
+// 1. LIVE DIGITAL CLOCK ENGINE
+// ============================================================================
+export function initHeaderClock() {
+    updateHeaderClock();
+    if (!headerClockInterval) {
+        headerClockInterval = setInterval(updateHeaderClock, 1000);
+    }
+}
+
+export function updateHeaderClock() {
+    const clockEl = document.getElementById('header-clock-time');
+    if (!clockEl) return;
+
+    const now = new Date();
+    clockEl.innerText = now.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    });
+}
+
+// ============================================================================
+// 2. THEME ENGINE & MODAL SYNC
+// ============================================================================
+export function setTheme(themeMode) {
+    localStorage.setItem('lokalex_theme', themeMode);
+    applyTheme(themeMode);
+    showToast(`🎨 Theme switched to ${themeMode.toUpperCase()}`);
+}
+
+export function applyTheme(themeMode) {
+    const savedTheme = themeMode || localStorage.getItem('lokalex_theme') || 'system';
+    const root = document.documentElement;
+
+    const isSystemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const shouldBeDark = savedTheme === 'dark' || (savedTheme === 'system' && isSystemDark);
+
+    if (shouldBeDark) {
+        root.classList.add('dark');
+    } else {
+        root.classList.remove('dark');
+    }
+
+    syncThemeUI(savedTheme);
+}
+
+export function syncThemeUI(activeTheme) {
+    const theme = activeTheme || localStorage.getItem('lokalex_theme') || 'system';
+    const modes = ['light', 'system', 'dark'];
+
+    modes.forEach(mode => {
+        const btn = document.getElementById(`modal-theme-btn-${mode}`);
+        if (btn) {
+            if (mode === theme) {
+                btn.className = "p-2.5 rounded-xl border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-black text-xs flex items-center justify-center gap-1.5 transition active:scale-95 shadow-sm";
+            } else {
+                btn.className = "p-2.5 rounded-xl border border-gray-300 dark:border-gray-700/60 bg-gray-50 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 shadow-xs";
+            }
+        }
+    });
+}
+
+if (typeof window !== 'undefined' && window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        const savedTheme = localStorage.getItem('lokalex_theme') || 'system';
+        if (savedTheme === 'system') {
+            applyTheme('system');
+        }
+    });
+}
+
+// ============================================================================
+// 3. ROUTING & VIEW CONTROLLERS
+// ============================================================================
 export function switchView(targetViewId, isBackwards = false, replace = false) {
     if (replace) {
         history.replaceState({ view: targetViewId }, '', '#' + targetViewId);
@@ -15,6 +91,7 @@ export function switchView(targetViewId, isBackwards = false, replace = false) {
 }
 
 export function handleHeaderUserClick() {
+    syncThemeUI();
     if (window.openProfileSettingsModal && typeof window.openProfileSettingsModal === 'function') {
         window.openProfileSettingsModal();
     }
@@ -29,6 +106,8 @@ export function syncHeaderAndWidgets(targetViewId) {
     const badgeIcon = document.getElementById('header-user-badge-icon');
     const networkPill = document.getElementById('network-status-pill');
     const floatingChat = document.getElementById('floating-chat-container');
+
+    initHeaderClock();
 
     const isLogin = targetViewId === 'view-login';
 
@@ -189,10 +268,19 @@ window.addEventListener('popstate', function(event) {
     }
 });
 
+// Run initialization immediately on evaluation
+initHeaderClock();
+applyTheme();
+
 if (typeof window !== 'undefined') {
     window.switchView = switchView;
     window.renderViewUI = renderViewUI;
     window.goBack = goBack;
     window.handleHeaderUserClick = handleHeaderUserClick;
     window.syncHeaderAndWidgets = syncHeaderAndWidgets;
+    window.setTheme = setTheme;
+    window.applyTheme = applyTheme;
+    window.syncThemeUI = syncThemeUI;
+    window.initHeaderClock = initHeaderClock;
+    window.updateHeaderClock = updateHeaderClock;
 }
