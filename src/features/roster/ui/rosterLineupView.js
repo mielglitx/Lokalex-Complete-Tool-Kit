@@ -16,10 +16,15 @@ import { openMapPicker } from '../../maps.js';
 import { getForcedCaterBadgeHtml } from './rosterBadge.js';
 import { loadGlobalCateredList } from './rosterFeeds.js';
 
-const DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
 export function openFindRidersMap() {
     openMapPicker('roster');
+}
+
+export function getRiderFirstName(name) {
+    if (!name) return "Rider";
+    const clean = String(name).trim();
+    const firstWord = clean.split(/\s+/)[0] || clean;
+    return formatTitleCase(firstWord);
 }
 
 export function updateRosterUI() {
@@ -154,30 +159,16 @@ export function updateRosterUI() {
     const allDayOffs = globalState.riderDayOffs || {};
     const todayDayOfWeek = new Date().getDay();
 
-    const getRiderDayOffBadge = (mId, mName) => {
-        const cleanName = (mName || "").toLowerCase().trim();
-        const rec = allDayOffs[mId] || allDayOffs[cleanName] || null;
-        if (!rec || rec.dayOfWeek === undefined || rec.dayOfWeek === null) return "";
-
-        const dIdx = parseInt(rec.dayOfWeek);
-        if (isNaN(dIdx)) return "";
-
-        if (dIdx === todayDayOfWeek) {
-            return `<span class="text-[9px] font-black text-teal-300 bg-teal-500/20 px-1.5 py-0.5 rounded border border-teal-500/40" title="Day-Off Scheduled Today">🏝️ DAY OFF TODAY</span>`;
-        }
-
-        return `<span class="text-[9px] font-bold text-gray-400 bg-gray-800/80 px-1.5 py-0.5 rounded border border-gray-700/50" title="Weekly Day-Off: Every ${DAYS_SHORT[dIdx]}">🏖️ ${DAYS_SHORT[dIdx]}</span>`;
-    };
-
     let availHtml = [], busyHtml = [], brkHtml = [], cdHtml = [];
     let availCounter = 1;
 
     // 1. Available List
     availableRiders.forEach((m) => {
         const mId = (m.telegramId || m.id || "").toString();
-        const mName = formatTitleCase(m.riderName || m.name || "Rider");
-        const todayGross = getRiderTodayGross(mName, mId);
-        const dayOffBadge = getRiderDayOffBadge(mId, mName);
+        const rawName = m.riderName || m.name || "Rider";
+        const mName = formatTitleCase(rawName);
+        const firstName = getRiderFirstName(rawName);
+        const todayGross = getRiderTodayGross(rawName, mId);
         
         let controlsHtml = "";
         if (showControls) {
@@ -195,9 +186,8 @@ export function updateRosterUI() {
         availHtml.push(`
             <div class="inline-flex items-center bg-white dark:bg-white/5 border border-gray-200 dark:border-gray-700/60 rounded-xl px-2.5 py-1 text-xs shadow-xs transition hover:border-emerald-500 gap-1.5">
                 <span class="font-black text-emerald-600 dark:text-green-400">${availCounter++}.</span>
-                <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${mId}', '${escapeHtml(mName)}')" class="font-bold text-gray-900 dark:text-gray-100 hover:text-emerald-500 dark:hover:text-emerald-400 hover:underline transition cursor-pointer text-left" title="View Rider Details">${escapeHtml(mName)}</button>
+                <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${mId}', '${escapeHtml(mName)}')" class="font-bold text-gray-900 dark:text-gray-100 hover:text-emerald-500 dark:hover:text-emerald-400 hover:underline transition cursor-pointer text-left" title="View Rider Details">${escapeHtml(firstName)}</button>
                 ${controlsHtml}
-                ${dayOffBadge}
                 <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
             </div>
         `);
@@ -206,15 +196,15 @@ export function updateRosterUI() {
     // 2. Catering List (With Multi-Customer Support & Universal Force Cater Badges)
     cateringRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
-        const mName = formatTitleCase(m.riderName || m.name || "Rider");
-        const todayGross = getRiderTodayGross(mName, mId);
-        const dayOffBadge = getRiderDayOffBadge(mId, mName);
+        const rawName = m.riderName || m.name || "Rider";
+        const mName = formatTitleCase(rawName);
+        const firstName = getRiderFirstName(rawName);
+        const todayGross = getRiderTodayGross(rawName, mId);
         let cardHtml = `
         <div class="flex flex-col py-1.5 border-b border-gray-200 dark:border-gray-800/60 last:border-0 gap-1">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-1.5">
-                    <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${mId}', '${escapeHtml(mName)}')" class="font-black text-xs text-gray-900 dark:text-white hover:text-orange-500 dark:hover:text-orange-400 hover:underline transition cursor-pointer text-left" title="View Rider Details">${escapeHtml(mName)}</button>
-                    ${dayOffBadge}
+                    <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${mId}', '${escapeHtml(mName)}')" class="font-black text-xs text-gray-900 dark:text-white hover:text-orange-500 dark:hover:text-orange-400 hover:underline transition cursor-pointer text-left" title="View Rider Details">${escapeHtml(firstName)}</button>
                     <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
                 </div>`;
 
@@ -280,9 +270,10 @@ export function updateRosterUI() {
     // 3. Break List
     breakRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
-        const mName = formatTitleCase(m.riderName || m.name || "Rider");
-        const todayGross = getRiderTodayGross(mName, mId);
-        const dayOffBadge = getRiderDayOffBadge(mId, mName);
+        const rawName = m.riderName || m.name || "Rider";
+        const mName = formatTitleCase(rawName);
+        const firstName = getRiderFirstName(rawName);
+        const todayGross = getRiderTodayGross(rawName, mId);
         
         let controlsHtml = "";
         if (showControls) {
@@ -292,9 +283,8 @@ export function updateRosterUI() {
         brkHtml.push(`
             <div class="flex items-center justify-between py-1 text-xs font-bold text-gray-900 dark:text-gray-200">
                 <div class="flex items-center gap-1.5">
-                    <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${mId}', '${escapeHtml(mName)}')" class="hover:text-amber-500 dark:hover:text-amber-400 hover:underline transition cursor-pointer text-left" title="View Rider Details">${escapeHtml(mName)}</button>
+                    <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${mId}', '${escapeHtml(mName)}')" class="hover:text-amber-500 dark:hover:text-amber-400 hover:underline transition cursor-pointer text-left" title="View Rider Details">${escapeHtml(firstName)}</button>
                     ${controlsHtml}
-                    ${dayOffBadge}
                     <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
                 </div>
             </div>
@@ -304,9 +294,10 @@ export function updateRosterUI() {
     // 4. Cooldown List
     cooldownRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
-        const mName = formatTitleCase(m.riderName || m.name || "Rider");
-        const todayGross = getRiderTodayGross(mName, mId);
-        const dayOffBadge = getRiderDayOffBadge(mId, mName);
+        const rawName = m.riderName || m.name || "Rider";
+        const mName = formatTitleCase(rawName);
+        const firstName = getRiderFirstName(rawName);
+        const todayGross = getRiderTodayGross(rawName, mId);
 
         let remSecs = m.cooldownUntil ? Math.max(0, Math.ceil((m.cooldownUntil - Date.now()) / 1000)) : 0;
         let mins = String(Math.floor(remSecs / 60)).padStart(2, '0');
@@ -321,9 +312,8 @@ export function updateRosterUI() {
         cdHtml.push(`
             <div class="flex items-center justify-between py-1 text-xs font-bold text-gray-900 dark:text-gray-200">
                 <div class="flex items-center gap-1.5">
-                    <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${mId}', '${escapeHtml(mName)}')" class="hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline transition cursor-pointer text-left" title="View Rider Details">${escapeHtml(mName)}</button>
+                    <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${mId}', '${escapeHtml(mName)}')" class="hover:text-yellow-500 dark:hover:text-yellow-400 hover:underline transition cursor-pointer text-left" title="View Rider Details">${escapeHtml(firstName)}</button>
                     ${controlsHtml}
-                    ${dayOffBadge}
                     <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
                 </div>
             </div>
@@ -336,7 +326,9 @@ export function updateRosterUI() {
     Object.entries(allDayOffs).forEach(([key, rec]) => {
         if (!rec || rec.dayOfWeek === undefined || rec.dayOfWeek === null) return;
         if (parseInt(rec.dayOfWeek) === todayDayOfWeek) {
-            const riderName = formatTitleCase(rec.riderName || key);
+            const rawRiderName = rec.riderName || key;
+            const riderName = formatTitleCase(rawRiderName);
+            const firstName = getRiderFirstName(rawRiderName);
             const riderId = rec.riderId || key;
             const uniqueKey = (riderId || riderName).toString().toLowerCase().trim();
 
@@ -345,7 +337,7 @@ export function updateRosterUI() {
                 dayOffHtml.push(`
                     <div class="inline-flex items-center bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-500/30 rounded-xl px-2.5 py-1 text-xs shadow-xs gap-1.5">
                         <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${riderId}', '${escapeHtml(riderName)}')" class="text-teal-700 dark:text-teal-300 font-bold flex items-center gap-1 hover:underline cursor-pointer" title="View Rider Details">
-                            <i class="fa-solid fa-umbrella-beach text-[10px] text-teal-500"></i> ${escapeHtml(riderName)}
+                            <i class="fa-solid fa-umbrella-beach text-[10px] text-teal-500"></i> ${escapeHtml(firstName)}
                         </button>
                         <span class="text-[9px] font-mono font-black text-teal-800 dark:text-teal-200 bg-teal-100 dark:bg-teal-500/20 px-1.5 py-0.5 rounded border border-teal-300 dark:border-teal-500/40">Today</span>
                     </div>
@@ -367,4 +359,16 @@ export function updateRosterUI() {
     if (elDayoff) elDayoff.innerHTML = dayOffHtml.length ? dayOffHtml.join('') : '(Walang naka-day off)';
 
     loadGlobalCateredList();
+}
+
+// Subscribe to real-time events to guarantee immediate re-calculation of earnings and queue sorting
+if (typeof window !== 'undefined') {
+    window.updateRosterUI = updateRosterUI;
+    window.openFindRidersMap = openFindRidersMap;
+    window.getRiderFirstName = getRiderFirstName;
+
+    window.addEventListener('receiptsUpdated', () => updateRosterUI());
+    window.addEventListener('cateredUpdated', () => updateRosterUI());
+    window.addEventListener('rosterUpdated', () => updateRosterUI());
+    window.addEventListener('loginsUpdated', () => updateRosterUI());
 }

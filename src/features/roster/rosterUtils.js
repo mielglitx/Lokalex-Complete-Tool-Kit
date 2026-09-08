@@ -17,6 +17,9 @@ const LOGINS_CACHE_KEY = 'lokalex_logins_cache';
 const CATERED_CACHE_KEY = 'lokalex_catered_cache_v2';
 const RECEIPTS_CACHE_KEY = 'lokalex_receipts_cache_v2';
 
+// Monotonic in-memory cache to prevent momentary drops to 0 during async receipt fetches
+const riderDailyGrossMemory = new Map();
+
 export function saveRosterCache() {
     try {
         localStorage.setItem(ROSTER_CACHE_KEY, JSON.stringify(globalState.rosterMembers || []));
@@ -125,7 +128,6 @@ export function hasTlPermission(permissionKey) {
         return perms[permissionKey] === true;
     }
 
-    // Fallback to legacy master tlAdminPower if granular perms not yet explicitly set
     if (myRecord && myRecord.tlAdminPower !== undefined) {
         return myRecord.tlAdminPower === true;
     }
@@ -190,7 +192,6 @@ export function canForceCaterTarget(targetType, targetId = "") {
         const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
         const tId = (targetId || "").toString().trim();
 
-        // Allow Team Leads to force-cater themselves
         if ((tId && myId && tId === myId) || (tId && myName && tId.toLowerCase() === myName)) {
             return true;
         }
@@ -253,49 +254,90 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     return durationText;
 }
 
+// Canonical date normalizer to handle ISO, slash, dash, and timestamps consistently
+export function normalizeToDateStr(val) {
+    if (!val) return "";
+    const str = String(val).trim();
+    
+    // YYYY-MM-DD
+    const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoMatch) {
+        return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+    }
+
+    // MM/DD/YYYY or M/D/YYYY
+    const slashMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (slashMatch) {
+        return `${slashMatch[3]}-${slashMatch[1].padStart(2, '0')}-${slashMatch[2].padStart(2, '0')}`;
+    }
+
+    // Epoch timestamp
+    if (/^\d{10,13}$/.test(str)) {
+        const d = new Date(Number(str));
+        if (!isNaN(d.getTime())) {
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+    }
+
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
+    return str;
+}
+
 export function isSameDateStr(date1, date2) {
     if (!date1 || !date2) return false;
-    const s1 = String(date1).trim();
-    const s2 = String(date2).trim();
-    if (!s1 || !s2) return false;
-    if (s1 === s2) return true;
-
-    const clean1 = s1.split('T')[0].split(' ')[0].replace(/\//g, '-');
-    const clean2 = s2.split('T')[0].split(' ')[0].replace(/\//g, '-');
-    if (clean1 === clean2) return true;
-
-    try {
-        const p1 = new Date(s1.includes('-') || s1.includes('/') ? s1 : Number(s1));
-        const p2 = new Date(s2.includes('-') || s2.includes('/') ? s2 : Number(s2));
-        if (!isNaN(p1.getTime()) && !isNaN(p2.getTime())) {
-            return p1.getFullYear() === p2.getFullYear() &&
-                   p1.getMonth() === p2.getMonth() &&
-                   p1.getDate() === p2.getDate();
-        }
-    } catch(e) {}
-
+    const n1 = normalizeToDateStr(date1);
+    const n2 = normalizeToDateStr(date2);
+    if (n1 && n2 && n1 === n2) return true;
     return false;
 }
 
+// Robust fee parser that strips currency symbols and cleans strings
 export function parseItemGross(item) {
     if (!item) return 0;
-    let gross = parseFloat(item.totalFees || item.gross || item.amount || item.total);
-    if (isNaN(gross) || gross <= 0) {
+
+    const rawVal = item.totalFees ?? item.gross ?? item.amount ?? item.total;
+    let gross = 0;
+
+    if (rawVal !== undefined && rawVal !== null) {
+        if (typeof rawVal === 'number') {
+            gross = rawVal;
+        } else {
+            const cleaned = String(rawVal).replace(/[^0-9.-]/g, '');
+            gross = parseFloat(cleaned) || 0;
+        }
+    }
+
+    if (gross <= 0) {
         let f = item.fees;
         if (typeof f === 'string') {
             try { f = JSON.parse(f); } catch(e) { f = null; }
         }
         if (f && typeof f === 'object') {
-            const hf = parseFloat(f.handling) || 0;
-            const mf = parseFloat(f.market) || 0;
-            const ms = parseFloat(f.multistore || f.multistop || f.multistoreFees) || 0;
-            const rdf = parseFloat(f.delivery || f.deliveryFees || f.riderFee) || 0;
-            const epay = parseFloat(f.epaymentFee || f.epay) || 0;
-            const disc = parseFloat(f.discount) || 0;
+            const parseNum = (v) => {
+                if (typeof v === 'number') return v;
+                return parseFloat(String(v || '0').replace(/[^0-9.-]/g, '')) || 0;
+            };
+            const hf = parseNum(f.handling);
+            const mf = parseNum(f.market);
+            const ms = parseNum(f.multistore || f.multistop || f.multistoreFees);
+            const rdf = parseNum(f.delivery || f.deliveryFees || f.riderFee);
+            const epay = parseNum(f.epaymentFee || f.epay);
+            const disc = parseNum(f.discount);
             gross = Math.max(0, hf + mf + ms + rdf + epay - disc);
         }
     }
-    return isNaN(gross) ? 0 : gross;
+
+    return isNaN(gross) || gross <= 0 ? 0 : gross;
 }
 
 export function isCustomerMatch(cust1 = "", cust2 = "") {
@@ -305,6 +347,30 @@ export function isCustomerMatch(cust1 = "", cust2 = "") {
     if (c1 === c2) return true;
     if (c1.length >= 4 && c2.includes(c1)) return true;
     if (c2.length >= 4 && c1.includes(c2)) return true;
+    return false;
+}
+
+// Flexible rider matcher to handle ID and full-name/first-name differences
+export function isRiderMatch(targetName = "", recordName = "", targetId = "", recordId = "") {
+    const tId = (targetId || "").toString().trim().toLowerCase();
+    const rId = (recordId || "").toString().trim().toLowerCase();
+    if (tId && rId && tId === rId) return true;
+
+    const tn = (targetName || "").trim().toLowerCase();
+    const rn = (recordName || "").trim().toLowerCase();
+    if (!tn || !rn) return false;
+    if (tn === rn) return true;
+
+    const w1 = tn.split(/\s+/);
+    const w2 = rn.split(/\s+/);
+    if (w1[0] && w2[0] && w1[0] === w2[0] && w1[0].length >= 3) {
+        return true;
+    }
+
+    if (tn.includes(rn) || rn.includes(tn)) {
+        return true;
+    }
+
     return false;
 }
 
@@ -337,7 +403,7 @@ export function getMergedDeduplicatedCommissionList() {
 
         const gross = parseItemGross(rc);
 
-        const sigKey = `${cleanRider}_${cleanCust}_${rcDate}`;
+        const sigKey = `${cleanRider}_${cleanCust}_${rcDate}_${sTime || 'default'}`;
         processedSignatures.add(sigKey);
         if (txId) processedSignatures.add(txId);
 
@@ -375,7 +441,7 @@ export function getMergedDeduplicatedCommissionList() {
         const dur = ch.duration || "";
         const txId = (ch.transactionId || ch.id || `${cleanRider}_${cleanCust}_${chDate}_${sTime}`).toString().trim();
 
-        const sigKey = `${cleanRider}_${cleanCust}_${chDate}`;
+        const sigKey = `${cleanRider}_${cleanCust}_${chDate}_${sTime || 'default'}`;
         if (processedSignatures.has(sigKey) || (txId && processedSignatures.has(txId))) {
             if (txId && mergedMap.has(txId)) {
                 const existing = mergedMap.get(txId);
@@ -410,7 +476,7 @@ export function getMergedDeduplicatedCommissionList() {
 
 export function getRiderTodayGross(riderName, telegramId) {
     const todayStr = getLocalTodayStr();
-    const rName = (riderName || "").trim().toLowerCase();
+    const rName = (riderName || "").trim();
     const tId = (telegramId || "").toString().trim();
 
     if (!rName && !tId) return 0;
@@ -423,21 +489,28 @@ export function getRiderTodayGross(riderName, telegramId) {
         if (!isSameDateStr(recDate, todayStr)) return;
 
         let recId = (rec.telegramId || "").toString().trim();
-        const recName = (rec.riderName || "").trim().toLowerCase();
+        const recName = (rec.riderName || "").trim();
 
         if (!recId) {
-            const rosterRec = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").toLowerCase() === recName);
-            if (rosterRec && rosterRec.telegramId) recId = rosterRec.telegramId.toString().trim();
-            else recId = recName;
+            const rosterRec = globalState.rosterMembers?.find(mem => 
+                isRiderMatch(recName, mem.riderName || mem.name || "")
+            );
+            if (rosterRec && rosterRec.telegramId) {
+                recId = rosterRec.telegramId.toString().trim();
+            }
         }
 
-        const matchId = tId && recId && tId.toLowerCase() === recId.toLowerCase();
-        const matchName = rName && recName && rName === recName;
-
-        if (matchId || matchName) {
+        if (isRiderMatch(rName, recName, tId, recId)) {
             total += (parseFloat(rec.totalFees) || 0);
         }
     });
+
+    const cacheKey = `${tId || rName}_${todayStr}`;
+    if (total > 0) {
+        riderDailyGrossMemory.set(cacheKey, total);
+    } else if (riderDailyGrossMemory.has(cacheKey)) {
+        total = riderDailyGrossMemory.get(cacheKey) || 0;
+    }
 
     return total;
 }
@@ -511,7 +584,7 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
 
         if (finalFees <= 0 && globalState.globalDailyReceipts) {
             const matchReceipt = globalState.globalDailyReceipts.find(rc => {
-                const rMatch = (rc.riderName || "").trim().toLowerCase() === tName.toLowerCase();
+                const rMatch = isRiderMatch(tName, rc.riderName, tId, rc.telegramId);
                 const cMatch = isCustomerMatch(rc.customerName, cName);
                 const dMatch = isSameDateStr(rc.date || rc.completedDate, todayStr);
                 return rMatch && cMatch && dMatch;
@@ -530,12 +603,12 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
             const hTxId = (h.transactionId || h.id || "").toString();
             if (targetTxId && hTxId === targetTxId) return true;
 
-            const hRider = (h.riderName || "").trim().toLowerCase();
+            const hRider = (h.riderName || "").trim();
             const hCust = (h.customerName || "").trim().toLowerCase();
             const hDate = h.completedDate || h.date;
             const hSTime = (h.startTime || "").trim().toLowerCase();
 
-            const isSameRider = hRider === cleanRiderKey || hRider === tName.toLowerCase();
+            const isSameRider = isRiderMatch(tName, hRider, tId, h.telegramId);
             const isSameCustomer = isCustomerMatch(hCust, cName);
             const isDateMatch = isSameDateStr(hDate, todayStr);
             const isTimeMatch = !cleanSTime || cleanSTime === 'n/a' || !hSTime || hSTime === 'n/a' || hSTime === cleanSTime;
@@ -651,7 +724,7 @@ export function hasReceiptForActiveSession(custName, custStartTime) {
         const rcRider = (rc.riderName || "").trim().toLowerCase();
         const rcDate = rc.date || rc.completedDate;
 
-        return rcRider === rName && 
+        return isRiderMatch(rName, rcRider, appState.telegramId, rc.telegramId) && 
                isCustomerMatch(rc.customerName, custName) && 
                isSameDateStr(rcDate, todayStr);
     });
