@@ -3,7 +3,7 @@ import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { getLocalTodayStr, copyText, getWeekString, getMonthString, escapeHtml } from '../../utils/helpers.js';
 import { switchView } from '../../ui/router.js';
-import { isAdmin as checkIsAdmin, getMergedDeduplicatedCommissionList, isSameDateStr, saveRosterCache } from '../roster/rosterUtils.js';
+import { isAdmin as checkIsAdmin, getMergedDeduplicatedCommissionList, isSameDateStr, saveRosterCache, isRiderMatch } from '../roster/rosterUtils.js';
 import { getCommissionRates, fetchCommissionSettings } from './commissionRates.js';
 
 export let viewSettings = {
@@ -86,26 +86,76 @@ export async function fetchCommissionData() {
 }
 
 export function getCleanRiderList() {
-    let riderMap = new Map();
+    const list = [];
 
-    const addRider = (rawName) => {
-        if (!rawName) return;
-        const clean = rawName.toString().trim();
-        const lower = clean.toLowerCase();
-        if (!lower || lower.includes("sample") || lower.includes("plesam") || lower.includes("test")) return;
-        if (!riderMap.has(lower)) {
-            riderMap.set(lower, clean);
-        }
+    const findExisting = (name, id) => {
+        return list.find(r => isRiderMatch(r.name, name, r.id, id));
     };
 
-    (globalState.rosterMembers || []).forEach(r => addRider(r.riderName || r.name));
-    (globalState.globalCateredHistory || []).forEach(h => addRider(h.riderName));
-    (globalState.globalDailyReceipts || []).forEach(rc => addRider(rc.riderName));
+    // 1. Seed with active roster members as primary source of truth
+    (globalState.rosterMembers || []).forEach(r => {
+        const name = (r.riderName || r.name || "").trim();
+        const id = (r.telegramId || r.id || "").toString().trim();
+        if (!name) return;
+        const lower = name.toLowerCase();
+        if (lower.includes("sample") || lower.includes("plesam") || lower.includes("test")) return;
+
+        const existing = findExisting(name, id);
+        if (!existing) {
+            list.push({ name, id });
+        } else if (!existing.id && id) {
+            existing.id = id;
+        }
+    });
+
+    // 2. Cross-reference catered history records
+    (globalState.globalCateredHistory || []).forEach(h => {
+        const name = (h.riderName || "").trim();
+        const id = (h.telegramId || h.riderId || "").toString().trim();
+        if (!name) return;
+        const lower = name.toLowerCase();
+        if (lower.includes("sample") || lower.includes("plesam") || lower.includes("test")) return;
+
+        const existing = findExisting(name, id);
+        if (!existing) {
+            list.push({ name, id });
+        } else if (!existing.id && id) {
+            existing.id = id;
+        }
+    });
+
+    // 3. Cross-reference daily receipt records
+    (globalState.globalDailyReceipts || []).forEach(rc => {
+        const name = (rc.riderName || "").trim();
+        const id = (rc.telegramId || rc.riderId || "").toString().trim();
+        if (!name) return;
+        const lower = name.toLowerCase();
+        if (lower.includes("sample") || lower.includes("plesam") || lower.includes("test")) return;
+
+        const existing = findExisting(name, id);
+        if (!existing) {
+            list.push({ name, id });
+        } else if (!existing.id && id) {
+            existing.id = id;
+        }
+    });
+
+    // 4. Cross-reference custom rider rates settings
     if (globalState.globalRiderRates) {
-        Object.keys(globalState.globalRiderRates).forEach(nameKey => addRider(nameKey));
+        Object.keys(globalState.globalRiderRates).forEach(nameKey => {
+            const name = nameKey.trim();
+            if (!name) return;
+            const lower = name.toLowerCase();
+            if (lower.includes("sample") || lower.includes("plesam") || lower.includes("test")) return;
+
+            const existing = findExisting(name, "");
+            if (!existing) {
+                list.push({ name, id: "" });
+            }
+        });
     }
 
-    return Array.from(riderMap.values()).sort((a, b) => a.localeCompare(b));
+    return list.map(r => r.name).sort((a, b) => a.localeCompare(b));
 }
 
 export function setupAdminControls() {
@@ -235,7 +285,7 @@ export function refreshCommissionView() {
         let rDate = r.date || r.completedDate;
 
         if (!rId) {
-            const rosterRec = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").toLowerCase() === rName.toLowerCase());
+            const rosterRec = globalState.rosterMembers?.find(mem => isRiderMatch(rName, mem.riderName || mem.name || ""));
             if (rosterRec && rosterRec.telegramId) rId = rosterRec.telegramId.toString();
             else rId = rName.toLowerCase();
         }
@@ -276,21 +326,12 @@ export function refreshCommissionView() {
         if (riderTotals[rId].gross <= 0 || riderTotals[rId].customers.length === 0) continue;
 
         if (targetRiderFilter && targetRiderFilter !== "ALL") {
-            const cleanTarget = targetRiderFilter.toString().trim().toLowerCase();
-            const rIdClean = rId.toString().trim().toLowerCase();
-            const rNameClean = (riderTotals[rId].name || "").toString().trim().toLowerCase();
+            const cleanTarget = targetRiderFilter.toString().trim();
+            const rIdClean = rId.toString().trim();
+            const rNameClean = (riderTotals[rId].name || "").toString().trim();
 
-            const targetRoster = (globalState.rosterMembers || []).find(m => 
-                (m.telegramId || "").toString().trim().toLowerCase() === cleanTarget ||
-                (m.riderName || m.name || "").toString().trim().toLowerCase() === cleanTarget
-            );
-            const targetRosterId = targetRoster ? (targetRoster.telegramId || "").toString().trim().toLowerCase() : "";
-            const targetRosterName = targetRoster ? (targetRoster.riderName || targetRoster.name || "").toString().trim().toLowerCase() : "";
-
-            const isIdMatch = (cleanTarget && rIdClean === cleanTarget) || (targetRosterId && rIdClean === targetRosterId) || (myId && rIdClean === myId.toLowerCase());
-            const isNameMatch = (cleanTarget && rNameClean === cleanTarget) || (targetRosterName && rNameClean === targetRosterName) || (myName && rNameClean === myName);
-
-            if (!isIdMatch && !isNameMatch) continue;
+            const isMatch = isRiderMatch(cleanTarget, rNameClean, cleanTarget, rIdClean);
+            if (!isMatch) continue;
             selectedRiderRates = riderTotals[rId].lastRates;
         }
         
@@ -301,7 +342,7 @@ export function refreshCommissionView() {
     }
 
     if (targetRiderFilter && targetRiderFilter !== "ALL" && !selectedRiderRates) {
-        const myRoster = globalState.rosterMembers?.find(m => (m.telegramId || "").toString() === targetRiderFilter.toString());
+        const myRoster = globalState.rosterMembers?.find(m => isRiderMatch(targetRiderFilter, m.riderName || m.name || "", targetRiderFilter, m.telegramId));
         const rName = myRoster ? (myRoster.riderName || myRoster.name || "") : (appState.riderName || myName);
         selectedRiderRates = getCommissionRates(viewSettings.dateValue, rName, targetRiderFilter);
     }
@@ -556,7 +597,7 @@ export function generateDailyReportText() {
         let rDate = r.date || r.completedDate;
 
         if (!rId) {
-            const rosterRec = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").toLowerCase() === rName.toLowerCase());
+            const rosterRec = globalState.rosterMembers?.find(mem => isRiderMatch(rName, mem.riderName || mem.name || ""));
             if (rosterRec && rosterRec.telegramId) rId = rosterRec.telegramId.toString();
             else rId = rName.toLowerCase();
         }
@@ -580,21 +621,12 @@ export function generateDailyReportText() {
         if (riderTotals[rId].gross <= 0) continue;
 
         if (targetRiderFilter && targetRiderFilter !== "ALL") {
-            const cleanTarget = targetRiderFilter.toString().trim().toLowerCase();
-            const rIdClean = rId.toString().trim().toLowerCase();
-            const rNameClean = (riderTotals[rId].name || "").toString().trim().toLowerCase();
+            const cleanTarget = targetRiderFilter.toString().trim();
+            const rIdClean = rId.toString().trim();
+            const rNameClean = (riderTotals[rId].name || "").toString().trim();
 
-            const targetRoster = (globalState.rosterMembers || []).find(m => 
-                (m.telegramId || "").toString().trim().toLowerCase() === cleanTarget ||
-                (m.riderName || m.name || "").toString().trim().toLowerCase() === cleanTarget
-            );
-            const targetRosterId = targetRoster ? (targetRoster.telegramId || "").toString().trim().toLowerCase() : "";
-            const targetRosterName = targetRoster ? (targetRoster.riderName || targetRoster.name || "").toString().trim().toLowerCase() : "";
-
-            const isIdMatch = (cleanTarget && rIdClean === cleanTarget) || (targetRosterId && rIdClean === targetRosterId);
-            const isNameMatch = (cleanTarget && rNameClean === cleanTarget) || (targetRosterName && rNameClean === targetRosterName);
-
-            if (!isIdMatch && !isNameMatch) continue;
+            const isMatch = isRiderMatch(cleanTarget, rNameClean, cleanTarget, rIdClean);
+            if (!isMatch) continue;
         }
 
         const rates = riderTotals[rId].lastRates || getCommissionRates(viewSettings.dateValue, riderTotals[rId].name, rId);

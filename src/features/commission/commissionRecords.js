@@ -4,7 +4,7 @@ import { db } from '../../config/firebase.js';
 import { getLocalTodayStr, escapeHtml } from '../../utils/helpers.js';
 import { showToast } from '../../ui/notifications.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
-import { isAdmin as checkIsAdmin, isCustomerMatch, isSameDateStr, saveRosterCache } from '../roster/rosterUtils.js';
+import { isAdmin as checkIsAdmin, isCustomerMatch, isSameDateStr, saveRosterCache, isRiderMatch } from '../roster/rosterUtils.js';
 import { getCleanRiderList, refreshCommissionView, viewSettings } from './commissionUI.js';
 
 export function openAdminPenaltyModal() {
@@ -52,8 +52,14 @@ export function submitAdminPenalty() {
     const cleanName = rName.toLowerCase().trim();
     const penaltyKey = `${cleanName}_${targetDate}`;
 
+    const rosterMem = (globalState.rosterMembers || []).find(m => 
+        isRiderMatch(rName, m.riderName || m.name || "", "", m.telegramId || m.id)
+    );
+    const rId = rosterMem ? (rosterMem.telegramId || rosterMem.id || "").toString().trim() : "";
+
     const penaltyRecord = {
         riderName: rName,
+        telegramId: rId,
         date: targetDate,
         penaltyPercentage: penaltyRate,
         reason: reason,
@@ -80,9 +86,23 @@ export function removeAdminPenalty(riderName, targetDate) {
     openSlideDeleteModal(`Tanggalin ang Date Penalty?`, `Sigurado ka bang tanggalin ang +commission penalty para kay ${riderName} sa ${targetDate}?`, () => {
         if (db) {
             db.ref(`commissionPenalties/${penaltyKey}`).remove();
+            db.ref('commissionPenalties').once('value', (snap) => {
+                const val = snap.val() || {};
+                Object.entries(val).forEach(([key, rec]) => {
+                    if (isSameDateStr(rec.date, targetDate) && isRiderMatch(riderName, rec.riderName || key.split('_')[0])) {
+                        db.ref(`commissionPenalties/${key}`).remove();
+                    }
+                });
+            });
         }
         if (globalState.globalCommissionPenalties) {
             delete globalState.globalCommissionPenalties[penaltyKey];
+            Object.keys(globalState.globalCommissionPenalties).forEach(key => {
+                const rec = globalState.globalCommissionPenalties[key];
+                if (rec && isSameDateStr(rec.date, targetDate) && isRiderMatch(riderName, rec.riderName || key.split('_')[0])) {
+                    delete globalState.globalCommissionPenalties[key];
+                }
+            });
         }
         showToast(`✅ Penalty removed for ${riderName}`);
         refreshCommissionView();
@@ -139,7 +159,9 @@ export async function submitAdminAddCommissionRecord() {
     const cleanCustKey = cNameInput.toLowerCase().replace(/[^a-z0-9]/g, '');
     const txId = `RCPT_MANUAL_${cleanRiderKey}_${cleanCustKey}_${Date.now()}`;
 
-    const rosterMem = (globalState.rosterMembers || []).find(m => (m.riderName || m.name || "").toLowerCase().trim() === rNameInput.toLowerCase().trim());
+    const rosterMem = (globalState.rosterMembers || []).find(m => 
+        isRiderMatch(rNameInput, m.riderName || m.name || "", "", m.telegramId || m.id)
+    );
     const rId = rosterMem ? (rosterMem.telegramId || rosterMem.id || "") : cleanRiderKey;
 
     const newRecord = {
@@ -208,7 +230,6 @@ export async function executeDeleteCommissionRecord(riderName, customerName, dat
             });
         }
     } else {
-        // Fallback ONLY when txId is not provided
         if (globalState.globalDailyReceipts) {
             globalState.globalDailyReceipts = globalState.globalDailyReceipts.filter(rc => {
                 const matchRider = (rc.riderName || "").toLowerCase().trim() === cleanRider;

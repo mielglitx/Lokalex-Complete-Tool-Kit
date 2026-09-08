@@ -3,6 +3,7 @@ import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { ADMIN_IDS } from '../../config/constants.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
+import { isRiderMatch, isSameDateStr } from '../roster/rosterUtils.js';
 
 export const SETTINGS_CACHE_KEY = 'lokalex_commission_settings_cache_v2';
 export const RECEIPTS_CACHE_KEY = 'lokalex_receipts_cache_v2';
@@ -97,23 +98,27 @@ export function isRiderAdmin(riderName = "", telegramId = "") {
     const cleanId = (telegramId || "").toString().trim();
 
     if (cleanId && ADMIN_IDS.some(id => id.toString().trim() === cleanId)) return true;
-    if (cleanName && ADMIN_IDS.some(id => id.toString().toLowerCase().trim() === cleanName)) return true;
+    if (cleanName && ADMIN_IDS.some(id => isRiderMatch(cleanName, id.toString()))) return true;
 
     if (globalState.userTypesMap) {
-        const hasName = cleanName && (cleanName in globalState.userTypesMap);
-        const hasId = cleanId && (cleanId in globalState.userTypesMap);
+        if (cleanId && globalState.userTypesMap[cleanId]) {
+            const type = globalState.userTypesMap[cleanId];
+            if (type === "admin" || type === "owner" || type === "manager") return true;
+        }
+        if (cleanName && globalState.userTypesMap[cleanName]) {
+            const type = globalState.userTypesMap[cleanName];
+            if (type === "admin" || type === "owner" || type === "manager") return true;
+        }
 
-        if (hasName || hasId) {
-            const typeByName = hasName ? globalState.userTypesMap[cleanName] : "";
-            const typeById = hasId ? globalState.userTypesMap[cleanId] : "";
-
-            return typeByName === "admin" || typeById === "admin";
+        for (const [key, type] of Object.entries(globalState.userTypesMap)) {
+            if (type === "admin" || type === "owner" || type === "manager") {
+                if (isRiderMatch(cleanName, key, cleanId, key)) return true;
+            }
         }
     }
 
     const rosterMem = (globalState.rosterMembers || []).find(m => 
-        (m.riderName || m.name || "").toLowerCase().trim() === cleanName ||
-        (m.telegramId || "").toString().trim() === cleanId
+        isRiderMatch(cleanName, m.riderName || m.name || "", cleanId, m.telegramId || m.id)
     );
 
     if (rosterMem) {
@@ -154,31 +159,74 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
     let baseCompanyPerc = defaultCommissionRate;
     let hasCustomOverride = false;
 
+    // 1. Direct ID or Name Match
     if (cleanId && customRiderRates[cleanId] !== undefined && customRiderRates[cleanId] !== null && customRiderRates[cleanId] !== "") {
         baseCompanyPerc = parseFloat(customRiderRates[cleanId]);
         hasCustomOverride = true;
     } else if (cleanName && customRiderRates[cleanName] !== undefined && customRiderRates[cleanName] !== null && customRiderRates[cleanName] !== "") {
         baseCompanyPerc = parseFloat(customRiderRates[cleanName]);
         hasCustomOverride = true;
-    } else if (globalState.globalRiderRates && globalState.globalRiderRates[cleanName]) {
-        const setting = globalState.globalRiderRates[cleanName];
-        if (setting.percentage !== undefined) {
-            baseCompanyPerc = parseFloat(setting.percentage);
-            hasCustomOverride = true;
-        } else if (setting.basePercentage !== undefined) {
-            baseCompanyPerc = parseFloat(setting.basePercentage);
-            hasCustomOverride = true;
+    } else {
+        // Fuzzy Match across customRiderRates keys
+        for (const [rateKey, rateVal] of Object.entries(customRiderRates)) {
+            if (rateVal !== undefined && rateVal !== null && rateVal !== "") {
+                if (isRiderMatch(cleanName, rateKey, cleanId, rateKey)) {
+                    baseCompanyPerc = parseFloat(rateVal);
+                    hasCustomOverride = true;
+                    break;
+                }
+            }
         }
     }
 
-    const penaltyKey = `${cleanName}_${dateFormatted}`;
-    const penaltyRecord = globalState.globalCommissionPenalties ? globalState.globalCommissionPenalties[penaltyKey] : null;
-    let penaltyPerc = 0;
-
-    if (penaltyRecord && penaltyRecord.penaltyPercentage) {
-        penaltyPerc = Math.max(0, parseFloat(penaltyRecord.penaltyPercentage) || 0);
+    // 2. Fallback to globalRiderRates settings
+    if (!hasCustomOverride && globalState.globalRiderRates) {
+        if (globalState.globalRiderRates[cleanName]) {
+            const setting = globalState.globalRiderRates[cleanName];
+            baseCompanyPerc = parseFloat(setting.percentage || setting.basePercentage || defaultCommissionRate);
+            hasCustomOverride = true;
+        } else {
+            for (const [rKey, setting] of Object.entries(globalState.globalRiderRates)) {
+                if (isRiderMatch(cleanName, rKey, cleanId, rKey)) {
+                    baseCompanyPerc = parseFloat(setting.percentage || setting.basePercentage || defaultCommissionRate);
+                    hasCustomOverride = true;
+                    break;
+                }
+            }
+        }
     }
 
+    // 3. Penalty lookup with canonical fuzzy matching
+    let penaltyPerc = 0;
+    let penaltyReason = "";
+
+    if (globalState.globalCommissionPenalties) {
+        const directKey = `${cleanName}_${dateFormatted}`;
+        const idKey = cleanId ? `${cleanId}_${dateFormatted}` : null;
+
+        const directRecord = globalState.globalCommissionPenalties[directKey] || 
+                             (idKey ? globalState.globalCommissionPenalties[idKey] : null);
+
+        if (directRecord && directRecord.penaltyPercentage) {
+            penaltyPerc = Math.max(0, parseFloat(directRecord.penaltyPercentage) || 0);
+            penaltyReason = directRecord.reason || "";
+        } else {
+            for (const [key, rec] of Object.entries(globalState.globalCommissionPenalties)) {
+                if (!rec) continue;
+                if (isSameDateStr(rec.date, dateFormatted)) {
+                    const recRiderName = rec.riderName || key.split('_')[0] || "";
+                    const recRiderId = (rec.telegramId || "").toString().trim();
+                    if (isRiderMatch(riderName, recRiderName, cleanId, recRiderId)) {
+                        penaltyPerc = Math.max(0, parseFloat(rec.penaltyPercentage) || 0);
+                        penaltyReason = rec.reason || "";
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Promo discounts
     let promoDiscountPerc = 0;
 
     if (recurringDiscount && recurringDiscount.enabled && recurringDiscount.day === dayOfWeek) {
@@ -203,7 +251,7 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         penaltyPerc: penaltyPerc,
         promoDiscountPerc: promoDiscountPerc,
         hasCustomOverride: hasCustomOverride,
-        penaltyReason: penaltyRecord ? penaltyRecord.reason : "",
+        penaltyReason: penaltyReason,
         isAdmin: false
     };
 }
