@@ -8,6 +8,13 @@ import { escapeHtml, copyText } from '../../utils/helpers.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
 import { mapState } from './mapState.js';
 
+export function calculateMapDeliveryFee(distanceKm) {
+    const km = parseFloat(distanceKm) || 0;
+    if (km <= 3) return 50;
+    const roundedKm = Math.ceil(km);
+    return 50 + (roundedKm - 3) * 15;
+}
+
 export function getMapCalcShareUrl(calcKey) {
     const origin = window.location.origin;
     const pathname = window.location.pathname;
@@ -258,6 +265,53 @@ export function renderMapCalcBoardList() {
 
 export const fetchAndRenderMapCalculations = renderMapCalcBoardList;
 
+function showMapCalcRouteSummary({ exactKm, roundedKm, fee, durationText }) {
+    let banner = document.getElementById('mapcalc-route-summary-banner');
+    const mapView = document.getElementById('view-map') || document.body;
+
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'mapcalc-route-summary-banner';
+        banner.className = 'absolute top-14 left-3 right-3 z-30 bg-gray-900/95 border border-emerald-500/60 shadow-2xl rounded-2xl p-3 text-white backdrop-blur-md transition-all flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-200';
+        mapView.appendChild(banner);
+    }
+
+    const breakdownText = roundedKm <= 3
+        ? `Base Delivery Rate (≤ 3 km)`
+        : `₱50 base (3 km) + ${roundedKm - 3} km × ₱15`;
+
+    banner.innerHTML = `
+        <div class="flex items-center justify-between border-b border-gray-800 pb-1.5">
+            <div class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span class="text-[11px] font-black text-gray-300 uppercase tracking-wider">Distance & Delivery Fee</span>
+            </div>
+            <span class="text-xs font-mono font-bold text-gray-400">
+                <i class="fa-solid fa-clock text-[10px] mr-1 text-emerald-400"></i>${escapeHtml(durationText || 'N/A')}
+            </span>
+        </div>
+        <div class="flex items-center justify-between pt-0.5">
+            <div class="flex flex-col">
+                <div class="text-xs text-gray-200 font-bold">
+                    Distance: <span class="text-emerald-400 font-mono font-black">${exactKm.toFixed(2)} km</span>
+                    <span class="text-gray-400 text-[11px] font-normal">(${roundedKm} km billed)</span>
+                </div>
+                <div class="text-[10px] text-gray-400 font-medium">${breakdownText}</div>
+            </div>
+            <div class="text-right">
+                <div class="text-2xl font-black text-emerald-400 font-mono leading-none">₱${fee}</div>
+                <div class="text-[9px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">Delivery Fee</div>
+            </div>
+        </div>
+    `;
+    banner.classList.remove('hidden');
+}
+
+export function hideMapCalcRouteSummary() {
+    const banner = document.getElementById('mapcalc-route-summary-banner');
+    if (banner) banner.classList.add('hidden');
+}
+
 export function openMapCalcRoute(targetLat, targetLng, custName) {
     closeMapCalcBoardModal();
     switchView('view-map');
@@ -304,7 +358,21 @@ export function openMapCalcRoute(targetLat, targetLng, custName) {
         if (status === google.maps.DirectionsStatus.OK) {
             mapState.mapDirectionsRenderer.setDirections(result);
             const routeLeg = result.routes[0].legs[0];
-            showToast(`📏 Travel Distance: ${routeLeg.distance.text} (${routeLeg.duration.text} travel time)`);
+            
+            // Calculate exact km and ceiling rounded km
+            const exactMeters = routeLeg.distance.value || 0;
+            const exactKm = exactMeters / 1000;
+            const roundedKm = Math.ceil(exactKm);
+            const fee = calculateMapDeliveryFee(exactKm);
+
+            showMapCalcRouteSummary({
+                exactKm: exactKm,
+                roundedKm: roundedKm,
+                fee: fee,
+                durationText: routeLeg.duration.text
+            });
+
+            showToast(`📏 ${exactKm.toFixed(2)} km (${roundedKm} km billed) • Fee: ₱${fee}`);
         } else {
             showToast("Unable to calculate driving route.");
         }
@@ -326,3 +394,12 @@ export function deleteMapCalcRecord(key, custName) {
 }
 
 export const deleteMapCalculation = deleteMapCalcRecord;
+
+// Global window attachments
+if (typeof window !== 'undefined') {
+    window.calculateMapDeliveryFee = calculateMapDeliveryFee;
+    window.showMapCalcRouteSummary = showMapCalcRouteSummary;
+    window.hideMapCalcRouteSummary = hideMapCalcRouteSummary;
+    window.openMapCalcRoute = openMapCalcRoute;
+    window.viewMapCalcRoute = viewMapCalcRoute;
+}
