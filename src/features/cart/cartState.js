@@ -30,7 +30,14 @@ export function saveCartState() {
         const serializable = {};
         for (let key in multiCarts) {
             serializable[key] = {
-                items: multiCarts[key].items || [],
+                items: (multiCarts[key].items || []).map(item => ({
+                    name: item.name || "",
+                    price: item.price !== undefined ? item.price : 0,
+                    category: item.category || item.type || 'store',
+                    type: item.type || item.category || 'store',
+                    isPaid: !!item.isPaid,
+                    isBought: !!item.isBought
+                })),
                 customerName: multiCarts[key].customerName || "",
                 isManual: !!multiCarts[key].isManual,
                 txId: multiCarts[key].txId || "",
@@ -57,7 +64,14 @@ export function loadCartState() {
             const parsed = JSON.parse(savedData);
             for (let key in parsed) {
                 multiCarts[key] = {
-                    items: parsed[key].items || [],
+                    items: (parsed[key].items || []).map(item => ({
+                        name: item.name || "",
+                        price: item.price !== undefined ? item.price : 0,
+                        category: item.category || item.type || 'store',
+                        type: item.type || item.category || 'store',
+                        isPaid: !!item.isPaid,
+                        isBought: !!item.isBought
+                    })),
                     selectedIds: new Set(),
                     customerName: parsed[key].customerName || "",
                     isManual: !!parsed[key].isManual,

@@ -51,6 +51,15 @@ export function toggleItemPaid(index) {
     }
 }
 
+export function toggleItemBought(index) {
+    const currentCart = getCurrentCart();
+    if (currentCart[index]) {
+        currentCart[index].isBought = !currentCart[index].isBought;
+        saveCartState();
+        renderCartItems();
+    }
+}
+
 export function toggleItemSelect(index) {
     const cartObj = multiCarts[activeCartSlot];
     if (!cartObj.selectedIds) cartObj.selectedIds = new Set();
@@ -176,7 +185,8 @@ export function processBulkAdd() {
                 price: parseFloat(match[2]),
                 category: 'store',
                 type: 'store',
-                isPaid: false
+                isPaid: false,
+                isBought: false
             });
         } else {
             newItems.push({
@@ -184,7 +194,8 @@ export function processBulkAdd() {
                 price: 0,
                 category: 'store',
                 type: 'store',
-                isPaid: false
+                isPaid: false,
+                isBought: false
             });
         }
     });

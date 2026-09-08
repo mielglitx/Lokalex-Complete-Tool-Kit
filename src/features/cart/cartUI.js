@@ -219,9 +219,29 @@ export function renderCartItems() {
         return;
     }
 
-    container.innerHTML = currentCart.map((item, index) => {
+    const totalItems = currentCart.length;
+    const boughtCount = currentCart.filter(item => !!item.isBought).length;
+    const progressPercent = totalItems > 0 ? Math.round((boughtCount / totalItems) * 100) : 0;
+
+    const progressBannerHtml = `
+        <div class="bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-xl flex flex-col gap-1.5 text-xs shrink-0 shadow-xs mb-1">
+            <div class="flex justify-between items-center text-[11px] font-bold">
+                <span class="text-gray-600 dark:text-gray-400 flex items-center gap-1.5">
+                    <i class="fa-solid fa-list-check text-blue-500"></i> Shopping Checklist
+                </span>
+                <span class="${boughtCount === totalItems ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-700 dark:text-gray-300'} font-mono text-[10px]">
+                    ${boughtCount} of ${totalItems} bought (${progressPercent}%)
+                </span>
+            </div>
+            <div class="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                <div class="bg-emerald-500 h-1.5 rounded-full transition-all duration-300" style="width: ${progressPercent}%"></div>
+            </div>
+        </div>`;
+
+    const cardsHtml = currentCart.map((item, index) => {
         const itemPrice = parseFloat(item.price) || 0;
         const isPaid = !!item.isPaid;
+        const isBought = !!item.isBought;
         const isSelected = currentCartObj.selectedIds && currentCartObj.selectedIds.has(index);
         const isUnpricedUnpaid = itemPrice <= 0 && !isPaid;
 
@@ -231,36 +251,51 @@ export function renderCartItems() {
         
         const catStoreClass = !isMarket 
             ? "bg-orange-600 text-white font-bold" 
-            : "bg-gray-800 text-gray-400 hover:text-white";
+            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white";
 
         const catMarketClass = isMarket 
             ? "bg-emerald-600 text-white font-bold" 
-            : "bg-gray-800 text-gray-400 hover:text-white";
+            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white";
+
+        const boughtBtnClass = isBought
+            ? "bg-emerald-600 text-white font-bold shadow-xs"
+            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white";
 
         const paidBtnClass = isPaid 
             ? "bg-emerald-600/30 text-emerald-400 border border-emerald-500/50" 
-            : "bg-gray-800 text-gray-400 hover:text-white";
+            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white";
 
-        let cardStyleClass = "bg-cardBg border-gray-800";
+        let cardStyleClass = "bg-cardBg border-gray-200 dark:border-gray-800";
         if (isUnpricedUnpaid) {
             cardStyleClass = "bg-amber-950/30 border-amber-500/80 ring-1 ring-amber-500/50 shadow-lg shadow-amber-950/30";
+        } else if (isBought) {
+            cardStyleClass = "bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-500/40 opacity-80";
         }
 
         const priceDisplayClass = isUnpricedUnpaid 
-            ? "text-amber-400 font-black animate-pulse" 
-            : (isPaid ? "text-gray-500 line-through" : "text-green-400 font-bold");
+            ? "text-amber-500 dark:text-amber-400 font-black animate-pulse" 
+            : (isPaid ? "text-gray-400 dark:text-gray-500 line-through" : (isBought ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-emerald-600 dark:text-green-400 font-bold"));
+
+        const itemNameClass = isBought
+            ? "break-words text-wrap font-bold text-sm text-gray-500 dark:text-gray-400 line-through flex-1 min-w-0"
+            : "break-words text-wrap font-bold text-sm text-gray-900 dark:text-white flex-1 min-w-0";
 
         const unpricedWarningBadge = isUnpricedUnpaid 
-            ? `<span class="bg-amber-500/20 text-amber-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-amber-500/40 flex items-center gap-1 shrink-0"><i class="fa-solid fa-triangle-exclamation"></i> Set Price or Paid</span>` 
+            ? `<span class="bg-amber-500/20 text-amber-500 dark:text-amber-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-amber-500/40 flex items-center gap-1 shrink-0"><i class="fa-solid fa-triangle-exclamation"></i> Set Price or Paid</span>` 
+            : '';
+
+        const boughtBadge = isBought
+            ? `<span class="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1 shrink-0"><i class="fa-solid fa-check text-[8px]"></i> Bought</span>`
             : '';
 
         return `
-        <div ontouchstart="handleCardTouchStart(event, this)" ontouchmove="handleCardTouchMove(event, this)" ontouchend="handleCardTouchEnd(event, ${index})" class="${cardStyleClass} border p-3 rounded-xl flex flex-col gap-2 transition-transform duration-75 relative select-none">
+        <div ontouchstart="handleCardTouchStart(event, this)" ontouchmove="handleCardTouchMove(event, this)" ontouchend="handleCardTouchEnd(event, ${index})" class="${cardStyleClass} border p-3 rounded-xl flex flex-col gap-2 transition-transform duration-75 relative select-none shadow-xs">
             <div class="flex items-start justify-between gap-2">
                 <div class="flex items-start gap-2 flex-1 min-w-0">
                     <input type="checkbox" onchange="toggleItemSelect(${index})" ${isSelected ? "checked" : ""} class="w-4 h-4 accent-blue-500 rounded cursor-pointer shrink-0 mt-0.5">
-                    <span class="text-[10px] text-gray-500 font-bold shrink-0 mt-0.5">#${index + 1}</span>
-                    <span class="break-words text-wrap font-bold text-sm text-white flex-1 min-w-0">${escapeHtml(item.name)}</span>
+                    <span class="text-[10px] text-gray-400 dark:text-gray-500 font-bold shrink-0 mt-0.5">#${index + 1}</span>
+                    <span class="${itemNameClass}">${escapeHtml(item.name)}</span>
+                    ${boughtBadge}
                     ${unpricedWarningBadge}
                 </div>
                 <div class="text-right shrink-0">
@@ -270,7 +305,7 @@ export function renderCartItems() {
                 </div>
             </div>
 
-            <div class="flex justify-between items-center pt-2 border-t border-gray-800/60 text-xs">
+            <div class="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-800/60 text-xs">
                 <div class="flex gap-1">
                     <button onclick="toggleItemCategory(${index}, 'store')" class="px-2.5 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${catStoreClass}">
                         <i class="fa-solid fa-store"></i> Store
@@ -280,21 +315,26 @@ export function renderCartItems() {
                     </button>
                 </div>
 
-                <div class="flex items-center gap-2">
-                    <button onclick="toggleItemPaid(${index})" class="px-2.5 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${paidBtnClass}">
-                        <i class="fa-solid fa-check"></i> Paid
+                <div class="flex items-center gap-1.5">
+                    <button onclick="toggleItemBought(${index})" class="px-2.5 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${boughtBtnClass}">
+                        <i class="fa-solid fa-check"></i> ${isBought ? 'Bought' : 'Buy'}
                     </button>
-                    <button onclick="editCartItem(${index})" class="text-blue-400 hover:text-blue-300 p-1 text-xs active:scale-90" title="Edit Item">
-                        <i class="fa-solid fa-pen"></i> Edit
+                    <button onclick="toggleItemPaid(${index})" class="px-2.5 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${paidBtnClass}">
+                        <i class="fa-solid fa-receipt"></i> Paid
+                    </button>
+                    <button onclick="editCartItem(${index})" class="text-blue-500 hover:text-blue-400 p-1 text-xs active:scale-90" title="Edit Item">
+                        <i class="fa-solid fa-pen"></i>
                     </button>
                 </div>
             </div>
             
-            <div class="text-[9px] text-gray-600 italic text-right -mt-1 select-none pointer-events-none">
+            <div class="text-[9px] text-gray-400 dark:text-gray-600 italic text-right -mt-1 select-none pointer-events-none">
                 <i class="fa-solid fa-arrows-left-right"></i> Slide left/right to delete
             </div>
         </div>`;
     }).join('');
+
+    container.innerHTML = progressBannerHtml + cardsHtml;
 
     if (subtotalDisplay) subtotalDisplay.innerText = subtotal.toFixed(2);
 
