@@ -141,19 +141,44 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
     const myAvatar = localStorage.getItem('customerAvatarUrl') || localStorage.getItem('lokalex_customer_avatar') || `https://ui-avatars.com/api/?name=User&background=0084FF&color=fff`;
 
     const messagesHtml = msgs.map(m => {
-        const isRider = !!m.isRider;
-        const alignClass = isRider 
-            ? "self-start bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-200 rounded-tl-none" 
-            : "self-end bg-blue-600 text-white rounded-tr-none";
+        const isStore = m.senderType === 'store' || m.isStore === true;
+        const isRider = !isStore && !!m.isRider;
+        const isCustomer = !isStore && !isRider;
+
+        let alignClass = "self-end bg-blue-600 text-white rounded-tr-none";
+        let senderColor = "text-blue-100";
+        let roleBadge = "";
+
+        if (isStore) {
+            alignClass = "self-start bg-orange-50/80 dark:bg-zinc-900 border border-orange-200 dark:border-orange-500/40 text-gray-900 dark:text-gray-100 rounded-tl-none shadow-xs";
+            senderColor = "text-orange-600 dark:text-orange-400";
+            roleBadge = `<span class="bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 text-[8px] font-black px-1 rounded ml-1">STORE</span>`;
+        } else if (isRider) {
+            alignClass = "self-start bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-200 rounded-tl-none shadow-xs";
+            senderColor = "text-blue-600 dark:text-blue-400";
+            roleBadge = `<span class="bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-[8px] font-black px-1 rounded ml-1">RIDER</span>`;
+        }
+
         const timeStr = m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
         const imgHtml = m.imageUrl ? `<img src="${m.imageUrl}" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(m.imageUrl)}', 'customer')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">` : '';
         
-        const senderName = m.sender || (isRider ? "Lokalex Rider" : "You");
-        const senderAvatar = isRider 
-            ? `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=3B82F6&color=fff`
-            : myAvatar;
+        let senderName = m.sender || "Lokalex";
+        if (isCustomer) senderName = "You";
 
-        const statusIndicator = !isRider ? renderMessageStatusIndicator(m) : '';
+        let senderAvatarHtml = "";
+        if (isStore) {
+            senderAvatarHtml = `
+            <div class="w-6 h-6 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/40 flex items-center justify-center text-[10px] shrink-0 mt-1 pointer-events-none">
+                <i class="fa-solid fa-store"></i>
+            </div>`;
+        } else if (isRider) {
+            const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=3B82F6&color=fff`;
+            senderAvatarHtml = `<img src="${avatarUrl}" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1 pointer-events-none">`;
+        } else {
+            senderAvatarHtml = `<img src="${myAvatar}" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1 pointer-events-none">`;
+        }
+
+        const statusIndicator = isCustomer ? renderMessageStatusIndicator(m) : '';
         const replyBlockHtml = renderReplyPreviewInsideMessage(m.replyTo);
         const reactionsHtml = renderReactionsHtml(m.reactions, m.id, 'customer');
 
@@ -194,8 +219,8 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
         const encodedSender = encodeURIComponent(senderName);
 
         return `
-        <div id="msg-bubble-${m.id}" class="flex items-start gap-1.5 ${isRider ? 'flex-row' : 'flex-row-reverse'} my-0.5 group/row">
-            <img src="${senderAvatar}" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1 pointer-events-none">
+        <div id="msg-bubble-${m.id}" class="flex items-start gap-1.5 ${isCustomer ? 'flex-row-reverse' : 'flex-row'} my-0.5 group/row">
+            ${senderAvatarHtml}
             <div 
                 onpointerdown="window.handleCustMsgPointerDown(event, '${m.id}', 'customer', '${encodedText}', '${encodedSender}')"
                 onpointermove="window.handleCustMsgPointerMove(event)"
@@ -203,8 +228,8 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
                 onpointercancel="window.handleCustMsgPointerUp(event, '${m.id}')"
                 oncontextmenu="window.handleCustMsgContextMenu(event, '${m.id}', 'customer', '${encodedText}', '${encodedSender}')"
                 class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 text-xs ${alignClass} cursor-pointer transition active:scale-[0.98] select-none">
-                <div class="text-[9px] ${isRider ? 'text-blue-600 dark:text-blue-400' : 'text-blue-100'} font-bold flex justify-between gap-3 pointer-events-none">
-                    <span>${escapeHtml(senderName)}</span>
+                <div class="text-[9px] ${senderColor} font-bold flex justify-between gap-3 pointer-events-none">
+                    <span class="flex items-center">${escapeHtml(senderName)} ${roleBadge}</span>
                     <div class="flex items-center gap-1 opacity-80 font-mono">
                         <span>${timeStr}</span>
                         ${statusIndicator}

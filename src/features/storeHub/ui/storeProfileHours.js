@@ -186,6 +186,26 @@ export function updateStoreProfileUI(storeData) {
         }
     }
 
+    // Inject persistent Store Chat Inbox button into header if missing
+    const controlsHeader = document.querySelector('#merch-store-status-btn')?.parentElement;
+    if (controlsHeader && !document.getElementById('merch-header-chat-btn')) {
+        const chatHeaderBtn = document.createElement('button');
+        chatHeaderBtn.id = 'merch-header-chat-btn';
+        chatHeaderBtn.onclick = () => {
+            if (window.openMerchantPortal) {
+                const sId = appState.merchantStoreId || localStorage.getItem('lokalex_merchant_store_id');
+                window.openMerchantPortal('DIRECT', sId);
+            }
+        };
+        chatHeaderBtn.className = "relative p-2 px-3 rounded-full text-xs font-black border border-blue-500/40 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 flex items-center gap-1.5 transition active:scale-95 shrink-0 shadow-xs";
+        chatHeaderBtn.innerHTML = `
+            <i class="fa-solid fa-comments"></i>
+            <span>Chats</span>
+            <span id="merch-header-unread-badge" class="hidden absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full animate-pulse">0</span>
+        `;
+        controlsHeader.appendChild(chatHeaderBtn);
+    }
+
     syncHeaderAndWidgets('view-store-hub');
 }
 

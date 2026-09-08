@@ -37,22 +37,24 @@ export function listenToCustomerRiderChat() {
     custChatState.custChatListener.on('value', (snapshot) => {
         const data = snapshot.val();
         if (!data) {
-            container.innerHTML = `<div class="text-center text-gray-400 dark:text-gray-500 italic py-12 text-xs">Pumili o mag-type ng mensahe para sa mga riders...</div>`;
+            container.innerHTML = `<div class="text-center text-gray-400 dark:text-gray-500 italic py-12 text-xs">Pumili o mag-type ng mensahe para sa rider o merchant...</div>`;
             return;
         }
 
         const isInitialLoad = custChatState.loadedCustMsgsMap.size === 0;
-        let newRiderMsg = null;
+        let incomingMsg = null;
 
         Object.entries(data).forEach(([key, msg]) => {
             const isNew = !custChatState.loadedCustMsgsMap.has(key);
             custChatState.loadedCustMsgsMap.set(key, { id: key, ...msg });
 
-            if (isNew && !isInitialLoad && msg.isRider) {
-                newRiderMsg = msg;
+            const isFromOther = !!(msg.isRider || msg.senderType === 'rider' || msg.senderType === 'store' || msg.isStore);
+
+            if (isNew && !isInitialLoad && isFromOther) {
+                incomingMsg = msg;
             }
 
-            if (msg.isRider && msg.status !== 'seen') {
+            if (isFromOther && msg.status !== 'seen') {
                 db.ref(`customerChats/${custFbId}/messages/${key}`).update({
                     status: 'seen',
                     seenAt: Date.now()
@@ -64,10 +66,11 @@ export function listenToCustomerRiderChat() {
 
         renderCustomerMessages(container, isInitialLoad);
 
-        if (newRiderMsg && !isInitialLoad) {
+        if (incomingMsg && !isInitialLoad) {
             if (!isNearBottom) {
-                const preview = newRiderMsg.text || (newRiderMsg.imageUrl ? "📷 Photo" : "📍 Shared Location");
-                showCustInChatToast(container, newRiderMsg.sender || "Lokalex Rider", preview);
+                const preview = incomingMsg.text || (incomingMsg.imageUrl ? "📷 Photo" : "📍 Shared Location");
+                const defaultSender = incomingMsg.senderType === 'store' ? "Merchant" : "Lokalex Rider";
+                showCustInChatToast(container, incomingMsg.sender || defaultSender, preview);
             } else {
                 hideCustInChatToast();
                 requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
@@ -235,4 +238,12 @@ export function sendCustomerToRiderChat(customText = "", customImageUrl = null, 
             setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
         });
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.listenToCustomerRiderChat = listenToCustomerRiderChat;
+    window.setCustomerReply = setCustomerReply;
+    window.cancelCustomerReply = cancelCustomerReply;
+    window.toggleCustomerMessageReaction = toggleCustomerMessageReaction;
+    window.sendCustomerToRiderChat = sendCustomerToRiderChat;
 }

@@ -18,6 +18,13 @@ export function openStoreRiderChatModal(orderId, riderId, riderName) {
     window.activeChatOrderId = storeHubState.activeChatOrderId;
     localStorage.setItem('lokalex_active_store_chat_order_id', storeHubState.activeChatOrderId);
 
+    // Delegate to openMerchantPortal for full dual-channel (Rider & Customer) support
+    const storeId = appState.merchantStoreId || localStorage.getItem('lokalex_merchant_store_id');
+    if (window.openMerchantPortal && storeId) {
+        window.openMerchantPortal(storeHubState.activeChatOrderId, storeId);
+        return;
+    }
+
     let modal = document.getElementById('store-rider-chat-modal');
     if (!modal) {
         modal = document.createElement('div');

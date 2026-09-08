@@ -2,9 +2,10 @@
 import { db } from '../../../config/firebase.js';
 import { appState } from '../../../store/state.js';
 import { showToast } from '../../../ui/notifications.js';
-import { escapeHtml } from '../../../utils/helpers.js';
+import { escapeHtml, copyText } from '../../../utils/helpers.js';
 import { storeChatState, cleanFirebasePathKey, sanitizeForFirebase } from './storeChatState.js';
 import { renderReactionsHtml, renderReplyPreviewInsideMessage } from './storeChatFeed.js';
+import { getMerchantPortalShareUrl } from './storeToRiderModal.js';
 
 let activeStoreInfo = null;
 
@@ -12,6 +13,21 @@ export function toggleRiderStoreInfoSheet() {
     const drawer = document.getElementById('r2s-store-info-drawer');
     if (!drawer) return;
     drawer.classList.toggle('hidden');
+}
+
+export function copyMerchantPortalLink() {
+    const orderId = storeChatState.activeRiderStoreChatOrderId || 'DIRECT';
+    const storeId = storeChatState.activeRiderStoreChatStoreId;
+    const storeName = storeChatState.activeRiderStoreChatStoreName || 'Store';
+    const custId = storeChatState.activeRiderStoreChatCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : '');
+
+    if (!storeId) return showToast("⚠️ Store ID not found.");
+
+    const portalUrl = getMerchantPortalShareUrl(storeId, orderId, custId);
+    const message = `Magandang araw po ${storeName}! 👋\n\nIto po ang inyong Lokalex Merchant Portal para sa Order #${orderId}.\nPindutin ang link na ito para makausap ang rider at customer in real-time:\n\n${portalUrl}\n\n⚠️ PAALALA:\nKung binuksan sa Messenger, paki-pindot ang 3 dots (...) sa itaas at piliin ang "Open in Chrome". Maraming salamat po! 🛵🏬`;
+
+    copyText(message);
+    showToast(`🔗 Merchant link & message copied for ${storeName}!`);
 }
 
 export function updateRiderStoreInfoUI(storeData) {
@@ -28,12 +44,10 @@ export function updateRiderStoreInfoUI(storeData) {
     const lng = activeStoreInfo.lng || activeStoreInfo.longitude;
     const directMapLink = activeStoreInfo.lat_lon_link || activeStoreInfo.mapLink || activeStoreInfo.mapPinLink;
 
-    // 1. Update Address Display
     if (addressText) {
         addressText.innerText = address || "No address provided";
     }
 
-    // 2. Configure Direct Call Action
     if (callBtn && phoneText) {
         if (contact) {
             phoneText.innerText = contact;
@@ -47,7 +61,6 @@ export function updateRiderStoreInfoUI(storeData) {
         }
     }
 
-    // 3. Configure Google Maps Pin & Directions Action
     if (mapBtn) {
         let mapsUrl = "";
         if (lat && lng) {
@@ -177,6 +190,7 @@ export function openRiderToStoreChatModal(orderId, storeId, storeName) {
     storeChatState.activeRiderStoreChatOrderId = cleanFirebasePathKey(orderId || 'DIRECT');
     storeChatState.activeRiderStoreChatStoreId = cleanFirebasePathKey(storeId);
     storeChatState.activeRiderStoreChatStoreName = storeName || "Store";
+    storeChatState.activeRiderStoreChatCustId = window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null;
 
     if (db && storeChatState.activeRiderStoreChatOrderId && storeChatState.activeRiderStoreChatStoreId) {
         db.ref(`storeRiderChats/${storeChatState.activeRiderStoreChatOrderId}_${storeChatState.activeRiderStoreChatStoreId}`).update({
@@ -203,6 +217,12 @@ export function openRiderToStoreChatModal(orderId, storeId, storeName) {
                         </div>
                     </div>
                     <div class="flex items-center gap-1.5 shrink-0">
+                        <!-- SHARE PORTAL LINK TO MERCHANT BUTTON -->
+                        <button type="button" onclick="window.copyMerchantPortalLink && window.copyMerchantPortalLink()" class="p-1.5 px-2 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-200 dark:bg-orange-600/20 dark:hover:bg-orange-600/30 dark:text-orange-300 dark:border-orange-500/30 text-xs font-bold transition active:scale-95 flex items-center gap-1" title="Share Web Chat Link to Merchant">
+                            <i class="fa-solid fa-link text-[11px]"></i>
+                            <span class="text-[10px]">Portal Link</span>
+                        </button>
+
                         <!-- STORE INFO TOGGLE BUTTON -->
                         <button type="button" onclick="window.toggleRiderStoreInfoSheet && window.toggleRiderStoreInfoSheet()" class="p-1.5 px-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 dark:bg-blue-600/20 dark:hover:bg-blue-600/30 dark:text-blue-300 dark:border-blue-500/30 text-xs font-bold transition active:scale-95 flex items-center gap-1" title="Store Info, Contact & Location">
                             <i class="fa-solid fa-circle-info text-[11px]"></i>
@@ -225,13 +245,11 @@ export function openRiderToStoreChatModal(orderId, storeId, storeName) {
                         <span id="r2s-info-address-text" class="truncate font-medium">Loading store address...</span>
                     </div>
                     <div class="grid grid-cols-2 gap-2">
-                        <!-- CALL STORE BUTTON -->
                         <a id="r2s-info-call-btn" href="tel:" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95 text-[11px] shadow-xs truncate">
                             <i class="fa-solid fa-phone text-xs"></i>
                             <span class="truncate">Call: <strong id="r2s-info-phone-text">--</strong></span>
                         </a>
 
-                        <!-- GOOGLE MAPS PIN & DIRECTIONS BUTTON -->
                         <a id="r2s-info-map-btn" href="#" target="_blank" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95 text-[11px] shadow-xs truncate">
                             <i class="fa-solid fa-diamond-turn-right text-xs"></i>
                             <span class="truncate">Directions</span>
@@ -303,7 +321,6 @@ export function openRiderToStoreChatModal(orderId, storeId, storeName) {
         }
     }
 
-    // Resolve store metadata from cache or Firebase to populate info drawer
     const cachedMatch = (storeChatState.allStoresListCache || []).find(s => s.storeId === storeChatState.activeRiderStoreChatStoreId);
     if (cachedMatch) {
         updateRiderStoreInfoUI(cachedMatch);
@@ -344,6 +361,7 @@ export function closeRiderToStoreChatModal() {
     storeChatState.activeRiderStoreChatOrderId = null;
     storeChatState.activeRiderStoreChatStoreId = null;
     storeChatState.activeRiderStoreChatStoreName = null;
+    storeChatState.activeRiderStoreChatCustId = null;
     cancelRiderStoreReply();
 }
 
@@ -472,6 +490,7 @@ export function cancelRiderStoreReply() {
 if (typeof window !== 'undefined') {
     window.toggleRiderStoreInfoSheet = toggleRiderStoreInfoSheet;
     window.updateRiderStoreInfoUI = updateRiderStoreInfoUI;
+    window.copyMerchantPortalLink = copyMerchantPortalLink;
     window.openRiderStoreChatPicker = openRiderStoreChatPicker;
     window.closeRiderStoreChatPicker = closeRiderStoreChatPicker;
     window.openRiderToStoreChatModal = openRiderToStoreChatModal;

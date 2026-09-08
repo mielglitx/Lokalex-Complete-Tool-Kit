@@ -14,6 +14,7 @@ export const storeChatState = {
     activeRiderStoreChatOrderId: null,
     activeRiderStoreChatStoreId: null,
     activeRiderStoreChatStoreName: null,
+    activeRiderStoreChatCustId: null,
     activeRiderStoreChatListener: null,
     globalStoreChatsListener: null,
     globalStoresListener: null,
@@ -21,8 +22,19 @@ export const storeChatState = {
     allStoresListCache: [],
     activeRiderStoreReplyTarget: null,
     storeSearchQuery: "",
-    activeStoreToRiderOrderId: null,
+
+    // Merchant Portal State
+    activeMerchantStoreId: null,
+    activeMerchantOrderId: null,
+    activeMerchantCustId: null,
+    activeMerchantStoreName: null,
+    activeMerchantRiderName: null,
+    activeMerchantCustName: null,
+    activeMerchantActiveTab: 'rider', // 'rider' | 'customer'
     activeStoreToRiderChatListener: null,
+    activeStoreToCustomerChatListener: null,
+
+    // Gesture & Long-press tracking
     longPressTimer: null,
     startX: 0,
     startY: 0
