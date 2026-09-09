@@ -285,7 +285,7 @@ export function renderCartItems() {
         }
 
         let priceDisplay = `₱${itemPrice.toFixed(2)}`;
-        let priceDisplayClass = "text-emerald-600 dark:text-green-400 font-bold";
+        let priceDisplayClass = "text-emerald-600 dark:text-green-400 font-bold text-sm font-mono";
 
         if (isUnavailable) {
             priceDisplay = "N/A (₱0.00)";
@@ -294,7 +294,7 @@ export function renderCartItems() {
             priceDisplay = "PAID (₱0.00)";
             priceDisplayClass = "text-gray-400 dark:text-gray-500 line-through text-xs";
         } else if (isUnpricedUnpaid) {
-            priceDisplayClass = "text-amber-500 dark:text-amber-400 font-black animate-pulse text-sm";
+            priceDisplayClass = "text-amber-500 dark:text-amber-400 font-black animate-pulse text-sm font-mono";
         }
 
         let itemNameClass = "break-words text-wrap font-bold text-sm text-gray-900 dark:text-white";
@@ -337,41 +337,40 @@ export function renderCartItems() {
                         ${unpricedWarningBadge}
                     </div>
                 </div>
-                <div class="text-right shrink-0">
+
+                <!-- PRICE BUTTON PAIRED DIRECTLY BEFORE THE ITEM PRICE -->
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onclick="window.openAddPriceModal && window.openAddPriceModal(${index})" class="py-1 px-2 rounded-lg text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/20 dark:text-blue-300 dark:border-blue-500/30 transition active:scale-95 flex items-center gap-1 font-bold shadow-xs">
+                        <i class="fa-solid fa-tag"></i> Price
+                    </button>
                     <span class="${priceDisplayClass}">
                         ${priceDisplay}
                     </span>
                 </div>
             </div>
 
-            <!-- TWO-TIER ACTION LAYOUT PREVENTING BUTTON OVERLAPS -->
-            <div class="flex flex-col gap-2 pt-2 border-t border-gray-200 dark:border-gray-800/60 text-xs">
-                <!-- Tier 1: Category Classification & Availability -->
-                <div class="flex items-center justify-between gap-1.5">
-                    <div class="flex items-center gap-1.5">
-                        <button onclick="toggleItemCategory(${index}, 'store')" class="px-3 py-1.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${catStoreClass}">
-                            <i class="fa-solid fa-store"></i> Store
-                        </button>
-                        <button onclick="toggleItemCategory(${index}, 'market')" class="px-3 py-1.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${catMarketClass}">
-                            <i class="fa-solid fa-basket-shopping"></i> Market
-                        </button>
-                    </div>
-
-                    <button onclick="toggleItemUnavailable(${index})" class="px-2.5 py-1.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${naBtnClass}" title="Mark as Not Available">
-                        <i class="fa-solid fa-ban"></i> N/A
+            <!-- ACTION CONTROLS ROW -->
+            <div class="flex items-center justify-between gap-2 pt-2 border-t border-gray-200 dark:border-gray-800/60 text-xs">
+                <!-- Left: Market stacked vertically under Store -->
+                <div class="flex flex-col gap-1 shrink-0">
+                    <button onclick="toggleItemCategory(${index}, 'store')" class="px-3 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${catStoreClass}">
+                        <i class="fa-solid fa-store"></i> Store
+                    </button>
+                    <button onclick="toggleItemCategory(${index}, 'market')" class="px-3 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${catMarketClass}">
+                        <i class="fa-solid fa-basket-shopping"></i> Market
                     </button>
                 </div>
 
-                <!-- Tier 2: Fulfillment & Pricing Operations -->
-                <div class="grid grid-cols-3 gap-1.5">
-                    <button onclick="toggleItemBought(${index})" class="py-1.5 px-2 rounded-lg text-[10px] transition active:scale-95 flex items-center justify-center gap-1 font-bold ${boughtBtnClass}">
-                        <i class="fa-solid fa-check"></i> ${isBought ? 'Bought' : 'Buy'}
+                <!-- Right: Buy/Bought, Paid, and N/A Grouped Together -->
+                <div class="flex items-center gap-1.5 flex-wrap justify-end">
+                    <button onclick="toggleItemBought(${index})" class="py-1.5 px-2.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${boughtBtnClass}">
+                        <i class="fa-solid fa-check"></i> ${isBought ? 'Bought' : 'Bought'}
                     </button>
-                    <button type="button" onclick="window.openAddPriceModal && window.openAddPriceModal(${index})" class="py-1.5 px-2 rounded-lg text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/20 dark:text-blue-300 dark:border-blue-500/30 transition active:scale-95 flex items-center justify-center gap-1 font-bold shadow-xs">
-                        <i class="fa-solid fa-tag"></i> Price
-                    </button>
-                    <button onclick="toggleItemPaid(${index})" class="py-1.5 px-2 rounded-lg text-[10px] transition active:scale-95 flex items-center justify-center gap-1 ${paidBtnClass}">
+                    <button onclick="toggleItemPaid(${index})" class="py-1.5 px-2.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${paidBtnClass}">
                         <i class="fa-solid fa-receipt"></i> Paid
+                    </button>
+                    <button onclick="toggleItemUnavailable(${index})" class="py-1.5 px-2.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${naBtnClass}" title="Mark as Not Available">
+                        <i class="fa-solid fa-ban"></i> N/A
                     </button>
                 </div>
             </div>
