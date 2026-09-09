@@ -1,4 +1,62 @@
 // src/features/chat/index.js
+
+/**
+ * ============================================================================
+ * CHAT SUBSYSTEM MASTER BARREL & DISPATCH COORDINATOR
+ * ============================================================================
+ * 
+ * Central facade for all real-time communication systems. Aggregates customer
+ * messaging, rider dispatch threads, store coordination, image markup/viewers,
+ * and internal staff team comms. Enforces safety capacity limits on catering
+ * operations and exposes functions to the global window scope.
+ * 
+ * Sub-Module Functional Breakdown:
+ * ----------------------------------------------------------------------------
+ * 1. chatUtils.js
+ *    - Core utilities: modal body-scroll locking and customer dropdown population.
+ *    - Image compression engine (HD 1920px vs Data Saver 600px via Canvas).
+ *    - Camera/file selection dialogs and message action popovers (reactions, replies, copy).
+ * 
+ * 2. imageEditor.js
+ *    - Canvas-based image markup tool with freehand drawing (4 brush sizes, 3 colors).
+ *    - Dynamic text overlay tool supporting touch pinch-to-scale and two-finger rotation.
+ *    - Brightness adjustments and image export/dispatch to active chats.
+ * 
+ * 3. imageViewer.js
+ *    - Fullscreen image lightbox with multi-touch pinch-to-zoom and wheel zoom (50%-400%).
+ *    - Direct handoff bridge from viewer into the image markup editor.
+ * 
+ * 4. customerChat.js (Facade)
+ *    - Sub-barrel for customer-facing chat components (state, animations, UI, feeds, actions).
+ * 
+ * 5. riderChat.js
+ *    - Active rider-to-customer chat session manager and message dispatcher.
+ *    - Lock enforcement preventing unauthorized replies if catered by another rider.
+ *    - Infinite scroll history pagination with top-loading progress spinners.
+ * 
+ * 6. riderChatFeed.js
+ *    - Filtered thread feed management (inbox, catering, stores, followup, done).
+ *    - Customer account deduplication algorithm merging matching names/phone numbers.
+ *    - Unread inbox badge calculation.
+ * 
+ * 7. riderChatRender.js
+ *    - Bubble DOM renderer with seen/delivered status indicators and static map previews.
+ *    - Pointer long-press popovers and playful rapid-tap animations with particle bursts.
+ *    - In-chat toast banners for unread messages received while scrolled up.
+ * 
+ * 8. riderStoreChat.js
+ *    - Integration module for direct rider-to-merchant store communication channels.
+ * 
+ * 9. riderThreadActions.js
+ *    - Order delivery lifecycle: customer info modals, quick replies, and thread voiding.
+ *    - Proof of Delivery (POD) photo capture, compression, and delivery submission.
+ *    - Order milestone tracking checkpoints (preparing, picked_up, arrived, delivered).
+ * 
+ * 10. teamComms.js (Facade)
+ *     - Sub-barrel for internal staff team communications, draggable widgets, and group rooms.
+ * ============================================================================
+ */
+
 import * as chatUtils from './chatUtils.js';
 import * as imageEditor from './imageEditor.js';
 import * as imageViewer from './imageViewer.js';

@@ -2,7 +2,7 @@
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'lokalex-app-cache-v2';
+const CACHE_NAME = 'lokalex-app-cache-v3';
 
 const STATIC_ASSETS = [
     './',
