@@ -7,6 +7,7 @@ import { calibrateGPS } from '../auth/index.js';
 import { switchView } from '../../ui/router.js';
 import { autoStartLiveGpsSession, endLiveGpsSession } from '../liveTracker.js';
 import { populateCateringCustomerDropdown } from '../chat/index.js';
+import { getLocalTodayStr } from '../../utils/helpers.js';
 import { 
     parseQueueTime, 
     getActiveCateringCustomersWithTimes, 
@@ -65,6 +66,156 @@ export function checkFirstInLineNotification() {
                 playLineAlarm();
             }
         }
+    }
+}
+
+export async function completeSingleCateringCustomer(targetId, targetName, custNameToComplete) {
+    const rosterMembers = globalState.rosterMembers || [];
+    const cleanTargetId = (targetId || "").toString().trim();
+    const cleanTargetName = (targetName || "").toString().trim().toLowerCase();
+
+    let targetRecord = rosterMembers.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        if (cleanTargetId && mId && mId === cleanTargetId) return true;
+        if (cleanTargetName && mName && mName === cleanTargetName) return true;
+        return false;
+    });
+
+    const resolvedTargetId = targetRecord ? (targetRecord.telegramId || targetRecord.id || cleanTargetId) : cleanTargetId;
+    const resolvedTargetName = targetRecord ? (targetRecord.riderName || targetRecord.name || targetName) : targetName;
+
+    if (!resolvedTargetId && !targetRecord) return;
+
+    let remainingCusts = [];
+    let remainingTimes = [];
+    let completedStartTime = "";
+
+    if (targetRecord && targetRecord.customerName) {
+        const custs = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+        const times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
+
+        custs.forEach((c, idx) => {
+            if (c.toLowerCase().trim() !== custNameToComplete.toLowerCase().trim()) {
+                remainingCusts.push(c);
+                remainingTimes.push(times[idx] || times[0] || "");
+            } else {
+                completedStartTime = times[idx] || times[0] || "";
+            }
+        });
+    }
+
+    const cleanCust = custNameToComplete.toLowerCase().trim();
+    const cleanCustKey = cleanCust.replace(/[^a-z0-9]/g, '');
+    const todayStr = getLocalTodayStr();
+    const endTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (db) {
+        const cateredLog = {
+            riderId: resolvedTargetId,
+            id: resolvedTargetId,
+            riderName: resolvedTargetName,
+            name: resolvedTargetName,
+            customerName: custNameToComplete,
+            startTime: completedStartTime || endTimeStr,
+            endTime: endTimeStr,
+            date: todayStr,
+            timestamp: Date.now()
+        };
+        db.ref(`catered/${todayStr}`).push(cateredLog).catch(() => {});
+
+        db.ref('customerChats').once('value', (snapshot) => {
+            const chats = snapshot.val() || {};
+            Object.keys(chats).forEach(custId => {
+                const meta = chats[custId]?.metadata || chats[custId] || {};
+                const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
+                if (chatCustName && chatCustName === cleanCust) {
+                    db.ref(`customerChats/${custId}/metadata`).update({
+                        folder: 'done',
+                        status: 'completed',
+                        completedAt: Date.now(),
+                        lastUpdated: Date.now()
+                    });
+                }
+            });
+        });
+
+        if (resolvedTargetId && cleanCustKey) {
+            db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
+            db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
+            db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCust}`).remove().catch(() => {});
+        }
+    }
+
+    if (targetRecord && targetRecord.forcedCaters) {
+        delete targetRecord.forcedCaters[cleanCustKey];
+        delete targetRecord.forcedCaters[cleanCust];
+        delete targetRecord.forcedCaters[custNameToComplete];
+
+        if (Object.keys(targetRecord.forcedCaters).length === 0) {
+            targetRecord.forcedCaters = null;
+            targetRecord.isForcedCater = false;
+            targetRecord.forcedBy = null;
+        }
+    }
+
+    if (remainingCusts.length > 0) {
+        await updateRosterStatusData(
+            'Catering', 
+            remainingCusts.join(', '), 
+            remainingTimes.join(', '), 
+            targetRecord ? parseQueueTime(targetRecord.queueTime) : Date.now(), 
+            resolvedTargetId, 
+            resolvedTargetName,
+            [],
+            false,
+            "",
+            { 
+                forcedCaters: targetRecord ? targetRecord.forcedCaters : null,
+                forcedBy: targetRecord ? targetRecord.forcedBy : null,
+                isForcedCater: !!(targetRecord && targetRecord.isForcedCater)
+            }
+        );
+        showToast(`✅ [${custNameToComplete}] marked as Done! ${remainingCusts.length} active customer(s) remaining.`);
+        showSideNotification("DELIVERY DONE", `Completed: ${custNameToComplete}`, "fa-circle-check", "text-emerald-400", "border-emerald-500");
+    } else {
+        const topQueueTime = getTopQueueTime();
+        if (db && resolvedTargetId) {
+            db.ref(`roster/${resolvedTargetId}/forcedCaters`).remove().catch(() => {});
+            db.ref(`roster/${resolvedTargetId}`).update({
+                forcedBy: null,
+                isForcedCater: false
+            }).catch(() => {});
+        }
+        if (targetRecord) {
+            targetRecord.forcedCaters = null;
+            targetRecord.forcedBy = null;
+            targetRecord.isForcedCater = false;
+        }
+
+        const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString();
+        if (resolvedTargetId === myId) {
+            endLiveGpsSession();
+        }
+
+        await updateRosterStatusData(
+            'Available', 
+            '', 
+            '', 
+            topQueueTime, 
+            resolvedTargetId, 
+            resolvedTargetName,
+            [],
+            false,
+            "",
+            { 
+                forcedCaters: null,
+                forcedBy: null,
+                isForcedCater: false
+            }
+        );
+        showToast(`🎉 All deliveries completed! [${resolvedTargetName}] is now Available in queue.`);
+        showSideNotification("ROTATION UPDATED", `${resolvedTargetName} is now Available`, "fa-motorcycle", "text-blue-400", "border-blue-500");
     }
 }
 
@@ -511,7 +662,6 @@ export async function confirmCateringStatus() {
     const hasPenalty = penaltySelect && parseInt(penaltySelect.value) > 0;
     const isPrivileged = canManageRoster();
 
-    // Legitimate turn: if privileged and legitimately taking turn as #1 in line, it is a regular cater
     const isQueueJump = liveAvailableRiders.length > 0 && !isFirstAvailable && !amIAlreadyCatering;
     const isBypassingAvailability = !myRecord || (myRecord.status !== 'Available' && !amIAlreadyCatering);
     const isForcedByRole = isPrivileged && (isQueueJump || isBypassingAvailability || hasPenalty);
@@ -691,4 +841,16 @@ export function claimCustomerFromRider(fromRiderId, fromRiderName, custName) {
             requestClaimCustomer(fromRiderId, fromRiderName, custName);
         }
     );
+}
+
+if (typeof window !== 'undefined') {
+    window.completeSingleCateringCustomer = completeSingleCateringCustomer;
+    window.voidSingleCateringCustomer = voidSingleCateringCustomer;
+    window.triggerStatusWithSlide = triggerStatusWithSlide;
+    window.promptCateringStatus = promptCateringStatus;
+    window.confirmCateringStatus = confirmCateringStatus;
+    window.claimCustomerFromRider = claimCustomerFromRider;
+    window.dismissQueueAlarm = dismissQueueAlarm;
+    window.checkFirstInLineNotification = checkFirstInLineNotification;
+    window.getTopQueueTime = getTopQueueTime;
 }

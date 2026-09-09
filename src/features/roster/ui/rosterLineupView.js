@@ -46,7 +46,8 @@ export function updateRosterUI() {
     syncHeaderUserProfile();
 
     const rosterMembers = globalState.rosterMembers || [];
-    const myId = (appState.telegramId || "").toString();
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
     const canManage = canManageRoster();
 
     if (!canManage) {
@@ -133,7 +134,12 @@ export function updateRosterUI() {
         else forceAllBtn.classList.add('hidden');
     }
 
-    const myRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === myId);
+    const myRecord = rosterMembers.find(m => {
+        const rId = (m.telegramId || m.id || "").toString().trim();
+        const rName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        return (myId && rId === myId) || (myName && rName === myName);
+    });
+
     if (myRecord) {
         if (myRecord.status === 'Catering') {
             try { autoStartLiveGpsSession(myRecord.customerName || "Customer"); } catch(e) {}
@@ -204,13 +210,18 @@ export function updateRosterUI() {
         `);
     });
 
-    // 2. Catering List (With Multi-Customer Support & Universal Force Cater Badges)
+    // 2. Catering List (With Multi-Customer Support & Per-Customer Done Actions)
     cateringRiders.forEach(m => {
-        const mId = (m.telegramId || m.id || "").toString();
+        const mId = (m.telegramId || m.id || "").toString().trim();
         const rawName = m.riderName || m.name || "Rider";
         const mName = formatTitleCase(rawName);
         const shortName = formatRiderShortName(rawName);
         const todayGross = getRiderTodayGross(rawName, mId);
+
+        const isMyLine = (myId && mId === myId) || (myName && (mName.toLowerCase() === myName || rawName.toLowerCase() === myName));
+        const canComplete = isMyLine || showControls;
+        const canSwap = isMyLine || showControls;
+
         let cardHtml = `
         <div class="flex flex-col py-1.5 border-b border-gray-200 dark:border-gray-800/60 last:border-0 gap-1">
             <div class="flex items-center justify-between">
@@ -233,9 +244,6 @@ export function updateRosterUI() {
                 const formattedCustName = formatTitleCase(cName);
                 const cTime = times[idx] || times[0] || '';
                 const timeDetails = getElapsedCateringTime(cTime);
-                const isMyLine = mId === myId || (appState.riderName && mName.toLowerCase() === appState.riderName.toLowerCase());
-                const canSwap = isMyLine || showControls;
-
                 const forcedBadge = getForcedCaterBadgeHtml(m, cName, mName);
 
                 cardHtml += `
@@ -246,25 +254,31 @@ export function updateRosterUI() {
                     </div>
                     
                     <div class="flex items-center gap-1 shrink-0">
+                        ${canComplete ? `
+                            <button type="button" onclick="window.completeSingleCateringCustomer && window.completeSingleCateringCustomer('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-0.5 rounded text-[10px] font-black transition active:scale-95 shadow-xs flex items-center gap-1 cursor-pointer" title="Mark this customer delivery as completed">
+                                <i class="fa-solid fa-check"></i> Done
+                            </button>
+                        ` : ''}
+
                         ${isMyLine ? `
-                            <button onclick="window.copyCustomerTrackingLink && window.copyCustomerTrackingLink('${escapeHtml(cName)}')" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/30 dark:hover:bg-blue-600 dark:text-blue-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Send Track Link">🔗 Link</button>
-                            <button onclick="window.openLiveCustomerMap && window.openLiveCustomerMap('${escapeHtml(cName)}')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Open Live Map">🗺️ Map</button>
+                            <button type="button" onclick="window.copyCustomerTrackingLink && window.copyCustomerTrackingLink('${escapeHtml(cName)}')" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/30 dark:hover:bg-blue-600 dark:text-blue-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Send Track Link">🔗 Link</button>
+                            <button type="button" onclick="window.openLiveCustomerMap && window.openLiveCustomerMap('${escapeHtml(cName)}')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Open Live Map">🗺️ Map</button>
                         ` : ''}
 
                         ${canSwap ? `
-                            <button onclick="window.openSwapCustomerModal && window.openSwapCustomerModal('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Swap customer with another rider">
+                            <button type="button" onclick="window.openSwapCustomerModal && window.openSwapCustomerModal('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Swap customer with another rider">
                                 🔀 Swap
                             </button>
                         ` : ''}
 
                         ${!isMyLine ? `
-                            <button onclick="window.claimCustomerFromRider && window.claimCustomerFromRider('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-emerald-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Request to get this customer">
+                            <button type="button" onclick="window.claimCustomerFromRider && window.claimCustomerFromRider('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-emerald-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Request to get this customer">
                                 📥 Get
                             </button>
                         ` : ''}
 
                         ${showControls ? `
-                            <button onclick="window.adminVoidSpecificCustomer && window.adminVoidSpecificCustomer('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-300 dark:border-red-700/50 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Void specific customer">
+                            <button type="button" onclick="window.adminVoidSpecificCustomer && window.adminVoidSpecificCustomer('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-300 dark:border-red-700/50 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Void specific customer">
                                 🚫 Void
                             </button>
                         ` : ''}
@@ -372,7 +386,6 @@ export function updateRosterUI() {
     loadGlobalCateredList();
 }
 
-// Subscribe to real-time events to guarantee immediate re-calculation of earnings and queue sorting
 if (typeof window !== 'undefined') {
     window.updateRosterUI = updateRosterUI;
     window.openFindRidersMap = openFindRidersMap;
