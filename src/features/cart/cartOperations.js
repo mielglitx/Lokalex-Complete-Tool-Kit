@@ -6,7 +6,8 @@ import { proceedToWizard } from '../wizard.js';
 import { getCurrentCart, saveCartState } from './cartState.js';
 import { renderCartTabs, renderCartItems, resetToCartOne } from './cartUI.js';
 
-let editingItemIndex = null;
+let editingNameIndex = null;
+let pricingItemIndex = null;
 
 export function handleCartActionBtn() {
     const currentCart = getCurrentCart();
@@ -35,8 +36,13 @@ export function handleCartActionBtn() {
 export function toggleItemCategory(index, category) {
     const currentCart = getCurrentCart();
     if (currentCart[index]) {
-        currentCart[index].category = category;
-        currentCart[index].type = category;
+        if (currentCart[index].category === category) {
+            currentCart[index].category = '';
+            currentCart[index].type = '';
+        } else {
+            currentCart[index].category = category;
+            currentCart[index].type = category;
+        }
         saveCartState();
         renderCartItems();
     }
@@ -53,11 +59,31 @@ export function toggleItemPaid(index) {
 
 export function toggleItemBought(index) {
     const currentCart = getCurrentCart();
-    if (currentCart[index]) {
-        currentCart[index].isBought = !currentCart[index].isBought;
-        saveCartState();
-        renderCartItems();
+    const item = currentCart[index];
+    if (!item) return;
+
+    item.isBought = !item.isBought;
+    saveCartState();
+    renderCartItems();
+
+    const hasPriceOrPaid = (parseFloat(item.price) || 0) > 0 || !!item.isPaid;
+
+    if (item.isBought && !item.isUnavailable && !hasPriceOrPaid) {
+        openAddPriceModal(index);
     }
+}
+
+export function toggleItemUnavailable(index) {
+    const currentCart = getCurrentCart();
+    const item = currentCart[index];
+    if (!item) return;
+
+    item.isUnavailable = !item.isUnavailable;
+    if (item.isUnavailable) {
+        item.isBought = false;
+    }
+    saveCartState();
+    renderCartItems();
 }
 
 export function toggleItemSelect(index) {
@@ -114,56 +140,88 @@ export function deleteSingleCartItem(index) {
     );
 }
 
-export function editCartItem(index) {
+export function openEditNameModal(index) {
     const currentCart = getCurrentCart();
     const item = currentCart[index];
     if (!item) return;
 
-    editingItemIndex = index;
+    editingNameIndex = index;
+    const input = document.getElementById('cart-edit-name-input');
+    const modal = document.getElementById('cart-edit-name-modal');
 
-    const nameInput = document.getElementById('edit-name-input');
-    const priceInput = document.getElementById('edit-price-input');
-    const paidInput = document.getElementById('edit-paid-input');
-
-    if (nameInput) nameInput.value = item.name || "";
-    if (priceInput) priceInput.value = item.price !== undefined ? item.price : "";
-    if (paidInput) paidInput.checked = !!item.isPaid;
-
-    const modal = document.getElementById('edit-item-modal');
+    if (input) input.value = item.name || '';
     if (modal) modal.classList.remove('hidden');
+    if (input) setTimeout(() => input.focus(), 100);
 }
 
-export function saveItemEdit() {
-    if (editingItemIndex === null) return;
+export function closeEditNameModal() {
+    const modal = document.getElementById('cart-edit-name-modal');
+    if (modal) modal.classList.add('hidden');
+    editingNameIndex = null;
+}
 
+export function saveItemName() {
+    if (editingNameIndex === null) return;
     const currentCart = getCurrentCart();
-    const item = currentCart[editingItemIndex];
+    const item = currentCart[editingNameIndex];
     if (!item) return;
 
-    const nameInput = document.getElementById('edit-name-input');
-    const priceInput = document.getElementById('edit-price-input');
-    const paidInput = document.getElementById('edit-paid-input');
-
-    const newName = nameInput ? nameInput.value.trim() : "";
-    const newPrice = priceInput ? parseFloat(priceInput.value) || 0 : 0;
-    const newPaid = paidInput ? paidInput.checked : false;
+    const input = document.getElementById('cart-edit-name-input');
+    const newName = input ? input.value.trim() : '';
 
     if (!newName) {
-        showToast("⚠️ Item name cannot be empty.");
-        return;
+        return showToast("⚠️ Item name cannot be empty.");
     }
 
     item.name = newName;
-    item.price = newPaid ? 0 : newPrice;
-    item.isPaid = newPaid;
+    saveCartState();
+    renderCartItems();
+    closeEditNameModal();
+    showToast("✅ Item name updated.");
+}
+
+export function openAddPriceModal(index) {
+    const currentCart = getCurrentCart();
+    const item = currentCart[index];
+    if (!item) return;
+
+    pricingItemIndex = index;
+    const nameLabel = document.getElementById('price-modal-item-name');
+    const input = document.getElementById('cart-item-price-input');
+    const modal = document.getElementById('cart-add-price-modal');
+
+    if (nameLabel) nameLabel.innerText = item.name || 'Item Price';
+    if (input) input.value = item.price > 0 ? item.price : '';
+    if (modal) modal.classList.remove('hidden');
+    if (input) setTimeout(() => input.focus(), 100);
+}
+
+export function closeAddPriceModal() {
+    const modal = document.getElementById('cart-add-price-modal');
+    if (modal) modal.classList.add('hidden');
+    pricingItemIndex = null;
+}
+
+export function saveItemPrice() {
+    if (pricingItemIndex === null) return;
+    const currentCart = getCurrentCart();
+    const item = currentCart[pricingItemIndex];
+    if (!item) return;
+
+    const input = document.getElementById('cart-item-price-input');
+    const priceVal = input ? parseFloat(input.value) : 0;
+    const cleanPrice = isNaN(priceVal) || priceVal < 0 ? 0 : priceVal;
+
+    item.price = cleanPrice;
+    if (cleanPrice > 0) {
+        item.isPaid = false;
+        item.isBought = true;
+    }
 
     saveCartState();
     renderCartItems();
-
-    const modal = document.getElementById('edit-item-modal');
-    if (modal) modal.classList.add('hidden');
-    editingItemIndex = null;
-    showToast("Item updated successfully.");
+    closeAddPriceModal();
+    showToast(`💰 Price set: ₱${cleanPrice.toFixed(2)}`);
 }
 
 export function processBulkAdd() {
@@ -183,19 +241,21 @@ export function processBulkAdd() {
             newItems.push({
                 name: match[1].trim(),
                 price: parseFloat(match[2]),
-                category: 'store',
-                type: 'store',
+                category: '',
+                type: '',
                 isPaid: false,
-                isBought: false
+                isBought: false,
+                isUnavailable: false
             });
         } else {
             newItems.push({
                 name: clean,
                 price: 0,
-                category: 'store',
-                type: 'store',
+                category: '',
+                type: '',
                 isPaid: false,
-                isBought: false
+                isBought: false,
+                isUnavailable: false
             });
         }
     });
@@ -224,15 +284,28 @@ export function validateAndProceedToWizard() {
         return showToast("⚠️ I-slide muna ang lock sa overlay screen upang i-unlock ang cart.");
     }
 
-    const unpricedUnpaidItems = currentCart.filter(i => (parseFloat(i.price) || 0) <= 0 && !i.isPaid);
+    const activeItems = currentCart.filter(i => !i.isUnavailable);
 
-    if (unpricedUnpaidItems.length > 0) {
-        showToast(`⚠️ Paki-lagyan ng presyo o i-check ang Paid button sa ${unpricedUnpaidItems.length} item na ₱0.00!`);
-        renderCartItems();
-        return;
+    if (activeItems.length === 0) {
+        return showToast("⚠️ Lahat ng item sa cart ay minarkahang Not Available!");
     }
 
-    const paidItems = currentCart.filter(i => i.isPaid);
+    const unboughtItems = activeItems.filter(i => !i.isBought);
+    if (unboughtItems.length > 0) {
+        return showToast(`⚠️ Paki-mark muna bilang Buy/Bought ang ${unboughtItems.length} active item(s)!`);
+    }
+
+    const uncategorizedItems = activeItems.filter(i => !i.category || (i.category !== 'store' && i.category !== 'market'));
+    if (uncategorizedItems.length > 0) {
+        return showToast(`⚠️ Paki-pili kung Store o Market ang ${uncategorizedItems.length} item(s)!`);
+    }
+
+    const unpricedUnpaidItems = activeItems.filter(i => (parseFloat(i.price) || 0) <= 0 && !i.isPaid);
+    if (unpricedUnpaidItems.length > 0) {
+        return showToast(`⚠️ Paki-lagyan ng presyo o i-check ang Paid sa ${unpricedUnpaidItems.length} item na ₱0.00!`);
+    }
+
+    const paidItems = activeItems.filter(i => i.isPaid);
     if (paidItems.length > 0) {
         const paidModal = document.getElementById('paid-item-confirm-modal');
         if (paidModal) {
@@ -283,4 +356,27 @@ export function clearAllCartSlots() {
     if (globalState.cartTxIds) globalState.cartTxIds = ["", "", "", ""];
     saveCartState();
     resetToCartOne();
+}
+
+if (typeof window !== 'undefined') {
+    window.handleCartActionBtn = handleCartActionBtn;
+    window.toggleItemCategory = toggleItemCategory;
+    window.toggleItemPaid = toggleItemPaid;
+    window.toggleItemBought = toggleItemBought;
+    window.toggleItemUnavailable = toggleItemUnavailable;
+    window.toggleItemSelect = toggleItemSelect;
+    window.deleteSelectedCartItems = deleteSelectedCartItems;
+    window.deleteSingleCartItem = deleteSingleCartItem;
+    window.openEditNameModal = openEditNameModal;
+    window.closeEditNameModal = closeEditNameModal;
+    window.saveItemName = saveItemName;
+    window.openAddPriceModal = openAddPriceModal;
+    window.closeAddPriceModal = closeAddPriceModal;
+    window.saveItemPrice = saveItemPrice;
+    window.processBulkAdd = processBulkAdd;
+    window.validateAndProceedToWizard = validateAndProceedToWizard;
+    window.confirmPaidItemProceed = confirmPaidItemProceed;
+    window.closePaidItemModal = closePaidItemModal;
+    window.clearCartSlot = clearCartSlot;
+    window.clearAllCartSlots = clearAllCartSlots;
 }

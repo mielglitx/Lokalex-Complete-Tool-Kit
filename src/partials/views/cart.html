@@ -31,4 +31,58 @@
             <i class="fa-solid fa-receipt"></i> Create Receipt (<span id="btn-cart-slot-label">Cart 1</span>)
         </button>
     </div>
+
+    <!-- 1. DEDICATED ADD / EDIT PRICE MODAL -->
+    <div id="cart-add-price-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-xs rounded-2xl p-4 shadow-2xl flex flex-col gap-3">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2">
+                <h3 class="text-xs font-black text-gray-900 dark:text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-tag text-emerald-500"></i> Set Item Price
+                </h3>
+                <button type="button" onclick="window.closeAddPriceModal && window.closeAddPriceModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-xs">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div class="text-[11px] font-bold text-gray-600 dark:text-gray-400 truncate" id="price-modal-item-name">Item Name</div>
+
+            <div class="relative flex items-center">
+                <span class="absolute left-3 text-xs font-bold text-gray-400 font-mono select-none">₱</span>
+                <input type="number" step="any" id="cart-item-price-input" placeholder="0.00" class="w-full bg-inputBg text-sm font-black font-mono pl-7 pr-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 outline-none text-emerald-600 dark:text-green-400 focus:border-emerald-500">
+            </div>
+
+            <div class="flex gap-2 pt-1">
+                <button type="button" onclick="window.closeAddPriceModal && window.closeAddPriceModal()" class="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-xs font-bold text-gray-700 dark:text-gray-300 transition active:scale-95">Cancel</button>
+                <button type="button" onclick="window.saveItemPrice && window.saveItemPrice()" class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-md transition active:scale-95 flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-check"></i> Save Price
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. DEDICATED EDIT ITEM NAME MODAL -->
+    <div id="cart-edit-name-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-xs rounded-2xl p-4 shadow-2xl flex flex-col gap-3">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2">
+                <h3 class="text-xs font-black text-gray-900 dark:text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-pen text-blue-500"></i> Edit Item Name
+                </h3>
+                <button type="button" onclick="window.closeEditNameModal && window.closeEditNameModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-xs">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div>
+                <label class="text-[10px] text-gray-500 font-bold uppercase">Item Description / Name</label>
+                <input type="text" id="cart-edit-name-input" placeholder="Enter item name" class="w-full bg-inputBg text-xs font-bold p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 focus:border-blue-500">
+            </div>
+
+            <div class="flex gap-2 pt-1">
+                <button type="button" onclick="window.closeEditNameModal && window.closeEditNameModal()" class="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-xs font-bold text-gray-700 dark:text-gray-300 transition active:scale-95">Cancel</button>
+                <button type="button" onclick="window.saveItemName && window.saveItemName()" class="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-md transition active:scale-95 flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-floppy-disk"></i> Save Name
+                </button>
+            </div>
+        </div>
+    </div>
 </section>

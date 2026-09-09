@@ -1,14 +1,13 @@
-// sw.js - Service Worker for Lokalex PWA
+// public/sw.js - Service Worker for Lokalex PWA
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
-const CACHE_NAME = 'lokalex-app-cache-v1';
+const CACHE_NAME = 'lokalex-app-cache-v2';
 
 const STATIC_ASSETS = [
-    '/',
-    '/index.html',
-    '/manifest.json',
-    '/src/main.js',
+    './',
+    './index.html',
+    './manifest.json',
     'https://cdn.tailwindcss.com',
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
     'https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js',
@@ -50,13 +49,13 @@ try {
         const body = payload.notification?.body || payload.data?.body || 'New update available.';
         const options = {
             body: body,
-            icon: payload.notification?.icon || payload.data?.icon || '/icons/icon-192x192.png',
-            badge: '/icons/icon-192x192.png',
+            icon: payload.notification?.icon || payload.data?.icon || 'https://i.imgur.com/dbomHa2.png',
+            badge: 'https://i.imgur.com/dbomHa2.png',
             vibrate: [300, 100, 300, 100, 400],
             tag: payload.data?.tag || 'lokalex-alert',
             renotify: true,
             data: {
-                url: payload.data?.url || '/',
+                url: payload.data?.url || './',
                 view: payload.data?.view || 'view-home',
                 ...payload.data
             }
@@ -69,13 +68,17 @@ try {
     console.warn('FCM Background messaging initialization:', e);
 }
 
-// 1. INSTALL: Pre-cache core application shell
+// 1. INSTALL: Resilient pre-caching of core application shell
 self.addEventListener('install', (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(STATIC_ASSETS).catch((err) => {
-                console.warn('SW Pre-cache non-fatal warning:', err);
-            });
+        caches.open(CACHE_NAME).then(async (cache) => {
+            for (const asset of STATIC_ASSETS) {
+                try {
+                    await cache.add(asset);
+                } catch (err) {
+                    console.warn('SW Pre-cache non-fatal warning for asset:', asset, err);
+                }
+            }
         }).then(() => self.skipWaiting())
     );
 });
@@ -140,12 +143,12 @@ self.addEventListener('push', (event) => {
         const body = payload.body || payload.notification?.body || 'You have a new update.';
         const options = {
             body: body,
-            icon: payload.icon || '/icons/icon-192x192.png',
-            badge: '/icons/icon-192x192.png',
+            icon: payload.icon || 'https://i.imgur.com/dbomHa2.png',
+            badge: 'https://i.imgur.com/dbomHa2.png',
             vibrate: [250, 100, 250, 100, 350],
             tag: payload.tag || 'lokalex-push',
             renotify: true,
-            data: payload.data || { url: '/' }
+            data: payload.data || { url: './' }
         };
 
         notifyClients({ title, body, ...payload });
@@ -156,7 +159,7 @@ self.addEventListener('push', (event) => {
         event.waitUntil(
             self.registration.showNotification('Lokalex', {
                 body: text,
-                icon: '/icons/icon-192x192.png'
+                icon: 'https://i.imgur.com/dbomHa2.png'
             })
         );
     }
@@ -165,7 +168,7 @@ self.addEventListener('push', (event) => {
 // 5. NOTIFICATION CLICK: Focus open tab or launch application window
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const targetUrl = event.notification.data?.url || '/';
+    const targetUrl = event.notification.data?.url || './';
 
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
@@ -190,12 +193,12 @@ self.addEventListener('message', (event) => {
         const title = event.data.title || 'Lokalex Alert';
         const options = {
             body: event.data.body || '',
-            icon: event.data.icon || '/icons/icon-192x192.png',
-            badge: '/icons/icon-192x192.png',
+            icon: event.data.icon || 'https://i.imgur.com/dbomHa2.png',
+            badge: 'https://i.imgur.com/dbomHa2.png',
             vibrate: [200, 100, 200],
             tag: event.data.tag || 'lokalex-local-alert',
             renotify: true,
-            data: event.data.data || { url: '/' }
+            data: event.data.data || { url: './' }
         };
         self.registration.showNotification(title, options);
     }

@@ -37,7 +37,7 @@ export function ensureQrCodeLibraryLoaded() {
     });
 }
 
-export async function generatePureQrImage(payload, size = 480) {
+export async function generatePureQrImage(payload, size = 600) {
     if (!payload) return null;
     await ensureQrCodeLibraryLoaded();
 
@@ -59,35 +59,6 @@ export async function generatePureQrImage(payload, size = 480) {
                 return resolve(null);
             }
 
-            const tCtx = tempCanvas.getContext('2d');
-            tCtx.save();
-
-            const badgeW = Math.round(size * 0.28);
-            const badgeH = Math.round(size * 0.20);
-            const bx = Math.round((size - badgeW) / 2);
-            const by = Math.round((size - badgeH) / 2);
-
-            tCtx.fillStyle = '#ffffff';
-            tCtx.strokeStyle = '#cbd5e1';
-            tCtx.lineWidth = 2;
-            tCtx.beginPath();
-            tCtx.roundRect(bx, by, badgeW, badgeH, 6);
-            tCtx.fill();
-            tCtx.stroke();
-
-            tCtx.textAlign = "center";
-            tCtx.textBaseline = "middle";
-
-            tCtx.fillStyle = '#005bb7';
-            tCtx.font = `800 ${Math.round(size * 0.042)}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
-            tCtx.fillText("insta", size / 2, by + (badgeH * 0.35));
-
-            tCtx.fillStyle = '#da291c';
-            tCtx.font = `900 ${Math.round(size * 0.052)}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
-            tCtx.fillText("Pay", size / 2, by + (badgeH * 0.72));
-
-            tCtx.restore();
-
             const img = new Image();
             img.onload = () => resolve(img);
             img.onerror = () => resolve(null);
@@ -100,12 +71,18 @@ export function loadImageAsync(src) {
     return new Promise((resolve) => {
         if (!src) return resolve(null);
         const img = new Image();
-        if (!src.startsWith('data:') && !src.startsWith('blob:')) {
+
+        // Only set crossOrigin for external http(s) URLs.
+        // Relative and local origin files in public/ must not have crossOrigin set,
+        // or local static hosts / GitHub Pages / Service Workers will block with CORS.
+        const isExternal = /^https?:\/\//i.test(src) && !src.startsWith(window.location.origin);
+        if (isExternal) {
             img.crossOrigin = "anonymous";
         }
+
         img.onload = () => resolve(img);
         img.onerror = (e) => {
-            console.warn("Image load failed:", e);
+            console.warn("Image load failed for:", src, e);
             resolve(null);
         };
         img.src = src;
@@ -123,16 +100,16 @@ export async function renderReceiptCanvas() {
     localStorage.removeItem('lokalex_gcash_qr');
     delete appState.gcashQrUrl;
 
-    const currentCart = getCurrentCart() || [];
+    const currentCart = (getCurrentCart() || []).filter(item => !item.isUnavailable);
     const dailyRiderId = getDailyRiderId();
-    const rawCustomerName = document.getElementById('rcpt-name')?.value.trim() || appState.selectedCateringClient || "Customer";
-    const rawRiderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
+    const rawCustomerName = document.getElementById('rcpt-name')?.value.trim() || appState.selectedCateringClient || "Sample";
+    const rawRiderName = appState.riderName || localStorage.getItem('riderName') || "Amiel Yalung";
 
     const customerName = toTitleCase(rawCustomerName);
     const riderName = toTitleCase(rawRiderName);
 
     const dateStr = new Date().toLocaleDateString('en-US', {
-        year: 'numeric', month: 'short', day: 'numeric',
+        month: 'short', day: 'numeric', year: 'numeric',
         hour: '2-digit', minute: '2-digit'
     });
 
@@ -142,319 +119,347 @@ export async function renderReceiptCanvas() {
     const finalMulti = wizState.finalMulti || 0;
     const deliveryFee = wizState.deliveryFee || 0;
     const discount = wizState.discount || 0;
-    const isPercent = wizState.discountType === 'percent';
-    const rawDiscVal = wizState.rawDiscountVal || 0;
 
     const codTotal = Math.max(0, wizState.codTotal || wizState.finalTotal || 0);
     const epayFee = wizState.finalEpay || (codTotal <= 1000 ? 15 : 15 + Math.ceil((codTotal - 1000) / 500) * 5);
     const gcashTotal = codTotal + epayFee;
 
-    const rawGcashName = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || "";
+    const rawGcashName = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || riderName;
     const gcashName = toTitleCase(rawGcashName);
-    const gcashNo = appState.gcashNo || localStorage.getItem('lokalex_gcash_no') || "";
+    const gcashNo = appState.gcashNo || localStorage.getItem('lokalex_gcash_no') || "09120600138";
     const gcashQrPayload = appState.gcashQrPayload || localStorage.getItem('lokalex_gcash_qr_payload') || "";
     const gcashQrImg = appState.gcashQrImg || localStorage.getItem('lokalex_gcash_qr_img') || "";
 
+    // Resolve Vite Base URL for GitHub Pages compatibility
+    const baseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL)
+        ? import.meta.env.BASE_URL
+        : '/';
+    const cleanBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+
+    const logoCandidates = [
+        `${cleanBase}Logo.jpg`,
+        `${cleanBase}logo.jpg`,
+        `${cleanBase}Logo.png`,
+        `${cleanBase}logo.png`,
+        './Logo.jpg',
+        './logo.jpg',
+        '/Logo.jpg',
+        '/logo.jpg',
+        'Logo.jpg',
+        'logo.jpg'
+    ];
+
+    let logoImg = null;
+    for (const path of logoCandidates) {
+        logoImg = await loadImageAsync(path);
+        if (logoImg) break;
+    }
+
+    // Preload Ultra-HD Vector QR Code
     let preloadedQrImage = null;
     if (gcashQrPayload) {
         try {
-            preloadedQrImage = await generatePureQrImage(gcashQrPayload, 512);
+            preloadedQrImage = await generatePureQrImage(gcashQrPayload, 600);
         } catch (e) {
-            console.warn("Generating vector QR failed:", e);
+            console.warn("Generating QR failed:", e);
         }
     }
-
     if (!preloadedQrImage && gcashQrImg) {
         try {
             preloadedQrImage = await loadImageAsync(gcashQrImg);
         } catch (e) {
-            console.warn("Loading cropped QR failed:", e);
+            console.warn("Loading uploaded QR failed:", e);
         }
     }
 
     const hasQrDrawn = !!preloadedQrImage;
     const hasGcashDetails = !!(gcashName || gcashNo || hasQrDrawn);
 
-    const width = 640;
-    let estimatedHeight = 380;
-    estimatedHeight += Math.max(1, currentCart.length) * 38;
-    
-    let activeFeesCount = 0;
-    if (finalHFee > 0) activeFeesCount++;
-    if (finalMFee > 0) activeFeesCount++;
-    if (finalMulti > 0) activeFeesCount++;
-    if (deliveryFee > 0) activeFeesCount++;
-    if (discount > 0) activeFeesCount++;
-    estimatedHeight += Math.max(1, activeFeesCount) * 28;
+    // Canvas Layout Dimensions
+    const width = 460;
+    let estimatedHeight = 220; // Top padding, logo, and header
+    estimatedHeight += 95;      // Metadata box
+    estimatedHeight += 35;      // Items header
 
-    const gcashBoxHeight = hasQrDrawn ? 224 : 88;
+    // Items list
+    estimatedHeight += Math.max(1, currentCart.length) * 20;
+
+    // Subtotal and active fee lines
+    let feeLinesCount = 1; // Items Subtotal
+    if (finalHFee > 0) feeLinesCount++;
+    if (finalMFee > 0) feeLinesCount++;
+    if (finalMulti > 0) feeLinesCount++;
+    if (deliveryFee > 0) feeLinesCount++;
+    if (discount > 0) feeLinesCount++;
+    estimatedHeight += (feeLinesCount * 20) + 20;
+
+    // Badges
+    estimatedHeight += 44; // COD Total Box
+    estimatedHeight += 52; // GCash Box
+
+    // QR & GCash section
     if (hasGcashDetails) {
-        estimatedHeight += gcashBoxHeight + 24;
+        estimatedHeight += (hasQrDrawn ? 285 : 70);
     }
-    estimatedHeight += 110;
 
-    const scaleFactor = 2;
+    // Footer
+    estimatedHeight += 70;
+
+    // 3x Ultra-HD Resolution scale factor for 300+ DPI QR scanning accuracy
+    const scaleFactor = 3;
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(width * scaleFactor);
     canvas.height = Math.round(estimatedHeight * scaleFactor);
-    
+
     const ctx = canvas.getContext('2d');
     ctx.scale(scaleFactor, scaleFactor);
 
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
-    ctx.fillStyle = "#FFFFFF";
+    // Thermal Paper Background
+    ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, width, estimatedHeight);
 
-    ctx.fillStyle = "#2563eb";
-    ctx.fillRect(0, 0, width, 12);
+    let y = 24;
 
-    let y = 46;
+    // 1. Centered Circular Logo
+    const logoSize = 100;
+    if (logoImg) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(width / 2, y + logoSize / 2, logoSize / 2, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+        ctx.drawImage(logoImg, (width - logoSize) / 2, y, logoSize, logoSize);
+        ctx.restore();
+        y += logoSize + 16;
+    } else {
+        y += 10;
+    }
 
-    ctx.fillStyle = "#0f172a";
-    ctx.font = "900 28px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    // 2. Header Text
+    ctx.fillStyle = "#000000";
+    ctx.font = "900 19px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("LOKALEX DELIVERY HUB", width / 2, y);
 
-    y += 24;
-    ctx.fillStyle = "#64748b";
-    ctx.font = "700 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-    ctx.letterSpacing = "2px";
-    ctx.fillText("OFFICIAL DELIVERY RECEIPT", width / 2, y);
-    ctx.letterSpacing = "0px";
-
-    y += 32;
-
-    ctx.fillStyle = "#f8fafc";
-    ctx.strokeStyle = "#e2e8f0";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(32, y, width - 64, 76, 16);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#475569";
-    ctx.font = "600 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-    ctx.fillText(`Customer:`, 50, y + 26);
-    ctx.fillText(`Rider:`, 50, y + 54);
-
-    ctx.fillStyle = "#0f172a";
+    y += 20;
+    ctx.fillStyle = "#111827";
     ctx.font = "800 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-    ctx.fillText(customerName, 120, y + 26);
-    ctx.fillText(`${riderName} (${dailyRiderId})`, 120, y + 54);
-
-    ctx.textAlign = "right";
-    ctx.fillStyle = "#64748b";
-    ctx.font = "600 11px 'SF Mono', Consolas, Monaco, monospace";
-    ctx.fillText(dateStr, width - 50, y + 26);
-    const txIdDisplay = wizState.currentReceiptTransactionId || "";
-    ctx.fillText(`#${txIdDisplay.slice(-14)}`, width - 50, y + 54);
-
-    y += 98;
-
-    ctx.fillStyle = "#0f172a";
-    ctx.font = "800 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText("ITEM DESCRIPTION", 44, y);
-    ctx.textAlign = "right";
-    ctx.fillText("TOTAL", width - 44, y);
-
-    y += 10;
-    ctx.strokeStyle = "#cbd5e1";
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.moveTo(40, y);
-    ctx.lineTo(width - 40, y);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.fillText("OFFICIAL DELIVERY RECEIPT", width / 2, y);
 
     y += 24;
+
+    // 3. Receipt Metadata Section
+    const leftMargin = 28;
+    const rightMargin = width - 28;
+    const metaFont = "600 12.5px 'SF Mono', Consolas, 'Courier New', monospace";
+    ctx.font = metaFont;
+    ctx.fillStyle = "#111827";
+    ctx.textAlign = "left";
+
+    const labelColX = leftMargin;
+    const valueColX = leftMargin + 85;
+
+    ctx.fillText("Customer:", labelColX, y);
+    ctx.fillText(customerName, valueColX, y);
+    y += 18;
+
+    ctx.fillText("Date:", labelColX, y);
+    ctx.fillText(dateStr, valueColX, y);
+    y += 18;
+
+    ctx.fillText("Rider:", labelColX, y);
+    ctx.fillText(`${riderName} (${dailyRiderId})`, valueColX, y);
+    y += 18;
+
+    const rawTxId = wizState.currentReceiptTransactionId || `E37FG-${Date.now().toString(36).toUpperCase()}`;
+    const cleanRefId = rawTxId.replace(/^RCPT_/, '');
+    ctx.fillText("Ref #:", labelColX, y);
+    ctx.fillText(`#${cleanRefId}`, valueColX, y);
+    y += 18;
+
+    // Helper: Draw Dashed Divider Line
+    const drawDashedDivider = (currY) => {
+        ctx.strokeStyle = "#475569";
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(leftMargin, currY);
+        ctx.lineTo(rightMargin, currY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    };
+
+    drawDashedDivider(y);
+    y += 16;
+
+    // 4. Item Table Headers
+    ctx.font = "800 12px 'SF Mono', Consolas, 'Courier New', monospace";
+    ctx.fillStyle = "#000000";
+    ctx.textAlign = "left";
+    ctx.fillText("ITEM DESCRIPTION", leftMargin, y);
+    ctx.textAlign = "right";
+    ctx.fillText("TOTAL", rightMargin, y);
+
+    y += 16;
+
+    // 5. Items List
+    ctx.font = "600 12px 'SF Mono', Consolas, 'Courier New', monospace";
+    ctx.fillStyle = "#111827";
 
     if (currentCart.length === 0) {
         ctx.textAlign = "center";
-        ctx.fillStyle = "#94a3b8";
-        ctx.font = "italic 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-        ctx.fillText("(Walang nakalistang items)", width / 2, y);
-        y += 28;
+        ctx.fillText("(No items listed)", width / 2, y);
+        y += 18;
     } else {
         currentCart.forEach(item => {
-            const isPaid = !!item.isPaid || (parseFloat(item.price) || 0) <= 0;
+            const isPaid = !!item.isPaid;
             const priceNum = Math.max(0, parseFloat(item.price) || 0);
-            const priceStr = isPaid ? "PAID (₱0.00)" : `₱${priceNum.toFixed(2)}`;
             const itemName = toTitleCase(item.name || 'Item');
 
-            ctx.textAlign = "left";
-            ctx.fillStyle = isPaid ? "#64748b" : "#1e293b";
-            ctx.font = isPaid ? "600 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" : "700 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+            const leftText = isPaid ? `${itemName} - PAID (P0.00)` : `${itemName} - P${priceNum.toFixed(2)}`;
+            const rightText = isPaid ? "PAID" : `P${priceNum.toFixed(2)}`;
 
-            ctx.fillText(`•  ${itemName}`, 44, y);
+            ctx.textAlign = "left";
+            ctx.fillText(leftText, leftMargin, y);
 
             ctx.textAlign = "right";
-            ctx.fillStyle = isPaid ? "#059669" : "#0f172a";
-            ctx.font = "700 13px 'SF Mono', Consolas, Monaco, monospace";
-            ctx.fillText(priceStr, width - 44, y);
+            ctx.fillText(rightText, rightMargin, y);
 
-            y += 28;
+            y += 18;
         });
     }
 
-    y += 4;
-    ctx.strokeStyle = "#e2e8f0";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(40, y);
-    ctx.lineTo(width - 40, y);
-    ctx.stroke();
+    y += 2;
+    drawDashedDivider(y);
+    y += 16;
 
-    y += 24;
-
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#475569";
-    ctx.font = "700 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-    ctx.fillText("ITEMS SUBTOTAL", 44, y);
-
-    ctx.textAlign = "right";
-    ctx.fillStyle = "#0f172a";
-    ctx.font = "800 14px 'SF Mono', Consolas, Monaco, monospace";
-    ctx.fillText(`₱${subtotal.toFixed(2)}`, width - 44, y);
-
-    y += 22;
-
-    const drawFeeRow = (label, amount, isDeduction = false) => {
+    // 6. Subtotal & Fee Breakdown
+    const drawBreakdownRow = (label, amount, isDeduction = false) => {
         ctx.textAlign = "left";
-        ctx.fillStyle = isDeduction ? "#b91c1c" : "#64748b";
-        ctx.font = "600 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-        ctx.fillText(label, 44, y);
+        ctx.font = "600 12px 'SF Mono', Consolas, 'Courier New', monospace";
+        ctx.fillStyle = isDeduction ? "#b91c1c" : "#111827";
+        ctx.fillText(label, leftMargin, y);
 
         ctx.textAlign = "right";
-        ctx.fillStyle = isDeduction ? "#b91c1c" : "#334155";
-        ctx.font = "700 12px 'SF Mono', Consolas, Monaco, monospace";
-        ctx.fillText(`${isDeduction ? '-' : ''}₱${amount.toFixed(2)}`, width - 44, y);
-        y += 22;
+        ctx.fillText(`${isDeduction ? '-' : ''}P${amount.toFixed(2)}`, rightMargin, y);
+        y += 18;
     };
 
-    if (finalHFee > 0) drawFeeRow("Handling Fee", finalHFee);
-    if (finalMFee > 0) drawFeeRow("Market Fee", finalMFee);
-    if (finalMulti > 0) drawFeeRow("Multistore Fee", finalMulti);
-    if (deliveryFee > 0) drawFeeRow("Delivery Fee", deliveryFee);
-    if (discount > 0) drawFeeRow(`Discount ${isPercent ? `(${rawDiscVal}%)` : ''}`, discount, true);
+    drawBreakdownRow("ITEMS SUBTOTAL", subtotal);
+    if (finalHFee > 0) drawBreakdownRow("Handling Fee", finalHFee);
+    if (finalMFee > 0) drawBreakdownRow("Market Fee", finalMFee);
+    if (finalMulti > 0) drawBreakdownRow("Multistore Fee", finalMulti);
+    if (deliveryFee > 0) drawBreakdownRow("Delivery Fee", deliveryFee);
+    if (discount > 0) drawBreakdownRow("Discount", discount, true);
 
-    y += 8;
+    y += 6;
 
-    ctx.fillStyle = "#ecfdf5";
-    ctx.strokeStyle = "#10b981";
-    ctx.lineWidth = 1.5;
+    // 7. COD Total Box (Rounded Green Border)
+    const boxWidth = width - (leftMargin * 2);
+    ctx.save();
+    ctx.strokeStyle = "#16a34a";
+    ctx.lineWidth = 1.6;
+    ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-    ctx.roundRect(36, y, width - 72, 46, 14);
+    ctx.roundRect(leftMargin, y, boxWidth, 34, 10);
     ctx.fill();
     ctx.stroke();
 
+    ctx.fillStyle = "#15803d";
+    ctx.font = "800 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
     ctx.textAlign = "left";
-    ctx.fillStyle = "#047857";
-    ctx.font = "900 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-    ctx.fillText("💵 COD TOTAL (CASH TO COLLECT)", 52, y + 28);
+    ctx.fillText("COD TOTAL (CASH TO COLLECT)", leftMargin + 10, y + 21);
+
+    ctx.font = "800 14.5px 'SF Mono', Consolas, 'Courier New', monospace";
+    ctx.textAlign = "right";
+    ctx.fillText(`P${codTotal.toFixed(2)}`, rightMargin - 10, y + 21);
+    ctx.restore();
+
+    y += 42;
+
+    // 8. GCash Payment Box (Rounded Light Green Tint)
+    ctx.save();
+    ctx.strokeStyle = "#86efac";
+    ctx.lineWidth = 1.4;
+    ctx.fillStyle = "#f0fdf4";
+    ctx.beginPath();
+    ctx.roundRect(leftMargin, y, boxWidth, 42, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#166534";
+    ctx.textAlign = "left";
+    ctx.font = "800 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    ctx.fillText("GCASH PAYMENT", leftMargin + 10, y + 19);
+
+    ctx.font = "700 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    ctx.fillText(`(+P${epayFee.toFixed(2)} Transfer Fee)`, leftMargin + 10, y + 33);
 
     ctx.textAlign = "right";
-    ctx.fillStyle = "#047857";
-    ctx.font = "900 18px 'SF Mono', Consolas, Monaco, monospace";
-    ctx.fillText(`₱${codTotal.toFixed(2)}`, width - 52, y + 29);
+    ctx.font = "800 14.5px 'SF Mono', Consolas, 'Courier New', monospace";
+    ctx.fillText(`P${gcashTotal.toFixed(2)}`, rightMargin - 10, y + 26);
+    ctx.restore();
 
     y += 56;
 
-    ctx.fillStyle = "#eff6ff";
-    ctx.strokeStyle = "#3b82f6";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(36, y, width - 72, 40, 12);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#1d4ed8";
-    ctx.font = "800 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-    ctx.fillText(`📱 GCASH PAYMENT (+₱${epayFee.toFixed(2)} Transfer Fee)`, 52, y + 25);
-
-    ctx.textAlign = "right";
-    ctx.fillStyle = "#1d4ed8";
-    ctx.font = "800 15px 'SF Mono', Consolas, Monaco, monospace";
-    ctx.fillText(`₱${gcashTotal.toFixed(2)}`, width - 52, y + 26);
-
-    y += 54;
-
+    // 9. Scan To Pay Via GCash & High-Scannability QR Code
     if (hasGcashDetails) {
-        ctx.fillStyle = "#f8fafc";
-        ctx.strokeStyle = "#e2e8f0";
-        ctx.lineWidth = 1;
-        
-        ctx.beginPath();
-        ctx.roundRect(36, y, width - 72, gcashBoxHeight, 18);
-        ctx.fill();
-        ctx.stroke();
+        ctx.fillStyle = "#111827";
+        ctx.textAlign = "center";
+        ctx.font = "800 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+        ctx.fillText("SCAN TO PAY VIA GCASH", width / 2, y);
+        y += 17;
 
-        ctx.save();
-        ctx.textBaseline = "alphabetic";
+        ctx.font = "600 11.5px 'SF Mono', Consolas, 'Courier New', monospace";
+        ctx.fillText(`Account Name: ${gcashName || riderName}`, width / 2, y);
+        y += 16;
+        ctx.fillText(`Mobile Number: ${gcashNo || '09120600138'}`, width / 2, y);
+        y += 16;
 
         if (hasQrDrawn) {
-            const qrSize = 180;
-            const qrX = 50;
-            const qrY = y + 22;
+            const qrDisplaySize = 176;
+            const qrX = Math.round((width - qrDisplaySize) / 2);
+            const quietPadding = 10;
 
-            ctx.fillStyle = "#FFFFFF";
+            // Dedicated Quiet-Zone Backing with high-contrast border
+            ctx.save();
+            ctx.fillStyle = "#ffffff";
             ctx.strokeStyle = "#cbd5e1";
             ctx.lineWidth = 1.5;
             ctx.beginPath();
-            ctx.roundRect(qrX - 4, qrY - 4, qrSize + 8, qrSize + 8, 12);
+            ctx.roundRect(
+                qrX - quietPadding, 
+                y - quietPadding, 
+                qrDisplaySize + (quietPadding * 2), 
+                qrDisplaySize + (quietPadding * 2), 
+                12
+            );
             ctx.fill();
             ctx.stroke();
 
-            ctx.drawImage(preloadedQrImage, qrX, qrY, qrSize, qrSize);
+            // Disable smoothing specifically for QR rendering to ensure razor-sharp module edges
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(preloadedQrImage, qrX, y, qrDisplaySize, qrDisplaySize);
+            ctx.restore();
 
-            const textX = qrX + qrSize + 22;
-            ctx.textAlign = "left";
-            
-            ctx.fillStyle = "#0284c7";
-            ctx.font = "900 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-            ctx.fillText("SCAN TO PAY VIA GCASH", textX, qrY + 32);
-
-            ctx.fillStyle = "#64748b";
-            ctx.font = "600 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-            ctx.fillText("Account Name:", textX, qrY + 68);
-            ctx.fillStyle = "#0f172a";
-            ctx.font = "800 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-            ctx.fillText(gcashName || "Rider GCash", textX, qrY + 90);
-
-            ctx.fillStyle = "#64748b";
-            ctx.font = "600 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-            ctx.fillText("Mobile Number:", textX, qrY + 124);
-            ctx.fillStyle = "#0f172a";
-            ctx.font = "800 16px 'SF Mono', Consolas, Monaco, monospace";
-            ctx.fillText(gcashNo || "Not Specified", textX, qrY + 148);
+            y += qrDisplaySize + 22;
         } else {
-            ctx.textAlign = "center";
-            ctx.fillStyle = "#0284c7";
-            ctx.font = "900 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-            ctx.fillText("GCASH PAYMENT DETAILS", width / 2, y + 28);
-
-            ctx.fillStyle = "#0f172a";
-            ctx.font = "700 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-            ctx.fillText(`${gcashName || 'Rider'} • ${gcashNo || ''}`, width / 2, y + 54);
+            y += 10;
         }
-
-        ctx.restore();
-        y += gcashBoxHeight + 16;
     }
 
+    // 10. Receipt Footer
+    ctx.fillStyle = "#111827";
     ctx.textAlign = "center";
-    ctx.fillStyle = "#64748b";
-    ctx.font = "700 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-    ctx.fillText("Salamat sa pagtitiwala sa Lokalex!", width / 2, y + 14);
+    ctx.font = "600 11.5px 'SF Mono', Consolas, 'Courier New', monospace";
+    ctx.fillText("Salamat sa pagtitiwala sa Lokalex!", width / 2, y);
+    y += 16;
 
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "500 10px 'SF Mono', Consolas, Monaco, monospace";
-    ctx.fillText("Lokalex Logistics • On-Demand Express Delivery", width / 2, y + 32);
+    ctx.font = "500 10.5px 'SF Mono', Consolas, 'Courier New', monospace";
+    ctx.fillText("Lokalex Logistics • On-Demand Express Delivery", width / 2, y);
 
     currentReceiptCanvas = canvas;
     currentReceiptDataUrl = canvas.toDataURL('image/png');
@@ -485,7 +490,6 @@ export async function downloadReceiptImage() {
     const fileName = `Lokalex_Receipt_${txId}.png`;
     const platform = getDevicePlatform();
 
-    // 1. ANDROID & PC: INSTANT DIRECT DOWNLOAD WITHOUT SHARE SHEET
     if (platform === 'android' || platform === 'pc') {
         if (currentReceiptCanvas && typeof currentReceiptCanvas.toBlob === 'function') {
             currentReceiptCanvas.toBlob((blob) => {
@@ -510,7 +514,6 @@ export async function downloadReceiptImage() {
         return;
     }
 
-    // 2. IOS (IPHONE / IPAD): WEB SHARE SHEET OR LONG-PRESS SAVE PROMPT
     if (navigator.canShare && currentReceiptCanvas) {
         try {
             const blob = await new Promise(resolve => currentReceiptCanvas.toBlob(resolve, 'image/png'));
@@ -548,7 +551,7 @@ export async function downloadReceiptImage() {
                 <title>${fileName}</title>
                 <style>
                     body { margin: 0; background-color: #0f172a; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; box-sizing: border-box; font-family: -apple-system, sans-serif; }
-                    img { max-width: 100%; height: auto; border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+                    img { max-width: 100%; height: auto; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
                     p { color: #94a3b8; font-size: 13px; margin-top: 16px; text-align: center; }
                     strong { color: #38bdf8; }
                 </style>
@@ -564,4 +567,9 @@ export async function downloadReceiptImage() {
     }
 
     triggerDirectAnchorDownload(currentReceiptDataUrl, fileName);
+}
+
+if (typeof window !== 'undefined') {
+    window.renderReceiptCanvas = renderReceiptCanvas;
+    window.downloadReceiptImage = downloadReceiptImage;
 }

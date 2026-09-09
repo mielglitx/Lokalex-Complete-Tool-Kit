@@ -33,10 +33,11 @@ export function saveCartState() {
                 items: (multiCarts[key].items || []).map(item => ({
                     name: item.name || "",
                     price: item.price !== undefined ? item.price : 0,
-                    category: item.category || item.type || 'store',
-                    type: item.type || item.category || 'store',
+                    category: item.category || "",
+                    type: item.type || item.category || "",
                     isPaid: !!item.isPaid,
-                    isBought: !!item.isBought
+                    isBought: !!item.isBought,
+                    isUnavailable: !!item.isUnavailable
                 })),
                 customerName: multiCarts[key].customerName || "",
                 isManual: !!multiCarts[key].isManual,
@@ -67,10 +68,11 @@ export function loadCartState() {
                     items: (parsed[key].items || []).map(item => ({
                         name: item.name || "",
                         price: item.price !== undefined ? item.price : 0,
-                        category: item.category || item.type || 'store',
-                        type: item.type || item.category || 'store',
+                        category: item.category || "",
+                        type: item.type || item.category || "",
                         isPaid: !!item.isPaid,
-                        isBought: !!item.isBought
+                        isBought: !!item.isBought,
+                        isUnavailable: !!item.isUnavailable
                     })),
                     selectedIds: new Set(),
                     customerName: parsed[key].customerName || "",

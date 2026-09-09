@@ -143,7 +143,7 @@ export function renderCartItems() {
         const clientName = getEffectiveCartClient(activeCartSlot - 1);
         const summary = currentCartObj.receiptSummary || {};
         
-        const rawSubtotal = currentCart.reduce((sum, item) => sum + (item.isPaid ? 0 : (parseFloat(item.price) || 0)), 0);
+        const rawSubtotal = currentCart.reduce((sum, item) => sum + (item.isPaid || item.isUnavailable ? 0 : (parseFloat(item.price) || 0)), 0);
         const subtotalItems = summary.subtotal !== undefined ? parseFloat(summary.subtotal) : rawSubtotal;
         const totalFees = summary.totalFees !== undefined ? parseFloat(summary.totalFees) : (parseFloat(summary.deliveryFee) || 0);
         
@@ -219,9 +219,10 @@ export function renderCartItems() {
         return;
     }
 
-    const totalItems = currentCart.length;
-    const boughtCount = currentCart.filter(item => !!item.isBought).length;
-    const progressPercent = totalItems > 0 ? Math.round((boughtCount / totalItems) * 100) : 0;
+    const activeItems = currentCart.filter(item => !item.isUnavailable);
+    const totalActive = activeItems.length;
+    const boughtCount = activeItems.filter(item => !!item.isBought).length;
+    const progressPercent = totalActive > 0 ? Math.round((boughtCount / totalActive) * 100) : 0;
 
     const progressBannerHtml = `
         <div class="bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-xl flex flex-col gap-1.5 text-xs shrink-0 shadow-xs mb-1">
@@ -229,8 +230,8 @@ export function renderCartItems() {
                 <span class="text-gray-600 dark:text-gray-400 flex items-center gap-1.5">
                     <i class="fa-solid fa-list-check text-blue-500"></i> Shopping Checklist
                 </span>
-                <span class="${boughtCount === totalItems ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-700 dark:text-gray-300'} font-mono text-[10px]">
-                    ${boughtCount} of ${totalItems} bought (${progressPercent}%)
+                <span class="${boughtCount === totalActive && totalActive > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-700 dark:text-gray-300'} font-mono text-[10px]">
+                    ${boughtCount} of ${totalActive} bought (${progressPercent}%)
                 </span>
             </div>
             <div class="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-1.5 overflow-hidden">
@@ -242,20 +243,25 @@ export function renderCartItems() {
         const itemPrice = parseFloat(item.price) || 0;
         const isPaid = !!item.isPaid;
         const isBought = !!item.isBought;
+        const isUnavailable = !!item.isUnavailable;
         const isSelected = currentCartObj.selectedIds && currentCartObj.selectedIds.has(index);
-        const isUnpricedUnpaid = itemPrice <= 0 && !isPaid;
+        const hasCategory = !!(item.category === 'store' || item.category === 'market');
+        const isUnpricedUnpaid = !isUnavailable && itemPrice <= 0 && !isPaid;
 
-        if (!isPaid) subtotal += itemPrice;
+        if (!isPaid && !isUnavailable) {
+            subtotal += itemPrice;
+        }
 
-        const isMarket = (item.category || item.type || '').toLowerCase() === 'market';
-        
-        const catStoreClass = !isMarket 
-            ? "bg-orange-600 text-white font-bold" 
-            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white";
+        const isStore = (item.category || '').toLowerCase() === 'store';
+        const isMarket = (item.category || '').toLowerCase() === 'market';
+
+        const catStoreClass = isStore 
+            ? "bg-orange-600 text-white font-bold shadow-xs" 
+            : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white";
 
         const catMarketClass = isMarket 
-            ? "bg-emerald-600 text-white font-bold" 
-            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white";
+            ? "bg-emerald-600 text-white font-bold shadow-xs" 
+            : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white";
 
         const boughtBtnClass = isBought
             ? "bg-emerald-600 text-white font-bold shadow-xs"
@@ -265,42 +271,75 @@ export function renderCartItems() {
             ? "bg-emerald-600/30 text-emerald-400 border border-emerald-500/50" 
             : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white";
 
+        const naBtnClass = isUnavailable
+            ? "bg-red-600 text-white font-bold shadow-xs"
+            : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-red-500";
+
         let cardStyleClass = "bg-cardBg border-gray-200 dark:border-gray-800";
-        if (isUnpricedUnpaid) {
+        if (isUnavailable) {
+            cardStyleClass = "bg-gray-100/60 dark:bg-gray-900/40 border-gray-300 dark:border-gray-800 opacity-60";
+        } else if (isUnpricedUnpaid) {
             cardStyleClass = "bg-amber-950/30 border-amber-500/80 ring-1 ring-amber-500/50 shadow-lg shadow-amber-950/30";
         } else if (isBought) {
-            cardStyleClass = "bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-500/40 opacity-80";
+            cardStyleClass = "bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-500/40";
         }
 
-        const priceDisplayClass = isUnpricedUnpaid 
-            ? "text-amber-500 dark:text-amber-400 font-black animate-pulse" 
-            : (isPaid ? "text-gray-400 dark:text-gray-500 line-through" : (isBought ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-emerald-600 dark:text-green-400 font-bold"));
+        let priceDisplay = `₱${itemPrice.toFixed(2)}`;
+        let priceDisplayClass = "text-emerald-600 dark:text-green-400 font-bold";
 
-        const itemNameClass = isBought
-            ? "break-words text-wrap font-bold text-sm text-gray-500 dark:text-gray-400 line-through flex-1 min-w-0"
-            : "break-words text-wrap font-bold text-sm text-gray-900 dark:text-white flex-1 min-w-0";
+        if (isUnavailable) {
+            priceDisplay = "N/A (₱0.00)";
+            priceDisplayClass = "text-gray-400 line-through text-xs font-mono";
+        } else if (isPaid) {
+            priceDisplay = "PAID (₱0.00)";
+            priceDisplayClass = "text-gray-400 dark:text-gray-500 line-through text-xs";
+        } else if (isUnpricedUnpaid) {
+            priceDisplayClass = "text-amber-500 dark:text-amber-400 font-black animate-pulse text-sm";
+        }
 
-        const unpricedWarningBadge = isUnpricedUnpaid 
-            ? `<span class="bg-amber-500/20 text-amber-500 dark:text-amber-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-amber-500/40 flex items-center gap-1 shrink-0"><i class="fa-solid fa-triangle-exclamation"></i> Set Price or Paid</span>` 
+        let itemNameClass = "break-words text-wrap font-bold text-sm text-gray-900 dark:text-white";
+        if (isUnavailable) {
+            itemNameClass = "break-words text-wrap font-bold text-sm text-gray-400 dark:text-gray-500 line-through";
+        } else if (isBought) {
+            itemNameClass = "break-words text-wrap font-bold text-sm text-gray-500 dark:text-gray-400 line-through";
+        }
+
+        const naBadge = isUnavailable 
+            ? `<span class="bg-red-500/10 text-red-600 dark:text-red-400 text-[9px] font-bold px-1.5 py-0.5 rounded border border-red-500/30 shrink-0">N/A</span>`
             : '';
 
-        const boughtBadge = isBought
+        const boughtBadge = !isUnavailable && isBought
             ? `<span class="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1 shrink-0"><i class="fa-solid fa-check text-[8px]"></i> Bought</span>`
+            : '';
+
+        const missingCategoryBadge = !isUnavailable && !hasCategory
+            ? `<span class="bg-red-500/10 text-red-500 text-[9px] font-bold px-1.5 py-0.5 rounded border border-red-500/30 flex items-center gap-1 shrink-0"><i class="fa-solid fa-circle-exclamation text-[8px]"></i> No Category</span>`
+            : '';
+
+        const unpricedWarningBadge = isUnpricedUnpaid 
+            ? `<span class="bg-amber-500/20 text-amber-500 dark:text-amber-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-amber-500/40 flex items-center gap-1 shrink-0"><i class="fa-solid fa-triangle-exclamation"></i> Set Price</span>` 
             : '';
 
         return `
         <div ontouchstart="handleCardTouchStart(event, this)" ontouchmove="handleCardTouchMove(event, this)" ontouchend="handleCardTouchEnd(event, ${index})" class="${cardStyleClass} border p-3 rounded-xl flex flex-col gap-2 transition-transform duration-75 relative select-none shadow-xs">
             <div class="flex items-start justify-between gap-2">
-                <div class="flex items-start gap-2 flex-1 min-w-0">
+                <div class="flex items-start gap-1.5 flex-1 min-w-0">
                     <input type="checkbox" onchange="toggleItemSelect(${index})" ${isSelected ? "checked" : ""} class="w-4 h-4 accent-blue-500 rounded cursor-pointer shrink-0 mt-0.5">
                     <span class="text-[10px] text-gray-400 dark:text-gray-500 font-bold shrink-0 mt-0.5">#${index + 1}</span>
-                    <span class="${itemNameClass}">${escapeHtml(item.name)}</span>
-                    ${boughtBadge}
-                    ${unpricedWarningBadge}
+                    <div class="flex items-center gap-1 flex-wrap flex-1 min-w-0">
+                        <span class="${itemNameClass}">${escapeHtml(item.name)}</span>
+                        <button type="button" onclick="window.openEditNameModal && window.openEditNameModal(${index})" class="text-blue-500 hover:text-blue-400 p-1 text-xs active:scale-90 shrink-0" title="Edit Item Name">
+                            <i class="fa-solid fa-pen text-[10px]"></i>
+                        </button>
+                        ${naBadge}
+                        ${boughtBadge}
+                        ${missingCategoryBadge}
+                        ${unpricedWarningBadge}
+                    </div>
                 </div>
                 <div class="text-right shrink-0">
-                    <span class="text-sm ${priceDisplayClass}">
-                        ${isPaid ? 'PAID (₱0.00)' : `₱${itemPrice.toFixed(2)}`}
+                    <span class="${priceDisplayClass}">
+                        ${priceDisplay}
                     </span>
                 </div>
             </div>
@@ -316,14 +355,17 @@ export function renderCartItems() {
                 </div>
 
                 <div class="flex items-center gap-1.5">
-                    <button onclick="toggleItemBought(${index})" class="px-2.5 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${boughtBtnClass}">
+                    <button onclick="toggleItemBought(${index})" class="px-2 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${boughtBtnClass}">
                         <i class="fa-solid fa-check"></i> ${isBought ? 'Bought' : 'Buy'}
                     </button>
-                    <button onclick="toggleItemPaid(${index})" class="px-2.5 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${paidBtnClass}">
+                    <button type="button" onclick="window.openAddPriceModal && window.openAddPriceModal(${index})" class="px-2 py-1 rounded-lg text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/20 dark:text-blue-300 dark:border-blue-500/30 transition active:scale-95 flex items-center gap-1 font-bold">
+                        <i class="fa-solid fa-tag"></i> Price
+                    </button>
+                    <button onclick="toggleItemPaid(${index})" class="px-2 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${paidBtnClass}">
                         <i class="fa-solid fa-receipt"></i> Paid
                     </button>
-                    <button onclick="editCartItem(${index})" class="text-blue-500 hover:text-blue-400 p-1 text-xs active:scale-90" title="Edit Item">
-                        <i class="fa-solid fa-pen"></i>
+                    <button onclick="toggleItemUnavailable(${index})" class="px-2 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${naBtnClass}" title="Mark as Not Available">
+                        <i class="fa-solid fa-ban"></i> N/A
                     </button>
                 </div>
             </div>
@@ -348,4 +390,14 @@ export function renderCartItems() {
             deleteBtnContainer.innerHTML = "";
         }
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.switchCartTab = switchCartTab;
+    window.resetToCartOne = resetToCartOne;
+    window.renderCartTabs = renderCartTabs;
+    window.renderCartCustomerSelector = renderCartCustomerSelector;
+    window.onCartCustomerSelected = onCartCustomerSelected;
+    window.handleOverlaySlideEnd = handleOverlaySlideEnd;
+    window.renderCartItems = renderCartItems;
 }
