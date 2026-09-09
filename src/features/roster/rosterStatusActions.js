@@ -18,6 +18,8 @@
  *    - `completeSingleCateringCustomer`: Enforces receipt verification, credits rider fees,
  *      logs to catered history, and transitions rider to Available when all orders finish.
  *    - `voidSingleCateringCustomer`: Cancels customer order, updates chat metadata, and cleans fees.
+ *    - `adminVoidSpecificCustomer`: Administrative wrapper with slide-delete modal verification
+ *      for Admins and authorized Team Leads.
  * 
  * 3. actions/rosterStatusSlider.js
  *    - Physical slide interaction controller for Rider state transitions.

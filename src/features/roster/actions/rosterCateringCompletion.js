@@ -3,6 +3,7 @@ import { db } from '../../../config/firebase.js';
 import { appState, globalState, multiCarts, activeCartSlot } from '../../../store/state.js';
 import { showToast, showSideNotification } from '../../../ui/notifications.js';
 import { switchView } from '../../../ui/router.js';
+import { openSlideDeleteModal } from '../../../ui/modals.js';
 import { endLiveGpsSession } from '../../liveTracker.js';
 import { getLocalTodayStr } from '../../../utils/helpers.js';
 import { 
@@ -13,7 +14,10 @@ import {
     isRiderMatch, 
     isCustomerMatch, 
     isSameDateStr, 
-    saveRosterCache 
+    saveRosterCache,
+    isAdmin,
+    canManageRoster,
+    hasTlPermission
 } from '../rosterUtils.js';
 import { updateRosterUI } from '../rosterUI.js';
 import { updateRosterStatusData } from '../rosterStatusCore.js';
@@ -270,9 +274,23 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
 }
 
 export async function voidSingleCateringCustomer(targetId, targetName, custNameToVoid) {
-    const rosterMembers = globalState.rosterMembers || [];
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+
     const cleanTargetId = (targetId || "").toString().trim();
     const cleanTargetName = (targetName || "").toString().trim().toLowerCase();
+
+    // 1. Authoritative Permission Verification Gate (Admin, Authorized TL, or Self)
+    const isMe = (myId && cleanTargetId && myId === cleanTargetId) || (myName && cleanTargetName && myName === cleanTargetName);
+    const hasAdminPower = isAdmin();
+    const hasTlVoidPower = hasTlPermission('canVoid') || hasTlPermission('canForceCater') || canManageRoster();
+
+    if (!isMe && !hasAdminPower && !hasTlVoidPower) {
+        showToast("🚫 Wala kang pahintulot na mag-void ng customer ng ibang rider.");
+        return;
+    }
+
+    const rosterMembers = globalState.rosterMembers || [];
 
     let targetRecord = rosterMembers.find(m => {
         const mId = (m.telegramId || m.id || "").toString().trim();
@@ -362,7 +380,8 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
                 isForcedCater: !!(targetRecord && targetRecord.isForcedCater)
             }
         );
-        showToast(`🚫 Voided [${custNameToVoid}]. ${remainingCusts.length} active customer(s) remaining.`);
+        showToast(`🚫 Na-void si [${custNameToVoid}]. ${remainingCusts.length} active customer(s) natitira kay ${resolvedTargetName}.`);
+        showSideNotification("ORDER VOIDED", `${custNameToVoid} was cancelled`, "fa-ban", "text-red-400", "border-red-500");
     } else {
         const topQueueTime = getTopQueueTime();
         if (db && resolvedTargetId) {
@@ -377,6 +396,11 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             targetRecord.forcedBy = null;
             targetRecord.isForcedCater = false;
         }
+
+        if (resolvedTargetId === myId) {
+            endLiveGpsSession();
+        }
+
         await updateRosterStatusData(
             'Available', 
             '', 
@@ -393,6 +417,33 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
                 isForcedCater: false
             }
         );
-        showToast(`🚫 Voided [${custNameToVoid}]. Moved to Available queue!`);
+        showToast(`🚫 Na-void si [${custNameToVoid}]. Inilipat si [${resolvedTargetName}] sa Available queue!`);
+        showSideNotification("ROTATION UPDATED", `${resolvedTargetName} is now Available`, "fa-motorcycle", "text-blue-400", "border-blue-500");
     }
+
+    saveRosterCache();
+    window.dispatchEvent(new CustomEvent('cateredUpdated'));
+    window.dispatchEvent(new CustomEvent('receiptsUpdated'));
+    window.dispatchEvent(new CustomEvent('rosterUpdated'));
+    updateRosterUI();
+}
+
+export function adminVoidSpecificCustomer(targetId, targetName, custName) {
+    if (!isAdmin() && !hasTlPermission('canVoid') && !canManageRoster()) {
+        return showToast("🚫 Access Denied: Admin or Team Lead authorization required.");
+    }
+
+    openSlideDeleteModal(
+        `Void Order: ${custName}?`,
+        `Sigurado ka bang nais mong i-void ang delivery ni ${custName} para kay ${targetName}?\nIto ay magkakansela sa order at mag-a-update sa kanyang rotation.`,
+        () => {
+            voidSingleCateringCustomer(targetId, targetName, custName);
+        }
+    );
+}
+
+if (typeof window !== 'undefined') {
+    window.completeSingleCateringCustomer = completeSingleCateringCustomer;
+    window.voidSingleCateringCustomer = voidSingleCateringCustomer;
+    window.adminVoidSpecificCustomer = adminVoidSpecificCustomer;
 }
