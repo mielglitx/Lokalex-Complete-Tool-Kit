@@ -268,7 +268,7 @@ export function renderCartItems() {
             : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white";
 
         const paidBtnClass = isPaid 
-            ? "bg-emerald-600/30 text-emerald-400 border border-emerald-500/50" 
+            ? "bg-emerald-600/30 text-emerald-400 border border-emerald-500/50 font-bold" 
             : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white";
 
         const naBtnClass = isUnavailable
@@ -321,7 +321,7 @@ export function renderCartItems() {
             : '';
 
         return `
-        <div ontouchstart="handleCardTouchStart(event, this)" ontouchmove="handleCardTouchMove(event, this)" ontouchend="handleCardTouchEnd(event, ${index})" class="${cardStyleClass} border p-3 rounded-xl flex flex-col gap-2 transition-transform duration-75 relative select-none shadow-xs">
+        <div ontouchstart="handleCardTouchStart(event, this)" ontouchmove="handleCardTouchMove(event, this)" ontouchend="handleCardTouchEnd(event, ${index})" class="${cardStyleClass} border p-3 rounded-xl flex flex-col gap-2.5 transition-transform duration-75 relative select-none shadow-xs">
             <div class="flex items-start justify-between gap-2">
                 <div class="flex items-start gap-1.5 flex-1 min-w-0">
                     <input type="checkbox" onchange="toggleItemSelect(${index})" ${isSelected ? "checked" : ""} class="w-4 h-4 accent-blue-500 rounded cursor-pointer shrink-0 mt-0.5">
@@ -344,28 +344,34 @@ export function renderCartItems() {
                 </div>
             </div>
 
-            <div class="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-800/60 text-xs">
-                <div class="flex gap-1">
-                    <button onclick="toggleItemCategory(${index}, 'store')" class="px-2.5 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${catStoreClass}">
-                        <i class="fa-solid fa-store"></i> Store
-                    </button>
-                    <button onclick="toggleItemCategory(${index}, 'market')" class="px-2.5 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${catMarketClass}">
-                        <i class="fa-solid fa-basket-shopping"></i> Market
+            <!-- TWO-TIER ACTION LAYOUT PREVENTING BUTTON OVERLAPS -->
+            <div class="flex flex-col gap-2 pt-2 border-t border-gray-200 dark:border-gray-800/60 text-xs">
+                <!-- Tier 1: Category Classification & Availability -->
+                <div class="flex items-center justify-between gap-1.5">
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="toggleItemCategory(${index}, 'store')" class="px-3 py-1.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${catStoreClass}">
+                            <i class="fa-solid fa-store"></i> Store
+                        </button>
+                        <button onclick="toggleItemCategory(${index}, 'market')" class="px-3 py-1.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${catMarketClass}">
+                            <i class="fa-solid fa-basket-shopping"></i> Market
+                        </button>
+                    </div>
+
+                    <button onclick="toggleItemUnavailable(${index})" class="px-2.5 py-1.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${naBtnClass}" title="Mark as Not Available">
+                        <i class="fa-solid fa-ban"></i> N/A
                     </button>
                 </div>
 
-                <div class="flex items-center gap-1.5">
-                    <button onclick="toggleItemBought(${index})" class="px-2 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${boughtBtnClass}">
+                <!-- Tier 2: Fulfillment & Pricing Operations -->
+                <div class="grid grid-cols-3 gap-1.5">
+                    <button onclick="toggleItemBought(${index})" class="py-1.5 px-2 rounded-lg text-[10px] transition active:scale-95 flex items-center justify-center gap-1 font-bold ${boughtBtnClass}">
                         <i class="fa-solid fa-check"></i> ${isBought ? 'Bought' : 'Buy'}
                     </button>
-                    <button type="button" onclick="window.openAddPriceModal && window.openAddPriceModal(${index})" class="px-2 py-1 rounded-lg text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/20 dark:text-blue-300 dark:border-blue-500/30 transition active:scale-95 flex items-center gap-1 font-bold">
+                    <button type="button" onclick="window.openAddPriceModal && window.openAddPriceModal(${index})" class="py-1.5 px-2 rounded-lg text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/20 dark:text-blue-300 dark:border-blue-500/30 transition active:scale-95 flex items-center justify-center gap-1 font-bold shadow-xs">
                         <i class="fa-solid fa-tag"></i> Price
                     </button>
-                    <button onclick="toggleItemPaid(${index})" class="px-2 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${paidBtnClass}">
+                    <button onclick="toggleItemPaid(${index})" class="py-1.5 px-2 rounded-lg text-[10px] transition active:scale-95 flex items-center justify-center gap-1 ${paidBtnClass}">
                         <i class="fa-solid fa-receipt"></i> Paid
-                    </button>
-                    <button onclick="toggleItemUnavailable(${index})" class="px-2 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${naBtnClass}" title="Mark as Not Available">
-                        <i class="fa-solid fa-ban"></i> N/A
                     </button>
                 </div>
             </div>
