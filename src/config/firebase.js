@@ -25,7 +25,115 @@ export const auth = fb ? fb.auth() : null;
 export const messaging = (fb && typeof fb.messaging === 'function' && fb.messaging.isSupported()) ? fb.messaging() : null;
 
 // ============================================================================
-// 2. DUAL-DATABASE PROXY ENGINE (REALTIME DUAL-WRITE & PRIMARY READ)
+// 2. OPTIMISTIC OFFLINE OUTBOX QUEUE ENGINE
+// ============================================================================
+
+const OUTBOX_STORAGE_KEY = 'lokalex_db_outbox';
+let isSyncInProgress = false;
+let isSocketConnected = navigator.onLine;
+
+function getOutbox() {
+    try {
+        return JSON.parse(localStorage.getItem(OUTBOX_STORAGE_KEY) || '[]');
+    } catch {
+        return [];
+    }
+}
+
+function saveOutbox(queue) {
+    try {
+        localStorage.setItem(OUTBOX_STORAGE_KEY, JSON.stringify(queue));
+    } catch (e) {
+        console.warn('Failed to save offline outbox queue:', e);
+    }
+    window.dispatchEvent(new CustomEvent('dbOutboxChanged', {
+        detail: { count: queue.length, isOnline: isSocketConnected }
+    }));
+}
+
+export function queueOfflineMutation(path, method, value) {
+    if (!path) return;
+    const cleanPath = path.replace(/^\/+/, '');
+    const queue = getOutbox();
+    queue.push({
+        id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        path: cleanPath,
+        method: method, // 'set', 'update', or 'remove'
+        value: value !== undefined ? value : null,
+        timestamp: Date.now()
+    });
+    saveOutbox(queue);
+}
+
+export async function drainOfflineOutbox() {
+    if (isSyncInProgress || !navigator.onLine || !primaryDb) return;
+    const queue = getOutbox();
+    if (queue.length === 0) return;
+
+    isSyncInProgress = true;
+    const remaining = [];
+
+    for (const item of queue) {
+        try {
+            const pRef = primaryDb.ref(item.path);
+            const bRef = backupDb ? backupDb.ref(item.path) : null;
+
+            if (item.method === 'set') {
+                await pRef.set(item.value);
+                if (bRef) bRef.set(item.value).catch(() => {});
+            } else if (item.method === 'update') {
+                await pRef.update(item.value);
+                if (bRef) bRef.update(item.value).catch(() => {});
+            } else if (item.method === 'remove') {
+                await pRef.remove();
+                if (bRef) bRef.remove().catch(() => {});
+            }
+        } catch (err) {
+            console.warn(`[Offline Outbox] Failed to replay mutation for ${item.path}:`, err);
+            remaining.push(item);
+        }
+    }
+
+    saveOutbox(remaining);
+    isSyncInProgress = false;
+
+    if (queue.length > 0 && remaining.length === 0) {
+        console.log('[Offline Outbox] All pending database mutations synced successfully.');
+    }
+}
+
+// Monitor real-time connection state for automatic outbox replay
+if (primaryDb) {
+    primaryDb.ref('.info/connected').on('value', (snap) => {
+        isSocketConnected = !!snap.val();
+        if (isSocketConnected) {
+            drainOfflineOutbox();
+        }
+    });
+}
+
+window.addEventListener('online', () => {
+    isSocketConnected = true;
+    drainOfflineOutbox();
+});
+
+window.addEventListener('offline', () => {
+    isSocketConnected = false;
+});
+
+function getRelativeRefPath(ref) {
+    if (!ref) return '';
+    try {
+        const rootStr = ref.root.toString().replace(/\/$/, '');
+        const fullStr = ref.toString().replace(/\/$/, '');
+        return fullStr.replace(rootStr, '').replace(/^\//, '');
+    } catch {
+        return ref.key || '';
+    }
+}
+
+// ============================================================================
+// 3. DUAL-DATABASE PROXY ENGINE (REALTIME DUAL-WRITE & PRIMARY READ)
 // ============================================================================
 
 function createRefWrapper(primaryRef, backupRef) {
@@ -51,9 +159,21 @@ function createRefWrapper(primaryRef, backupRef) {
             );
         },
 
-        // --- DUAL-WRITE OPERATIONS (SIMULTANEOUS MIRRORING) ---
+        // --- DUAL-WRITE OPERATIONS WITH OPTIMISTIC OFFLINE OUTBOX ---
         set(value, onComplete) {
-            const p = primaryRef.set(value, onComplete);
+            const relPath = getRelativeRefPath(primaryRef);
+
+            if (!navigator.onLine || !isSocketConnected) {
+                queueOfflineMutation(relPath, 'set', value);
+                if (typeof onComplete === 'function') onComplete(null);
+                return Promise.resolve();
+            }
+
+            const p = primaryRef.set(value, onComplete).catch((err) => {
+                queueOfflineMutation(relPath, 'set', value);
+                throw err;
+            });
+
             if (backupDb && backupRef) {
                 backupRef.set(value).catch((err) => {
                     console.warn(`[Backup DB Sync] set error on ${backupRef.toString()}:`, err.message);
@@ -62,7 +182,19 @@ function createRefWrapper(primaryRef, backupRef) {
             return p;
         },
         update(values, onComplete) {
-            const p = primaryRef.update(values, onComplete);
+            const relPath = getRelativeRefPath(primaryRef);
+
+            if (!navigator.onLine || !isSocketConnected) {
+                queueOfflineMutation(relPath, 'update', values);
+                if (typeof onComplete === 'function') onComplete(null);
+                return Promise.resolve();
+            }
+
+            const p = primaryRef.update(values, onComplete).catch((err) => {
+                queueOfflineMutation(relPath, 'update', values);
+                throw err;
+            });
+
             if (backupDb && backupRef) {
                 backupRef.update(values).catch((err) => {
                     console.warn(`[Backup DB Sync] update error on ${backupRef.toString()}:`, err.message);
@@ -71,7 +203,19 @@ function createRefWrapper(primaryRef, backupRef) {
             return p;
         },
         remove(onComplete) {
-            const p = primaryRef.remove(onComplete);
+            const relPath = getRelativeRefPath(primaryRef);
+
+            if (!navigator.onLine || !isSocketConnected) {
+                queueOfflineMutation(relPath, 'remove', null);
+                if (typeof onComplete === 'function') onComplete(null);
+                return Promise.resolve();
+            }
+
+            const p = primaryRef.remove(onComplete).catch((err) => {
+                queueOfflineMutation(relPath, 'remove', null);
+                throw err;
+            });
+
             if (backupDb && backupRef) {
                 backupRef.remove().catch((err) => {
                     console.warn(`[Backup DB Sync] remove error on ${backupRef.toString()}:`, err.message);
@@ -80,23 +224,16 @@ function createRefWrapper(primaryRef, backupRef) {
             return p;
         },
         push(value, onComplete) {
-            if (value !== undefined) {
-                const newPrimaryRef = primaryRef.push();
-                const newKey = newPrimaryRef.key;
-                const p = newPrimaryRef.set(value, onComplete);
+            const newPrimaryRef = primaryRef.push();
+            const newKey = newPrimaryRef.key;
+            const newBackupRef = backupDb && backupRef && newKey ? backupRef.child(newKey) : null;
+            const wrappedPush = createRefWrapper(newPrimaryRef, newBackupRef);
 
-                if (backupDb && backupRef && newKey) {
-                    backupRef.child(newKey).set(value).catch((err) => {
-                        console.warn(`[Backup DB Sync] push error on ${backupRef.toString()}:`, err.message);
-                    });
-                }
+            if (value !== undefined) {
+                wrappedPush.set(value, onComplete);
                 return newPrimaryRef;
-            } else {
-                const newPrimaryRef = primaryRef.push();
-                const newKey = newPrimaryRef.key;
-                const newBackupRef = backupDb && backupRef && newKey ? backupRef.child(newKey) : null;
-                return createRefWrapper(newPrimaryRef, newBackupRef);
             }
+            return wrappedPush;
         },
         transaction(transactionUpdate, onComplete, applyLocally) {
             return primaryRef.transaction((currentVal) => {
@@ -236,7 +373,7 @@ function createQueryWrapper(primaryQuery, backupRef) {
     return queryWrapper;
 }
 
-// 3. Centralized Database Proxy Export (Zero changes needed across the rest of the application)
+// 4. Centralized Database Proxy Export
 export const db = fb ? {
     ref(path = '') {
         const pRef = primaryDb ? primaryDb.ref(path) : null;

@@ -193,13 +193,23 @@
     <load src="src/partials/modals/rider-password-modal.html" />
     <load src="src/partials/modals/profile-settings-modal.html" />
 
-    <!-- ROBUST RELATIVE SERVICE WORKER REGISTRATION SCRIPT -->
+    <!-- STANDALONE PWA SERVICE WORKER REGISTRATION SCRIPT -->
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js', { scope: './' })
                     .then((reg) => {
-                        console.log('Service Worker registered successfully! Scope:', reg.scope);
+                        console.log('Lokalex Service Worker registered with scope:', reg.scope);
+                        reg.addEventListener('updatefound', () => {
+                            const newWorker = reg.installing;
+                            if (newWorker) {
+                                newWorker.addEventListener('statechange', () => {
+                                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                        console.log('New Lokalex update installed; active on next reload.');
+                                    }
+                                });
+                            }
+                        });
                     })
                     .catch((err) => {
                         console.error('Service Worker registration failed:', err);
