@@ -15,11 +15,142 @@ export function getSectionLetter(name) {
 }
 
 /**
+ * Minimizes the floating search overlay into the upper-right floating badge.
+ */
+export function minimizeDirectorySearch() {
+    const floatingBar = document.getElementById('dir-floating-search-bar');
+    const minSearchWrapper = document.getElementById('dir-min-search-wrapper');
+
+    if (floatingBar && !floatingBar.classList.contains('hidden')) {
+        floatingBar.classList.add('hidden');
+    }
+
+    if (minSearchWrapper && minSearchWrapper.classList.contains('hidden')) {
+        minSearchWrapper.classList.remove('hidden');
+    }
+}
+
+/**
+ * Hides all floating search widgets (badge and overlay bar).
+ */
+export function restoreDirectorySearch() {
+    const minSearchWrapper = document.getElementById('dir-min-search-wrapper');
+    const floatingBar = document.getElementById('dir-floating-search-bar');
+
+    if (minSearchWrapper && !minSearchWrapper.classList.contains('hidden')) {
+        minSearchWrapper.classList.add('hidden');
+    }
+
+    if (floatingBar && !floatingBar.classList.contains('hidden')) {
+        floatingBar.classList.add('hidden');
+    }
+}
+
+/**
+ * Expands the floating search bar overlay when tapping the minimized badge.
+ */
+export function expandDirectorySearch() {
+    const floatingBar = document.getElementById('dir-floating-search-bar');
+    const minSearchWrapper = document.getElementById('dir-min-search-wrapper');
+    const floatingInput = document.getElementById('floating-search-input');
+    const searchInput = document.getElementById('search-input');
+
+    if (minSearchWrapper) {
+        minSearchWrapper.classList.add('hidden');
+    }
+
+    if (floatingBar) {
+        floatingBar.classList.remove('hidden');
+    }
+
+    if (floatingInput) {
+        floatingInput.value = searchInput ? searchInput.value : '';
+        floatingInput.focus();
+    }
+}
+
+/**
+ * Synchronizes search text typed in the floating overlay with the main search input.
+ */
+export function syncAndFilterFloatingSearch(val) {
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        searchInput.value = val;
+    }
+    filterDirectoryRecords();
+}
+
+/**
+ * Attaches scroll monitoring with hysteresis to smoothly toggle the upper-right
+ * floating badge when the inline search bar scrolls out of bounds.
+ */
+export function initDirectoryScrollListener() {
+    const recordList = document.getElementById('record-list');
+
+    const handleScroll = () => {
+        const viewDir = document.getElementById('view-directory');
+        if (!viewDir || viewDir.classList.contains('hidden')) return;
+
+        const winScroll = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        const listScroll = recordList ? recordList.scrollTop : 0;
+        const currentScroll = Math.max(winScroll, listScroll);
+
+        const floatingBar = document.getElementById('dir-floating-search-bar');
+        const isFloatingOpen = floatingBar && !floatingBar.classList.contains('hidden');
+
+        // Hysteresis boundary: Out-of-bounds at >60px, back in-bounds at <=25px
+        if (currentScroll > 60) {
+            if (!isFloatingOpen) {
+                const minSearchWrapper = document.getElementById('dir-min-search-wrapper');
+                if (minSearchWrapper && minSearchWrapper.classList.contains('hidden')) {
+                    minSearchWrapper.classList.remove('hidden');
+                }
+            }
+        } else if (currentScroll <= 25) {
+            restoreDirectorySearch();
+        }
+    };
+
+    window.removeEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    if (recordList && recordList.dataset.scrollBound !== 'true') {
+        recordList.dataset.scrollBound = 'true';
+        recordList.addEventListener('scroll', handleScroll, { passive: true });
+    }
+}
+
+/**
  * Navigates to the directory view, dynamically updates titles, and renders cache.
+ * Cleanses search inputs and ensures the view starts clean at the top.
  */
 export async function openDirectory(type) {
     globalState.currentType = type || 'customers';
+
+    const searchInput = document.getElementById('search-input');
+    const floatingInput = document.getElementById('floating-search-input');
+    if (searchInput) searchInput.value = '';
+    if (floatingInput) floatingInput.value = '';
+
+    const clearBtn = document.getElementById('clear-search-btn');
+    const floatingClearBtn = document.getElementById('floating-clear-search-btn');
+    if (clearBtn) clearBtn.classList.add('hidden');
+    if (floatingClearBtn) floatingClearBtn.classList.add('hidden');
+
+    const minLabel = document.getElementById('dir-min-search-label');
+    const minIndicator = document.getElementById('dir-min-search-indicator');
+    if (minLabel) minLabel.innerText = "Search";
+    if (minIndicator) minIndicator.classList.add('hidden');
+
+    restoreDirectorySearch();
+
     switchView('view-directory');
+
+    window.scrollTo({ top: 0 });
+    const recordList = document.getElementById('record-list');
+    if (recordList) {
+        recordList.scrollTop = 0;
+    }
     
     const headerTitle = document.getElementById('header-title');
     if (headerTitle) {
@@ -30,9 +161,75 @@ export async function openDirectory(type) {
 
     loadDirectoryCache();
     renderDirectoryList();
+    initDirectoryScrollListener();
 }
 
+/**
+ * Filters directory records according to search input and updates badge labels.
+ */
 export function filterDirectoryRecords() {
+    const searchInput = document.getElementById('search-input');
+    const floatingInput = document.getElementById('floating-search-input');
+    const clearBtn = document.getElementById('clear-search-btn');
+    const floatingClearBtn = document.getElementById('floating-clear-search-btn');
+    const minLabel = document.getElementById('dir-min-search-label');
+    const minIndicator = document.getElementById('dir-min-search-indicator');
+
+    const activeVal = searchInput?.value || floatingInput?.value || '';
+    const query = activeVal.trim();
+
+    if (searchInput && searchInput.value !== activeVal) searchInput.value = activeVal;
+    if (floatingInput && floatingInput.value !== activeVal) floatingInput.value = activeVal;
+
+    if (clearBtn) {
+        if (query.length > 0) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
+    }
+
+    if (floatingClearBtn) {
+        if (query.length > 0) floatingClearBtn.classList.remove('hidden');
+        else floatingClearBtn.classList.add('hidden');
+    }
+
+    if (minLabel) {
+        minLabel.innerText = query ? query : "Search";
+    }
+
+    if (minIndicator) {
+        if (query) minIndicator.classList.remove('hidden');
+        else minIndicator.classList.add('hidden');
+    }
+
+    renderDirectoryList();
+}
+
+/**
+ * Clears the active search filter across both inputs and restores the full list.
+ */
+export function clearDirectorySearch() {
+    const searchInput = document.getElementById('search-input');
+    const floatingInput = document.getElementById('floating-search-input');
+    const clearBtn = document.getElementById('clear-search-btn');
+    const floatingClearBtn = document.getElementById('floating-clear-search-btn');
+    const minLabel = document.getElementById('dir-min-search-label');
+    const minIndicator = document.getElementById('dir-min-search-indicator');
+
+    if (searchInput) searchInput.value = '';
+    if (floatingInput) floatingInput.value = '';
+
+    if (clearBtn) clearBtn.classList.add('hidden');
+    if (floatingClearBtn) floatingClearBtn.classList.add('hidden');
+
+    if (minLabel) minLabel.innerText = "Search";
+    if (minIndicator) minIndicator.classList.add('hidden');
+
+    const floatingBar = document.getElementById('dir-floating-search-bar');
+    if (floatingBar && !floatingBar.classList.contains('hidden')) {
+        floatingInput?.focus();
+    } else {
+        searchInput?.focus();
+    }
+
     renderDirectoryList();
 }
 
@@ -54,7 +251,7 @@ export function copyBarangayRate(barangayName, rawRate) {
  */
 export function renderDirectoryList() {
     const listEl = document.getElementById('record-list');
-    const searchVal = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
+    const searchVal = (document.getElementById('floating-search-input')?.value || document.getElementById('search-input')?.value || '').toLowerCase().trim();
     if (!listEl) return;
 
     if (!globalState.records || globalState.records.length === 0) {
@@ -102,7 +299,7 @@ export function renderDirectoryList() {
             const headerLabel = letterHeader === "#" ? "# (Special & Foreign)" : letterHeader;
 
             htmlBuilder += `
-            <div id="dir-section-${letterHeader === "#" ? "SPECIAL" : letterHeader}" data-section="${letterHeader}" class="sticky top-0 z-10 bg-gray-100/95 dark:bg-darkBg/95 backdrop-blur-md text-amber-700 dark:text-amber-400 font-black text-xs px-2.5 py-1.5 border-b border-gray-200 dark:border-gray-800/80 my-1 flex items-center justify-between">
+            <div id="dir-section-${letterHeader === "#" ? "SPECIAL" : letterHeader}" data-section="${letterHeader}" class="sticky top-[48px] sm:top-[52px] z-20 bg-gray-100/95 dark:bg-darkBg/95 backdrop-blur-md text-amber-700 dark:text-amber-400 font-black text-xs px-2.5 py-1.5 border-b border-gray-200 dark:border-gray-800/80 my-1 flex items-center justify-between">
                 <span>${headerLabel}</span>
                 <span class="text-[9px] text-gray-500 dark:text-gray-400 font-medium">Section Header</span>
             </div>`;
@@ -114,7 +311,7 @@ export function renderDirectoryList() {
         }
 
         const deleteBtnHtml = isAdminUser 
-            ? `<button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-red-600 dark:text-red-400 p-2 rounded-lg text-xs transition active:scale-90" title="Delete">
+            ? `<button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-red-600 dark:text-red-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Delete">
                     <i class="fa-solid fa-trash"></i>
                </button>`
             : '';
@@ -135,10 +332,10 @@ export function renderDirectoryList() {
                     ${metaInfoHtml}
                 </div>
                 <div class="flex gap-1.5 shrink-0">
-                    <button onclick="copyBarangayRate('${escapeHtml(r.name)}', '${escapeHtml(displayRate)}')" class="bg-blue-50 hover:bg-blue-100 dark:bg-blue-600/30 dark:hover:bg-blue-600 text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-white border border-blue-200 dark:border-blue-500/50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1" title="Copy Rate Message">
+                    <button onclick="copyBarangayRate('${escapeHtml(r.name)}', '${escapeHtml(displayRate)}')" class="bg-blue-50 hover:bg-blue-100 dark:bg-blue-600/30 dark:hover:bg-blue-600 text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-white border border-blue-200 dark:border-blue-500/50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1 cursor-pointer" title="Copy Rate Message">
                         <i class="fa-solid fa-copy"></i> Copy
                     </button>
-                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
+                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
                     ${deleteBtnHtml}
@@ -155,7 +352,7 @@ export function renderDirectoryList() {
                     ${metaInfoHtml}
                 </div>
                 <div class="flex gap-1 shrink-0">
-                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90" title="Edit">
+                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
                     ${deleteBtnHtml}

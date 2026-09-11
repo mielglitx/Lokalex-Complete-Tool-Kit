@@ -8,11 +8,24 @@ import { prefetchMediaBatch } from '../../utils/storageEngine.js';
 import { saveDirectoryCache, loadDirectoryCache } from './directoryStorage.js';
 import { renderDirectoryList } from './directoryUi.js';
 
+const SYNC_TTL_KEY = 'lokalex_dir_last_sync_timestamp';
+const SYNC_TTL_MS = 6 * 60 * 60 * 1000; // 6 Hours cache window to prevent repeated bandwidth egress
+
 /**
- * Silently merges directory and customer collections from Firebase into the local cache.
+ * Silently syncs directory data ONLY if the local cache has expired or is empty.
+ * Prevents continuous multi-megabyte full-tree downloads on every page reload.
  */
 export async function silentSyncDirectory() {
     if (!db) return;
+
+    const lastSync = parseInt(localStorage.getItem(SYNC_TTL_KEY) || "0", 10);
+    const now = Date.now();
+    const hasLocalRecords = Array.isArray(globalState.records) && globalState.records.length > 5;
+
+    // Skip bandwidth-heavy database fetches if local data is fresh
+    if (hasLocalRecords && (now - lastSync < SYNC_TTL_MS)) {
+        return;
+    }
 
     try {
         const types = ['customers', 'stores', 'barangays'];
@@ -25,6 +38,7 @@ export async function silentSyncDirectory() {
             }
         });
 
+        // Batch fetch directory collections
         for (const type of types) {
             const snap = await db.ref(`directory/${type}`).once('value');
             const fbData = snap.val();
@@ -48,35 +62,11 @@ export async function silentSyncDirectory() {
             }
         }
 
-        try {
-            const custSnap = await db.ref('customers').once('value');
-            const custVal = custSnap.val();
-            if (custVal) {
-                Object.values(custVal).forEach(c => {
-                    const name = (c.name || "").trim();
-                    if (name) {
-                        const key = `customers_${name.toLowerCase()}`;
-                        const existing = updatedRecordsMap.get(key) || {};
-                        updatedRecordsMap.set(key, {
-                            name: name,
-                            contact: (c.phoneNumber || existing.contact || "").trim(),
-                            address: (c.address || existing.address || "").trim(),
-                            rate: existing.rate || "",
-                            lat_lon_link: (c.mapPinLink || existing.lat_lon_link || (c.lat && c.lng ? `https://www.google.com/maps/search/?api=1&query=${c.lat},${c.lng}` : "")).trim(),
-                            type: 'customers',
-                            recorded_by: existing.recorded_by || "App Registered",
-                            recorded_at: existing.recorded_at || getLocalTodayStr(),
-                            photoUrl: c.photoUrl || c.avatarUrl || ""
-                        });
-                    }
-                });
-            }
-        } catch (e) {}
-
         const finalMerged = Array.from(updatedRecordsMap.values());
         if (finalMerged.length > 0) {
             globalState.records = finalMerged;
             saveDirectoryCache();
+            localStorage.setItem(SYNC_TTL_KEY, now.toString());
 
             const avatarUrls = finalMerged.map(r => r.photoUrl).filter(Boolean);
             if (avatarUrls.length > 0) prefetchMediaBatch(avatarUrls);
@@ -92,7 +82,7 @@ export async function silentSyncDirectory() {
 }
 
 /**
- * Triggers manual dual-source synchronization (GAS API + Firebase) with animated visual feedback.
+ * Triggers manual dual-source synchronization (GAS API + Firebase) when explicitly requested.
  */
 export async function syncData(isSilent = false) {
     const type = globalState.currentType || 'customers';
@@ -150,7 +140,7 @@ export async function syncData(isSilent = false) {
             }
         }
     } catch (err) {
-        console.warn("Offline/Network error syncing directory, preserving local cache...");
+        console.warn("Network error during manual sync, using cache...");
     }
 
     if (db) {
@@ -182,6 +172,7 @@ export async function syncData(isSilent = false) {
             const otherTypeRecords = (globalState.records || []).filter(r => r.type !== type);
             globalState.records = [...otherTypeRecords, ...fetchedRecords];
             saveDirectoryCache();
+            localStorage.setItem(SYNC_TTL_KEY, Date.now().toString());
 
             if (!isSilent) {
                 showToast(`✅ ${displayTypeLabel} Directory updated (${fetchedRecords.length} records)!`);

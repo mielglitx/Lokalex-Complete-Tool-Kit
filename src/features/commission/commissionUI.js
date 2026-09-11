@@ -13,70 +13,107 @@ export let viewSettings = {
 };
 
 let isCommissionListenerActive = false;
+let activeListenerDate = "";
 
+/**
+ * Attaches real-time listeners scoped strictly to today's date.
+ * Prevents continuous multi-megabyte egress by stopping full-database broadcasts.
+ */
 export function initCommissionLiveListeners() {
-    if (isCommissionListenerActive || !db) return;
+    if (!db) return;
+
+    const todayStr = getLocalTodayStr();
+    if (isCommissionListenerActive && activeListenerDate === todayStr) return;
+
+    // Detach any previous root listeners to prevent socket data leakage
+    try {
+        db.ref('receipts').off();
+        db.ref('cateredHistory').off();
+    } catch(e) {}
+
     isCommissionListenerActive = true;
+    activeListenerDate = todayStr;
 
-    db.ref('receipts').on('value', (snapshot) => {
-        const val = snapshot.val();
-        if (val) {
-            globalState.globalDailyReceipts = Object.entries(val).map(([k, v]) => ({
+    // Server-side filtered listener: downloads ONLY today's receipts
+    db.ref('receipts')
+        .orderByChild('date')
+        .equalTo(todayStr)
+        .on('value', (snapshot) => {
+            const val = snapshot.val();
+            const todayRecords = val ? Object.entries(val).map(([k, v]) => ({
                 id: k,
                 transactionId: v.transactionId || k,
                 ...v
-            }));
-        } else {
-            globalState.globalDailyReceipts = [];
-        }
-        saveRosterCache();
-        refreshCommissionView();
-        window.dispatchEvent(new CustomEvent('rosterUpdated'));
-    });
+            })) : [];
 
-    db.ref('cateredHistory').on('value', (snapshot) => {
-        const val = snapshot.val();
-        if (val) {
-            globalState.globalCateredHistory = Object.entries(val).map(([k, v]) => ({
+            // Merge today's fresh records into existing local cache without wiping historical cache
+            const nonTodayExisting = (globalState.globalDailyReceipts || []).filter(r => !isSameDateStr(r.date || r.completedDate, todayStr));
+            globalState.globalDailyReceipts = [...nonTodayExisting, ...todayRecords];
+
+            saveRosterCache();
+            refreshCommissionView();
+            window.dispatchEvent(new CustomEvent('rosterUpdated'));
+        });
+
+    // Server-side filtered listener: downloads ONLY today's completed deliveries
+    db.ref('cateredHistory')
+        .orderByChild('completedDate')
+        .equalTo(todayStr)
+        .on('value', (snapshot) => {
+            const val = snapshot.val();
+            const todayCatered = val ? Object.entries(val).map(([k, v]) => ({
                 id: k,
                 transactionId: v.transactionId || k,
                 ...v
-            }));
-        } else {
-            globalState.globalCateredHistory = [];
-        }
-        saveRosterCache();
-        refreshCommissionView();
-        window.dispatchEvent(new CustomEvent('rosterUpdated'));
-    });
+            })) : [];
+
+            const nonTodayExisting = (globalState.globalCateredHistory || []).filter(h => !isSameDateStr(h.completedDate || h.date, todayStr));
+            globalState.globalCateredHistory = [...nonTodayExisting, ...todayCatered];
+
+            saveRosterCache();
+            refreshCommissionView();
+            window.dispatchEvent(new CustomEvent('rosterUpdated'));
+        });
 }
 
 initCommissionLiveListeners();
 
+/**
+ * Fetches recent records bounded by a 200-item limit.
+ * Protects bandwidth by capping maximum history download to ~150KB instead of tens of megabytes.
+ */
 export async function fetchCommissionData() {
     if (!db) return;
     try {
         const [rcptSnap, catSnap] = await Promise.all([
-            db.ref('receipts').once('value'),
-            db.ref('cateredHistory').once('value')
+            db.ref('receipts').limitToLast(200).once('value'),
+            db.ref('cateredHistory').limitToLast(200).once('value')
         ]);
 
         const rcptVal = rcptSnap.val();
         if (rcptVal) {
-            globalState.globalDailyReceipts = Object.entries(rcptVal).map(([k, v]) => ({
+            const fetchedList = Object.entries(rcptVal).map(([k, v]) => ({
                 id: k,
                 transactionId: v.transactionId || k,
                 ...v
             }));
+            const recordMap = new Map();
+            (globalState.globalDailyReceipts || []).forEach(r => recordMap.set(r.transactionId || r.id, r));
+            fetchedList.forEach(r => recordMap.set(r.transactionId || r.id, r));
+            globalState.globalDailyReceipts = Array.from(recordMap.values());
         }
 
         const catVal = catSnap.val();
         if (catVal) {
-            globalState.globalCateredHistory = Object.entries(catVal).map(([k, v]) => ({
+            const fetchedHistory = Object.entries(catVal).map(([k, v]) => ({
                 id: k,
                 transactionId: v.transactionId || k,
                 ...v
             }));
+            const histMap = new Map();
+            (globalState.globalCateredHistory || []).forEach(h => histMap.set(h.transactionId || h.id, h));
+            fetchedHistory.forEach(h => histMap.set(h.transactionId || h.id, h));
+            globalState.globalCateredHistory = Array.from(histMap.values());
         }
 
         saveRosterCache();
@@ -92,7 +129,6 @@ export function getCleanRiderList() {
         return list.find(r => isRiderMatch(r.name, name, r.id, id));
     };
 
-    // 1. Seed with active roster members as primary source of truth
     (globalState.rosterMembers || []).forEach(r => {
         const name = (r.riderName || r.name || "").trim();
         const id = (r.telegramId || r.id || "").toString().trim();
@@ -108,7 +144,6 @@ export function getCleanRiderList() {
         }
     });
 
-    // 2. Cross-reference catered history records
     (globalState.globalCateredHistory || []).forEach(h => {
         const name = (h.riderName || "").trim();
         const id = (h.telegramId || h.riderId || "").toString().trim();
@@ -124,7 +159,6 @@ export function getCleanRiderList() {
         }
     });
 
-    // 3. Cross-reference daily receipt records
     (globalState.globalDailyReceipts || []).forEach(rc => {
         const name = (rc.riderName || "").trim();
         const id = (rc.telegramId || rc.riderId || "").toString().trim();
@@ -140,7 +174,6 @@ export function getCleanRiderList() {
         }
     });
 
-    // 4. Cross-reference custom rider rates settings
     if (globalState.globalRiderRates) {
         Object.keys(globalState.globalRiderRates).forEach(nameKey => {
             const name = nameKey.trim();
@@ -184,10 +217,10 @@ export function setupAdminControls() {
         if (!addBtn) {
             const btnHtml = `
             <div class="flex gap-2 mt-2">
-                <button id="admin-add-comm-btn" onclick="promptAdminAddCommissionRecord()" class="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-emerald-500/50 text-[11px] font-bold py-2 px-2 rounded-xl transition active:scale-95 flex items-center justify-center gap-1 shadow-xs">
+                <button id="admin-add-comm-btn" onclick="promptAdminAddCommissionRecord()" class="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-emerald-500/50 text-[11px] font-bold py-2 px-2 rounded-xl transition active:scale-95 flex items-center justify-center gap-1 shadow-xs cursor-pointer">
                     <i class="fa-solid fa-plus-circle"></i> + Manual Record
                 </button>
-                <button id="admin-add-penalty-btn" onclick="openAdminPenaltyModal()" class="flex-1 bg-red-50 hover:bg-red-100 text-red-800 border border-red-300 dark:bg-red-600/30 dark:hover:bg-red-600 dark:text-red-300 dark:border-red-500/50 text-[11px] font-bold py-2 px-2 rounded-xl transition active:scale-95 flex items-center justify-center gap-1 shadow-xs">
+                <button id="admin-add-penalty-btn" onclick="openAdminPenaltyModal()" class="flex-1 bg-red-50 hover:bg-red-100 text-red-800 border border-red-300 dark:bg-red-600/30 dark:hover:bg-red-600 dark:text-red-300 dark:border-red-500/50 text-[11px] font-bold py-2 px-2 rounded-xl transition active:scale-95 flex items-center justify-center gap-1 shadow-xs cursor-pointer">
                     <i class="fa-solid fa-gavel"></i> + Date Penalty
                 </button>
             </div>`;
@@ -206,11 +239,11 @@ export function setCommissionMode(mode) {
     const btnCompany = document.getElementById('comm-mode-company');
     
     if (mode === 'earned') {
-        if (btnEarned) btnEarned.className = "flex-1 py-2 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 dark:bg-emerald-600/20 dark:text-emerald-400 dark:border-emerald-500/50 font-black transition shadow-xs";
-        if (btnCompany) btnCompany.className = "flex-1 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition";
+        if (btnEarned) btnEarned.className = "flex-1 py-2 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 dark:bg-emerald-600/20 dark:text-emerald-400 dark:border-emerald-500/50 font-black transition shadow-xs cursor-pointer";
+        if (btnCompany) btnCompany.className = "flex-1 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer";
     } else {
-        if (btnCompany) btnCompany.className = "flex-1 py-2 rounded-lg bg-red-50 text-red-800 border border-red-300 dark:bg-red-600/20 dark:text-red-400 dark:border-red-500/50 font-black transition shadow-xs";
-        if (btnEarned) btnEarned.className = "flex-1 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition";
+        if (btnCompany) btnCompany.className = "flex-1 py-2 rounded-lg bg-red-50 text-red-800 border border-red-300 dark:bg-red-600/20 dark:text-red-400 dark:border-red-500/50 font-black transition shadow-xs cursor-pointer";
+        if (btnEarned) btnEarned.className = "flex-1 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer";
     }
     
     refreshCommissionView();
@@ -223,10 +256,10 @@ export function setCommissionPeriod(period) {
         const btn = document.getElementById(`comm-period-${p}`);
         const input = document.getElementById(`comm-input-${p}`);
         if (p === period) {
-            if (btn) btn.className = "py-1.5 rounded-lg bg-blue-600 text-white font-bold transition shadow";
+            if (btn) btn.className = "py-1.5 rounded-lg bg-blue-600 text-white font-bold transition shadow cursor-pointer";
             if (input) input.classList.remove('hidden');
         } else {
-            if (btn) btn.className = "py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition";
+            if (btn) btn.className = "py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer";
             if (input) input.classList.add('hidden');
         }
     });
@@ -404,7 +437,7 @@ export function checkSettlementStatus(riderId, period, dateVal, isAdmin) {
             if (isAdmin) {
                 adminBtn.classList.remove('hidden');
                 adminBtn.innerHTML = `<i class="fa-solid fa-rotate-left"></i> REVERT TO UNPAID`;
-                adminBtn.className = "w-full bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-300 font-black py-3 rounded-xl text-xs transition active:scale-95 shadow mt-1 border border-gray-300 dark:border-gray-700";
+                adminBtn.className = "w-full bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-300 font-black py-3 rounded-xl text-xs transition active:scale-95 shadow mt-1 border border-gray-300 dark:border-gray-700 cursor-pointer";
             } else {
                 adminBtn.classList.add('hidden');
             }
@@ -414,7 +447,7 @@ export function checkSettlementStatus(riderId, period, dateVal, isAdmin) {
             if (isAdmin) {
                 adminBtn.classList.remove('hidden');
                 adminBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> MARK AS PAID`;
-                adminBtn.className = "w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl text-xs transition active:scale-95 shadow-lg mt-1 border border-emerald-400/50";
+                adminBtn.className = "w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl text-xs transition active:scale-95 shadow-lg mt-1 border border-emerald-400/50 cursor-pointer";
             } else {
                 adminBtn.classList.add('hidden');
             }
@@ -499,11 +532,11 @@ export function renderRiderSummaryList(riderListArray) {
                 if (c.time) dateTimeStr += ` • ${c.time}`;
 
                 const editBtn = isAdmin 
-                    ? `<button onclick="event.stopPropagation(); promptAdminEditCustomerFee('${escapeHtml(rider.name)}', '${escapeHtml(c.customerName)}', '${c.date}', ${c.gross})" class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 ml-1.5 p-0.5" title="Edit Fee"><i class="fa-solid fa-pen text-[10px]"></i></button>` 
+                    ? `<button onclick="event.stopPropagation(); promptAdminEditCustomerFee('${escapeHtml(rider.name)}', '${escapeHtml(c.customerName)}', '${c.date}', ${c.gross})" class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 ml-1.5 p-0.5 cursor-pointer" title="Edit Fee"><i class="fa-solid fa-pen text-[10px]"></i></button>` 
                     : ``;
 
                 const deleteBtn = isAdmin 
-                    ? `<button onclick="event.stopPropagation(); promptAdminDeleteCommissionRecord('${escapeHtml(rider.name)}', '${escapeHtml(c.customerName)}', '${c.date}', '${c.transactionId}')" class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 ml-1 p-0.5" title="Delete Record"><i class="fa-solid fa-trash text-[10px]"></i></button>` 
+                    ? `<button onclick="event.stopPropagation(); promptAdminDeleteCommissionRecord('${escapeHtml(rider.name)}', '${escapeHtml(c.customerName)}', '${c.date}', '${c.transactionId}')" class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 ml-1 p-0.5 cursor-pointer" title="Delete Record"><i class="fa-solid fa-trash text-[10px]"></i></button>` 
                     : ``;
 
                 return `
@@ -529,11 +562,11 @@ export function renderRiderSummaryList(riderListArray) {
         const penaltyBadge = rates.penaltyPerc > 0 
             ? `<div class="flex items-center justify-between bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-500/40 px-2.5 py-1 rounded-xl text-[10px] text-red-700 dark:text-red-300 font-bold my-1 shadow-xs">
                 <span><i class="fa-solid fa-gavel text-red-600 dark:text-red-400"></i> Date Penalty Active (+${rates.penaltyPerc}% to Company)</span>
-                ${isAdmin ? `<button onclick="event.stopPropagation(); removeAdminPenalty('${escapeHtml(rider.name)}', '${viewSettings.dateValue}')" class="text-red-800 dark:text-white hover:underline ml-2 font-black"><i class="fa-solid fa-trash"></i> Remove</button>` : ''}
+                ${isAdmin ? `<button onclick="event.stopPropagation(); removeAdminPenalty('${escapeHtml(rider.name)}', '${viewSettings.dateValue}')" class="text-red-800 dark:text-white hover:underline ml-2 font-black cursor-pointer"><i class="fa-solid fa-trash"></i> Remove</button>` : ''}
                </div>`
             : '';
 
-        const promoBadge = rates.promoDiscountPerc > 0
+        const promoBadge = rates.promoDiscountPerc > 0 
             ? `<div class="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-500/40 px-2.5 py-1 rounded-xl text-[10px] text-emerald-800 dark:text-emerald-300 font-bold my-1 shadow-xs">
                 <span><i class="fa-solid fa-tags text-emerald-600 dark:text-emerald-400"></i> Special Promo Active (-${rates.promoDiscountPerc}% Commission Less)</span>
                </div>`

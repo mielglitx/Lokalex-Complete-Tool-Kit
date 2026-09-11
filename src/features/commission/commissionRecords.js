@@ -86,14 +86,19 @@ export function removeAdminPenalty(riderName, targetDate) {
     openSlideDeleteModal(`Tanggalin ang Date Penalty?`, `Sigurado ka bang tanggalin ang +commission penalty para kay ${riderName} sa ${targetDate}?`, () => {
         if (db) {
             db.ref(`commissionPenalties/${penaltyKey}`).remove();
-            db.ref('commissionPenalties').once('value', (snap) => {
-                const val = snap.val() || {};
-                Object.entries(val).forEach(([key, rec]) => {
-                    if (isSameDateStr(rec.date, targetDate) && isRiderMatch(riderName, rec.riderName || key.split('_')[0])) {
-                        db.ref(`commissionPenalties/${key}`).remove();
-                    }
+            
+            // Bandwidth Optimization: Server-side query restricted to target date only
+            db.ref('commissionPenalties')
+                .orderByChild('date')
+                .equalTo(targetDate)
+                .once('value', (snap) => {
+                    const val = snap.val() || {};
+                    Object.entries(val).forEach(([key, rec]) => {
+                        if (isRiderMatch(riderName, rec.riderName || key.split('_')[0])) {
+                            db.ref(`commissionPenalties/${key}`).remove();
+                        }
+                    });
                 });
-            });
         }
         if (globalState.globalCommissionPenalties) {
             delete globalState.globalCommissionPenalties[penaltyKey];
@@ -205,7 +210,7 @@ export function promptAdminDeleteCommissionRecord(riderName, customerName, dateV
     );
 }
 
-// STRICT SINGLE-ID DELETION: Never deletes other records of the same customer/rider
+// STRICT SINGLE-ID DELETION: Targeted deletion preventing full-database scans
 export async function executeDeleteCommissionRecord(riderName, customerName, dateVal, txId) {
     const cleanRider = (riderName || "").toLowerCase().trim();
 
@@ -221,7 +226,6 @@ export async function executeDeleteCommissionRecord(riderName, customerName, dat
             await db.ref('receipts/' + txId).remove();
             await db.ref('cateredHistory/' + txId).remove();
 
-            // In case Firebase key differs from txId
             db.ref('receipts').orderByChild('transactionId').equalTo(txId).once('value', (snap) => {
                 snap.forEach(child => child.ref.remove());
             });
@@ -249,35 +253,43 @@ export async function executeDeleteCommissionRecord(riderName, customerName, dat
         }
 
         if (db) {
-            db.ref('receipts').once('value', (snapshot) => {
-                const data = snapshot.val();
-                if (data) {
-                    Object.keys(data).forEach(key => {
-                        const item = data[key];
-                        const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
-                        const matchCust = isCustomerMatch(item.customerName, customerName);
-                        const matchDate = isSameDateStr(item.date || item.completedDate, dateVal);
-                        if (matchRider && matchCust && matchDate) {
-                            db.ref('receipts/' + key).remove();
-                        }
-                    });
-                }
-            });
+            const queryDate = dateVal || getLocalTodayStr();
 
-            db.ref('cateredHistory').once('value', (snapshot) => {
-                const data = snapshot.val();
-                if (data) {
-                    Object.keys(data).forEach(key => {
-                        const item = data[key];
-                        const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
-                        const matchCust = isCustomerMatch(item.customerName, customerName);
-                        const matchDate = isSameDateStr(item.completedDate || item.date, dateVal);
-                        if (matchRider && matchCust && matchDate) {
-                            db.ref('cateredHistory/' + key).remove();
-                        }
-                    });
-                }
-            });
+            // Bandwidth Optimization: Server-side date query instead of downloading all receipts
+            db.ref('receipts')
+                .orderByChild('date')
+                .equalTo(queryDate)
+                .once('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        Object.keys(data).forEach(key => {
+                            const item = data[key];
+                            const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
+                            const matchCust = isCustomerMatch(item.customerName, customerName);
+                            if (matchRider && matchCust) {
+                                db.ref('receipts/' + key).remove();
+                            }
+                        });
+                    }
+                });
+
+            // Bandwidth Optimization: Server-side date query instead of downloading all cateredHistory
+            db.ref('cateredHistory')
+                .orderByChild('completedDate')
+                .equalTo(queryDate)
+                .once('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        Object.keys(data).forEach(key => {
+                            const item = data[key];
+                            const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
+                            const matchCust = isCustomerMatch(item.customerName, customerName);
+                            if (matchRider && matchCust) {
+                                db.ref('cateredHistory/' + key).remove();
+                            }
+                        });
+                    }
+                });
         }
     }
 
@@ -309,21 +321,25 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
         }
     });
 
+    // Bandwidth Optimization: Server-side date query instead of downloading full receipts root
     if (db) {
-        db.ref('receipts').once('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                Object.keys(data).forEach(key => {
-                    const item = data[key];
-                    const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
-                    const matchCust = isCustomerMatch(item.customerName, customerName);
-                    const matchDate = isSameDateStr(item.date || item.completedDate, dateVal);
-                    if (matchRider && matchCust && matchDate) {
-                        db.ref('receipts/' + key).update({ totalFees: parsedFee });
-                    }
-                });
-            }
-        });
+        const queryDate = dateVal || getLocalTodayStr();
+        db.ref('receipts')
+            .orderByChild('date')
+            .equalTo(queryDate)
+            .once('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    Object.keys(data).forEach(key => {
+                        const item = data[key];
+                        const matchRider = (item.riderName || "").toLowerCase().trim() === cleanRider;
+                        const matchCust = isCustomerMatch(item.customerName, customerName);
+                        if (matchRider && matchCust) {
+                            db.ref('receipts/' + key).update({ totalFees: parsedFee });
+                        }
+                    });
+                }
+            });
     }
 
     saveRosterCache();

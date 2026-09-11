@@ -219,15 +219,16 @@ export async function submitAdminForceCatering() {
         }).catch(() => {});
     }
 
+    // Bandwidth Optimization: Server-side filter to target only matching customer chat node
     if (db && custName) {
-        const cleanSearchName = custName.toLowerCase().trim();
-        db.ref('customerChats').once('value', (snapshot) => {
-            const chats = snapshot.val();
-            if (chats) {
-                Object.keys(chats).forEach(custId => {
-                    const meta = chats[custId]?.metadata || chats[custId] || {};
-                    const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
-                    if (chatCustName && chatCustName === cleanSearchName) {
+        const cleanSearchName = custName.trim();
+        db.ref('customerChats')
+            .orderByChild('metadata/customerName')
+            .equalTo(cleanSearchName)
+            .once('value', (snapshot) => {
+                const chats = snapshot.val();
+                if (chats) {
+                    Object.keys(chats).forEach(custId => {
                         db.ref(`customerChats/${custId}/metadata`).update({
                             folder: 'catering',
                             cateredByRiderId: targetId,
@@ -237,10 +238,9 @@ export async function submitAdminForceCatering() {
                             isForcedCater: true,
                             lastUpdated: Date.now()
                         });
-                    }
-                });
-            }
-        });
+                    });
+                }
+            });
     }
 
     await updateRosterStatusData(
@@ -387,6 +387,10 @@ export function promptVoidCustomer(riderName, customerName, completedDate = "", 
     );
 }
 
+/**
+ * Executes catered record voiding.
+ * Bandwidth-optimized: Uses direct ID deletes and date-scoped queries.
+ */
 export async function executeVoidCateredCustomer(riderName, customerName, completedDate = "", startTime = "", transactionId = "") {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
@@ -396,39 +400,35 @@ export async function executeVoidCateredCustomer(riderName, customerName, comple
 
     try {
         if (db) {
-            if (transactionId) {
-                await db.ref(`cateredHistory/${transactionId}`).remove().catch(() => {});
-                await db.ref(`receipts/${transactionId}`).remove().catch(() => {});
-            }
-
-            const snap = await db.ref('cateredHistory').once('value');
-            const data = snap.val() || {};
             const deletePromises = [];
 
-            Object.entries(data).forEach(([key, v]) => {
-                const rMatch = (v.riderName || "").trim().toLowerCase() === cleanRider;
-                const cMatch = (v.customerName || "").trim().toLowerCase() === cleanCust;
-                const dMatch = !completedDate || isSameDate(v.completedDate || v.date, completedDate);
-                const sMatch = !startTime || (v.startTime || "").trim() === startTime.trim();
-                const txMatch = transactionId && (v.transactionId === transactionId || v.id === transactionId || key === transactionId);
+            if (transactionId) {
+                deletePromises.push(db.ref(`cateredHistory/${transactionId}`).remove());
+                deletePromises.push(db.ref(`receipts/${transactionId}`).remove());
+            }
 
-                if (txMatch || (rMatch && cMatch && (dMatch || sMatch))) {
-                    deletePromises.push(db.ref(`cateredHistory/${key}`).remove());
-                }
-            });
+            if (completedDate) {
+                const snap = await db.ref('cateredHistory').orderByChild('completedDate').equalTo(completedDate).once('value');
+                const data = snap.val() || {};
+                Object.entries(data).forEach(([key, v]) => {
+                    const rMatch = (v.riderName || "").trim().toLowerCase() === cleanRider;
+                    const cMatch = (v.customerName || "").trim().toLowerCase() === cleanCust;
+                    const sMatch = !startTime || (v.startTime || "").trim() === startTime.trim();
+                    if (rMatch && cMatch && sMatch) {
+                        deletePromises.push(db.ref(`cateredHistory/${key}`).remove());
+                    }
+                });
 
-            const rcptSnap = await db.ref('receipts').once('value');
-            const rcptData = rcptSnap.val() || {};
-            Object.entries(rcptData).forEach(([key, r]) => {
-                const rMatch = (r.riderName || "").trim().toLowerCase() === cleanRider;
-                const cMatch = (r.customerName || "").trim().toLowerCase() === cleanCust;
-                const dMatch = !completedDate || isSameDate(r.date || r.completedDate, completedDate);
-                const txMatch = transactionId && (r.transactionId === transactionId || key === transactionId);
-
-                if (txMatch || (rMatch && cMatch && dMatch)) {
-                    deletePromises.push(db.ref(`receipts/${key}`).remove());
-                }
-            });
+                const rcptSnap = await db.ref('receipts').orderByChild('date').equalTo(completedDate).once('value');
+                const rcptData = rcptSnap.val() || {};
+                Object.entries(rcptData).forEach(([key, r]) => {
+                    const rMatch = (r.riderName || "").trim().toLowerCase() === cleanRider;
+                    const cMatch = (r.customerName || "").trim().toLowerCase() === cleanCust;
+                    if (rMatch && cMatch) {
+                        deletePromises.push(db.ref(`receipts/${key}`).remove());
+                    }
+                });
+            }
 
             const targetRoster = (globalState.rosterMembers || []).find(m => (m.riderName || m.name || "").trim().toLowerCase() === cleanRider);
             if (targetRoster && (targetRoster.telegramId || targetRoster.id) && cleanCustKey) {

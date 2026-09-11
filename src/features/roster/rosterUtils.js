@@ -528,6 +528,10 @@ export function sortAvailableRidersByGross(availableList) {
     });
 }
 
+/**
+ * Archives completed catering delivery sessions.
+ * Bandwidth-optimized: Targets only active catering chats instead of downloading the entire chat history.
+ */
 export async function archiveRiderCateringIfNeeded(targetRecord) {
     if (!targetRecord || targetRecord.status !== 'Catering' || !targetRecord.customerName) return;
 
@@ -540,25 +544,27 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
     const todayStr = getLocalTodayStr();
     const todayClean = todayStr.replace(/-/g, '');
 
+    // Bandwidth Optimization: query active catering chats rather than full chat root
     if (db && custs.length > 0) {
-        db.ref('customerChats').once('value', (snapshot) => {
-            const chats = snapshot.val();
-            if (chats) {
-                Object.keys(chats).forEach(custId => {
-                    const chatMeta = chats[custId]?.metadata || chats[custId] || {};
-                    const chatCustName = (chatMeta.customerName || chatMeta.name || "").trim().toLowerCase();
-                    
-                    if (chatCustName && custs.some(c => c.toLowerCase() === chatCustName)) {
-                        db.ref(`customerChats/${custId}/metadata`).update({
-                            folder: 'done',
-                            cateredByRiderId: null,
-                            cateredByRiderName: null,
-                            cateredBy: null,
-                            lastUpdated: Date.now()
+        custs.forEach(cName => {
+            const cleanC = cName.trim();
+            db.ref('customerChats')
+                .orderByChild('metadata/customerName')
+                .equalTo(cleanC)
+                .once('value', (snap) => {
+                    const chats = snap.val();
+                    if (chats) {
+                        Object.keys(chats).forEach(custId => {
+                            db.ref(`customerChats/${custId}/metadata`).update({
+                                folder: 'done',
+                                cateredByRiderId: null,
+                                cateredByRiderName: null,
+                                cateredBy: null,
+                                lastUpdated: Date.now()
+                            });
                         });
                     }
                 });
-            }
         });
     }
 

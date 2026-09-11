@@ -42,6 +42,17 @@ import { updateNetworkStatus, initBatteryMonitor } from './app/appMonitors.js';
 import { runBackgroundPersistenceSync, forceReconnectFirebase, initSyncWatchdog } from './app/appSync.js';
 import { initRealtimeFirebaseListeners } from './app/appListeners.js';
 import { initGlobalWindowBridge, bootApp, initAppLifecycleEvents } from './app/appBootstrap.js';
+import { registerSW } from 'virtual:pwa-register';
+
+registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    console.log("New content available; reload to update.");
+  },
+  onOfflineReady() {
+    console.log("Lokalex is fully ready to work offline.");
+  }
+});
 
 // Re-export all core members for system-wide imports
 export * from './app/appPush.js';

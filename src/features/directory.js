@@ -22,9 +22,12 @@
  *
  * 4. directoryUi.js:
  *    - View Rendering & Interactive Scrubber: Handles DOM list construction, 
- *      sorting, copy actions, and elastic alphabet scrubber distortion.
+ *      sorting, copy actions, search queries, scroll-aware search badge minimization,
+ *      floating search overlay synchronization, and elastic alphabet scrubber distortion.
  *    - Key Exports: openDirectory(), renderDirectoryList(), setupAlphabetScrubber(),
- *      filterDirectoryRecords(), copyBarangayRate(), getSectionLetter()
+ *      filterDirectoryRecords(), clearDirectorySearch(), copyBarangayRate(), getSectionLetter(),
+ *      minimizeDirectorySearch(), restoreDirectorySearch(), expandDirectorySearch(),
+ *      syncAndFilterFloatingSearch(), initDirectoryScrollListener()
  *
  * 5. directoryForm.js:
  *    - Record Mutations & GPS Validation: Coordinates add/edit forms, 
@@ -56,14 +59,20 @@ export {
     syncData
 } from './directory/directorySync.js';
 
-// 4. UI & Interactive Scrubber
+// 4. UI & Interactive Scrubber & Scroll-Aware Search
 export {
     getSectionLetter,
     openDirectory,
     filterDirectoryRecords,
+    clearDirectorySearch,
     copyBarangayRate,
     renderDirectoryList,
-    setupAlphabetScrubber
+    setupAlphabetScrubber,
+    minimizeDirectorySearch,
+    restoreDirectorySearch,
+    expandDirectorySearch,
+    syncAndFilterFloatingSearch,
+    initDirectoryScrollListener
 } from './directory/directoryUi.js';
 
 // 5. Form & Mutators
@@ -89,8 +98,14 @@ import { silentSyncDirectory, syncData } from './directory/directorySync.js';
 import {
     openDirectory,
     filterDirectoryRecords,
+    clearDirectorySearch,
     copyBarangayRate,
-    renderDirectoryList
+    renderDirectoryList,
+    minimizeDirectorySearch,
+    restoreDirectorySearch,
+    expandDirectorySearch,
+    syncAndFilterFloatingSearch,
+    initDirectoryScrollListener
 } from './directory/directoryUi.js';
 import {
     openForm,
@@ -107,10 +122,25 @@ import {
 // Initialize cache hydration immediately upon evaluation
 loadDirectoryCache();
 
-// Listen for view navigation changes to automatically refresh the directory DOM
+// Listen for view navigation changes to manage DOM rendering, scroll listeners, and search cleanup
 window.addEventListener('viewChanged', (e) => {
     if (e.detail === 'view-directory') {
         renderDirectoryList();
+        initDirectoryScrollListener();
+    } else {
+        // Teardown: clear search inputs, reset clear buttons, and restore search overlay state
+        const searchInput = document.getElementById('search-input');
+        const floatingInput = document.getElementById('floating-search-input');
+        const clearBtn = document.getElementById('clear-search-btn');
+        const floatingClearBtn = document.getElementById('floating-clear-search-btn');
+
+        if (searchInput) searchInput.value = '';
+        if (floatingInput) floatingInput.value = '';
+
+        if (clearBtn) clearBtn.classList.add('hidden');
+        if (floatingClearBtn) floatingClearBtn.classList.add('hidden');
+
+        restoreDirectorySearch();
     }
 });
 
@@ -120,6 +150,12 @@ if (typeof window !== 'undefined') {
     window.syncData = syncData;
     window.silentSyncDirectory = silentSyncDirectory;
     window.filterDirectoryRecords = filterDirectoryRecords;
+    window.clearDirectorySearch = clearDirectorySearch;
+    window.minimizeDirectorySearch = minimizeDirectorySearch;
+    window.restoreDirectorySearch = restoreDirectorySearch;
+    window.expandDirectorySearch = expandDirectorySearch;
+    window.syncAndFilterFloatingSearch = syncAndFilterFloatingSearch;
+    window.initDirectoryScrollListener = initDirectoryScrollListener;
     window.openForm = openForm;
     window.editDirectoryRecord = editDirectoryRecord;
     window.promptDeleteDirectoryRecord = promptDeleteDirectoryRecord;
