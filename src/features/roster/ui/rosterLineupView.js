@@ -8,7 +8,8 @@ import {
     getElapsedCateringTime, 
     checkFirstInLineAlarm,
     getRiderTodayGross,
-    sortAvailableRidersByGross
+    sortAvailableRidersByGross,
+    parseQueueTime
 } from '../rosterUtils.js';
 import { syncHeaderUserProfile } from '../rosterAvatar.js';
 import { autoStartLiveGpsSession, endLiveGpsSession } from '../../liveTracker.js';
@@ -36,6 +37,77 @@ export function formatRiderShortName(name) {
 
     const lastInitial = cleanedLast[0].toUpperCase();
     return `${firstName} ${lastInitial}.`;
+}
+
+export function openQueueInfoModal(riderId, riderName) {
+    const rosterMembers = globalState.rosterMembers || [];
+    const cleanId = (riderId || "").toString().trim();
+    const cleanName = (riderName || "").toString().trim().toLowerCase();
+
+    const member = rosterMembers.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        return (cleanId && mId === cleanId) || (cleanName && mName === cleanName);
+    });
+
+    if (!member) return;
+
+    const modal = document.getElementById('available-queue-info-modal');
+    if (!modal) return;
+
+    const availableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
+    const queueIdx = availableRiders.findIndex(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        return (cleanId && mId === cleanId) || (cleanName && mName === cleanName);
+    });
+    const queuePos = queueIdx !== -1 ? `#${queueIdx + 1}` : 'N/A';
+
+    const nameEl = document.getElementById('queue-info-rider-name');
+    const posEl = document.getElementById('queue-info-position');
+    const timeEl = document.getElementById('queue-info-time');
+    const elapsedEl = document.getElementById('queue-info-elapsed');
+    const gpsEl = document.getElementById('queue-info-coords');
+    const mapBtn = document.getElementById('queue-info-map-btn');
+
+    if (nameEl) nameEl.innerText = formatTitleCase(member.riderName || member.name || riderName || "Rider");
+    if (posEl) posEl.innerText = queuePos;
+
+    const rawTs = member.availableTimestamp || member.lastActiveTimestamp || (member.queueTime ? parseQueueTime(member.queueTime) : null);
+    const timeStr = member.availableTimeStr || (rawTs ? new Date(rawTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Unknown');
+    if (timeEl) timeEl.innerText = timeStr;
+
+    if (rawTs) {
+        const diffMins = Math.max(0, Math.floor((Date.now() - rawTs) / 60000));
+        const hrs = Math.floor(diffMins / 60);
+        const mins = diffMins % 60;
+        let elapsedText = "";
+        if (hrs > 0) elapsedText = `${hrs}h ${mins}m ago`;
+        else elapsedText = `${mins}m ago`;
+        if (elapsedEl) elapsedEl.innerText = elapsedText;
+    } else {
+        if (elapsedEl) elapsedEl.innerText = "Just now";
+    }
+
+    const loc = member.availableLocation || null;
+    if (loc && loc.lat && loc.lon) {
+        const acc = loc.accuracy ? ` (±${Math.round(loc.accuracy)}m)` : '';
+        if (gpsEl) gpsEl.innerText = `${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}${acc}`;
+        if (mapBtn) {
+            mapBtn.href = `https://www.google.com/maps?q=${loc.lat},${loc.lon}`;
+            mapBtn.classList.remove('hidden');
+        }
+    } else {
+        if (gpsEl) gpsEl.innerText = "GPS Not Recorded / Calibrated";
+        if (mapBtn) mapBtn.classList.add('hidden');
+    }
+
+    modal.classList.remove('hidden');
+}
+
+export function closeQueueInfoModal() {
+    const modal = document.getElementById('available-queue-info-modal');
+    if (modal) modal.classList.add('hidden');
 }
 
 export function updateRosterUI() {
@@ -179,7 +251,7 @@ export function updateRosterUI() {
     let availHtml = [], busyHtml = [], brkHtml = [], cdHtml = [];
     let availCounter = 1;
 
-    // 1. Available List
+    // 1. Available List (With Info Trigger for Time and Location Audit)
     availableRiders.forEach((m) => {
         const mId = (m.telegramId || m.id || "").toString();
         const rawName = m.riderName || m.name || "Rider";
@@ -201,9 +273,12 @@ export function updateRosterUI() {
         }
 
         availHtml.push(`
-            <div class="inline-flex items-center bg-white dark:bg-white/5 border border-gray-200 dark:border-gray-700/60 rounded-xl px-2.5 py-1 text-xs shadow-xs transition hover:border-emerald-500 gap-1.5">
+            <div class="inline-flex items-center bg-white dark:bg-white/5 border border-gray-200 dark:border-gray-700/60 rounded-xl px-2 py-1 text-xs shadow-xs transition hover:border-emerald-500 gap-1.5">
                 <span class="font-black text-emerald-600 dark:text-green-400">${availCounter++}.</span>
                 <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${mId}', '${escapeHtml(mName)}')" class="font-bold text-gray-900 dark:text-gray-100 hover:text-emerald-500 dark:hover:text-emerald-400 hover:underline transition cursor-pointer text-left" title="View Rider Details">${escapeHtml(shortName)}</button>
+                <button type="button" onclick="window.openQueueInfoModal && window.openQueueInfoModal('${mId}', '${escapeHtml(mName)}')" class="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 transition active:scale-90 p-0.5 text-[11px]" title="View Queue Location & Time">
+                    <i class="fa-solid fa-circle-info"></i>
+                </button>
                 ${controlsHtml}
                 <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
             </div>
@@ -390,6 +465,8 @@ if (typeof window !== 'undefined') {
     window.updateRosterUI = updateRosterUI;
     window.openFindRidersMap = openFindRidersMap;
     window.formatRiderShortName = formatRiderShortName;
+    window.openQueueInfoModal = openQueueInfoModal;
+    window.closeQueueInfoModal = closeQueueInfoModal;
 
     window.addEventListener('receiptsUpdated', () => updateRosterUI());
     window.addEventListener('cateredUpdated', () => updateRosterUI());

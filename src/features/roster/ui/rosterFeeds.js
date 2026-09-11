@@ -7,7 +7,8 @@ import {
     calculateSplitDuration, 
     parseTimeToMinutes, 
     getMergedDeduplicatedCommissionList, 
-    isSameDateStr 
+    isSameDateStr,
+    isCustomerMatch
 } from '../rosterUtils.js';
 import { getForcedCaterBadgeHtml } from './rosterBadge.js';
 
@@ -56,15 +57,28 @@ export function loadGlobalCateredList() {
         }
 
         const sTime = h.startTime || h.cateringStartTime || h.time || "";
-        const cTime = h.completedTime || "";
+        let rTime = h.receiptTime || "";
+        const dTime = h.doneTime || h.completedTime || "";
+
+        // Fallback lookup in global daily receipts for matching receiptTime
+        if (!rTime && globalState.globalDailyReceipts) {
+            const rcMatch = globalState.globalDailyReceipts.find(rc => 
+                (recordTxId && (rc.transactionId === recordTxId || rc.id === recordTxId)) ||
+                (isCustomerMatch(rc.customerName, h.customerName) && isSameDateStr(rc.date || rc.completedDate, cDate))
+            );
+            if (rcMatch) {
+                rTime = rcMatch.receiptTime || rcMatch.time || "";
+            }
+        }
+
         const cCount = parseInt(h.customerCount) || 1;
         let durationStr = h.duration || "";
 
-        if ((!durationStr || durationStr === "Just now") && sTime && cTime && sTime !== cTime) {
-            durationStr = calculateSplitDuration(sTime, cTime, cCount);
+        if ((!durationStr || durationStr === "Just now") && sTime && dTime && sTime !== dTime) {
+            durationStr = calculateSplitDuration(sTime, dTime, cCount);
         } else if (durationStr && cCount > 1 && !durationStr.includes('/') && !durationStr.includes('&divide;')) {
             const startMins = parseTimeToMinutes(sTime);
-            const endMins = parseTimeToMinutes(cTime);
+            const endMins = parseTimeToMinutes(dTime || rTime);
             if (startMins !== null && endMins !== null) {
                 let totalMins = endMins - startMins;
                 if (totalMins < 0) totalMins += 24 * 60;
@@ -73,17 +87,46 @@ export function loadGlobalCateredList() {
             }
         }
 
-        let timeRange = sTime ? `🕒 ${escapeHtml(sTime)}` : `🕒 Completed`;
-        if (cTime && cTime !== sTime) {
-            timeRange += ` -> ${escapeHtml(cTime)}`;
-        }
-
         let durationBadge = "";
         if (durationStr) {
             durationBadge = `<span class="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 px-1.5 py-0.5 rounded font-black text-[9px] font-mono tracking-wide">[${escapeHtml(durationStr)}]</span>`;
         }
 
         const historyForcedBadge = getForcedCaterBadgeHtml(h, h.customerName, h.riderName);
+
+        // 3-Stage Milestone Display: Started -> Receipt -> Done
+        let timelineParts = [];
+
+        if (sTime) {
+            timelineParts.push(`
+                <span class="inline-flex items-center gap-1 text-gray-700 dark:text-gray-300" title="Started Catering">
+                    <i class="fa-solid fa-play text-blue-500 text-[8px]"></i>
+                    <span>${escapeHtml(sTime)}</span>
+                </span>
+            `);
+        }
+
+        if (rTime && rTime !== sTime) {
+            timelineParts.push(`
+                <span class="inline-flex items-center gap-1 text-gray-700 dark:text-gray-300" title="Receipt Created">
+                    <i class="fa-solid fa-receipt text-amber-500 text-[9px]"></i>
+                    <span>${escapeHtml(rTime)}</span>
+                </span>
+            `);
+        }
+
+        if (dTime && (dTime !== sTime || !rTime)) {
+            timelineParts.push(`
+                <span class="inline-flex items-center gap-1 text-gray-700 dark:text-gray-300 font-bold" title="Marked as Done">
+                    <i class="fa-solid fa-circle-check text-emerald-500 text-[9px]"></i>
+                    <span class="text-emerald-700 dark:text-emerald-400">${escapeHtml(dTime)}</span>
+                </span>
+            `);
+        }
+
+        let timelineHtml = timelineParts.length > 0 
+            ? timelineParts.join('<span class="text-gray-300 dark:text-gray-700 select-none">→</span>') 
+            : `<span class="text-gray-500 dark:text-gray-400"><i class="fa-solid fa-circle-check text-emerald-500 text-[9px]"></i> Done</span>`;
 
         return `
         <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-2xl flex flex-col gap-1.5 shadow-xs">
@@ -99,8 +142,10 @@ export function loadGlobalCateredList() {
                 </div>
             </div>
 
-            <div class="flex flex-wrap items-center justify-between gap-1 pt-1 border-t border-gray-100 dark:border-gray-800/60 text-[10px] font-mono">
-                <span class="text-gray-600 dark:text-gray-400 font-medium">${timeRange}</span>
+            <div class="flex flex-wrap items-center justify-between gap-1.5 pt-1.5 border-t border-gray-100 dark:border-gray-800/60 text-[10px] font-mono">
+                <div class="flex flex-wrap items-center gap-1.5">
+                    ${timelineHtml}
+                </div>
                 ${durationBadge}
             </div>
         </div>`;

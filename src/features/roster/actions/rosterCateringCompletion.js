@@ -23,6 +23,35 @@ import { updateRosterUI } from '../rosterUI.js';
 import { updateRosterStatusData } from '../rosterStatusCore.js';
 import { getTopQueueTime } from './rosterAlarms.js';
 
+function getDeviceLocationQuick() {
+    return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+            return resolve({
+                lat: appState.lat || null,
+                lon: appState.lon || null,
+                accuracy: appState.gpsAccuracy || null
+            });
+        }
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                resolve({
+                    lat: pos.coords.latitude,
+                    lon: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy
+                });
+            },
+            () => {
+                resolve({
+                    lat: appState.lat || null,
+                    lon: appState.lon || null,
+                    accuracy: appState.gpsAccuracy || null
+                });
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
+        );
+    });
+}
+
 export async function completeSingleCateringCustomer(targetId, targetName, custNameToComplete) {
     const rosterMembers = globalState.rosterMembers || [];
     const cleanTargetId = (targetId || "").toString().trim();
@@ -65,15 +94,26 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     const todayClean = todayStr.replace(/-/g, '');
     const endTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // 1. Receipt Verification Gate
+    // 1. Receipt Verification Gate & Milestone Extraction
+    let receiptTimeFound = "";
+    if (targetRecord?.customerFees && cleanCustKey && targetRecord.customerFees[cleanCustKey]?.receiptTime) {
+        receiptTimeFound = targetRecord.customerFees[cleanCustKey].receiptTime;
+    }
+
+    const matchReceipt = (globalState.globalDailyReceipts || []).find(rc => {
+        const rMatch = isRiderMatch(resolvedTargetName, rc.riderName, resolvedTargetId, rc.telegramId);
+        const cMatch = isCustomerMatch(rc.customerName, custNameToComplete);
+        const dMatch = isSameDateStr(rc.date || rc.completedDate, todayStr);
+        return rMatch && cMatch && dMatch;
+    });
+
+    if (!receiptTimeFound && matchReceipt) {
+        receiptTimeFound = matchReceipt.receiptTime || matchReceipt.completedTime || "";
+    }
+
     const hasReceipt = hasReceiptForActiveSession(custNameToComplete, completedStartTime) ||
         (targetRecord?.customerFees && cleanCustKey && !!targetRecord.customerFees[cleanCustKey]) ||
-        (globalState.globalDailyReceipts || []).some(rc => {
-            const rMatch = isRiderMatch(resolvedTargetName, rc.riderName, resolvedTargetId, rc.telegramId);
-            const cMatch = isCustomerMatch(rc.customerName, custNameToComplete);
-            const dMatch = isSameDateStr(rc.date || rc.completedDate, todayStr);
-            return rMatch && cMatch && dMatch;
-        });
+        !!matchReceipt;
 
     if (!hasReceipt) {
         showToast(`⚠️ Paki-gawaan muna ng resibo si ${custNameToComplete} bago i-mark as Done!`);
@@ -105,38 +145,29 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         }
     }
 
-    if (finalFees <= 0 && globalState.globalDailyReceipts) {
-        const matchReceipt = globalState.globalDailyReceipts.find(rc => {
-            const rMatch = isRiderMatch(resolvedTargetName, rc.riderName, resolvedTargetId, rc.telegramId);
-            const cMatch = isCustomerMatch(rc.customerName, custNameToComplete);
-            const dMatch = isSameDateStr(rc.date || rc.completedDate, todayStr);
-            return rMatch && cMatch && dMatch;
-        });
-
-        if (matchReceipt) {
-            finalFeeDetails = matchReceipt.fees || null;
-            if (finalFeeDetails && typeof finalFeeDetails === 'object') {
-                const parseNum = (v) => {
-                    if (typeof v === 'number') return v;
-                    return parseFloat(String(v || '0').replace(/[^0-9.-]/g, '')) || 0;
-                };
-                const hf = parseNum(finalFeeDetails.handling || finalFeeDetails.handlingFee);
-                const mf = parseNum(finalFeeDetails.market || finalFeeDetails.marketFee);
-                const ms = parseNum(finalFeeDetails.multistore || finalFeeDetails.multistop || finalFeeDetails.multistoreFees);
-                const rdf = parseNum(finalFeeDetails.delivery || finalFeeDetails.deliveryFees || finalFeeDetails.riderFee || finalFeeDetails.deliveryFee);
-                finalFees = hf + mf + ms + rdf;
-            }
-
-            if (finalFees <= 0) {
-                finalFees = parseItemGross(matchReceipt);
-            }
-            targetTxId = matchReceipt.transactionId || matchReceipt.id || targetTxId;
+    if (finalFees <= 0 && matchReceipt) {
+        finalFeeDetails = matchReceipt.fees || null;
+        if (finalFeeDetails && typeof finalFeeDetails === 'object') {
+            const parseNum = (v) => {
+                if (typeof v === 'number') return v;
+                return parseFloat(String(v || '0').replace(/[^0-9.-]/g, '')) || 0;
+            };
+            const hf = parseNum(finalFeeDetails.handling || finalFeeDetails.handlingFee);
+            const mf = parseNum(finalFeeDetails.market || finalFeeDetails.marketFee);
+            const ms = parseNum(finalFeeDetails.multistore || finalFeeDetails.multistop || finalFeeDetails.multistoreFees);
+            const rdf = parseNum(finalFeeDetails.delivery || finalFeeDetails.deliveryFees || finalFeeDetails.riderFee || finalFeeDetails.deliveryFee);
+            finalFees = hf + mf + ms + rdf;
         }
+
+        if (finalFees <= 0) {
+            finalFees = parseItemGross(matchReceipt);
+        }
+        targetTxId = matchReceipt.transactionId || matchReceipt.id || targetTxId;
     }
 
     const splitDuration = calculateSplitDuration(completedStartTime, endTimeStr, 1);
 
-    // 3. Log Completed Order to Catered List
+    // 3. Log Completed Order with 3-Stage Milestones (Started, Receipt Created, Marked Done)
     const hItem = {
         id: targetTxId,
         transactionId: targetTxId,
@@ -145,6 +176,8 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         telegramId: resolvedTargetId,
         customerName: custNameToComplete,
         startTime: completedStartTime || endTimeStr,
+        receiptTime: receiptTimeFound || completedStartTime || endTimeStr,
+        doneTime: endTimeStr,
         completedTime: endTimeStr,
         completedDate: todayStr,
         date: todayStr,
@@ -158,6 +191,10 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     if (db) {
         db.ref(`cateredHistory/${targetTxId}`).set(hItem).catch(() => {});
         db.ref(`catered/${todayStr}/${targetTxId}`).set(hItem).catch(() => {});
+        db.ref(`receipts/${targetTxId}`).update({
+            doneTime: endTimeStr,
+            completedTime: endTimeStr
+        }).catch(() => {});
 
         db.ref('customerChats').once('value', (snapshot) => {
             const chats = snapshot.val() || {};
@@ -188,6 +225,11 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         globalState.globalCateredHistory[exHistIdx] = hItem;
     } else {
         globalState.globalCateredHistory.push(hItem);
+    }
+
+    if (matchReceipt) {
+        matchReceipt.doneTime = endTimeStr;
+        matchReceipt.completedTime = endTimeStr;
     }
 
     if (targetRecord?.customerFees && cleanCustKey) {
@@ -228,22 +270,44 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         showSideNotification("DELIVERY DONE", `${custNameToComplete} • ₱${finalFees.toFixed(2)}`, "fa-circle-check", "text-emerald-400", "border-emerald-500");
     } else {
         const topQueueTime = getTopQueueTime();
+        const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString();
+
+        let locationData = null;
+        if (resolvedTargetId === myId) {
+            locationData = await getDeviceLocationQuick();
+            if (locationData && locationData.lat) {
+                appState.lat = locationData.lat;
+                appState.lon = locationData.lon;
+                appState.gpsAccuracy = locationData.accuracy;
+            }
+            endLiveGpsSession();
+        }
+
+        const availableTimestamp = Date.now();
+        const availableTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
         if (db && resolvedTargetId) {
             db.ref(`roster/${resolvedTargetId}/forcedCaters`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}`).update({
+            const updatePayload = {
                 forcedBy: null,
-                isForcedCater: false
-            }).catch(() => {});
+                isForcedCater: false,
+                availableTimestamp: availableTimestamp,
+                availableTimeStr: availableTimeStr
+            };
+            if (locationData) {
+                updatePayload.availableLocation = locationData;
+            }
+            db.ref(`roster/${resolvedTargetId}`).update(updatePayload).catch(() => {});
         }
         if (targetRecord) {
             targetRecord.forcedCaters = null;
             targetRecord.forcedBy = null;
             targetRecord.isForcedCater = false;
-        }
-
-        const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString();
-        if (resolvedTargetId === myId) {
-            endLiveGpsSession();
+            targetRecord.availableTimestamp = availableTimestamp;
+            targetRecord.availableTimeStr = availableTimeStr;
+            if (locationData) {
+                targetRecord.availableLocation = locationData;
+            }
         }
 
         await updateRosterStatusData(

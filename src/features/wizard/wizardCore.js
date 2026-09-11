@@ -112,6 +112,7 @@ export async function saveReceiptToDatabase(customerName) {
         customerName: cName,
         cateringStartTime: sTime,
         startTime: sTime,
+        receiptTime: currentTimeStr,
         completedTime: currentTimeStr,
         customerCount: custCount,
         duration: splitDuration,
@@ -136,6 +137,7 @@ export async function saveReceiptToDatabase(customerName) {
         telegramId: (appState.telegramId || "").toString().trim(),
         customerName: cName,
         startTime: sTime,
+        receiptTime: currentTimeStr,
         completedTime: currentTimeStr,
         completedDate: todayStr,
         customerCount: custCount,
@@ -160,7 +162,8 @@ export async function saveReceiptToDatabase(customerName) {
                     customerName: cName,
                     totalFees: totalFees,
                     fees: receiptPayload.fees,
-                    transactionId: generatedTxId
+                    transactionId: generatedTxId,
+                    receiptTime: currentTimeStr
                 });
             }
         }

@@ -15,6 +15,35 @@ import { checkRiderTimeInAllowed } from '../rosterStatusLimits.js';
 import { updateRosterStatus, clockOutRider } from '../rosterStatusCore.js';
 import { dismissQueueAlarm } from './rosterAlarms.js';
 
+function getDeviceLocationQuick() {
+    return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+            return resolve({
+                lat: appState.lat || null,
+                lon: appState.lon || null,
+                accuracy: appState.gpsAccuracy || null
+            });
+        }
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                resolve({
+                    lat: pos.coords.latitude,
+                    lon: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy
+                });
+            },
+            () => {
+                resolve({
+                    lat: appState.lat || null,
+                    lon: appState.lon || null,
+                    accuracy: appState.gpsAccuracy || null
+                });
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
+        );
+    });
+}
+
 export async function triggerStatusWithSlide(targetStatus) {
     const rosterMembers = globalState.rosterMembers || [];
     const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
@@ -130,6 +159,17 @@ export async function triggerStatusWithSlide(targetStatus) {
             showToast(`✅ GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
         }
 
+        // Capture exact Available queue time and GPS coordinates
+        const locationData = await getDeviceLocationQuick();
+        if (locationData && locationData.lat) {
+            appState.lat = locationData.lat;
+            appState.lon = locationData.lon;
+            appState.gpsAccuracy = locationData.accuracy;
+        }
+
+        const availableTimestamp = Date.now();
+        const availableTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
         const currentRoster = globalState.rosterMembers || [];
         const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || m.id || "").toString() !== myId);
         let maxTime = new Date().getTime();
@@ -146,13 +186,19 @@ export async function triggerStatusWithSlide(targetStatus) {
             db.ref(`roster/${myId}/forcedCaters`).remove().catch(() => {});
             db.ref(`roster/${myId}`).update({
                 forcedBy: null,
-                isForcedCater: false
+                isForcedCater: false,
+                availableTimestamp: availableTimestamp,
+                availableTimeStr: availableTimeStr,
+                availableLocation: locationData
             }).catch(() => {});
         }
         if (myRecord) {
             myRecord.forcedCaters = null;
             myRecord.forcedBy = null;
             myRecord.isForcedCater = false;
+            myRecord.availableTimestamp = availableTimestamp;
+            myRecord.availableTimeStr = availableTimeStr;
+            myRecord.availableLocation = locationData;
         }
 
         await updateRosterStatus('Available', myId, myName, lockedQueueTime);
