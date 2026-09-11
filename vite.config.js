@@ -4,6 +4,7 @@ import htmlInject from 'vite-plugin-html-inject';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  base: './',
   plugins: [
     htmlInject(),
     VitePWA({

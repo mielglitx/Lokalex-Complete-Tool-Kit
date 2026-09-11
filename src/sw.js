@@ -1,8 +1,9 @@
 // src/sw.js
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
-import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies';
+import { CacheFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
+import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 
 // 1. Precache all compiled Vite chunks, CSS, HTML, and local assets
 precacheAndRoute(self.__WB_MANIFEST);
@@ -14,6 +15,9 @@ registerRoute(
     new CacheFirst({
         cacheName: 'external-cdn-scripts',
         plugins: [
+            new CacheableResponsePlugin({
+                statuses: [0, 200]
+            }),
             new ExpirationPlugin({
                 maxEntries: 40,
                 maxAgeSeconds: 60 * 24 * 60 * 60
@@ -28,6 +32,9 @@ registerRoute(
     new CacheFirst({
         cacheName: 'external-fonts-and-styles',
         plugins: [
+            new CacheableResponsePlugin({
+                statuses: [0, 200]
+            }),
             new ExpirationPlugin({
                 maxEntries: 30,
                 maxAgeSeconds: 90 * 24 * 60 * 60
