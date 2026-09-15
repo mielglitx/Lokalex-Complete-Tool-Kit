@@ -1,0 +1,26 @@
+<div id="image-viewer-modal" class="hidden fixed inset-0 bg-black/95 backdrop-blur-md z-[999999] flex flex-col justify-between p-3 select-none">
+    <div class="flex justify-between items-center bg-cardBg/90 border border-gray-800 p-2.5 rounded-2xl shadow-xl z-10">
+        <div class="flex items-center gap-1.5">
+            <button onclick="window.zoomViewerImage && window.zoomViewerImage(0.25)" class="bg-gray-800 hover:bg-gray-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition" title="Zoom In"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+            <button onclick="window.zoomViewerImage && window.zoomViewerImage(-0.25)" class="bg-gray-800 hover:bg-gray-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition" title="Zoom Out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+            <button onclick="window.resetViewerZoom && window.resetViewerZoom()" class="bg-gray-800 hover:bg-gray-700 text-cyan-400 font-bold px-2.5 py-1.5 rounded-xl text-xs active:scale-95 transition" title="Reset Zoom">1:1</button>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <a id="viewer-download-btn" href="#" download="lokalex_photo.jpg" target="_blank" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition flex items-center gap-1"><i class="fa-solid fa-download"></i> Download</a>
+            <button onclick="window.editViewerImage && window.editViewerImage()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
+            <button onclick="window.closeImageViewerModal && window.closeImageViewerModal()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white p-2 rounded-xl text-xs active:scale-95 transition"><i class="fa-solid fa-xmark text-sm"></i></button>
+        </div>
+    </div>
+
+    <div id="viewer-image-viewport" class="flex-1 w-full h-full flex items-center justify-center overflow-hidden my-2 relative touch-none">
+        <img id="viewer-image" src="" class="max-w-full max-h-full object-contain rounded-xl transition-transform duration-75 origin-center shadow-2xl">
+    </div>
+
+    <div class="bg-cardBg/90 border border-gray-800 p-2.5 rounded-2xl shadow-xl flex items-center gap-3 z-10">
+        <i class="fa-solid fa-magnifying-glass-minus text-gray-400 text-xs"></i>
+        <input type="range" id="viewer-zoom-slider" min="50" max="400" value="100" oninput="window.setViewerZoom && window.setViewerZoom(this.value / 100)" class="w-full accent-cyan-500 cursor-pointer h-1.5 rounded-lg bg-gray-700">
+        <i class="fa-solid fa-magnifying-glass-plus text-gray-400 text-xs"></i>
+        <span id="viewer-zoom-val" class="text-xs font-mono font-bold text-cyan-400 shrink-0 w-10 text-right">100%</span>
+    </div>
+</div>

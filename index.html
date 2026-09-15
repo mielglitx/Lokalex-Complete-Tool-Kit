@@ -1,0 +1,224 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Lokalex Toolkit</title>
+
+    <!-- PWA & MOBILE APP STANDALONE CAPABILITIES (REMOVES ADDRESS BAR) -->
+    <meta name="theme-color" content="#09090b">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Lokalex Hub">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="apple-touch-icon" href="https://i.imgur.com/dbomHa2.png">
+
+    <!-- CONTENT SECURITY POLICY ENABLING TESSERACT OCR WORKERS & NETWORK FETCHING -->
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' blob:; worker-src * blob: data: 'unsafe-inline' 'unsafe-eval'; child-src * blob: data:; connect-src * blob: data:; style-src * 'unsafe-inline'; font-src * data:; img-src * data: blob:;">
+
+    <!-- FIREBASE CDN SCRIPTS -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+    <!-- QR CODE SCANNER (DECODER) & GENERATOR FOR GCASH INSTAPAY INTEGRATION -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+    <!-- OCR ENGINE FOR AUTO-DETECTING CUSTOMER NAMES FROM CHAT SCREENSHOTS -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+    <!-- HEAD PARTIAL (TAILWIND, FONTAWESOME & MAPS) -->
+    <load src="src/partials/head.html" />
+
+    <!-- GLOBAL HIGH-CONTRAST LIGHT MODE ENFORCEMENT -->
+    <style>
+        html:not(.dark) {
+            color-scheme: light;
+        }
+        html:not(.dark) body {
+            background-color: #f8fafc !important;
+            color: #0f172a !important;
+        }
+        html:not(.dark) .bg-cardBg {
+            background-color: #ffffff !important;
+            border-color: #e2e8f0 !important;
+            color: #0f172a !important;
+        }
+        html:not(.dark) .bg-darkBg {
+            background-color: #f1f5f9 !important;
+            border-color: #e2e8f0 !important;
+            color: #0f172a !important;
+        }
+        html:not(.dark) .bg-inputBg {
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
+        }
+        html:not(.dark) input,
+        html:not(.dark) select,
+        html:not(.dark) textarea {
+            color: #0f172a !important;
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+        }
+        html:not(.dark) input::placeholder,
+        html:not(.dark) textarea::placeholder {
+            color: #64748b !important;
+        }
+        /* Modal dialog backgrounds in light mode */
+        html:not(.dark) [id$="-modal"] .bg-cardBg,
+        html:not(.dark) [id$="-modal"] .bg-\[\#1E1A1A\] {
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+        }
+        /* High contrast text overrides for light mode */
+        html:not(.dark) .text-white {
+            color: #0f172a !important;
+        }
+        html:not(.dark) .text-gray-200,
+        html:not(.dark) .text-gray-300 {
+            color: #1e293b !important;
+        }
+        html:not(.dark) .text-gray-400 {
+            color: #475569 !important;
+        }
+        html:not(.dark) .text-gray-500 {
+            color: #64748b !important;
+        }
+        /* Saturated readable accents in light mode */
+        html:not(.dark) .text-purple-300,
+        html:not(.dark) .text-purple-400 {
+            color: #7e22ce !important;
+            font-weight: 700 !important;
+        }
+        html:not(.dark) .text-emerald-300,
+        html:not(.dark) .text-emerald-400 {
+            color: #047857 !important;
+            font-weight: 700 !important;
+        }
+        html:not(.dark) .text-blue-300,
+        html:not(.dark) .text-blue-400 {
+            color: #1d4ed8 !important;
+            font-weight: 700 !important;
+        }
+        html:not(.dark) .text-amber-300,
+        html:not(.dark) .text-amber-400 {
+            color: #b45309 !important;
+            font-weight: 700 !important;
+        }
+        html:not(.dark) .text-orange-300,
+        html:not(.dark) .text-orange-400 {
+            color: #c2410c !important;
+            font-weight: 700 !important;
+        }
+        html:not(.dark) .text-red-300,
+        html:not(.dark) .text-red-400 {
+            color: #b91c1c !important;
+            font-weight: 700 !important;
+        }
+        html:not(.dark) .text-teal-300,
+        html:not(.dark) .text-teal-400 {
+            color: #0f766e !important;
+            font-weight: 700 !important;
+        }
+        html:not(.dark) .text-rose-300,
+        html:not(.dark) .text-rose-400 {
+            color: #be123c !important;
+            font-weight: 700 !important;
+        }
+        /* Fix dark translucent inner cards in light mode */
+        html:not(.dark) .bg-black\/40,
+        html:not(.dark) .bg-black\/30,
+        html:not(.dark) .bg-darkBg\/60 {
+            background-color: #f8fafc !important;
+            border-color: #e2e8f0 !important;
+        }
+        /* Primary action button text preservation */
+        html:not(.dark) button.bg-blue-600,
+        html:not(.dark) button.bg-emerald-600,
+        html:not(.dark) button.bg-red-600,
+        html:not(.dark) button.bg-purple-600,
+        html:not(.dark) button.bg-teal-600,
+        html:not(.dark) button.bg-rose-600,
+        html:not(.dark) button.bg-amber-500,
+        html:not(.dark) .bg-blue-600.text-white,
+        html:not(.dark) .bg-emerald-600.text-white,
+        html:not(.dark) .bg-red-600.text-white,
+        html:not(.dark) .bg-purple-600.text-white,
+        html:not(.dark) .bg-teal-600.text-white,
+        html:not(.dark) .bg-rose-600.text-white {
+            color: #ffffff !important;
+        }
+    </style>
+</head>
+<body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-darkBg text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative">
+
+    <div id="golden-first-line-border" class="hidden pointer-events-none fixed inset-0 border-[6px] border-yellow-400 shadow-[inset_0_0_30px_rgba(250,204,21,0.8)] z-[9999]"></div>
+
+    <!-- UI NOTIFICATION & HEADER PARTIALS -->
+    <load src="src/partials/notifications.html" />
+    <load src="src/partials/header.html" />
+
+    <!-- MAIN APP VIEWS -->
+    <main class="flex-1 max-w-md w-full mx-auto flex flex-col relative pb-20 px-3">
+        <load src="src/partials/views/login.html" />
+        <load src="src/partials/views/customer-home.html" />
+        <load src="src/partials/views/home-dashboard.html" />
+        <load src="src/partials/views/store-hub.html" />
+        <load src="src/partials/views/cart.html" />
+        <load src="src/partials/views/wizard.html" />
+        <load src="src/partials/views/receipt.html" />
+        <load src="src/partials/views/commission.html" />
+        <load src="src/partials/views/directory.html" />
+        <load src="src/partials/views/form.html" />
+        <load src="src/partials/views/map-picker.html" />
+    </main>
+
+    <!-- MODALS & OVERLAYS -->
+    <load src="src/partials/modals/image-viewer.html" />
+    <load src="src/partials/modals/image-editor.html" />
+    <load src="src/partials/modals/chat.html" />
+    <load src="src/partials/modals/rider-chat.html" />
+    <load src="src/partials/modals/portals.html" />
+    <load src="src/partials/modals/admin-controls.html" />
+    <load src="src/partials/modals/system-dialogs.html" />
+    <load src="src/partials/modals/store-account-modal.html" />
+    <load src="src/partials/modals/store-item-modal.html" />
+    <load src="src/partials/modals/avatar-modal.html" />
+    <load src="src/partials/modals/rider-password-modal.html" />
+    <load src="src/partials/modals/profile-settings-modal.html" />
+
+    <!-- STANDALONE PWA SERVICE WORKER REGISTRATION SCRIPT -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js', { scope: './' })
+                    .then((reg) => {
+                        console.log('Lokalex Service Worker registered with scope:', reg.scope);
+                        reg.addEventListener('updatefound', () => {
+                            const newWorker = reg.installing;
+                            if (newWorker) {
+                                newWorker.addEventListener('statechange', () => {
+                                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                        console.log('New Lokalex update installed; active on next reload.');
+                                    }
+                                });
+                            }
+                        });
+                    })
+                    .catch((err) => {
+                        console.error('Service Worker registration failed:', err);
+                    });
+            });
+        }
+    </script>
+
+    <!-- RELATIVE ESM ENTRY POINT -->
+    <script type="module" src="./src/main.js"></script>
+</body>
+</html>

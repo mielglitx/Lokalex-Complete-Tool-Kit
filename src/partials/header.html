@@ -1,0 +1,43 @@
+<!-- src/partials/header.html -->
+<header id="app-header" class="hidden bg-cardBg px-3.5 py-2.5 flex items-center justify-between sticky top-0 z-40 border-b border-gray-200 dark:border-gray-800/80 shadow-xs">
+    <!-- LEFT: BACK BUTTON & UNIFIED USER PROFILE GREETING (CUSTOMER, MERCHANT, RIDER) -->
+    <div class="flex items-center gap-2 min-w-0">
+        <button id="back-btn" onclick="window.goBack && window.goBack()" class="hidden text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1.5 transition active:scale-95 text-xs py-1 px-2 rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/50 shrink-0">
+            <i class="fa-solid fa-arrow-left"></i> Back
+        </button>
+
+        <!-- UNIFIED PROFILE BUTTON -->
+        <div id="header-user-section" onclick="window.handleHeaderUserClick && window.handleHeaderUserClick()" class="flex items-center gap-2 min-w-0 cursor-pointer group transition active:scale-95" title="Click to view & edit profile settings">
+            <div class="relative shrink-0">
+                <img id="header-user-avatar" src="https://ui-avatars.com/api/?name=User&background=0284c7&color=ffffff&bold=true&size=128" alt="Profile" class="w-8 h-8 rounded-full object-cover border-2 border-emerald-500 shadow-sm group-hover:border-emerald-400 transition">
+                <span id="header-user-badge" class="absolute -bottom-1 -right-1 bg-gray-900 text-gray-300 group-hover:text-white rounded-full p-0.5 text-[8px] border border-gray-700 shadow flex items-center justify-center w-3.5 h-3.5">
+                    <i id="header-user-badge-icon" class="fa-solid fa-pen"></i>
+                </span>
+            </div>
+            <div class="flex flex-col min-w-0">
+                <span id="header-user-role" class="text-[9px] text-gray-400 uppercase tracking-wider font-bold leading-none">Welcome!</span>
+                <span id="header-user-name" class="text-xs font-black text-gray-900 dark:text-white truncate max-w-[120px] sm:max-w-[170px] leading-tight group-hover:text-emerald-400 transition">Username</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: LIVE DIGITAL CLOCK, BATTERY INDICATOR & NETWORK STATUS PILL -->
+    <div class="flex items-center gap-1.5 shrink-0">
+        <!-- LIVE DIGITAL CLOCK PILL -->
+        <div id="header-clock-pill" class="flex items-center gap-1 bg-gray-100 dark:bg-black/40 border border-gray-300 dark:border-gray-700/60 px-2 py-1 rounded-xl text-[10px] font-mono font-bold text-gray-700 dark:text-gray-300 transition-all select-none shrink-0" title="Current Time">
+            <i class="fa-regular fa-clock text-blue-500 text-[10px]"></i>
+            <span id="header-clock-time">--:--</span>
+        </div>
+
+        <!-- GLOBAL BATTERY STATUS INDICATOR PILL -->
+        <div id="header-battery-pill" class="hidden flex items-center gap-1 bg-gray-100 dark:bg-black/40 border border-gray-300 dark:border-gray-700/60 px-2 py-1 rounded-xl text-[10px] font-mono font-bold text-gray-700 dark:text-gray-300 transition-all select-none shrink-0" title="Device Battery Status">
+            <i id="header-battery-icon" class="fa-solid fa-battery-half text-emerald-500"></i>
+            <span id="header-battery-text">--%</span>
+        </div>
+
+        <!-- COLOR-COORDINATED NETWORK STATUS INDICATOR (Only visible in Rider views) -->
+        <div id="network-status-pill" class="hidden flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/40 shadow-xs transition-all duration-300 shrink-0" title="Network: Online">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
+        </div>
+    </div>
+</header>

@@ -1,0 +1,382 @@
+<!-- src/partials/views/home-dashboard.html -->
+<!--
+  ============================================================================
+  HOME DASHBOARD VIEW COMPONENT
+  ============================================================================
+  Description:
+  Primary operational dashboard for on-duty riders. Contains the 30-minute
+  advance order urgency banner, quick-action workflow dock, real-time customer/
+  store chat feeds, roster rotation queue, daily shift logins, completed
+  catered customer feeds, and administrative lineup/cooldown configuration tools.
+-->
+<section id="view-home" class="hidden flex-1 flex flex-col p-3 gap-3 py-3">
+    <!-- LIGHT MODE HIGH CONTRAST & CARD STYLING ENFORCEMENT -->
+    <style>
+        html:not(.dark) #view-home {
+            color: #0f172a;
+        }
+        html:not(.dark) #view-home .bg-cardBg {
+            background-color: #ffffff !important;
+            border-color: #e2e8f0 !important;
+        }
+        /* Remove gray/black translucent backgrounds and force crisp white cards in light mode */
+        html:not(.dark) #rider-cust-chats-feed > div,
+        html:not(.dark) #login-list-feed > div,
+        html:not(.dark) #catered-customers-feed > div {
+            background-color: #ffffff !important;
+            border-color: #e2e8f0 !important;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+        }
+        /* Enforce high-contrast dark text in light mode */
+        html:not(.dark) #rider-cust-chats-feed > div span,
+        html:not(.dark) #rider-cust-chats-feed > div div,
+        html:not(.dark) #login-list-feed > div span,
+        html:not(.dark) #login-list-feed > div div,
+        html:not(.dark) #catered-customers-feed > div span,
+        html:not(.dark) #catered-customers-feed > div div {
+            color: #0f172a !important;
+        }
+        /* Muted timestamps and secondary text */
+        html:not(.dark) #rider-cust-chats-feed .text-gray-400,
+        html:not(.dark) #rider-cust-chats-feed .text-gray-500,
+        html:not(.dark) #login-list-feed .text-gray-400,
+        html:not(.dark) #login-list-feed .text-gray-500,
+        html:not(.dark) #catered-customers-feed .text-gray-400,
+        html:not(.dark) #catered-customers-feed .text-gray-500 {
+            color: #475569 !important;
+        }
+        /* High visibility for primary highlights */
+        html:not(.dark) #catered-customers-feed .text-orange-400,
+        html:not(.dark) #catered-customers-feed .text-orange-500,
+        html:not(.dark) #catered-customers-feed .text-orange-600 {
+            color: #ea580c !important;
+            font-weight: 800 !important;
+        }
+        html:not(.dark) #login-list-feed .text-blue-400,
+        html:not(.dark) #login-list-feed .text-blue-500,
+        html:not(.dark) #login-list-feed .text-blue-600,
+        html:not(.dark) #catered-customers-feed .text-blue-400,
+        html:not(.dark) #catered-customers-feed .text-blue-500,
+        html:not(.dark) #catered-customers-feed .text-blue-600 {
+            color: #2563eb !important;
+            font-weight: 800 !important;
+        }
+        html:not(.dark) #catered-customers-feed .text-emerald-400,
+        html:not(.dark) #catered-customers-feed .text-emerald-500,
+        html:not(.dark) #catered-customers-feed .text-emerald-600 {
+            color: #059669 !important;
+            font-weight: 800 !important;
+        }
+    </style>
+
+    <!-- ADVANCE ORDER WARNING BANNER (URGENT SCHEDULE ALERTS: 30M, 15M, 5M) -->
+    <div id="adv-order-banner" class="hidden p-3 rounded-2xl shadow-xl flex items-center justify-between gap-2 cursor-pointer transition-all duration-200 select-none">
+        <div class="flex items-center gap-2.5 min-w-0 flex-1">
+            <div id="adv-banner-icon-box" class="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-sm shrink-0">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+            </div>
+            <div class="flex flex-col min-w-0">
+                <h4 id="adv-banner-title" class="font-black text-xs truncate leading-tight">🔔 30 MINS NOTICE: Scheduled Delivery Ahead</h4>
+                <p id="adv-banner-msg" class="text-[11px] text-white/90 truncate font-medium mt-0.5">Customer — Scheduled delivery due soon</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+            <span class="text-[10px] font-bold bg-white/25 hover:bg-white/35 px-2 py-1 rounded-lg transition active:scale-95 text-white">View Order</span>
+            <i class="fa-solid fa-chevron-right text-xs text-white/80"></i>
+        </div>
+    </div>
+
+    <!-- ULTRA-COMPACT 2-TIER QUICK ACTION DOCK (70% VERTICAL SPACE SAVER) -->
+    <div class="flex flex-col gap-1.5 mt-0.5">
+        <!-- TIER 1: PRIMARY WORKFLOW TOOLS (4-COL GRID) -->
+        <div class="grid grid-cols-4 gap-1.5">
+            <!-- Smart Cart -->
+            <button onclick="window.switchView && window.switchView('view-cart')" class="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-500/30 dark:hover:border-emerald-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm">
+                <i class="fa-solid fa-receipt text-emerald-600 dark:text-emerald-400 text-sm"></i>
+                <span class="text-[10px] font-bold text-emerald-900 dark:text-emerald-300 truncate w-full text-center">Smart Cart</span>
+            </button>
+
+            <!-- Map Calculation -->
+            <button onclick="window.openMapCalcBoardModal && window.openMapCalcBoardModal()" class="bg-blue-50 hover:bg-blue-100 border border-blue-200 dark:bg-blue-950/40 dark:border-blue-500/30 dark:hover:border-blue-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm">
+                <i class="fa-solid fa-calculator text-blue-600 dark:text-blue-400 text-sm"></i>
+                <span class="text-[10px] font-bold text-blue-900 dark:text-blue-300 truncate w-full text-center">Map Calc</span>
+            </button>
+
+            <!-- Commission -->
+            <button onclick="window.openCommissionScreen && window.openCommissionScreen()" class="bg-amber-50 hover:bg-amber-100 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-500/30 dark:hover:border-amber-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm">
+                <i class="fa-solid fa-wallet text-amber-600 dark:text-amber-400 text-sm"></i>
+                <span class="text-[10px] font-bold text-amber-900 dark:text-amber-300 truncate w-full text-center">Commission</span>
+            </button>
+
+            <!-- Adv. Orders -->
+            <button onclick="window.openAdvancedOrdersModal && window.openAdvancedOrdersModal()" class="bg-purple-50 hover:bg-purple-100 border border-purple-200 dark:bg-purple-950/40 dark:border-purple-500/30 dark:hover:border-purple-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm relative">
+                <i class="fa-solid fa-calendar-check text-purple-600 dark:text-purple-400 text-sm"></i>
+                <span class="text-[10px] font-bold text-purple-900 dark:text-purple-300 truncate w-full text-center">Adv. Orders</span>
+                <div id="adv-count-badge" class="hidden absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full border border-cardBg animate-pulse">0</div>
+            </button>
+        </div>
+
+        <!-- TIER 2: TRACKER & DIRECTORY UTILITIES (5-COL GRID) -->
+        <div class="grid grid-cols-5 gap-1.5">
+            <!-- Mutual Live GPS Tracker -->
+            <button onclick="window.promptStartLiveGpsSession && window.promptStartLiveGpsSession()" class="bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 dark:bg-indigo-950/40 dark:border-indigo-500/30 dark:hover:border-indigo-400 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-90 shadow-sm" title="Mutual Live GPS Tracker">
+                <i class="fa-solid fa-satellite-dish text-indigo-600 dark:text-indigo-400 text-xs animate-pulse"></i>
+                <span class="text-[9px] font-bold text-indigo-900 dark:text-indigo-300 truncate w-full text-center">Live GPS</span>
+            </button>
+
+            <!-- Customers Directory -->
+            <button onclick="window.openDirectory && window.openDirectory('customers')" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-blue-500/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-90 shadow-sm">
+                <i class="fa-solid fa-users text-blue-600 dark:text-blue-400 text-xs"></i>
+                <span class="text-[9px] font-bold text-gray-700 dark:text-gray-300 truncate w-full text-center">Customers</span>
+            </button>
+
+            <!-- Stores Directory -->
+            <button onclick="window.openDirectory && window.openDirectory('stores')" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-orange-500/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-95 shadow-sm">
+                <i class="fa-solid fa-store text-orange-600 dark:text-orange-400 text-xs"></i>
+                <span class="text-[9px] font-bold text-gray-700 dark:text-gray-300 truncate w-full text-center">Stores</span>
+            </button>
+
+            <!-- Rates Directory -->
+            <button onclick="window.openDirectory && window.openDirectory('barangays')" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-emerald-500/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-95 shadow-sm">
+                <i class="fa-solid fa-map-location-dot text-emerald-600 dark:text-emerald-400 text-xs"></i>
+                <span class="text-[9px] font-bold text-gray-700 dark:text-gray-300 truncate w-full text-center">Rates</span>
+            </button>
+
+            <!-- GCash Modal -->
+            <button onclick="window.openGCashModal && window.openGCashModal()" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-blue-400/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-95 shadow-sm">
+                <img src="gcash-logo-png_seeklogo-522261.png" alt="GCash" class="w-3.5 h-3.5 object-contain">
+                <span class="text-[9px] font-bold text-gray-700 dark:text-gray-300 truncate w-full text-center">GCash</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- RIDER LIVE CUSTOMER & MERCHANT CHATS PANEL -->
+    <div class="bg-cardBg border border-gray-200 dark:border-gray-800 rounded-2xl flex flex-col overflow-hidden shadow-sm">
+        <div class="bg-gray-50 dark:bg-gray-800/50 p-2.5 text-xs font-bold text-gray-800 dark:text-gray-200 flex flex-col gap-2 border-b border-gray-200 dark:border-gray-800">
+            <div class="flex justify-between items-center">
+                <span><i class="fa-solid fa-comments text-blue-600 dark:text-blue-400 mr-1.5"></i> Live Chats Feed</span>
+                <span class="text-[10px] text-gray-500 dark:text-gray-400 font-mono" id="rider-cust-chats-badge">0 threads</span>
+            </div>
+            <div class="flex bg-gray-200/80 dark:bg-black/40 p-1 rounded-xl border border-gray-200 dark:border-gray-800 text-center gap-1 overflow-x-auto no-scrollbar">
+                <!-- INBOX TAB WITH ACTIVE UNREAD BADGE -->
+                <button id="rider-chat-tab-inbox" onclick="window.setRiderChatFilter && window.setRiderChatFilter('inbox')" class="flex-1 min-w-[55px] py-1 rounded-lg bg-blue-600 text-white font-bold text-[10px] transition shadow-sm flex items-center justify-center gap-1">
+                    <span>Inbox</span>
+                    <span id="rider-inbox-unread-badge" class="hidden bg-red-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full animate-pulse">0</span>
+                </button>
+                <button id="rider-chat-tab-catering" onclick="window.setRiderChatFilter && window.setRiderChatFilter('catering')" class="flex-1 min-w-[55px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition">Catering</button>
+                <button id="rider-chat-tab-stores" onclick="window.setRiderChatFilter && window.setRiderChatFilter('stores')" class="flex-1 min-w-[65px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition flex items-center justify-center gap-1">
+                    <span>🏬 Stores</span>
+                    <span id="rider-store-unread-badge" class="hidden bg-orange-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full animate-pulse">0</span>
+                </button>
+                <button id="rider-chat-tab-followup" onclick="window.setRiderChatFilter && window.setRiderChatFilter('followup')" class="flex-1 min-w-[60px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition">Follow Up</button>
+                <button id="rider-chat-tab-done" onclick="window.setRiderChatFilter && window.setRiderChatFilter('done')" class="flex-1 min-w-[45px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition">Done</button>
+            </div>
+        </div>
+
+        <div id="rider-cust-chats-feed" class="p-3 flex flex-col gap-2 text-xs max-h-56 overflow-y-auto min-h-[120px]">
+            <div class="text-gray-400 dark:text-gray-500 italic text-center py-4">No active messages yet.</div>
+        </div>
+    </div>
+
+    <!-- ROSTER PANEL -->
+    <div class="bg-cardBg dark:bg-tgBg text-gray-900 dark:text-[#f5f5f5] rounded-2xl border border-gray-200 dark:border-gray-800 p-3.5 flex flex-col gap-3 shadow-sm">
+        <!-- HEADER & RIDER/ADMIN TOOLS -->
+        <div class="flex justify-between items-center flex-wrap gap-1.5">
+            <h3 class="text-xs font-black tracking-wide text-gray-900 dark:text-white">🛵 LOKALEX RIDER ROTATION</h3>
+            
+            <div class="flex items-center gap-1.5 flex-wrap">
+                <!-- 1. DEDICATED RIDER DAY-OFF BUTTON (ALWAYS VISIBLE TO ALL RIDERS) -->
+                <button id="btn-rider-dayoff" onclick="window.openRiderDayOffModal && window.openRiderDayOffModal()" class="bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 dark:bg-teal-600/30 dark:hover:bg-teal-600 dark:text-teal-300 dark:border-teal-500/50 text-[9px] px-2 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 shadow-xs" title="Piliin ang iyong lingguhang Day-Off">
+                    <i class="fa-solid fa-umbrella-beach text-teal-500"></i> Day Off
+                </button>
+
+                <!-- 2. ADMIN STORE HUB BUTTON (GATED BY TOGGLE) -->
+                <button id="admin-store-hub-btn" onclick="window.openAdminStoreAccountModal && window.openAdminStoreAccountModal()" class="hidden bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 dark:bg-orange-600/30 dark:hover:bg-orange-600 dark:text-orange-300 dark:border-orange-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                    <i class="fa-solid fa-shop"></i> Store Hub
+                </button>
+
+                <!-- 3. ADMIN MANAGE RIDERS BUTTON (GATED BY TOGGLE) -->
+                <button id="admin-manage-riders-btn" onclick="window.openAdminManageRidersModal && window.openAdminManageRidersModal()" class="hidden bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/30 dark:hover:bg-blue-600 dark:text-blue-300 dark:border-blue-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                    <i class="fa-solid fa-users-gear"></i> Manage
+                </button>
+
+                <!-- 4. ADMIN TIME-IN SCHEDULE BUTTON (GATED BY TOGGLE) -->
+                <button id="admin-schedule-settings-btn" onclick="window.openAdminTimeInScheduleModal && window.openAdminTimeInScheduleModal()" class="hidden bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-purple-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1" title="Set Rider Time-In Schedules & Early Passes">
+                    <i class="fa-solid fa-clock"></i> Schedule
+                </button>
+
+                <!-- 5. ADMIN DAY-OFF SETTINGS BUTTON (GATED BY TOGGLE) -->
+                <button id="admin-dayoff-settings-btn" onclick="window.openAdminDayOffSettingsModal && window.openAdminDayOffSettingsModal()" class="hidden bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 dark:bg-teal-600/30 dark:hover:bg-teal-600 dark:text-teal-300 dark:border-teal-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1" title="Admin Day-Off Quotas & Reassignment Controls">
+                    <i class="fa-solid fa-sliders"></i> Day-Off Rules
+                </button>
+
+                <!-- 6. ADMIN QUEUE LINEUP RULES BUTTON (GATED BY TOGGLE) -->
+                <button id="admin-queue-settings-btn" onclick="window.openAdminQueueSettingsModal && window.openAdminQueueSettingsModal()" class="hidden bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-purple-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1" title="Configure Available Queue Lineup (FIFO vs Lowest Gross) & Cooldown">
+                    <i class="fa-solid fa-arrow-down-short-wide"></i> Lineup Rules
+                </button>
+
+                <!-- 7. ADMIN MAXIMUM ACTIVE BOOKINGS LIMIT BUTTON (GATED BY TOGGLE) -->
+                <button id="admin-booking-limits-btn" onclick="window.openAdminBookingLimitsModal && window.openAdminBookingLimitsModal()" class="hidden bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-600/30 dark:hover:bg-rose-600 dark:text-rose-300 dark:border-rose-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1" title="Set Maximum Active Catering Bookings per Rider">
+                    <i class="fa-solid fa-layer-group"></i> Max Orders
+                </button>
+
+                <!-- 8. ADMIN COMMISSION SETTINGS BUTTON (GATED BY TOGGLE) -->
+                <button id="admin-commission-settings-btn" onclick="window.openAdminCommissionSettingsModal && window.openAdminCommissionSettingsModal()" class="hidden bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-600/30 dark:hover:bg-amber-600 dark:text-amber-300 dark:border-amber-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                    <i class="fa-solid fa-percent"></i> Commission
+                </button>
+
+                <!-- 9. ADMIN AUTO END SHIFT BUTTON (GATED BY TOGGLE) -->
+                <button id="admin-auto-endshift-btn" onclick="window.openAdminAutoEndShiftModal && window.openAdminAutoEndShiftModal()" class="hidden bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-purple-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                    <i class="fa-solid fa-clock-rotate-left"></i> Auto End
+                </button>
+
+                <!-- 10. ADMIN BAN LIST BUTTON (GATED BY TOGGLE) -->
+                <button id="admin-block-btn" onclick="window.openAdminBlockModal && window.openAdminBlockModal()" class="hidden bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-600/30 dark:hover:bg-red-600 dark:text-red-300 dark:border-red-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                    <i class="fa-solid fa-user-slash"></i> Ban List
+                </button>
+
+                <!-- 11. ADMIN FIND RIDERS BUTTON (GATED BY TOGGLE) -->
+                <button id="admin-find-riders-btn" onclick="window.openFindRidersModal && window.openFindRidersModal()" class="hidden bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-600/30 dark:hover:bg-indigo-600 dark:text-indigo-300 dark:border-indigo-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                    <i class="fa-solid fa-map-location-dot"></i> Find
+                </button>
+
+                <button id="admin-force-all-btn" onclick="window.forceAllEndShift && window.forceAllEndShift()" class="hidden bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-600/20 dark:border-red-600 dark:text-red-400 text-[9px] px-1.5 py-0.5 rounded font-bold transition active:scale-95">Force All End</button>
+
+                <!-- MODERN SLIDER TOGGLE SWITCH FOR ADMIN CONTROLS -->
+                <div id="admin-toggle-wrapper" class="hidden">
+                    <label class="inline-flex items-center gap-1.5 cursor-pointer bg-gray-100 dark:bg-black/50 border border-gray-200 dark:border-amber-500/30 px-2 py-0.5 rounded-lg select-none shadow-xs transition hover:border-amber-500/50">
+                        <span class="text-[9px] font-bold text-gray-700 dark:text-amber-400">Admin</span>
+                        <div class="relative inline-flex items-center">
+                            <input type="checkbox" id="admin-controls-toggle" onchange="window.toggleAdminControls && window.toggleAdminControls(this.checked)" class="sr-only peer">
+                            <div class="w-6 h-3.5 bg-gray-300 dark:bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-2.5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-2.5 after:w-2.5 after:transition-all peer-checked:bg-amber-500 shadow-inner"></div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- ULTRA-COMPACT 4-COL ACTION BUTTONS (DIRECTLY ABOVE AVAILABLE QUEUE) -->
+        <div class="grid grid-cols-4 gap-1.5 p-1 bg-gray-100 dark:bg-black/40 border border-gray-200 dark:border-gray-800 rounded-xl">
+             <button id="btn-status-avail" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('Available')" class="bg-white hover:bg-gray-50 border border-gray-200 dark:border-transparent dark:bg-tgBtn dark:hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-emerald-600 dark:text-green-400">
+                 <div class="w-2 h-2 rounded-full bg-emerald-500"></div> Available
+             </button>
+             <button id="btn-status-cater" onclick="window.promptCateringStatus && window.promptCateringStatus()" class="bg-white hover:bg-gray-50 border border-gray-200 dark:border-transparent dark:bg-tgBtn dark:hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-red-600 dark:text-red-400">
+                 <div class="w-2 h-2 rounded-full bg-red-500"></div> Catering
+             </button>
+             <button id="btn-status-break" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('Break')" class="bg-white hover:bg-gray-50 border border-gray-200 dark:border-transparent dark:bg-tgBtn dark:hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-amber-600 dark:text-amber-300">
+                 ☕ Break
+             </button>
+             <button id="btn-status-end" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('End')" class="bg-white hover:bg-gray-50 border border-gray-200 dark:border-transparent dark:bg-tgBtn dark:hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-gray-600 dark:text-gray-400">
+                 <div class="w-2 h-2 rounded-full bg-gray-400 dark:bg-black border border-gray-500"></div> End Shift
+             </button>
+        </div>
+        
+        <!-- QUEUE LISTINGS -->
+        <div class="flex flex-col gap-2.5">
+            <div>
+                <div class="flex items-center gap-1.5 text-emerald-600 dark:text-green-500 font-bold text-xs">
+                    <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_#22c55e]"></div> AVAILABLE (Queue):
+                </div>
+                <!-- HORIZONTALLY WRAPPED AVAILABLE QUEUE CONTAINER -->
+                <div class="pl-1 text-xs text-gray-600 dark:text-gray-400 mt-1.5 flex flex-wrap items-center gap-1.5" id="home-roster-avail">(Walang naka-duty)</div>
+            </div>
+            
+            <div>
+                <div class="flex items-center gap-1.5 text-red-600 dark:text-red-500 font-bold text-xs">
+                    <div class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_6px_#ef4444]"></div> CATERING / BUSY:
+                </div>
+                <div class="pl-2 text-xs text-gray-600 dark:text-gray-400 mt-1 flex flex-col gap-1" id="home-roster-busy">(Walang bumibiyahe)</div>
+            </div>
+
+            <div>
+                <div class="flex items-center gap-1.5 text-amber-700 dark:text-gray-300 font-bold text-xs">☕ ON BREAK:</div>
+                <div class="pl-2 text-xs text-gray-600 dark:text-gray-400 mt-1 flex flex-col gap-1" id="home-roster-break">(Walang naka-break)</div>
+            </div>
+
+            <div>
+                <div class="flex items-center gap-1.5 text-amber-600 dark:text-yellow-500 font-bold text-xs">⏳ PENALTY COOLDOWN:</div>
+                <div class="pl-2 text-xs text-gray-600 dark:text-gray-400 mt-1 flex flex-col gap-1" id="home-roster-cooldown">(Walang naka-cooldown)</div>
+            </div>
+
+            <!-- DEDICATED ON DAY OFF (TODAY) DISPLAY SECTION -->
+            <div>
+                <div class="flex items-center gap-1.5 text-teal-600 dark:text-teal-400 font-bold text-xs">
+                    🏝️ ON DAY OFF (Today):
+                </div>
+                <div class="pl-1 text-xs text-gray-600 dark:text-gray-400 mt-1.5 flex flex-wrap items-center gap-1.5" id="home-roster-dayoff">(Walang naka-day off)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGIN LIST PANEL -->
+    <div class="bg-cardBg border border-gray-200 dark:border-gray-800 rounded-2xl flex flex-col mt-1 overflow-hidden shadow-sm">
+        <div class="bg-gray-50 dark:bg-gray-800/50 p-2.5 text-xs font-bold text-gray-800 dark:text-gray-200 flex justify-between items-center border-b border-gray-200 dark:border-gray-800">
+            <span><i class="fa-solid fa-right-to-bracket text-blue-600 dark:text-blue-400"></i> Rider Login List (Today)</span>
+            <span class="text-[10px] text-gray-500 dark:text-gray-400 font-mono" id="login-count-badge">0 logins</span>
+        </div>
+        <div id="login-list-feed" class="p-2.5 flex flex-col gap-1.5 text-xs max-h-36 overflow-y-auto">
+            <div class="text-gray-400 dark:text-gray-500 italic text-center py-2">No logins recorded yet today.</div>
+        </div>
+    </div>
+
+    <!-- CATERED CUSTOMERS LIST -->
+    <div class="bg-cardBg border border-gray-200 dark:border-gray-800 rounded-2xl flex flex-col mt-1 overflow-hidden shadow-sm">
+        <div class="bg-gray-50 dark:bg-gray-800/50 p-2.5 text-xs font-bold text-gray-800 dark:text-gray-200 flex justify-between items-center border-b border-gray-200 dark:border-gray-800">
+            <span><i class="fa-solid fa-list-check text-orange-600 dark:text-orange-400"></i> Catered Customers List</span>
+            <span class="text-[10px] text-gray-500 dark:text-gray-400 font-mono" id="catered-count-badge">0 recorded</span>
+        </div>
+        <div id="catered-customers-feed" class="p-2.5 flex flex-col gap-1.5 text-xs max-h-48 overflow-y-auto">
+            <div class="text-gray-400 dark:text-gray-500 italic text-center py-4">No completed catered customers yet today.</div>
+        </div>
+    </div>
+    
+    <button onclick="window.logout && window.logout()" class="text-xs text-red-500 hover:text-red-700 dark:text-red-400/60 dark:hover:text-red-400 py-1.5 mt-1 font-bold transition">Log out of device</button>
+
+    <!-- AVAILABLE QUEUE INFO & GPS AUDIT MODAL -->
+    <div id="available-queue-info-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-xs rounded-2xl p-4 shadow-2xl flex flex-col gap-3 text-gray-900 dark:text-white">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2">
+                <h3 class="text-xs font-black flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                    <i class="fa-solid fa-circle-info"></i> Queue Status Details
+                </h3>
+                <button type="button" onclick="window.closeQueueInfoModal && window.closeQueueInfoModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-xs">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="flex flex-col gap-2 text-xs">
+                <div class="flex justify-between items-center bg-gray-50 dark:bg-white/5 p-2 rounded-xl border border-gray-200 dark:border-gray-700/60">
+                    <span class="text-gray-500 dark:text-gray-400 font-bold">Rider:</span>
+                    <div class="flex items-center gap-1.5 font-black text-gray-900 dark:text-white">
+                        <span id="queue-info-rider-name">Rider Name</span>
+                        <span id="queue-info-position" class="bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] px-1.5 py-0.5 rounded font-mono">#1</span>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center bg-gray-50 dark:bg-white/5 p-2 rounded-xl border border-gray-200 dark:border-gray-700/60">
+                    <span class="text-gray-500 dark:text-gray-400 font-bold">Queued At:</span>
+                    <span id="queue-info-time" class="font-mono font-bold text-gray-900 dark:text-white">--:-- --</span>
+                </div>
+
+                <div class="flex justify-between items-center bg-gray-50 dark:bg-white/5 p-2 rounded-xl border border-gray-200 dark:border-gray-700/60">
+                    <span class="text-gray-500 dark:text-gray-400 font-bold">Elapsed:</span>
+                    <span id="queue-info-elapsed" class="font-mono font-bold text-amber-600 dark:text-amber-400">--</span>
+                </div>
+
+                <div class="flex flex-col gap-1 bg-gray-50 dark:bg-white/5 p-2 rounded-xl border border-gray-200 dark:border-gray-700/60">
+                    <span class="text-gray-500 dark:text-gray-400 font-bold">Location When Queued:</span>
+                    <span id="queue-info-coords" class="font-mono text-[11px] font-bold text-gray-900 dark:text-gray-200 break-words">--</span>
+                </div>
+            </div>
+
+            <div class="flex gap-2 pt-1">
+                <a id="queue-info-map-btn" href="#" target="_blank" rel="noopener noreferrer" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md transition active:scale-95 text-center">
+                    <i class="fa-solid fa-map-location-dot"></i> View on Map
+                </a>
+                <button type="button" onclick="window.closeQueueInfoModal && window.closeQueueInfoModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 text-center">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</section>

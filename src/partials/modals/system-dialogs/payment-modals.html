@@ -1,0 +1,129 @@
+<!-- src/partials/modals/system-dialogs/payment-modals.html -->
+
+<!-- GCASH REGISTRATION MODAL WITH VISUAL CAPTURED QR VIEWER -->
+<div id="gcash-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-blue-500/40 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3 text-gray-900 dark:text-white max-h-[92vh] overflow-y-auto">
+        <div class="w-12 h-12 bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto text-2xl shrink-0">
+            <i class="fa-solid fa-mobile-screen-button"></i>
+        </div>
+        <h3 class="font-bold text-base text-center text-blue-600 dark:text-blue-400">Rider GCash Details</h3>
+        <p class="text-[11px] text-gray-600 dark:text-gray-300 text-center leading-relaxed">
+            I-register ang iyong GCash details at QR Code. Lalabas ito sa iyong opisyal na image resibo.
+        </p>
+
+        <div class="flex flex-col gap-2.5 text-left text-xs">
+            <div>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase block mb-1">GCash Account Name</label>
+                <input type="text" id="gcash-name-input" autocomplete="off" placeholder="e.g. JUAN DELA CRUZ" class="w-full bg-inputBg text-xs rounded-xl p-2.5 outline-none border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white font-bold">
+            </div>
+            
+            <div>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase block mb-1">GCash Number</label>
+                <input type="tel" id="gcash-no-input" autocomplete="tel" inputmode="tel" placeholder="e.g. 09123456789" class="w-full bg-inputBg text-xs rounded-xl p-2.5 outline-none border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white font-bold font-mono">
+            </div>
+
+            <!-- PROMINENT CAPTURED QR CODE VIEWER CARD -->
+            <div class="flex flex-col gap-1.5 pt-2 border-t border-gray-200 dark:border-gray-800">
+                <div class="flex justify-between items-center">
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase flex items-center gap-1">
+                        <i class="fa-solid fa-qrcode text-blue-500"></i> Captured GCash QR Code
+                    </label>
+                    <span id="gcash-qr-status-badge" class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                        No QR Code
+                    </span>
+                </div>
+
+                <div class="flex flex-col items-center justify-center p-3 bg-gray-100 dark:bg-black/40 rounded-2xl border border-gray-200 dark:border-gray-800 gap-2.5 shadow-inner">
+                    <!-- PLACEHOLDER WHEN EMPTY -->
+                    <div id="gcash-qr-placeholder" class="text-center py-5 text-gray-400 text-xs flex flex-col items-center gap-1">
+                        <i class="fa-solid fa-qrcode text-4xl opacity-40"></i>
+                        <span class="text-[10px] font-medium">Walang naka-attach na QR Code</span>
+                    </div>
+
+                    <!-- LIVE PREVIEW IMAGE (SHOWN WHEN QR IS ATTACHED) -->
+                    <div id="gcash-qr-preview-card" class="hidden flex flex-col items-center gap-1.5 w-full">
+                        <div class="p-2 bg-white rounded-xl shadow-md border border-gray-200 dark:border-gray-700 flex items-center justify-center">
+                            <img id="gcash-qr-preview-img" src="" alt="Captured GCash QR" class="w-40 h-40 object-contain rounded-lg">
+                        </div>
+                        <span id="gcash-qr-type-label" class="text-[9.5px] text-emerald-600 dark:text-emerald-400 font-bold">
+                            InstaPay Vector QR Ready
+                        </span>
+                    </div>
+
+                    <!-- ACTION BUTTONS -->
+                    <div class="flex items-center gap-2 w-full pt-1">
+                        <input type="file" id="gcash-qr-file-input" accept="image/*" class="hidden" onchange="window.handleGcashQrFileSelected && window.handleGcashQrFileSelected(event)">
+                        <button type="button" onclick="document.getElementById('gcash-qr-file-input').click()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 px-3 rounded-xl font-bold text-xs transition active:scale-95 shadow flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-camera"></i> <span id="gcash-qr-upload-btn-txt">Upload Screenshot</span>
+                        </button>
+                        <button type="button" id="gcash-qr-clear-btn" onclick="window.clearGcashQr && window.clearGcashQr()" class="hidden bg-red-600/10 hover:bg-red-600 text-red-600 hover:text-white py-2 px-3 rounded-xl font-bold text-xs transition active:scale-95 border border-red-500/30 flex items-center justify-center gap-1" title="Remove QR Code">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <p class="text-[9px] text-gray-500 dark:text-gray-400 italic leading-snug text-center">
+                    I-upload ang screenshot ng iyong GCash QR code. Awtomatikong ihihiwalay ang QR code para lumabas nang malinis sa receipt card.
+                </p>
+            </div>
+        </div>
+
+        <div class="flex gap-2 mt-1 shrink-0">
+            <button onclick="window.closeGCashModal && window.closeGCashModal()" class="flex-1 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 transition active:scale-95">Cancel</button>
+            <button onclick="window.saveGCashDetails && window.saveGCashDetails()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Save Details</button>
+        </div>
+    </div>
+</div>
+
+<!-- SUKLI / CASH CHANGE CALCULATOR MODAL -->
+<div id="sukli-calculator-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-emerald-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3 text-gray-900 dark:text-white animate-in fade-in zoom-in duration-150">
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-500 flex items-center justify-center text-sm font-bold border border-emerald-500/30">
+                    <i class="fa-solid fa-calculator"></i>
+                </div>
+                <div>
+                    <h3 class="font-black text-xs text-gray-900 dark:text-white">Sukli Calculator</h3>
+                    <p id="sukli-cart-label" class="text-[9px] text-gray-500 dark:text-gray-400 font-bold">Cart 1</p>
+                </div>
+            </div>
+            <button onclick="window.closeSukliCalculatorModal && window.closeSukliCalculatorModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- ORDER TOTAL DISPLAY -->
+        <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex justify-between items-center">
+            <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Total to Collect:</span>
+            <span id="sukli-order-total-display" class="font-mono text-base font-black text-emerald-600 dark:text-emerald-400">₱0.00</span>
+        </div>
+
+        <!-- CASH TENDERED INPUT -->
+        <div class="flex flex-col gap-1">
+            <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Customer Cash / Bayad (₱):</label>
+            <input type="number" id="sukli-cash-input" inputmode="decimal" placeholder="0.00" oninput="window.calculateSukli && window.calculateSukli()" class="w-full bg-inputBg text-lg font-black text-center rounded-xl p-2.5 outline-none border border-emerald-500/50 text-gray-900 dark:text-white font-mono">
+        </div>
+
+        <!-- QUICK CASH PRESETS -->
+        <div class="grid grid-cols-4 gap-1.5">
+            <button type="button" onclick="window.setQuickTendered && window.setQuickTendered('exact')" class="bg-gray-200 dark:bg-gray-800 hover:bg-emerald-600 hover:text-white text-gray-800 dark:text-gray-200 py-1.5 rounded-lg text-[10px] font-bold transition active:scale-95">Exact</button>
+            <button type="button" onclick="window.setQuickTendered && window.setQuickTendered(100)" class="bg-gray-200 dark:bg-gray-800 hover:bg-emerald-600 hover:text-white text-gray-800 dark:text-gray-200 py-1.5 rounded-lg text-[10px] font-bold transition active:scale-95">₱100</button>
+            <button type="button" onclick="window.setQuickTendered && window.setQuickTendered(200)" class="bg-gray-200 dark:bg-gray-800 hover:bg-emerald-600 hover:text-white text-gray-800 dark:text-gray-200 py-1.5 rounded-lg text-[10px] font-bold transition active:scale-95">₱200</button>
+            <button type="button" onclick="window.setQuickTendered && window.setQuickTendered(500)" class="bg-gray-200 dark:bg-gray-800 hover:bg-emerald-600 hover:text-white text-gray-800 dark:text-gray-200 py-1.5 rounded-lg text-[10px] font-bold transition active:scale-95">₱500</button>
+            <button type="button" onclick="window.setQuickTendered && window.setQuickTendered(1000)" class="col-span-2 bg-gray-200 dark:bg-gray-800 hover:bg-emerald-600 hover:text-white text-gray-800 dark:text-gray-200 py-1.5 rounded-lg text-[10px] font-bold transition active:scale-95">₱1,000</button>
+            <button type="button" onclick="window.setQuickTendered && window.setQuickTendered('clear')" class="col-span-2 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-500 py-1.5 rounded-lg text-[10px] font-bold transition active:scale-95">Clear</button>
+        </div>
+
+        <!-- COMPUTED CHANGE RESULT -->
+        <div id="sukli-result-box" class="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/40 p-3 rounded-2xl flex flex-col items-center justify-center text-center">
+            <span class="text-[9px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Sukli / Change:</span>
+            <span id="sukli-amount-display" class="font-mono text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">₱0.00</span>
+            <span id="sukli-shortage-msg" class="hidden text-[10px] font-bold text-red-500 mt-0.5">Kulang ang bayad!</span>
+        </div>
+
+        <button type="button" onclick="window.closeSukliCalculatorModal && window.closeSukliCalculatorModal()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 shadow">
+            Done
+        </button>
+    </div>
+</div>

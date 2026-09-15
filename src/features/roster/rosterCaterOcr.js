@@ -1,0 +1,238 @@
+// src/features/roster/rosterCaterOcr.js
+import { showToast, showSideNotification } from '../../ui/notifications.js';
+
+const TESSDATA_FAST_CDN = 'https://cdn.jsdelivr.net/gh/naptha/tessdata@gh-pages/4.0.0_fast';
+
+export function ensureTesseractLoaded() {
+    return new Promise((resolve) => {
+        if (window.Tesseract) return resolve(true);
+
+        const existingScript = document.querySelector('script[src*="tesseract"]');
+        if (existingScript) {
+            existingScript.addEventListener('load', () => resolve(true));
+            setTimeout(() => resolve(!!window.Tesseract), 2500);
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.head.appendChild(script);
+    });
+}
+
+export function fileToImage(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = (err) => reject(err);
+            img.src = e.target.result;
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+    });
+}
+
+export function extractFirstNameFromOcrText(rawText) {
+    if (!rawText) return "";
+
+    const noiseWords = [
+        "assign", "conversation", "see contact", "contact", "active", "now",
+        "messenger", "message", "messages", "chat", "direct", "meta", "business",
+        "suite", "facebook", "today", "yesterday", "reply", "inbox", "search",
+        "unread", "done", "spam", "follow up", "sent by", "transfer", "completed",
+        "details", "view", "edit", "call", "video", "profile", "thursday", "friday",
+        "saturday", "sunday", "monday", "tuesday", "wednesday", "thu", "fri", "sat",
+        "sun", "mon", "tue", "wed", "reply in messenger", "this is a reply", "an ad",
+        "ad_id", "ad id", "transfer requested", "how much", "total price", "sent a photo",
+        "オンライン中", "アクティブ", "メッセージ", "連絡先", "チャット", "検索", "プロフィール", "広告への返信"
+    ];
+
+    const lines = rawText
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .filter(l => l.length > 0);
+
+    for (const line of lines) {
+        const lower = line.toLowerCase();
+        
+        if (noiseWords.some(w => lower.includes(w))) continue;
+        if (!/[\p{L}]/u.test(line)) continue;
+        if (/^\d{1,2}:\d{2}/.test(line)) continue;
+        if (/^ad_id/i.test(line)) continue;
+        if (/^\d+$/.test(line)) continue;
+
+        const cleanedLine = line.replace(/^[^\p{L}\p{N}]+/u, '').replace(/[^\p{L}\p{N}]+$/u, '').trim();
+        if (cleanedLine.length < 1) continue;
+
+        const words = cleanedLine
+            .split(/\s+/)
+            .map(w => w.replace(/[^\p{L}\p{N}'-]/gu, '').trim())
+            .filter(Boolean);
+
+        if (words.length > 0) {
+            let chosenWord = "";
+            const isAsianScript = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7AF]/.test(words[0]);
+
+            if (isAsianScript) {
+                // Return exact Katakana / Kanji / Hangul first name
+                chosenWord = words[0];
+            } else if (words.length >= 2 && words[0].length <= 2 && words[1].length >= 3) {
+                chosenWord = words[1];
+            } else if (words.length >= 3 && words[0].length <= 2) {
+                chosenWord = words[1];
+            } else {
+                chosenWord = words[0];
+            }
+
+            if (chosenWord && chosenWord.length >= 1) {
+                if (/[a-zA-Z]/.test(chosenWord)) {
+                    return chosenWord.charAt(0).toUpperCase() + chosenWord.slice(1).toLowerCase();
+                }
+                return chosenWord;
+            }
+        }
+    }
+
+    return "";
+}
+
+export async function handleCaterScreenshotSelected(event, targetInputId = 'catering-customer-name', targetSelectId = 'catering-customer-select', statusElId = 'cater-ocr-status') {
+    const file = event.target?.files?.[0];
+    if (!file) return;
+
+    const statusEl = document.getElementById(statusElId);
+    const nameInput = document.getElementById(targetInputId);
+    const selectEl = document.getElementById(targetSelectId);
+
+    if (statusEl) statusEl.classList.remove('hidden');
+    showToast("⏳ Sinusuri ang Messenger header (English & Japanese)...");
+
+    try {
+        await ensureTesseractLoaded();
+        if (!window.Tesseract) {
+            throw new Error("Tesseract OCR engine unavailable.");
+        }
+
+        const img = await fileToImage(file);
+
+        const isMobilePortrait = img.height > img.width * 1.3;
+        let startY, cropH, startX, cropW;
+
+        if (isMobilePortrait) {
+            // Isolate the header name line; exclude status bar above and ad_id below
+            startY = Math.round(img.height * 0.046);
+            cropH = Math.round(img.height * 0.048);
+            startX = Math.round(img.width * 0.18);
+            cropW = Math.round(img.width * 0.72);
+        } else {
+            startY = 0;
+            cropH = Math.round(img.height * 0.12);
+            startX = Math.round(img.width * 0.08);
+            cropW = Math.round(img.width * 0.80);
+        }
+
+        const upscale = 2.5;
+        const roiCanvas = document.createElement('canvas');
+        roiCanvas.width = Math.round(cropW * upscale);
+        roiCanvas.height = Math.round(cropH * upscale);
+        
+        const ctx = roiCanvas.getContext('2d', { willReadFrequently: true });
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, roiCanvas.width, roiCanvas.height);
+        ctx.drawImage(img, startX, startY, cropW, cropH, 0, 0, roiCanvas.width, roiCanvas.height);
+
+        const imgData = ctx.getImageData(0, 0, roiCanvas.width, roiCanvas.height);
+        const d = imgData.data;
+
+        // Determine background theme
+        let darkPixelCount = 0;
+        const totalPixels = d.length / 4;
+        for (let i = 0; i < d.length; i += 4) {
+            const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            if (gray < 128) darkPixelCount++;
+        }
+        const isDarkTheme = darkPixelCount > totalPixels * 0.5;
+
+        // Smooth contrast enhancement: preserves Katakana anti-aliased subpixels
+        for (let i = 0; i < d.length; i += 4) {
+            let gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            if (isDarkTheme) {
+                gray = 255 - gray; // Invert to black text on white
+            }
+            // Linear contrast stretch between [50, 190]
+            const contrast = Math.min(255, Math.max(0, (gray - 50) * (255 / 140)));
+            d[i] = contrast;
+            d[i + 1] = contrast;
+            d[i + 2] = contrast;
+        }
+        ctx.putImageData(imgData, 0, 0);
+
+        let rawText = "";
+
+        // Use fast 4.0.0_fast dictionary path (2.4MB) with multi-language support
+        let worker = null;
+        try {
+            if (typeof window.Tesseract.createWorker === 'function') {
+                worker = await window.Tesseract.createWorker(['eng', 'jpn'], 1, {
+                    langPath: TESSDATA_FAST_CDN,
+                    logger: () => {}
+                });
+                const ret = await worker.recognize(roiCanvas);
+                rawText = ret?.data?.text || "";
+            } else {
+                const ret = await window.Tesseract.recognize(roiCanvas, 'eng+jpn', {
+                    langPath: TESSDATA_FAST_CDN,
+                    logger: () => {}
+                });
+                rawText = ret?.data?.text || "";
+            }
+        } catch (workerErr) {
+            console.warn("Primary fast worker OCR failed, trying fallback recognize:", workerErr);
+            const ret = await window.Tesseract.recognize(roiCanvas, 'eng+jpn', {
+                langPath: TESSDATA_FAST_CDN,
+                logger: () => {}
+            });
+            rawText = ret?.data?.text || "";
+        } finally {
+            if (worker) {
+                await worker.terminate().catch(() => {});
+            }
+        }
+
+        const detectedName = extractFirstNameFromOcrText(rawText);
+
+        if (detectedName) {
+            if (nameInput) {
+                nameInput.value = detectedName;
+                nameInput.focus();
+            }
+
+            if (selectEl && selectEl.options) {
+                for (let i = 0; i < selectEl.options.length; i++) {
+                    const optVal = (selectEl.options[i].value || "").toLowerCase();
+                    if (optVal && (optVal.includes(detectedName.toLowerCase()) || detectedName.toLowerCase().includes(optVal))) {
+                        selectEl.selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            showToast(`✅ Customer detected: ${detectedName}`);
+            showSideNotification("NAME DETECTED", `Customer: ${detectedName}`, "fa-user-check", "text-emerald-400", "border-emerald-500");
+        } else {
+            showToast("⚠️ Hindi matukoy ang pangalan. Paki-type nang manual.");
+        }
+    } catch (err) {
+        console.error("Catering screenshot OCR failed:", err);
+        showToast("❌ Bigo ang OCR scan. Paki-type nang manual.");
+    } finally {
+        if (statusEl) statusEl.classList.add('hidden');
+        event.target.value = '';
+    }
+}

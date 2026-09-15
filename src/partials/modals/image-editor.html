@@ -1,0 +1,97 @@
+<!-- IMAGE EDITOR MODAL (Set z-index to 999999 to float above chat window) -->
+<div id="image-editor-modal" class="hidden fixed inset-0 z-[999999] bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-4" style="z-index: 999999 !important;">
+    <div class="bg-cardBg border border-gray-800 w-full max-w-md rounded-3xl p-5 shadow-2xl flex flex-col gap-4 relative animate-in fade-in zoom-in duration-200">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+            <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                <i class="fa-solid fa-wand-magic-sparkles text-blue-400"></i> Edit & Annotate Photo
+            </h3>
+            <button onclick="window.closeImageEditorModal && window.closeImageEditorModal()" class="text-gray-400 hover:text-white transition text-sm">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- Canvas Container -->
+        <div id="photo-canvas-wrapper" class="relative bg-black rounded-2xl overflow-hidden flex items-center justify-center border border-gray-800 min-h-[300px] max-h-[420px]">
+            <canvas id="photo-canvas" class="max-w-full max-h-[400px] object-contain cursor-crosshair"></canvas>
+
+            <!-- DIRECT CANVAS INLINE TRANSPARENT TEXT OVERLAY -->
+            <input type="text" id="canvas-inline-text-input" 
+                class="hidden absolute z-30 bg-transparent text-white font-bold border-none outline-none p-0 text-center focus:ring-0 select-text font-sans" 
+                style="transform: translate(-50%, -50%);" 
+                oninput="window.handleCanvasInlineTextInput && window.handleCanvasInlineTextInput(this.value)" 
+                onblur="window.commitCanvasInlineText && window.commitCanvasInlineText()" 
+                onkeydown="if(event.key==='Enter') this.blur();">
+        </div>
+
+        <!-- Toolbar Controls -->
+        <div class="bg-darkBg/90 border border-gray-800 p-3 rounded-2xl flex flex-col gap-3">
+            <div class="flex items-center justify-between gap-2 wrap">
+                <!-- Color Options -->
+                <div class="flex items-center gap-1.5">
+                    <span class="text-[10px] text-gray-400 font-bold uppercase mr-1">Color:</span>
+                    <button id="color-btn-red" onclick="window.setEditorColor && window.setEditorColor('#ef4444')" class="w-7 h-7 rounded-full bg-red-500 border-2 border-black ring-2 ring-blue-500 scale-110 shadow transition"></button>
+                    <button id="color-btn-black" onclick="window.setEditorColor && window.setEditorColor('#000000')" class="w-7 h-7 rounded-full bg-black border-2 border-white opacity-80 shadow transition"></button>
+                    <button id="color-btn-white" onclick="window.setEditorColor && window.setEditorColor('#ffffff')" class="w-7 h-7 rounded-full bg-white border-2 border-black opacity-80 shadow transition"></button>
+                </div>
+
+                <!-- Brush Size Toggle -->
+                <button onclick="window.cycleBrushSize && window.cycleBrushSize()" class="bg-inputBg border border-gray-700 px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-gray-300 hover:text-white transition">
+                    <span class="text-[10px] text-gray-400 uppercase">Brush:</span>
+                    <span id="brush-size-dot" class="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                    <span id="brush-size-label" class="font-mono">S</span>
+                </button>
+
+                <!-- Direct Inline Text Button -->
+                <button onclick="window.addEditorTextOverlay && window.addEditorTextOverlay()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs transition active:scale-95 flex items-center gap-1">
+                    <i class="fa-solid fa-font"></i> A Text
+                </button>
+
+                <!-- Clear Drawing Button -->
+                <button onclick="window.clearEditorDrawings && window.clearEditorDrawings()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 p-2 rounded-xl text-xs transition active:scale-95" title="Clear Canvas">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </button>
+            </div>
+
+            <!-- Lighting Slider -->
+            <div class="flex items-center gap-3 pt-1 border-t border-gray-800/80">
+                <span class="text-[10px] text-amber-400 font-bold uppercase shrink-0 flex items-center gap-1">
+                    <i class="fa-solid fa-sun"></i> Lighting:
+                </span>
+                <input type="range" id="editor-brightness" min="50" max="180" value="100" oninput="window.renderEditorCanvas && window.renderEditorCanvas()" class="w-full accent-amber-400 cursor-pointer h-1.5 bg-gray-700 rounded-lg">
+            </div>
+        </div>
+
+        <!-- Selected Text Controls (Dynamic Size/Rotate Adjustment) -->
+        <div id="editor-text-controls" class="hidden bg-darkBg/90 border border-blue-500/40 p-3 rounded-2xl flex items-center justify-between gap-2 text-xs">
+            <div class="flex items-center gap-2 flex-1">
+                <span class="text-[10px] text-blue-400 font-bold uppercase shrink-0">Size:</span>
+                <input type="range" id="editor-text-size-slider" min="12" max="100" value="24" oninput="window.updateSelectedTextFontSize && window.updateSelectedTextFontSize(this.value)" class="w-full accent-blue-500 h-1 bg-gray-700 rounded">
+                <span id="editor-text-size-val" class="text-[10px] text-gray-400 font-mono w-8">24px</span>
+            </div>
+            <button onclick="window.deleteSelectedTextOverlay && window.deleteSelectedTextOverlay()" class="bg-red-600/30 text-red-400 border border-red-500/40 px-2.5 py-1 rounded-lg text-xs font-bold hover:bg-red-600 hover:text-white transition">
+                <i class="fa-solid fa-trash"></i>
+            </button>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center justify-between gap-3 pt-1">
+            <!-- HD MODE TOGGLE BUTTON -->
+            <button type="button" id="editor-hd-toggle-btn" onclick="window.toggleHdMode && window.toggleHdMode()" class="px-3 py-2.5 rounded-xl bg-inputBg text-gray-400 border border-gray-700 hover:text-white transition flex items-center gap-1.5 text-xs font-bold active:scale-95 shadow">
+                <i id="editor-hd-icon" class="fa-solid fa-compress text-gray-400"></i>
+                <span id="editor-hd-label">HD Off</span>
+            </button>
+
+            <div class="flex items-center gap-2 flex-1 justify-end">
+                <button onclick="window.closeImageEditorModal && window.closeImageEditorModal()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold px-4 py-2.5 rounded-xl text-xs transition active:scale-95">
+                    Cancel
+                </button>
+                <button onclick="window.exportAndSendEditedImage && window.exportAndSendEditedImage()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition active:scale-95 shadow-lg flex items-center gap-2">
+                    <i class="fa-solid fa-paper-plane"></i> Send Photo
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>

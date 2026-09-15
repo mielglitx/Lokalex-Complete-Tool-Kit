@@ -1,0 +1,33 @@
+<div id="floating-chat-container" class="fixed right-0 z-50 flex flex-col items-end pointer-events-none" style="top: 80%;">
+    <div id="expanded-chat-window" class="hidden pointer-events-auto bg-cardBg border border-gray-700 rounded-2xl shadow-2xl w-80 sm:w-88 h-96 max-h-[75vh] flex flex-col overflow-hidden mr-3 mb-2 transition-all">
+        <div id="chat-drag-handle" class="bg-gray-800 p-3 flex items-center justify-between select-none border-b border-gray-700 shrink-0">
+            <div class="flex items-center gap-2 font-bold text-xs text-blue-400">
+                <i class="fa-solid fa-comments text-base"></i> Team Comms
+            </div>
+            <button onclick="window.toggleChatWindow && window.toggleChatWindow(false)" class="text-gray-400 hover:text-white text-sm active:scale-90">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        
+        <div id="bubble-chat-messages" class="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col gap-2 text-xs">
+            <div class="text-center text-gray-500 italic py-10">Loading messages...</div>
+        </div>
+
+        <div class="p-2 bg-inputBg border-t border-gray-700 flex flex-col relative shrink-0">
+            <div id="tag-suggestions" class="hidden absolute bottom-full left-0 right-0 bg-cardBg border border-gray-700 rounded-t-xl max-h-32 overflow-y-auto z-20 p-1 text-xs shadow-xl"></div>
+            
+            <div class="flex gap-2 items-center">
+                <input type="text" id="bubble-chat-input" name="bubble_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" oninput="window.handleChatInput && window.handleChatInput(this)" onkeydown="if(event.key==='Enter') window.sendBubbleChatMessage && window.sendBubbleChatMessage()" placeholder="Type a message or @rider..." class="flex-1 bg-darkBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 focus:border-blue-500 text-white">
+                <button onclick="window.sendBubbleChatMessage && window.sendBubbleChatMessage()" class="bg-blue-600 hover:bg-blue-500 text-white w-9 h-9 rounded-xl flex items-center justify-center text-xs transition active:scale-90 shrink-0">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="chat-bubble" class="pointer-events-auto relative bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-l-2xl shadow-2xl flex items-center justify-center cursor-pointer transition-all active:scale-90 border-l-2 border-t-2 border-b-2 border-white/20 select-none touch-none">
+        <i class="fa-solid fa-comments text-base"></i>
+        <div id="chat-tag-badge" class="hidden absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-black text-[9px] font-black rounded-full flex items-center justify-center border-2 border-darkBg animate-bounce shadow-md">!</div>
+        <div id="chat-unread-badge" class="hidden absolute -top-1.5 -left-1.5 min-w-[18px] h-4 px-1 bg-red-600 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-darkBg shadow-md">0</div>
+    </div>
+</div>

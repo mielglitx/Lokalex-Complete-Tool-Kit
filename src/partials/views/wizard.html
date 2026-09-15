@@ -1,0 +1,90 @@
+<section id="view-wizard" class="hidden flex-1 flex flex-col gap-3 p-4 overflow-y-auto">
+    <!-- CLIENT DETAILS PANEL -->
+    <div class="bg-cardBg rounded-xl border border-gray-800 p-4">
+        <h3 class="text-sm font-bold text-emerald-500 uppercase tracking-wider mb-2">Client Details</h3>
+        
+        <div id="catered-client-selector-box" class="flex flex-col gap-2 mb-2">
+            <label class="text-[10px] text-gray-400 font-bold uppercase">Selected Catering Client:</label>
+            <div id="catered-client-buttons" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <div class="flex items-center gap-2 my-1">
+            <input type="checkbox" id="manual-client-toggle" onchange="window.toggleManualClientInput && window.toggleManualClientInput(this.checked)" class="w-4 h-4 accent-blue-500">
+            <label for="manual-client-toggle" class="text-xs text-gray-300">Type client name manually</label>
+        </div>
+
+        <input type="text" id="rcpt-name" name="rcpt_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Customer / Store Name (Required)" class="w-full bg-inputBg text-sm rounded-lg p-2.5 mt-1 outline-none border border-gray-700 text-white font-bold">
+        <input type="text" id="rcpt-contact" name="rcpt_contact_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Contact Number / Address" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 mt-2 text-white">
+    </div>
+
+    <!-- AUTO-CALCULATED FEES PANEL -->
+    <div class="text-xs text-gray-400 mt-2 uppercase tracking-wider font-bold">Auto-Calculated Fees (Editable)</div>
+    <div class="bg-cardBg rounded-xl border border-gray-800 overflow-hidden text-sm flex flex-col gap-3 p-3">
+        <div class="flex justify-between items-center gap-2">
+            <span class="text-gray-300 flex-1">Handling Fee (Store)</span>
+            <input type="number" id="wiz-handling" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold text-white">
+        </div>
+        <div class="flex justify-between items-center gap-2">
+            <span class="text-gray-300 flex-1">Market Fee</span>
+            <input type="number" id="wiz-market" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold text-white">
+        </div>
+        <div class="flex justify-between items-center gap-2">
+            <span class="text-gray-300 flex-1">Multi-Stop Fee</span>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="window.adjustStoreCount && window.adjustStoreCount(-1)" class="text-red-400 active:scale-95 transition"><i class="fa-solid fa-circle-minus"></i></button>
+                <span id="wiz-store-count" class="font-bold w-4 text-center text-white">1</span>
+                <button type="button" onclick="window.adjustStoreCount && window.adjustStoreCount(1)" class="text-green-400 active:scale-95 transition"><i class="fa-solid fa-circle-plus"></i></button>
+                <input type="number" id="wiz-multistop" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-20 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 text-blue-400 font-bold">
+            </div>
+        </div>
+    </div>
+
+    <!-- MANUAL ADJUSTMENTS PANEL WITH DISCOUNT MODE SWITCHER -->
+    <div class="text-xs text-gray-400 mt-2 uppercase tracking-wider font-bold">Manual Adjustments</div>
+    <div class="bg-cardBg rounded-xl border border-gray-800 overflow-hidden text-sm flex flex-col gap-3 p-3">
+        <div class="flex justify-between items-center gap-2">
+            <span class="text-gray-300 flex-1">Rider Delivery Fee</span>
+            <input type="number" id="wiz-delivery" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold text-white">
+        </div>
+
+        <!-- DISCOUNT ROW WITH TOGGLE BUTTONS (₱ vs %) -->
+        <div class="flex justify-between items-center gap-2">
+            <div class="flex items-center gap-1.5 flex-1">
+                <span class="text-gray-300">Discount Bawas</span>
+                
+                <!-- TOGGLE SWITCH (AMOUNT ₱ / PERCENT %) -->
+                <div class="flex bg-darkBg border border-gray-700 rounded-lg p-0.5 ml-1">
+                    <button type="button" id="wiz-discount-type-amount" onclick="window.toggleDiscountType && window.toggleDiscountType('amount')" class="px-2 py-1 bg-red-600 text-white font-bold rounded-md text-[10px] shadow transition active:scale-95">₱</button>
+                    <button type="button" id="wiz-discount-type-percent" onclick="window.toggleDiscountType && window.toggleDiscountType('percent')" class="px-2 py-1 bg-gray-800 text-gray-400 font-bold rounded-md text-[10px] hover:text-white transition active:scale-95">%</button>
+                </div>
+            </div>
+
+            <div class="relative flex items-center">
+                <span id="wiz-discount-icon" class="absolute left-2 text-xs font-bold text-red-400">₱</span>
+                <input type="number" id="wiz-discount" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded pl-5 pr-2 py-1 outline-none border border-gray-700 text-red-400 font-bold">
+            </div>
+        </div>
+    </div>
+
+    <!-- PAYMENT OPTIONS PANEL -->
+    <div class="text-xs text-gray-400 mt-2 uppercase tracking-wider font-bold">Payment Options</div>
+
+    <label class="bg-cardBg p-3 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer">
+        <div>
+            <div class="text-sm font-bold text-orange-400"><i class="fa-solid fa-gift"></i> Libreng Deliberi</div>
+            <div class="text-[10px] text-gray-400">Walang sasaguting fees ang customer</div>
+        </div>
+        <input type="checkbox" id="wiz-free-delivery" onchange="window.calculateGrandTotal && window.calculateGrandTotal()" class="w-5 h-5 accent-orange-500">
+    </label>
+
+    <!-- GRAND TOTAL DISPLAY -->
+    <div class="mt-4 p-4 bg-emerald-900/20 border border-emerald-800/50 rounded-xl flex justify-between items-center">
+        <span class="text-gray-400 text-sm font-bold">GRAND TOTAL</span>
+        <span class="text-2xl font-black text-emerald-400">₱<span id="wiz-grand-total">0.00</span></span>
+    </div>
+
+    <!-- SUBMIT BUTTON -->
+    <button type="button" onclick="window.generateFinalReceipt && window.generateFinalReceipt()" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold p-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2">
+        <i class="fa-solid fa-receipt"></i> Generate Digital Receipt
+    </button>
+</section>
