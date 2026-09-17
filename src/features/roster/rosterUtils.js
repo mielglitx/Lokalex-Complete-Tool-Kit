@@ -1,4 +1,6 @@
 // src/features/roster/rosterUtils.js
+<<<<<<< HEAD
+=======
 
 /**
  * ============================================================================
@@ -21,12 +23,16 @@
  * ============================================================================
  */
 
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
 import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { ADMIN_IDS } from '../../config/constants.js';
 import { showToast, unlockAudioContext } from '../../ui/notifications.js';
 import { getLocalTodayStr, isSameDate } from '../../utils/helpers.js';
+<<<<<<< HEAD
+=======
 import { getQueueLineupSettings } from './rosterQueueSettings.js';
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
 
 export let lineAlarmInterval = null;
 export let lineAlarmConfirmed = false;
@@ -131,6 +137,10 @@ export function isTL() {
     return validTlTypes.includes(t);
 }
 
+<<<<<<< HEAD
+// Check granular permissions for Team Leads
+=======
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
 export function hasTlPermission(permissionKey) {
     if (isAdmin()) return true;
     if (!isTL()) return false;
@@ -276,20 +286,36 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     return durationText;
 }
 
+<<<<<<< HEAD
+// Canonical date normalizer to handle ISO, slash, dash, and timestamps consistently
+=======
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
 export function normalizeToDateStr(val) {
     if (!val) return "";
     const str = String(val).trim();
     
+<<<<<<< HEAD
+    // YYYY-MM-DD
+=======
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
     const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
     if (isoMatch) {
         return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
     }
 
+<<<<<<< HEAD
+    // MM/DD/YYYY or M/D/YYYY
+=======
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
     const slashMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
     if (slashMatch) {
         return `${slashMatch[3]}-${slashMatch[1].padStart(2, '0')}-${slashMatch[2].padStart(2, '0')}`;
     }
 
+<<<<<<< HEAD
+    // Epoch timestamp
+=======
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
     if (/^\d{10,13}$/.test(str)) {
         const d = new Date(Number(str));
         if (!isNaN(d.getTime())) {
@@ -319,6 +345,10 @@ export function isSameDateStr(date1, date2) {
     return false;
 }
 
+<<<<<<< HEAD
+// Robust fee parser that strips currency symbols and cleans strings
+=======
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
 export function parseItemGross(item) {
     if (!item) return 0;
 
@@ -367,6 +397,10 @@ export function isCustomerMatch(cust1 = "", cust2 = "") {
     return false;
 }
 
+<<<<<<< HEAD
+// Flexible rider matcher to handle ID and full-name/first-name differences
+=======
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
 export function isRiderMatch(targetName = "", recordName = "", targetId = "", recordId = "") {
     const tId = (targetId || "").toString().trim().toLowerCase();
     const rId = (recordId || "").toString().trim().toLowerCase();
@@ -390,6 +424,10 @@ export function isRiderMatch(targetName = "", recordName = "", targetId = "", re
     return false;
 }
 
+<<<<<<< HEAD
+// 100% FINANCIAL & ROSTER SOURCE OF TRUTH
+=======
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
 export function getMergedDeduplicatedCommissionList() {
     if ((!globalState.globalDailyReceipts || globalState.globalDailyReceipts.length === 0) &&
         (!globalState.globalCateredHistory || globalState.globalCateredHistory.length === 0)) {
@@ -530,6 +568,10 @@ export function getRiderTodayGross(riderName, telegramId) {
     return total;
 }
 
+<<<<<<< HEAD
+export function sortAvailableRidersByGross(availableList) {
+    return (availableList || []).slice().sort((a, b) => {
+=======
 /**
  * Universal Available Queue Sorter.
  * Evaluates active lineup settings (FIFO vs Lowest Gross Income) and applies
@@ -569,6 +611,7 @@ export function sortAvailableRiders(availableList) {
         }
 
         // Active sorting pool: Prioritize lowest gross earnings
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
         const grossA = getRiderTodayGross(a.riderName || a.name, a.telegramId);
         const grossB = getRiderTodayGross(b.riderName || b.name, b.telegramId);
 
@@ -576,6 +619,16 @@ export function sortAvailableRiders(availableList) {
             return grossA - grossB;
         }
 
+<<<<<<< HEAD
+        return parseQueueTime(a.queueTime) - parseQueueTime(b.queueTime);
+    });
+}
+
+/**
+ * Archives completed catering delivery sessions.
+ * Bandwidth-optimized: Targets only active catering chats instead of downloading the entire chat history.
+ */
+=======
         return timeA - timeB;
     });
 }
@@ -583,6 +636,7 @@ export function sortAvailableRiders(availableList) {
 // Backward-compatible alias for existing imports
 export const sortAvailableRidersByGross = sortAvailableRiders;
 
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
 export async function archiveRiderCateringIfNeeded(targetRecord) {
     if (!targetRecord || targetRecord.status !== 'Catering' || !targetRecord.customerName) return;
 
@@ -595,6 +649,10 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
     const todayStr = getLocalTodayStr();
     const todayClean = todayStr.replace(/-/g, '');
 
+<<<<<<< HEAD
+    // Bandwidth Optimization: query active catering chats rather than full chat root
+=======
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
     if (db && custs.length > 0) {
         custs.forEach(cName => {
             const cleanC = cName.trim();

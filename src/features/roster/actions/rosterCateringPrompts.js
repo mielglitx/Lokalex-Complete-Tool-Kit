@@ -6,6 +6,7 @@ import { closeCateringModal } from '../../../ui/modals.js';
 import { autoStartLiveGpsSession } from '../../liveTracker.js';
 import { populateCateringCustomerDropdown } from '../../chat/index.js';
 import { 
+    loadRosterCache,
     parseQueueTime, 
     getRiderTodayGross, 
     sortAvailableRidersByGross, 
@@ -17,26 +18,12 @@ import { canRiderTakeMoreBookings } from '../rosterStatusLimits.js';
 import { updateRosterStatusData } from '../rosterStatusCore.js';
 import { dismissQueueAlarm } from './rosterAlarms.js';
 
-export async function promptCateringStatus() {
-    let rosterMembers = globalState.rosterMembers || [];
-
-    if (db) {
-        try {
-            const snap = await db.ref('roster').once('value');
-            const liveData = snap.val();
-            if (liveData) {
-                rosterMembers = Object.entries(liveData).map(([id, r]) => ({
-                    telegramId: id,
-                    id: id,
-                    ...r
-                }));
-                globalState.rosterMembers = rosterMembers;
-            }
-        } catch (e) {
-            console.warn("Failed to fetch live roster for queue check:", e);
-        }
+export function promptCateringStatus() {
+    if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
+        loadRosterCache();
     }
 
+    const rosterMembers = globalState.rosterMembers || [];
     const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
     const currentName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
 
@@ -78,8 +65,12 @@ export async function promptCateringStatus() {
         return showToast(`⚠️ Reached maximum limit of ${limitCheck.maxAllowed} active catering customer(s)${modeLabel}!`);
     }
 
-    if (typeof populateCateringCustomerDropdown === 'function') {
-        populateCateringCustomerDropdown();
+    try {
+        if (typeof populateCateringCustomerDropdown === 'function') {
+            populateCateringCustomerDropdown();
+        }
+    } catch (err) {
+        console.warn("Dropdown population error:", err);
     }
 
     const input = document.getElementById('catering-customer-name') || document.getElementById('admin-cater-cust-name');
@@ -97,23 +88,10 @@ export async function confirmCateringStatus() {
     let custName = (input && input.value ? input.value.trim() : "") || (custSelect && custSelect.value ? custSelect.value.trim() : "");
     if (!custName) return showToast("Please enter or select customer name");
 
-    let liveRoster = globalState.rosterMembers || [];
-    if (db) {
-        try {
-            const snap = await db.ref('roster').once('value');
-            const val = snap.val();
-            if (val) {
-                liveRoster = Object.entries(val).map(([id, r]) => ({
-                    telegramId: id,
-                    id: id,
-                    ...r
-                }));
-                globalState.rosterMembers = liveRoster;
-            }
-        } catch (e) {
-            console.warn("Live roster confirmation check error:", e);
-        }
+    if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
+        loadRosterCache();
     }
+    let liveRoster = globalState.rosterMembers || [];
 
     const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
     const currentName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
@@ -224,8 +202,8 @@ export async function confirmCateringStatus() {
         }
 
         if (db) {
-            await db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
-            await db.ref(`roster/${resolvedId}`).update({
+            db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
+            db.ref(`roster/${resolvedId}`).update({
                 forcedBy: myName,
                 isForcedCater: true
             }).catch(() => {});
@@ -276,7 +254,7 @@ export async function confirmCateringStatus() {
                             updateObj.forcedBy = null;
                             updateObj.isForcedCater = false;
                         }
-                        db.ref(`customerChats/${custId}/metadata`).update(updateObj);
+                        db.ref(`customerChats/${custId}/metadata`).update(updateObj).catch(() => {});
                     }
                 });
             }

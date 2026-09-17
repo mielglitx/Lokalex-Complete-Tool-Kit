@@ -6,8 +6,13 @@
   Description:
   Primary operational dashboard for on-duty riders. Contains the 30-minute
   advance order urgency banner, quick-action workflow dock, real-time customer/
+<<<<<<< HEAD
+  store chat feeds, roster rotation queue, daily shift logins, and completed
+  catered customer feeds.
+=======
   store chat feeds, roster rotation queue, daily shift logins, completed
   catered customer feeds, and administrative lineup/cooldown configuration tools.
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
 -->
 <section id="view-home" class="hidden flex-1 flex flex-col p-3 gap-3 py-3">
     <!-- LIGHT MODE HIGH CONTRAST & CARD STYLING ENFORCEMENT -->
@@ -210,32 +215,52 @@
                     <i class="fa-solid fa-sliders"></i> Day-Off Rules
                 </button>
 
+<<<<<<< HEAD
+                <!-- 6. ADMIN MAXIMUM ACTIVE BOOKINGS LIMIT BUTTON (GATED BY TOGGLE) -->
+=======
                 <!-- 6. ADMIN QUEUE LINEUP RULES BUTTON (GATED BY TOGGLE) -->
                 <button id="admin-queue-settings-btn" onclick="window.openAdminQueueSettingsModal && window.openAdminQueueSettingsModal()" class="hidden bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-purple-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1" title="Configure Available Queue Lineup (FIFO vs Lowest Gross) & Cooldown">
                     <i class="fa-solid fa-arrow-down-short-wide"></i> Lineup Rules
                 </button>
 
                 <!-- 7. ADMIN MAXIMUM ACTIVE BOOKINGS LIMIT BUTTON (GATED BY TOGGLE) -->
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
                 <button id="admin-booking-limits-btn" onclick="window.openAdminBookingLimitsModal && window.openAdminBookingLimitsModal()" class="hidden bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-600/30 dark:hover:bg-rose-600 dark:text-rose-300 dark:border-rose-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1" title="Set Maximum Active Catering Bookings per Rider">
                     <i class="fa-solid fa-layer-group"></i> Max Orders
                 </button>
 
+<<<<<<< HEAD
+                <!-- 7. ADMIN COMMISSION SETTINGS BUTTON (GATED BY TOGGLE) -->
+=======
                 <!-- 8. ADMIN COMMISSION SETTINGS BUTTON (GATED BY TOGGLE) -->
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
                 <button id="admin-commission-settings-btn" onclick="window.openAdminCommissionSettingsModal && window.openAdminCommissionSettingsModal()" class="hidden bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-600/30 dark:hover:bg-amber-600 dark:text-amber-300 dark:border-amber-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
                     <i class="fa-solid fa-percent"></i> Commission
                 </button>
 
+<<<<<<< HEAD
+                <!-- 8. ADMIN AUTO END SHIFT BUTTON (GATED BY TOGGLE) -->
+=======
                 <!-- 9. ADMIN AUTO END SHIFT BUTTON (GATED BY TOGGLE) -->
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
                 <button id="admin-auto-endshift-btn" onclick="window.openAdminAutoEndShiftModal && window.openAdminAutoEndShiftModal()" class="hidden bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-purple-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
                     <i class="fa-solid fa-clock-rotate-left"></i> Auto End
                 </button>
 
+<<<<<<< HEAD
+                <!-- 9. ADMIN BAN LIST BUTTON (GATED BY TOGGLE) -->
+=======
                 <!-- 10. ADMIN BAN LIST BUTTON (GATED BY TOGGLE) -->
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
                 <button id="admin-block-btn" onclick="window.openAdminBlockModal && window.openAdminBlockModal()" class="hidden bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-600/30 dark:hover:bg-red-600 dark:text-red-300 dark:border-red-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
                     <i class="fa-solid fa-user-slash"></i> Ban List
                 </button>
 
+<<<<<<< HEAD
+                <!-- 10. ADMIN FIND RIDERS BUTTON (GATED BY TOGGLE) -->
+=======
                 <!-- 11. ADMIN FIND RIDERS BUTTON (GATED BY TOGGLE) -->
+>>>>>>> 2dcde05 (Update Lokalex features from new PC)
                 <button id="admin-find-riders-btn" onclick="window.openFindRidersModal && window.openFindRidersModal()" class="hidden bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-600/30 dark:hover:bg-indigo-600 dark:text-indigo-300 dark:border-indigo-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
                     <i class="fa-solid fa-map-location-dot"></i> Find
                 </button>

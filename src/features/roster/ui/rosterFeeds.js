@@ -1,22 +1,4 @@
 // src/features/roster/ui/rosterFeeds.js
-
-/**
- * ============================================================================
- * ROSTER FEEDS VIEW COMPONENT (CATERED DELIVERIES & DAILY LOGINS)
- * ============================================================================
- * 
- * Description:
- * Renders chronological feeds on the rider home dashboard:
- * 1. Catered Customers List (#catered-customers-feed):
- *    - Resolves 3-stage delivery milestones: Started -> Receipt -> Marked Done.
- *    - Cross-references receipts and catering history to guarantee accurate
- *      timestamps between receipt generation and final completion.
- *    - Calculates multi-order split durations and mounts administrative voids.
- * 2. Rider Login List (#login-list-feed):
- *    - Displays daily driver check-ins, timestamps, and geolocation pins.
- * ============================================================================
- */
-
 import { globalState } from '../../../store/state.js';
 import { escapeHtml, formatTitleCase, getLocalTodayStr } from '../../../utils/helpers.js';
 import { 
@@ -74,7 +56,6 @@ export function loadGlobalCateredList() {
             voidBtn = `<button onclick="window.promptAdminDeleteCommissionRecord && window.promptAdminDeleteCommissionRecord('${escapeHtml(h.riderName || '')}', '${escapeHtml(h.customerName || '')}', '${escapeHtml(cDate)}', '${escapeHtml(recordTxId)}')" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-400 dark:border-red-700/50 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shrink-0"><i class="fa-solid fa-ban"></i> Void</button>`;
         }
 
-        // Cross-reference source records to isolate authentic milestones
         const rcMatch = (globalState.globalDailyReceipts || []).find(rc => 
             (recordTxId && (rc.transactionId === recordTxId || rc.id === recordTxId)) ||
             (isCustomerMatch(rc.customerName, h.customerName) && isSameDateStr(rc.date || rc.completedDate, cDate))
@@ -85,20 +66,16 @@ export function loadGlobalCateredList() {
             (isCustomerMatch(ch.customerName, h.customerName) && isSameDateStr(ch.completedDate || ch.date, cDate))
         );
 
-        // 1. Catering Start Time (Blue Play)
         const sTime = h.startTime || h.cateringStartTime || rcMatch?.cateringStartTime || rcMatch?.startTime || chMatch?.startTime || h.time || "";
 
-        // 2. Receipt Generation Time (Amber Ticket)
         let rTime = h.receiptTime || rcMatch?.receiptTime || chMatch?.receiptTime || "";
         if (!rTime && rcMatch && rcMatch.time && rcMatch.time !== sTime) {
             rTime = rcMatch.time;
         }
 
-        // 3. True Delivery Completed Time (Green Clock)
         let dTime = h.doneTime || chMatch?.doneTime || rcMatch?.doneTime || "";
         if (!dTime) {
             const possibleDone = chMatch?.completedTime || rcMatch?.completedTime || h.completedTime || "";
-            // Ensure completedTime is not merely reflecting the initial receipt creation time
             if (possibleDone && possibleDone !== rTime) {
                 dTime = possibleDone;
             }
@@ -131,9 +108,7 @@ export function loadGlobalCateredList() {
 
         const historyForcedBadge = getForcedCaterBadgeHtml(h, h.customerName, h.riderName);
 
-        // 3-Stage Milestone Display: Started -> Receipt -> Done
         let timelineParts = [];
-
         if (sTime) {
             timelineParts.push(`
                 <span class="inline-flex items-center gap-1 text-gray-700 dark:text-gray-300" title="Started Catering">

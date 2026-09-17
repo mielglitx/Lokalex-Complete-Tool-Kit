@@ -7,6 +7,7 @@ import { openSlideDeleteModal, closeAdminCateringModal } from '../../ui/modals.j
 import { isSameDate, escapeHtml } from '../../utils/helpers.js';
 import { populateCateringCustomerDropdown } from '../chat/index.js';
 import { 
+    loadRosterCache,
     parseQueueTime, 
     isAdmin, 
     canManageRoster,
@@ -68,7 +69,6 @@ export * from './rosterAutoEndShift.js';
 
 let pendingAdminTarget = null;
 
-// TOGGLE ADMIN CONTROLS SWITCH
 export function toggleAdminControls(enabled) {
     if (!canManageRoster()) {
         globalState.adminControlsEnabled = false;
@@ -84,8 +84,11 @@ export function toggleAdminControls(enabled) {
     updateRosterUI();
 }
 
-// OPEN ADMIN FORCE CATERING MODAL
 export function openAdminCateringModal(id, name) {
+    if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
+        loadRosterCache();
+    }
+
     if (!hasTlPermission('canForceCater')) {
         return showToast("⚠️ Unauthorized: You do not have permission to Force Cater.");
     }
@@ -112,8 +115,12 @@ export function openAdminCateringModal(id, name) {
     if (penaltySelect) penaltySelect.value = "0";
 
     if (custSelect) {
-        if (typeof populateCateringCustomerDropdown === 'function') {
-            populateCateringCustomerDropdown(custSelect.id);
+        try {
+            if (typeof populateCateringCustomerDropdown === 'function') {
+                populateCateringCustomerDropdown(custSelect.id);
+            }
+        } catch (err) {
+            console.warn("Dropdown population error in admin modal:", err);
         }
     }
 
@@ -150,6 +157,9 @@ export async function submitAdminForceCatering() {
     const adminName = appState.riderName || localStorage.getItem('riderName') || "Admin/TL";
     const cleanCustKey = custName.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+    if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
+        loadRosterCache();
+    }
     const rosterMembers = globalState.rosterMembers || [];
     let targetRecord = rosterMembers.find(m => 
         (m.telegramId && m.telegramId.toString() === targetId.toString()) ||
@@ -212,14 +222,13 @@ export async function submitAdminForceCatering() {
     targetRecord.isForcedCater = true;
 
     if (db && targetId && cleanCustKey) {
-        await db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
-        await db.ref(`roster/${targetId}`).update({
+        db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
+        db.ref(`roster/${targetId}`).update({
             forcedBy: adminName,
             isForcedCater: true
         }).catch(() => {});
     }
 
-    // Bandwidth Optimization: Server-side filter to target only matching customer chat node
     if (db && custName) {
         const cleanSearchName = custName.trim();
         db.ref('customerChats')
@@ -237,7 +246,7 @@ export async function submitAdminForceCatering() {
                             forcedBy: adminName,
                             isForcedCater: true,
                             lastUpdated: Date.now()
-                        });
+                        }).catch(() => {});
                     });
                 }
             });
@@ -261,9 +270,9 @@ export async function submitAdminForceCatering() {
     );
 
     if (penaltyMins > 0 && db && targetId) {
-        await db.ref(`roster/${targetId}`).update({
+        db.ref(`roster/${targetId}`).update({
             pendingPenaltyMinutes: penaltyMins
-        });
+        }).catch(() => {});
 
         if (targetRecord) {
             targetRecord.pendingPenaltyMinutes = penaltyMins;
@@ -278,7 +287,6 @@ export async function submitAdminForceCatering() {
     showSideNotification("FORCE CATER", `Assigned ${custName} to ${notifyLabel}`, "fa-user-gear", "text-amber-400", "border-amber-500");
 }
 
-// ADMIN FORCE STATUS
 export async function adminForceStatus(id, name, actionValue) {
     if (actionValue === 'Catering') {
         if (!hasTlPermission('canForceCater')) {
@@ -292,6 +300,9 @@ export async function adminForceStatus(id, name, actionValue) {
         return showToast("⚠️ Unauthorized: You do not have permission to Force Status.");
     }
 
+    if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
+        loadRosterCache();
+    }
     const rosterMembers = globalState.rosterMembers || [];
     const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === id.toString());
     const targetType = targetRecord ? targetRecord.userType : "";
@@ -350,7 +361,6 @@ export async function adminForceStatus(id, name, actionValue) {
     });
 }
 
-// ADMIN VOID SPECIFIC CATERING CUSTOMER
 export async function adminVoidSpecificCustomer(targetId, targetName, custNameToVoid) {
     if (!hasTlPermission('canVoidCustomer')) {
         return showToast("⚠️ Unauthorized: You do not have permission to Void Active Customers.");
@@ -374,7 +384,6 @@ export async function adminVoidSpecificCustomer(targetId, targetName, custNameTo
     });
 }
 
-// ADMIN VOID COMPLETED CATERED RECORD & DUAL LOGGING REMOVAL (STRICT ADMIN ONLY)
 export function promptVoidCustomer(riderName, customerName, completedDate = "", startTime = "", transactionId = "") {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
@@ -387,10 +396,6 @@ export function promptVoidCustomer(riderName, customerName, completedDate = "", 
     );
 }
 
-/**
- * Executes catered record voiding.
- * Bandwidth-optimized: Uses direct ID deletes and date-scoped queries.
- */
 export async function executeVoidCateredCustomer(riderName, customerName, completedDate = "", startTime = "", transactionId = "") {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 

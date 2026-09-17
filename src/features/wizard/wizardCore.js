@@ -1,22 +1,4 @@
 // src/features/wizard/wizardCore.js
-
-/**
- * ============================================================================
- * RECEIPT WIZARD CORE ENGINE & PERSISTENCE CONTROLLER
- * ============================================================================
- * 
- * Description:
- * Manages the checkout wizard lifecycle, delivery fee validations, sample
- * receipt generations, and Firebase database synchronization:
- * - Validates delivery fee inputs and catering client assignment.
- * - Saves receipt payloads to Firebase ('receipts/' and 'roster/customerFees').
- * - Preserves authentic delivery milestones: records 'receiptTime' upon creation
- *   while leaving 'doneTime' and 'completedTime' empty until the rider marks
- *   the order as finished.
- * - Locks cart slots upon completion and triggers canvas/text renderers.
- * ============================================================================
- */
-
 import { appState, globalState, wizState, multiCarts } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
@@ -120,7 +102,6 @@ export async function saveReceiptToDatabase(customerName) {
     if (!globalState.cartTxIds) globalState.cartTxIds = ["", "", "", ""];
     globalState.cartTxIds[activeCartIdx] = generatedTxId;
 
-    // completedTime and doneTime remain empty until explicitly marked done upon arrival
     const receiptPayload = {
         id: generatedTxId,
         key: generatedTxId,

@@ -1,25 +1,4 @@
 // src/features/roster/ui/rosterLineupView.js
-
-/**
- * ============================================================================
- * ROSTER LINEUP & QUEUE BOARD VIEW COMPONENT
- * ============================================================================
- * 
- * Description:
- * Primary renderer and visual controller for the rider lineup board:
- * - Renders Available queue with support for both FIFO and Lowest Gross Income
- *   sorting algorithms.
- * - Drives an active 1-second countdown ticker for riders holding in the cooldown
- *   buffer at the end of the queue.
- * - Automatically re-sorts and promotes riders to their gross-income position
- *   the moment their cooldown expires without requiring a page reload.
- * - Renders Catering cards with multi-customer support, delivery completion,
- *   direct tracking links, map pickers, order swaps, and void operations.
- * - Renders Break cards, penalty cooldown countdowns, and scheduled Day-Off tags.
- * - Mounts administrative controls (Force Status, Queue Shifts, Settings).
- * ============================================================================
- */
-
 import { appState, globalState } from '../../../store/state.js';
 import { escapeHtml, formatTitleCase } from '../../../utils/helpers.js';
 import { 
@@ -137,11 +116,6 @@ export function closeQueueInfoModal() {
     if (modal) modal.classList.add('hidden');
 }
 
-/**
- * High-precision 1-second ticker.
- * Updates visible cooldown badges in-place without causing full UI re-renders.
- * Automatically calls updateRosterUI() to re-sort riders when a cooldown expires.
- */
 export function initQueueCooldownTicker() {
     if (queueCooldownTickerInterval) {
         clearInterval(queueCooldownTickerInterval);
@@ -318,7 +292,6 @@ export function updateRosterUI() {
         btnBreak.style.opacity = isEnded ? '0.3' : '1';
     }
 
-    // Dynamic Lineup Sorting Engine (FIFO vs Lowest Gross + Cooldown)
     const availableRiders = sortAvailableRiders(rosterMembers.filter(m => m.status === 'Available'));
 
     checkFirstInLineAlarm(availableRiders);
@@ -339,7 +312,6 @@ export function updateRosterUI() {
     let availHtml = [], busyHtml = [], brkHtml = [], cdHtml = [];
     let availCounter = 1;
 
-    // 1. Available List (With Dynamic Countdown Targets & Live Ticker Bindings)
     availableRiders.forEach((m) => {
         const mId = (m.telegramId || m.id || "").toString();
         const rawName = m.riderName || m.name || "Rider";
@@ -389,7 +361,6 @@ export function updateRosterUI() {
         `);
     });
 
-    // 2. Catering List (With Multi-Customer Support & Per-Customer Done Actions)
     cateringRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString().trim();
         const rawName = m.riderName || m.name || "Rider";
@@ -471,7 +442,6 @@ export function updateRosterUI() {
         busyHtml.push(cardHtml);
     });
 
-    // 3. Break List
     breakRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const rawName = m.riderName || m.name || "Rider";
@@ -495,7 +465,6 @@ export function updateRosterUI() {
         `);
     });
 
-    // 4. Cooldown List
     cooldownRiders.forEach(m => {
         const mId = (m.telegramId || m.id || "").toString();
         const rawName = m.riderName || m.name || "Rider";
@@ -578,6 +547,5 @@ if (typeof window !== 'undefined') {
     window.addEventListener('rosterUpdated', () => updateRosterUI());
     window.addEventListener('loginsUpdated', () => updateRosterUI());
 
-    // Start the active 1-second countdown ticker
     initQueueCooldownTicker();
 }
