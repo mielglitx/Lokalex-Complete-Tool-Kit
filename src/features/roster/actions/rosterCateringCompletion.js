@@ -2,20 +2,6 @@
 
 /**
  * ============================================================================
-<<<<<<< HEAD
- * ROSTER CATERING COMPLETION & VOID ACTION HANDLERS
- * ============================================================================
- * 
- * Manages the lifecycle of active catering deliveries per rider:
- * - Receipt verification before allowing delivery completion.
- * - Crediting rider fees and archiving to cateredHistory.
- * - Voiding active customer assignments with state cleanup across roster,
- *   customerFees, multiCarts, and chat metadata.
- * 
- * Update Note:
- * - Enhanced voidSingleCateringCustomer to scrub multiCarts and localStorage
- *   markers to prevent voided customer names from appearing on new receipts.
-=======
  * ROSTER CATERING COMPLETION & DEEP CART RESET ACTION HANDLERS
  * ============================================================================
  * 
@@ -26,7 +12,6 @@
  * - Deep cart cleanup: when a customer delivery finishes or voids, wipes
  *   items, clears receipt summaries, unlocks slot barriers, and updates UI.
  * - Enforces administrative safety verification for customer order voids.
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
  * ============================================================================
  */
 
@@ -83,8 +68,6 @@ function getDeviceLocationQuick() {
     });
 }
 
-<<<<<<< HEAD
-=======
 /**
  * Deeply resets a cart slot across all memory arrays and unlocks barrier states.
  */
@@ -130,7 +113,6 @@ function purgeCartSlotForCustomer(customerName) {
     }
 }
 
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
 export async function completeSingleCateringCustomer(targetId, targetName, custNameToComplete) {
     const rosterMembers = globalState.rosterMembers || [];
     const cleanTargetId = (targetId || "").toString().trim();
@@ -173,11 +155,7 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     const todayClean = todayStr.replace(/-/g, '');
     const endTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-<<<<<<< HEAD
     // 1. Receipt Verification Gate & Milestone Extraction
-=======
-    // 1. Receipt Verification Gate
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
     let receiptTimeFound = "";
     if (targetRecord?.customerFees && cleanCustKey && targetRecord.customerFees[cleanCustKey]?.receiptTime) {
         receiptTimeFound = targetRecord.customerFees[cleanCustKey].receiptTime;
@@ -210,11 +188,7 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         return;
     }
 
-<<<<<<< HEAD
     // 2. Extract Strict Rider Service Fees (Delivery + Handling + Market + Multi-Stop)
-=======
-    // 2. Extract Service Fees
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
     const cleanRiderKey = resolvedTargetName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanTimeKey = completedStartTime.replace(/[^a-z0-9]/gi, '');
     let targetTxId = `RCPT_${cleanRiderKey}_${cleanCustKey}_${todayClean}_${cleanTimeKey || '1'}`;
@@ -254,11 +228,7 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
 
     const splitDuration = calculateSplitDuration(completedStartTime, endTimeStr, 1);
 
-<<<<<<< HEAD
     // 3. Log Completed Order with 3-Stage Milestones (Started, Receipt Created, Marked Done)
-=======
-    // 3. Log Completed Order
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
     const hItem = {
         id: targetTxId,
         transactionId: targetTxId,
@@ -338,30 +308,10 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         }
     }
 
-<<<<<<< HEAD
-    // Clean up active cart slot if it belonged to this customer
-    if (multiCarts) {
-        Object.keys(multiCarts).forEach(slotKey => {
-            if (multiCarts[slotKey] && multiCarts[slotKey].customerName) {
-                if (multiCarts[slotKey].customerName.trim().toLowerCase() === cleanCust) {
-                    multiCarts[slotKey].customerName = "";
-                    multiCarts[slotKey].isManual = false;
-                }
-            }
-        });
-        if (typeof window.saveCartState === 'function') window.saveCartState();
-    }
-    if (appState.selectedCateringClient && appState.selectedCateringClient.trim().toLowerCase() === cleanCust) {
-        appState.selectedCateringClient = "";
-    }
-
-    // 4. Update Status (Remaining vs Available)
-=======
     // DEEP CART CLEANUP: Purge items, reset receipt summaries, and unlock barrier
     purgeCartSlotForCustomer(custNameToComplete);
 
     // 4. Update Rotation State
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
     if (remainingCusts.length > 0) {
         await updateRosterStatusData(
             'Catering', 
@@ -406,12 +356,8 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
                 forcedBy: null,
                 isForcedCater: false,
                 availableTimestamp: availableTimestamp,
-<<<<<<< HEAD
-                availableTimeStr: availableTimeStr
-=======
                 availableTimeStr: availableTimeStr,
                 queueTime: availableTimestamp
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
             };
             if (locationData) {
                 updatePayload.availableLocation = locationData;
@@ -425,10 +371,7 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
             targetRecord.customerFees = null;
             targetRecord.availableTimestamp = availableTimestamp;
             targetRecord.availableTimeStr = availableTimeStr;
-<<<<<<< HEAD
-=======
             targetRecord.queueTime = availableTimestamp;
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
             if (locationData) {
                 targetRecord.availableLocation = locationData;
             }
@@ -447,13 +390,9 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
             { 
                 forcedCaters: null,
                 forcedBy: null,
-<<<<<<< HEAD
-                isForcedCater: false
-=======
                 isForcedCater: false,
                 availableTimestamp: availableTimestamp,
                 availableTimeStr: availableTimeStr
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
             }
         );
         showToast(`🎉 All deliveries completed! [${resolvedTargetName}] is now Available (₱${finalFees.toFixed(2)} credited).`);
@@ -474,10 +413,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
     const cleanTargetId = (targetId || "").toString().trim();
     const cleanTargetName = (targetName || "").toString().trim().toLowerCase();
 
-<<<<<<< HEAD
     // 1. Authoritative Permission Verification Gate (Admin, Authorized TL, or Self)
-=======
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
     const isMe = (myId && cleanTargetId && myId === cleanTargetId) || (myName && cleanTargetName && myName === cleanTargetName);
     const hasAdminPower = isAdmin();
     const hasTlVoidPower = hasTlPermission('canVoidCustomer') || hasTlPermission('canVoid') || hasTlPermission('canForceCater') || canManageRoster();
@@ -520,10 +456,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
     const cleanVoidCust = custNameToVoid.toLowerCase().trim();
     const cleanCustKey = cleanVoidCust.replace(/[^a-z0-9]/g, '');
 
-<<<<<<< HEAD
     // Purge forced catering metadata
-=======
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
     if (targetRecord && targetRecord.forcedCaters) {
         delete targetRecord.forcedCaters[cleanCustKey];
         delete targetRecord.forcedCaters[cleanVoidCust];
@@ -536,39 +469,15 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         }
     }
 
-<<<<<<< HEAD
     // Purge lingering in-memory fees for the voided customer
-=======
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
     if (targetRecord?.customerFees && cleanCustKey) {
         delete targetRecord.customerFees[cleanCustKey];
     }
 
-<<<<<<< HEAD
-    // Purge from active cart slots and selected client state
-    if (multiCarts) {
-        Object.keys(multiCarts).forEach(slotKey => {
-            if (multiCarts[slotKey] && multiCarts[slotKey].customerName) {
-                if (multiCarts[slotKey].customerName.trim().toLowerCase() === cleanVoidCust) {
-                    multiCarts[slotKey].customerName = "";
-                    multiCarts[slotKey].isManual = false;
-                }
-            }
-        });
-        if (typeof window.saveCartState === 'function') window.saveCartState();
-    }
-
-    if (appState.selectedCateringClient && appState.selectedCateringClient.trim().toLowerCase() === cleanVoidCust) {
-        appState.selectedCateringClient = "";
-    }
-
-    // Purge localStorage receipt session completion keys
-=======
     // DEEP CART CLEANUP: Purge items, reset receipt summaries, and unlock barrier
     purgeCartSlotForCustomer(custNameToVoid);
 
     // Purge localStorage receipt completion flags
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
     try {
         const cleanRiderKey = resolvedTargetName.toLowerCase().replace(/[^a-z0-9]/g, '');
         const keysToRemove = [];
@@ -581,10 +490,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         keysToRemove.forEach(k => localStorage.removeItem(k));
     } catch(e) {}
 
-<<<<<<< HEAD
     // Update Firebase chat folders and clear fees
-=======
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
     if (db) {
         db.ref('customerChats')
             .orderByChild('metadata/customerName')
@@ -633,25 +539,18 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         showSideNotification("ORDER VOIDED", `${custNameToVoid} was cancelled`, "fa-ban", "text-red-400", "border-red-500");
     } else {
         const topQueueTime = getTopQueueTime();
-<<<<<<< HEAD
-=======
         const availableTimestamp = Date.now();
         const availableTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
         if (db && resolvedTargetId) {
             db.ref(`roster/${resolvedTargetId}/forcedCaters`).remove().catch(() => {});
             db.ref(`roster/${resolvedTargetId}/customerFees`).remove().catch(() => {});
             db.ref(`roster/${resolvedTargetId}`).update({
                 forcedBy: null,
-<<<<<<< HEAD
-                isForcedCater: false
-=======
                 isForcedCater: false,
                 availableTimestamp: availableTimestamp,
                 availableTimeStr: availableTimeStr,
                 queueTime: availableTimestamp
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
             }).catch(() => {});
         }
         if (targetRecord) {
@@ -659,12 +558,9 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             targetRecord.forcedBy = null;
             targetRecord.isForcedCater = false;
             targetRecord.customerFees = null;
-<<<<<<< HEAD
-=======
             targetRecord.availableTimestamp = availableTimestamp;
             targetRecord.availableTimeStr = availableTimeStr;
             targetRecord.queueTime = availableTimestamp;
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
         }
 
         if (resolvedTargetId === myId) {
@@ -684,13 +580,9 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             { 
                 forcedCaters: null,
                 forcedBy: null,
-<<<<<<< HEAD
-                isForcedCater: false
-=======
                 isForcedCater: false,
                 availableTimestamp: availableTimestamp,
                 availableTimeStr: availableTimeStr
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
             }
         );
         showToast(`🚫 Na-void si [${custNameToVoid}]. Inilipat si [${resolvedTargetName}] sa Available queue!`);
