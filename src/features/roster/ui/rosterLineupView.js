@@ -1,4 +1,26 @@
 // src/features/roster/ui/rosterLineupView.js
+
+/**
+ * ============================================================================
+ * ROSTER LINEUP VIEW & ROTATION BOARD CONTROLLER
+ * ============================================================================
+ * 
+ * Description:
+ * Manages presentation and real-time state rendering of the Lokalex dispatch lineup:
+ * - Available Queue: Gross-earnings/FIFO sorting with active cooldown counters.
+ * - Catering Board: Multi-customer order tracking, live links, and swap mechanics.
+ * - Break Queue: Live consumed break timers tracking how long each rider has
+ *   been resting, backed by non-destructive interval updates.
+ * - Penalty Cooldowns & Day-Off roster indicators.
+ * - Queue info inspector modal with GPS coordinate verification links.
+ * 
+ * Update Note:
+ * - Integrated `getElapsedBreakTime` and `.break-elapsed-timer` UI badges.
+ * - Added `initBreakTimerTicker` to smoothly update consumed break times every
+ *   10 seconds without full DOM re-renders.
+ * ============================================================================
+ */
+
 import { appState, globalState } from '../../../store/state.js';
 import { escapeHtml, formatTitleCase } from '../../../utils/helpers.js';
 import { 
@@ -6,6 +28,7 @@ import {
     canManageRoster, 
     isAdmin, 
     getElapsedCateringTime, 
+    getElapsedBreakTime,
     checkFirstInLineAlarm,
     getRiderTodayGross,
     sortAvailableRiders,
@@ -22,6 +45,7 @@ import { getForcedCaterBadgeHtml } from './rosterBadge.js';
 import { loadGlobalCateredList } from './rosterFeeds.js';
 
 let queueCooldownTickerInterval = null;
+let breakTimerTickerInterval = null;
 
 export function openFindRidersMap() {
     openMapPicker('roster');
@@ -157,6 +181,36 @@ export function initQueueCooldownTicker() {
             updateRosterUI();
         }
     }, 1000);
+}
+
+export function initBreakTimerTicker() {
+    if (breakTimerTickerInterval) {
+        clearInterval(breakTimerTickerInterval);
+        breakTimerTickerInterval = null;
+    }
+
+    breakTimerTickerInterval = setInterval(() => {
+        const badges = document.querySelectorAll('.break-elapsed-timer');
+        if (!badges || badges.length === 0) return;
+
+        const rosterMembers = globalState.rosterMembers || [];
+        const breakRiders = rosterMembers.filter(m => m.status === 'Break');
+        if (breakRiders.length === 0) return;
+
+        badges.forEach(badge => {
+            const riderId = badge.getAttribute('data-rider-id');
+            if (!riderId) return;
+
+            const rider = breakRiders.find(r => (r.telegramId || r.id || "").toString().trim() === riderId);
+            if (rider) {
+                const newDuration = getElapsedBreakTime(rider);
+                const digitsEl = badge.querySelector('.break-timer-digits');
+                if (digitsEl && digitsEl.innerText !== newDuration) {
+                    digitsEl.innerText = newDuration;
+                }
+            }
+        });
+    }, 10000);
 }
 
 export function updateRosterUI() {
@@ -448,7 +502,8 @@ export function updateRosterUI() {
         const mName = formatTitleCase(rawName);
         const shortName = formatRiderShortName(rawName);
         const todayGross = getRiderTodayGross(rawName, mId);
-        
+        const elapsedBreak = getElapsedBreakTime(m);
+
         let controlsHtml = "";
         if (showControls) {
             controlsHtml += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
@@ -456,8 +511,11 @@ export function updateRosterUI() {
 
         brkHtml.push(`
             <div class="flex items-center justify-between py-1 text-xs font-bold text-gray-900 dark:text-gray-200">
-                <div class="flex items-center gap-1.5">
+                <div class="flex items-center gap-1.5 flex-wrap">
                     <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${mId}', '${escapeHtml(mName)}')" class="hover:text-amber-500 dark:hover:text-amber-400 hover:underline transition cursor-pointer text-left" title="View Rider Details">${escapeHtml(shortName)}</button>
+                    <span class="break-elapsed-timer inline-flex items-center gap-1 text-[9px] font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 px-1.5 py-0.5 rounded" data-rider-id="${mId}" title="Total Break Time Consumed">
+                        <i class="fa-regular fa-clock text-[9px]"></i> <span class="break-timer-digits">${elapsedBreak}</span>
+                    </span>
                     ${controlsHtml}
                     <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
                 </div>
@@ -541,6 +599,7 @@ if (typeof window !== 'undefined') {
     window.openQueueInfoModal = openQueueInfoModal;
     window.closeQueueInfoModal = closeQueueInfoModal;
     window.initQueueCooldownTicker = initQueueCooldownTicker;
+    window.initBreakTimerTicker = initBreakTimerTicker;
 
     window.addEventListener('receiptsUpdated', () => updateRosterUI());
     window.addEventListener('cateredUpdated', () => updateRosterUI());
@@ -548,4 +607,5 @@ if (typeof window !== 'undefined') {
     window.addEventListener('loginsUpdated', () => updateRosterUI());
 
     initQueueCooldownTicker();
+    initBreakTimerTicker();
 }

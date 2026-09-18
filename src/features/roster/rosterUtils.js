@@ -9,15 +9,15 @@
  * Core utility and business logic layer for the Lokalex rider roster:
  * - Time parsing and milestone split duration calculations.
  * - Deduplicated commission gross calculations across receipts and history.
- * - Dual-mode Available Queue Sorting:
- *   1. First-In First-Out (FIFO) based on arrival time.
- *   2. Lowest Gross Income First with cooldown buffer (holding recent arrivals
- *      at the bottom of the list before promotion).
+ * - Dual-mode Available Queue Sorting (FIFO vs. Lowest Gross with cooldown).
+ * - Real-time break duration calculator (getElapsedBreakTime) for monitoring
+ *   active break consumption across riders.
  * - Catering session completion archiving and audio alarm synthesizers.
  * 
  * Update Note:
- * - Added dual-mode queue sorting and cooldown calculation to sortAvailableRiders.
- * - Integrated settings from getQueueLineupSettings with backward-compatible aliases.
+ * - Added `getElapsedBreakTime` to calculate exact consumed break time from
+ *   `breakTimestamp` or legacy clock string fallbacks.
+ * - Maintained dual-mode sorting and backward-compatible queue aliases.
  * ============================================================================
  */
 
@@ -755,6 +755,40 @@ export function getElapsedCateringTime(startTimeStr) {
     }
 
     return ` • ${firstTime} [${durationStr}]`;
+}
+
+/**
+ * Calculates consumed break duration.
+ * Evaluates breakTimestamp (epoch ms) or parses breakStartTime / lastUpdated.
+ * Returns human-readable elapsed duration (e.g., "12m", "1h 05m").
+ */
+export function getElapsedBreakTime(rider) {
+    if (!rider) return "0m";
+    const now = Date.now();
+    let startMs = rider.breakTimestamp || 0;
+
+    if (!startMs && (rider.breakStartTime || rider.startTime || rider.lastUpdated)) {
+        const timeStr = rider.breakStartTime || rider.startTime || rider.lastUpdated;
+        const mins = parseTimeToMinutes(timeStr);
+        if (mins !== null) {
+            const pht = getPHTDate();
+            const start = new Date(pht.getFullYear(), pht.getMonth(), pht.getDate(), Math.floor(mins / 60), mins % 60, 0);
+            startMs = start.getTime();
+            if (startMs > now) startMs -= 24 * 60 * 60 * 1000;
+        }
+    }
+
+    if (!startMs) return "0m";
+
+    const diffMs = Math.max(0, now - startMs);
+    const totalMins = Math.floor(diffMs / 60000);
+    const hrs = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+
+    if (hrs > 0) {
+        return `${hrs}h ${String(mins).padStart(2, '0')}m`;
+    }
+    return `${mins}m`;
 }
 
 export function getActiveCateringCustomersWithTimes() {

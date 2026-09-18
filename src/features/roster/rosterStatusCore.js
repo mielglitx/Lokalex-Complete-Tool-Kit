@@ -1,4 +1,24 @@
 // src/features/roster/rosterStatusCore.js
+
+/**
+ * ============================================================================
+ * ROSTER STATUS CORE ENGINE & PERSISTENCE
+ * ============================================================================
+ * 
+ * Description:
+ * Core state machine governing rider status mutations across the Lokalex platform:
+ * - Direct updates and local/remote synchronization to Firebase Realtime Database.
+ * - Manages shift login generation, shift clock-outs, and delivery archiving.
+ * - Automates break lifecycle tracking: stamps `breakTimestamp` (epoch ms) and
+ *   `breakStartTime` (clock time) when a rider takes a break, and resets them
+ *   when returning to Available, Catering, or End Shift.
+ * 
+ * Update Note:
+ * - Added automatic management of `breakTimestamp` and `breakStartTime` on status
+ *   changes to ensure continuous consumed break duration tracking.
+ * ============================================================================
+ */
+
 import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
@@ -53,7 +73,14 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
         extraData = { 
             forcedCaters: null,
             forcedBy: null,
-            isForcedCater: false
+            isForcedCater: false,
+            breakTimestamp: null,
+            breakStartTime: null
+        };
+    } else if (status === 'Catering') {
+        extraData = {
+            breakTimestamp: null,
+            breakStartTime: null
         };
     }
 
@@ -93,6 +120,28 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         currentIsForcedCater = !!existingRec.isForcedCater;
     }
 
+    // BREAK LIFECYCLE TIMESTAMP ORCHESTRATION
+    let currentBreakTimestamp = null;
+    let currentBreakStartTime = null;
+
+    if (status === 'Break') {
+        if (extraData.breakTimestamp !== undefined) {
+            currentBreakTimestamp = extraData.breakTimestamp;
+        } else if (existingRec && existingRec.status === 'Break' && existingRec.breakTimestamp) {
+            currentBreakTimestamp = existingRec.breakTimestamp;
+        } else {
+            currentBreakTimestamp = nowTimestamp;
+        }
+
+        if (extraData.breakStartTime !== undefined) {
+            currentBreakStartTime = extraData.breakStartTime;
+        } else if (existingRec && existingRec.status === 'Break' && existingRec.breakStartTime) {
+            currentBreakStartTime = existingRec.breakStartTime;
+        } else {
+            currentBreakStartTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+    }
+
     const rosterData = {
         telegramId: tId.toString(),
         id: tId.toString(),
@@ -104,14 +153,16 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         customerName: customerName || "",
         startTime: startTime || "",
         queueTime: (queueTime !== null && queueTime !== undefined && queueTime !== 0) ? queueTime : nowTimestamp,
-        lastUpdated: new Date().toLocaleTimeString(),
+        lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         lastActiveTimestamp: nowTimestamp,
         lat: appState.lat || 0,
         lng: appState.lon || 0,
         ...extraData,
         forcedCaters: currentForcedCaters,
         forcedBy: currentForcedBy,
-        isForcedCater: currentIsForcedCater
+        isForcedCater: currentIsForcedCater,
+        breakTimestamp: currentBreakTimestamp,
+        breakStartTime: currentBreakStartTime
     };
 
     if (!globalState.rosterMembers) globalState.rosterMembers = [];
@@ -119,10 +170,7 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     if (existingIdx !== -1) {
         globalState.rosterMembers[existingIdx] = {
             ...globalState.rosterMembers[existingIdx],
-            ...rosterData,
-            forcedCaters: currentForcedCaters,
-            forcedBy: currentForcedBy,
-            isForcedCater: currentIsForcedCater
+            ...rosterData
         };
     } else {
         globalState.rosterMembers.push(rosterData);
@@ -207,6 +255,8 @@ export async function clockOutRider(targetId = null) {
             forcedCaters: null,
             forcedBy: null,
             isForcedCater: false,
+            breakTimestamp: null,
+            breakStartTime: null,
             lastActiveTimestamp: Date.now(),
             lastUpdated: timeStr
         }).catch(() => {});
@@ -219,6 +269,8 @@ export async function clockOutRider(targetId = null) {
             rMem.forcedCaters = null;
             rMem.forcedBy = null;
             rMem.isForcedCater = false;
+            rMem.breakTimestamp = null;
+            rMem.breakStartTime = null;
         }
     }
 
@@ -231,5 +283,3 @@ export async function clockOutRider(targetId = null) {
     saveRosterCache();
     window.dispatchEvent(new CustomEvent('loginsUpdated'));
 }
-
-//end here
