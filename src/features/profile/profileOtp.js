@@ -1,4 +1,24 @@
 // src/features/profile/profileOtp.js
+
+/**
+ * ============================================================================
+ * PROFILE OTP & MOBILE NUMBER VERIFICATION ENGINE
+ * ============================================================================
+ * 
+ * Description:
+ * Manages mobile number mutations, input formatting, and SMS verification:
+ * - Direct contact number updates for Riders without requiring SMS OTP.
+ * - Enforces Firebase Phone Authentication with reCAPTCHA verification and
+ *   6-digit SMS OTP confirmation for Customers and Merchants.
+ * - Dynamic UI badge and button toggling based on active role permissions.
+ * 
+ * Update Note:
+ * - Added rider-specific bypass in `handleProfilePhoneInput`: when a rider
+ *   enters a 10-digit mobile number, it is immediately marked as verified
+ *   and ready to save without displaying the Send OTP button or verification drawer.
+ * ============================================================================
+ */
+
 import { profileState } from './profileState.js';
 import { auth as firebaseAuth } from '../../config/firebase.js';
 import { showToast } from '../../ui/notifications.js';
@@ -12,6 +32,29 @@ export function handleProfilePhoneInput(input) {
     const phoneBadge = document.getElementById('prof-phone-status-badge');
     const otpDrawer = document.getElementById('prof-otp-verify-drawer');
 
+    // RIDER DIRECT SAVE (NO OTP REQUIRED)
+    if (profileState.activeRole === 'rider') {
+        if (sendOtpBtn) sendOtpBtn.classList.add('hidden');
+        if (otpDrawer) otpDrawer.classList.add('hidden');
+
+        if (clean.length === 10) {
+            profileState.isPhoneModified = (clean !== profileState.originalPhoneNumber);
+            profileState.isPhoneOtpVerified = true;
+            if (phoneBadge) {
+                phoneBadge.innerText = "Verified";
+                phoneBadge.className = "text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30";
+            }
+        } else {
+            profileState.isPhoneOtpVerified = false;
+            if (phoneBadge) {
+                phoneBadge.innerText = "10 digits req.";
+                phoneBadge.className = "text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-500/30";
+            }
+        }
+        return;
+    }
+
+    // CUSTOMER & MERCHANT OTP WORKFLOW
     if (clean !== profileState.originalPhoneNumber && clean.length === 10) {
         profileState.isPhoneModified = true;
         profileState.isPhoneOtpVerified = false;
@@ -25,13 +68,17 @@ export function handleProfilePhoneInput(input) {
         if (sendOtpBtn) sendOtpBtn.classList.add('hidden');
         if (otpDrawer) otpDrawer.classList.add('hidden');
         if (phoneBadge) {
-            phoneBadge.innerText = "Verified";
-            phoneBadge.className = "text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30";
+            phoneBadge.innerText = clean.length === 10 ? "Verified" : "Unverified";
+            phoneBadge.className = clean.length === 10
+                ? "text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30"
+                : "text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-500/30";
         }
     }
 }
 
 export async function sendProfilePhoneChangeOTP() {
+    if (profileState.activeRole === 'rider') return;
+
     const phoneInput = document.getElementById('prof-phone-input');
     const sendOtpBtn = document.getElementById('prof-send-otp-btn');
     const otpDrawer = document.getElementById('prof-otp-verify-drawer');
@@ -69,6 +116,8 @@ export async function sendProfilePhoneChangeOTP() {
 }
 
 export async function verifyProfilePhoneChangeOTP() {
+    if (profileState.activeRole === 'rider') return;
+
     const otpInput = document.getElementById('prof-otp-input');
     const verifyBtn = document.getElementById('prof-verify-otp-btn');
     const phoneBadge = document.getElementById('prof-phone-status-badge');

@@ -1,4 +1,24 @@
 // src/features/profile/profileUI.js
+
+/**
+ * ============================================================================
+ * PROFILE MODAL UI CONTROLLER
+ * ============================================================================
+ * 
+ * Description:
+ * Manages modal form population, role-specific UI adaptation, and spatial map
+ * location listeners for Customers, Merchants, and Riders:
+ * - Adapts form fields dynamically based on the active session role.
+ * - Manages avatar preview updates and password visibility toggling.
+ * - Suppresses OTP challenge controls for Riders while maintaining OTP
+ *   verification readiness for Customer and Merchant account management.
+ * 
+ * Update Note:
+ * - Configured rider modal initialization to hide OTP verification triggers
+ *   and set `isPhoneOtpVerified = true` by default.
+ * ============================================================================
+ */
+
 import { profileState, getActiveSessionRole } from './profileState.js';
 import { appState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
@@ -10,8 +30,10 @@ export async function openProfileSettingsModal() {
     if (!modal) return;
 
     profileState.isPhoneModified = false;
-    profileState.isPhoneOtpVerified = false;
     profileState.phoneConfirmationResult = null;
+
+    // Riders do not require OTP verification for contact number updates
+    profileState.isPhoneOtpVerified = (profileState.activeRole === 'rider');
 
     const roleIcon = document.getElementById('prof-modal-role-icon');
     const modalTitle = document.getElementById('prof-modal-title');
@@ -156,8 +178,9 @@ export async function openProfileSettingsModal() {
     if (avatarPreview) avatarPreview.src = initialAvatar;
 
     if (phoneBadge) {
-        phoneBadge.innerText = displayPhone ? "Verified" : "Unverified";
-        phoneBadge.className = displayPhone 
+        const isVerified = (profileState.activeRole === 'rider' && displayPhone.length === 10) || (displayPhone.length === 10);
+        phoneBadge.innerText = isVerified ? "Verified" : (profileState.activeRole === 'rider' ? "10 digits req." : "Unverified");
+        phoneBadge.className = isVerified 
             ? "text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30"
             : "text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-500/30";
     }

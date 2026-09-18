@@ -1,4 +1,28 @@
 // src/features/profile/profileSave.js
+
+/**
+ * ============================================================================
+ * PROFILE SAVE & SESSION TERMINATION HANDLER
+ * ============================================================================
+ * 
+ * Description:
+ * Manages database mutations and session teardown across Customers, Merchants,
+ * and Riders:
+ * - Persists profile changes (names, contact numbers, addresses, map coordinates,
+ *   avatars, and passwords) to their respective Firebase nodes (`customers`,
+ *   `stores`, `storeAccounts`, `riders`, and `roster`).
+ * - Allows Riders to update and save contact numbers directly without OTP
+ *   verification hurdles, while enforcing OTP completion for customer/merchant roles.
+ * - Universal session logout handling: unregisters background GPS watchers, purges
+ *   role-specific authentication tokens from localStorage, and resets state.
+ * 
+ * Update Note:
+ * - Scoped the OTP verification check exclusively to non-rider accounts
+ *   (`profileState.activeRole !== 'rider'`).
+ * - Ensured rider contact updates sync to both `riders` and `roster` Firebase trees.
+ * ============================================================================
+ */
+
 import { profileState } from './profileState.js';
 import { appState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
@@ -17,7 +41,8 @@ export async function submitSaveProfileSettings() {
     if (!name) return showToast("⚠️ Name is required!");
     if (!phone) return showToast("⚠️ Mobile Number is required!");
 
-    if (profileState.isPhoneModified && !profileState.isPhoneOtpVerified) {
+    // OTP verification requirement enforced only for Customer and Merchant roles
+    if (profileState.activeRole !== 'rider' && profileState.isPhoneModified && !profileState.isPhoneOtpVerified) {
         return showToast("⚠️ Binago mo ang mobile number. I-verify muna ito gamit ang OTP bago i-save!");
     }
 
@@ -95,7 +120,7 @@ export async function submitSaveProfileSettings() {
             localStorage.setItem('lokalex_merchant_username', username);
             localStorage.setItem('lokalex_merchant_avatar', profileState.currentAvatarUrl);
         } else {
-            // Rider
+            // Rider Profile Save (Direct update without OTP)
             const riderId = appState.telegramId || localStorage.getItem('telegramId');
             const updates = {
                 name,
@@ -113,15 +138,19 @@ export async function submitSaveProfileSettings() {
                 await db.ref(`roster/${riderId}`).update({
                     name,
                     riderName: name,
+                    phoneNumber: formattedPhone,
+                    phone: formattedPhone,
                     photoUrl: profileState.currentAvatarUrl
                 }).catch(() => {});
             }
 
             appState.riderName = name;
+            appState.phoneNumber = formattedPhone;
             appState.photoUrl = profileState.currentAvatarUrl;
             localStorage.setItem('riderName', name);
             localStorage.setItem('lokalex_photo_url', profileState.currentAvatarUrl);
             localStorage.setItem('lokalex_rider_phone', formattedPhone);
+            localStorage.setItem('phoneNumber', formattedPhone);
         }
 
         showToast("✅ Profile settings saved successfully!");
@@ -173,6 +202,7 @@ export function executeUniversalLogout() {
     localStorage.removeItem('lokalex_photo_url');
     localStorage.removeItem('riderPhotoUrl');
     localStorage.removeItem('lokalex_rider_phone');
+    localStorage.removeItem('phoneNumber');
 
     // Reset runtime state
     appState.telegramId = null;
@@ -183,6 +213,7 @@ export function executeUniversalLogout() {
     appState.merchantStoreId = null;
     appState.merchantStoreName = null;
     appState.merchantUsername = null;
+    appState.phoneNumber = null;
 
     closeProfileSettingsModal();
     showToast("👋 Logged out successfully.");
@@ -192,4 +223,4 @@ export function executeUniversalLogout() {
     } else {
         location.reload();
     }
-}   
+}
