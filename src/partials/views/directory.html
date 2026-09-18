@@ -1,4 +1,14 @@
 <!-- src/partials/views/directory.html -->
+<!--
+  ============================================================================
+  DIRECTORY VIEW COMPONENT
+  ============================================================================
+  Description:
+  Customer, Merchant, and Barangay Rate search registry. Provides an inline
+  search bar that transitions to a floating action badge upon scrolling, an
+  overflow-contained scrollable record list with sticky alphabetical headers,
+  an A-Z elastic scrubber bar, and quick record creation FAB.
+-->
 <section id="view-directory" class="hidden flex-1 flex flex-col relative p-4">
     <!-- INLINE PRIMARY SEARCH CONTAINER (SCROLLS NATURALLY WITH CONTENT, NO HEIGHT COLLAPSE) -->
     <div id="dir-search-container" class="flex gap-2 mb-3 pr-6 transition-all duration-200">
@@ -42,7 +52,8 @@
         </div>
     </div>
     
-    <div id="record-list" class="flex-1 flex flex-col gap-3 pb-20 pr-8 overflow-y-auto"></div>
+    <!-- DIRECTORY RECORD LIST (SMOOTH SCROLLING CONTAINER WITH NO SECTION HEADER OVERLAP) -->
+    <div id="record-list" class="flex-1 flex flex-col gap-3 pb-20 pr-8 overflow-y-auto scroll-smooth"></div>
     
     <div id="alphabet-scrubber" class="fixed right-2 top-1/2 -translate-y-1/2 flex flex-col text-[10px] text-gray-400 font-bold z-30 touch-none select-none"></div>
 

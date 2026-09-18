@@ -1,4 +1,28 @@
 // src/features/directory/directoryUi.js
+
+/**
+ * ============================================================================
+ * DIRECTORY UI & INTERACTIVE SCRUBBER MODULE
+ * ============================================================================
+ * 
+ * Description:
+ * Manages the presentation layer, card rendering, and navigation for Customer,
+ * Store, and Barangay Rate directories:
+ * - Dynamic grouped rendering by alphabet and special character sections.
+ * - Non-overlapping sticky section headers with dark-mode theme fidelity.
+ * - Interactive side A-Z alphabet scrubber with dynamic touch/drag magnifications.
+ * - Dual search synchronization (inline bar and sticky floating header).
+ * - Clipboard formatting for standard delivery rates and barangay fee guidelines.
+ * 
+ * Update Note:
+ * - Fixed section header overlap by setting `top-0` relative to the `#record-list`
+ *   scrollable ancestor.
+ * - Fixed dark-mode styling by adopting `dark:bg-cardBg/95`.
+ * - Upgraded `jumpToSectionLetter` to calculate precise `recordList.scrollTo`
+ *   offsets, preventing window jumping.
+ * ============================================================================
+ */
+
 import { globalState } from '../../store/state.js';
 import { switchView } from '../../ui/router.js';
 import { showToast } from '../../ui/notifications.js';
@@ -299,7 +323,7 @@ export function renderDirectoryList() {
             const headerLabel = letterHeader === "#" ? "# (Special & Foreign)" : letterHeader;
 
             htmlBuilder += `
-            <div id="dir-section-${letterHeader === "#" ? "SPECIAL" : letterHeader}" data-section="${letterHeader}" class="sticky top-[48px] sm:top-[52px] z-20 bg-gray-100/95 dark:bg-darkBg/95 backdrop-blur-md text-amber-700 dark:text-amber-400 font-black text-xs px-2.5 py-1.5 border-b border-gray-200 dark:border-gray-800/80 my-1 flex items-center justify-between">
+            <div id="dir-section-${letterHeader === "#" ? "SPECIAL" : letterHeader}" data-section="${letterHeader}" class="sticky top-0 z-20 bg-gray-100/95 dark:bg-cardBg/95 backdrop-blur-md text-amber-700 dark:text-amber-400 font-black text-xs px-3 py-2 border-b border-gray-200 dark:border-gray-800 rounded-xl shadow-xs my-1 flex items-center justify-between">
                 <span>${headerLabel}</span>
                 <span class="text-[9px] text-gray-500 dark:text-gray-400 font-medium">Section Header</span>
             </div>`;
@@ -403,7 +427,13 @@ export function setupAlphabetScrubber(availableLetters) {
         }
 
         if (targetEl) {
-            targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const recordList = document.getElementById('record-list');
+            if (recordList) {
+                const targetOffset = targetEl.offsetTop - recordList.offsetTop;
+                recordList.scrollTo({ top: Math.max(0, targetOffset), behavior: 'smooth' });
+            } else {
+                targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         }
     };
 

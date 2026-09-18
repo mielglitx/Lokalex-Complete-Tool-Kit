@@ -1,4 +1,25 @@
 // src/features/roster/rosterCaterOcr.js
+
+/**
+ * ============================================================================
+ * ROSTER CATERING SCREENSHOT OCR ENGINE
+ * ============================================================================
+ * 
+ * Description:
+ * High-accuracy multi-script OCR extractor for Messenger chat screenshots:
+ * - Multi-language engine loading English, Japanese, and Arabic trained models.
+ * - Forces Page Segmentation Mode 6 (PSM 6) for single uniform text block parsing.
+ * - Targeted horizontal and vertical crop bounding that isolates the customer name
+ *   while excluding status bar icons, the back button, the customer avatar, the
+ *   three-dots menu icon, and the ad_id subtitle.
+ * - Dominant script isolation: prevents cross-alphabet pollution (e.g. stops the
+ *   Arabic model from hallucinating Arabic words like 'فته' from Japanese dots
+ *   or menu icons).
+ * - Multi-line header accumulator: collects full customer names (First + Last)
+ *   while repairing spurious OCR whitespace between Japanese syllables.
+ * ============================================================================
+ */
+
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 
 const TESSDATA_FAST_CDN = 'https://cdn.jsdelivr.net/gh/naptha/tessdata@gh-pages/4.0.0_fast';
@@ -36,10 +57,33 @@ export function fileToImage(file) {
     });
 }
 
+/**
+ * Identifies the dominant script family in the extracted text.
+ */
+function detectDominantScript(text) {
+    const jpnMatches = text.match(/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g) || [];
+    const araMatches = text.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g) || [];
+    const latMatches = text.match(/[a-zA-Z]/g) || [];
+
+    if (jpnMatches.length > 0 && jpnMatches.length >= araMatches.length) {
+        return 'japanese';
+    }
+    if (araMatches.length > 0 && araMatches.length > jpnMatches.length) {
+        return 'arabic';
+    }
+    return 'latin';
+}
+
+/**
+ * Extracts the full customer name from raw Messenger OCR text.
+ * Enforces dominant script isolation to prevent icon noise from being
+ * interpreted as words from a different language.
+ */
 export function extractFirstNameFromOcrText(rawText) {
     if (!rawText) return "";
 
     const noiseWords = [
+        // English system & subtitle noise
         "assign", "conversation", "see contact", "contact", "active", "now",
         "messenger", "message", "messages", "chat", "direct", "meta", "business",
         "suite", "facebook", "today", "yesterday", "reply", "inbox", "search",
@@ -48,7 +92,15 @@ export function extractFirstNameFromOcrText(rawText) {
         "saturday", "sunday", "monday", "tuesday", "wednesday", "thu", "fri", "sat",
         "sun", "mon", "tue", "wed", "reply in messenger", "this is a reply", "an ad",
         "ad_id", "ad id", "transfer requested", "how much", "total price", "sent a photo",
-        "オンライン中", "アクティブ", "メッセージ", "連絡先", "チャット", "検索", "プロフィール", "広告への返信"
+        "volte", "kb/s", "mb/s", "tap to fill", "suggested reply",
+        
+        // Japanese subtitle noise
+        "オンライン中", "アクティブ", "メッセージ", "連絡先", "チャット", "検索", "プロフィール", 
+        "広告への返信", "詳細を見る", "送金リクエスト", "支払い", "写真",
+        
+        // Arabic subtitle noise
+        "نشط الآن", "رسالة", "بحث", "مكالمة", "عرض التفاصيل", "هذا رد على إعلان", 
+        "طلب تحويل", "ملف شخصي", "جهات الاتصال"
     ];
 
     const lines = rawText
@@ -56,48 +108,104 @@ export function extractFirstNameFromOcrText(rawText) {
         .map(l => l.trim())
         .filter(l => l.length > 0);
 
+    const nameParts = [];
+
     for (const line of lines) {
         const lower = line.toLowerCase();
         
-        if (noiseWords.some(w => lower.includes(w))) continue;
-        if (!/[\p{L}]/u.test(line)) continue;
+        // Skip status bar clock, network speeds, or battery percentages
         if (/^\d{1,2}:\d{2}/.test(line)) continue;
-        if (/^ad_id/i.test(line)) continue;
+        if (/\b(?:kb\/s|mb\/s|volte|\d+%\b)/i.test(line)) continue;
         if (/^\d+$/.test(line)) continue;
+        if (!/[\p{L}]/u.test(line)) continue;
 
-        const cleanedLine = line.replace(/^[^\p{L}\p{N}]+/u, '').replace(/[^\p{L}\p{N}]+$/u, '').trim();
-        if (cleanedLine.length < 1) continue;
-
-        const words = cleanedLine
-            .split(/\s+/)
-            .map(w => w.replace(/[^\p{L}\p{N}'-]/gu, '').trim())
-            .filter(Boolean);
-
-        if (words.length > 0) {
-            let chosenWord = "";
-            const isAsianScript = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uAC00-\uD7AF]/.test(words[0]);
-
-            if (isAsianScript) {
-                // Return exact Katakana / Kanji / Hangul first name
-                chosenWord = words[0];
-            } else if (words.length >= 2 && words[0].length <= 2 && words[1].length >= 3) {
-                chosenWord = words[1];
-            } else if (words.length >= 3 && words[0].length <= 2) {
-                chosenWord = words[1];
-            } else {
-                chosenWord = words[0];
+        // If line contains known subtitle/ad keywords, stop accumulating
+        if (noiseWords.some(w => lower.includes(w))) {
+            if (nameParts.length > 0) {
+                break;
             }
-
-            if (chosenWord && chosenWord.length >= 1) {
-                if (/[a-zA-Z]/.test(chosenWord)) {
-                    return chosenWord.charAt(0).toUpperCase() + chosenWord.slice(1).toLowerCase();
-                }
-                return chosenWord;
-            }
+            continue;
         }
+
+        // Clean leading navigation icons/bullets and trailing badge indicators
+        let cleaned = line
+            .replace(/^[<«‹●•\s\d\-:_|]+/u, '')
+            .replace(/\s*\+\d+$/, '')
+            .replace(/[^\p{L}\p{N}\sー・'-]/gu, ' ')
+            .trim();
+
+        if (cleaned.length < 1) continue;
+
+        nameParts.push(cleaned);
+
+        if (nameParts.length >= 2) break;
     }
 
-    return "";
+    if (nameParts.length === 0) return "";
+
+    const combinedRaw = nameParts.join(' ').trim();
+    const dominantScript = detectDominantScript(combinedRaw);
+
+    // 1. JAPANESE SCRIPT MODE
+    if (dominantScript === 'japanese') {
+        // Discard any tokens containing foreign scripts (e.g., stray Arabic hallucinations)
+        const rawTokens = combinedRaw.split(/\s+/).filter(Boolean);
+        const validTokens = rawTokens.filter(token => {
+            return /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\w]/.test(token) &&
+                   !/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(token);
+        });
+
+        // Reconnect Katakana syllables separated by OCR whitespace
+        const mergedWords = [];
+        let singleCharBuffer = "";
+
+        for (const token of validTokens) {
+            const cleanToken = token.replace(/[^\p{L}\p{N}ー・]/gu, '').trim();
+            if (!cleanToken) continue;
+
+            if (cleanToken.length === 1 && /[\u3040-\u309F\u30A0-\u30FF]/.test(cleanToken)) {
+                singleCharBuffer += cleanToken;
+            } else {
+                if (singleCharBuffer) {
+                    mergedWords.push(singleCharBuffer);
+                    singleCharBuffer = "";
+                }
+                mergedWords.push(cleanToken);
+            }
+        }
+        if (singleCharBuffer) {
+            mergedWords.push(singleCharBuffer);
+        }
+
+        return mergedWords.join(' ').trim();
+    }
+
+    // 2. ARABIC SCRIPT MODE
+    if (dominantScript === 'arabic') {
+        const arabicWords = combinedRaw
+            .split(/\s+/)
+            .map(w => w.replace(/[^\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/gu, '').trim())
+            .filter(Boolean)
+            .filter(w => !/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(w));
+
+        return arabicWords.slice(0, 3).join(' ').trim();
+    }
+
+    // 3. LATIN & STANDARD INTERNATIONAL ALPHABETS
+    const words = combinedRaw
+        .split(/\s+/)
+        .map(w => w.replace(/[^\p{L}\p{N}'-]/gu, '').trim())
+        .filter(Boolean)
+        .filter(w => !/[\u0600-\u06FF\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(w));
+
+    const formattedWords = words.slice(0, 3).map(w => {
+        if (/[a-zA-Z]/.test(w)) {
+            return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+        }
+        return w;
+    });
+
+    return formattedWords.join(' ').trim();
 }
 
 export async function handleCaterScreenshotSelected(event, targetInputId = 'catering-customer-name', targetSelectId = 'catering-customer-select', statusElId = 'cater-ocr-status') {
@@ -109,7 +217,7 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
     const selectEl = document.getElementById(targetSelectId);
 
     if (statusEl) statusEl.classList.remove('hidden');
-    showToast("⏳ Sinusuri ang Messenger header (English & Japanese)...");
+    showToast("⏳ Sinusuri ang Messenger header (English, Japanese, Arabic)...");
 
     try {
         await ensureTesseractLoaded();
@@ -123,16 +231,20 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
         let startY, cropH, startX, cropW;
 
         if (isMobilePortrait) {
-            // Isolate the header name line; exclude status bar above and ad_id below
+            // Precise header name bounding box:
+            // startX = 0.20: Skips back arrow (<) and profile avatar
+            // cropW  = 0.64: Safely terminates before the 3-dots menu icon on the right
+            // startY = 0.046: Starts below the status bar icons
+            // cropH  = 0.044: Bounded to the title line; stops before ad_id subtitle
             startY = Math.round(img.height * 0.046);
-            cropH = Math.round(img.height * 0.048);
-            startX = Math.round(img.width * 0.18);
-            cropW = Math.round(img.width * 0.72);
+            cropH = Math.round(img.height * 0.044);
+            startX = Math.round(img.width * 0.20);
+            cropW = Math.round(img.width * 0.64);
         } else {
             startY = 0;
             cropH = Math.round(img.height * 0.12);
-            startX = Math.round(img.width * 0.08);
-            cropW = Math.round(img.width * 0.80);
+            startX = Math.round(img.width * 0.12);
+            cropW = Math.round(img.width * 0.72);
         }
 
         const upscale = 2.5;
@@ -150,7 +262,7 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
         const imgData = ctx.getImageData(0, 0, roiCanvas.width, roiCanvas.height);
         const d = imgData.data;
 
-        // Determine background theme
+        // Theme brightness evaluation
         let darkPixelCount = 0;
         const totalPixels = d.length / 4;
         for (let i = 0; i < d.length; i += 4) {
@@ -159,14 +271,13 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
         }
         const isDarkTheme = darkPixelCount > totalPixels * 0.5;
 
-        // Smooth contrast enhancement: preserves Katakana anti-aliased subpixels
+        // Diacritic-preserving contrast stretch: keeps Katakana dakuten and Arabic dots intact
         for (let i = 0; i < d.length; i += 4) {
             let gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
             if (isDarkTheme) {
-                gray = 255 - gray; // Invert to black text on white
+                gray = 255 - gray;
             }
-            // Linear contrast stretch between [50, 190]
-            const contrast = Math.min(255, Math.max(0, (gray - 50) * (255 / 140)));
+            const contrast = Math.min(255, Math.max(0, (gray - 30) * (255 / 195)));
             d[i] = contrast;
             d[i + 1] = contrast;
             d[i + 2] = contrast;
@@ -175,26 +286,29 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
 
         let rawText = "";
 
-        // Use fast 4.0.0_fast dictionary path (2.4MB) with multi-language support
+        // Multi-language OCR execution with PSM 6 (single uniform text block)
         let worker = null;
         try {
             if (typeof window.Tesseract.createWorker === 'function') {
-                worker = await window.Tesseract.createWorker(['eng', 'jpn'], 1, {
+                worker = await window.Tesseract.createWorker(['eng', 'jpn', 'ara'], 1, {
                     langPath: TESSDATA_FAST_CDN,
                     logger: () => {}
+                });
+                await worker.setParameters({
+                    tessedit_pageseg_mode: '6'
                 });
                 const ret = await worker.recognize(roiCanvas);
                 rawText = ret?.data?.text || "";
             } else {
-                const ret = await window.Tesseract.recognize(roiCanvas, 'eng+jpn', {
+                const ret = await window.Tesseract.recognize(roiCanvas, 'eng+jpn+ara', {
                     langPath: TESSDATA_FAST_CDN,
                     logger: () => {}
                 });
                 rawText = ret?.data?.text || "";
             }
         } catch (workerErr) {
-            console.warn("Primary fast worker OCR failed, trying fallback recognize:", workerErr);
-            const ret = await window.Tesseract.recognize(roiCanvas, 'eng+jpn', {
+            console.warn("Primary PSM 6 multi-lang worker failed, using fallback recognize:", workerErr);
+            const ret = await window.Tesseract.recognize(roiCanvas, 'eng+jpn+ara', {
                 langPath: TESSDATA_FAST_CDN,
                 logger: () => {}
             });
@@ -214,9 +328,10 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
             }
 
             if (selectEl && selectEl.options) {
+                const cleanDetected = detectedName.toLowerCase().trim();
                 for (let i = 0; i < selectEl.options.length; i++) {
-                    const optVal = (selectEl.options[i].value || "").toLowerCase();
-                    if (optVal && (optVal.includes(detectedName.toLowerCase()) || detectedName.toLowerCase().includes(optVal))) {
+                    const optVal = (selectEl.options[i].value || "").toLowerCase().trim();
+                    if (optVal && (optVal.includes(cleanDetected) || cleanDetected.includes(optVal))) {
                         selectEl.selectedIndex = i;
                         break;
                     }
@@ -226,7 +341,7 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
             showToast(`✅ Customer detected: ${detectedName}`);
             showSideNotification("NAME DETECTED", `Customer: ${detectedName}`, "fa-user-check", "text-emerald-400", "border-emerald-500");
         } else {
-            showToast("⚠️ Hindi matukoy ang pangalan. Paki-type nang manual.");
+            showToast("⚠️ Hindi matukoy ang buong pangalan. Paki-type nang manual.");
         }
     } catch (err) {
         console.error("Catering screenshot OCR failed:", err);
