@@ -1,4 +1,19 @@
 // src/features/maps/mapPicker.js
+
+/**
+ * ============================================================================
+ * LEAFLET & OPENSTREETMAP COORDINATE PICKER MODULE
+ * ============================================================================
+ * 
+ * Description:
+ * Interactive location selector and coordinate calibration tool powered by Leaflet:
+ * - Free OpenStreetMap cartographic tile layer with zero billing overhead.
+ * - Dynamic Nominatim geocoding search for Philippine addresses and landmarks.
+ * - Draggable/movable map center with visual crosshair/pin alignment.
+ * - Integrates with Form fields, Customer Chat, Rider Chat, and Registration.
+ * ============================================================================
+ */
+
 import { appState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { HUB_LOCATION } from '../../config/constants.js';
@@ -6,30 +21,85 @@ import { showToast } from '../../ui/notifications.js';
 import { switchView, goBack } from '../../ui/router.js';
 import { getDeviceLocation } from '../auth/index.js';
 import { sendCustomerToRiderChat, sendRiderToCustomerChat } from '../chat/index.js';
-import { mapState } from './mapState.js';
+import { 
+    mapState, 
+    ensureLeafletLoaded, 
+    searchNominatimPlaces 
+} from './mapState.js';
 
+let nominatimSearchTimeout = null;
+
+/**
+ * Initializes the search bar with free Nominatim autocomplete for OpenStreetMap.
+ */
 export function initMapSearchAutocomplete() {
     const input = document.getElementById('map-search-input');
-    if (!input || !window.google || !window.google.maps || !window.google.maps.places) return;
+    if (!input) return;
 
-    if (!mapState.mapSearchAutocomplete) {
-        mapState.mapSearchAutocomplete = new google.maps.places.Autocomplete(input, {
-            types: ['geocode', 'establishment']
-        });
+    let dropdown = document.getElementById('map-nominatim-results-box');
+    if (!dropdown) {
+        dropdown = document.createElement('div');
+        dropdown.id = 'map-nominatim-results-box';
+        dropdown.className = 'hidden absolute left-0 right-0 top-full mt-1 bg-gray-900/95 border border-gray-700 rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto text-xs flex flex-col backdrop-blur-md';
+        input.parentElement.style.position = 'relative';
+        input.parentElement.appendChild(dropdown);
+    }
 
-        mapState.mapSearchAutocomplete.addListener('place_changed', () => {
-            const place = mapState.mapSearchAutocomplete.getPlace();
-            if (!place.geometry || !place.geometry.location) {
-                showToast("⚠️ Location not found. Please select from dropdown.");
+    input.oninput = () => {
+        const val = input.value.trim();
+        if (nominatimSearchTimeout) clearTimeout(nominatimSearchTimeout);
+
+        if (val.length < 3) {
+            dropdown.innerHTML = '';
+            dropdown.classList.add('hidden');
+            return;
+        }
+
+        nominatimSearchTimeout = setTimeout(async () => {
+            dropdown.innerHTML = '<div class="p-2.5 text-gray-400 text-[11px] italic text-center">Searching OpenStreetMap...</div>';
+            dropdown.classList.remove('hidden');
+
+            const results = await searchNominatimPlaces(val);
+            if (!results || results.length === 0) {
+                dropdown.innerHTML = '<div class="p-2.5 text-gray-400 text-[11px] italic text-center">No matching locations found.</div>';
                 return;
             }
 
-            if (mapState.googleMapObj) {
-                mapState.googleMapObj.panTo(place.geometry.location);
-                mapState.googleMapObj.setZoom(17);
-            }
-        });
-    }
+            dropdown.innerHTML = results.map(item => {
+                const displayName = item.display_name || 'Location';
+                const lat = parseFloat(item.lat);
+                const lon = parseFloat(item.lon);
+
+                return `
+                <div class="nominatim-result-item p-2.5 border-b border-gray-800/80 hover:bg-blue-600/30 cursor-pointer transition flex items-start gap-2 text-white text-[11px]" data-lat="${lat}" data-lon="${lon}">
+                    <i class="fa-solid fa-location-dot text-red-400 text-xs mt-0.5 shrink-0"></i>
+                    <span class="truncate leading-snug">${displayName}</span>
+                </div>`;
+            }).join('');
+
+            dropdown.querySelectorAll('.nominatim-result-item').forEach(el => {
+                el.onclick = () => {
+                    const lat = parseFloat(el.getAttribute('data-lat'));
+                    const lon = parseFloat(el.getAttribute('data-lon'));
+
+                    if (!isNaN(lat) && !isNaN(lon) && mapState.leafletMapObj) {
+                        mapState.leafletMapObj.setView([lat, lon], 17);
+                        mapState.selectedMapLat = lat;
+                        mapState.selectedMapLng = lon;
+                    }
+
+                    input.value = el.querySelector('span')?.innerText || '';
+                    dropdown.classList.add('hidden');
+                };
+            });
+        }, 350);
+    };
+
+    document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.add('hidden');
+        }
+    });
 }
 
 export async function openMapPicker(context = 'form') {
@@ -64,6 +134,7 @@ export async function openMapPicker(context = 'form') {
     }
 
     showToast("📡 Calibrating map center...");
+    await ensureLeafletLoaded();
     const coords = await getDeviceLocation();
 
     let initialLat = 0;
@@ -101,44 +172,63 @@ export async function openMapPicker(context = 'form') {
     mapState.selectedMapLat = initialLat;
     mapState.selectedMapLng = initialLng;
 
-    initGoogleMapObject(mapState.selectedMapLat, mapState.selectedMapLng);
+    initLeafletMapObject(mapState.selectedMapLat, mapState.selectedMapLng);
     initMapSearchAutocomplete();
 }
 
-export function initGoogleMapObject(lat, lng) {
-    const mapCenter = { lat: parseFloat(lat), lng: parseFloat(lng) };
+/**
+ * Initializes or recenters the Leaflet OpenStreetMap canvas.
+ */
+export function initLeafletMapObject(lat, lng) {
     const mapContainer = document.getElementById('google-map-container');
+    if (!mapContainer || !window.L) return;
 
-    if (!mapContainer || !window.google || !window.google.maps) return;
+    const initialPos = [parseFloat(lat), parseFloat(lng)];
 
-    if (!mapState.googleMapObj) {
-        mapState.googleMapObj = new google.maps.Map(mapContainer, {
-            center: mapCenter,
+    if (!mapState.leafletMapObj) {
+        // Initialize Leaflet map instance
+        mapState.leafletMapObj = window.L.map(mapContainer, {
+            center: initialPos,
             zoom: 17,
-            mapTypeId: 'hybrid',
-            disableDefaultUI: false,
             zoomControl: true,
-            mapTypeControl: false,
-            streetViewControl: false,
-            fullscreenControl: false
+            attributionControl: false
         });
 
-        mapState.googleMapObj.addListener('center_changed', () => {
-            const center = mapState.googleMapObj.getCenter();
-            mapState.selectedMapLat = center.lat();
-            mapState.selectedMapLng = center.lng();
+        // Add free OpenStreetMap cartographic tile layer
+        window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap'
+        }).addTo(mapState.leafletMapObj);
+
+        // Update selected center pin coordinates on map move
+        mapState.leafletMapObj.on('move', () => {
+            const center = mapState.leafletMapObj.getCenter();
+            mapState.selectedMapLat = center.lat;
+            mapState.selectedMapLng = center.lng;
         });
+
+        // Backward compatibility link
+        mapState.googleMapObj = mapState.leafletMapObj;
     } else {
-        mapState.googleMapObj.setCenter(mapCenter);
-        mapState.googleMapObj.setZoom(17);
+        mapState.leafletMapObj.setView(initialPos, 17);
     }
+
+    // Force container dimension refresh when opening view
+    setTimeout(() => {
+        if (mapState.leafletMapObj) {
+            mapState.leafletMapObj.invalidateSize();
+        }
+    }, 200);
 
     appState.lat = lat;
     appState.lon = lng;
 }
 
+// Backward-compatible alias for existing imports
+export const initGoogleMapObject = initLeafletMapObject;
+
 export function confirmGoogleMapPin() {
-    if (!mapState.googleMapObj) return;
+    if (!mapState.leafletMapObj) return;
 
     const formattedLat = mapState.selectedMapLat.toFixed(6);
     const formattedLng = mapState.selectedMapLng.toFixed(6);
@@ -178,3 +268,5 @@ export function confirmGoogleMapPin() {
         showToast("📍 Location pin confirmed!");
     }
 }
+
+// REMARKS: MAP_PICKER_LEAFLET_OSM_NOMINATIM_GEOCODER_V1_COMPLETE

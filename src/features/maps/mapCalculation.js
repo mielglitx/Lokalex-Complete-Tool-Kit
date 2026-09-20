@@ -1,4 +1,25 @@
 // src/features/maps/mapCalculation.js
+
+/**
+ * ============================================================================
+ * MAP CALCULATION & DISTANCE FEE ENGINE (LEAFLET + OSRM)
+ * ============================================================================
+ * 
+ * Description:
+ * Manages customer distance estimation, map pinning, and delivery fee calculation:
+ * - Generates unique customer location request links (?mapcalc=KEY).
+ * - Open Source Routing Machine (OSRM) driving route calculator: replaces paid
+ *   Google Directions API to fetch accurate driving distances and turn-by-turn
+ *   GeoJSON coordinates for free.
+ * - Interactive Leaflet + OpenStreetMap road rendering with dynamic ETA overlays.
+ * - Automated tier pricing calculator based on billable kilometer radius.
+ * 
+ * Update Note:
+ * - Replaced Google Maps SDK with Leaflet and OSRM routing in `openMapCalcRoute`
+ *   and `startMapCalcLocationSharing`.
+ * ============================================================================
+ */
+
 import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { HUB_LOCATION, API_URL } from '../../config/constants.js';
@@ -6,7 +27,7 @@ import { showToast } from '../../ui/notifications.js';
 import { switchView } from '../../ui/router.js';
 import { escapeHtml, copyText } from '../../utils/helpers.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
-import { mapState } from './mapState.js';
+import { mapState, ensureLeafletLoaded, fetchOsrmDrivingRoute } from './mapState.js';
 
 export function calculateMapDeliveryFee(distanceKm) {
     const km = parseFloat(distanceKm) || 0;
@@ -106,7 +127,7 @@ export function checkAndInitMapCalcPortal() {
     if (portal) portal.classList.remove('hidden');
 }
 
-export function startMapCalcLocationSharing() {
+export async function startMapCalcLocationSharing() {
     const urlParams = new URLSearchParams(window.location.search);
     const calcKey = urlParams.get('mapcalc');
     if (!calcKey) return;
@@ -128,6 +149,7 @@ export function startMapCalcLocationSharing() {
         return;
     }
 
+    await ensureLeafletLoaded();
     if (mapBox) mapBox.classList.remove('hidden');
     let shareCount = 0;
 
@@ -137,21 +159,32 @@ export function startMapCalcLocationSharing() {
             const lng = pos.coords.longitude;
             const accuracy = Math.round(pos.coords.accuracy || 0);
             shareCount++;
-            const custLoc = { lat, lng };
 
-            if (!mapState.custGoogleMapObj && typeof google !== 'undefined' && google.maps) {
-                const mapEl = document.getElementById('mapcalc-cust-google-map');
-                if (mapEl) {
-                    mapState.custGoogleMapObj = new google.maps.Map(mapEl, {
-                        center: custLoc, zoom: 17, disableDefaultUI: true, zoomControl: true
+            // Render on Leaflet OpenStreetMap canvas
+            const mapEl = document.getElementById('mapcalc-cust-google-map');
+            if (mapEl && window.L) {
+                if (!mapState.custLeafletMapObj) {
+                    mapState.custLeafletMapObj = window.L.map(mapEl, {
+                        center: [lat, lng],
+                        zoom: 17,
+                        zoomControl: true,
+                        attributionControl: false
                     });
-                    mapState.custMarkerObj = new google.maps.Marker({
-                        position: custLoc, map: mapState.custGoogleMapObj, title: "Iyong Lokasyon", animation: google.maps.Animation.DROP
-                    });
+                    window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        maxZoom: 19
+                    }).addTo(mapState.custLeafletMapObj);
+
+                    mapState.custMarkerObj = window.L.marker([lat, lng], {
+                        title: "Iyong Lokasyon"
+                    }).addTo(mapState.custLeafletMapObj);
+                    
+                    mapState.custGoogleMapObj = mapState.custLeafletMapObj;
+                } else {
+                    mapState.custLeafletMapObj.setView([lat, lng], 17);
+                    if (mapState.custMarkerObj) {
+                        mapState.custMarkerObj.setLatLng([lat, lng]);
+                    }
                 }
-            } else if (mapState.custGoogleMapObj && mapState.custMarkerObj) {
-                mapState.custGoogleMapObj.setCenter(custLoc);
-                mapState.custMarkerObj.setPosition(custLoc);
             }
 
             const mapPinUrl = `https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lng.toFixed(6)}`;
@@ -175,7 +208,7 @@ export function startMapCalcLocationSharing() {
 
             if (statusEl) {
                 statusEl.className = "text-xs font-bold text-emerald-400 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20";
-                statusEl.innerHTML = `📡 Signal Accuracy: ±${accuracy}m (Fix ${shareCount})<br><span class="text-gray-300 font-normal">Nasa-save na ang iyong lokasyon...</span>`;
+                statusEl.innerHTML = `📡 Signal Accuracy: ±${accuracy}m (Fix${shareCount})<br><span class="text-gray-300 font-normal">Nasa-save na ang iyong lokasyon...</span>`;
             }
 
             if (accuracy <= 25 || shareCount >= 3) {
@@ -312,7 +345,7 @@ export function hideMapCalcRouteSummary() {
     if (banner) banner.classList.add('hidden');
 }
 
-export function openMapCalcRoute(targetLat, targetLng, custName) {
+export async function openMapCalcRoute(targetLat, targetLng, custName) {
     closeMapCalcBoardModal();
     switchView('view-map');
     
@@ -330,53 +363,82 @@ export function openMapCalcRoute(targetLat, targetLng, custName) {
     if (confirmBtn) confirmBtn.classList.add('hidden');
     if (navBtn) navBtn.classList.remove('hidden');
 
-    const hubLoc = { lat: HUB_LOCATION.lat, lng: HUB_LOCATION.lng };
-    const custLoc = { lat: parseFloat(targetLat), lng: parseFloat(targetLng) };
-    mapState.activeNavTargetCoords = custLoc;
+    const hubLoc = [HUB_LOCATION.lat, HUB_LOCATION.lng];
+    const custLoc = [parseFloat(targetLat), parseFloat(targetLng)];
+    mapState.activeNavTargetCoords = { lat: custLoc[0], lng: custLoc[1] };
 
+    await ensureLeafletLoaded();
     const mapContainer = document.getElementById('google-map-container');
-    if (!mapState.googleMapObj) {
-        mapState.googleMapObj = new google.maps.Map(mapContainer, { center: hubLoc, zoom: 15, disableDefaultUI: false, zoomControl: true });
-    }
+    if (!mapContainer || !window.L) return;
 
-    if (!mapState.mapDirectionsService) mapState.mapDirectionsService = new google.maps.DirectionsService();
-    if (!mapState.mapDirectionsRenderer) {
-        mapState.mapDirectionsRenderer = new google.maps.DirectionsRenderer({ 
-            map: mapState.googleMapObj, 
-            suppressMarkers: false,
-            polylineOptions: {
-                strokeColor: '#10B981',
-                strokeWeight: 6,
-                strokeOpacity: 0.85
-            }
+    if (!mapState.leafletMapObj) {
+        mapState.leafletMapObj = window.L.map(mapContainer, {
+            center: hubLoc,
+            zoom: 14,
+            zoomControl: true,
+            attributionControl: false
         });
+        window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(mapState.leafletMapObj);
+        mapState.googleMapObj = mapState.leafletMapObj;
     }
 
-    mapState.mapDirectionsService.route({
-        origin: hubLoc, destination: custLoc, travelMode: google.maps.TravelMode.DRIVING
-    }, (result, status) => {
-        if (status === google.maps.DirectionsStatus.OK) {
-            mapState.mapDirectionsRenderer.setDirections(result);
-            const routeLeg = result.routes[0].legs[0];
-            
-            // Calculate exact km and ceiling rounded km
-            const exactMeters = routeLeg.distance.value || 0;
-            const exactKm = exactMeters / 1000;
-            const roundedKm = Math.ceil(exactKm);
-            const fee = calculateMapDeliveryFee(exactKm);
+    // Clear previous markers & route polylines
+    if (mapState.leafletRoutePolyline) {
+        mapState.leafletMapObj.removeLayer(mapState.leafletRoutePolyline);
+        mapState.leafletRoutePolyline = null;
+    }
+    if (mapState.calcMarkers) {
+        mapState.calcMarkers.forEach(m => mapState.leafletMapObj.removeLayer(m));
+    }
+    mapState.calcMarkers = [];
 
-            showMapCalcRouteSummary({
-                exactKm: exactKm,
-                roundedKm: roundedKm,
-                fee: fee,
-                durationText: routeLeg.duration.text
-            });
+    // Add Hub and Customer markers
+    const hubMarker = window.L.marker(hubLoc, { title: "Lokalex Hub" }).addTo(mapState.leafletMapObj);
+    const custMarker = window.L.marker(custLoc, { title: custName || "Customer" }).addTo(mapState.leafletMapObj);
+    mapState.calcMarkers.push(hubMarker, custMarker);
 
-            showToast(`📏 ${exactKm.toFixed(2)} km (${roundedKm} km billed) • Fee: ₱${fee}`);
-        } else {
-            showToast("Unable to calculate driving route.");
-        }
-    });
+    showToast("🚗 Calculating driving route via OSRM...");
+    const route = await fetchOsrmDrivingRoute(hubLoc[0], hubLoc[1], custLoc[0], custLoc[1]);
+
+    if (route.success && route.coordinates.length > 0) {
+        mapState.leafletRoutePolyline = window.L.polyline(route.coordinates, {
+            color: '#10B981',
+            weight: 6,
+            opacity: 0.85
+        }).addTo(mapState.leafletMapObj);
+
+        mapState.leafletMapObj.fitBounds(mapState.leafletRoutePolyline.getBounds(), {
+            padding: [50, 50]
+        });
+
+        const exactKm = route.distanceKm;
+        const roundedKm = Math.ceil(exactKm);
+        const fee = calculateMapDeliveryFee(exactKm);
+
+        showMapCalcRouteSummary({
+            exactKm: exactKm,
+            roundedKm: roundedKm,
+            fee: fee,
+            durationText: route.durationText
+        });
+
+        showToast(`📏 ${exactKm.toFixed(2)} km (${roundedKm} km billed) • Fee: ₱${fee}`);
+    } else {
+        // Fallback straight line if driving road route is unavailable
+        mapState.leafletRoutePolyline = window.L.polyline([hubLoc, custLoc], {
+            color: '#EF4444',
+            weight: 4,
+            dashArray: '5, 10'
+        }).addTo(mapState.leafletMapObj);
+
+        mapState.leafletMapObj.fitBounds(mapState.leafletRoutePolyline.getBounds(), {
+            padding: [50, 50]
+        });
+
+        showToast("⚠️ Could not fetch road route; showing straight-line distance.");
+    }
 }
 
 export function viewMapCalcRoute(id, lat, lng, custName = "Customer") {
@@ -403,3 +465,4 @@ if (typeof window !== 'undefined') {
     window.openMapCalcRoute = openMapCalcRoute;
     window.viewMapCalcRoute = viewMapCalcRoute;
 }
+// REMARKS: MAP_CALCULATION_LEAFLET_OSRM_ROUTING_V1_COMPLETE

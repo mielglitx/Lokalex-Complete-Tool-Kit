@@ -1,4 +1,13 @@
 <!-- src/partials/head.html -->
+<!--
+  ============================================================================
+  GLOBAL HEAD PARTIAL & ASSET LOADER
+  ============================================================================
+  Description:
+  Loads global metadata, early theme hydration logic, Tailwind CSS configurations,
+  FontAwesome icon libraries, and free open-source mapping stylesheets (Leaflet.js).
+  Completely removes Google Maps SDK dependencies to eliminate API billing limits.
+-->
 <meta id="meta-theme-color" name="theme-color" content="#121212">
 
 <!-- THEME INITIALIZATION SCRIPT (PREVENTS FLASH OF UNSTYLED THEME ON LOAD) -->
@@ -67,7 +76,21 @@
     .bg-darkBg { background-color: var(--color-darkBg) !important; }
     .bg-cardBg { background-color: var(--color-cardBg) !important; }
     .bg-inputBg { background-color: var(--color-inputBg) !important; }
+
+    /* LEAFLET TILE FIXES FOR MOBILE APP CONTAINERS */
+    .leaflet-container {
+        font-family: inherit !important;
+        background-color: #1e293b !important;
+    }
+    .leaflet-control-zoom {
+        border: none !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
+    }
 </style>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBVAwn0UnyHJ926oHeK0k789ncADMzmX80&libraries=places" async defer></script>
+
+<!-- FREE OPEN-SOURCE MAPPING STACK (LEAFLET + OPENSTREETMAP) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<!-- REMARKS: HEAD_PARTIAL_LEAFLET_OSM_INTEGRATION_V1_COMPLETE -->

@@ -1,4 +1,25 @@
 // src/features/maps/mapTracking.js
+
+/**
+ * ============================================================================
+ * LIVE CUSTOMER TRACKING & ROUTE ENGINE (LEAFLET + OSRM)
+ * ============================================================================
+ * 
+ * Description:
+ * End-to-end customer delivery tracking and turn-by-turn route plotting:
+ * - Generates personalized customer location sharing links (?track=KEY).
+ * - Customer Portal: Captures GPS location and renders on OpenStreetMap.
+ * - Rider Portal: Plots real-time driving route from rider to customer using
+ *   the free Open Source Routing Machine (OSRM) driving API.
+ * - Dynamic Leaflet polyline rendering with distance, duration, and native
+ *   turn-by-turn navigation deep-links.
+ * 
+ * Update Note:
+ * - Migrated from Google Maps DirectionsService to Leaflet.js and OSRM routing.
+ * - Eliminated Google Maps SDK runtime dependencies.
+ * ============================================================================
+ */
+
 import { appState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { HUB_LOCATION } from '../../config/constants.js';
@@ -7,7 +28,7 @@ import { switchView } from '../../ui/router.js';
 import { copyText, getLocalTodayStr } from '../../utils/helpers.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
 import { getDeviceLocation } from '../auth/index.js';
-import { mapState, saveTrackingHistory } from './mapState.js';
+import { mapState, saveTrackingHistory, ensureLeafletLoaded, fetchOsrmDrivingRoute } from './mapState.js';
 
 export function copyCustomerTrackingLink(custName, forceRefresh = false) {
     if (!custName) custName = "Customer";
@@ -55,7 +76,7 @@ export function checkAndInitTrackPortal() {
     if (portal) portal.classList.remove('hidden');
 }
 
-export function startCustomerLocationSharing() {
+export async function startCustomerLocationSharing() {
     const urlParams = new URLSearchParams(window.location.search);
     const trackKey = urlParams.get('track');
     if (!trackKey) return;
@@ -77,6 +98,7 @@ export function startCustomerLocationSharing() {
         return;
     }
 
+    await ensureLeafletLoaded();
     if (mapBox) mapBox.classList.remove('hidden');
     let shareCount = 0;
 
@@ -85,27 +107,31 @@ export function startCustomerLocationSharing() {
             const lat = pos.coords.latitude;
             const lng = pos.coords.longitude;
             shareCount++;
-            const custLoc = { lat, lng };
 
-            if (!mapState.custGoogleMapObj && typeof google !== 'undefined' && google.maps) {
-                const mapEl = document.getElementById('cust-google-map');
-                if (mapEl) {
-                    mapState.custGoogleMapObj = new google.maps.Map(mapEl, {
-                        center: custLoc,
+            const mapEl = document.getElementById('cust-google-map');
+            if (mapEl && window.L) {
+                if (!mapState.custLeafletMapObj) {
+                    mapState.custLeafletMapObj = window.L.map(mapEl, {
+                        center: [lat, lng],
                         zoom: 17,
-                        disableDefaultUI: true,
-                        zoomControl: true
+                        zoomControl: true,
+                        attributionControl: false
                     });
-                    mapState.custMarkerObj = new google.maps.Marker({
-                        position: custLoc,
-                        map: mapState.custGoogleMapObj,
-                        title: "Iyong Lokasyon",
-                        animation: google.maps.Animation.DROP
-                    });
+                    window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        maxZoom: 19
+                    }).addTo(mapState.custLeafletMapObj);
+
+                    mapState.custMarkerObj = window.L.marker([lat, lng], {
+                        title: "Iyong Lokasyon"
+                    }).addTo(mapState.custLeafletMapObj);
+
+                    mapState.custGoogleMapObj = mapState.custLeafletMapObj;
+                } else {
+                    mapState.custLeafletMapObj.setView([lat, lng], 17);
+                    if (mapState.custMarkerObj) {
+                        mapState.custMarkerObj.setLatLng([lat, lng]);
+                    }
                 }
-            } else if (mapState.custGoogleMapObj && mapState.custMarkerObj) {
-                mapState.custGoogleMapObj.setCenter(custLoc);
-                mapState.custMarkerObj.setPosition(custLoc);
             }
 
             if (db) {
@@ -118,11 +144,11 @@ export function startCustomerLocationSharing() {
 
             if (statusEl) {
                 statusEl.className = "text-xs font-bold text-blue-400 bg-blue-500/10 p-3 rounded-xl border border-blue-500/20";
-                statusEl.innerHTML = `📡 Capturing signal accuracy... (${shareCount}/20)<br><span class="text-gray-300 font-normal">Nasa-save na ang iyong lokasyon...</span>`;
+                statusEl.innerHTML = `📡 Signal Accuracy... (${shareCount}/20)<br><span class="text-gray-300 font-normal">Nasa-save na ang iyong lokasyon...</span>`;
             }
 
             if (shareCount >= 20) {
-                navigator.geolocation.clearWatch(watchId);
+                try { navigator.geolocation.clearWatch(watchId); } catch(e) {}
                 if (statusEl) {
                     statusEl.innerHTML = "🔒 <strong>Pin Permanently Saved (100%)!</strong><br><span class=\"text-gray-300 font-normal\">Nai-save na ang iyong lokasyon. Ipaalam na ito sa rider.</span>";
                 }
@@ -174,52 +200,90 @@ export async function openLiveCustomerMap(custName) {
     if (navBtn) navBtn.classList.remove('hidden');
 
     showToast("Locating rider position...");
+    await ensureLeafletLoaded();
     const coords = await getDeviceLocation();
-    const riderLoc = { lat: coords.lat || HUB_LOCATION.lat, lng: coords.lon || HUB_LOCATION.lng };
+    const riderLat = coords.lat || HUB_LOCATION.lat;
+    const riderLng = coords.lon || HUB_LOCATION.lng;
+    const riderLoc = [riderLat, riderLng];
 
     const mapContainer = document.getElementById('google-map-container');
-    if (!mapState.googleMapObj) {
-        mapState.googleMapObj = new google.maps.Map(mapContainer, {
+    if (!mapContainer || !window.L) return;
+
+    if (!mapState.leafletMapObj) {
+        mapState.leafletMapObj = window.L.map(mapContainer, {
             center: riderLoc,
             zoom: 16,
-            disableDefaultUI: false,
-            zoomControl: true
+            zoomControl: true,
+            attributionControl: false
         });
+        window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(mapState.leafletMapObj);
+        mapState.googleMapObj = mapState.leafletMapObj;
     } else {
-        mapState.googleMapObj.setCenter(riderLoc);
+        mapState.leafletMapObj.setView(riderLoc, 16);
     }
 
-    if (!mapState.mapDirectionsService) mapState.mapDirectionsService = new google.maps.DirectionsService();
-    if (!mapState.mapDirectionsRenderer) {
-        mapState.mapDirectionsRenderer = new google.maps.DirectionsRenderer({ 
-            map: mapState.googleMapObj, 
-            suppressMarkers: false,
-            polylineOptions: {
-                strokeColor: '#3B82F6',
-                strokeWeight: 6,
-                strokeOpacity: 0.85
-            }
-        });
+    // Initialize or clear tracking layer container
+    if (mapState.leafletRoutePolyline) {
+        mapState.leafletMapObj.removeLayer(mapState.leafletRoutePolyline);
+        mapState.leafletRoutePolyline = null;
     }
+    if (mapState.trackingMarkers) {
+        mapState.trackingMarkers.forEach(m => mapState.leafletMapObj.removeLayer(m));
+    }
+    mapState.trackingMarkers = [];
+
+    const riderMarker = window.L.marker(riderLoc, { title: "Rider Location" }).addTo(mapState.leafletMapObj);
+    mapState.trackingMarkers.push(riderMarker);
 
     if (db) {
-        db.ref('liveTracking/' + trackKey).on('value', (snapshot) => {
+        db.ref('liveTracking/' + trackKey).on('value', async (snapshot) => {
             const data = snapshot.val();
             if (data && data.lat && data.lng) {
-                const custLoc = { lat: data.lat, lng: data.lng };
-                mapState.activeNavTargetCoords = custLoc;
+                const custLoc = [parseFloat(data.lat), parseFloat(data.lng)];
+                mapState.activeNavTargetCoords = { lat: custLoc[0], lng: custLoc[1] };
 
-                mapState.mapDirectionsService.route({
-                    origin: riderLoc,
-                    destination: custLoc,
-                    travelMode: google.maps.TravelMode.DRIVING
-                }, (result, status) => {
-                    if (status === google.maps.DirectionsStatus.OK) {
-                        mapState.mapDirectionsRenderer.setDirections(result);
-                        const routeLeg = result.routes[0].legs[0];
-                        showToast(`📍 Route Plotted: ${routeLeg.distance.text} (~${routeLeg.duration.text})`);
-                    }
-                });
+                // Remove previous customer marker if existing
+                if (mapState.trackingMarkers.length > 1) {
+                    mapState.leafletMapObj.removeLayer(mapState.trackingMarkers[1]);
+                    mapState.trackingMarkers.pop();
+                }
+
+                const custMarker = window.L.marker(custLoc, { title: `Customer: ${custName}` }).addTo(mapState.leafletMapObj);
+                mapState.trackingMarkers.push(custMarker);
+
+                // Fetch OSRM driving route
+                const route = await fetchOsrmDrivingRoute(riderLoc[0], riderLoc[1], custLoc[0], custLoc[1]);
+
+                if (mapState.leafletRoutePolyline) {
+                    mapState.leafletMapObj.removeLayer(mapState.leafletRoutePolyline);
+                    mapState.leafletRoutePolyline = null;
+                }
+
+                if (route.success && route.coordinates.length > 0) {
+                    mapState.leafletRoutePolyline = window.L.polyline(route.coordinates, {
+                        color: '#3B82F6',
+                        weight: 6,
+                        opacity: 0.85
+                    }).addTo(mapState.leafletMapObj);
+
+                    mapState.leafletMapObj.fitBounds(mapState.leafletRoutePolyline.getBounds(), {
+                        padding: [50, 50]
+                    });
+
+                    showToast(`📍 Route Plotted: ${route.distanceKm.toFixed(2)} km (~${route.durationText})`);
+                } else {
+                    mapState.leafletRoutePolyline = window.L.polyline([riderLoc, custLoc], {
+                        color: '#3B82F6',
+                        weight: 4,
+                        dashArray: '5, 10'
+                    }).addTo(mapState.leafletMapObj);
+
+                    mapState.leafletMapObj.fitBounds(mapState.leafletRoutePolyline.getBounds(), {
+                        padding: [50, 50]
+                    });
+                }
             } else {
                 showToast("Waiting for customer to open tracking link...");
             }
@@ -232,3 +296,5 @@ export function openExternalGoogleNav() {
     const url = `https://www.google.com/maps/dir/?api=1&destination=${mapState.activeNavTargetCoords.lat},${mapState.activeNavTargetCoords.lng}&travelmode=driving`;
     window.open(url, '_blank');
 }
+
+// REMARKS: MAP_TRACKING_LEAFLET_OSRM_ROUTING_V1_COMPLETE

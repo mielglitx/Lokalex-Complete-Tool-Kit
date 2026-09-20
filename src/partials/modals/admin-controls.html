@@ -1,3 +1,4 @@
+<!-- src/partials/modals/admin-controls.html -->
 <!-- ADMIN BLOCK USER MODAL -->
 <div id="admin-block-user-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-red-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
@@ -464,7 +465,7 @@
 
 <!-- ADMIN MANAGE RIDERS MODAL (ACCOUNT TYPE & PERMISSIONS) -->
 <div id="admin-manage-riders-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
-    <div class="bg-cardBg border border-blue-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
+    <div class="bg-cardBg border border-blue-500/60 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2">
             <div class="flex items-center gap-2">
                 <i class="fa-solid fa-users-gear text-blue-400 text-lg"></i>
@@ -487,6 +488,45 @@
         <button onclick="window.closeAdminManageRidersModal && window.closeAdminManageRidersModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
             Close
         </button>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- ADMIN RIDER APP ACCESS CONTROLS MODAL                                     -->
+<!-- ========================================================================= -->
+<div id="admin-rider-app-access-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-purple-500/50 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3.5 max-h-[90vh] overflow-hidden relative animate-in fade-in zoom-in duration-200">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2.5">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center text-sm font-bold border border-purple-500/30">
+                    <i class="fa-solid fa-cubes"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-white">Rider App Access Controls</h3>
+                    <p id="rider-app-access-target-subtitle" class="text-[9px] text-purple-400 font-mono">Select Authorized App Sections</p>
+                </div>
+            </div>
+            <button onclick="window.closeRiderAppAccessModal && window.closeRiderAppAccessModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 px-1">
+            <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Permitted Features</span>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="window.toggleAllRiderFeatures && window.toggleAllRiderFeatures(true)" class="text-[9px] text-emerald-400 font-bold hover:underline cursor-pointer">Allow All</button>
+                <span class="text-gray-600 text-[10px]">|</span>
+                <button type="button" onclick="window.toggleAllRiderFeatures && window.toggleAllRiderFeatures(false)" class="text-[9px] text-red-400 font-bold hover:underline cursor-pointer">Restrict All</button>
+            </div>
+        </div>
+
+        <div id="rider-app-access-list-container" class="flex flex-col gap-2 overflow-y-auto flex-1 pr-1 min-h-0">
+            <div class="text-center text-gray-500 italic py-6 text-xs">Loading feature list...</div>
+        </div>
+
+        <div class="pt-2 border-t border-gray-800">
+            <button type="button" onclick="window.closeRiderAppAccessModal && window.closeRiderAppAccessModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
+                Done
+            </button>
+        </div>
     </div>
 </div>
 
@@ -699,3 +739,4 @@
         </button>
     </div>
 </div>
+<!-- REMARKS: ADMIN_CONTROLS_MODAL_RIDER_APP_ACCESS_MODAL_INCLUDED_V1_COMPLETE -->

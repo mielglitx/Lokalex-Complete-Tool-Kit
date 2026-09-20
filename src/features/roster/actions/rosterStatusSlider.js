@@ -1,4 +1,24 @@
 // src/features/roster/actions/rosterStatusSlider.js
+
+/**
+ * ============================================================================
+ * ROSTER STATUS SLIDER & RIDER TRANSITION HANDLER
+ * ============================================================================
+ * 
+ * Description:
+ * Controls rider status transitions initiated by the rider UI dock:
+ * - Available: Handles shift time-in restrictions, single-shot silent GPS
+ *   calibration, queue time anchoring, and live tracking session termination.
+ * - End Shift: Prompts confirmation modals, clocks out attendance, and purges
+ *   active assignments.
+ * - Break / Cooldown: Manages rest transitions and background timer lifecycles.
+ * 
+ * Update Note:
+ * - Silenced repeated intermediate GPS calibration callbacks during time-in
+ *   so riders receive exactly one clean confirmation notification.
+ * ============================================================================
+ */
+
 import { db } from '../../../config/firebase.js';
 import { appState, globalState, multiCarts, activeCartSlot } from '../../../store/state.js';
 import { showToast } from '../../../ui/notifications.js';
@@ -142,11 +162,9 @@ export async function triggerStatusWithSlide(targetStatus) {
             }
         }
 
+        // Silent GPS calibration: avoids multiple intermediate fix notifications
         if (isStartingShift) {
-            showToast("📡 Kinukuha ang GPS Location bago mag-Time In...");
-            const coords = await calibrateGPS((acc, count) => {
-                showToast(`📡 Calibrating GPS: ±${Math.round(acc)}m (Fix ${count}/4)`);
-            });
+            const coords = await calibrateGPS(() => {});
 
             if (!coords || !coords.lat || !coords.lon || coords.accuracy > 500) {
                 showToast("❌ Bigo ang GPS. Paki-enable ang Location Access bago mag-Time In!");
@@ -156,10 +174,9 @@ export async function triggerStatusWithSlide(targetStatus) {
             appState.lat = coords.lat;
             appState.lon = coords.lon;
             appState.gpsAccuracy = coords.accuracy;
-            showToast(`✅ GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
         }
 
-        // Capture exact Available queue time and GPS coordinates
+        // Capture exact Available queue time and GPS coordinates silently
         const locationData = await getDeviceLocationQuick();
         if (locationData && locationData.lat) {
             appState.lat = locationData.lat;
@@ -208,6 +225,9 @@ export async function triggerStatusWithSlide(targetStatus) {
         } else if (window.clearCartSlot) {
             window.clearCartSlot();
         }
+
+        // Single definitive notification
+        showToast("✅ Available na! GPS Location recorded.");
 
     } else if (targetStatus === 'End') {
         openSlideDeleteModal(`Sigurado ka bang mag-End Shift?`, async () => {

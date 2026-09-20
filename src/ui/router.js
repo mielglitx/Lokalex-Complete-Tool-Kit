@@ -1,6 +1,23 @@
 // src/ui/router.js
+
+/**
+ * ============================================================================
+ * ROUTER, NAVIGATION GUARD & APP ACCESS CONTROLLER
+ * ============================================================================
+ * 
+ * Description:
+ * Client-side view routing engine with built-in runtime permission gates:
+ * - Digital clock heartbeat and theme state management.
+ * - Runtime View Guard: intercepts navigation attempts to restricted sections
+ *   (e.g., Smart Cart, Directory, Commission) and displays an alert toast.
+ * - Dynamic Dock Synchronization: grays out and locks quick action buttons
+ *   on the rider home dashboard when disabled by an administrator.
+ * - Capture-phase click listener that halts execution on restricted buttons.
+ * ============================================================================
+ */
+
 import { showToast } from './notifications.js';
-import { appState } from '../store/state.js';
+import { appState, globalState } from '../store/state.js';
 
 let backPressCount = 0;
 let backPressTimer = null;
@@ -79,9 +96,107 @@ if (typeof window !== 'undefined' && window.matchMedia) {
 }
 
 // ============================================================================
-// 3. ROUTING & VIEW CONTROLLERS
+// 3. RIDER APP SECTION ACCESS CONTROLS & DOCK PERMISSION GATES
+// ============================================================================
+
+/**
+ * Checks whether a specific feature key is permitted for the active rider.
+ * Admins are exempt from all restrictions.
+ */
+export function isFeatureAllowed(featureKey) {
+    if (!featureKey) return true;
+
+    const activeRole = localStorage.getItem('lokalex_active_role');
+    const riderId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+
+    // Customers and Merchants do not use the rider tool gating system
+    if (!riderId && activeRole !== 'rider') return true;
+
+    // Full administrators have unrestricted access to all features
+    const userType = (appState.userType || localStorage.getItem('userType') || "").toLowerCase().trim();
+    if (userType === 'admin') return true;
+
+    let allowedFeatures = null;
+
+    try {
+        const cached = localStorage.getItem('lokalex_allowed_features');
+        if (cached) allowedFeatures = JSON.parse(cached);
+    } catch (e) {}
+
+    if (!allowedFeatures && globalState.rosterMembers) {
+        const myRecord = globalState.rosterMembers.find(m => (m.telegramId || m.id || "").toString().trim() === riderId);
+        if (myRecord && myRecord.allowedFeatures) {
+            allowedFeatures = myRecord.allowedFeatures;
+        }
+    }
+
+    // Unconfigured features default to allowed
+    if (!allowedFeatures) return true;
+
+    return allowedFeatures[featureKey] !== false;
+}
+
+/**
+ * Validates route navigation requests against the rider's permitted features.
+ */
+export function isViewPermittedForCurrentRider(targetViewId) {
+    if (targetViewId === 'view-cart') return isFeatureAllowed('cart');
+    if (targetViewId === 'view-directory') return isFeatureAllowed('directory');
+    if (targetViewId === 'view-commission') return isFeatureAllowed('commission');
+    return true;
+}
+
+/**
+ * Dynamically updates the home dashboard quick action dock buttons to reflect
+ * active administrative access restrictions.
+ */
+export function syncRiderAppDockPermissions() {
+    const dockConfigs = [
+        { selector: '#view-home button[onclick*="view-cart"]', key: 'cart' },
+        { selector: '#view-home button[onclick*="openMapCalcBoardModal"]', key: 'mapcalc' },
+        { selector: '#view-home button[onclick*="openCommissionScreen"]', key: 'commission' },
+        { selector: '#view-home button[onclick*="openAdvancedOrdersModal"]', key: 'advOrders' },
+        { selector: '#view-home button[onclick*="promptStartLiveGpsSession"]', key: 'livegps' },
+        { selector: '#view-home button[onclick*="openDirectory"]', key: 'directory' },
+        { selector: '#view-home button[onclick*="openGCashModal"]', key: 'gcash' }
+    ];
+
+    dockConfigs.forEach(({ selector, key }) => {
+        const btns = document.querySelectorAll(selector);
+        const allowed = isFeatureAllowed(key);
+        btns.forEach(btn => {
+            if (!allowed) {
+                btn.classList.add('opacity-40', 'grayscale');
+                btn.setAttribute('data-restricted', 'true');
+            } else {
+                btn.classList.remove('opacity-40', 'grayscale');
+                btn.removeAttribute('data-restricted');
+            }
+        });
+    });
+}
+
+// Capture-phase event listener: blocks restricted buttons before inline onclick execution
+if (typeof document !== 'undefined') {
+    document.addEventListener('click', (e) => {
+        const restrictedBtn = e.target.closest('[data-restricted="true"]');
+        if (restrictedBtn) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            showToast("🚫 Access Restricted: Hindi pinahihintulutan ng Admin ang access sa feature na ito.");
+        }
+    }, true);
+}
+
+// ============================================================================
+// 4. ROUTING & VIEW CONTROLLERS
 // ============================================================================
 export function switchView(targetViewId, isBackwards = false, replace = false) {
+    if (!isViewPermittedForCurrentRider(targetViewId)) {
+        showToast("🚫 Access Restricted: Hindi pinahihintulutan ng Admin ang access sa feature na ito.");
+        return;
+    }
+
     if (replace) {
         history.replaceState({ view: targetViewId }, '', '#' + targetViewId);
     } else if (!isBackwards) {
@@ -188,8 +303,9 @@ export function renderViewUI(targetViewId) {
             }
         }
 
-        if (targetViewId === 'view-home' && headerTitle) {
-            headerTitle.innerHTML = `L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub`;
+        if (targetViewId === 'view-home') {
+            if (headerTitle) headerTitle.innerHTML = `L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub`;
+            syncRiderAppDockPermissions();
         } else if (targetViewId === 'view-customer-home' && headerTitle) {
             headerTitle.innerHTML = `L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Customer Portal`;
         } else if (targetViewId === 'view-store-hub' && headerTitle) {
@@ -268,6 +384,11 @@ window.addEventListener('popstate', function(event) {
     }
 });
 
+// Synchronize dock permissions whenever roster updates
+window.addEventListener('rosterUpdated', () => {
+    syncRiderAppDockPermissions();
+});
+
 // Run initialization immediately on evaluation
 initHeaderClock();
 applyTheme();
@@ -283,4 +404,8 @@ if (typeof window !== 'undefined') {
     window.syncThemeUI = syncThemeUI;
     window.initHeaderClock = initHeaderClock;
     window.updateHeaderClock = updateHeaderClock;
+    window.isFeatureAllowed = isFeatureAllowed;
+    window.isViewPermittedForCurrentRider = isViewPermittedForCurrentRider;
+    window.syncRiderAppDockPermissions = syncRiderAppDockPermissions;
 }
+// REMARKS: ROUTER_APP_ACCESS_GUARD_AND_DOCK_SYNC_V1_COMPLETE
