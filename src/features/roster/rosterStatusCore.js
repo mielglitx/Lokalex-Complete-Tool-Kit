@@ -2,20 +2,19 @@
 
 /**
  * ============================================================================
- * ROSTER STATUS CORE ENGINE & PERSISTENCE
+ * ROSTER STATUS CORE ENGINE & ATTENDANCE LIFECYCLE
  * ============================================================================
  * 
  * Description:
  * Core state machine governing rider status mutations across the Lokalex platform:
  * - Direct updates and local/remote synchronization to Firebase Realtime Database.
  * - Manages shift login generation, shift clock-outs, and delivery archiving.
- * - Automates break lifecycle tracking: stamps `breakTimestamp` (epoch ms) and
- *   `breakStartTime` (clock time) when a rider takes a break, and resets them
- *   when returning to Available, Catering, or End Shift.
- * 
- * Update Note:
- * - Added automatic management of `breakTimestamp` and `breakStartTime` on status
- *   changes to ensure continuous consumed break duration tracking.
+ * - Millisecond Attendance Timestamps: saves `loginTimestamp` and `clockOutTimestamp`
+ *   to ensure exact 8-hour shift compliance evaluations.
+ * - Accurate Break Time Ledger: accumulates `totalBreakMinutes` across all break
+ *   sessions during a shift, ensuring break time is deducted from duty time.
+ * - Shift Cycle Reset: resets `commissionSurcharge`, `earlyShiftDeficitHours`,
+ *   and `totalBreakMinutes` whenever a rider starts a fresh shift.
  * ============================================================================
  */
 
@@ -68,19 +67,47 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
         newQueueTime = maxTime + 1000;
     }
 
+    const nowTimestamp = Date.now();
+    let accumulatedBreakMins = targetRecord?.totalBreakMinutes || 0;
+
+    // If moving OUT of Break status, calculate and accumulate the finished break session
+    if (targetRecord && targetRecord.status === 'Break' && targetRecord.breakTimestamp) {
+        const finishedBreakSession = Math.max(0, Math.floor((nowTimestamp - targetRecord.breakTimestamp) / 60000));
+        accumulatedBreakMins += finishedBreakSession;
+    }
+
     let extraData = {};
-    if (status === 'Available' || status === 'End') {
+    if (status === 'Available') {
         extraData = { 
             forcedCaters: null,
             forcedBy: null,
             isForcedCater: false,
             breakTimestamp: null,
-            breakStartTime: null
+            breakStartTime: null,
+            totalBreakMinutes: isStartingShift ? 0 : accumulatedBreakMins
+        };
+        if (isStartingShift) {
+            extraData.commissionSurcharge = 0;
+            extraData.earlyShiftDeficitHours = 0;
+        }
+    } else if (status === 'End') {
+        extraData = { 
+            forcedCaters: null,
+            forcedBy: null,
+            isForcedCater: false,
+            breakTimestamp: null,
+            breakStartTime: null,
+            totalBreakMinutes: accumulatedBreakMins
         };
     } else if (status === 'Catering') {
         extraData = {
             breakTimestamp: null,
-            breakStartTime: null
+            breakStartTime: null,
+            totalBreakMinutes: accumulatedBreakMins
+        };
+    } else if (status === 'Break') {
+        extraData = {
+            totalBreakMinutes: accumulatedBreakMins
         };
     }
 
@@ -120,7 +147,6 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         currentIsForcedCater = !!existingRec.isForcedCater;
     }
 
-    // BREAK LIFECYCLE TIMESTAMP ORCHESTRATION
     let currentBreakTimestamp = null;
     let currentBreakStartTime = null;
 
@@ -142,6 +168,10 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         }
     }
 
+    const currentTotalBreak = extraData.totalBreakMinutes !== undefined 
+        ? extraData.totalBreakMinutes 
+        : (existingRec?.totalBreakMinutes || 0);
+
     const rosterData = {
         telegramId: tId.toString(),
         id: tId.toString(),
@@ -162,7 +192,8 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         forcedBy: currentForcedBy,
         isForcedCater: currentIsForcedCater,
         breakTimestamp: currentBreakTimestamp,
-        breakStartTime: currentBreakStartTime
+        breakStartTime: currentBreakStartTime,
+        totalBreakMinutes: currentTotalBreak
     };
 
     if (!globalState.rosterMembers) globalState.rosterMembers = [];
@@ -186,17 +217,26 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         rosterRef.onDisconnect().update({
             lastActiveTimestamp: firebase.database.ServerValue.TIMESTAMP
         }).catch(() => {});
+
+        // Keep attendance login totalBreakMinutes synchronized
+        db.ref(`logins/${tId}`).update({
+            totalBreakMinutes: currentTotalBreak
+        }).catch(() => {});
     }
 
     if (recordLogin && db) {
         const todayStr = getLocalTodayStr();
         let finalLoginTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        let finalLoginTimestamp = nowTimestamp;
 
         try {
             const loginSnap = await db.ref('logins/' + tId).once('value');
             const existingLogin = loginSnap.val();
             if (existingLogin && isSameDateStr(existingLogin.date, todayStr) && existingLogin.loginTime) {
                 finalLoginTime = existingLogin.loginTime;
+                if (existingLogin.loginTimestamp) {
+                    finalLoginTimestamp = existingLogin.loginTimestamp;
+                }
             }
         } catch(e) {}
 
@@ -205,9 +245,14 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
             id: tId,
             riderName: tName,
             loginTime: finalLoginTime,
+            loginTimestamp: finalLoginTimestamp,
             clockOutTime: "",
+            clockOutTimestamp: null,
             date: todayStr,
-            location: locationLink || ""
+            location: locationLink || "",
+            earlyShiftPenaltyPercent: 0,
+            deficitHours: 0,
+            totalBreakMinutes: 0
         };
         await db.ref('logins/' + tId).set(loginEntry);
 
@@ -225,8 +270,19 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
 
 export async function clockOutRider(targetId = null) {
     const tId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const nowTimestamp = Date.now();
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const todayStr = getLocalTodayStr();
+
+    let finalBreakMins = 0;
+    const rMem = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === tId);
+    if (rMem) {
+        finalBreakMins = rMem.totalBreakMinutes || 0;
+        if (rMem.status === 'Break' && rMem.breakTimestamp) {
+            const activeBreak = Math.max(0, Math.floor((nowTimestamp - rMem.breakTimestamp) / 60000));
+            finalBreakMins += activeBreak;
+        }
+    }
 
     if (db && tId) {
         try {
@@ -234,18 +290,24 @@ export async function clockOutRider(targetId = null) {
             const existingLogin = loginSnap.val();
 
             if (existingLogin) {
-                await db.ref('logins/' + tId).update({ clockOutTime: timeStr });
+                await db.ref('logins/' + tId).update({ 
+                    clockOutTime: timeStr,
+                    clockOutTimestamp: nowTimestamp,
+                    totalBreakMinutes: finalBreakMins
+                });
             } else {
-                const rosterMem = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === tId);
-                const rName = rosterMem ? (rosterMem.riderName || rosterMem.name || "Rider") : (appState.riderName || "Rider");
+                const rName = rMem ? (rMem.riderName || rMem.name || "Rider") : (appState.riderName || "Rider");
                 await db.ref('logins/' + tId).set({
                     riderId: tId,
                     id: tId,
                     riderName: rName,
                     loginTime: timeStr,
+                    loginTimestamp: nowTimestamp,
                     clockOutTime: timeStr,
+                    clockOutTimestamp: nowTimestamp,
                     date: todayStr,
-                    location: ""
+                    location: "",
+                    totalBreakMinutes: finalBreakMins
                 });
             }
         } catch(e) {}
@@ -257,29 +319,32 @@ export async function clockOutRider(targetId = null) {
             isForcedCater: false,
             breakTimestamp: null,
             breakStartTime: null,
-            lastActiveTimestamp: Date.now(),
+            totalBreakMinutes: finalBreakMins,
+            lastActiveTimestamp: nowTimestamp,
             lastUpdated: timeStr
         }).catch(() => {});
     }
 
-    if (globalState.rosterMembers) {
-        const rMem = globalState.rosterMembers.find(m => (m.telegramId || m.id || "").toString() === tId);
-        if (rMem) {
-            rMem.status = 'End';
-            rMem.forcedCaters = null;
-            rMem.forcedBy = null;
-            rMem.isForcedCater = false;
-            rMem.breakTimestamp = null;
-            rMem.breakStartTime = null;
-        }
+    if (rMem) {
+        rMem.status = 'End';
+        rMem.forcedCaters = null;
+        rMem.forcedBy = null;
+        rMem.isForcedCater = false;
+        rMem.breakTimestamp = null;
+        rMem.breakStartTime = null;
+        rMem.totalBreakMinutes = finalBreakMins;
     }
 
     if (globalState.globalLogins) {
         const lIdx = globalState.globalLogins.findIndex(l => (l.riderId || l.id || "").toString() === tId);
         if (lIdx !== -1) {
             globalState.globalLogins[lIdx].clockOutTime = timeStr;
+            globalState.globalLogins[lIdx].clockOutTimestamp = nowTimestamp;
+            globalState.globalLogins[lIdx].totalBreakMinutes = finalBreakMins;
         }
     }
     saveRosterCache();
     window.dispatchEvent(new CustomEvent('loginsUpdated'));
 }
+
+// REMARKS: ROSTER_STATUS_CORE_ACCUMULATED_BREAK_MINUTES_TRACKING_V1_COMPLETE

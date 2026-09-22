@@ -1,4 +1,19 @@
 // src/features/directory/directoryForm.js
+
+/**
+ * ============================================================================
+ * DIRECTORY FORM & DYNAMIC REGISTRATION CREDIT REWARDS MODULE
+ * ============================================================================
+ * 
+ * Description:
+ * Coordinates record mutations, GPS signal calibration, and credit reward awards:
+ * - Dynamic Registration Incentive: Inspects `globalState.directoryCreditsConfig`
+ *   to determine the exact reward amounts for customers and stores.
+ * - Atomic persistence to Firebase (`riders/${id}/directoryCredits`) and local cache.
+ * - Enforces GPS signal calibration verification before saving new locations.
+ * ============================================================================
+ */
+
 import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { API_URL } from '../../config/constants.js';
@@ -9,7 +24,7 @@ import { calibrateGPS } from '../auth/index.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
 import { checkAdminAccess } from './directoryPermissions.js';
 import { saveDirectoryCache } from './directoryStorage.js';
-import { renderDirectoryList, openDirectory } from './directoryUi.js';
+import { renderDirectoryList, openDirectory, updateRosterCreditsDisplay } from './directoryUi.js';
 
 let editingRecord = null;
 
@@ -120,6 +135,7 @@ export async function submitForm() {
     const type = globalState.currentType || 'customers';
     const isEdit = !!editingRecord;
     const currentDate = getLocalTodayStr();
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
 
     const recordData = {
         name, contact, address, rate: address, lat_lon_link,
@@ -139,6 +155,38 @@ export async function submitForm() {
 
     saveDirectoryCache();
     editingRecord = null;
+
+    // DYNAMIC REGISTRATION REWARD ENGINE (HONORS ADMIN SETTINGS)
+    const creditConfig = globalState.directoryCreditsConfig || {
+        enabled: true,
+        rewardCustomerRegistration: 5,
+        rewardStoreRegistration: 10
+    };
+
+    if (!isEdit && myId && creditConfig.enabled !== false) {
+        let earnedCredits = 0;
+        if (type === 'stores') {
+            earnedCredits = creditConfig.rewardStoreRegistration !== undefined ? creditConfig.rewardStoreRegistration : 10;
+        } else if (type === 'customers') {
+            earnedCredits = creditConfig.rewardCustomerRegistration !== undefined ? creditConfig.rewardCustomerRegistration : 5;
+        }
+
+        if (earnedCredits > 0) {
+            const cur = parseInt(localStorage.getItem('lokalex_rider_credits') || "0", 10);
+            const updated = cur + earnedCredits;
+            localStorage.setItem('lokalex_rider_credits', updated.toString());
+            appState.directoryCredits = updated;
+            updateRosterCreditsDisplay(updated);
+
+            if (db) {
+                db.ref(`riders/${myId}/directoryCredits`).transaction(c => (c || 0) + earnedCredits);
+                db.ref(`roster/${myId}/directoryCredits`).transaction(c => (c || 0) + earnedCredits).catch(() => {});
+            }
+
+            showSideNotification("CREDITS REWARD", `+${earnedCredits} Credits for registering ${name}`, "fa-coins", "text-amber-400", "border-amber-500");
+            showToast(`🎉 +${earnedCredits} Directory Credits earned! Total: ${updated}`);
+        }
+    }
 
     showToast(`✅ Record ${isEdit ? 'updated' : 'saved'} successfully!`);
 
@@ -167,3 +215,4 @@ export async function submitForm() {
         }).catch(() => {});
     } catch (e) {}
 }
+// REMARKS: DIRECTORY_FORM_DYNAMIC_CONFIG_REWARDS_ENGINE_V1_COMPLETE

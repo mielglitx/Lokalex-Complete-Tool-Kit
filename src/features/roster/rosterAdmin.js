@@ -1,4 +1,19 @@
 // src/features/roster/rosterAdmin.js
+
+/**
+ * ============================================================================
+ * ROSTER ADMINISTRATIVE CONTROLS & SETTINGS ORCHESTRATOR
+ * ============================================================================
+ * 
+ * Description:
+ * Administrative control suite and modal orchestration for Team Leads and Admins:
+ * - Lineup management, force catering, queue shifting, and cascading record voids.
+ * - Early Shift Out Penalty controls: 8-hour shift minimum settings & listeners.
+ * - Directory Credit settings modal dialog controller and global listener.
+ * - Toggle switch coordinator syncing all admin toolbar buttons in real time.
+ * ============================================================================
+ */
+
 import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { API_URL } from '../../config/constants.js';
@@ -9,10 +24,10 @@ import { populateCateringCustomerDropdown } from '../chat/index.js';
 import { 
     parseQueueTime, 
     isAdmin, 
-    canManageRoster,
-    hasTlPermission,
-    canForceCaterTarget,
-    archiveRiderCateringIfNeeded,
+    canManageRoster, 
+    hasTlPermission, 
+    canForceCaterTarget, 
+    archiveRiderCateringIfNeeded, 
     saveRosterCache 
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
@@ -25,9 +40,7 @@ import {
     grantRiderEarlyPass,
     revokeRiderEarlyPass,
     saveAdminTimeInScheduleSettings,
-    listenToTimeInSchedule,
-    getRiderStorageKey,
-    sanitizeForFirebase
+    listenToTimeInSchedule
 } from './rosterSchedule.js';
 
 import {
@@ -61,14 +74,120 @@ import {
     executeAutoEndShift
 } from './rosterAutoEndShift.js';
 
+import {
+    openAdminDirectoryCreditsModal,
+    closeAdminDirectoryCreditsModal,
+    saveAdminDirectoryCreditsSettings,
+    promptAdjustRiderCredits,
+    listenToDirectoryCreditsSettings
+} from './rosterAccounts.js';
+
 export * from './rosterSchedule.js';
 export * from './rosterDayOff.js';
 export * from './rosterBookingLimits.js';
 export * from './rosterAutoEndShift.js';
+export * from './rosterAccounts.js';
 
 let pendingAdminTarget = null;
 
-// TOGGLE ADMIN CONTROLS SWITCH
+// ============================================================================
+// 1. EARLY SHIFT OUT PENALTY ADMIN CONTROLLERS
+// ============================================================================
+
+export function openAdminEarlyShiftModal() {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    const modal = document.getElementById('admin-early-shift-modal');
+    if (!modal) return;
+
+    const config = globalState.earlyShiftPenaltyConfig || {
+        enabled: true,
+        targetHours: 8,
+        penaltyPerMissingHour: 2.5,
+        capEnabled: true,
+        maxPenaltyPercentage: 10,
+        gracePeriodMinutes: 15
+    };
+
+    const enabledToggle = document.getElementById('admin-early-shift-enabled');
+    const targetHoursInput = document.getElementById('admin-early-shift-target-hours');
+    const rateInput = document.getElementById('admin-early-shift-rate-input');
+    const capToggle = document.getElementById('admin-early-shift-cap-toggle');
+    const maxCapInput = document.getElementById('admin-early-shift-max-cap-input');
+    const graceInput = document.getElementById('admin-early-shift-grace-input');
+
+    if (enabledToggle) enabledToggle.checked = config.enabled !== false;
+    if (targetHoursInput) targetHoursInput.value = config.targetHours || 8;
+    if (rateInput) rateInput.value = config.penaltyPerMissingHour || 2.5;
+    if (capToggle) capToggle.checked = config.capEnabled !== false;
+    if (maxCapInput) maxCapInput.value = config.maxPenaltyPercentage || 10;
+    if (graceInput) graceInput.value = config.gracePeriodMinutes !== undefined ? config.gracePeriodMinutes : 15;
+
+    modal.classList.remove('hidden');
+}
+
+export function closeAdminEarlyShiftModal() {
+    const modal = document.getElementById('admin-early-shift-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export async function saveAdminEarlyShiftSettings() {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+
+    const enabledToggle = document.getElementById('admin-early-shift-enabled');
+    const targetHoursInput = document.getElementById('admin-early-shift-target-hours');
+    const rateInput = document.getElementById('admin-early-shift-rate-input');
+    const capToggle = document.getElementById('admin-early-shift-cap-toggle');
+    const maxCapInput = document.getElementById('admin-early-shift-max-cap-input');
+    const graceInput = document.getElementById('admin-early-shift-grace-input');
+
+    const payload = {
+        enabled: enabledToggle ? enabledToggle.checked : true,
+        targetHours: targetHoursInput ? Math.max(1, parseFloat(targetHoursInput.value) || 8) : 8,
+        penaltyPerMissingHour: rateInput ? Math.max(0.1, parseFloat(rateInput.value) || 2.5) : 2.5,
+        capEnabled: capToggle ? capToggle.checked : true,
+        maxPenaltyPercentage: maxCapInput ? Math.max(1, parseFloat(maxCapInput.value) || 10) : 10,
+        gracePeriodMinutes: graceInput ? Math.max(0, parseInt(graceInput.value, 10) || 15) : 15,
+        updatedAt: Date.now(),
+        updatedBy: appState.riderName || "Admin"
+    };
+
+    globalState.earlyShiftPenaltyConfig = payload;
+    localStorage.setItem('lokalex_early_shift_penalty_config', JSON.stringify(payload));
+
+    if (db) {
+        try {
+            await db.ref('settings/earlyShiftPenalty').set(payload);
+            showToast("⚙️ Early Shift Out Penalty settings saved!");
+            showSideNotification("PENALTY RULES SAVED", `8h check: ${payload.enabled ? 'ACTIVE' : 'DISABLED'}`, "fa-user-clock", "text-red-400", "border-red-500");
+        } catch(e) {
+            showToast("❌ Failed to save penalty settings to cloud.");
+        }
+    }
+
+    closeAdminEarlyShiftModal();
+}
+
+export function listenToEarlyShiftSettings() {
+    if (!db) return;
+
+    try {
+        const cached = localStorage.getItem('lokalex_early_shift_penalty_config');
+        if (cached) globalState.earlyShiftPenaltyConfig = JSON.parse(cached);
+    } catch(e) {}
+
+    db.ref('settings/earlyShiftPenalty').on('value', (snap) => {
+        if (snap.exists()) {
+            const data = snap.val();
+            globalState.earlyShiftPenaltyConfig = data;
+            localStorage.setItem('lokalex_early_shift_penalty_config', JSON.stringify(data));
+        }
+    });
+}
+
+// ============================================================================
+// 2. ADMIN CONTROLS MASTER SWITCH & DOM SYNC
+// ============================================================================
+
 export function toggleAdminControls(enabled) {
     if (!canManageRoster()) {
         globalState.adminControlsEnabled = false;
@@ -80,11 +199,40 @@ export function toggleAdminControls(enabled) {
     }
 
     globalState.adminControlsEnabled = !!enabled;
+
+    // Explicitly toggle all admin button IDs on the roster toolbar
+    const adminButtonIds = [
+        'admin-store-hub-btn',
+        'admin-manage-riders-btn',
+        'admin-schedule-settings-btn',
+        'admin-dayoff-settings-btn',
+        'admin-queue-settings-btn',
+        'admin-booking-limits-btn',
+        'admin-commission-settings-btn',
+        'admin-credits-settings-btn',
+        'admin-early-shift-btn',
+        'admin-auto-endshift-btn',
+        'admin-block-btn',
+        'admin-find-riders-btn',
+        'admin-force-all-btn'
+    ];
+
+    adminButtonIds.forEach(btnId => {
+        const btn = document.getElementById(btnId);
+        if (btn) {
+            if (enabled) btn.classList.remove('hidden');
+            else btn.classList.add('hidden');
+        }
+    });
+
     showToast(`Admin Safety Controls: ${enabled ? 'ENABLED' : 'DISABLED'}`);
     updateRosterUI();
 }
 
-// OPEN ADMIN FORCE CATERING MODAL
+// ============================================================================
+// 3. FORCE CATERING & STATUS OVERRIDES
+// ============================================================================
+
 export function openAdminCateringModal(id, name) {
     if (!hasTlPermission('canForceCater')) {
         return showToast("⚠️ Unauthorized: You do not have permission to Force Cater.");
@@ -135,7 +283,7 @@ export async function submitAdminForceCatering() {
 
     let targetId = (idInput ? idInput.value.trim() : "") || (pendingAdminTarget ? pendingAdminTarget.id : "");
     let targetName = (nameInputHidden ? nameInputHidden.value.trim() : "") || (pendingAdminTarget ? pendingAdminTarget.name : "");
-    const penaltyMins = penaltySelect ? parseInt(penaltySelect.value) || 0 : 0;
+    const penaltyMins = penaltySelect ? parseInt(penaltySelect.value, 10) || 0 : 0;
 
     if (!targetId) {
         targetId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
@@ -219,7 +367,6 @@ export async function submitAdminForceCatering() {
         }).catch(() => {});
     }
 
-    // Bandwidth Optimization: Target query directly by customer name instead of downloading entire customerChats tree
     if (db && custName) {
         const cleanSearchName = custName.trim();
         db.ref('customerChats')
@@ -278,7 +425,6 @@ export async function submitAdminForceCatering() {
     showSideNotification("FORCE CATER", `Assigned ${custName} to ${notifyLabel}`, "fa-user-gear", "text-amber-400", "border-amber-500");
 }
 
-// ADMIN FORCE STATUS
 export async function adminForceStatus(id, name, actionValue) {
     if (actionValue === 'Catering') {
         if (!hasTlPermission('canForceCater')) {
@@ -350,7 +496,6 @@ export async function adminForceStatus(id, name, actionValue) {
     });
 }
 
-// ADMIN VOID SPECIFIC CATERING CUSTOMER
 export async function adminVoidSpecificCustomer(targetId, targetName, custNameToVoid) {
     if (!hasTlPermission('canVoidCustomer')) {
         return showToast("⚠️ Unauthorized: You do not have permission to Void Active Customers.");
@@ -374,7 +519,6 @@ export async function adminVoidSpecificCustomer(targetId, targetName, custNameTo
     });
 }
 
-// ADMIN VOID COMPLETED CATERED RECORD & DUAL LOGGING REMOVAL (STRICT ADMIN ONLY)
 export function promptVoidCustomer(riderName, customerName, completedDate = "", startTime = "", transactionId = "") {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
@@ -387,10 +531,6 @@ export function promptVoidCustomer(riderName, customerName, completedDate = "", 
     );
 }
 
-/**
- * Executes catered record voiding.
- * Bandwidth-optimized: Targets specific IDs directly instead of downloading the entire receipts/catered history.
- */
 export async function executeVoidCateredCustomer(riderName, customerName, completedDate = "", startTime = "", transactionId = "") {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
@@ -402,13 +542,11 @@ export async function executeVoidCateredCustomer(riderName, customerName, comple
         if (db) {
             const deletePromises = [];
 
-            // Direct ID deletion without pulling the database root
             if (transactionId) {
                 deletePromises.push(db.ref(`cateredHistory/${transactionId}`).remove());
                 deletePromises.push(db.ref(`receipts/${transactionId}`).remove());
             }
 
-            // Scoped deletion using date filter rather than downloading all historical data
             if (completedDate) {
                 const snap = await db.ref('cateredHistory').orderByChild('completedDate').equalTo(completedDate).once('value');
                 const data = snap.val() || {};
@@ -463,15 +601,9 @@ export async function executeVoidCateredCustomer(riderName, customerName, comple
         }
 
         saveRosterCache();
-        if (typeof window.loadGlobalCateredList === 'function') {
-            window.loadGlobalCateredList();
-        }
-        if (typeof window.updateRosterUI === 'function') {
-            window.updateRosterUI();
-        }
-        if (typeof window.refreshCommissionView === 'function') {
-            window.refreshCommissionView();
-        }
+        if (typeof window.loadGlobalCateredList === 'function') window.loadGlobalCateredList();
+        if (typeof window.updateRosterUI === 'function') window.updateRosterUI();
+        if (typeof window.refreshCommissionView === 'function') window.refreshCommissionView();
 
         showToast(`🗑️ Voided catered record for ${customerName}.`);
     } catch(e) {
@@ -563,6 +695,14 @@ export async function forceAllEndShift() {
     });
 }
 
+// Global initialization of listeners
+listenToTimeInSchedule();
+listenToDayOffData();
+listenToBookingLimits();
+listenToAutoEndShift();
+listenToEarlyShiftSettings();
+listenToDirectoryCreditsSettings();
+
 if (typeof window !== 'undefined') {
     window.toggleAdminControls = toggleAdminControls;
     window.openAdminCateringModal = openAdminCateringModal;
@@ -602,8 +742,13 @@ if (typeof window !== 'undefined') {
     window.toggleBookingLimitsModeUI = toggleBookingLimitsModeUI;
     window.saveAdminBookingLimitsSettings = saveAdminBookingLimitsSettings;
 
-    listenToTimeInSchedule();
-    listenToDayOffData();
-    listenToBookingLimits();
-    listenToAutoEndShift();
+    window.openAdminEarlyShiftModal = openAdminEarlyShiftModal;
+    window.closeAdminEarlyShiftModal = closeAdminEarlyShiftModal;
+    window.saveAdminEarlyShiftSettings = saveAdminEarlyShiftSettings;
+
+    window.openAdminDirectoryCreditsModal = openAdminDirectoryCreditsModal;
+    window.closeAdminDirectoryCreditsModal = closeAdminDirectoryCreditsModal;
+    window.saveAdminDirectoryCreditsSettings = saveAdminDirectoryCreditsSettings;
+    window.promptAdjustRiderCredits = promptAdjustRiderCredits;
 }
+// REMARKS: ROSTER_ADMIN_EARLY_SHIFT_AND_DIRECTORY_CREDITS_CONTROLLERS_V1_COMPLETE

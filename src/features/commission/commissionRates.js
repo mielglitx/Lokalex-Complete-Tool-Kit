@@ -1,4 +1,20 @@
 // src/features/commission/commissionRates.js
+
+/**
+ * ============================================================================
+ * COMMISSION RATES ENGINE & EARLY SHIFT PENALTY RESOLVER
+ * ============================================================================
+ * 
+ * Description:
+ * Resolves net commission percentages per rider, date, and operational conditions:
+ * - Admin Commission Exemption: 0% company remittance, 100% rider keep[cite: 44].
+ * - Date-specific Admin penalties and recurring/special calendar discounts[cite: 44].
+ * - Early Shift Out Surcharge Resolver: inspects daily attendance records for
+ *   unexcused early clock-outs and factors the surcharge directly into payable rates[cite: 44].
+ * - Real-time synchronization with Firebase settings, penalties, and logins[cite: 44].
+ * ============================================================================
+ */
+
 import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { ADMIN_IDS } from '../../config/constants.js';
@@ -130,7 +146,7 @@ export function isRiderAdmin(riderName = "", telegramId = "") {
     return false;
 }
 
-// GET DYNAMIC COMMISSION RATES PER RIDER
+// GET DYNAMIC COMMISSION RATES PER RIDER (INCLUDES EARLY SHIFT OUT PENALTY)
 export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
     const dateFormatted = dateStr || getLocalTodayStr();
     const d = new Date(dateFormatted + "T00:00:00");
@@ -147,6 +163,9 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
             riderPerc: 100,
             baseCompanyPerc: 0,
             penaltyPerc: 0,
+            manualPenaltyPerc: 0,
+            earlyShiftPenaltyPerc: 0,
+            earlyShiftDeficitHours: 0,
             promoDiscountPerc: 0,
             hasCustomOverride: true,
             isAdmin: true
@@ -167,7 +186,6 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         baseCompanyPerc = parseFloat(customRiderRates[cleanName]);
         hasCustomOverride = true;
     } else {
-        // Fuzzy Match across customRiderRates keys
         for (const [rateKey, rateVal] of Object.entries(customRiderRates)) {
             if (rateVal !== undefined && rateVal !== null && rateVal !== "") {
                 if (isRiderMatch(cleanName, rateKey, cleanId, rateKey)) {
@@ -196,8 +214,8 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         }
     }
 
-    // 3. Penalty lookup with canonical fuzzy matching
-    let penaltyPerc = 0;
+    // 3. Admin date penalty lookup
+    let manualPenaltyPerc = 0;
     let penaltyReason = "";
 
     if (globalState.globalCommissionPenalties) {
@@ -208,7 +226,7 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
                              (idKey ? globalState.globalCommissionPenalties[idKey] : null);
 
         if (directRecord && directRecord.penaltyPercentage) {
-            penaltyPerc = Math.max(0, parseFloat(directRecord.penaltyPercentage) || 0);
+            manualPenaltyPerc = Math.max(0, parseFloat(directRecord.penaltyPercentage) || 0);
             penaltyReason = directRecord.reason || "";
         } else {
             for (const [key, rec] of Object.entries(globalState.globalCommissionPenalties)) {
@@ -217,7 +235,7 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
                     const recRiderName = rec.riderName || key.split('_')[0] || "";
                     const recRiderId = (rec.telegramId || "").toString().trim();
                     if (isRiderMatch(riderName, recRiderName, cleanId, recRiderId)) {
-                        penaltyPerc = Math.max(0, parseFloat(rec.penaltyPercentage) || 0);
+                        manualPenaltyPerc = Math.max(0, parseFloat(rec.penaltyPercentage) || 0);
                         penaltyReason = rec.reason || "";
                         break;
                     }
@@ -226,7 +244,33 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         }
     }
 
-    // 4. Promo discounts
+    // 4. Early Shift Out Penalty lookup (evaluated from attendance logins or roster)
+    let earlyShiftPenaltyPerc = 0;
+    let earlyShiftDeficitHours = 0;
+
+    if (globalState.globalLogins && Array.isArray(globalState.globalLogins)) {
+        const loginRec = globalState.globalLogins.find(l => 
+            isSameDateStr(l.date, dateFormatted) &&
+            isRiderMatch(riderName, l.riderName || "", cleanId, (l.riderId || l.id || "").toString())
+        );
+        if (loginRec && loginRec.earlyShiftPenaltyPercent) {
+            earlyShiftPenaltyPerc = Math.max(0, parseFloat(loginRec.earlyShiftPenaltyPercent) || 0);
+            earlyShiftDeficitHours = parseInt(loginRec.deficitHours, 10) || 0;
+        }
+    }
+
+    // Fallback for today's active roster record if login record is still syncing
+    if (earlyShiftPenaltyPerc === 0 && isSameDateStr(dateFormatted, getLocalTodayStr()) && globalState.rosterMembers) {
+        const rosterMem = globalState.rosterMembers.find(m => 
+            isRiderMatch(riderName, m.riderName || m.name || "", cleanId, (m.telegramId || m.id || "").toString())
+        );
+        if (rosterMem && rosterMem.commissionSurcharge) {
+            earlyShiftPenaltyPerc = Math.max(0, parseFloat(rosterMem.commissionSurcharge) || 0);
+            earlyShiftDeficitHours = parseInt(rosterMem.earlyShiftDeficitHours, 10) || 0;
+        }
+    }
+
+    // 5. Promo calendar and recurring day discounts
     let promoDiscountPerc = 0;
 
     if (recurringDiscount && recurringDiscount.enabled && recurringDiscount.day === dayOfWeek) {
@@ -237,9 +281,10 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         promoDiscountPerc = Math.max(promoDiscountPerc, parseFloat(specialDateDiscounts[dateFormatted]) || 0);
     }
 
-    let finalCompanyPerc = Math.max(0, baseCompanyPerc + penaltyPerc - promoDiscountPerc);
-    let companyRate = finalCompanyPerc / 100;
-    let riderRate = Math.max(0, (100 - finalCompanyPerc) / 100);
+    const totalPenaltyPerc = manualPenaltyPerc + earlyShiftPenaltyPerc;
+    const finalCompanyPerc = Math.max(0, baseCompanyPerc + totalPenaltyPerc - promoDiscountPerc);
+    const companyRate = finalCompanyPerc / 100;
+    const riderRate = Math.max(0, (100 - finalCompanyPerc) / 100);
 
     return {
         companyRate: companyRate,
@@ -248,7 +293,10 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         companyPerc: finalCompanyPerc,
         riderPerc: Math.max(0, 100 - finalCompanyPerc),
         baseCompanyPerc: baseCompanyPerc,
-        penaltyPerc: penaltyPerc,
+        penaltyPerc: totalPenaltyPerc,
+        manualPenaltyPerc: manualPenaltyPerc,
+        earlyShiftPenaltyPerc: earlyShiftPenaltyPerc,
+        earlyShiftDeficitHours: earlyShiftDeficitHours,
         promoDiscountPerc: promoDiscountPerc,
         hasCustomOverride: hasCustomOverride,
         penaltyReason: penaltyReason,
@@ -303,7 +351,14 @@ export async function fetchCommissionSettings() {
             if (window.refreshCommissionView) window.refreshCommissionView();
         });
 
-        // REALTIME LISTENER FOR RECEIPTS
+        // Realtime listener for attendance logins (syncs early shift penalties)
+        db.ref('logins').on('value', (snapshot) => {
+            const val = snapshot.val();
+            globalState.globalLogins = val ? Object.values(val) : [];
+            if (window.refreshCommissionView) window.refreshCommissionView();
+        });
+
+        // Realtime listener for receipts
         db.ref('receipts').on('value', (snapshot) => {
             const val = snapshot.val();
             globalState.globalDailyReceipts = val ? Object.values(val) : [];
@@ -311,7 +366,7 @@ export async function fetchCommissionSettings() {
             if (window.refreshCommissionView) window.refreshCommissionView();
         });
 
-        // REALTIME LISTENER FOR CATERED HISTORY
+        // Realtime listener for catered history
         db.ref('cateredHistory').on('value', (snapshot) => {
             const val = snapshot.val();
             globalState.globalCateredHistory = val ? Object.values(val) : [];
@@ -320,3 +375,4 @@ export async function fetchCommissionSettings() {
         });
     }
 }
+// REMARKS: COMMISSION_RATES_EARLY_SHIFT_PENALTY_INTEGRATION_V1_COMPLETE

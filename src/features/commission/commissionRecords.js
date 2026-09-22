@@ -1,4 +1,20 @@
 // src/features/commission/commissionRecords.js
+
+/**
+ * ============================================================================
+ * COMMISSION RECORDS & ADMINISTRATIVE PENALTY MUTATORS
+ * ============================================================================
+ * 
+ * Description:
+ * Manages manual commission records, rate penalty sanctions, and waiver tools:
+ * - Admin Date Penalties: adds/removes +X% punitive commission penalties[cite: 45].
+ * - Early Shift Penalty Waiver: allows administrators to excuse/waive an early
+ *   shift out surcharge, synchronously clearing records in Firebase and state[cite: 45].
+ * - Manual Commission Records: injects unlogged delivery fees into ledgers[cite: 45].
+ * - Record Deletion & Fee Corrections: targeted mutations without database scans[cite: 45].
+ * ============================================================================
+ */
+
 import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { getLocalTodayStr, escapeHtml } from '../../utils/helpers.js';
@@ -87,7 +103,6 @@ export function removeAdminPenalty(riderName, targetDate) {
         if (db) {
             db.ref(`commissionPenalties/${penaltyKey}`).remove();
             
-            // Bandwidth Optimization: Server-side query restricted to target date only
             db.ref('commissionPenalties')
                 .orderByChild('date')
                 .equalTo(targetDate)
@@ -112,6 +127,61 @@ export function removeAdminPenalty(riderName, targetDate) {
         showToast(`✅ Penalty removed for ${riderName}`);
         refreshCommissionView();
     });
+}
+
+/**
+ * Waives an automated early shift-out penalty surcharge for a rider on a given date.
+ */
+export async function waiveEarlyShiftPenalty(riderName, riderId, targetDate) {
+    if (!checkIsAdmin()) return showToast("⚠️ Admin access required to waive penalty.");
+
+    openSlideDeleteModal(
+        `Waive Early Shift Penalty?`,
+        `Sigurado ka bang nais mong tanggalin ang early shift penalty ni [${riderName}] para sa ${targetDate}?`,
+        async () => {
+            const cleanRider = (riderName || "").toLowerCase().trim();
+            const rId = (riderId || "").toString().trim();
+
+            if (db && rId) {
+                await db.ref(`logins/${rId}`).update({
+                    earlyShiftPenaltyPercent: 0,
+                    deficitHours: 0
+                }).catch(() => {});
+
+                await db.ref(`roster/${rId}`).update({
+                    commissionSurcharge: 0,
+                    earlyShiftDeficitHours: 0
+                }).catch(() => {});
+            }
+
+            if (globalState.globalLogins) {
+                globalState.globalLogins.forEach(l => {
+                    const idMatch = rId && (l.riderId || l.id || "").toString().trim() === rId;
+                    const nameMatch = isRiderMatch(cleanRider, (l.riderName || "").toLowerCase());
+                    if (isSameDateStr(l.date, targetDate) && (idMatch || nameMatch)) {
+                        l.earlyShiftPenaltyPercent = 0;
+                        l.deficitHours = 0;
+                    }
+                });
+            }
+
+            if (globalState.rosterMembers) {
+                const rMem = globalState.rosterMembers.find(m => 
+                    isRiderMatch(cleanRider, (m.riderName || m.name || "").toLowerCase(), rId, (m.telegramId || m.id || "").toString())
+                );
+                if (rMem) {
+                    rMem.commissionSurcharge = 0;
+                    rMem.earlyShiftDeficitHours = 0;
+                }
+            }
+
+            saveRosterCache();
+            showToast(`✅ Early shift penalty waived for ${riderName}!`);
+            refreshCommissionView();
+            window.dispatchEvent(new CustomEvent('rosterUpdated'));
+            window.dispatchEvent(new CustomEvent('loginsUpdated'));
+        }
+    );
 }
 
 export function promptAdminAddCommissionRecord() {
@@ -210,7 +280,6 @@ export function promptAdminDeleteCommissionRecord(riderName, customerName, dateV
     );
 }
 
-// STRICT SINGLE-ID DELETION: Targeted deletion preventing full-database scans
 export async function executeDeleteCommissionRecord(riderName, customerName, dateVal, txId) {
     const cleanRider = (riderName || "").toLowerCase().trim();
 
@@ -254,8 +323,6 @@ export async function executeDeleteCommissionRecord(riderName, customerName, dat
 
         if (db) {
             const queryDate = dateVal || getLocalTodayStr();
-
-            // Bandwidth Optimization: Server-side date query instead of downloading all receipts
             db.ref('receipts')
                 .orderByChild('date')
                 .equalTo(queryDate)
@@ -273,7 +340,6 @@ export async function executeDeleteCommissionRecord(riderName, customerName, dat
                     }
                 });
 
-            // Bandwidth Optimization: Server-side date query instead of downloading all cateredHistory
             db.ref('cateredHistory')
                 .orderByChild('completedDate')
                 .equalTo(queryDate)
@@ -321,7 +387,6 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
         }
     });
 
-    // Bandwidth Optimization: Server-side date query instead of downloading full receipts root
     if (db) {
         const queryDate = dateVal || getLocalTodayStr();
         db.ref('receipts')
@@ -349,3 +414,18 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
     window.dispatchEvent(new CustomEvent('cateredUpdated'));
     window.dispatchEvent(new CustomEvent('receiptsUpdated'));
 }
+
+if (typeof window !== 'undefined') {
+    window.openAdminPenaltyModal = openAdminPenaltyModal;
+    window.closeAdminPenaltyModal = closeAdminPenaltyModal;
+    window.submitAdminPenalty = submitAdminPenalty;
+    window.removeAdminPenalty = removeAdminPenalty;
+    window.waiveEarlyShiftPenalty = waiveEarlyShiftPenalty;
+    window.promptAdminAddCommissionRecord = promptAdminAddCommissionRecord;
+    window.closeAdminAddCommModal = closeAdminAddCommModal;
+    window.submitAdminAddCommissionRecord = submitAdminAddCommissionRecord;
+    window.promptAdminDeleteCommissionRecord = promptAdminDeleteCommissionRecord;
+    window.executeDeleteCommissionRecord = executeDeleteCommissionRecord;
+    window.promptAdminEditCustomerFee = promptAdminEditCustomerFee;
+}
+// REMARKS: COMMISSION_RECORDS_EARLY_SHIFT_WAIVE_MUTATOR_V1_COMPLETE

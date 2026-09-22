@@ -1,4 +1,20 @@
 // src/features/commission/commissionUI.js
+
+/**
+ * ============================================================================
+ * COMMISSION UI, LEDGER AGGREGATION & EARLY SHIFT BREAKDOWN
+ * ============================================================================
+ * 
+ * Description:
+ * Manages commission views, mode toggles, period aggregation, and penalties:
+ * - Dynamic Mode Toggle: My Earnings vs. To Pay (Company Dues)[cite: 40, 41].
+ * - Early Shift Out Line-Item Display: Renders custom penalty badges showing
+ *   deficit hours and surcharge rates directly in rider order accordions[cite: 41].
+ * - One-click Waive Action: Allows administrators to excuse early shift penalties[cite: 41, 45].
+ * - Exportable Settlement Reports formatted for clipboard sharing[cite: 41].
+ * ============================================================================
+ */
+
 import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { getLocalTodayStr, copyText, getWeekString, getMonthString, escapeHtml } from '../../utils/helpers.js';
@@ -15,17 +31,12 @@ export let viewSettings = {
 let isCommissionListenerActive = false;
 let activeListenerDate = "";
 
-/**
- * Attaches real-time listeners scoped strictly to today's date.
- * Prevents continuous multi-megabyte egress by stopping full-database broadcasts.
- */
 export function initCommissionLiveListeners() {
     if (!db) return;
 
     const todayStr = getLocalTodayStr();
     if (isCommissionListenerActive && activeListenerDate === todayStr) return;
 
-    // Detach any previous root listeners to prevent socket data leakage
     try {
         db.ref('receipts').off();
         db.ref('cateredHistory').off();
@@ -34,7 +45,6 @@ export function initCommissionLiveListeners() {
     isCommissionListenerActive = true;
     activeListenerDate = todayStr;
 
-    // Server-side filtered listener: downloads ONLY today's receipts
     db.ref('receipts')
         .orderByChild('date')
         .equalTo(todayStr)
@@ -46,7 +56,6 @@ export function initCommissionLiveListeners() {
                 ...v
             })) : [];
 
-            // Merge today's fresh records into existing local cache without wiping historical cache
             const nonTodayExisting = (globalState.globalDailyReceipts || []).filter(r => !isSameDateStr(r.date || r.completedDate, todayStr));
             globalState.globalDailyReceipts = [...nonTodayExisting, ...todayRecords];
 
@@ -55,7 +64,6 @@ export function initCommissionLiveListeners() {
             window.dispatchEvent(new CustomEvent('rosterUpdated'));
         });
 
-    // Server-side filtered listener: downloads ONLY today's completed deliveries
     db.ref('cateredHistory')
         .orderByChild('completedDate')
         .equalTo(todayStr)
@@ -78,10 +86,6 @@ export function initCommissionLiveListeners() {
 
 initCommissionLiveListeners();
 
-/**
- * Fetches recent records bounded by a 200-item limit.
- * Protects bandwidth by capping maximum history download to ~150KB instead of tens of megabytes.
- */
 export async function fetchCommissionData() {
     if (!db) return;
     try {
@@ -390,7 +394,17 @@ export function refreshCommissionView() {
     if (summaryTitleEl) summaryTitleEl.innerText = `${viewSettings.period.toUpperCase()} SUMMARY`;
 
     const displayRates = selectedRiderRates || getCommissionRates(viewSettings.dateValue, appState.riderName, appState.telegramId);
-    let penaltyNotice = displayRates.penaltyPerc > 0 ? ` (+${displayRates.penaltyPerc}% Penalty)` : '';
+
+    // Formulate comprehensive notice for manual and early shift out penalties
+    let penaltyNotice = '';
+    if (displayRates.manualPenaltyPerc > 0 && displayRates.earlyShiftPenaltyPerc > 0) {
+        penaltyNotice = ` (+${displayRates.manualPenaltyPerc}\% Penalty, +${displayRates.earlyShiftPenaltyPerc}% Early Out)`;
+    } else if (displayRates.earlyShiftPenaltyPerc > 0) {
+        penaltyNotice = ` (+${displayRates.earlyShiftPenaltyPerc}% Early Out)`;
+    } else if (displayRates.manualPenaltyPerc > 0) {
+        penaltyNotice = ` (+${displayRates.manualPenaltyPerc}% Penalty)`;
+    }
+
     let promoNotice = displayRates.promoDiscountPerc > 0 ? ` (-${displayRates.promoDiscountPerc}% Promo Less)` : '';
 
     if (viewSettings.mode === 'earned') {
@@ -532,7 +546,7 @@ export function renderRiderSummaryList(riderListArray) {
                 if (c.time) dateTimeStr += ` • ${c.time}`;
 
                 const editBtn = isAdmin 
-                    ? `<button onclick="event.stopPropagation(); promptAdminEditCustomerFee('${escapeHtml(rider.name)}', '${escapeHtml(c.customerName)}', '${c.date}', ${c.gross})" class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 ml-1.5 p-0.5 cursor-pointer" title="Edit Fee"><i class="fa-solid fa-pen text-[10px]"></i></button>` 
+                    ? `<button onclick="event.stopPropagation(); promptAdminEditCustomerFee('${escapeHtml(rider.name)}', '${escapeHtml(c.customerName)}', '${c.date}',${c.gross})" class="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 ml-1.5 p-0.5 cursor-pointer" title="Edit Fee"><i class="fa-solid fa-pen text-[10px]"></i></button>` 
                     : ``;
 
                 const deleteBtn = isAdmin 
@@ -559,9 +573,21 @@ export function renderRiderSummaryList(riderListArray) {
 
         const adminBadge = rates.isAdmin ? `<span class="bg-purple-50 dark:bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30 text-[9px] font-black px-1.5 py-0.5 rounded ml-1">ADMIN</span>` : '';
 
-        const penaltyBadge = rates.penaltyPerc > 0 
+        // Dedicated Early Shift Out Penalty Surcharge Badge
+        const earlyShiftBadge = rates.earlyShiftPenaltyPerc > 0
+            ? `<div class="flex items-center justify-between bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-500/40 px-2.5 py-1.5 rounded-xl text-[10px] text-red-700 dark:text-red-300 font-bold my-1 shadow-xs">
+                <span class="flex items-center gap-1.5">
+                    <i class="fa-solid fa-user-clock text-red-500"></i>
+                    <span>Early Out Penalty: <strong>+${rates.earlyShiftPenaltyPerc}%</strong> (${rates.earlyShiftDeficitHours}h deficit)</span>
+                </span>
+                ${isAdmin ? `<button onclick="event.stopPropagation(); window.waiveEarlyShiftPenalty && window.waiveEarlyShiftPenalty('${escapeHtml(rider.name)}', '${escapeHtml(rider.id)}', '${viewSettings.dateValue}')" class="bg-red-600/20 hover:bg-red-600 text-red-700 dark:text-red-300 hover:text-white px-2 py-0.5 rounded-lg border border-red-500/30 font-black transition active:scale-95 cursor-pointer ml-2"><i class="fa-solid fa-hand-holding-hand"></i> Waive</button>` : ''}
+               </div>`
+            : '';
+
+        // Admin Manual Date Penalty Badge
+        const penaltyBadge = rates.manualPenaltyPerc > 0 
             ? `<div class="flex items-center justify-between bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-500/40 px-2.5 py-1 rounded-xl text-[10px] text-red-700 dark:text-red-300 font-bold my-1 shadow-xs">
-                <span><i class="fa-solid fa-gavel text-red-600 dark:text-red-400"></i> Date Penalty Active (+${rates.penaltyPerc}% to Company)</span>
+                <span><i class="fa-solid fa-gavel text-red-600 dark:text-red-400"></i> Date Penalty Active (+${rates.manualPenaltyPerc}% to Company)</span>
                 ${isAdmin ? `<button onclick="event.stopPropagation(); removeAdminPenalty('${escapeHtml(rider.name)}', '${viewSettings.dateValue}')" class="text-red-800 dark:text-white hover:underline ml-2 font-black cursor-pointer"><i class="fa-solid fa-trash"></i> Remove</button>` : ''}
                </div>`
             : '';
@@ -590,6 +616,7 @@ export function renderRiderSummaryList(riderListArray) {
                 </div>
 
                 <div id="box-${uid}" class="hidden bg-gray-50 dark:bg-zinc-950/80 p-3 border-t border-gray-200 dark:border-gray-800/80 flex flex-col gap-2">
+                    ${earlyShiftBadge}
                     ${penaltyBadge}
                     ${promoBadge}
                     <div class="text-[10px] text-amber-700 dark:text-amber-400 font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
@@ -669,13 +696,14 @@ export function generateDailyReportText() {
         grandCompany += riderTotals[rId].company;
 
         let displayAmount = "";
+        let penaltyNote = rates.earlyShiftPenaltyPerc > 0 ? ` (incl. +${rates.earlyShiftPenaltyPerc}% Early Shift penalty)` : '';
         if (viewSettings.mode === 'earned') {
-            displayAmount = `₱${riderTotals[rId].earned.toFixed(2)} (${rates.riderPerc}%)`;
+            displayAmount = `₱${riderTotals[rId].earned.toFixed(2)} (${rates.riderPerc}%)${penaltyNote}`;
         } else {
             if (rates.isAdmin) {
                 displayAmount = `₱0.00 (Admin Exempt)`;
             } else {
-                displayAmount = `₱${riderTotals[rId].company.toFixed(2)} (${rates.companyPerc}%)`;
+                displayAmount = `₱${riderTotals[rId].company.toFixed(2)} (${rates.companyPerc}%)${penaltyNote}`;
             }
         }
         listText += `• ${riderTotals[rId].name}: ${displayAmount}\n`;
@@ -727,3 +755,8 @@ export async function openCommissionScreen() {
     await fetchCommissionData();
     refreshCommissionView();
 }
+
+window.addEventListener('loginsUpdated', () => {
+    refreshCommissionView();
+});
+// REMARKS: COMMISSION_UI_EARLY_SHIFT_LINE_ITEM_AND_WAIVE_CONTROLS_V1_COMPLETE

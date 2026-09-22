@@ -2,34 +2,31 @@
 
 /**
  * ============================================================================
- * DIRECTORY UI & INTERACTIVE SCRUBBER MODULE
+ * DIRECTORY UI, DYNAMIC CREDIT GATE & INTERACTIVE SCRUBBER
  * ============================================================================
  * 
  * Description:
- * Manages the presentation layer, card rendering, and navigation for Customer,
- * Store, and Barangay Rate directories:
- * - Dynamic grouped rendering by alphabet and special character sections.
- * - Non-overlapping sticky section headers with dark-mode theme fidelity.
- * - Interactive side A-Z alphabet scrubber with dynamic touch/drag magnifications.
- * - Dual search synchronization (inline bar and sticky floating header).
- * - Clipboard formatting for standard delivery rates and barangay fee guidelines.
- * 
- * Update Note:
- * - Fixed alphabet scrubber indexing: restored universal `scrollIntoView`
- *   to control window/document-level viewport scrolling alongside container scrolling.
- * - Added `scroll-margin-top: 56px` to section headers so jumped sections clear
- *   the fixed app header cleanly without obscuring the record cards.
+ * Manages presentation layer, card rendering, and credit consumption for directories:
+ * - Dynamic Directory Credit Gate: Checks `globalState.directoryCreditsConfig`.
+ *   If disabled by Admin or user is Admin, grants free access. If enabled for riders,
+ *   enforces balance check and deducts the exact configured `costPerAccess`.
+ * - Admin Exemption: Admins see `Credits: ∞ (Admin)` on their dashboard pill in
+ *   gold styling and are never deducted or blocked.
+ * - Live Credit Sync: Synchronizes remaining directory credits in real time.
+ * - Universal `scrollIntoView` indexing with `scroll-margin-top: 56px`.
  * ============================================================================
  */
 
-import { globalState } from '../../store/state.js';
+import { db } from '../../config/firebase.js';
+import { appState, globalState } from '../../store/state.js';
 import { switchView } from '../../ui/router.js';
-import { showToast } from '../../ui/notifications.js';
+import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { escapeHtml, copyText } from '../../utils/helpers.js';
 import { loadDirectoryCache } from './directoryStorage.js';
 import { checkAdminAccess } from './directoryPermissions.js';
 
 let lastJumpLetter = "";
+let creditsListenerActive = false;
 
 export function getSectionLetter(name) {
     if (!name) return "#";
@@ -38,75 +35,111 @@ export function getSectionLetter(name) {
 }
 
 /**
- * Minimizes the floating search overlay into the upper-right floating badge.
+ * Updates the rider credits pill display on the home roster dashboard.
+ * Admins are rendered with an explicit unlimited / exempt badge.
  */
+export function updateRosterCreditsDisplay(credits) {
+    const countEl = document.getElementById('rider-credits-count');
+    const pillEl = document.getElementById('rider-credits-pill');
+    
+    const isAdmin = checkAdminAccess();
+
+    if (isAdmin) {
+        if (countEl) countEl.innerText = "∞ (Admin)";
+        if (pillEl) {
+            pillEl.className = "bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-500/40 text-amber-800 dark:text-amber-300 text-[10px] px-2.5 py-0.5 rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition select-none cursor-pointer";
+        }
+        return;
+    }
+
+    let balance = credits;
+    if (balance === undefined || balance === null) {
+        balance = parseInt(localStorage.getItem('lokalex_rider_credits') || "0", 10);
+    }
+
+    if (countEl) countEl.innerText = balance;
+
+    if (pillEl) {
+        if (balance <= 0) {
+            pillEl.className = "bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-500/40 text-red-700 dark:text-red-400 text-[10px] px-2.5 py-0.5 rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition select-none cursor-pointer";
+        } else {
+            pillEl.className = "bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-500/40 text-amber-800 dark:text-amber-300 text-[10px] px-2.5 py-0.5 rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition select-none cursor-pointer";
+        }
+    }
+}
+
+/**
+ * Displays informational guidance when tapping the credits pill.
+ */
+export function showCreditsInfoToast() {
+    const isAdmin = checkAdminAccess();
+    if (isAdmin) {
+        showToast("👑 Admin Account: Mayroon kang UNLIMITED Directory Access at hindi ka nababawasan ng credits.");
+        return;
+    }
+
+    const cur = parseInt(localStorage.getItem('lokalex_rider_credits') || "0", 10);
+    const config = globalState.directoryCreditsConfig || {};
+    const cost = config.costPerAccess !== undefined ? config.costPerAccess : 1;
+    const custR = config.rewardCustomerRegistration !== undefined ? config.rewardCustomerRegistration : 5;
+    const storeR = config.rewardStoreRegistration !== undefined ? config.rewardStoreRegistration : 10;
+    const status = config.enabled !== false ? 'ACTIVE' : 'DISABLED';
+
+    showToast(`🪙 Directory Credits (${status})\n• Balance: ${cur} credits\n• -${cost} credit per Directory access\n• +${custR} credits per Customer registered\n• +${storeR} credits per Store registered`);
+}
+
+/**
+ * Listens to real-time credit balance updates for the current rider from Firebase.
+ */
+export function initRiderCreditsListener() {
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    if (!myId || !db || creditsListenerActive) return;
+
+    creditsListenerActive = true;
+    db.ref(`riders/${myId}/directoryCredits`).on('value', (snap) => {
+        const val = snap.exists() ? parseInt(snap.val(), 10) || 0 : 0;
+        localStorage.setItem('lokalex_rider_credits', val.toString());
+        appState.directoryCredits = val;
+        updateRosterCreditsDisplay(val);
+    });
+}
+
 export function minimizeDirectorySearch() {
     const floatingBar = document.getElementById('dir-floating-search-bar');
     const minSearchWrapper = document.getElementById('dir-min-search-wrapper');
 
-    if (floatingBar && !floatingBar.classList.contains('hidden')) {
-        floatingBar.classList.add('hidden');
-    }
-
-    if (minSearchWrapper && minSearchWrapper.classList.contains('hidden')) {
-        minSearchWrapper.classList.remove('hidden');
-    }
+    if (floatingBar && !floatingBar.classList.contains('hidden')) floatingBar.classList.add('hidden');
+    if (minSearchWrapper && minSearchWrapper.classList.contains('hidden')) minSearchWrapper.classList.remove('hidden');
 }
 
-/**
- * Hides all floating search widgets (badge and overlay bar).
- */
 export function restoreDirectorySearch() {
     const minSearchWrapper = document.getElementById('dir-min-search-wrapper');
     const floatingBar = document.getElementById('dir-floating-search-bar');
 
-    if (minSearchWrapper && !minSearchWrapper.classList.contains('hidden')) {
-        minSearchWrapper.classList.add('hidden');
-    }
-
-    if (floatingBar && !floatingBar.classList.contains('hidden')) {
-        floatingBar.classList.add('hidden');
-    }
+    if (minSearchWrapper && !minSearchWrapper.classList.contains('hidden')) minSearchWrapper.classList.add('hidden');
+    if (floatingBar && !floatingBar.classList.contains('hidden')) floatingBar.classList.add('hidden');
 }
 
-/**
- * Expands the floating search bar overlay when tapping the minimized badge.
- */
 export function expandDirectorySearch() {
     const floatingBar = document.getElementById('dir-floating-search-bar');
     const minSearchWrapper = document.getElementById('dir-min-search-wrapper');
     const floatingInput = document.getElementById('floating-search-input');
     const searchInput = document.getElementById('search-input');
 
-    if (minSearchWrapper) {
-        minSearchWrapper.classList.add('hidden');
-    }
-
-    if (floatingBar) {
-        floatingBar.classList.remove('hidden');
-    }
-
+    if (minSearchWrapper) minSearchWrapper.classList.add('hidden');
+    if (floatingBar) floatingBar.classList.remove('hidden');
     if (floatingInput) {
         floatingInput.value = searchInput ? searchInput.value : '';
         floatingInput.focus();
     }
 }
 
-/**
- * Synchronizes search text typed in the floating overlay with the main search input.
- */
 export function syncAndFilterFloatingSearch(val) {
     const searchInput = document.getElementById('search-input');
-    if (searchInput) {
-        searchInput.value = val;
-    }
+    if (searchInput) searchInput.value = val;
     filterDirectoryRecords();
 }
 
-/**
- * Attaches scroll monitoring with hysteresis to smoothly toggle the upper-right
- * floating badge when the inline search bar scrolls out of bounds.
- */
 export function initDirectoryScrollListener() {
     const recordList = document.getElementById('record-list');
 
@@ -121,7 +154,6 @@ export function initDirectoryScrollListener() {
         const floatingBar = document.getElementById('dir-floating-search-bar');
         const isFloatingOpen = floatingBar && !floatingBar.classList.contains('hidden');
 
-        // Hysteresis boundary: Out-of-bounds at >60px, back in-bounds at <=25px
         if (currentScroll > 60) {
             if (!isFloatingOpen) {
                 const minSearchWrapper = document.getElementById('dir-min-search-wrapper');
@@ -144,10 +176,54 @@ export function initDirectoryScrollListener() {
 }
 
 /**
- * Navigates to the directory view, dynamically updates titles, and renders cache.
- * Cleanses search inputs and ensures the view starts clean at the top.
+ * Navigates to directory view with dynamic credit validation and deduction.
+ * Admins are strictly exempt and never blocked or deducted.
  */
 export async function openDirectory(type) {
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const isAdmin = checkAdminAccess();
+
+    const creditConfig = globalState.directoryCreditsConfig || {
+        enabled: true,
+        costPerAccess: 1,
+        rewardCustomerRegistration: 5,
+        rewardStoreRegistration: 10
+    };
+
+    // CREDIT DEDUCTION GATE (EXEMPT: ADMINS OR WHEN SYSTEM IS DISABLED)
+    if (creditConfig.enabled && !isAdmin && myId) {
+        const cost = creditConfig.costPerAccess !== undefined ? creditConfig.costPerAccess : 1;
+        let currentCredits = parseInt(localStorage.getItem('lokalex_rider_credits') || "0", 10);
+
+        if (db) {
+            try {
+                const snap = await db.ref(`riders/${myId}/directoryCredits`).once('value');
+                if (snap.exists()) {
+                    currentCredits = parseInt(snap.val(), 10) || 0;
+                    localStorage.setItem('lokalex_rider_credits', currentCredits.toString());
+                }
+            } catch(e) {}
+        }
+
+        if (currentCredits < cost) {
+            showToast(`⚠️ Kulang ang iyong Directory Credits (${currentCredits} natira)!\nKailangan ng ${cost} credit(s). Mag-rehistro ng Customer (+${creditConfig.rewardCustomerRegistration || 5}) o Store (+${creditConfig.rewardStoreRegistration || 10}) para magka-credits.`);
+            showSideNotification("LOW CREDITS", `Insufficient balance (${currentCredits} credits). Register new entries to earn.`, "fa-coins", "text-red-400", "border-red-500");
+            return;
+        }
+
+        const newBalance = Math.max(0, currentCredits - cost);
+        localStorage.setItem('lokalex_rider_credits', newBalance.toString());
+        appState.directoryCredits = newBalance;
+        updateRosterCreditsDisplay(newBalance);
+
+        if (db) {
+            db.ref(`riders/${myId}/directoryCredits`).transaction(c => Math.max(0, (c || cost) - cost));
+            db.ref(`roster/${myId}/directoryCredits`).transaction(c => Math.max(0, (c || cost) - cost)).catch(() => {});
+        }
+
+        showToast(`🪙 -${cost} Credit used for ${type || 'Directory'}. Balance: ${newBalance}`);
+    }
+
     globalState.currentType = type || 'customers';
 
     const searchInput = document.getElementById('search-input');
@@ -171,9 +247,7 @@ export async function openDirectory(type) {
 
     window.scrollTo({ top: 0 });
     const recordList = document.getElementById('record-list');
-    if (recordList) {
-        recordList.scrollTop = 0;
-    }
+    if (recordList) recordList.scrollTop = 0;
     
     const headerTitle = document.getElementById('header-title');
     if (headerTitle) {
@@ -187,9 +261,6 @@ export async function openDirectory(type) {
     initDirectoryScrollListener();
 }
 
-/**
- * Filters directory records according to search input and updates badge labels.
- */
 export function filterDirectoryRecords() {
     const searchInput = document.getElementById('search-input');
     const floatingInput = document.getElementById('floating-search-input');
@@ -214,9 +285,7 @@ export function filterDirectoryRecords() {
         else floatingClearBtn.classList.add('hidden');
     }
 
-    if (minLabel) {
-        minLabel.innerText = query ? query : "Search";
-    }
+    if (minLabel) minLabel.innerText = query ? query : "Search";
 
     if (minIndicator) {
         if (query) minIndicator.classList.remove('hidden');
@@ -226,9 +295,6 @@ export function filterDirectoryRecords() {
     renderDirectoryList();
 }
 
-/**
- * Clears the active search filter across both inputs and restores the full list.
- */
 export function clearDirectorySearch() {
     const searchInput = document.getElementById('search-input');
     const floatingInput = document.getElementById('floating-search-input');
@@ -256,9 +322,6 @@ export function clearDirectorySearch() {
     renderDirectoryList();
 }
 
-/**
- * Formats and copies standard delivery fee response strings to the clipboard.
- */
 export function copyBarangayRate(barangayName, rawRate) {
     let rateNum = parseFloat((rawRate || "").replace(/[^0-9.]/g, ''));
     let amountStr = !isNaN(rateNum) ? rateNum.toFixed(0) : (rawRate || '0').replace(/[^0-9.]/g, '');
@@ -269,9 +332,6 @@ export function copyBarangayRate(barangayName, rawRate) {
     showToast(`📋 Copied rate message for ${barangayName}!`);
 }
 
-/**
- * Renders sorted group cards for customer, store, or barangay directory data.
- */
 export function renderDirectoryList() {
     const listEl = document.getElementById('record-list');
     const searchVal = (document.getElementById('floating-search-input')?.value || document.getElementById('search-input')?.value || '').toLowerCase().trim();
@@ -388,9 +448,6 @@ export function renderDirectoryList() {
     setupAlphabetScrubber(Array.from(availableLetters));
 }
 
-/**
- * Initializes the side A-Z scrubber with touch/cursor elastic magnifications.
- */
 export function setupAlphabetScrubber(availableLetters) {
     const scrubberContainer = document.getElementById('alphabet-scrubber');
     if (!scrubberContainer) return;
@@ -436,10 +493,8 @@ export function setupAlphabetScrubber(availableLetters) {
         }
 
         if (targetEl) {
-            // 1. Native scrollIntoView scrolls whichever container holds the active scrollbar (window, document, or main)
             targetEl.scrollIntoView({ behavior: 'auto', block: 'start' });
 
-            // 2. If recordList has its own active overflow-y scrollbar, scroll it directly
             const recordList = document.getElementById('record-list');
             if (recordList && (recordList.scrollHeight > recordList.clientHeight + 10)) {
                 const targetRect = targetEl.getBoundingClientRect();
@@ -528,4 +583,20 @@ export function setupAlphabetScrubber(availableLetters) {
         updateElasticDistortion(e.clientY);
     };
 }
-// REMARKS: DIRECTORY_UI_ALPHABET_SCRUBBER_UNIVERSAL_SCROLL_FIX_V1_COMPLETE
+
+if (typeof window !== 'undefined') {
+    window.updateRosterCreditsDisplay = updateRosterCreditsDisplay;
+    window.showCreditsInfoToast = showCreditsInfoToast;
+    window.initRiderCreditsListener = initRiderCreditsListener;
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            updateRosterCreditsDisplay();
+            initRiderCreditsListener();
+        });
+    } else {
+        updateRosterCreditsDisplay();
+        initRiderCreditsListener();
+    }
+}
+// REMARKS: DIRECTORY_UI_ADMIN_EXEMPTION_AND_ROSTER_CREDITS_PILL_V1_COMPLETE

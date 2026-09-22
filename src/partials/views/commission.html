@@ -7,14 +7,14 @@
         </div>
 
         <div class="flex bg-gray-100 dark:bg-darkBg rounded-xl p-1 text-xs font-bold border border-gray-200 dark:border-gray-800">
-            <button id="comm-mode-earned" onclick="window.setCommissionMode && window.setCommissionMode('earned')" class="flex-1 py-2 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 dark:bg-emerald-600/20 dark:text-emerald-400 dark:border-emerald-500/50 font-black transition shadow-xs">My Earnings</button>
-            <button id="comm-mode-company" onclick="window.setCommissionMode && window.setCommissionMode('company')" class="flex-1 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition">To Pay (Company)</button>
+            <button id="comm-mode-earned" onclick="window.setCommissionMode && window.setCommissionMode('earned')" class="flex-1 py-2 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 dark:bg-emerald-600/20 dark:text-emerald-400 dark:border-emerald-500/50 font-black transition shadow-xs cursor-pointer">My Earnings</button>
+            <button id="comm-mode-company" onclick="window.setCommissionMode && window.setCommissionMode('company')" class="flex-1 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer">To Pay (Company)</button>
         </div>
 
         <div class="grid grid-cols-3 gap-1 bg-gray-100 dark:bg-darkBg rounded-xl p-1 text-[10px] font-bold border border-gray-200 dark:border-gray-800">
-            <button id="comm-period-daily" onclick="window.setCommissionPeriod && window.setCommissionPeriod('daily')" class="py-1.5 rounded-lg bg-blue-600 text-white font-bold transition shadow">Daily</button>
-            <button id="comm-period-weekly" onclick="window.setCommissionPeriod && window.setCommissionPeriod('weekly')" class="py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition">Weekly</button>
-            <button id="comm-period-monthly" onclick="window.setCommissionPeriod && window.setCommissionPeriod('monthly')" class="py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition">Monthly</button>
+            <button id="comm-period-daily" onclick="window.setCommissionPeriod && window.setCommissionPeriod('daily')" class="py-1.5 rounded-lg bg-blue-600 text-white font-bold transition shadow cursor-pointer">Daily</button>
+            <button id="comm-period-weekly" onclick="window.setCommissionPeriod && window.setCommissionPeriod('weekly')" class="py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer">Weekly</button>
+            <button id="comm-period-monthly" onclick="window.setCommissionPeriod && window.setCommissionPeriod('monthly')" class="py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer">Monthly</button>
         </div>
 
         <div class="flex justify-between items-center">
@@ -25,7 +25,9 @@
         </div>
     </div>
 
+    <!-- MAIN SUMMARY CARD WITH SETTLEMENT STATUS BADGE -->
     <div class="bg-white dark:bg-cardBg p-4 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xs flex flex-col gap-3 relative overflow-hidden text-gray-900 dark:text-white">
+        <div id="comm-status-badge" class="hidden absolute top-0 right-0 bg-red-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest shadow-md">UNPAID</div>
         <div class="text-xs text-gray-600 dark:text-gray-400 uppercase tracking-widest font-black text-center mt-2" id="comm-summary-title">Daily Summary</div>
         
         <div class="flex flex-col items-center justify-center py-2">
@@ -35,12 +37,17 @@
             </div>
             <div class="text-[10px] text-gray-500 dark:text-gray-400 font-mono font-bold mt-1">Gross Total: ₱<span id="comm-gross-amount">0.00</span></div>
         </div>
+
+        <button id="admin-mark-paid-btn" onclick="window.toggleSettlementStatus && window.toggleSettlementStatus()" class="hidden w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl text-xs transition active:scale-95 shadow-lg mt-1 border border-emerald-400/50 cursor-pointer">
+            <i class="fa-solid fa-check-double"></i> MARK AS PAID
+        </button>
     </div>
 
-    <button onclick="window.generateDailyReportText && window.generateDailyReportText()" class="w-full bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 dark:bg-blue-600/20 dark:border-blue-600/50 dark:hover:bg-blue-600 dark:text-blue-400 dark:hover:text-white font-bold py-3.5 rounded-2xl shadow-xs flex items-center justify-center gap-2 transition active:scale-95 text-xs">
+    <button onclick="window.generateDailyReportText && window.generateDailyReportText()" class="w-full bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 dark:bg-blue-600/20 dark:border-blue-600/50 dark:hover:bg-blue-600 dark:text-blue-400 dark:hover:text-white font-bold py-3.5 rounded-2xl shadow-xs flex items-center justify-center gap-2 transition active:scale-95 text-xs cursor-pointer">
         <i class="fa-solid fa-file-lines"></i> Generate Text Report
     </button>
 
     <div class="text-[10px] text-gray-600 dark:text-gray-400 uppercase tracking-wider font-bold mt-2 border-b border-gray-200 dark:border-gray-800 pb-1">Rider Summary</div>
     <div id="commission-rider-list" class="flex flex-col gap-3 pb-20"></div>
 </section>
+<!-- REMARKS: COMMISSION_HTML_SETTLEMENT_STATUS_BADGE_RESTORED_V1_COMPLETE -->
