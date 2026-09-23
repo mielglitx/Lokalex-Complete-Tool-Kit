@@ -7,10 +7,11 @@
  * 
  * Description:
  * Administrative control suite and modal orchestration for Team Leads and Admins:
- * - Lineup management, force catering, queue shifting, and cascading record voids.
- * - Early Shift Out Penalty controls: 8-hour shift minimum settings & listeners.
- * - Directory Credit settings modal dialog controller and global listener.
- * - Toggle switch coordinator syncing all admin toolbar buttons in real time.
+ * - Lineup management, force catering, queue shifting, and cascading record voids[cite: 38].
+ * - Early Shift Out Penalty controls: 8-hour baseline, per-rider daily duty hours,
+ *   and 1-day temporary early out exemptions[cite: 30, 38].
+ * - Directory Credit settings modal dialog controller and global listener[cite: 38].
+ * - Toggle switch coordinator syncing all admin toolbar buttons in real time[cite: 38].
  * ============================================================================
  */
 
@@ -19,7 +20,7 @@ import { appState, globalState } from '../../store/state.js';
 import { API_URL } from '../../config/constants.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { openSlideDeleteModal, closeAdminCateringModal } from '../../ui/modals.js';
-import { isSameDate, escapeHtml } from '../../utils/helpers.js';
+import { isSameDate, escapeHtml, getLocalTodayStr } from '../../utils/helpers.js';
 import { populateCateringCustomerDropdown } from '../chat/index.js';
 import { 
     parseQueueTime, 
@@ -91,7 +92,7 @@ export * from './rosterAccounts.js';
 let pendingAdminTarget = null;
 
 // ============================================================================
-// 1. EARLY SHIFT OUT PENALTY ADMIN CONTROLLERS
+// 1. EARLY SHIFT OUT PENALTY & PER-RIDER DUTY CONTROLS
 // ============================================================================
 
 export function openAdminEarlyShiftModal() {
@@ -105,7 +106,9 @@ export function openAdminEarlyShiftModal() {
         penaltyPerMissingHour: 2.5,
         capEnabled: true,
         maxPenaltyPercentage: 10,
-        gracePeriodMinutes: 15
+        gracePeriodMinutes: 15,
+        riderTargets: {},
+        exemptions: {}
     };
 
     const enabledToggle = document.getElementById('admin-early-shift-enabled');
@@ -122,12 +125,97 @@ export function openAdminEarlyShiftModal() {
     if (maxCapInput) maxCapInput.value = config.maxPenaltyPercentage || 10;
     if (graceInput) graceInput.value = config.gracePeriodMinutes !== undefined ? config.gracePeriodMinutes : 15;
 
+    renderAdminEarlyShiftRidersList();
     modal.classList.remove('hidden');
 }
 
 export function closeAdminEarlyShiftModal() {
     const modal = document.getElementById('admin-early-shift-modal');
     if (modal) modal.classList.add('hidden');
+}
+
+export function renderAdminEarlyShiftRidersList() {
+    const container = document.getElementById('admin-early-shift-riders-list');
+    if (!container) return;
+
+    const config = globalState.earlyShiftPenaltyConfig || {};
+    const riderTargets = config.riderTargets || {};
+    const exemptions = config.exemptions || {};
+    const todayStr = getLocalTodayStr();
+
+    const roster = globalState.rosterMembers || [];
+    if (roster.length === 0) {
+        container.innerHTML = `<div class="text-center text-gray-500 italic py-4 text-xs">No active roster members found.</div>`;
+        return;
+    }
+
+    container.innerHTML = roster.map(r => {
+        const rId = (r.telegramId || r.id || "").toString().trim();
+        const rName = r.riderName || r.name || `Rider #${rId}`;
+        const currentTarget = riderTargets[rId] !== undefined ? riderTargets[rId] : "";
+        const isExemptToday = exemptions[rId] && exemptions[rId].date === todayStr;
+
+        const exemptBtnHtml = isExemptToday
+            ? `<button type="button" onclick="window.toggleRiderEarlyShiftExemption && window.toggleRiderEarlyShiftExemption('${escapeHtml(rId)}', '${escapeHtml(rName)}', false)" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[9.5px] px-2.5 py-1.5 rounded-xl border border-emerald-400/40 shadow-xs transition active:scale-95 cursor-pointer flex items-center gap-1">
+                <i class="fa-solid fa-shield-check"></i> Exempt Today
+               </button>`
+            : `<button type="button" onclick="window.toggleRiderEarlyShiftExemption && window.toggleRiderEarlyShiftExemption('${escapeHtml(rId)}', '${escapeHtml(rName)}', true)" class="bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white font-bold text-[9.5px] px-2.5 py-1.5 rounded-xl border border-gray-700 transition active:scale-95 cursor-pointer flex items-center gap-1">
+                <i class="fa-solid fa-shield"></i> Grant Pass
+               </button>`;
+
+        return `
+        <div class="bg-black/40 border border-gray-800 p-2.5 rounded-2xl flex items-center justify-between gap-2 shadow-xs text-xs">
+            <div class="flex flex-col min-w-0 flex-1">
+                <span class="font-bold text-white truncate flex items-center gap-1.5">
+                    <i class="fa-solid fa-motorcycle text-red-400"></i> ${escapeHtml(rName)}
+                </span>
+                <span class="text-[9.5px] text-gray-400 font-mono">ID: ${escapeHtml(rId)}</span>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+                <div class="flex items-center gap-1 bg-gray-900 border border-gray-700 rounded-xl px-2 py-1">
+                    <input type="number" step="0.5" min="1" max="24" 
+                        id="early-shift-target-${escapeHtml(rId)}" 
+                        placeholder="${config.targetHours || 8}" 
+                        value="${currentTarget}" 
+                        class="w-10 bg-transparent text-xs text-center font-bold font-mono text-amber-400 outline-none">
+                    <span class="text-[9px] text-gray-400 font-bold">hrs</span>
+                </div>
+                ${exemptBtnHtml}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+export async function toggleRiderEarlyShiftExemption(riderId, riderName, grant) {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!riderId) return;
+
+    const todayStr = getLocalTodayStr();
+    if (!globalState.earlyShiftPenaltyConfig) globalState.earlyShiftPenaltyConfig = {};
+    if (!globalState.earlyShiftPenaltyConfig.exemptions) globalState.earlyShiftPenaltyConfig.exemptions = {};
+
+    if (grant) {
+        globalState.earlyShiftPenaltyConfig.exemptions[riderId] = {
+            date: todayStr,
+            grantedBy: appState.riderName || "Admin",
+            grantedAt: Date.now()
+        };
+        showToast(`🛡️ Early Out Pass GRANTED to ${riderName} for today!`);
+        showSideNotification("EARLY OUT PASS", `Temporary pass granted to ${riderName}`, "fa-shield-check", "text-emerald-400", "border-emerald-500");
+    } else {
+        delete globalState.earlyShiftPenaltyConfig.exemptions[riderId];
+        showToast(`Revoked Early Out Pass for ${riderName}.`);
+    }
+
+    if (db) {
+        await db.ref(`settings/earlyShiftPenalty/exemptions/${riderId}`).set(
+            grant ? globalState.earlyShiftPenaltyConfig.exemptions[riderId] : null
+        ).catch(() => {});
+    }
+
+    localStorage.setItem('lokalex_early_shift_penalty_config', JSON.stringify(globalState.earlyShiftPenaltyConfig));
+    renderAdminEarlyShiftRidersList();
 }
 
 export async function saveAdminEarlyShiftSettings() {
@@ -140,6 +228,21 @@ export async function saveAdminEarlyShiftSettings() {
     const maxCapInput = document.getElementById('admin-early-shift-max-cap-input');
     const graceInput = document.getElementById('admin-early-shift-grace-input');
 
+    const updatedRiderTargets = {};
+    const targetInputs = document.querySelectorAll('[id^="early-shift-target-"]');
+    targetInputs.forEach(input => {
+        const riderId = input.id.replace('early-shift-target-', '').trim();
+        const valStr = input.value.trim();
+        if (valStr !== "") {
+            const valNum = parseFloat(valStr);
+            if (!isNaN(valNum) && valNum > 0 && valNum <= 24) {
+                updatedRiderTargets[riderId] = valNum;
+            }
+        }
+    });
+
+    const existingExemptions = globalState.earlyShiftPenaltyConfig?.exemptions || {};
+
     const payload = {
         enabled: enabledToggle ? enabledToggle.checked : true,
         targetHours: targetHoursInput ? Math.max(1, parseFloat(targetHoursInput.value) || 8) : 8,
@@ -147,6 +250,8 @@ export async function saveAdminEarlyShiftSettings() {
         capEnabled: capToggle ? capToggle.checked : true,
         maxPenaltyPercentage: maxCapInput ? Math.max(1, parseFloat(maxCapInput.value) || 10) : 10,
         gracePeriodMinutes: graceInput ? Math.max(0, parseInt(graceInput.value, 10) || 15) : 15,
+        riderTargets: updatedRiderTargets,
+        exemptions: existingExemptions,
         updatedAt: Date.now(),
         updatedBy: appState.riderName || "Admin"
     };
@@ -200,7 +305,6 @@ export function toggleAdminControls(enabled) {
 
     globalState.adminControlsEnabled = !!enabled;
 
-    // Explicitly toggle all admin button IDs on the roster toolbar
     const adminButtonIds = [
         'admin-store-hub-btn',
         'admin-manage-riders-btn',
@@ -695,7 +799,6 @@ export async function forceAllEndShift() {
     });
 }
 
-// Global initialization of listeners
 listenToTimeInSchedule();
 listenToDayOffData();
 listenToBookingLimits();
@@ -745,10 +848,12 @@ if (typeof window !== 'undefined') {
     window.openAdminEarlyShiftModal = openAdminEarlyShiftModal;
     window.closeAdminEarlyShiftModal = closeAdminEarlyShiftModal;
     window.saveAdminEarlyShiftSettings = saveAdminEarlyShiftSettings;
+    window.renderAdminEarlyShiftRidersList = renderAdminEarlyShiftRidersList;
+    window.toggleRiderEarlyShiftExemption = toggleRiderEarlyShiftExemption;
 
     window.openAdminDirectoryCreditsModal = openAdminDirectoryCreditsModal;
     window.closeAdminDirectoryCreditsModal = closeAdminDirectoryCreditsModal;
     window.saveAdminDirectoryCreditsSettings = saveAdminDirectoryCreditsSettings;
     window.promptAdjustRiderCredits = promptAdjustRiderCredits;
 }
-// REMARKS: ROSTER_ADMIN_EARLY_SHIFT_AND_DIRECTORY_CREDITS_CONTROLLERS_V1_COMPLETE
+// REMARKS: ROSTER_ADMIN_CUSTOM_DUTY_HOURS_AND_DAILY_EXEMPTIONS_V1_COMPLETE

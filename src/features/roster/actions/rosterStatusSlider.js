@@ -2,18 +2,22 @@
 
 /**
  * ============================================================================
- * ROSTER STATUS SLIDER & EARLY SHIFT PENALTY ENGINE (BREAK EXCLUDED)
+ * ROSTER STATUS SLIDER & EARLY SHIFT PENALTY ENGINE (CUSTOM HOURS & EXEMPTIONS)
  * ============================================================================
  * 
  * Description:
  * Controls rider status transitions initiated by the rider UI dock:
  * - Available: Handles shift time-in restrictions, single-shot silent GPS
  *   calibration, queue time anchoring, and live tracking session termination.
- * - End Shift: Evaluates minimum 8-hour shift compliance. Deducts all consumed
- *   break time from gross elapsed time. If net duty time is under the 8-hour target,
- *   computes the deficit and commission surcharge %, warns the rider with an
- *   itemized breakdown, and writes the penalty rate to Firebase upon clock-out.
+ * - End Shift: Evaluates shift duration against rider-specific daily targets
+ *   (or global 8h default) minus consumed break time. Inspects temporary daily
+ *   exemptions: if granted an early out pass by Admin, early departure penalties
+ *   are completely bypassed.
  * - Break / Cooldown: Manages rest transitions and background timer lifecycles.
+ * 
+ * Update Note:
+ * - Fixed import path: moved `isSameDateStr` to `../rosterUtils.js` where it is
+ *   properly exported.
  * ============================================================================
  */
 
@@ -29,7 +33,8 @@ import {
     parseQueueTime, 
     getActiveCateringCustomersWithTimes, 
     hasReceiptForActiveSession,
-    parseTimeToMinutes 
+    parseTimeToMinutes,
+    isSameDateStr 
 } from '../rosterUtils.js';
 import { checkRiderTimeInAllowed } from '../rosterStatusLimits.js';
 import { updateRosterStatus, clockOutRider } from '../rosterStatusCore.js';
@@ -65,8 +70,9 @@ function getDeviceLocationQuick() {
 }
 
 /**
- * Evaluates whether the rider has fulfilled the required 8-hour shift.
- * Accurately deducts all break time (break time does NOT count as working time).
+ * Evaluates whether the rider has fulfilled their required shift duration.
+ * Accurately deducts break time, checks for 1-day temporary exemptions,
+ * and honors per-rider custom daily duty hour configurations.
  */
 async function evaluateEarlyShiftPenalty(riderId, myRecord = null) {
     const config = globalState.earlyShiftPenaltyConfig || {
@@ -75,7 +81,9 @@ async function evaluateEarlyShiftPenalty(riderId, myRecord = null) {
         penaltyPerMissingHour: 2.5,
         capEnabled: true,
         maxPenaltyPercentage: 10,
-        gracePeriodMinutes: 15
+        gracePeriodMinutes: 15,
+        riderTargets: {},
+        exemptions: {}
     };
 
     if (!config.enabled) {
@@ -83,6 +91,20 @@ async function evaluateEarlyShiftPenalty(riderId, myRecord = null) {
     }
 
     const todayStr = getLocalTodayStr();
+
+    // 1. TEMPORARY DAILY EXEMPTION CHECK (ADMIN PASS)
+    const exemption = config.exemptions && config.exemptions[riderId];
+    if (exemption && isSameDateStr(exemption.date, todayStr)) {
+        return { 
+            hasPenalty: false, 
+            isExempted: true, 
+            netWorkedMins: 0, 
+            totalBreakMins: 0, 
+            deficitHours: 0, 
+            penaltyPercent: 0 
+        };
+    }
+
     let loginTimestamp = null;
     let loginTimeStr = "";
     let totalBreakMins = 0;
@@ -118,7 +140,6 @@ async function evaluateEarlyShiftPenalty(riderId, myRecord = null) {
 
     const now = Date.now();
 
-    // Include active break session if rider is currently on Break
     if (myRecord) {
         if (myRecord.totalBreakMinutes !== undefined) {
             totalBreakMins = Math.max(totalBreakMins, parseInt(myRecord.totalBreakMinutes, 10) || 0);
@@ -130,15 +151,29 @@ async function evaluateEarlyShiftPenalty(riderId, myRecord = null) {
     }
 
     const grossElapsedMins = Math.max(0, Math.floor((now - loginTimestamp) / 60000));
-    // DEDUCT BREAK TIME: Break time is excluded from working hours
     const netWorkedMins = Math.max(0, grossElapsedMins - totalBreakMins);
 
-    const targetMins = Math.round((config.targetHours || 8) * 60);
+    // 2. RESOLVE RIDER-SPECIFIC SHIFT TARGET (FALLBACK TO GLOBAL TARGET)
+    let assignedTargetHours = config.targetHours || 8;
+    if (config.riderTargets && config.riderTargets[riderId] !== undefined && config.riderTargets[riderId] !== "") {
+        const customTarget = parseFloat(config.riderTargets[riderId]);
+        if (!isNaN(customTarget) && customTarget > 0) {
+            assignedTargetHours = customTarget;
+        }
+    }
+
+    const targetMins = Math.round(assignedTargetHours * 60);
     const graceMins = config.gracePeriodMinutes !== undefined ? config.gracePeriodMinutes : 15;
 
-    // Shift completed if net worked minutes satisfy target duration within grace allowance
     if (netWorkedMins >= (targetMins - graceMins)) {
-        return { hasPenalty: false, netWorkedMins, totalBreakMins, deficitHours: 0, penaltyPercent: 0 };
+        return { 
+            hasPenalty: false, 
+            netWorkedMins, 
+            totalBreakMins, 
+            deficitHours: 0, 
+            penaltyPercent: 0,
+            assignedTargetHours 
+        };
     }
 
     const missingMins = targetMins - netWorkedMins;
@@ -152,10 +187,12 @@ async function evaluateEarlyShiftPenalty(riderId, myRecord = null) {
 
     return {
         hasPenalty: true,
+        isExempted: false,
         netWorkedMins,
         totalBreakMins,
         deficitHours,
         penaltyPercent: finalPenalty,
+        assignedTargetHours,
         workedHoursText: `${Math.floor(netWorkedMins / 60)}h ${netWorkedMins % 60}m`,
         breakHoursText: `${Math.floor(totalBreakMins / 60)}h ${totalBreakMins % 60}m`
     };
@@ -324,15 +361,17 @@ export async function triggerStatusWithSlide(targetStatus) {
         showToast("✅ Available na! GPS Location recorded.");
 
     } else if (targetStatus === 'End') {
-        // EARLY SHIFT OUT EVALUATION (BREAK TIME STRICTLY EXCLUDED)
         const penaltyInfo = await evaluateEarlyShiftPenalty(myId, myRecord);
 
         let promptTitle = "Sigurado ka bang mag-End Shift?";
         let promptDesc = "Mag-o-off duty ka na para sa araw na ito.";
 
-        if (penaltyInfo.hasPenalty) {
+        if (penaltyInfo.isExempted) {
+            promptTitle = "Sigurado ka bang mag-End Shift?";
+            promptDesc = "Mayroon kang Admin Early Out Pass para sa araw na ito. Walang penalty na maia-apply sa iyong komisyon.";
+        } else if (penaltyInfo.hasPenalty) {
             promptTitle = `⚠️ EARLY SHIFT OUT DETECTED!`;
-            promptDesc = `Nakapag-duty ka lamang ng ${penaltyInfo.workedHoursText} (Break: ${penaltyInfo.breakHoursText}, Target: 8h).\nKulang ng ${penaltyInfo.deficitHours} oras dahil hindi kasama ang break time sa duty.\n\nMay dagdag na +${penaltyInfo.penaltyPercent}% penalty sa iyong babayarang komisyon ngayong araw.\n\nItuloy pa rin ang pag-End Shift?`;
+            promptDesc = `Nakapag-duty ka lamang ng ${penaltyInfo.workedHoursText} (Break: ${penaltyInfo.breakHoursText}, Target: ${penaltyInfo.assignedTargetHours}h).\nKulang ng ${penaltyInfo.deficitHours} oras dahil hindi kasama ang break time sa duty.\n\nMay dagdag na +${penaltyInfo.penaltyPercent}% penalty sa iyong babayarang komisyon ngayong araw.\n\nItuloy pa rin ang pag-End Shift?`;
         }
 
         openSlideDeleteModal(promptTitle, promptDesc, async () => {
@@ -347,7 +386,7 @@ export async function triggerStatusWithSlide(targetStatus) {
                     isForcedCater: false
                 };
 
-                if (penaltyInfo.hasPenalty) {
+                if (penaltyInfo.hasPenalty && !penaltyInfo.isExempted) {
                     updates.commissionSurcharge = penaltyInfo.penaltyPercent;
                     updates.earlyShiftDeficitHours = penaltyInfo.deficitHours;
 
@@ -359,6 +398,15 @@ export async function triggerStatusWithSlide(targetStatus) {
                     }).catch(() => {});
 
                     showSideNotification("EARLY OUT PENALTY", `+${penaltyInfo.penaltyPercent}% penalty applied to commission (Break excluded)`, "fa-triangle-exclamation", "text-red-400", "border-red-500");
+                } else if (penaltyInfo.isExempted) {
+                    updates.commissionSurcharge = 0;
+                    updates.earlyShiftDeficitHours = 0;
+
+                    db.ref(`logins/${myId}`).update({
+                        earlyShiftPenaltyPercent: 0,
+                        deficitHours: 0,
+                        isExemptedEarlyOut: true
+                    }).catch(() => {});
                 }
 
                 db.ref(`roster/${myId}`).update(updates).catch(() => {});
@@ -368,8 +416,10 @@ export async function triggerStatusWithSlide(targetStatus) {
                 myRecord.forcedCaters = null;
                 myRecord.forcedBy = null;
                 myRecord.isForcedCater = false;
-                if (penaltyInfo.hasPenalty) {
+                if (penaltyInfo.hasPenalty && !penaltyInfo.isExempted) {
                     myRecord.commissionSurcharge = penaltyInfo.penaltyPercent;
+                } else {
+                    myRecord.commissionSurcharge = 0;
                 }
             }
 
@@ -384,4 +434,4 @@ export async function triggerStatusWithSlide(targetStatus) {
         });
     }
 }
-// REMARKS: ROSTER_STATUS_SLIDER_BREAK_EXCLUSION_FROM_SHIFT_HOURS_V1_COMPLETE
+// REMARKS: ROSTER_STATUS_SLIDER_FIX_IMPORT_SAME_DATE_STR_V1_COMPLETE

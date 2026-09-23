@@ -526,17 +526,17 @@
     </div>
 </div>
 
-<!-- 9. ADMIN EARLY SHIFT OUT PENALTY SETTINGS MODAL -->
+<!-- 9. ADMIN EARLY SHIFT OUT PENALTY & PER-RIDER DUTY SETTINGS MODAL (EXPANDED TO MAX-W-MD) -->
 <div id="admin-early-shift-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
-    <div class="bg-cardBg border border-red-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3.5 relative animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+    <div class="bg-cardBg border border-red-500/60 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3.5 relative animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2.5 shrink-0">
             <div class="flex items-center gap-2">
                 <div class="w-8 h-8 rounded-xl bg-red-600/20 text-red-400 flex items-center justify-center text-sm font-bold border border-red-500/30">
                     <i class="fa-solid fa-user-clock"></i>
                 </div>
                 <div>
-                    <h3 class="font-bold text-xs text-white">Early Shift Out Penalty</h3>
-                    <p class="text-[9px] text-red-400 font-mono">8-Hour Minimum Shift Enforcement</p>
+                    <h3 class="font-bold text-xs text-white">Early Shift Out Penalty & Custom Duty</h3>
+                    <p class="text-[9px] text-red-400 font-mono">Shift Thresholds, Daily Targets & 1-Day Passes</p>
                 </div>
             </div>
             <button onclick="window.closeAdminEarlyShiftModal && window.closeAdminEarlyShiftModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
@@ -546,9 +546,9 @@
             <label class="bg-darkBg p-3 rounded-2xl border border-red-500/30 flex justify-between items-center cursor-pointer select-none">
                 <div>
                     <div class="font-bold text-white text-xs flex items-center gap-1.5">
-                        <i class="fa-solid fa-shield-halved text-red-400"></i> Enable 8-Hour Shift Check
+                        <i class="fa-solid fa-shield-halved text-red-400"></i> Enable Shift Duration Check
                     </div>
-                    <div class="text-[10px] text-gray-400 mt-0.5">Surcharge commission for shifts under 8 hours</div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Surcharge commission for shifts under target duty hours</div>
                 </div>
                 <input type="checkbox" id="admin-early-shift-enabled" class="w-5 h-5 accent-red-500 cursor-pointer shrink-0">
             </label>
@@ -556,9 +556,9 @@
             <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between">
                 <div>
                     <div class="font-bold text-white text-xs flex items-center gap-1.5">
-                        <i class="fa-solid fa-stopwatch text-amber-400"></i> Target Shift Duration
+                        <i class="fa-solid fa-stopwatch text-amber-400"></i> Global Default Shift Duration
                     </div>
-                    <div class="text-[10px] text-gray-400 mt-0.5">Standard shift requirement per day</div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Applied to riders without custom hourly duty</div>
                 </div>
                 <div class="flex items-center gap-1">
                     <input type="number" step="0.5" min="1" max="24" id="admin-early-shift-target-hours" value="8" class="w-16 bg-inputBg text-sm text-center font-mono font-black text-amber-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-amber-500">
@@ -614,6 +614,17 @@
                     <span class="text-gray-400 text-xs font-bold">mins</span>
                 </div>
             </div>
+
+            <!-- INDIVIDUAL RIDER SHIFT TARGETS & DAILY PASSES SECTION -->
+            <div class="flex flex-col shrink-0 gap-1.5 pt-2 border-t border-gray-800">
+                <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex justify-between items-center">
+                    <span>Individual Rider Duty & Daily Passes</span>
+                    <span class="text-[9px] text-red-400 lowercase">blank = default hours</span>
+                </div>
+                <div id="admin-early-shift-riders-list" class="flex flex-col gap-2 min-h-[100px] max-h-48 overflow-y-auto pr-1">
+                    <div class="text-center text-gray-500 italic py-6 text-xs">Loading riders roster...</div>
+                </div>
+            </div>
         </div>
 
         <div class="flex gap-2 mt-1 shrink-0">
@@ -623,7 +634,7 @@
     </div>
 </div>
 
-<!-- 10. ADMIN MANAGE RIDERS MODAL (HEADER BUTTONS POLISHED WITHOUT CREDIT RULES) -->
+<!-- 10. ADMIN MANAGE RIDERS MODAL -->
 <div id="admin-manage-riders-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-blue-500/60 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2">
@@ -903,9 +914,7 @@
     </div>
 </div>
 
-<!-- ========================================================================= -->
-<!-- 17. ADMIN ADJUST RIDER CREDITS MODAL (MODERN REPLACEMENT FOR PROMPT)      -->
-<!-- ========================================================================= -->
+<!-- 17. ADMIN ADJUST RIDER CREDITS MODAL -->
 <div id="admin-adjust-rider-credits-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-amber-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3.5 relative animate-in fade-in zoom-in duration-200">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2.5">
@@ -968,4 +977,4 @@
         </div>
     </div>
 </div>
-<!-- REMARKS: ADMIN_CONTROLS_ALL_17_MODALS_INCLUDING_ADJUST_CREDITS_MODAL_V1_COMPLETE -->
+<!-- REMARKS: ADMIN_CONTROLS_ALL_17_MODALS_INCLUDING_CUSTOM_DUTY_HOURS_AND_DAILY_PASSES_V1_COMPLETE -->
