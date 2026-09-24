@@ -281,8 +281,8 @@ export async function syncData(isSilent = false) {
 }
 
 // Seed barangay rates on initialization if cloud has no records yet
-<<<<<<< HEAD
+
 seedBarangaysToFirebase();
-=======
+
 seedBarangaysToFirebase();
->>>>>>> e35f804a763303a0372654affb8399c906c5ba17
+
