@@ -2,15 +2,15 @@
 const firebaseConfig = {
     apiKey: "AIzaSyD2ZbvO60h-udB_iNZ6zVbmXjMwYfbS_2w",
     authDomain: "lokalex-hub.firebaseapp.com",
-    databaseURL: "https://lokalexrtdb-default-rtdb.asia-southeast1.firebasedatabase.app",
+    databaseURL: "https://lokalex-hub-default-rtdb.asia-southeast1.firebasedatabase.app",
     projectId: "lokalex-hub",
     storageBucket: "lokalex-hub.appspot.com",
     messagingSenderId: "102938475610",
     appId: "1:102938475610:web:abcdef1234567890"
 };
 
-const DEFAULT_DB_URL = "https://lokalexrtdb-default-rtdb.asia-southeast1.firebasedatabase.app";
-const BACKUP_DB_URL = "https://lokalexrtdb-default-rtdb.asia-southeast1.firebasedatabase.app";
+const DEFAULT_DB_URL = "https://lokalex-hub-default-rtdb.asia-southeast1.firebasedatabase.app";
+const BACKUP_DB_URL = "https://lokalex-hub-backupdatabase.asia-southeast1.firebasedatabase.app";
 
 const fb = window.firebase || (typeof firebase !== 'undefined' ? firebase : null);
 
