@@ -1,16 +1,16 @@
 // src/config/firebase.js
 const firebaseConfig = {
-    apiKey: "AIzaSyD2ZbvO60h-udB_iNZ6zVbmXjMwYfbS_2w",
-    authDomain: "lokalex-hub.firebaseapp.com",
-    databaseURL: "https://lokalex-hub-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "lokalex-hub",
-    storageBucket: "lokalex-hub.appspot.com",
-    messagingSenderId: "102938475610",
-    appId: "1:102938475610:web:abcdef1234567890"
+    apiKey: "AIzaSyDVsi2niqDbQeAbj-Q5XUf4jdkaUVSpbu8",
+    authDomain: "lokalexrtdb.firebaseapp.com",
+    databaseURL: "https://lokalexrtdb-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "lokalexrtdb",
+    storageBucket: "lokalexrtdb.firebasestorage.app",
+    messagingSenderId: "963261909152",
+    appId: "1:963261909152:web:327976c26a6feb85e161c5"
 };
 
-const DEFAULT_DB_URL = "https://lokalex-hub-default-rtdb.asia-southeast1.firebasedatabase.app";
-const BACKUP_DB_URL = "https://lokalex-hub-backupdatabase.asia-southeast1.firebasedatabase.app";
+const DEFAULT_DB_URL = "https://lokalexrtdb-default-rtdb.asia-southeast1.firebasedatabase.app";
+const BACKUP_DB_URL = null; // Disabled to prevent duplicate writes to the same database
 
 const fb = window.firebase || (typeof firebase !== 'undefined' ? firebase : null);
 
@@ -18,9 +18,13 @@ if (fb && !fb.apps.length) {
     fb.initializeApp(firebaseConfig);
 }
 
-// 1. Initialize distinct instances for Primary and Backup Realtime Databases
+// 1. Initialize Primary DB and Optional Secondary Backup DB
 export const primaryDb = fb ? fb.app().database(DEFAULT_DB_URL) : null;
-export const backupDb = fb ? fb.app().database(BACKUP_DB_URL) : null;
+
+// Only spin up backupDb if configured and pointing to a different instance
+const isBackupConfigured = Boolean(BACKUP_DB_URL && BACKUP_DB_URL !== DEFAULT_DB_URL);
+export const backupDb = (fb && isBackupConfigured) ? fb.app().database(BACKUP_DB_URL) : null;
+
 export const auth = fb ? fb.auth() : null;
 export const messaging = (fb && typeof fb.messaging === 'function' && fb.messaging.isSupported()) ? fb.messaging() : null;
 
@@ -296,7 +300,7 @@ function createRefWrapper(primaryRef, backupRef) {
             return createQueryWrapper(primaryRef.orderByKey(), backupRef);
         },
         orderByValue() {
-            return createQueryWrapper(primaryRef.orderByValue(), backupRef);
+            return createQueryWrapper(primaryQuery ? primaryRef.orderByValue() : primaryRef.orderByValue(), backupRef);
         },
         orderByPriority() {
             return createQueryWrapper(primaryRef.orderByPriority(), backupRef);
