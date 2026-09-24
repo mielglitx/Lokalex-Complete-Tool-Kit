@@ -4,15 +4,6 @@
  * ============================================================================
  * COMMISSION UI, LEDGER AGGREGATION & EARLY SHIFT BREAKDOWN
  * ============================================================================
- * 
- * Description:
- * Manages commission views, mode toggles, period aggregation, and penalties:
- * - Dynamic Mode Toggle: My Earnings vs. To Pay (Company Dues)[cite: 40, 41].
- * - Early Shift Out Line-Item Display: Renders custom penalty badges showing
- *   deficit hours and surcharge rates directly in rider order accordions[cite: 41].
- * - One-click Waive Action: Allows administrators to excuse early shift penalties[cite: 41, 45].
- * - Exportable Settlement Reports formatted for clipboard sharing[cite: 41].
- * ============================================================================
  */
 
 import { appState, globalState } from '../../store/state.js';
@@ -30,6 +21,17 @@ export let viewSettings = {
 
 let isCommissionListenerActive = false;
 let activeListenerDate = "";
+
+function normalizeDateStr(d) {
+    if (!d) return '';
+    const str = String(d).trim().split('T')[0];
+    if (str.includes('/')) {
+        const parts = str.split('/');
+        if (parts[0].length === 4) return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+        if (parts[2].length === 4) return `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+    }
+    return str;
+}
 
 export function initCommissionLiveListeners() {
     if (!db) return;
@@ -89,9 +91,10 @@ initCommissionLiveListeners();
 export async function fetchCommissionData() {
     if (!db) return;
     try {
+        // Fetch full sets without alphabetical limitToLast truncations
         const [rcptSnap, catSnap] = await Promise.all([
-            db.ref('receipts').limitToLast(200).once('value'),
-            db.ref('cateredHistory').limitToLast(200).once('value')
+            db.ref('receipts').once('value'),
+            db.ref('cateredHistory').once('value')
         ]);
 
         const rcptVal = rcptSnap.val();
@@ -209,7 +212,7 @@ export function setupAdminControls() {
         
         let options = `<option value="ALL">All Riders (Combined)</option>`;
         cleanRiders.forEach(name => {
-            const isSelected = currentSelected === name ? "selected" : "";
+            const isSelected = (currentSelected === name) ? "selected" : "";
             options += `<option value="${escapeHtml(name)}" ${isSelected}>${escapeHtml(name)}</option>`;
         });
         
@@ -261,7 +264,10 @@ export function setCommissionPeriod(period) {
         const input = document.getElementById(`comm-input-${p}`);
         if (p === period) {
             if (btn) btn.className = "py-1.5 rounded-lg bg-blue-600 text-white font-bold transition shadow cursor-pointer";
-            if (input) input.classList.remove('hidden');
+            if (input) {
+                input.classList.remove('hidden');
+                if (input.value) viewSettings.dateValue = input.value;
+            }
         } else {
             if (btn) btn.className = "py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer";
             if (input) input.classList.add('hidden');
@@ -284,7 +290,10 @@ export function refreshCommissionView() {
         targetRiderFilter = myId || myName;
     }
 
-    if (targetRiderFilter === "ALL") targetRiderFilter = null;
+    // Sanitize ALL combinations
+    if (!targetRiderFilter || targetRiderFilter.toUpperCase() === "ALL" || targetRiderFilter.toLowerCase().includes("all riders")) {
+        targetRiderFilter = null;
+    }
 
     const dateInput = document.getElementById(`comm-input-${viewSettings.period}`);
     if (dateInput && dateInput.value) {
@@ -301,14 +310,14 @@ export function refreshCommissionView() {
         if (!rDate) return false;
         
         if (viewSettings.period === 'daily') {
-            return isSameDateStr(rDate, viewSettings.dateValue);
+            return isSameDateStr(rDate, viewSettings.dateValue) || (normalizeDateStr(rDate) === normalizeDateStr(viewSettings.dateValue));
         }
         if (viewSettings.period === 'weekly') {
             const d = new Date(rDate.includes('-') || rDate.includes('/') ? rDate : Number(rDate));
             return getWeekString(d.getTime()) === viewSettings.dateValue;
         }
         if (viewSettings.period === 'monthly') {
-            return String(rDate).substring(0, 7) === String(viewSettings.dateValue).substring(0, 7);
+            return String(normalizeDateStr(rDate)).substring(0, 7) === String(normalizeDateStr(viewSettings.dateValue)).substring(0, 7);
         }
         return false;
     });
@@ -362,7 +371,7 @@ export function refreshCommissionView() {
     for (let rId in riderTotals) {
         if (riderTotals[rId].gross <= 0 || riderTotals[rId].customers.length === 0) continue;
 
-        if (targetRiderFilter && targetRiderFilter !== "ALL") {
+        if (targetRiderFilter) {
             const cleanTarget = targetRiderFilter.toString().trim();
             const rIdClean = rId.toString().trim();
             const rNameClean = (riderTotals[rId].name || "").toString().trim();
@@ -378,7 +387,7 @@ export function refreshCommissionView() {
         grandCompany += riderTotals[rId].company;
     }
 
-    if (targetRiderFilter && targetRiderFilter !== "ALL" && !selectedRiderRates) {
+    if (targetRiderFilter && !selectedRiderRates) {
         const myRoster = globalState.rosterMembers?.find(m => isRiderMatch(targetRiderFilter, m.riderName || m.name || "", targetRiderFilter, m.telegramId));
         const rName = myRoster ? (myRoster.riderName || myRoster.name || "") : (appState.riderName || myName);
         selectedRiderRates = getCommissionRates(viewSettings.dateValue, rName, targetRiderFilter);
@@ -395,7 +404,6 @@ export function refreshCommissionView() {
 
     const displayRates = selectedRiderRates || getCommissionRates(viewSettings.dateValue, appState.riderName, appState.telegramId);
 
-    // Formulate comprehensive notice for manual and early shift out penalties
     let penaltyNotice = '';
     if (displayRates.manualPenaltyPerc > 0 && displayRates.earlyShiftPenaltyPerc > 0) {
         penaltyNotice = ` (+${displayRates.manualPenaltyPerc}\% Penalty, +${displayRates.earlyShiftPenaltyPerc}% Early Out)`;
@@ -573,7 +581,6 @@ export function renderRiderSummaryList(riderListArray) {
 
         const adminBadge = rates.isAdmin ? `<span class="bg-purple-50 dark:bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30 text-[9px] font-black px-1.5 py-0.5 rounded ml-1">ADMIN</span>` : '';
 
-        // Dedicated Early Shift Out Penalty Surcharge Badge
         const earlyShiftBadge = rates.earlyShiftPenaltyPerc > 0
             ? `<div class="flex items-center justify-between bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-500/40 px-2.5 py-1.5 rounded-xl text-[10px] text-red-700 dark:text-red-300 font-bold my-1 shadow-xs">
                 <span class="flex items-center gap-1.5">
@@ -584,7 +591,6 @@ export function renderRiderSummaryList(riderListArray) {
                </div>`
             : '';
 
-        // Admin Manual Date Penalty Badge
         const penaltyBadge = rates.manualPenaltyPerc > 0 
             ? `<div class="flex items-center justify-between bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-500/40 px-2.5 py-1 rounded-xl text-[10px] text-red-700 dark:text-red-300 font-bold my-1 shadow-xs">
                 <span><i class="fa-solid fa-gavel text-red-600 dark:text-red-400"></i> Date Penalty Active (+${rates.manualPenaltyPerc}% to Company)</span>
@@ -633,19 +639,21 @@ export function renderRiderSummaryList(riderListArray) {
 export function generateDailyReportText() {
     const isUserAdmin = checkIsAdmin();
     let targetRiderFilter = isUserAdmin ? document.getElementById('admin-rider-select')?.value : (appState.telegramId || appState.riderName);
-    if (targetRiderFilter === "ALL") targetRiderFilter = null;
+    if (!targetRiderFilter || targetRiderFilter.toUpperCase() === "ALL" || targetRiderFilter.toLowerCase().includes("all riders")) {
+        targetRiderFilter = null;
+    }
 
     const mergedList = getMergedDeduplicatedCommissionList();
 
     let filteredHistory = mergedList.filter(record => {
         let rDate = record.date || record.completedDate;
         if (!rDate) return false;
-        if (viewSettings.period === 'daily') return isSameDateStr(rDate, viewSettings.dateValue);
+        if (viewSettings.period === 'daily') return isSameDateStr(rDate, viewSettings.dateValue) || (normalizeDateStr(rDate) === normalizeDateStr(viewSettings.dateValue));
         if (viewSettings.period === 'weekly') {
             const d = new Date(rDate.includes('-') || rDate.includes('/') ? rDate : Number(rDate));
             return getWeekString(d.getTime()) === viewSettings.dateValue;
         }
-        if (viewSettings.period === 'monthly') return String(rDate).substring(0, 7) === String(viewSettings.dateValue).substring(0, 7);
+        if (viewSettings.period === 'monthly') return String(normalizeDateStr(rDate)).substring(0, 7) === String(normalizeDateStr(viewSettings.dateValue)).substring(0, 7);
         return false;
     });
 
@@ -680,7 +688,7 @@ export function generateDailyReportText() {
     for (let rId in riderTotals) {
         if (riderTotals[rId].gross <= 0) continue;
 
-        if (targetRiderFilter && targetRiderFilter !== "ALL") {
+        if (targetRiderFilter) {
             const cleanTarget = targetRiderFilter.toString().trim();
             const rIdClean = rId.toString().trim();
             const rNameClean = (riderTotals[rId].name || "").toString().trim();
@@ -734,29 +742,37 @@ export async function openCommissionScreen() {
     const weeklyInput = document.getElementById('comm-input-weekly');
     const monthlyInput = document.getElementById('comm-input-monthly');
 
-    if (dailyInput && !dailyInput.value) {
-        dailyInput.value = todayStr;
-        dailyInput.onchange = () => refreshCommissionView();
+    if (dailyInput) {
+        if (!dailyInput.value) dailyInput.value = todayStr;
+        dailyInput.onchange = () => {
+            viewSettings.dateValue = dailyInput.value;
+            refreshCommissionView();
+        };
     }
-    if (weeklyInput && !weeklyInput.value) {
-        weeklyInput.value = getWeekString(today.getTime());
-        weeklyInput.onchange = () => refreshCommissionView();
+    if (weeklyInput) {
+        if (!weeklyInput.value) weeklyInput.value = getWeekString(today.getTime());
+        weeklyInput.onchange = () => {
+            viewSettings.dateValue = weeklyInput.value;
+            refreshCommissionView();
+        };
     }
-    if (monthlyInput && !monthlyInput.value) {
-        monthlyInput.value = getMonthString(today.getTime());
-        monthlyInput.onchange = () => refreshCommissionView();
+    if (monthlyInput) {
+        if (!monthlyInput.value) monthlyInput.value = getMonthString(today.getTime());
+        monthlyInput.onchange = () => {
+            viewSettings.dateValue = monthlyInput.value;
+            refreshCommissionView();
+        };
     }
 
     if (!viewSettings.dateValue) viewSettings.dateValue = todayStr;
 
     initCommissionLiveListeners();
-    setupAdminControls();
     await fetchCommissionSettings();
     await fetchCommissionData();
+    setupAdminControls(); // Call after fetchCommissionData so all history riders are registered
     refreshCommissionView();
 }
 
 window.addEventListener('loginsUpdated', () => {
     refreshCommissionView();
 });
-// REMARKS: COMMISSION_UI_EARLY_SHIFT_LINE_ITEM_AND_WAIVE_CONTROLS_V1_COMPLETE
