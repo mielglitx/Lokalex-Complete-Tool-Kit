@@ -1,15 +1,17 @@
 <!-- src/partials/views/directory.html -->
 <!--
   ============================================================================
-  DIRECTORY VIEW COMPONENT WITH ORIGIN HUB FILTER TOOLBAR
+  DIRECTORY VIEW COMPONENT WITH DUAL-TIER ROUTING TOOLBAR
   ============================================================================
   Description:
-  Customer, Merchant, and Delivery Rate search registry. Features an Origin
-  Hub filter dropdown for the Rates directory (allowing riders and admins to
-  isolate and view rates originating from Camiling, Paniqui, San Clemente, etc.),
-  an inline search bar with scroll-minimized floating action badge, an
-  overflow-contained record list with sticky alphabet headers, an A-Z elastic
-  scrubber bar, and record creation FAB.
+  Customer, Merchant, and Delivery Rate search registry. Features a dual-tier
+  geographic routing toolbar for the Rates directory:
+  - Row 1: Starting Hub (Origin) dropdown to isolate dispatches by branch.
+  - Row 2: Destination dropdown dynamically populated strictly with serviced
+    municipalities that contain active rate records, with zero-hang GPS auto-selection.
+  - Inline search bar with scroll-minimized floating action badge, overflow-
+    contained list with sticky alphabet headers, A-Z elastic scrubber bar,
+    and record creation FAB.
 -->
 <section id="view-directory" class="hidden flex-1 flex flex-col relative p-4">
     <!-- INLINE PRIMARY SEARCH CONTAINER -->
@@ -26,26 +28,42 @@
         </button>
     </div>
 
-    <!-- ORIGIN HUB SELECTOR TOOLBAR (VISIBLE ONLY IN RATES DIRECTORY) -->
-    <div id="dir-origin-hub-container" class="hidden flex items-center justify-between bg-cardBg/90 dark:bg-cardBg/90 border border-amber-500/30 rounded-2xl p-2 mb-2 pr-6 shadow-xs gap-2">
-        <div class="flex items-center gap-1.5 min-w-0">
-            <div class="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs shrink-0 border border-amber-500/30">
-                <i class="fa-solid fa-location-crosshairs"></i>
+    <!-- DUAL-TIER ROUTING TOOLBAR (VISIBLE ONLY IN RATES DIRECTORY) -->
+    <div id="dir-origin-hub-container" class="hidden flex flex-col gap-2 bg-cardBg/90 dark:bg-cardBg/90 border border-amber-500/30 rounded-2xl p-2.5 mb-2 pr-6 shadow-xs">
+        <!-- ROW 1: STARTING HUB (ORIGIN) -->
+        <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 shrink-0">
+                <div class="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs shrink-0 border border-amber-500/30">
+                    <i class="fa-solid fa-location-crosshairs"></i>
+                </div>
+                <span class="text-[11px] font-bold text-gray-300">Starting Hub:</span>
             </div>
-            <span class="text-[11px] font-bold text-gray-300 truncate">Starting Hub:</span>
+            <select id="dir-origin-hub-select" onchange="window.handleOriginHubChange && window.handleOriginHubChange(this.value)" class="bg-darkBg text-xs font-black text-amber-400 border border-amber-500/40 rounded-xl px-2.5 py-1.5 outline-none cursor-pointer max-w-[175px] truncate">
+                <option value="Camiling" selected>Camiling (Main Hub)</option>
+                <option value="San Clemente">San Clemente</option>
+                <option value="Santa Ignacia">Santa Ignacia</option>
+                <option value="Paniqui">Paniqui</option>
+                <option value="Mayantoc">Mayantoc</option>
+                <option value="Moncada">Moncada</option>
+                <option value="Gerona">Gerona</option>
+                <option value="Bayambang">Bayambang</option>
+                <option value="Mangatarem">Mangatarem</option>
+                <option value="ALL">🌐 All Starting Hubs</option>
+            </select>
         </div>
-        <select id="dir-origin-hub-select" onchange="window.handleOriginHubChange && window.handleOriginHubChange(this.value)" class="bg-darkBg text-xs font-black text-amber-400 border border-amber-500/40 rounded-xl px-2.5 py-1.5 outline-none cursor-pointer">
-            <option value="Camiling" selected>Camiling (Main Hub)</option>
-            <option value="San Clemente">San Clemente</option>
-            <option value="Santa Ignacia">Santa Ignacia</option>
-            <option value="Paniqui">Paniqui</option>
-            <option value="Mayantoc">Mayantoc</option>
-            <option value="Moncada">Moncada</option>
-            <option value="Gerona">Gerona</option>
-            <option value="Bayambang">Bayambang</option>
-            <option value="Mangatarem">Mangatarem</option>
-            <option value="ALL">🌐 All Starting Hubs</option>
-        </select>
+
+        <!-- ROW 2: DESTINATION (READABLE, RECORDS-ONLY & GPS AUTO-SELECTED) -->
+        <div class="flex items-center justify-between gap-2 pt-2 border-t border-gray-200/30 dark:border-gray-800/60">
+            <div class="flex items-center gap-1.5 shrink-0">
+                <div class="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs shrink-0 border border-emerald-500/30">
+                    <i class="fa-solid fa-map-location-dot"></i>
+                </div>
+                <span class="text-[11px] font-bold text-emerald-400">Destination:</span>
+            </div>
+            <select id="dir-destination-select" onchange="window.handleDestinationChange && window.handleDestinationChange(this.value)" class="bg-darkBg text-xs font-black text-emerald-400 border border-emerald-500/40 rounded-xl px-2.5 py-1.5 outline-none cursor-pointer max-w-[175px] truncate">
+                <option value="ALL">🌐 All Destinations</option>
+            </select>
+        </div>
     </div>
 
     <!-- MINIMIZED UPPER-RIGHT FLOATING SEARCH BADGE -->
@@ -87,4 +105,4 @@
         <i class="fa-solid fa-plus"></i>
     </button>
 </section>
-<!-- REMARKS: DIRECTORY_HTML_STARTING_HUB_FILTER_TOOLBAR_V3_COMPLETE -->
+<!-- REMARKS: DIRECTORY_HTML_DESTINATION_LABEL_AND_NO_CLIPPING_V5_COMPLETE -->

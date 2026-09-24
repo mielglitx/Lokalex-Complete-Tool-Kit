@@ -2,25 +2,23 @@
 
 /**
  * ============================================================================
- * DIRECTORY UI, MULTI-BRANCH ORIGIN HUB FILTER & RATE ROUTING CONTROLLER
+ * DIRECTORY UI, DUAL-TIER ROUTING TOOLBAR & GPS DESTINATION AUTO-SELECT
  * ============================================================================
  * 
  * Description:
  * Manages presentation layer, card rendering, search filtering, and credit consumption:
- * - Multi-Branch Origin Hub Switcher: Manages `#dir-origin-hub-select` to isolate
- *   delivery rates by starting hub (Camiling, Paniqui, San Clemente, etc.) while
- *   preserving Camiling as the fallback default for all legacy records.
- * - Dynamic Directory Credit Gate: Enforces credit deduction based on
- *   `globalState.directoryCreditsConfig` for standard riders while exempting Admins.
+ * - Dual-Tier Routing Toolbar: Coordinates Origin Hub (`#dir-origin-hub-select`)
+ *   and Destination Municipality (`#dir-destination-select`).
+ * - Records-Only Destination Population: Dynamically extracts only serviced
+ *   municipalities that have recorded rates under the active Starting Hub.
+ * - Non-Blocking GPS Auto-Selection: Compares device GPS coordinates against
+ *   municipal geographic anchors in the background to auto-select the user's
+ *   local municipality without blocking initial page rendering.
+ * - Anti-Clipping Typography: Uses flex wrapping and break-words for long barangay
+ *   names (e.g., Cacamilingan Norte, Palimbo-Caarosipan) to prevent text cutoff.
  * - Contextual Rate Copy Engine: Formats copied customer fee advisories as:
  *   - Cross-Town: "The delivery fee from [Origin] to [Municipality], [Barangay] starts at ₱[rate]"
  *   - Local Town: "The delivery fee at [Municipality], [Barangay] starts at ₱[rate]"
- * - Composite Key Mutation Routing: Passes `compositeKey` to edit and delete actions
- *   to avoid accidental cross-branch key overwrites.
- * - Deep Geographic Search Filter: Indexes names, barangays, origin municipalities,
- *   destination municipalities, regions, and nationalities for instant real-time filtering.
- * - Universal Scrubber & Pinned Search: Sticky alphabet navigation with elastic
- *   distortion and minimized floating search action button.
  * ============================================================================
  */
 
@@ -34,6 +32,22 @@ import { checkAdminAccess } from './directoryPermissions.js';
 
 let lastJumpLetter = "";
 let creditsListenerActive = false;
+let hasAttemptedGpsAutoSelect = false;
+
+// MUNICIPALITY GEOGRAPHIC ANCHORS FOR GPS DISTANCE COMPUTATION
+const MUNICIPALITY_COORDINATES = {
+    "Camiling": { lat: 15.6881, lng: 120.4144 },
+    "San Clemente": { lat: 15.7136, lng: 120.3598 },
+    "Santa Ignacia": { lat: 15.6186, lng: 120.4856 },
+    "Paniqui": { lat: 15.6664, lng: 120.5819 },
+    "Mayantoc": { lat: 15.6200, lng: 120.3700 },
+    "Moncada": { lat: 15.7347, lng: 120.5700 },
+    "Gerona": { lat: 15.6067, lng: 120.5989 },
+    "Bayambang": { lat: 15.8115, lng: 120.4578 },
+    "Mangatarem": { lat: 15.7892, lng: 120.2975 },
+    "San Manuel": { lat: 15.8000, lng: 120.6000 },
+    "Tarlac City": { lat: 15.4802, lng: 120.5979 }
+};
 
 export function getSectionLetter(name) {
     if (!name) return "#";
@@ -43,7 +57,6 @@ export function getSectionLetter(name) {
 
 /**
  * Updates the rider credits pill display on the home roster dashboard.
- * Admins are rendered with an explicit unlimited / exempt badge.
  */
 export function updateRosterCreditsDisplay(credits) {
     const countEl = document.getElementById('rider-credits-count');
@@ -112,6 +125,112 @@ export function initRiderCreditsListener() {
 }
 
 /**
+ * Populates the Destination dropdown with ONLY municipalities that have records
+ * under the active Starting Hub.
+ */
+export function populateDestinationDropdown() {
+    const destSelect = document.getElementById('dir-destination-select');
+    if (!destSelect) return [];
+
+    const activeOriginHub = (globalState.selectedOriginHub || "Camiling").trim().toLowerCase();
+    const records = (globalState.records || []).filter(r => (r.type || 'customers') === 'barangays');
+
+    // Extract municipalities that have at least 1 record under the current Starting Hub
+    const munCountMap = new Map();
+
+    records.forEach(r => {
+        const rOrigin = (r.originMunicipality || "Camiling").trim().toLowerCase();
+        if (activeOriginHub === "all" || rOrigin === activeOriginHub) {
+            const destMun = (r.municipality || "Camiling").trim();
+            munCountMap.set(destMun, (munCountMap.get(destMun) || 0) + 1);
+        }
+    });
+
+    const servicedMunicipalities = Array.from(munCountMap.keys()).sort((a, b) => a.localeCompare(b));
+
+    // Build options
+    let optionsHtml = `<option value="ALL">🌐 All Destinations</option>`;
+
+    servicedMunicipalities.forEach(mun => {
+        optionsHtml += `<option value="${escapeHtml(mun)}">${escapeHtml(mun)} (${munCountMap.get(mun)})</option>`;
+    });
+
+    destSelect.innerHTML = optionsHtml;
+
+    // Validate current selection
+    if (!globalState.selectedDestinationMun) {
+        globalState.selectedDestinationMun = localStorage.getItem('lokalex_selected_destination_mun') || "ALL";
+    }
+
+    if (globalState.selectedDestinationMun !== "ALL" && !servicedMunicipalities.includes(globalState.selectedDestinationMun)) {
+        // Fallback to Camiling if available, else ALL
+        globalState.selectedDestinationMun = servicedMunicipalities.includes("Camiling") ? "Camiling" : "ALL";
+    }
+
+    destSelect.value = globalState.selectedDestinationMun;
+    return servicedMunicipalities;
+}
+
+/**
+ * Non-blocking background GPS locator: finds nearest municipality among serviced towns.
+ */
+export function detectAndSetGpsDestination(servicedMunicipalities) {
+    if (!servicedMunicipalities || servicedMunicipalities.length === 0) return;
+
+    const findNearest = (userLat, userLng) => {
+        let closestMun = null;
+        let minDistance = Infinity;
+
+        servicedMunicipalities.forEach(mun => {
+            const anchor = MUNICIPALITY_COORDINATES[mun];
+            if (anchor) {
+                const dLat = userLat - anchor.lat;
+                const dLng = userLng - anchor.lng;
+                const distSq = (dLat * dLat) + (dLng * dLng);
+                if (distSq < minDistance) {
+                    minDistance = distSq;
+                    closestMun = mun;
+                }
+            }
+        });
+
+        // 0.05 sq deg threshold (~20km distance radius)
+        if (closestMun && minDistance < 0.05) {
+            const destSelect = document.getElementById('dir-destination-select');
+            if (destSelect && globalState.selectedDestinationMun !== closestMun) {
+                globalState.selectedDestinationMun = closestMun;
+                destSelect.value = closestMun;
+                try {
+                    localStorage.setItem('lokalex_selected_destination_mun', closestMun);
+                } catch(e) {}
+                renderDirectoryList();
+                showToast(`📍 GPS: Focused on destination [${closestMun}]`);
+            }
+        }
+    };
+
+    // 1. Check existing cached GPS coordinates first
+    if (appState.lat && appState.lon) {
+        findNearest(appState.lat, appState.lon);
+        return;
+    }
+
+    // 2. Non-blocking native GPS query
+    if (!hasAttemptedGpsAutoSelect && navigator.geolocation) {
+        hasAttemptedGpsAutoSelect = true;
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                if (pos?.coords?.latitude && pos?.coords?.longitude) {
+                    findNearest(pos.coords.latitude, pos.coords.longitude);
+                }
+            },
+            () => {}, // Ignore errors silently
+            { timeout: 4000, maximumAge: 300000, enableHighAccuracy: false }
+        );
+    }
+}
+
+/**
  * Handles switching the active Origin Starting Hub filter for rates.
  */
 export function handleOriginHubChange(selectedHub) {
@@ -120,10 +239,27 @@ export function handleOriginHubChange(selectedHub) {
         localStorage.setItem('lokalex_selected_origin_hub', globalState.selectedOriginHub);
     } catch(e) {}
 
+    // Re-evaluate available destination municipalities for the selected origin
+    const serviced = populateDestinationDropdown();
     renderDirectoryList();
 
     const hubLabel = selectedHub === "ALL" ? "Lahat ng Starting Hubs" : `${selectedHub} Hub`;
     showToast(`📍 Na-filter ang mga rates mula sa: ${hubLabel}`);
+}
+
+/**
+ * Handles switching the active Destination Municipality filter for rates.
+ */
+export function handleDestinationChange(selectedMun) {
+    globalState.selectedDestinationMun = selectedMun || "ALL";
+    try {
+        localStorage.setItem('lokalex_selected_destination_mun', globalState.selectedDestinationMun);
+    } catch(e) {}
+
+    renderDirectoryList();
+
+    const destLabel = selectedMun === "ALL" ? "Lahat ng Destinations" : `${selectedMun}`;
+    showToast(`🎯 Destination: ${destLabel}`);
 }
 
 export function minimizeDirectorySearch() {
@@ -199,7 +335,7 @@ export function initDirectoryScrollListener() {
 
 /**
  * Navigates to directory view with dynamic credit validation and deduction.
- * Automatically coordinates the Origin Hub toolbar visibility.
+ * Automatically synchronizes the dual-tier routing toolbar.
  */
 export async function openDirectory(type) {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
@@ -247,7 +383,7 @@ export async function openDirectory(type) {
 
     globalState.currentType = type || 'customers';
 
-    // COORDINATE ORIGIN HUB TOOLBAR VISIBILITY
+    // COORDINATE DUAL-TIER ROUTING TOOLBAR VISIBILITY
     const originContainer = document.getElementById('dir-origin-hub-container');
     const originSelect = document.getElementById('dir-origin-hub-select');
 
@@ -257,8 +393,17 @@ export async function openDirectory(type) {
             globalState.selectedOriginHub = localStorage.getItem('lokalex_selected_origin_hub') || "Camiling";
         }
         if (originSelect) originSelect.value = globalState.selectedOriginHub;
+
+        loadDirectoryCache();
+        const serviced = populateDestinationDropdown();
+        renderDirectoryList();
+
+        // Non-blocking background GPS proximity check
+        detectAndSetGpsDestination(serviced);
     } else {
         if (originContainer) originContainer.classList.add('hidden');
+        loadDirectoryCache();
+        renderDirectoryList();
     }
 
     const searchInput = document.getElementById('search-input');
@@ -291,8 +436,6 @@ export async function openDirectory(type) {
         else headerTitle.innerText = "Rates & Barangays";
     }
 
-    loadDirectoryCache();
-    renderDirectoryList();
     initDirectoryScrollListener();
 }
 
@@ -387,7 +530,7 @@ export function copyBarangayRate(barangayName, rawRate, destinationMun = "Camili
 
 /**
  * Renders the directory cards list with sticky alphabetical sections,
- * isolated Origin Hub filtering, and route vector breadcrumbs.
+ * anti-clipping titles, isolated Origin Hub, and Destination filtering.
  */
 export function renderDirectoryList() {
     const listEl = document.getElementById('record-list');
@@ -403,13 +546,22 @@ export function renderDirectoryList() {
 
     let records = globalState.records ? globalState.records.filter(r => (r.type || 'customers') === globalState.currentType) : [];
 
-    // ISOLATE RATES BY SELECTED ORIGIN HUB
+    // ISOLATE RATES BY BOTH VECTOR AXES: ORIGIN HUB & DESTINATION MUNICIPALITY
     if (isBarangay) {
-        const activeOriginHub = (globalState.selectedOriginHub || "Camiling").trim();
-        if (activeOriginHub !== "ALL") {
+        const activeOriginHub = (globalState.selectedOriginHub || "Camiling").trim().toLowerCase();
+        const activeDestination = (globalState.selectedDestinationMun || "ALL").trim().toLowerCase();
+
+        if (activeOriginHub !== "all") {
             records = records.filter(r => {
-                const recordOrigin = (r.originMunicipality || "Camiling").trim();
-                return recordOrigin.toLowerCase() === activeOriginHub.toLowerCase();
+                const recordOrigin = (r.originMunicipality || "Camiling").trim().toLowerCase();
+                return recordOrigin === activeOriginHub;
+            });
+        }
+
+        if (activeDestination !== "all") {
+            records = records.filter(r => {
+                const recordDest = (r.municipality || "Camiling").trim().toLowerCase();
+                return recordDest === activeDestination;
             });
         }
     }
@@ -430,9 +582,12 @@ export function renderDirectoryList() {
     }
 
     if (records.length === 0) {
-        const noRecordsMsg = isBarangay
-            ? `Walang rates na nakarehistro para sa Origin Hub: [${globalState.selectedOriginHub || 'Camiling'}]. I-click ang + para magdagdag.`
-            : 'No records found. Click + to add or tap 🔄 to refresh.';
+        let noRecordsMsg = 'No records found. Click + to add or tap 🔄 to refresh.';
+        if (isBarangay) {
+            const originLabel = globalState.selectedOriginHub || 'Camiling';
+            const destLabel = globalState.selectedDestinationMun || 'ALL';
+            noRecordsMsg = `Walang rates na nakarehistro [From: ${originLabel} ➔ To: ${destLabel}]. I-click ang + para magdagdag.`;
+        }
         listEl.innerHTML = `<div class="text-center text-gray-500 italic py-16 text-xs">${escapeHtml(noRecordsMsg)}</div>`;
         setupAlphabetScrubber([]);
         return;
@@ -481,7 +636,7 @@ export function renderDirectoryList() {
 
         const recordedByText = escapeHtml(r.recorded_by || "System");
         const recordedAtText = r.recorded_at ? ` • ${escapeHtml(r.recorded_at)}` : '';
-        const metaInfoHtml = `<div class="text-[10px] text-gray-500 dark:text-gray-400 mt-1.5 flex items-center gap-1"><i class="fa-solid fa-user-pen text-[9px]"></i> Recorded by <span class="text-gray-800 dark:text-gray-300 font-bold">${recordedByText}</span>${recordedAtText}</div>`;
+        const metaInfoHtml = `<div class="text-[10px] text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1 flex-wrap"><i class="fa-solid fa-user-pen text-[9px] shrink-0"></i> <span>Recorded by <span class="text-gray-800 dark:text-gray-300 font-bold">${recordedByText}</span></span>${recordedAtText ? `<span class="whitespace-nowrap">${recordedAtText}</span>` : ''}</div>`;
 
         if (isBarangay) {
             let rateNum = parseFloat((r.rate || r.address || "").replace(/[^0-9.]/g, ''));
@@ -502,18 +657,19 @@ export function renderDirectoryList() {
                      <i class="fa-solid fa-location-dot text-[9px] text-emerald-500"></i> Local: ${escapeHtml(destMun)} Hub
                    </div>`;
 
+            // Anti-clipping header layout using break-words and leading-snug
             htmlBuilder += `
             <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-3.5 rounded-2xl flex justify-between items-center gap-2 shadow-xs my-1">
-                <div class="flex-1 min-w-0">
-                    <div class="font-black text-sm text-gray-900 dark:text-white truncate flex items-center gap-1.5">
-                        <i class="fa-solid fa-map-location-dot text-emerald-600 dark:text-emerald-400"></i>
-                        <span>${escapeHtml(resolvedBrgy)}</span>
+                <div class="flex-1 min-w-0 pr-1">
+                    <div class="font-black text-sm text-gray-900 dark:text-white flex items-start gap-1.5 leading-snug break-words">
+                        <i class="fa-solid fa-map-location-dot text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0 text-xs"></i>
+                        <span class="break-words">${escapeHtml(resolvedBrgy)}</span>
                     </div>
                     ${locationSubtitleHtml}
                     <div class="text-xs font-mono text-emerald-700 dark:text-emerald-400 font-black mt-1">Delivery Rate: ${escapeHtml(displayRate)}</div>
                     ${metaInfoHtml}
                 </div>
-                <div class="flex gap-1.5 shrink-0">
+                <div class="flex gap-1.5 shrink-0 items-center">
                     <button onclick="copyBarangayRate('${escapeHtml(resolvedBrgy)}', '${escapeHtml(displayRate)}', '${escapeHtml(destMun)}', '${escapeHtml(originMun)}')" class="bg-blue-50 hover:bg-blue-100 dark:bg-blue-600/30 dark:hover:bg-blue-600 text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-white border border-blue-200 dark:border-blue-500/50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1 cursor-pointer" title="Copy Rate Message">
                         <i class="fa-solid fa-copy"></i> Copy
                     </button>
@@ -526,14 +682,14 @@ export function renderDirectoryList() {
         } else {
             htmlBuilder += `
             <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-3.5 rounded-2xl flex justify-between items-start gap-2 shadow-xs my-1">
-                <div class="flex-1 min-w-0">
-                    <div class="font-black text-sm text-gray-900 dark:text-white truncate">${escapeHtml(r.name)}</div>
+                <div class="flex-1 min-w-0 pr-1">
+                    <div class="font-black text-sm text-gray-900 dark:text-white break-words leading-snug">${escapeHtml(r.name)}</div>
                     ${r.contact ? `<div class="text-xs text-gray-700 dark:text-gray-400 mt-0.5 font-bold font-mono"><i class="fa-solid fa-phone text-[10px] text-blue-500"></i> ${escapeHtml(r.contact)}</div>` : ''}
-                    ${r.address ? `<div class="text-xs text-gray-700 dark:text-gray-300 mt-0.5 font-medium"><i class="fa-solid fa-location-dot text-[10px] text-red-500"></i> ${escapeHtml(r.address)}</div>` : ''}
+                    ${r.address ? `<div class="text-xs text-gray-700 dark:text-gray-300 mt-0.5 font-medium break-words"><i class="fa-solid fa-location-dot text-[10px] text-red-500"></i> ${escapeHtml(r.address)}</div>` : ''}
                     ${mapBtn}
                     ${metaInfoHtml}
                 </div>
-                <div class="flex gap-1 shrink-0">
+                <div class="flex gap-1 shrink-0 items-center">
                     <button onclick="editDirectoryRecord('${safeRecordName}', '${safeCompositeKey}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
@@ -688,6 +844,7 @@ if (typeof window !== 'undefined') {
     window.showCreditsInfoToast = showCreditsInfoToast;
     window.initRiderCreditsListener = initRiderCreditsListener;
     window.handleOriginHubChange = handleOriginHubChange;
+    window.handleDestinationChange = handleDestinationChange;
     window.copyBarangayRate = copyBarangayRate;
 
     if (document.readyState === 'loading') {
@@ -700,4 +857,4 @@ if (typeof window !== 'undefined') {
         initRiderCreditsListener();
     }
 }
-// REMARKS: DIRECTORY_UI_ORIGIN_HUB_ISOLATION_AND_VECTOR_ROUTING_V5_COMPLETE
+// REMARKS: DIRECTORY_UI_DESTINATION_RECORDS_ONLY_GPS_AUTO_SELECT_V6_COMPLETE

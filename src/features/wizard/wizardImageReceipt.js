@@ -89,6 +89,65 @@ export function loadImageAsync(src) {
     });
 }
 
+/**
+ * Splits text into wrapped lines that strictly fit within maxWidth in canvas pixels.
+ * Breaks on word boundaries where possible and character boundaries on long single words.
+ */
+function getWrappedLines(ctx, text, maxWidth) {
+    if (!text) return [""];
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+
+    for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        if (!word) continue;
+
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const testWidth = ctx.measureText(testLine).width;
+
+        if (testWidth <= maxWidth) {
+            currentLine = testLine;
+        } else {
+            if (currentLine) {
+                lines.push(currentLine);
+                currentLine = '';
+                if (ctx.measureText(word).width <= maxWidth) {
+                    currentLine = word;
+                } else {
+                    let broken = '';
+                    for (let c = 0; c < word.length; c++) {
+                        if (ctx.measureText(broken + word[c]).width <= maxWidth) {
+                            broken += word[c];
+                        } else {
+                            if (broken) lines.push(broken);
+                            broken = word[c];
+                        }
+                    }
+                    currentLine = broken;
+                }
+            } else {
+                let broken = '';
+                for (let c = 0; c < word.length; c++) {
+                    if (ctx.measureText(broken + word[c]).width <= maxWidth) {
+                        broken += word[c];
+                    } else {
+                        if (broken) lines.push(broken);
+                        broken = word[c];
+                    }
+                }
+                currentLine = broken;
+            }
+        }
+    }
+
+    if (currentLine) {
+        lines.push(currentLine);
+    }
+
+    return lines.length > 0 ? lines : [text];
+}
+
 export async function renderReceiptCanvas() {
     const loadingEl = document.getElementById('receipt-image-loading');
     const previewWrapper = document.getElementById('receipt-image-preview-wrapper');
@@ -177,12 +236,47 @@ export async function renderReceiptCanvas() {
 
     // Canvas Layout Dimensions
     const width = 460;
+    const leftMargin = 28;
+    const rightMargin = width - 28;
+
+    // Offscreen context to calculate exact wrapped line heights for items
+    const measureCanvas = document.createElement('canvas');
+    const measureCtx = measureCanvas.getContext('2d');
+    measureCtx.font = "600 12px 'SF Mono', Consolas, 'Courier New', monospace";
+
+    let totalItemRowsHeight = 0;
+    const preparedItems = currentCart.map(item => {
+        const isPaid = !!item.isPaid;
+        const priceNum = Math.max(0, parseFloat(item.price) || 0);
+        const itemName = toTitleCase(item.name || 'Item');
+
+        const leftText = isPaid ? `${itemName} - PAID (P0.00)` : `${itemName} - P${priceNum.toFixed(2)}`;
+        const rightText = isPaid ? "PAID" : `P${priceNum.toFixed(2)}`;
+
+        const rightWidth = measureCtx.measureText(rightText).width;
+        // Strictly reserve price width + 16px safety gap so text never collides
+        const maxDescWidth = Math.max(160, (rightMargin - leftMargin) - rightWidth - 16);
+
+        const descLines = getWrappedLines(measureCtx, leftText, maxDescWidth);
+        const itemHeight = (descLines.length * 17) + 3;
+        totalItemRowsHeight += itemHeight;
+
+        return {
+            descLines,
+            rightText
+        };
+    });
+
     let estimatedHeight = 220; // Top padding, logo, and header
     estimatedHeight += 95;      // Metadata box
     estimatedHeight += 35;      // Items header
 
-    // Items list
-    estimatedHeight += Math.max(1, currentCart.length) * 20;
+    // Items list height dynamically calculated from wrapped lines
+    if (preparedItems.length === 0) {
+        estimatedHeight += 24;
+    } else {
+        estimatedHeight += totalItemRowsHeight;
+    }
 
     // Subtotal and active fee lines
     let feeLinesCount = 1; // Items Subtotal
@@ -252,8 +346,6 @@ export async function renderReceiptCanvas() {
     y += 24;
 
     // 3. Receipt Metadata Section
-    const leftMargin = 28;
-    const rightMargin = width - 28;
     const metaFont = "600 12.5px 'SF Mono', Consolas, 'Courier New', monospace";
     ctx.font = metaFont;
     ctx.fillStyle = "#111827";
@@ -261,24 +353,30 @@ export async function renderReceiptCanvas() {
 
     const labelColX = leftMargin;
     const valueColX = leftMargin + 85;
+    const maxMetaValueWidth = rightMargin - valueColX;
 
-    ctx.fillText("Customer:", labelColX, y);
-    ctx.fillText(customerName, valueColX, y);
-    y += 18;
+    const drawMetaRow = (label, val) => {
+        ctx.textAlign = "left";
+        ctx.fillText(label, labelColX, y);
 
-    ctx.fillText("Date:", labelColX, y);
-    ctx.fillText(dateStr, valueColX, y);
-    y += 18;
+        let cleanVal = (val || "").toString();
+        if (ctx.measureText(cleanVal).width > maxMetaValueWidth) {
+            while (cleanVal.length > 3 && ctx.measureText(cleanVal + '...').width > maxMetaValueWidth) {
+                cleanVal = cleanVal.slice(0, -1);
+            }
+            cleanVal += '...';
+        }
+        ctx.fillText(cleanVal, valueColX, y);
+        y += 18;
+    };
 
-    ctx.fillText("Rider:", labelColX, y);
-    ctx.fillText(`${riderName} (${dailyRiderId})`, valueColX, y);
-    y += 18;
+    drawMetaRow("Customer:", customerName);
+    drawMetaRow("Date:", dateStr);
+    drawMetaRow("Rider:", `${riderName} (${dailyRiderId})`);
 
     const rawTxId = wizState.currentReceiptTransactionId || `E37FG-${Date.now().toString(36).toUpperCase()}`;
     const cleanRefId = rawTxId.replace(/^RCPT_/, '');
-    ctx.fillText("Ref #:", labelColX, y);
-    ctx.fillText(`#${cleanRefId}`, valueColX, y);
-    y += 18;
+    drawMetaRow("Ref #:", `#${cleanRefId}`);
 
     // Helper: Draw Dashed Divider Line
     const drawDashedDivider = (currY) => {
@@ -305,30 +403,30 @@ export async function renderReceiptCanvas() {
 
     y += 16;
 
-    // 5. Items List
+    // 5. Items List with Guaranteed Word-Wrapping (No Collision Over TOTAL)
     ctx.font = "600 12px 'SF Mono', Consolas, 'Courier New', monospace";
     ctx.fillStyle = "#111827";
 
-    if (currentCart.length === 0) {
+    if (preparedItems.length === 0) {
         ctx.textAlign = "center";
         ctx.fillText("(No items listed)", width / 2, y);
         y += 18;
     } else {
-        currentCart.forEach(item => {
-            const isPaid = !!item.isPaid;
-            const priceNum = Math.max(0, parseFloat(item.price) || 0);
-            const itemName = toTitleCase(item.name || 'Item');
+        preparedItems.forEach(item => {
+            const firstLineY = y;
 
-            const leftText = isPaid ? `${itemName} - PAID (P0.00)` : `${itemName} - P${priceNum.toFixed(2)}`;
-            const rightText = isPaid ? "PAID" : `P${priceNum.toFixed(2)}`;
-
-            ctx.textAlign = "left";
-            ctx.fillText(leftText, leftMargin, y);
-
+            // TOTAL Amount remains fixed on the first line
             ctx.textAlign = "right";
-            ctx.fillText(rightText, rightMargin, y);
+            ctx.fillText(item.rightText, rightMargin, firstLineY);
 
-            y += 18;
+            // Description lines wrap cleanly on the left
+            ctx.textAlign = "left";
+            item.descLines.forEach((line) => {
+                ctx.fillText(line, leftMargin, y);
+                y += 17;
+            });
+
+            y += 3; // Space between items
         });
     }
 
@@ -573,3 +671,4 @@ if (typeof window !== 'undefined') {
     window.renderReceiptCanvas = renderReceiptCanvas;
     window.downloadReceiptImage = downloadReceiptImage;
 }
+// REMARKS: WIZARD_IMAGE_RECEIPT_WORD_WRAP_COLLISION_FIX_V2_COMPLETE
