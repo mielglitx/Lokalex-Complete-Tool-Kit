@@ -10,7 +10,9 @@ const firebaseConfig = {
 };
 
 const DEFAULT_DB_URL = "https://lokalexrtdb-default-rtdb.asia-southeast1.firebasedatabase.app";
-const BACKUP_DB_URL = "https://lokalexrtdb-default-rtdb.asia-southeast1.firebasedatabase.app";
+
+// Leave empty or set to null if not currently replicating to a secondary database
+const BACKUP_DB_URL = null;
 
 const fb = window.firebase || (typeof firebase !== 'undefined' ? firebase : null);
 
@@ -18,9 +20,13 @@ if (fb && !fb.apps.length) {
     fb.initializeApp(firebaseConfig);
 }
 
-// 1. Initialize distinct instances for Primary and Backup Realtime Databases
+// 1. Initialize Primary DB and Optional Secondary Backup DB
 export const primaryDb = fb ? fb.app().database(DEFAULT_DB_URL) : null;
-export const backupDb = fb ? fb.app().database(BACKUP_DB_URL) : null;
+
+// Only spin up backupDb if it is configured and points to a DIFFERENT database
+const isBackupConfigured = Boolean(BACKUP_DB_URL && BACKUP_DB_URL !== DEFAULT_DB_URL);
+export const backupDb = (fb && isBackupConfigured) ? fb.app().database(BACKUP_DB_URL) : null;
+
 export const auth = fb ? fb.auth() : null;
 export const messaging = (fb && typeof fb.messaging === 'function' && fb.messaging.isSupported()) ? fb.messaging() : null;
 
