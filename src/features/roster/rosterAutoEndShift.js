@@ -7,16 +7,14 @@
  * 
  * Description:
  * Automated shift termination and overnight cleanup controller for the Lokalex roster:
- * - Real-time Scheduled Execution: Triggers auto end-shift for all active riders
- *   at the designated daily cutoff time (e.g., 23:00 or 03:00).
- * - Overnight Catch-Up & Stale Shift Sweeper: Solves the static-hosting limitation
- *   where devices are closed during the scheduled cutoff. Automatically detects
- *   and clocks out lingering riders from prior dates the moment any user launches
- *   the application the following morning.
- * - Distributed Firebase Transactions: Prevents duplicate execution across
- *   multiple devices simultaneously launching the application.
- * - Attendance & History Archiving: Clocks out attendance login records and
- *   safely archives lingering catering orders.
+ * - Real-time Scheduled Execution: Evaluates local clock time against daily cutoff
+ *   without polling Firebase on every timer interval.
+ * - Single-Pass Overnight Catch-Up: Runs `sweepStaleShiftsFromPriorDays` strictly
+ *   once upon application initialization, eliminating the 15-second database query storm.
+ * - Distributed Firebase Transactions: Prevents duplicate execution across multiple
+ *   devices simultaneously reaching the shift cutoff.
+ * - Attendance & History Archiving: Clocks out attendance login records and safely
+ *   archives lingering catering orders upon scheduled shift termination.
  * ============================================================================
  */
 
@@ -30,6 +28,7 @@ import { updateRosterUI } from './rosterUI.js';
 import { sanitizeForFirebase } from './rosterSchedule.js';
 
 let autoEndShiftTimer = null;
+let hasSweptPriorDaysOnStartup = false;
 
 export function openAdminAutoEndShiftModal() {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
@@ -96,9 +95,12 @@ export async function saveAdminAutoEndShiftSettings() {
 
 export function startAutoEndShiftScheduler() {
     if (autoEndShiftTimer) clearInterval(autoEndShiftTimer);
+    
+    // Heartbeat evaluates local time every 20 seconds without issuing database queries
     autoEndShiftTimer = setInterval(() => {
         checkAndTriggerAutoEndShift();
-    }, 15000); // 15-second heartbeat
+    }, 20000);
+
     checkAndTriggerAutoEndShift();
 }
 
@@ -109,6 +111,12 @@ export function listenToAutoEndShift() {
         const cached = localStorage.getItem('lokalex_auto_endshift_cache');
         if (cached) globalState.autoEndShift = JSON.parse(cached);
     } catch(e) {}
+
+    // Execute single-pass sweep on startup once database connection is ready
+    if (!hasSweptPriorDaysOnStartup) {
+        hasSweptPriorDaysOnStartup = true;
+        sweepStaleShiftsFromPriorDays();
+    }
 
     db.ref('settings/autoEndShift').on('value', (snap) => {
         const data = snap.val();
@@ -126,7 +134,7 @@ export function listenToAutoEndShift() {
 
 /**
  * Sweeps and clocks out any riders whose active shifts originated on a prior calendar day.
- * Solves the overnight app closure issue when no users are active at midnight/scheduled cutoff.
+ * Executed strictly once per app launch to eliminate sequential Firebase query storms.
  */
 export async function sweepStaleShiftsFromPriorDays() {
     if (!db) return;
@@ -136,14 +144,13 @@ export async function sweepStaleShiftsFromPriorDays() {
         const rosterSnap = await db.ref('roster').once('value');
         const dbRoster = rosterSnap.val() || {};
         let sweptCount = 0;
-        const timeStr = "11:59 PM"; // End of previous day cutoff marker
+        const timeStr = "11:59 PM";
         const nowTimestamp = Date.now();
 
         for (const riderId of Object.keys(dbRoster)) {
             const rider = dbRoster[riderId];
             if (!rider || rider.status === 'End') continue;
 
-            // Determine date of current active shift
             let shiftDate = "";
             if (rider.lastActiveTimestamp) {
                 const shiftD = new Date(rider.lastActiveTimestamp);
@@ -171,7 +178,6 @@ export async function sweepStaleShiftsFromPriorDays() {
                     lastActiveTimestamp: nowTimestamp
                 }).catch(() => {});
 
-                // Close login attendance for the stale day
                 try {
                     const loginSnap = await db.ref(`logins/${riderId}`).once('value');
                     const loginData = loginSnap.val();
@@ -180,7 +186,6 @@ export async function sweepStaleShiftsFromPriorDays() {
                     }
                 } catch(e) {}
 
-                // Update local memory
                 const localMember = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === riderId.toString());
                 if (localMember) {
                     localMember.status = 'End';
@@ -206,13 +211,13 @@ export async function sweepStaleShiftsFromPriorDays() {
     }
 }
 
+/**
+ * In-memory threshold evaluator: compares local system time against configured
+ * cutoff time. Does NOT make unnecessary database read requests every interval.
+ */
 export async function checkAndTriggerAutoEndShift() {
     if (!db) return;
 
-    // 1. Always sweep stale shifts originating from previous calendar days
-    await sweepStaleShiftsFromPriorDays();
-
-    // 2. Evaluate current day scheduled auto-end shift
     try {
         const config = globalState.autoEndShift;
         if (!config || !config.enabled || !config.time) return;
@@ -220,6 +225,7 @@ export async function checkAndTriggerAutoEndShift() {
         const todayStr = getLocalTodayStr();
         const currentSlotKey = `${todayStr}_${config.time}`;
 
+        // Skip immediately if today's slot was already triggered
         if (config.lastTriggeredSlot === currentSlotKey) return;
 
         const targetMins = parseTimeToMinutes(config.time);
@@ -323,3 +329,4 @@ export async function executeAutoEndShift() {
         console.error("Execute auto end shift error:", err);
     }
 }
+// REMARKS: ROSTER_AUTO_END_SHIFT_PERFORMANCE_OPTIMIZED_V2_COMPLETE

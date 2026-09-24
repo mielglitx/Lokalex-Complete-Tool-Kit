@@ -7,11 +7,13 @@
  * 
  * Description:
  * Resolves net commission percentages per rider, date, and operational conditions:
- * - Admin Commission Exemption: 0% company remittance, 100% rider keep[cite: 44].
- * - Date-specific Admin penalties and recurring/special calendar discounts[cite: 44].
+ * - Admin Commission Exemption: 0% company remittance, 100% rider earnings.
+ * - Date-specific Admin penalties and recurring/special calendar discounts.
  * - Early Shift Out Surcharge Resolver: inspects daily attendance records for
- *   unexcused early clock-outs and factors the surcharge directly into payable rates[cite: 44].
- * - Real-time synchronization with Firebase settings, penalties, and logins[cite: 44].
+ *   unexcused early clock-outs and factors the surcharge directly into payable rates.
+ * - Socket & Bandwidth Optimization: Scopes attendance login listeners strictly to
+ *   today's date (`.orderByChild('date').equalTo(todayStr)`), eliminating full-tree
+ *   download locks and preventing WebSocket connection degradation.
  * ============================================================================
  */
 
@@ -259,7 +261,6 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         }
     }
 
-    // Fallback for today's active roster record if login record is still syncing
     if (earlyShiftPenaltyPerc === 0 && isSameDateStr(dateFormatted, getLocalTodayStr()) && globalState.rosterMembers) {
         const rosterMem = globalState.rosterMembers.find(m => 
             isRiderMatch(riderName, m.riderName || m.name || "", cleanId, (m.telegramId || m.id || "").toString())
@@ -309,6 +310,8 @@ export async function fetchCommissionSettings() {
     await fetchRiderUserTypes();
 
     if (db) {
+        const todayStr = getLocalTodayStr();
+
         db.ref('settings/commission').on('value', (snapshot) => {
             const data = snapshot.val();
             if (data) {
@@ -351,28 +354,15 @@ export async function fetchCommissionSettings() {
             if (window.refreshCommissionView) window.refreshCommissionView();
         });
 
-        // Realtime listener for attendance logins (syncs early shift penalties)
-        db.ref('logins').on('value', (snapshot) => {
-            const val = snapshot.val();
-            globalState.globalLogins = val ? Object.values(val) : [];
-            if (window.refreshCommissionView) window.refreshCommissionView();
-        });
-
-        // Realtime listener for receipts
-        db.ref('receipts').on('value', (snapshot) => {
-            const val = snapshot.val();
-            globalState.globalDailyReceipts = val ? Object.values(val) : [];
-            saveCommissionSettingsCache();
-            if (window.refreshCommissionView) window.refreshCommissionView();
-        });
-
-        // Realtime listener for catered history
-        db.ref('cateredHistory').on('value', (snapshot) => {
-            const val = snapshot.val();
-            globalState.globalCateredHistory = val ? Object.values(val) : [];
-            saveCommissionSettingsCache();
-            if (window.refreshCommissionView) window.refreshCommissionView();
-        });
+        // Date-scoped listener: streams strictly today's attendance instead of the entire root collection
+        db.ref('logins')
+            .orderByChild('date')
+            .equalTo(todayStr)
+            .on('value', (snapshot) => {
+                const val = snapshot.val();
+                globalState.globalLogins = val ? Object.values(val) : [];
+                if (window.refreshCommissionView) window.refreshCommissionView();
+            });
     }
 }
-// REMARKS: COMMISSION_RATES_EARLY_SHIFT_PENALTY_INTEGRATION_V1_COMPLETE
+// REMARKS: COMMISSION_RATES_BANDWIDTH_AND_SOCKET_OPTIMIZED_V2_COMPLETE

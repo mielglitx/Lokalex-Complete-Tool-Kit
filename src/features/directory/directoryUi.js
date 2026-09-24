@@ -2,18 +2,25 @@
 
 /**
  * ============================================================================
- * DIRECTORY UI, DYNAMIC CREDIT GATE & INTERACTIVE SCRUBBER
+ * DIRECTORY UI, MULTI-BRANCH ORIGIN HUB FILTER & RATE ROUTING CONTROLLER
  * ============================================================================
  * 
  * Description:
- * Manages presentation layer, card rendering, and credit consumption for directories:
- * - Dynamic Directory Credit Gate: Checks `globalState.directoryCreditsConfig`.
- *   If disabled by Admin or user is Admin, grants free access. If enabled for riders,
- *   enforces balance check and deducts the exact configured `costPerAccess`.
- * - Admin Exemption: Admins see `Credits: ∞ (Admin)` on their dashboard pill in
- *   gold styling and are never deducted or blocked.
- * - Live Credit Sync: Synchronizes remaining directory credits in real time.
- * - Universal `scrollIntoView` indexing with `scroll-margin-top: 56px`.
+ * Manages presentation layer, card rendering, search filtering, and credit consumption:
+ * - Multi-Branch Origin Hub Switcher: Manages `#dir-origin-hub-select` to isolate
+ *   delivery rates by starting hub (Camiling, Paniqui, San Clemente, etc.) while
+ *   preserving Camiling as the fallback default for all legacy records.
+ * - Dynamic Directory Credit Gate: Enforces credit deduction based on
+ *   `globalState.directoryCreditsConfig` for standard riders while exempting Admins.
+ * - Contextual Rate Copy Engine: Formats copied customer fee advisories as:
+ *   - Cross-Town: "The delivery fee from [Origin] to [Municipality], [Barangay] starts at ₱[rate]"
+ *   - Local Town: "The delivery fee at [Municipality], [Barangay] starts at ₱[rate]"
+ * - Composite Key Mutation Routing: Passes `compositeKey` to edit and delete actions
+ *   to avoid accidental cross-branch key overwrites.
+ * - Deep Geographic Search Filter: Indexes names, barangays, origin municipalities,
+ *   destination municipalities, regions, and nationalities for instant real-time filtering.
+ * - Universal Scrubber & Pinned Search: Sticky alphabet navigation with elastic
+ *   distortion and minimized floating search action button.
  * ============================================================================
  */
 
@@ -104,6 +111,21 @@ export function initRiderCreditsListener() {
     });
 }
 
+/**
+ * Handles switching the active Origin Starting Hub filter for rates.
+ */
+export function handleOriginHubChange(selectedHub) {
+    globalState.selectedOriginHub = selectedHub || "Camiling";
+    try {
+        localStorage.setItem('lokalex_selected_origin_hub', globalState.selectedOriginHub);
+    } catch(e) {}
+
+    renderDirectoryList();
+
+    const hubLabel = selectedHub === "ALL" ? "Lahat ng Starting Hubs" : `${selectedHub} Hub`;
+    showToast(`📍 Na-filter ang mga rates mula sa: ${hubLabel}`);
+}
+
 export function minimizeDirectorySearch() {
     const floatingBar = document.getElementById('dir-floating-search-bar');
     const minSearchWrapper = document.getElementById('dir-min-search-wrapper');
@@ -177,7 +199,7 @@ export function initDirectoryScrollListener() {
 
 /**
  * Navigates to directory view with dynamic credit validation and deduction.
- * Admins are strictly exempt and never blocked or deducted.
+ * Automatically coordinates the Origin Hub toolbar visibility.
  */
 export async function openDirectory(type) {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
@@ -190,7 +212,6 @@ export async function openDirectory(type) {
         rewardStoreRegistration: 10
     };
 
-    // CREDIT DEDUCTION GATE (EXEMPT: ADMINS OR WHEN SYSTEM IS DISABLED)
     if (creditConfig.enabled && !isAdmin && myId) {
         const cost = creditConfig.costPerAccess !== undefined ? creditConfig.costPerAccess : 1;
         let currentCredits = parseInt(localStorage.getItem('lokalex_rider_credits') || "0", 10);
@@ -225,6 +246,20 @@ export async function openDirectory(type) {
     }
 
     globalState.currentType = type || 'customers';
+
+    // COORDINATE ORIGIN HUB TOOLBAR VISIBILITY
+    const originContainer = document.getElementById('dir-origin-hub-container');
+    const originSelect = document.getElementById('dir-origin-hub-select');
+
+    if (type === 'barangays') {
+        if (originContainer) originContainer.classList.remove('hidden');
+        if (!globalState.selectedOriginHub) {
+            globalState.selectedOriginHub = localStorage.getItem('lokalex_selected_origin_hub') || "Camiling";
+        }
+        if (originSelect) originSelect.value = globalState.selectedOriginHub;
+    } else {
+        if (originContainer) originContainer.classList.add('hidden');
+    }
 
     const searchInput = document.getElementById('search-input');
     const floatingInput = document.getElementById('floating-search-input');
@@ -322,16 +357,38 @@ export function clearDirectorySearch() {
     renderDirectoryList();
 }
 
-export function copyBarangayRate(barangayName, rawRate) {
+/**
+ * Copies formatted delivery fee message for a barangay:
+ * - Cross-Town: "The delivery fee from [Origin] to [Municipality], [Barangay] starts at ₱[rate]"
+ * - Intra-Town: "The delivery fee at [Municipality], [Barangay] starts at ₱[rate]"
+ */
+export function copyBarangayRate(barangayName, rawRate, destinationMun = "Camiling", originMun = "Camiling") {
     let rateNum = parseFloat((rawRate || "").replace(/[^0-9.]/g, ''));
     let amountStr = !isNaN(rateNum) ? rateNum.toFixed(0) : (rawRate || '0').replace(/[^0-9.]/g, '');
 
-    const formattedMessage = `The delivery fee at ${barangayName} starts at ₱${amountStr}\n\n(Note: Other fees may apply for additional stores or extra services!)\n\nYou may view our fee guidelines by visiting this google document link:\n\nhttps://docs.google.com/document/d/1CPUE5gx6JZqcZoRcU-OEOWWgUCLyZhF6WnWRbLTnVus/edit?usp=drivesdk`;
+    const cleanDestMun = (destinationMun || "Camiling").trim();
+    const cleanOriginMun = (originMun || "Camiling").trim();
+    const cleanBrgy = (barangayName || "").trim();
+
+    const isCrossTown = cleanOriginMun.toLowerCase() !== cleanDestMun.toLowerCase();
+
+    let firstLine = "";
+    if (isCrossTown) {
+        firstLine = `The delivery fee from ${cleanOriginMun} to ${cleanDestMun}, ${cleanBrgy} starts at ₱${amountStr}`;
+    } else {
+        firstLine = `The delivery fee at ${cleanDestMun}, ${cleanBrgy} starts at ₱${amountStr}`;
+    }
+
+    const formattedMessage = `${firstLine}\n\n(Note: Other fees may apply for additional stores or extra services!)\n\nYou may view our fee guidelines by visiting this google document link:\n\nhttps://docs.google.com/document/d/1CPUE5gx6JZqcZoRcU-OEOWWgUCLyZhF6WnWRbLTnVus/edit?usp=drivesdk`;
 
     copyText(formattedMessage);
-    showToast(`📋 Copied rate message for ${barangayName}!`);
+    showToast(`📋 Copied rate message for ${cleanBrgy}!`);
 }
 
+/**
+ * Renders the directory cards list with sticky alphabetical sections,
+ * isolated Origin Hub filtering, and route vector breadcrumbs.
+ */
 export function renderDirectoryList() {
     const listEl = document.getElementById('record-list');
     const searchVal = (document.getElementById('floating-search-input')?.value || document.getElementById('search-input')?.value || '').toLowerCase().trim();
@@ -341,11 +398,31 @@ export function renderDirectoryList() {
         loadDirectoryCache();
     }
 
+    const isBarangay = globalState.currentType === 'barangays';
+    const isAdminUser = checkAdminAccess();
+
     let records = globalState.records ? globalState.records.filter(r => (r.type || 'customers') === globalState.currentType) : [];
 
+    // ISOLATE RATES BY SELECTED ORIGIN HUB
+    if (isBarangay) {
+        const activeOriginHub = (globalState.selectedOriginHub || "Camiling").trim();
+        if (activeOriginHub !== "ALL") {
+            records = records.filter(r => {
+                const recordOrigin = (r.originMunicipality || "Camiling").trim();
+                return recordOrigin.toLowerCase() === activeOriginHub.toLowerCase();
+            });
+        }
+    }
+
+    // Comprehensive Geographic Search Predicate
     if (searchVal) {
         records = records.filter(r => 
             (r.name || '').toLowerCase().includes(searchVal) ||
+            (r.barangay || '').toLowerCase().includes(searchVal) ||
+            (r.originMunicipality || '').toLowerCase().includes(searchVal) ||
+            (r.municipality || '').toLowerCase().includes(searchVal) ||
+            (r.region || '').toLowerCase().includes(searchVal) ||
+            (r.nationality || '').toLowerCase().includes(searchVal) ||
             (r.address || '').toLowerCase().includes(searchVal) ||
             (r.rate || '').toLowerCase().includes(searchVal) ||
             (r.contact || '').toLowerCase().includes(searchVal)
@@ -353,7 +430,10 @@ export function renderDirectoryList() {
     }
 
     if (records.length === 0) {
-        listEl.innerHTML = `<div class="text-center text-gray-500 italic py-16 text-xs">No records found. Click + to add or tap 🔄 to refresh.</div>`;
+        const noRecordsMsg = isBarangay
+            ? `Walang rates na nakarehistro para sa Origin Hub: [${globalState.selectedOriginHub || 'Camiling'}]. I-click ang + para magdagdag.`
+            : 'No records found. Click + to add or tap 🔄 to refresh.';
+        listEl.innerHTML = `<div class="text-center text-gray-500 italic py-16 text-xs">${escapeHtml(noRecordsMsg)}</div>`;
         setupAlphabetScrubber([]);
         return;
     }
@@ -365,9 +445,6 @@ export function renderDirectoryList() {
         if (secA !== "#" && secB === "#") return 1;
         return (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' });
     });
-
-    const isBarangay = globalState.currentType === 'barangays';
-    const isAdminUser = checkAdminAccess();
 
     let currentLetterGroup = "";
     let htmlBuilder = "";
@@ -393,8 +470,11 @@ export function renderDirectoryList() {
             mapBtn = `<a href="${escapeHtml(r.lat_lon_link)}" target="_blank" class="text-xs text-blue-600 dark:text-blue-400 font-bold underline flex items-center gap-1 mt-1"><i class="fa-solid fa-map-location-dot"></i> View Location</a>`;
         }
 
+        const safeCompositeKey = escapeHtml(r.compositeKey || "");
+        const safeRecordName = escapeHtml(r.name || "");
+
         const deleteBtnHtml = isAdminUser 
-            ? `<button onclick="promptDeleteDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-red-600 dark:text-red-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Delete">
+            ? `<button onclick="promptDeleteDirectoryRecord('${safeRecordName}', '${safeCompositeKey}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-red-600 dark:text-red-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Delete">
                     <i class="fa-solid fa-trash"></i>
                </button>`
             : '';
@@ -407,18 +487,37 @@ export function renderDirectoryList() {
             let rateNum = parseFloat((r.rate || r.address || "").replace(/[^0-9.]/g, ''));
             let displayRate = !isNaN(rateNum) ? `₱${rateNum.toFixed(2)}` : (r.rate || r.address || '₱0.00');
 
+            const originMun = (r.originMunicipality || "Camiling").trim();
+            const destMun = (r.municipality || "Camiling").trim();
+            const resolvedBrgy = (r.barangay || r.name || "").trim();
+
+            const isCrossTown = originMun.toLowerCase() !== destMun.toLowerCase();
+
+            // Render Geographic Route Breadcrumb Subtitle
+            const locationSubtitleHtml = isCrossTown
+                ? `<div class="text-[10px] text-amber-500 dark:text-amber-400 mt-0.5 font-bold flex items-center gap-1">
+                     <i class="fa-solid fa-arrow-right text-[8.5px]"></i> From <span class="underline">${escapeHtml(originMun)}</span> to <span class="text-white">${escapeHtml(destMun)}</span>
+                   </div>`
+                : `<div class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium flex items-center gap-1">
+                     <i class="fa-solid fa-location-dot text-[9px] text-emerald-500"></i> Local: ${escapeHtml(destMun)} Hub
+                   </div>`;
+
             htmlBuilder += `
             <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-3.5 rounded-2xl flex justify-between items-center gap-2 shadow-xs my-1">
                 <div class="flex-1 min-w-0">
-                    <div class="font-black text-sm text-gray-900 dark:text-white truncate flex items-center gap-1.5"><i class="fa-solid fa-map-location-dot text-emerald-600 dark:text-emerald-400"></i> <span>${escapeHtml(r.name)}</span></div>
+                    <div class="font-black text-sm text-gray-900 dark:text-white truncate flex items-center gap-1.5">
+                        <i class="fa-solid fa-map-location-dot text-emerald-600 dark:text-emerald-400"></i>
+                        <span>${escapeHtml(resolvedBrgy)}</span>
+                    </div>
+                    ${locationSubtitleHtml}
                     <div class="text-xs font-mono text-emerald-700 dark:text-emerald-400 font-black mt-1">Delivery Rate: ${escapeHtml(displayRate)}</div>
                     ${metaInfoHtml}
                 </div>
                 <div class="flex gap-1.5 shrink-0">
-                    <button onclick="copyBarangayRate('${escapeHtml(r.name)}', '${escapeHtml(displayRate)}')" class="bg-blue-50 hover:bg-blue-100 dark:bg-blue-600/30 dark:hover:bg-blue-600 text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-white border border-blue-200 dark:border-blue-500/50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1 cursor-pointer" title="Copy Rate Message">
+                    <button onclick="copyBarangayRate('${escapeHtml(resolvedBrgy)}', '${escapeHtml(displayRate)}', '${escapeHtml(destMun)}', '${escapeHtml(originMun)}')" class="bg-blue-50 hover:bg-blue-100 dark:bg-blue-600/30 dark:hover:bg-blue-600 text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-white border border-blue-200 dark:border-blue-500/50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1 cursor-pointer" title="Copy Rate Message">
                         <i class="fa-solid fa-copy"></i> Copy
                     </button>
-                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Edit">
+                    <button onclick="editDirectoryRecord('${safeRecordName}', '${safeCompositeKey}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
                     ${deleteBtnHtml}
@@ -435,7 +534,7 @@ export function renderDirectoryList() {
                     ${metaInfoHtml}
                 </div>
                 <div class="flex gap-1 shrink-0">
-                    <button onclick="editDirectoryRecord('${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Edit">
+                    <button onclick="editDirectoryRecord('${safeRecordName}', '${safeCompositeKey}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
                     ${deleteBtnHtml}
@@ -588,6 +687,8 @@ if (typeof window !== 'undefined') {
     window.updateRosterCreditsDisplay = updateRosterCreditsDisplay;
     window.showCreditsInfoToast = showCreditsInfoToast;
     window.initRiderCreditsListener = initRiderCreditsListener;
+    window.handleOriginHubChange = handleOriginHubChange;
+    window.copyBarangayRate = copyBarangayRate;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
@@ -599,4 +700,4 @@ if (typeof window !== 'undefined') {
         initRiderCreditsListener();
     }
 }
-// REMARKS: DIRECTORY_UI_ADMIN_EXEMPTION_AND_ROSTER_CREDITS_PILL_V1_COMPLETE
+// REMARKS: DIRECTORY_UI_ORIGIN_HUB_ISOLATION_AND_VECTOR_ROUTING_V5_COMPLETE

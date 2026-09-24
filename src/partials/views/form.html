@@ -1,24 +1,138 @@
+<!-- src/partials/views/form.html -->
+<!--
+  ============================================================================
+  DIRECTORY RECORD MUTATION FORM COMPONENT
+  ============================================================================
+  Description:
+  Dynamic entry and editing form for Customer, Merchant Store, and Delivery
+  Rate directory records. Automatically toggles between standard profile
+  inputs (Name, Contact, Address, Map Link) and a structured geographic
+  hierarchy with isolated Origin Starting Hubs (Origin Municipality ->
+  Destination Nationality -> Region -> Municipality -> Barangay -> Rate)
+  backed by real-time public geographic REST APIs.
+-->
 <section id="view-form" class="hidden flex-1 flex flex-col gap-4 p-4 overflow-y-auto">
-    <div id="edit-warning" class="hidden bg-amber-500/10 border border-amber-500 p-3 rounded-xl flex items-center gap-3 text-amber-400 text-xs">
+    <!-- EDITING STATE BANNER -->
+    <div id="edit-warning" class="hidden bg-amber-500/10 border border-amber-500 p-3 rounded-xl flex items-center gap-3 text-amber-400 text-xs shadow-xs">
         <i class="fa-solid fa-triangle-exclamation text-xl"></i>
         <div id="warning-text">Editing record.</div>
     </div>
-    <div class="flex flex-col gap-3">
-        <label class="text-xs text-gray-400 font-bold">Name / Store Name</label>
-        <input type="text" id="form-name" name="form_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+
+    <!-- 1. STANDARD FORM FIELDS (CUSTOMERS & STORES) -->
+    <div id="standard-form-fields" class="flex flex-col gap-3">
+        <label class="text-xs text-gray-400 font-bold">Name / Store Name *</label>
+        <input type="text" id="form-name" name="form_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Enter customer or merchant store name" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-blue-500 transition">
+
         <label class="text-xs text-gray-400 font-bold">Contact Number</label>
-        <input type="text" id="form-contact" name="form_contact_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+        <input type="text" id="form-contact" name="form_contact_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="e.g. 09123456789" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-mono focus:border-blue-500 transition">
+
         <label class="text-xs text-gray-400 font-bold">General Address</label>
-        <input type="text" id="form-address" name="form_address_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+        <input type="text" id="form-address" name="form_address_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Street, Barangay, Landmarks" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white focus:border-blue-500 transition">
+
         <label class="text-xs text-gray-400 font-bold">Map Link (Lat_Lon_Link)</label>
         <div class="flex gap-2">
-            <input type="text" id="form-latlon" name="form_latlon_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Paste link or get from Map" class="flex-1 bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
-            <button onclick="window.openMapPicker && window.openMapPicker()" class="bg-blue-600 hover:bg-blue-500 px-4 rounded-xl text-white text-sm font-bold flex items-center gap-2 transition active:scale-95">
+            <input type="text" id="form-latlon" name="form_latlon_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Paste link or get from Map" class="flex-1 bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white text-xs font-mono focus:border-blue-500 transition">
+            <button type="button" onclick="window.openMapPicker && window.openMapPicker()" class="bg-blue-600 hover:bg-blue-500 px-4 rounded-xl text-white text-sm font-bold flex items-center gap-2 transition active:scale-95 cursor-pointer shadow-sm">
                 <i class="fa-solid fa-map-location-dot"></i> Map
             </button>
         </div>
     </div>
-    <button onclick="window.submitForm && window.submitForm()" id="form-submit-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold p-4 rounded-xl shadow-lg mt-auto transition active:scale-95">
+
+    <!-- 2. HIERARCHICAL GEOGRAPHIC RATE FIELDS (ISOLATED ORIGIN & DESTINATION) -->
+    <div id="rate-form-fields" class="hidden flex flex-col gap-3">
+        <!-- ORIGIN STARTING HUB / MUNICIPALITY (ISOLATION VECTOR) -->
+        <div class="bg-black/30 p-3 rounded-2xl border border-amber-500/30 flex flex-col gap-1.5">
+            <div class="flex justify-between items-center">
+                <label class="text-xs text-amber-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-location-crosshairs text-amber-400"></i> Origin Starting Hub (Departing From) *
+                </label>
+                <span class="text-[9.5px] text-gray-400 font-mono">Fare Base Point</span>
+            </div>
+            <select id="form-rate-origin" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-amber-500/50 text-amber-300 font-black focus:border-amber-400 transition cursor-pointer">
+                <option value="Camiling" selected>Camiling (Main Hub)</option>
+                <option value="San Clemente">San Clemente Branch</option>
+                <option value="Santa Ignacia">Santa Ignacia Branch</option>
+                <option value="Paniqui">Paniqui Branch</option>
+                <option value="Mayantoc">Mayantoc Branch</option>
+                <option value="Moncada">Moncada Branch</option>
+                <option value="Gerona">Gerona Branch</option>
+                <option value="Bayambang">Bayambang Branch</option>
+                <option value="Mangatarem">Mangatarem Branch</option>
+            </select>
+            <span class="text-[9.5px] text-gray-400 leading-tight">
+                Ang pamasahe ay kakalkulahin batay sa distansya mula sa napiling Starting Hub na ito.
+            </span>
+        </div>
+
+        <!-- DESTINATION NATIONALITY -->
+        <div>
+            <div class="flex justify-between items-center mb-1">
+                <label class="text-xs text-gray-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-globe text-blue-400"></i> Destination Nationality *
+                </label>
+                <span id="rate-geo-loading-nations" class="hidden text-[10px] text-blue-400"><i class="fa-solid fa-spinner fa-spin"></i> Detecting location...</span>
+            </div>
+            <select id="form-rate-nationality" onchange="window.handleRateNationalityChange && window.handleRateNationalityChange(this.value)" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition cursor-pointer">
+                <option value="" disabled selected>Loading all countries...</option>
+            </select>
+        </div>
+
+        <!-- DESTINATION REGION -->
+        <div>
+            <div class="flex justify-between items-center mb-1">
+                <label id="form-rate-region-label" class="text-xs text-gray-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-map text-emerald-400"></i> Destination Region *
+                </label>
+                <span id="rate-geo-loading-regions" class="hidden text-[10px] text-emerald-400"><i class="fa-solid fa-spinner fa-spin"></i> Loading regions...</span>
+            </div>
+            <select id="form-rate-region" onchange="window.handleRateRegionChange && window.handleRateRegionChange(this.value)" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition cursor-pointer">
+                <option value="" disabled selected>Select Region</option>
+            </select>
+            <input type="text" id="form-rate-region-custom" placeholder="Enter State / Province / Region" class="hidden w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition mt-1">
+        </div>
+
+        <!-- DESTINATION MUNICIPALITY / CITY -->
+        <div>
+            <div class="flex justify-between items-center mb-1">
+                <label id="form-rate-municipality-label" class="text-xs text-gray-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-city text-amber-400"></i> Destination Municipality / City *
+                </label>
+                <span id="rate-geo-loading-mun" class="hidden text-[10px] text-amber-400"><i class="fa-solid fa-spinner fa-spin"></i> Loading cities/municipalities...</span>
+            </div>
+            <select id="form-rate-municipality" onchange="window.handleRateMunicipalityChange && window.handleRateMunicipalityChange(this.value)" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition cursor-pointer">
+                <option value="" disabled selected>Select Municipality/City</option>
+            </select>
+            <input type="text" id="form-rate-municipality-custom" placeholder="Enter Municipality / City / Town" class="hidden w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition mt-1">
+        </div>
+
+        <!-- DESTINATION BARANGAY / DISTRICT -->
+        <div>
+            <div class="flex justify-between items-center mb-1">
+                <label id="form-rate-barangay-label" class="text-xs text-gray-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-map-pin text-red-400"></i> Destination Barangay / District *
+                </label>
+                <span id="rate-geo-loading-brgy" class="hidden text-[10px] text-red-400"><i class="fa-solid fa-spinner fa-spin"></i> Loading barangays...</span>
+            </div>
+            <input type="text" id="form-rate-barangay" list="form-rate-barangay-list" autocomplete="off" placeholder="Select or type Barangay / District name" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition">
+            <datalist id="form-rate-barangay-list"></datalist>
+            <span id="form-rate-barangay-hint" class="text-[10px] text-gray-500 mt-1 block">Pumili sa opisyal na listahan mula sa PSA PSGC API o mag-type ng sariling lugar.</span>
+        </div>
+
+        <!-- DELIVERY AMOUNT (RATE) -->
+        <div>
+            <label class="text-xs text-gray-400 font-bold flex items-center gap-1.5 mb-1">
+                <i class="fa-solid fa-peso-sign text-emerald-400"></i> Base Delivery Amount (₱) *
+            </label>
+            <div class="relative">
+                <span class="absolute left-3.5 top-3 text-emerald-400 font-bold text-sm">₱</span>
+                <input type="number" step="1" min="0" id="form-rate-amount" placeholder="e.g. 50, 95, 110" class="w-full bg-inputBg text-sm rounded-xl pl-8 pr-3 py-3 outline-none border border-gray-700 text-emerald-400 font-mono font-black focus:border-emerald-500 transition">
+            </div>
+        </div>
+    </div>
+
+    <!-- SUBMIT ACTION BUTTON -->
+    <button onclick="window.submitForm && window.submitForm()" id="form-submit-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold p-4 rounded-xl shadow-lg mt-auto transition active:scale-95 cursor-pointer">
         SAVE RECORD
     </button>
 </section>
+<!-- REMARKS: FORM_HTML_ISOLATED_ORIGIN_HUB_AND_HIERARCHICAL_DESTINATION_V4_COMPLETE -->

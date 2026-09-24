@@ -2,18 +2,22 @@
 
 /**
  * ============================================================================
- * RIDER PROFILE INSPECTION & COMPLIANCE MODAL (NET DUTY HOURS)
+ * RIDER PROFILE INSPECTION & COMPLIANCE MODAL (CUSTOM TARGET & PASS SYNC)
  * ============================================================================
  * 
  * Description:
  * Detailed profile inspector modal for individual riders:
- * - Real-time duty status, contact phone, and GCash payment credentials[cite: 17].
- * - Daily financial ledger: gross earnings and completed delivery order count[cite: 17].
- * - Directory Credit Balance: live balance display reflecting deductions and rewards[cite: 34].
+ * - Real-time duty status, contact phone, and GCash payment credentials.
+ * - Daily financial ledger: gross earnings and completed delivery order count.
+ * - Directory Credit Balance: live balance display reflecting deductions and rewards.
  * - Shift & Labor Compliance Tracker: computes exact net duty time (gross minus
- *   total consumed break duration) against the 8-hour requirement, displaying
- *   active early shift out penalties when applicable[cite: 35, 44].
- * - Active multi-customer catering orders and scheduled weekly day-off[cite: 17].
+ *   total consumed break duration) against individual target hours (default 8h),
+ *   and reflects active daily exemption passes.
+ * - Active multi-customer catering orders and scheduled weekly day-off.
+ * 
+ * Update Note:
+ * - Fixed import origin: moved `isSameDateStr` from `helpers.js` to `rosterUtils.js`
+ *   to resolve the unhandled module export SyntaxError.
  * ============================================================================
  */
 
@@ -32,14 +36,12 @@ export async function openRiderInfoModal(targetId, targetName = "") {
     const modal = document.getElementById('rider-info-modal');
     if (!modal) return;
 
-    // 1. Locate member in local roster cache
     const roster = globalState.rosterMembers || [];
     let member = roster.find(m => isRiderMatch(cleanName, m.riderName || m.name || "", cleanId, (m.telegramId || m.id || "").toString()));
 
     const riderId = member ? (member.telegramId || member.id || cleanId).toString() : cleanId;
     const riderName = member ? (member.riderName || member.name || cleanName || "Rider") : (cleanName || "Rider");
 
-    // 2. Fetch latest data from Firebase
     let cloudData = null;
     if (db && riderId) {
         try {
@@ -48,7 +50,6 @@ export async function openRiderInfoModal(targetId, targetName = "") {
         } catch(e) {}
     }
 
-    // 3. Resolve Profile Fields
     const photoUrl = member?.photoUrl || cloudData?.photoUrl || localStorage.getItem(`lokalex_avatar_${riderId}`) || `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=0284c7&color=ffffff&bold=true&size=128`;
     const userType = (member?.userType || cloudData?.userType || "rider").toUpperCase();
     const status = (member?.status || "End").toUpperCase();
@@ -60,7 +61,6 @@ export async function openRiderInfoModal(targetId, targetName = "") {
         ? parseInt(cloudData.directoryCredits, 10) 
         : (member?.directoryCredits !== undefined ? parseInt(member.directoryCredits, 10) : 20);
 
-    // 4. Performance Today (Gross Total & Deliveries)
     const todayStr = getLocalTodayStr();
     let todayGross = 0;
     let todayDeliveries = 0;
@@ -99,10 +99,22 @@ export async function openRiderInfoModal(targetId, targetName = "") {
         }
     });
 
-    // 5. Shift & Labor Compliance Evaluation (Break Time Strictly Excluded)
+    // 5. SHIFT & LABOR COMPLIANCE (CUSTOM HOURS & DAILY PASS SYNC)
     let shiftDisplayHtml = `<span class="text-gray-400">Not Shifted In</span>`;
-    const config = globalState.earlyShiftPenaltyConfig || { targetHours: 8, gracePeriodMinutes: 15 };
-    const targetMins = Math.round((config.targetHours || 8) * 60);
+    const config = globalState.earlyShiftPenaltyConfig || { targetHours: 8, gracePeriodMinutes: 15, riderTargets: {}, exemptions: {} };
+
+    // Resolve rider custom shift duration
+    let assignedTargetHours = config.targetHours || 8;
+    if (config.riderTargets && config.riderTargets[riderId] !== undefined && config.riderTargets[riderId] !== "") {
+        const customTarget = parseFloat(config.riderTargets[riderId]);
+        if (!isNaN(customTarget) && customTarget > 0) {
+            assignedTargetHours = customTarget;
+        }
+    }
+    const targetMins = Math.round(assignedTargetHours * 60);
+
+    // Check 1-day temporary exemption
+    const isExemptToday = config.exemptions && config.exemptions[riderId] && isSameDateStr(config.exemptions[riderId].date, todayStr);
 
     let loginRec = (globalState.globalLogins || []).find(l => 
         isSameDateStr(l.date, todayStr) &&
@@ -135,7 +147,6 @@ export async function openRiderInfoModal(targetId, targetName = "") {
 
         const now = Date.now();
 
-        // If rider is currently on Break, add ongoing break session
         if (status === 'BREAK' && member?.breakTimestamp) {
             const ongoingBreak = Math.max(0, Math.floor((now - member.breakTimestamp) / 60000));
             totalBreakMins += ongoingBreak;
@@ -152,17 +163,23 @@ export async function openRiderInfoModal(targetId, targetName = "") {
             const penaltyPerc = loginRec.earlyShiftPenaltyPercent || member?.commissionSurcharge || 0;
             const deficitHours = loginRec.deficitHours || member?.earlyShiftDeficitHours || 0;
 
-            if (penaltyPerc > 0) {
+            if (isExemptToday || loginRec.isExemptedEarlyOut) {
                 shiftDisplayHtml = `
                     <div class="flex flex-col text-right">
-                        <span class="text-red-500 font-bold font-mono">Early Out (${netHoursText} / 8h)</span>
+                        <span class="text-emerald-400 font-bold font-mono">Ended Shift (${netHoursText})</span>
+                        <span class="text-[9.5px] text-emerald-300 font-bold">🛡️ Exempted Today (Pass Active)${breakNote}</span>
+                    </div>`;
+            } else if (penaltyPerc > 0) {
+                shiftDisplayHtml = `
+                    <div class="flex flex-col text-right">
+                        <span class="text-red-500 font-bold font-mono">Early Out (${netHoursText} / ${assignedTargetHours}h)</span>
                         <span class="text-[9.5px] text-red-400 font-black">+${penaltyPerc}% Penalty (${deficitHours}h deficit)${breakNote}</span>
                     </div>`;
             } else if (netMins >= (targetMins - (config.gracePeriodMinutes || 15))) {
                 shiftDisplayHtml = `
                     <div class="flex flex-col text-right">
                         <span class="text-emerald-500 font-bold font-mono">Shift Completed (${netHoursText})</span>
-                        <span class="text-[9.5px] text-emerald-400">8h Target Satisfied${breakNote}</span>
+                        <span class="text-[9.5px] text-emerald-400">${assignedTargetHours}h Target Satisfied${breakNote}</span>
                     </div>`;
             } else {
                 shiftDisplayHtml = `
@@ -172,37 +189,40 @@ export async function openRiderInfoModal(targetId, targetName = "") {
                     </div>`;
             }
         } else {
-            // Currently on-duty or on break
             grossMins = loginTs ? Math.max(0, Math.floor((now - loginTs) / 60000)) : 0;
             const netMins = Math.max(0, grossMins - totalBreakMins);
             const netHoursText = `${Math.floor(netMins / 60)}h ${netMins % 60}m`;
 
-            if (netMins >= (targetMins - (config.gracePeriodMinutes || 15))) {
+            if (isExemptToday) {
                 shiftDisplayHtml = `
                     <div class="flex flex-col text-right">
-                        <span class="text-emerald-400 font-bold font-mono">${netHoursText} / 8h</span>
-                        <span class="text-[9.5px] text-emerald-400 font-bold">8h Minimum Reached ✅${breakNote}</span>
+                        <span class="text-emerald-400 font-bold font-mono">${netHoursText} on duty</span>
+                        <span class="text-[9.5px] text-emerald-300 font-bold">🛡️ Early Pass Active for Today${breakNote}</span>
+                    </div>`;
+            } else if (netMins >= (targetMins - (config.gracePeriodMinutes || 15))) {
+                shiftDisplayHtml = `
+                    <div class="flex flex-col text-right">
+                        <span class="text-emerald-400 font-bold font-mono">${netHoursText} / ${assignedTargetHours}h</span>
+                        <span class="text-[9.5px] text-emerald-400 font-bold">${assignedTargetHours}h Target Reached ✅${breakNote}</span>
                     </div>`;
             } else {
                 const remMins = targetMins - netMins;
                 const remHoursText = `${Math.floor(remMins / 60)}h ${remMins % 60}m`;
                 shiftDisplayHtml = `
                     <div class="flex flex-col text-right">
-                        <span class="text-amber-400 font-bold font-mono">${netHoursText} / 8h</span>
+                        <span class="text-amber-400 font-bold font-mono">${netHoursText} / ${assignedTargetHours}h</span>
                         <span class="text-[9.5px] text-gray-400">${remHoursText} remaining${breakNote}</span>
                     </div>`;
             }
         }
     }
 
-    // 6. Day of Week Mapping
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     let dayOffText = "None Assigned";
     if (dayOffDay !== null && dayOffDay !== undefined && dayNames[dayOffDay]) {
         dayOffText = dayNames[dayOffDay];
     }
 
-    // 7. Render to DOM Elements
     const avatarEl = document.getElementById('rider-info-avatar');
     const nameEl = document.getElementById('rider-info-name');
     const roleEl = document.getElementById('rider-info-role');
@@ -277,4 +297,4 @@ if (typeof window !== 'undefined') {
     window.openRiderInfoModal = openRiderInfoModal;
     window.closeRiderInfoModal = closeRiderInfoModal;
 }
-// REMARKS: ROSTER_RIDER_MODAL_NET_DUTY_HOURS_BREAK_EXCLUSION_V1_COMPLETE
+// REMARKS: ROSTER_RIDER_MODAL_FIX_ISSAMEDATESTR_IMPORT_ORIGIN_V2_COMPLETE
