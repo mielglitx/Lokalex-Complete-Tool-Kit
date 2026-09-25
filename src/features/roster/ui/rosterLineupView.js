@@ -7,17 +7,15 @@
  * 
  * Description:
  * Manages presentation and real-time state rendering of the Lokalex dispatch lineup:
- * - Available Queue: Gross-earnings/FIFO sorting with active cooldown counters.
+ * - Available Queue: O(1) Gross-earnings/FIFO sorting with active cooldown counters.
+ * - Batched Frame Rendering: Leverages `requestAnimationFrame` debouncing
+ *   (`requestRosterUIRefresh`) to collapse cascading Firebase events into a single
+ *   smooth paint cycle, completely eliminating UI lag and layout thrashing.
  * - Catering Board: Multi-customer order tracking, live links, and swap mechanics.
  * - Break Queue: Live consumed break timers tracking how long each rider has
  *   been resting, backed by non-destructive interval updates.
  * - Penalty Cooldowns & Day-Off roster indicators.
  * - Queue info inspector modal with GPS coordinate verification links.
- * 
- * Update Note:
- * - Integrated `getElapsedBreakTime` and `.break-elapsed-timer` UI badges.
- * - Added `initBreakTimerTicker` to smoothly update consumed break times every
- *   10 seconds without full DOM re-renders.
  * ============================================================================
  */
 
@@ -28,11 +26,12 @@ import {
     canManageRoster, 
     isAdmin, 
     getElapsedCateringTime, 
-    getElapsedBreakTime,
-    checkFirstInLineAlarm,
-    getRiderTodayGross,
-    sortAvailableRiders,
-    parseQueueTime
+    getElapsedBreakTime, 
+    checkFirstInLineAlarm, 
+    getRiderTodayGross, 
+    sortAvailableRiders, 
+    parseQueueTime,
+    invalidateRosterGrossCache 
 } from '../rosterUtils.js';
 import { 
     getQueueLineupSettings, 
@@ -46,6 +45,20 @@ import { loadGlobalCateredList } from './rosterFeeds.js';
 
 let queueCooldownTickerInterval = null;
 let breakTimerTickerInterval = null;
+let renderScheduled = false;
+
+/**
+ * Batches incoming UI update events into a single animation frame paint,
+ * eliminating repetitive DOM recalculations when multiple events fire in bursts.
+ */
+export function requestRosterUIRefresh() {
+    if (renderScheduled) return;
+    renderScheduled = true;
+    requestAnimationFrame(() => {
+        renderScheduled = false;
+        updateRosterUI();
+    });
+}
 
 export function openFindRidersMap() {
     openMapPicker('roster');
@@ -178,7 +191,7 @@ export function initQueueCooldownTicker() {
         });
 
         if (needsResort) {
-            updateRosterUI();
+            requestRosterUIRefresh();
         }
     }, 1000);
 }
@@ -594,6 +607,7 @@ export function updateRosterUI() {
 
 if (typeof window !== 'undefined') {
     window.updateRosterUI = updateRosterUI;
+    window.requestRosterUIRefresh = requestRosterUIRefresh;
     window.openFindRidersMap = openFindRidersMap;
     window.formatRiderShortName = formatRiderShortName;
     window.openQueueInfoModal = openQueueInfoModal;
@@ -601,11 +615,20 @@ if (typeof window !== 'undefined') {
     window.initQueueCooldownTicker = initQueueCooldownTicker;
     window.initBreakTimerTicker = initBreakTimerTicker;
 
-    window.addEventListener('receiptsUpdated', () => updateRosterUI());
-    window.addEventListener('cateredUpdated', () => updateRosterUI());
-    window.addEventListener('rosterUpdated', () => updateRosterUI());
-    window.addEventListener('loginsUpdated', () => updateRosterUI());
+    // Batched listeners to collapse rapid-fire Firebase updates into single frame renders
+    window.addEventListener('receiptsUpdated', () => {
+        invalidateRosterGrossCache();
+        requestRosterUIRefresh();
+    });
+    window.addEventListener('cateredUpdated', () => {
+        invalidateRosterGrossCache();
+        requestRosterUIRefresh();
+    });
+    window.addEventListener('rosterUpdated', () => requestRosterUIRefresh());
+    window.addEventListener('loginsUpdated', () => requestRosterUIRefresh());
 
     initQueueCooldownTicker();
     initBreakTimerTicker();
 }
+
+// REMARKS: ROSTER_LINEUP_VIEW_BATCHED_RENDER_FRAME_V3_COMPLETE
