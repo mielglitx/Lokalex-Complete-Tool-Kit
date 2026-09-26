@@ -11,6 +11,8 @@
  * - High-Speed O(1) Pre-Indexed Lookup: Replaces heavy nested O(N*M) regex scanning
  *   with pre-built transaction and customer hash maps, rendering catered history
  *   instantly without blocking the main browser thread.
+ * - Cache-Bypassing Fresh Refresh: Supports `forceFresh` invalidation so asynchronous
+ *   Firebase payloads immediately bust cold-start caches upon arrival.
  * - Single-Pass Timestamp Sorting: Evaluates parseTimeToMinutes once per record
  *   prior to sorting, eliminating redundant comparator regex parsing.
  * - Batched Frame Refresh: Leverages requestAnimationFrame (requestCateredFeedRefresh)
@@ -33,24 +35,30 @@ import {
 import { getForcedCaterBadgeHtml } from './rosterBadge.js';
 
 let cateredFeedScheduled = false;
+let pendingForceFresh = false;
 
 /**
  * Batches incoming catered feed updates into a single animation frame,
- * preventing layout thrashing when multiple orders arrive or complete.
+ * preserving fresh cache invalidation requests across rapid bursts.
  */
-export function requestCateredFeedRefresh() {
+export function requestCateredFeedRefresh(forceFresh = false) {
+    if (forceFresh) pendingForceFresh = true;
     if (cateredFeedScheduled) return;
+
     cateredFeedScheduled = true;
     requestAnimationFrame(() => {
         cateredFeedScheduled = false;
-        loadGlobalCateredList();
+        const fresh = pendingForceFresh;
+        pendingForceFresh = false;
+        loadGlobalCateredList(fresh);
     });
 }
 
 /**
  * Renders the Catered Customers feed using single-pass O(1) indexed lookups.
+ * @param {boolean} forceFresh - When true, bypasses the in-memory memoized cache.
  */
-export function loadGlobalCateredList() {
+export function loadGlobalCateredList(forceFresh = false) {
     const feed = document.getElementById('catered-customers-feed');
     const badge = document.getElementById('catered-count-badge');
     if (!feed) return;
@@ -61,7 +69,7 @@ export function loadGlobalCateredList() {
     }
 
     const todayStr = getLocalTodayStr();
-    const mergedList = getMergedDeduplicatedCommissionList();
+    const mergedList = getMergedDeduplicatedCommissionList(forceFresh);
 
     const todayHistory = mergedList.filter(item => {
         const itemDate = item.date || item.completedDate;
@@ -286,8 +294,8 @@ if (typeof window !== 'undefined') {
     window.requestCateredFeedRefresh = requestCateredFeedRefresh;
     window.loadGlobalLoginList = loadGlobalLoginList;
 
-    window.addEventListener('receiptsUpdated', () => requestCateredFeedRefresh());
-    window.addEventListener('cateredUpdated', () => requestCateredFeedRefresh());
+    window.addEventListener('receiptsUpdated', () => requestCateredFeedRefresh(true));
+    window.addEventListener('cateredUpdated', () => requestCateredFeedRefresh(true));
 }
 
-// REMARKS: ROSTER_FEEDS_FAST_MEMOIZED_CATERED_LIST_V2_COMPLETE
+// REMARKS: ROSTER_FEEDS_FORCE_FRESH_CATERED_FEED_V3_COMPLETE
