@@ -13,7 +13,8 @@
  *   turn-by-turn polyline GeoJSON coordinates, road distance, and travel ETAs.
  * - Nominatim Geocoding Client: provides free address and landmark search across
  *   the Philippines without requiring Google Places API keys.
- * - Central state holder for active Leaflet instances, markers, and navigation.
+ * - Manual Pin & Center Reticle State: Holds references to user-placed manual
+ *   draggable pins, placement flags, and coordinate hierarchy buffers.
  * ============================================================================
  */
 
@@ -36,6 +37,11 @@ export const mapState = {
     mapPickerContext: 'form', // 'form' | 'chat' | 'rider-chat' | 'registration'
     selectedMapLat: 0,
     selectedMapLng: 0,
+
+    // Manual Pin & Center Reticle Hierarchy State
+    manualPinMarker: null,    // Leaflet Marker instance when user taps the map
+    isManualPinPlaced: false, // true = manual pin takes priority; false = center of map is captured
+    manualPinCoords: null,    // { lat: number, lng: number }
 
     // Tracking session cache
     trackingHistory: JSON.parse(localStorage.getItem('lokalex_tracking_history') || '{}')
@@ -156,4 +162,4 @@ export async function searchNominatimPlaces(query) {
     }
 }
 
-// REMARKS: MAP_STATE_LEAFLET_OSM_OSRM_DYNAMIC_ENGINE_V1_COMPLETE
+// REMARKS: MAP_STATE_MANUAL_PIN_AND_RETICLE_REGISTRY_V2_COMPLETE

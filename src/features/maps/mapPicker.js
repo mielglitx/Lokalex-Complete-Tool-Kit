@@ -7,9 +7,13 @@
  * 
  * Description:
  * Interactive location selector and coordinate calibration tool powered by Leaflet:
- * - Free OpenStreetMap cartographic tile layer with zero billing overhead.
+ * - Persistent Center Reticle: High-z-index precision crosshairs locked to the
+ *   exact viewport center that never disappears under loading map tiles.
+ * - Interactive Manual Pin Drop: Allows users to tap anywhere on the map to drop
+ *   or drag a custom pin.
+ * - Two-Tier Capture Hierarchy: Captures manual pin coordinates first if placed;
+ *   otherwise falls back to capturing the exact center reticle coordinates.
  * - Dynamic Nominatim geocoding search for Philippine addresses and landmarks.
- * - Draggable/movable map center with visual crosshair/pin alignment.
  * - Integrates with Form fields, Customer Chat, Rider Chat, and Registration.
  * ============================================================================
  */
@@ -28,6 +32,180 @@ import {
 } from './mapState.js';
 
 let nominatimSearchTimeout = null;
+
+/**
+ * Creates custom styled HTML pin icons for Leaflet manual marker.
+ */
+function createManualPinIcon() {
+    const html = `
+        <div style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: translate(0, -50%); cursor: grab;">
+            <div style="background-color: #EF4444; width: 34px; height: 34px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 2.5px solid white;">
+                <i class="fa-solid fa-location-dot" style="font-size: 15px; color: white; transform: rotate(45deg);"></i>
+            </div>
+            <div style="width: 8px; height: 8px; background: rgba(0,0,0,0.4); border-radius: 50%; filter: blur(1px); margin-top: 2px;"></div>
+        </div>
+    `;
+
+    return window.L.divIcon({
+        className: 'custom-manual-pin-icon',
+        html: html,
+        iconSize: [34, 42],
+        iconAnchor: [17, 38],
+        popupAnchor: [0, -38]
+    });
+}
+
+/**
+ * Injects or updates a persistent center reticle crosshair overlay on the map container.
+ */
+function ensureCenterReticleOverlay(container) {
+    if (!container) return;
+
+    let reticle = document.getElementById('map-persistent-center-reticle');
+    if (!reticle) {
+        reticle = document.createElement('div');
+        reticle.id = 'map-persistent-center-reticle';
+        reticle.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+        `;
+
+        reticle.innerHTML = `
+            <div style="position: relative; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                <div style="position: absolute; width: 36px; height: 36px; border: 2px solid rgba(59, 130, 246, 0.85); border-radius: 50%; box-shadow: 0 0 10px rgba(59, 130, 246, 0.5), inset 0 0 6px rgba(59, 130, 246, 0.3);"></div>
+                <div style="position: absolute; width: 14px; height: 2px; background: #3B82F6; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>
+                <div style="position: absolute; height: 14px; width: 2px; background: #3B82F6; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>
+                <div style="position: absolute; width: 6px; height: 6px; background: #EF4444; border-radius: 50%; border: 1.5px solid white; box-shadow: 0 0 5px rgba(239, 68, 68, 0.9);"></div>
+            </div>
+        `;
+        container.style.position = 'relative';
+        container.appendChild(reticle);
+    }
+
+    reticle.classList.remove('hidden');
+}
+
+/**
+ * Injects or updates an interactive status bar on top of the map showing
+ * which capture target (Manual Pin vs. Center Reticle) is active.
+ */
+function updatePinStatusOverlay(container) {
+    if (!container) return;
+
+    let banner = document.getElementById('map-pin-mode-banner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'map-pin-mode-banner';
+        banner.style.cssText = `
+            position: absolute;
+            bottom: 24px;
+            left: 12px;
+            right: 12px;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(15, 23, 42, 0.92);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            border-radius: 14px;
+            padding: 8px 12px;
+            color: white;
+            font-size: 11px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            backdrop-filter: blur(8px);
+        `;
+        container.appendChild(banner);
+    }
+
+    if (mapState.isManualPinPlaced && mapState.manualPinCoords) {
+        banner.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                <span style="background: rgba(239, 68, 68, 0.2); color: #F87171; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; padding: 2px 6px; font-weight: 800; font-size: 10px;">PIN PLACED</span>
+                <span style="font-family: monospace; font-size: 11px; color: #E2E8F0; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                    ${mapState.manualPinCoords.lat.toFixed(5)}, ${mapState.manualPinCoords.lng.toFixed(5)}
+                </span>
+            </div>
+            <button type="button" onclick="window.clearManualPin && window.clearManualPin()" style="background: rgba(239, 68, 68, 0.85); hover:background: #DC2626; color: white; border: none; border-radius: 8px; padding: 4px 8px; font-weight: 700; font-size: 10px; cursor: pointer; transition: all 0.2s;" title="Remove placed pin and revert to map center">
+                <i class="fa-solid fa-xmark"></i> Clear
+            </button>
+        `;
+    } else {
+        banner.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                <span style="background: rgba(59, 130, 246, 0.2); color: #60A5FA; border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 6px; padding: 2px 6px; font-weight: 800; font-size: 10px;">CENTER RETICLE</span>
+                <span style="font-size: 11px; color: #CBD5E1;">Pan map to target, or tap anywhere to drop pin</span>
+            </div>
+            <div style="font-size: 9px; color: #94A3B8; font-style: italic;">Auto-center</div>
+        `;
+    }
+
+    banner.classList.remove('hidden');
+}
+
+/**
+ * Places or relocates the draggable manual pin on the map.
+ */
+export function placeManualPin(lat, lng) {
+    if (!mapState.leafletMapObj || !window.L) return;
+
+    const numLat = parseFloat(lat);
+    const numLng = parseFloat(lng);
+    if (isNaN(numLat) || isNaN(numLng)) return;
+
+    mapState.manualPinCoords = { lat: numLat, lng: numLng };
+    mapState.isManualPinPlaced = true;
+
+    if (!mapState.manualPinMarker) {
+        const pinIcon = createManualPinIcon();
+        mapState.manualPinMarker = window.L.marker([numLat, numLng], {
+            icon: pinIcon,
+            draggable: true,
+            zIndexOffset: 1000
+        }).addTo(mapState.leafletMapObj);
+
+        // Update coordinates when user drags the manual marker
+        mapState.manualPinMarker.on('dragend', () => {
+            const pos = mapState.manualPinMarker.getLatLng();
+            mapState.manualPinCoords = { lat: pos.lat, lng: pos.lng };
+            const container = document.getElementById('google-map-container');
+            updatePinStatusOverlay(container);
+        });
+    } else {
+        mapState.manualPinMarker.setLatLng([numLat, numLng]);
+        if (!mapState.leafletMapObj.hasLayer(mapState.manualPinMarker)) {
+            mapState.manualPinMarker.addTo(mapState.leafletMapObj);
+        }
+    }
+
+    const container = document.getElementById('google-map-container');
+    updatePinStatusOverlay(container);
+    showToast("📍 Pin placed! Tapping confirm will capture this pin.");
+}
+
+/**
+ * Clears the manual pin and restores capture priority to the map center reticle.
+ */
+export function clearManualPin() {
+    if (mapState.manualPinMarker && mapState.leafletMapObj) {
+        mapState.leafletMapObj.removeLayer(mapState.manualPinMarker);
+    }
+    mapState.manualPinMarker = null;
+    mapState.isManualPinPlaced = false;
+    mapState.manualPinCoords = null;
+
+    const container = document.getElementById('google-map-container');
+    updatePinStatusOverlay(container);
+    showToast("🎯 Pin cleared. Active capture switched back to Map Center.");
+}
 
 /**
  * Initializes the search bar with free Nominatim autocomplete for OpenStreetMap.
@@ -86,6 +264,9 @@ export function initMapSearchAutocomplete() {
                         mapState.leafletMapObj.setView([lat, lon], 17);
                         mapState.selectedMapLat = lat;
                         mapState.selectedMapLng = lon;
+
+                        // Place the manual pin directly at the searched landmark
+                        placeManualPin(lat, lon);
                     }
 
                     input.value = el.querySelector('span')?.innerText || '';
@@ -105,6 +286,9 @@ export function initMapSearchAutocomplete() {
 export async function openMapPicker(context = 'form') {
     mapState.mapPickerContext = context;
 
+    // Reset manual pin state for clean session calibration
+    clearManualPin();
+
     switchView('view-map');
     
     const searchBarContainer = document.getElementById('map-search-bar-container');
@@ -115,9 +299,11 @@ export async function openMapPicker(context = 'form') {
     const titleEl = document.getElementById('map-view-title');
 
     if (searchBarContainer) searchBarContainer.classList.remove('hidden');
-    if (centerPin) centerPin.classList.remove('hidden');
     if (confirmBtn) confirmBtn.classList.remove('hidden');
     if (navBtn) navBtn.classList.add('hidden');
+
+    // Hide legacy center pin in favor of our high-z-index reticle
+    if (centerPin) centerPin.classList.add('hidden');
 
     if (context === 'chat') {
         if (titleEl) titleEl.innerText = "Select Location for Chat";
@@ -133,7 +319,7 @@ export async function openMapPicker(context = 'form') {
         if (confirmBtnText) confirmBtnText.innerText = "CONFIRM LOCATION PIN";
     }
 
-    showToast("📡 Calibrating map center...");
+    showToast("📍 Calibrating map position...");
     await ensureLeafletLoaded();
     const coords = await getDeviceLocation();
 
@@ -207,11 +393,22 @@ export function initLeafletMapObject(lat, lng) {
             mapState.selectedMapLng = center.lng;
         });
 
+        // Tap/click listener: Drop or move manual pin on the map
+        mapState.leafletMapObj.on('click', (e) => {
+            if (e && e.latlng) {
+                placeManualPin(e.latlng.lat, e.latlng.lng);
+            }
+        });
+
         // Backward compatibility link
         mapState.googleMapObj = mapState.leafletMapObj;
     } else {
         mapState.leafletMapObj.setView(initialPos, 17);
     }
+
+    // Attach high-z-index center reticle & pin indicator overlay
+    ensureCenterReticleOverlay(mapContainer);
+    updatePinStatusOverlay(mapContainer);
 
     // Force container dimension refresh when opening view
     setTimeout(() => {
@@ -227,28 +424,50 @@ export function initLeafletMapObject(lat, lng) {
 // Backward-compatible alias for existing imports
 export const initGoogleMapObject = initLeafletMapObject;
 
+/**
+ * Confirms coordinates according to strict priority hierarchy:
+ * Priority 1: Captures user-placed manual pin (ignores center).
+ * Priority 2: Captures map center reticle if no manual pin is placed.
+ */
 export function confirmGoogleMapPin() {
     if (!mapState.leafletMapObj) return;
 
-    const formattedLat = mapState.selectedMapLat.toFixed(6);
-    const formattedLng = mapState.selectedMapLng.toFixed(6);
+    let targetLat = 0;
+    let targetLng = 0;
+    let isManualCapture = false;
+
+    // Strict Selection Hierarchy
+    if (mapState.isManualPinPlaced && mapState.manualPinCoords) {
+        targetLat = mapState.manualPinCoords.lat;
+        targetLng = mapState.manualPinCoords.lng;
+        isManualCapture = true;
+    } else {
+        const center = mapState.leafletMapObj.getCenter();
+        targetLat = center.lat;
+        targetLng = center.lng;
+    }
+
+    const formattedLat = targetLat.toFixed(6);
+    const formattedLng = targetLng.toFixed(6);
     const mapLink = `https://www.google.com/maps/search/?api=1&query=${formattedLat},${formattedLng}`;
 
-    appState.lat = mapState.selectedMapLat;
-    appState.lon = mapState.selectedMapLng;
+    appState.lat = targetLat;
+    appState.lon = targetLng;
+
+    const captureLabel = isManualCapture ? "Placed Pin" : "Center Reticle";
 
     if (mapState.mapPickerContext === 'chat') {
         goBack();
         if (typeof sendCustomerToRiderChat === 'function') {
-            sendCustomerToRiderChat("", null, { lat: mapState.selectedMapLat, lng: mapState.selectedMapLng });
+            sendCustomerToRiderChat("", null, { lat: targetLat, lng: targetLng });
         }
-        showToast("📍 Location card sent to chat!");
+        showToast(`📍 ${captureLabel} location sent to chat!`);
     } else if (mapState.mapPickerContext === 'rider-chat') {
         goBack();
         if (typeof sendRiderToCustomerChat === 'function') {
-            sendRiderToCustomerChat("📍 Shared Rider Location", null, { lat: mapState.selectedMapLat, lng: mapState.selectedMapLng });
+            sendRiderToCustomerChat("Shared Rider Location", null, { lat: targetLat, lng: targetLng });
         }
-        showToast("📍 Rider location pin sent to chat!");
+        showToast(`📍 ${captureLabel} location sent to chat!`);
     } else if (mapState.mapPickerContext === 'registration') {
         const regGpsInput = document.getElementById('reg-gps-link');
         const regLatInput = document.getElementById('reg-lat');
@@ -259,14 +478,22 @@ export function confirmGoogleMapPin() {
         if (regLonInput) regLonInput.value = formattedLng;
 
         goBack();
-        showToast("📍 Registration location pinned!");
+        showToast(`📍 ${captureLabel} pinned for registration!`);
     } else {
         const formLatLonInput = document.getElementById('form-latlon');
         if (formLatLonInput) formLatLonInput.value = mapLink;
         
         goBack();
-        showToast("📍 Location pin confirmed!");
+        showToast(`📍 ${captureLabel} confirmed!`);
     }
 }
 
-// REMARKS: MAP_PICKER_LEAFLET_OSM_NOMINATIM_GEOCODER_V1_COMPLETE
+// Global window attachments
+if (typeof window !== 'undefined') {
+    window.placeManualPin = placeManualPin;
+    window.clearManualPin = clearManualPin;
+    window.confirmGoogleMapPin = confirmGoogleMapPin;
+    window.openMapPicker = openMapPicker;
+}
+
+// REMARKS: MAP_PICKER_PERSISTENT_RETICLE_AND_MANUAL_PIN_HIERARCHY_V2_COMPLETE
