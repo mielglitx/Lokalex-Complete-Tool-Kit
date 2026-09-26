@@ -8,12 +8,16 @@
  * Description:
  * Manages background and on-demand synchronization across Google Apps Script,
  * Firebase Realtime Database, and LocalStorage/IndexedDB:
- * - Dual-Source Ingestion: Fetches from GAS API, with automatic fallback to
- *   Firebase `directory/${type}` and legacy root paths (`customers/`, `stores/`).
- * - Auto-Seeding: Automatically populates Firebase `directory/barangays` from
- *   `BARANGAY_DATA` if the cloud node is empty.
- * - Diagnostic Transparency: Replaced silent catches with explicit logging and
- *   toast alerts so network or database permission failures are visible.
+ * - Non-Destructive Ingestion: Preserves all geographic routing fields
+ *   (`originMunicipality`, `municipality`, `barangay`, `compositeKey`, `region`,
+ *   and `nationality`), preventing multi-municipality rates from being expunged.
+ * - Composite Key Deduplication: Uses unique composite keys
+ *   (`origin_destination_barangay`) to prevent same-name barangays in different
+ *   towns from overwriting each other.
+ * - Dual-Source Ingestion: Merges GAS API and Firebase Realtime Database without
+ *   dropping cloud rate updates.
+ * - Auto-Seeding: Automatically populates Firebase `directory/barangays` with
+ *   complete composite keys if the cloud node is empty.
  * ============================================================================
  */
 
@@ -24,13 +28,14 @@ import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
 import { prefetchMediaBatch } from '../../utils/storageEngine.js';
 import { saveDirectoryCache, loadDirectoryCache } from './directoryStorage.js';
-import { renderDirectoryList } from './directoryUi.js';
+import { renderDirectoryList, populateDestinationDropdown } from './directoryUi.js';
 
 const SYNC_TTL_KEY = 'lokalex_dir_last_sync_timestamp';
 const SYNC_TTL_MS = 6 * 60 * 60 * 1000; // 6 Hours cache window
 
 /**
- * Automatically seeds default barangays to Firebase if the cloud node is empty.
+ * Automatically seeds default barangays to Firebase if the cloud node is empty,
+ * ensuring all initial records have complete geographic routing metadata.
  */
 export async function seedBarangaysToFirebase() {
     if (!db || !BARANGAY_DATA || BARANGAY_DATA.length === 0) return;
@@ -41,8 +46,15 @@ export async function seedBarangaysToFirebase() {
             const updates = {};
             BARANGAY_DATA.forEach(b => {
                 const cleanKey = b.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-                updates[`directory/barangays/${cleanKey}`] = {
+                const compositeKey = `camiling_camiling_${cleanKey}`;
+                updates[`directory/barangays/${compositeKey}`] = {
                     name: b.name,
+                    barangay: b.name,
+                    originMunicipality: "Camiling",
+                    municipality: "Camiling",
+                    compositeKey: compositeKey,
+                    nationality: "Philippines",
+                    region: "Region III (Central Luzon)",
                     contact: "",
                     address: `₱${b.fee.toFixed(2)}`,
                     rate: `₱${b.fee.toFixed(2)}`,
@@ -53,7 +65,7 @@ export async function seedBarangaysToFirebase() {
                 };
             });
             await db.ref().update(updates);
-            console.info("✅ Barangay Rates successfully seeded to Firebase.");
+            console.info("✅ Barangay Rates successfully seeded to Firebase with composite keys.");
         }
     } catch(err) {
         console.warn("Notice: Could not auto-seed barangays to Firebase:", err.message);
@@ -61,7 +73,8 @@ export async function seedBarangaysToFirebase() {
 }
 
 /**
- * Silently syncs directory data if local cache is stale.
+ * Silently syncs directory data if local cache is stale, preserving all
+ * multi-municipality routing fields.
  */
 export async function silentSyncDirectory() {
     if (!db) return;
@@ -80,8 +93,12 @@ export async function silentSyncDirectory() {
 
         (globalState.records || []).forEach(r => {
             if (r && r.name) {
-                const key = `${r.type || 'customers'}_${r.name.toLowerCase().trim()}`;
-                updatedRecordsMap.set(key, r);
+                const isBrgy = (r.type || 'customers') === 'barangays';
+                const compKey = r.compositeKey || (isBrgy
+                    ? `${(r.originMunicipality || 'camiling').toLowerCase().replace(/[^a-z0-9]/g, '')}_${(r.municipality || 'camiling').toLowerCase().replace(/[^a-z0-9]/g, '')}_${r.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`
+                    : `${r.type || 'customers'}_${r.name.toLowerCase().trim()}`);
+                const mapKey = `${r.type || 'customers'}_${compKey}`;
+                updatedRecordsMap.set(mapKey, r);
             }
         });
 
@@ -96,18 +113,33 @@ export async function silentSyncDirectory() {
             }
 
             if (fbData) {
-                Object.values(fbData).forEach(item => {
-                    const name = (item.name || item.storeName || item.customerName || "").trim();
+                Object.entries(fbData).forEach(([fbKey, item]) => {
+                    if (!item) return;
+                    const name = (item.name || item.storeName || item.customerName || item.barangay || "").trim();
                     if (name) {
-                        const key = `${type}_${name.toLowerCase()}`;
-                        updatedRecordsMap.set(key, {
+                        const isBrgy = (item.type || type) === 'barangays';
+                        const originMun = (item.originMunicipality || "Camiling").trim();
+                        const destMun = (item.municipality || "Camiling").trim();
+                        const compKey = item.compositeKey || (isBrgy
+                            ? `${originMun.toLowerCase().replace(/[^a-z0-9]/g, '')}_${destMun.toLowerCase().replace(/[^a-z0-9]/g, '')}_${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`
+                            : fbKey || `${type}_${name.toLowerCase()}`);
+                        const mapKey = `${type}_${compKey}`;
+
+                        updatedRecordsMap.set(mapKey, {
+                            ...item,
                             name: name,
+                            barangay: item.barangay || name,
+                            originMunicipality: originMun,
+                            municipality: destMun,
+                            nationality: item.nationality || "Philippines",
+                            region: item.region || "Region III (Central Luzon)",
+                            compositeKey: compKey,
                             contact: (item.contact || item.phone || item.mobile || "").trim(),
-                            address: (item.address || item.location || "").trim(),
+                            address: (item.address || item.location || item.rate || "").trim(),
                             rate: (item.rate || item.address || "").toString().trim(),
                             lat_lon_link: (item.lat_lon_link || item.mapLink || "").trim(),
                             type: item.type || type,
-                            recorded_by: item.recorded_by || "Amiel",
+                            recorded_by: item.recorded_by || "System",
                             recorded_at: (item.recorded_at || item.recorded_date || item.date || "").toString().trim()
                         });
                     }
@@ -126,6 +158,9 @@ export async function silentSyncDirectory() {
 
             const currentViewEl = document.querySelector('main > section:not(.hidden)');
             if (currentViewEl && currentViewEl.id === 'view-directory') {
+                if (globalState.currentType === 'barangays') {
+                    populateDestinationDropdown();
+                }
                 renderDirectoryList();
             }
         }
@@ -135,7 +170,8 @@ export async function silentSyncDirectory() {
 }
 
 /**
- * Triggers manual dual-source synchronization (GAS API + Firebase).
+ * Triggers manual dual-source synchronization (GAS API + Firebase Realtime Database).
+ * Fully retains origin and destination municipalities across all records.
  */
 export async function syncData(isSilent = false) {
     const type = globalState.currentType || 'customers';
@@ -181,15 +217,28 @@ export async function syncData(isSilent = false) {
                         const recorded_at = item.recorded_at || item.recorded_date || item.date_added || item.date || "";
 
                         const finalName = (type === 'barangays' ? barangayName : (item.name || item.customer_name || item.store_name || barangayName)).trim();
+                        const originMun = (item.originMunicipality || item.origin || "Camiling").trim();
+                        const destMun = (item.municipality || item.destination || "Camiling").trim();
+                        const isBrgy = type === 'barangays';
+                        const compKey = item.compositeKey || (isBrgy
+                            ? `${originMun.toLowerCase().replace(/[^a-z0-9]/g, '')}_${destMun.toLowerCase().replace(/[^a-z0-9]/g, '')}_${finalName.toLowerCase().replace(/[^a-z0-9]/g, '')}`
+                            : `${type}_${finalName.toLowerCase()}`);
 
                         return {
+                            ...item,
                             name: finalName,
+                            barangay: item.barangay || finalName,
+                            originMunicipality: originMun,
+                            municipality: destMun,
+                            nationality: item.nationality || "Philippines",
+                            region: item.region || "Region III (Central Luzon)",
+                            compositeKey: compKey,
                             contact: contact.trim(),
                             address: address.trim(),
                             rate: rateVal.toString().trim(),
                             lat_lon_link: lat_lon_link.trim(),
                             type: item.type || type,
-                            recorded_by: item.recorded_by || item.recordedby || "Amiel",
+                            recorded_by: item.recorded_by || item.recordedby || "System",
                             recorded_at: recorded_at.toString().trim()
                         };
                     }).filter(r => r.name !== "");
@@ -207,41 +256,67 @@ export async function syncData(isSilent = false) {
     // 2. ATTEMPT FIREBASE REALTIME DATABASE SYNC
     if (db) {
         try {
-            // First check directory/{type}
             let snap = await db.ref(`directory/${type}`).once('value');
             let fbData = snap.val();
 
-            // For barangays: auto-seed from BARANGAY_DATA if Firebase is empty
             if (!fbData && type === 'barangays') {
                 await seedBarangaysToFirebase();
                 snap = await db.ref('directory/barangays').once('value');
                 fbData = snap.val();
             }
 
-            // For customers/stores: check root node fallback if directory/{type} is empty
             if (!fbData && type !== 'barangays') {
                 snap = await db.ref(type).once('value');
                 fbData = snap.val();
             }
 
             if (fbData) {
-                const fbList = Object.values(fbData).map(item => {
-                    const name = (item.name || item.storeName || item.customerName || "").trim();
+                const fbList = Object.entries(fbData).map(([fbKey, item]) => {
+                    if (!item) return null;
+                    const name = (item.name || item.storeName || item.customerName || item.barangay || "").trim();
+                    const isBrgy = (item.type || type) === 'barangays';
+                    const originMun = (item.originMunicipality || "Camiling").trim();
+                    const destMun = (item.municipality || "Camiling").trim();
+                    const compKey = item.compositeKey || (isBrgy
+                        ? `${originMun.toLowerCase().replace(/[^a-z0-9]/g, '')}_${destMun.toLowerCase().replace(/[^a-z0-9]/g, '')}_${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`
+                        : fbKey || `${type}_${name.toLowerCase()}`);
+
                     return {
+                        ...item,
                         name: name,
+                        barangay: item.barangay || name,
+                        originMunicipality: originMun,
+                        municipality: destMun,
+                        nationality: item.nationality || "Philippines",
+                        region: item.region || "Region III (Central Luzon)",
+                        compositeKey: compKey,
                         contact: (item.contact || item.phone || item.mobile || "").trim(),
-                        address: (item.address || item.location || "").trim(),
+                        address: (item.address || item.location || item.rate || "").trim(),
                         rate: (item.rate || item.address || "").toString().trim(),
                         lat_lon_link: (item.lat_lon_link || item.mapLink || "").trim(),
                         type: item.type || type,
-                        recorded_by: item.recorded_by || "Amiel",
+                        recorded_by: item.recorded_by || "System",
                         recorded_at: (item.recorded_at || item.recorded_date || item.date || "").toString().trim()
                     };
-                }).filter(r => r.name !== "");
+                }).filter(r => r && r.name !== "");
 
+                // Index by composite key so multi-municipality rates remain completely intact
                 const recordMap = new Map();
-                fetchedRecords.forEach(r => recordMap.set(r.name.toLowerCase(), r));
-                fbList.forEach(r => recordMap.set(r.name.toLowerCase(), r));
+                fetchedRecords.forEach(r => {
+                    const k = (r.type === 'barangays')
+                        ? (r.compositeKey || `${(r.originMunicipality || 'camiling').toLowerCase()}_${(r.municipality || 'camiling').toLowerCase()}_${r.name.toLowerCase()}`)
+                        : `${r.type}_${r.name.toLowerCase()}`;
+                    recordMap.set(k, r);
+                });
+
+                // Authoritative Firebase records supplement and override GAS data
+                fbList.forEach(r => {
+                    const k = (r.type === 'barangays')
+                        ? (r.compositeKey || `${(r.originMunicipality || 'camiling').toLowerCase()}_${(r.municipality || 'camiling').toLowerCase()}_${r.name.toLowerCase()}`)
+                        : `${r.type}_${r.name.toLowerCase()}`;
+                    recordMap.set(k, r);
+                });
+
                 fetchedRecords = Array.from(recordMap.values());
             }
         } catch (dbErr) {
@@ -273,6 +348,9 @@ export async function syncData(isSilent = false) {
 
         const currentViewEl = document.querySelector('main > section:not(.hidden)');
         if (currentViewEl && currentViewEl.id === 'view-directory') {
+            if (type === 'barangays') {
+                populateDestinationDropdown();
+            }
             renderDirectoryList();
         }
     } finally {
@@ -280,9 +358,7 @@ export async function syncData(isSilent = false) {
     }
 }
 
-// Seed barangay rates on initialization if cloud has no records yet
-
+// Seed initial barangay rates if Firebase cloud node is empty
 seedBarangaysToFirebase();
 
-seedBarangaysToFirebase();
-
+// REMARKS: DIRECTORY_SYNC_NON_DESTRUCTIVE_COMPOSITE_KEYING_V2_COMPLETE

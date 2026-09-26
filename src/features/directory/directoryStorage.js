@@ -1,4 +1,20 @@
 // src/features/directory/directoryStorage.js
+
+/**
+ * ============================================================================
+ * DIRECTORY STORAGE & OFFLINE PERSISTENCE ENGINE
+ * ============================================================================
+ * 
+ * Description:
+ * Manages synchronous LocalStorage and asynchronous IndexedDB caching for all
+ * directory entities (customers, stores, and multi-municipality delivery rates):
+ * - Guarantees default barangays are seeded with complete origin and destination
+ *   routing metadata (`originMunicipality: "Camiling"`, `municipality: "Camiling"`,
+ *   and unique composite keys), preventing fallback overwrites.
+ * - Restores offline records across application view navigations and reloads.
+ * ============================================================================
+ */
+
 import { globalState } from '../../store/state.js';
 import { BARANGAY_DATA } from '../../config/constants.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
@@ -20,8 +36,8 @@ export function saveDirectoryCache() {
 }
 
 /**
- * Hydrates state synchronously from LocalStorage, fills fallback barangays,
- * and asynchronously hydrates deeper records from IndexedDB.
+ * Hydrates state synchronously from LocalStorage, fills fallback barangays with
+ * complete routing keys, and asynchronously hydrates deeper records from IndexedDB.
  */
 export function loadDirectoryCache(onHydrated) {
     try {
@@ -51,16 +67,25 @@ export function loadDirectoryCache(onHydrated) {
 
         const hasBarangays = (globalState.records || []).some(r => r.type === 'barangays');
         if (!hasBarangays) {
-            const defaultBarangays = BARANGAY_DATA.map(b => ({
-                name: b.name,
-                contact: "",
-                address: `₱${b.fee.toFixed(2)}`,
-                rate: `₱${b.fee.toFixed(2)}`,
-                lat_lon_link: "",
-                type: 'barangays',
-                recorded_by: "System",
-                recorded_at: getLocalTodayStr()
-            }));
+            const defaultBarangays = BARANGAY_DATA.map(b => {
+                const cleanKey = b.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                return {
+                    name: b.name,
+                    barangay: b.name,
+                    originMunicipality: "Camiling",
+                    municipality: "Camiling",
+                    compositeKey: `camiling_camiling_${cleanKey}`,
+                    nationality: "Philippines",
+                    region: "Region III (Central Luzon)",
+                    contact: "",
+                    address: `₱${b.fee.toFixed(2)}`,
+                    rate: `₱${b.fee.toFixed(2)}`,
+                    lat_lon_link: "",
+                    type: 'barangays',
+                    recorded_by: "System",
+                    recorded_at: getLocalTodayStr()
+                };
+            });
             globalState.records = [...(globalState.records || []), ...defaultBarangays];
             saveDirectoryCache();
         }
@@ -68,3 +93,5 @@ export function loadDirectoryCache(onHydrated) {
         if (!globalState.records) globalState.records = [];
     }
 }
+
+// REMARKS: DIRECTORY_STORAGE_COMPOSITE_METADATA_CACHING_V2_COMPLETE

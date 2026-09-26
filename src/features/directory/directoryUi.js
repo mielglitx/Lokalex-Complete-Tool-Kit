@@ -2,15 +2,16 @@
 
 /**
  * ============================================================================
- * DIRECTORY UI, DUAL-TIER ROUTING TOOLBAR & GPS DESTINATION AUTO-SELECT
+ * DIRECTORY UI, DUAL-TIER ROUTING TOOLBAR & DYNAMIC DESTINATION SYNCHRONIZER
  * ============================================================================
  * 
  * Description:
  * Manages presentation layer, card rendering, search filtering, and credit consumption:
+ * - Dynamic Destination Synchronization: Automatically updates the Destination
+ *   dropdown whenever rates are rendered, ensuring newly added municipalities
+ *   and accurate record counts are immediately visible without being expunged.
  * - Dual-Tier Routing Toolbar: Coordinates Origin Hub (`#dir-origin-hub-select`)
  *   and Destination Municipality (`#dir-destination-select`).
- * - Records-Only Destination Population: Dynamically extracts only serviced
- *   municipalities that have recorded rates under the active Starting Hub.
  * - Non-Blocking GPS Auto-Selection: Compares device GPS coordinates against
  *   municipal geographic anchors in the background to auto-select the user's
  *   local municipality without blocking initial page rendering.
@@ -126,7 +127,7 @@ export function initRiderCreditsListener() {
 
 /**
  * Populates the Destination dropdown with ONLY municipalities that have records
- * under the active Starting Hub.
+ * under the active Starting Hub. Automatically called whenever rates render.
  */
 export function populateDestinationDropdown() {
     const destSelect = document.getElementById('dir-destination-select');
@@ -141,7 +142,9 @@ export function populateDestinationDropdown() {
     records.forEach(r => {
         const rOrigin = (r.originMunicipality || "Camiling").trim().toLowerCase();
         if (activeOriginHub === "all" || rOrigin === activeOriginHub) {
-            const destMun = (r.municipality || "Camiling").trim();
+            const rawDest = (r.municipality || "Camiling").trim();
+            // Normalize casing for consistent grouping
+            const destMun = rawDest.charAt(0).toUpperCase() + rawDest.slice(1);
             munCountMap.set(destMun, (munCountMap.get(destMun) || 0) + 1);
         }
     });
@@ -162,7 +165,10 @@ export function populateDestinationDropdown() {
         globalState.selectedDestinationMun = localStorage.getItem('lokalex_selected_destination_mun') || "ALL";
     }
 
-    if (globalState.selectedDestinationMun !== "ALL" && !servicedMunicipalities.includes(globalState.selectedDestinationMun)) {
+    const currentSelected = globalState.selectedDestinationMun;
+    const isAvailable = servicedMunicipalities.some(m => m.toLowerCase() === currentSelected.toLowerCase());
+
+    if (currentSelected !== "ALL" && !isAvailable) {
         // Fallback to Camiling if available, else ALL
         globalState.selectedDestinationMun = servicedMunicipalities.includes("Camiling") ? "Camiling" : "ALL";
     }
@@ -240,7 +246,7 @@ export function handleOriginHubChange(selectedHub) {
     } catch(e) {}
 
     // Re-evaluate available destination municipalities for the selected origin
-    const serviced = populateDestinationDropdown();
+    populateDestinationDropdown();
     renderDirectoryList();
 
     const hubLabel = selectedHub === "ALL" ? "Lahat ng Starting Hubs" : `${selectedHub} Hub`;
@@ -531,6 +537,7 @@ export function copyBarangayRate(barangayName, rawRate, destinationMun = "Camili
 /**
  * Renders the directory cards list with sticky alphabetical sections,
  * anti-clipping titles, isolated Origin Hub, and Destination filtering.
+ * Automatically synchronizes the Destination dropdown on render.
  */
 export function renderDirectoryList() {
     const listEl = document.getElementById('record-list');
@@ -543,6 +550,11 @@ export function renderDirectoryList() {
 
     const isBarangay = globalState.currentType === 'barangays';
     const isAdminUser = checkAdminAccess();
+
+    // Dynamically rebuild destination options whenever rates are rendered
+    if (isBarangay) {
+        populateDestinationDropdown();
+    }
 
     let records = globalState.records ? globalState.records.filter(r => (r.type || 'customers') === globalState.currentType) : [];
 
@@ -845,6 +857,7 @@ if (typeof window !== 'undefined') {
     window.initRiderCreditsListener = initRiderCreditsListener;
     window.handleOriginHubChange = handleOriginHubChange;
     window.handleDestinationChange = handleDestinationChange;
+    window.populateDestinationDropdown = populateDestinationDropdown;
     window.copyBarangayRate = copyBarangayRate;
 
     if (document.readyState === 'loading') {
@@ -857,4 +870,5 @@ if (typeof window !== 'undefined') {
         initRiderCreditsListener();
     }
 }
-// REMARKS: DIRECTORY_UI_DESTINATION_RECORDS_ONLY_GPS_AUTO_SELECT_V6_COMPLETE
+
+// REMARKS: DIRECTORY_UI_DYNAMIC_DESTINATION_SYNC_V7_COMPLETE
