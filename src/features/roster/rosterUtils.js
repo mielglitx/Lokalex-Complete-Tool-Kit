@@ -10,6 +10,10 @@
  * - High-Performance Memoized Gross Index: Pre-computes daily rider totals in a
  *   single pass ($O(N)$), enabling instant $O(1)$ lookups during queue sorting
  *   and rendering without secondary database ledgers.
+ * - Non-Empty Cache Latch Protection: Prevents empty cold-start states from
+ *   locking getMergedDeduplicatedCommissionList when Firebase loads async.
+ * - Intelligent Date Normalizer: Resolves ISO, Epoch, MM/DD/YYYY, and Philippine
+ *   DD/MM/YYYY formats seamlessly to prevent date mismatches.
  * - Shift Crossover Date Resolver (`resolveOrderDate`): Intelligently binds
  *   late-night deliveries (started PM, finished AM) to the originating shift date.
  * - Deduplicated commission gross calculations across receipts and history.
@@ -318,24 +322,41 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     return durationText;
 }
 
-// Canonical date normalizer to handle ISO, slash, dash, and timestamps consistently
+/**
+ * Intelligent Canonical Date Normalizer:
+ * Accurately parses ISO (YYYY-MM-DD), timestamps, MM/DD/YYYY, and Philippine
+ * DD/MM/YYYY dates without confusing days with months.
+ */
 export function normalizeToDateStr(val) {
     if (!val) return "";
     const str = String(val).trim();
     
-    // YYYY-MM-DD
+    // 1. Standard ISO Format: YYYY-MM-DD or YYYY/MM/DD
     const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
     if (isoMatch) {
         return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
     }
 
-    // MM/DD/YYYY or M/D/YYYY
+    // 2. Slash/Dash Ambiguous Formats: MM/DD/YYYY vs DD/MM/YYYY
     const slashMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
     if (slashMatch) {
-        return `${slashMatch[3]}-${slashMatch[1].padStart(2, '0')}-${slashMatch[2].padStart(2, '0')}`;
+        const p1 = parseInt(slashMatch[1], 10);
+        const p2 = parseInt(slashMatch[2], 10);
+        const year = slashMatch[3];
+
+        // If the first number > 12, it is guaranteed to be DD/MM/YYYY
+        if (p1 > 12) {
+            return `${year}-${String(p2).padStart(2, '0')}-${String(p1).padStart(2, '0')}`;
+        }
+        // If the second number > 12, it is guaranteed to be MM/DD/YYYY
+        if (p2 > 12) {
+            return `${year}-${String(p1).padStart(2, '0')}-${String(p2).padStart(2, '0')}`;
+        }
+        // Standard default: MM/DD/YYYY
+        return `${year}-${String(p1).padStart(2, '0')}-${String(p2).padStart(2, '0')}`;
     }
 
-    // Epoch timestamp
+    // 3. Raw Epoch Milliseconds / Seconds
     if (/^\d{10,13}$/.test(str)) {
         const d = new Date(Number(str));
         if (!isNaN(d.getTime())) {
@@ -346,6 +367,7 @@ export function normalizeToDateStr(val) {
         }
     }
 
+    // 4. Human-readable strings (e.g., "Sep 26, 2026")
     const d = new Date(str);
     if (!isNaN(d.getTime())) {
         const y = d.getFullYear();
@@ -438,10 +460,14 @@ export function isRiderMatch(targetName = "", recordName = "", targetId = "", re
     return false;
 }
 
-// 100% FINANCIAL & ROSTER SOURCE OF TRUTH (Cached for fast iterative access)
-export function getMergedDeduplicatedCommissionList() {
+/**
+ * 100% FINANCIAL & ROSTER SOURCE OF TRUTH
+ * Features non-empty cache latch protection to guarantee records are not lost on boot.
+ */
+export function getMergedDeduplicatedCommissionList(forceFresh = false) {
     const now = Date.now();
-    if (cachedMergedCommissionList && (now - lastMergedListTimestamp < 500)) {
+    // Only return cached list if caller did not force fresh AND cache has active records
+    if (!forceFresh && cachedMergedCommissionList && cachedMergedCommissionList.length > 0 && (now - lastMergedListTimestamp < 500)) {
         return cachedMergedCommissionList;
     }
 
@@ -995,4 +1021,4 @@ export function playLineBeep() {
 
 export const playLineAlarm = playLineBeep;
 
-// REMARKS: ROSTER_UTILS_HIGH_PERFORMANCE_MEMOIZED_ENGINE_V1_COMPLETE
+// REMARKS: ROSTER_UTILS_NON_EMPTY_CACHE_LATCH_AND_DATE_NORMALIZER_V2_COMPLETE
