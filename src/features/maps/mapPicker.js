@@ -13,6 +13,9 @@
  *   or drag a custom pin.
  * - Two-Tier Capture Hierarchy: Captures manual pin coordinates first if placed;
  *   otherwise falls back to capturing the exact center reticle coordinates.
+ * - Click-Isolated Status Banner: Floating status overlay positioned at `bottom: 84px`
+ *   with Leaflet event propagation disabled (`disableClickPropagation`), ensuring
+ *   the Clear Pin button responds reliably on all mobile and desktop browsers.
  * - Dynamic Nominatim geocoding search for Philippine addresses and landmarks.
  * - Integrates with Form fields, Customer Chat, Rider Chat, and Registration.
  * ============================================================================
@@ -97,6 +100,7 @@ function ensureCenterReticleOverlay(container) {
 /**
  * Injects or updates an interactive status bar on top of the map showing
  * which capture target (Manual Pin vs. Center Reticle) is active.
+ * Configured above bottom confirm bar with click-propagation disabled.
  */
 function updatePinStatusOverlay(container) {
     if (!container) return;
@@ -107,15 +111,16 @@ function updatePinStatusOverlay(container) {
         banner.id = 'map-pin-mode-banner';
         banner.style.cssText = `
             position: absolute;
-            bottom: 24px;
+            bottom: 84px;
             left: 12px;
             right: 12px;
-            z-index: 1000;
+            z-index: 1050;
+            pointer-events: auto;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            background: rgba(15, 23, 42, 0.92);
-            border: 1px solid rgba(59, 130, 246, 0.4);
+            background: rgba(15, 23, 42, 0.94);
+            border: 1px solid rgba(59, 130, 246, 0.5);
             border-radius: 14px;
             padding: 8px 12px;
             color: white;
@@ -124,20 +129,40 @@ function updatePinStatusOverlay(container) {
             backdrop-filter: blur(8px);
         `;
         container.appendChild(banner);
+
+        // Prevent Leaflet from intercepting touches/clicks on the banner
+        if (window.L && window.L.DomEvent) {
+            window.L.DomEvent.disableClickPropagation(banner);
+            window.L.DomEvent.disableScrollPropagation(banner);
+        }
     }
 
     if (mapState.isManualPinPlaced && mapState.manualPinCoords) {
         banner.innerHTML = `
             <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
-                <span style="background: rgba(239, 68, 68, 0.2); color: #F87171; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; padding: 2px 6px; font-weight: 800; font-size: 10px;">PIN PLACED</span>
+                <span style="background: rgba(239, 68, 68, 0.25); color: #F87171; border: 1px solid rgba(239, 68, 68, 0.5); border-radius: 6px; padding: 2px 6px; font-weight: 800; font-size: 10px; shrink: 0;">PIN PLACED</span>
                 <span style="font-family: monospace; font-size: 11px; color: #E2E8F0; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
                     ${mapState.manualPinCoords.lat.toFixed(5)}, ${mapState.manualPinCoords.lng.toFixed(5)}
                 </span>
             </div>
-            <button type="button" onclick="window.clearManualPin && window.clearManualPin()" style="background: rgba(239, 68, 68, 0.85); hover:background: #DC2626; color: white; border: none; border-radius: 8px; padding: 4px 8px; font-weight: 700; font-size: 10px; cursor: pointer; transition: all 0.2s;" title="Remove placed pin and revert to map center">
+            <button id="map-clear-manual-pin-btn" type="button" style="background: #EF4444; color: white; border: none; border-radius: 8px; padding: 5px 10px; font-weight: 700; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 4px; pointer-events: auto; z-index: 1051; transition: background 0.2s;" title="Remove placed pin and revert to map center">
                 <i class="fa-solid fa-xmark"></i> Clear
             </button>
         `;
+
+        const clearBtn = document.getElementById('map-clear-manual-pin-btn');
+        if (clearBtn) {
+            if (window.L && window.L.DomEvent) {
+                window.L.DomEvent.disableClickPropagation(clearBtn);
+            }
+            clearBtn.onclick = (e) => {
+                if (e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                }
+                clearManualPin();
+            };
+        }
     } else {
         banner.innerHTML = `
             <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
@@ -496,4 +521,4 @@ if (typeof window !== 'undefined') {
     window.openMapPicker = openMapPicker;
 }
 
-// REMARKS: MAP_PICKER_PERSISTENT_RETICLE_AND_MANUAL_PIN_HIERARCHY_V2_COMPLETE
+// REMARKS: MAP_PICKER_CLICKABLE_CLEAR_PIN_AND_LEAFLET_EVENT_ISOLATION_V3_COMPLETE
