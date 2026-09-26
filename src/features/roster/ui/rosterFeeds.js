@@ -1,4 +1,24 @@
 // src/features/roster/ui/rosterFeeds.js
+
+/**
+ * ============================================================================
+ * ROSTER FEEDS & CATERED CUSTOMER LOG ENGINE
+ * ============================================================================
+ * 
+ * Description:
+ * Manages presentation and live activity feeds for completed customer catering
+ * orders and daily rider logins:
+ * - High-Speed O(1) Pre-Indexed Lookup: Replaces heavy nested O(N*M) regex scanning
+ *   with pre-built transaction and customer hash maps, rendering catered history
+ *   instantly without blocking the main browser thread.
+ * - Single-Pass Timestamp Sorting: Evaluates parseTimeToMinutes once per record
+ *   prior to sorting, eliminating redundant comparator regex parsing.
+ * - Batched Frame Refresh: Leverages requestAnimationFrame (requestCateredFeedRefresh)
+ *   to isolate feed updates from rapid roster rotation and break timer ticks.
+ * - Multi-customer duration splits, milestone progression badges, and admin void controls.
+ * ============================================================================
+ */
+
 import { globalState } from '../../../store/state.js';
 import { escapeHtml, formatTitleCase, getLocalTodayStr } from '../../../utils/helpers.js';
 import { 
@@ -12,6 +32,24 @@ import {
 } from '../rosterUtils.js';
 import { getForcedCaterBadgeHtml } from './rosterBadge.js';
 
+let cateredFeedScheduled = false;
+
+/**
+ * Batches incoming catered feed updates into a single animation frame,
+ * preventing layout thrashing when multiple orders arrive or complete.
+ */
+export function requestCateredFeedRefresh() {
+    if (cateredFeedScheduled) return;
+    cateredFeedScheduled = true;
+    requestAnimationFrame(() => {
+        cateredFeedScheduled = false;
+        loadGlobalCateredList();
+    });
+}
+
+/**
+ * Renders the Catered Customers feed using single-pass O(1) indexed lookups.
+ */
 export function loadGlobalCateredList() {
     const feed = document.getElementById('catered-customers-feed');
     const badge = document.getElementById('catered-count-badge');
@@ -30,13 +68,15 @@ export function loadGlobalCateredList() {
         return itemDate && isSameDateStr(itemDate, todayStr);
     });
 
-    todayHistory.sort((a, b) => {
-        const pA = parseTimeToMinutes(a.startTime || a.cateringStartTime || a.time || "");
-        const pB = parseTimeToMinutes(b.startTime || b.cateringStartTime || b.time || "");
-        const timeA = pA !== null && pA !== undefined ? pA : 9999;
-        const timeB = pB !== null && pB !== undefined ? pB : 9999;
-        return timeA - timeB;
-    });
+    // Pre-calculate sorting minutes once per item to avoid O(N log N) regex parsing in comparator
+    for (let i = 0; i < todayHistory.length; i++) {
+        const item = todayHistory[i];
+        const sTime = item.startTime || item.cateringStartTime || item.time || "";
+        const mins = parseTimeToMinutes(sTime);
+        item._sortMinutes = mins !== null && mins !== undefined ? mins : 9999;
+    }
+
+    todayHistory.sort((a, b) => a._sortMinutes - b._sortMinutes);
 
     if (badge) badge.innerText = `${todayHistory.length} recorded`;
 
@@ -45,26 +85,62 @@ export function loadGlobalCateredList() {
         return;
     }
 
+    // Build single-pass O(1) lookup tables for receipts and catered history
+    const rcById = new Map();
+    const rcByCustKey = new Map();
+    (globalState.globalDailyReceipts || []).forEach(rc => {
+        if (!rc) return;
+        const txId = (rc.transactionId || rc.id || "").toString().trim();
+        if (txId) rcById.set(txId, rc);
+        const cName = (rc.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const rDate = rc.date || rc.completedDate || "";
+        if (cName && rDate) {
+            rcByCustKey.set(`${cName}_${rDate}`, rc);
+        }
+    });
+
+    const chById = new Map();
+    const chByCustKey = new Map();
+    (globalState.globalCateredHistory || []).forEach(ch => {
+        if (!ch) return;
+        const txId = (ch.transactionId || ch.id || "").toString().trim();
+        if (txId) chById.set(txId, ch);
+        const cName = (ch.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cDate = ch.completedDate || ch.date || "";
+        if (cName && cDate) {
+            chByCustKey.set(`${cName}_${cDate}`, ch);
+        }
+    });
+
+    const isAdminUser = isAdmin();
+
     feed.innerHTML = todayHistory.map(h => {
         let voidBtn = "";
         const recordTxId = (h.transactionId || h.id || "").toString().trim();
         const cDate = h.date || h.completedDate || todayStr;
         const riderFormatted = formatTitleCase(h.riderName || "Rider");
         const customerFormatted = formatTitleCase(h.customerName || "Customer");
+        const cleanCustKey = (h.customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
 
-        if (isAdmin()) {
-            voidBtn = `<button onclick="window.promptAdminDeleteCommissionRecord && window.promptAdminDeleteCommissionRecord('${escapeHtml(h.riderName || '')}', '${escapeHtml(h.customerName || '')}', '${escapeHtml(cDate)}', '${escapeHtml(recordTxId)}')" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-400 dark:border-red-700/50 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shrink-0"><i class="fa-solid fa-ban"></i> Void</button>`;
+        if (isAdminUser) {
+            voidBtn = `<button onclick="window.promptAdminDeleteCommissionRecord && window.promptAdminDeleteCommissionRecord('${escapeHtml(h.riderName || '')}', '${escapeHtml(h.customerName || '')}', '${escapeHtml(cDate)}', '${escapeHtml(recordTxId)}')" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-400 dark:border-red-700/50 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shrink-0 cursor-pointer"><i class="fa-solid fa-ban"></i> Void</button>`;
         }
 
-        const rcMatch = (globalState.globalDailyReceipts || []).find(rc => 
-            (recordTxId && (rc.transactionId === recordTxId || rc.id === recordTxId)) ||
-            (isCustomerMatch(rc.customerName, h.customerName) && isSameDateStr(rc.date || rc.completedDate, cDate))
-        );
+        // Instant O(1) resolution instead of nested O(N*M) linear scanning
+        let rcMatch = (recordTxId && rcById.get(recordTxId)) || rcByCustKey.get(`${cleanCustKey}_${cDate}`) || null;
+        let chMatch = (recordTxId && chById.get(recordTxId)) || chByCustKey.get(`${cleanCustKey}_${cDate}`) || null;
 
-        const chMatch = (globalState.globalCateredHistory || []).find(ch => 
-            (recordTxId && (ch.transactionId === recordTxId || ch.id === recordTxId)) ||
-            (isCustomerMatch(ch.customerName, h.customerName) && isSameDateStr(ch.completedDate || ch.date, cDate))
-        );
+        // Fallback to customer match only if direct key was absent
+        if (!rcMatch && cleanCustKey) {
+            rcMatch = (globalState.globalDailyReceipts || []).find(rc => 
+                isCustomerMatch(rc.customerName, h.customerName) && isSameDateStr(rc.date || rc.completedDate, cDate)
+            );
+        }
+        if (!chMatch && cleanCustKey) {
+            chMatch = (globalState.globalCateredHistory || []).find(ch => 
+                isCustomerMatch(ch.customerName, h.customerName) && isSameDateStr(ch.completedDate || ch.date, cDate)
+            );
+        }
 
         const sTime = h.startTime || h.cateringStartTime || rcMatch?.cateringStartTime || rcMatch?.startTime || chMatch?.startTime || h.time || "";
 
@@ -204,3 +280,14 @@ export function loadGlobalLoginList() {
         </div>`;
     }).join('');
 }
+
+if (typeof window !== 'undefined') {
+    window.loadGlobalCateredList = loadGlobalCateredList;
+    window.requestCateredFeedRefresh = requestCateredFeedRefresh;
+    window.loadGlobalLoginList = loadGlobalLoginList;
+
+    window.addEventListener('receiptsUpdated', () => requestCateredFeedRefresh());
+    window.addEventListener('cateredUpdated', () => requestCateredFeedRefresh());
+}
+
+// REMARKS: ROSTER_FEEDS_FAST_MEMOIZED_CATERED_LIST_V2_COMPLETE

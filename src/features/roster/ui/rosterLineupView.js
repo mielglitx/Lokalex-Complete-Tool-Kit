@@ -11,6 +11,8 @@
  * - Batched Frame Rendering: Leverages `requestAnimationFrame` debouncing
  *   (`requestRosterUIRefresh`) to collapse cascading Firebase events into a single
  *   smooth paint cycle, completely eliminating UI lag and layout thrashing.
+ * - Decoupled Feed Lifecycle: Separates the Catered Customers log from high-frequency
+ *   lineup timers, preventing redundant DOM destructions.
  * - Catering Board: Multi-customer order tracking, live links, and swap mechanics.
  * - Break Queue: Live consumed break timers tracking how long each rider has
  *   been resting, backed by non-destructive interval updates.
@@ -41,7 +43,7 @@ import { syncHeaderUserProfile } from '../rosterAvatar.js';
 import { autoStartLiveGpsSession, endLiveGpsSession } from '../../liveTracker.js';
 import { openMapPicker } from '../../maps.js';
 import { getForcedCaterBadgeHtml } from './rosterBadge.js';
-import { loadGlobalCateredList } from './rosterFeeds.js';
+import { loadGlobalCateredList, requestCateredFeedRefresh } from './rosterFeeds.js';
 
 let queueCooldownTickerInterval = null;
 let breakTimerTickerInterval = null;
@@ -602,7 +604,7 @@ export function updateRosterUI() {
     if (elCooldown) elCooldown.innerHTML = cdHtml.length ? cdHtml.join('') : '(Walang naka-cooldown)';
     if (elDayoff) elDayoff.innerHTML = dayOffHtml.length ? dayOffHtml.join('') : '(Walang naka-day off)';
 
-    loadGlobalCateredList();
+    // Decoupled: loadGlobalCateredList() is no longer called here on high-frequency timers.
 }
 
 if (typeof window !== 'undefined') {
@@ -619,16 +621,21 @@ if (typeof window !== 'undefined') {
     window.addEventListener('receiptsUpdated', () => {
         invalidateRosterGrossCache();
         requestRosterUIRefresh();
+        requestCateredFeedRefresh();
     });
     window.addEventListener('cateredUpdated', () => {
         invalidateRosterGrossCache();
         requestRosterUIRefresh();
+        requestCateredFeedRefresh();
     });
     window.addEventListener('rosterUpdated', () => requestRosterUIRefresh());
     window.addEventListener('loginsUpdated', () => requestRosterUIRefresh());
 
     initQueueCooldownTicker();
     initBreakTimerTicker();
+
+    // Initial load of the decoupled catered customer feed
+    requestCateredFeedRefresh();
 }
 
-// REMARKS: ROSTER_LINEUP_VIEW_BATCHED_RENDER_FRAME_V3_COMPLETE
+// REMARKS: ROSTER_LINEUP_VIEW_DECOUPLED_HIGH_PERFORMANCE_LINEUP_V4_COMPLETE
