@@ -7,16 +7,12 @@
  * 
  * Description:
  * Core state machine governing rider status mutations across the Lokalex platform:
- * - Queue Preservation & Idempotency: Protects on-duty riders from losing their
+ * - Queue Preservation: Completely protects on-duty riders from losing their
  *   first-in-line position or restarting their cooldown when tapping "Available".
+ * - Scoped Role Integrity: Passes `(tId, tName)` to `getUserType()` to prevent
+ *   admin sessions from overriding rider roles with "admin".
  * - Direct updates and local/remote synchronization to Firebase Realtime Database.
  * - Manages shift login generation, shift clock-outs, and delivery archiving.
- * - Millisecond Attendance Timestamps: saves `loginTimestamp` and `clockOutTimestamp`
- *   to ensure exact 8-hour shift compliance evaluations.
- * - Accurate Break Time Ledger: accumulates `totalBreakMinutes` across all break
- *   sessions during a shift, ensuring break time is deducted from duty time.
- * - Shift Cycle Reset: resets `commissionSurcharge`, `earlyShiftDeficitHours`,
- *   and `totalBreakMinutes` whenever a rider starts a fresh shift.
  * ============================================================================
  */
 
@@ -40,9 +36,8 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === tId);
 
-    // IDEMPOTENCY GUARD: If rider is ALREADY 'Available' and clicks 'Available' again accidentally:
-    // Prevent resetting queue position, recalculating max queue time, or restarting the cooldown buffer.
-    if (status === 'Available' && targetRecord && targetRecord.status === 'Available' && precalculatedQueueTime === null) {
+    // IDEMPOTENCY GUARD: Do not reset queue time or restart cooldown if already Available
+    if (status === 'Available' && targetRecord && targetRecord.status === 'Available') {
         showToast("ℹ️ Nakapila ka na (Already Available in line).");
         return;
     }
@@ -85,7 +80,6 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
     const nowTimestamp = Date.now();
     let accumulatedBreakMins = targetRecord?.totalBreakMinutes || 0;
 
-    // If moving OUT of Break status, calculate and accumulate the finished break session
     if (targetRecord && targetRecord.status === 'Break' && targetRecord.breakTimestamp) {
         const finishedBreakSession = Math.max(0, Math.floor((nowTimestamp - targetRecord.breakTimestamp) / 60000));
         accumulatedBreakMins += finishedBreakSession;
@@ -196,7 +190,6 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         ? extraData.totalBreakMinutes 
         : (existingRec?.totalBreakMinutes || 0);
 
-    // Preserve existing availableTimestamp if rider was already on duty
     let currentAvailableTimestamp = null;
     if (status === 'Available') {
         if (extraData.availableTimestamp !== undefined) {
@@ -213,13 +206,15 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         finalQueueTime = parseQueueTime(existingRec.queueTime);
     }
 
+    const resolvedUserType = getUserType(tId, tName);
+
     const rosterData = {
         telegramId: tId.toString(),
         id: tId.toString(),
         riderName: tName,
         name: tName,
         photoUrl: photoUrl,
-        userType: getUserType(),
+        userType: resolvedUserType,
         status: status,
         customerName: customerName || "",
         startTime: startTime || "",
@@ -390,4 +385,4 @@ export async function clockOutRider(targetId = null) {
     window.dispatchEvent(new CustomEvent('loginsUpdated'));
 }
 
-// REMARKS: ROSTER_STATUS_CORE_AVAILABLE_QUEUE_PROTECTION_V2_COMPLETE
+// REMARKS: ROSTER_STATUS_CORE_UNCONDITIONAL_IDEMPOTENT_AVAILABLE_V4_COMPLETE

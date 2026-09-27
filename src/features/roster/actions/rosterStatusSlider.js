@@ -9,15 +9,10 @@
  * Controls rider status transitions initiated by the rider UI dock:
  * - Available: Handles shift time-in restrictions, single-shot silent GPS
  *   calibration, queue time anchoring, and live tracking session termination.
+ * - Queue Preservation: Safeguards riders who are already Available from losing
+ *   their position or restarting their cooldown when tapping Available again.
  * - End Shift: Evaluates shift duration against rider-specific daily targets
- *   (or global 8h default) minus consumed break time. Inspects temporary daily
- *   exemptions: if granted an early out pass by Admin, early departure penalties
- *   are completely bypassed.
- * - Break / Cooldown: Manages rest transitions and background timer lifecycles.
- * 
- * Update Note:
- * - Fixed import path: moved `isSameDateStr` to `../rosterUtils.js` where it is
- *   properly exported.
+ *   (or global 8h default) minus consumed break time.
  * ============================================================================
  */
 
@@ -71,8 +66,6 @@ function getDeviceLocationQuick() {
 
 /**
  * Evaluates whether the rider has fulfilled their required shift duration.
- * Accurately deducts break time, checks for 1-day temporary exemptions,
- * and honors per-rider custom daily duty hour configurations.
  */
 async function evaluateEarlyShiftPenalty(riderId, myRecord = null) {
     const config = globalState.earlyShiftPenaltyConfig || {
@@ -92,7 +85,6 @@ async function evaluateEarlyShiftPenalty(riderId, myRecord = null) {
 
     const todayStr = getLocalTodayStr();
 
-    // 1. TEMPORARY DAILY EXEMPTION CHECK (ADMIN PASS)
     const exemption = config.exemptions && config.exemptions[riderId];
     if (exemption && isSameDateStr(exemption.date, todayStr)) {
         return { 
@@ -153,7 +145,6 @@ async function evaluateEarlyShiftPenalty(riderId, myRecord = null) {
     const grossElapsedMins = Math.max(0, Math.floor((now - loginTimestamp) / 60000));
     const netWorkedMins = Math.max(0, grossElapsedMins - totalBreakMins);
 
-    // 2. RESOLVE RIDER-SPECIFIC SHIFT TARGET (FALLBACK TO GLOBAL TARGET)
     let assignedTargetHours = config.targetHours || 8;
     if (config.riderTargets && config.riderTargets[riderId] !== undefined && config.riderTargets[riderId] !== "") {
         const customTarget = parseFloat(config.riderTargets[riderId]);
@@ -220,6 +211,20 @@ export async function triggerStatusWithSlide(targetStatus) {
     }
 
     if (targetStatus === 'Available') {
+        // IDEMPOTENCY GUARD: Do not touch Firebase or recalculate queue position if already Available
+        let currentStatus = myRecord?.status;
+        if (!currentStatus && db && myId) {
+            try {
+                const snap = await db.ref(`roster/${myId}/status`).once('value');
+                currentStatus = snap.val();
+            } catch(e) {}
+        }
+
+        if (currentStatus === 'Available') {
+            showToast("ℹ️ Naka-Available ka na sa pila (Queue position preserved).");
+            return;
+        }
+
         const isStartingShift = !myRecord || !myRecord.status || myRecord.status === 'End';
         if (isStartingShift && db && myId) {
             const isSkippedLocal = localStorage.getItem(`lokalex_skip_pass_${myId}`) === 'true';
@@ -434,4 +439,5 @@ export async function triggerStatusWithSlide(targetStatus) {
         });
     }
 }
-// REMARKS: ROSTER_STATUS_SLIDER_FIX_IMPORT_SAME_DATE_STR_V1_COMPLETE
+
+// REMARKS: ROSTER_STATUS_SLIDER_IDEMPOTENT_AVAILABLE_GUARD_V2_COMPLETE

@@ -486,44 +486,44 @@ function getOrCreateMenuGalleryModal() {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'store-menu-gallery-modal';
-        modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-5 hidden';
+        modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2.5 sm:p-5 hidden';
         modal.innerHTML = `
         <div class="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-3xl max-w-2xl w-full max-h-[92vh] shadow-2xl flex flex-col overflow-hidden animate-scaleUp">
             <!-- Header -->
-            <div class="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-gray-800/80 bg-gray-50/60 dark:bg-black/20">
-                <div class="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
-                    <div class="w-9 h-9 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
-                        <i class="fa-solid fa-book-open text-base"></i>
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800/80 bg-gray-50/60 dark:bg-black/20">
+                <div class="flex items-center gap-2 min-w-0 flex-1 pr-2">
+                    <div class="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+                        <i class="fa-solid fa-book-open text-sm"></i>
                     </div>
                     <div class="min-w-0 flex-1">
-                        <h3 id="gallery-store-title" class="font-black text-sm text-gray-900 dark:text-white truncate">Store Menu</h3>
-                        <p id="gallery-store-subtitle" class="text-[10px] text-gray-500 dark:text-gray-400 truncate">Rider-contributed physical restaurant menu</p>
+                        <h3 id="gallery-store-title" class="font-black text-xs sm:text-sm text-gray-900 dark:text-white truncate">Store Menu</h3>
+                        <p id="gallery-store-subtitle" class="text-[9px] sm:text-[10px] text-gray-500 dark:text-gray-400 truncate">Rider-contributed physical restaurant menu</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
-                    <button type="button" id="btn-download-all-menu" onclick="window.downloadCompleteMenuToPhone && window.downloadCompleteMenuToPhone()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition active:scale-95 shadow-xs flex items-center gap-1.5 cursor-pointer">
-                        <i class="fa-solid fa-cloud-arrow-down"></i> <span class="hidden sm:inline">Save to Phone</span>
+                    <button type="button" id="btn-download-all-menu" onclick="window.downloadCompleteMenuToPhone && window.downloadCompleteMenuToPhone()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] px-2.5 py-1.5 rounded-xl transition active:scale-95 shadow-xs flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-cloud-arrow-down"></i> <span class="hidden sm:inline">Save All</span>
                     </button>
-                    <button type="button" onclick="window.closeStoreMenuGalleryModal && window.closeStoreMenuGalleryModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-2 text-base cursor-pointer">
+                    <button type="button" onclick="window.closeStoreMenuGalleryModal && window.closeStoreMenuGalleryModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 text-base cursor-pointer">
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                 </div>
             </div>
 
-            <!-- Upload Bar (Multiple Selection Enabled) -->
-            <div class="px-5 py-2.5 bg-amber-50/50 dark:bg-amber-950/20 border-b border-amber-200/50 dark:border-amber-500/20 flex items-center justify-between gap-2 flex-wrap">
-                <div class="flex items-center gap-1 text-[11px] text-amber-800 dark:text-amber-300 font-bold">
+            <!-- Compact Upload Bar -->
+            <div class="px-4 py-2 bg-amber-50/50 dark:bg-amber-950/20 border-b border-amber-200/50 dark:border-amber-500/20 flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-1 text-[10px] text-amber-800 dark:text-amber-300 font-bold">
                     <i class="fa-solid fa-camera"></i>
-                    <span>Got updated menu photos?</span>
+                    <span>Got updated photos?</span>
                 </div>
-                <label class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-black px-3 py-1.5 rounded-xl cursor-pointer transition active:scale-95 shadow-xs flex items-center gap-1.5">
-                    <i class="fa-solid fa-plus"></i> Add Menu Pages
+                <label class="bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-black px-2.5 py-1 rounded-lg cursor-pointer transition active:scale-95 shadow-xs flex items-center gap-1">
+                    <i class="fa-solid fa-plus text-[9px]"></i> Add Pages
                     <input type="file" id="gallery-upload-input" accept="image/*" multiple class="hidden" onchange="window.handleMenuPhotoUpload && window.handleMenuPhotoUpload(event)">
                 </label>
             </div>
 
-            <!-- Body: Image Cards Grid -->
-            <div id="gallery-images-container" class="flex-1 overflow-y-auto p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Body: Compact 2-Column Mobile Grid -->
+            <div id="gallery-images-container" class="flex-1 overflow-y-auto p-2.5 sm:p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                 <div class="col-span-full text-center text-gray-500 italic py-16 text-xs">Loading menu photos...</div>
             </div>
 
@@ -644,10 +644,10 @@ function renderMenuPages(pages = [], storeName = "Store") {
     if (pages.length === 0) {
         if (dlBtn) dlBtn.classList.add('hidden');
         container.innerHTML = `
-        <div class="col-span-full text-center text-gray-500 dark:text-gray-400 italic py-16 text-xs flex flex-col items-center gap-2">
-            <i class="fa-solid fa-camera-retro text-3xl text-amber-500/60"></i>
+        <div class="col-span-full text-center text-gray-500 dark:text-gray-400 italic py-12 text-xs flex flex-col items-center gap-2">
+            <i class="fa-solid fa-camera-retro text-2xl text-amber-500/60"></i>
             <span>Walang naka-save na photo menu para sa restaurant na ito.</span>
-            <span class="text-[11px] text-gray-400">Maging unang rider na mag-picture at mag-register ng menu gamit ang buton sa itaas!</span>
+            <span class="text-[10px] text-gray-400">Mag-picture at mag-register gamit ang buton sa itaas.</span>
         </div>`;
         return;
     }
@@ -662,29 +662,29 @@ function renderMenuPages(pages = [], storeName = "Store") {
         const safeUrl = page.imageUrl || "";
 
         return `
-        <div class="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-gray-800 rounded-2xl p-2.5 flex flex-col gap-2 shadow-xs group">
-            <div class="relative w-full aspect-[4/3] bg-black/60 rounded-xl overflow-hidden cursor-pointer" onclick="window.openGalleryLightbox && window.openGalleryLightbox('${safeUrl}', '${escapeHtml(caption)}')">
-                <img src="${safeUrl}" alt="${escapeHtml(caption)}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
-                <span class="absolute top-2 left-2 bg-black/70 backdrop-blur-xs text-amber-400 font-mono font-black text-[10px] px-2 py-0.5 rounded-lg border border-amber-500/30">
-                    Page ${pageNum}
+        <div class="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-gray-800/80 rounded-xl p-1.5 flex flex-col gap-1.5 shadow-2xs group">
+            <div class="relative w-full aspect-[4/3] bg-black/60 rounded-lg overflow-hidden cursor-pointer" onclick="window.openGalleryLightbox && window.openGalleryLightbox('${safeUrl}', '${escapeHtml(caption)}')">
+                <img src="${safeUrl}" alt="${escapeHtml(caption)}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
+                <span class="absolute top-1.5 left-1.5 bg-black/75 backdrop-blur-xs text-amber-400 font-mono font-black text-[9px] px-1.5 py-0.5 rounded-md border border-amber-500/30">
+                    P${pageNum}
                 </span>
-                <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-sm font-bold gap-1 pointer-events-none">
-                    <i class="fa-solid fa-magnifying-glass-plus"></i> View Full
+                <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-bold gap-1 pointer-events-none">
+                    <i class="fa-solid fa-magnifying-glass-plus text-[10px]"></i> View
                 </div>
             </div>
             
-            <div class="flex items-center justify-between text-xs pt-1">
-                <div class="flex flex-col min-w-0 pr-2">
-                    <span class="font-bold text-gray-900 dark:text-white truncate">${escapeHtml(caption)}</span>
-                    <span class="text-[10px] text-gray-500 dark:text-gray-400 truncate">By ${escapeHtml(uploader)}${uploadedAt}</span>
+            <div class="flex items-center justify-between text-xs px-0.5 pt-0.5">
+                <div class="flex flex-col min-w-0 pr-1">
+                    <span class="font-bold text-[11px] text-gray-900 dark:text-white truncate">${escapeHtml(caption)}</span>
+                    <span class="text-[8.5px] text-gray-500 dark:text-gray-400 truncate leading-tight">${escapeHtml(uploader)}${uploadedAt}</span>
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
-                    <a href="${safeUrl}" download="${storeName}_Menu_Page_${pageNum}.jpg" class="p-2 rounded-lg bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-emerald-500 transition" title="Save this page">
-                        <i class="fa-solid fa-download text-xs"></i>
+                    <a href="${safeUrl}" download="${storeName}_Menu_Page_${pageNum}.jpg" class="p-1 rounded-md bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-emerald-500 transition active:scale-95" title="Save this page">
+                        <i class="fa-solid fa-download text-[9px]"></i>
                     </a>
                     ${checkAdminAccess() ? `
-                    <button type="button" onclick="window.deleteMenuGalleryPage && window.deleteMenuGalleryPage('${page.id}')" class="p-2 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 transition" title="Delete page">
-                        <i class="fa-solid fa-trash text-xs"></i>
+                    <button type="button" onclick="window.deleteMenuGalleryPage && window.deleteMenuGalleryPage('${page.id}')" class="p-1 rounded-md bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 transition active:scale-95" title="Delete page">
+                        <i class="fa-solid fa-trash text-[9px]"></i>
                     </button>` : ''}
                 </div>
             </div>

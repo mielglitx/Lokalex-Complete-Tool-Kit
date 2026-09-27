@@ -2,18 +2,16 @@
 
 /**
  * ============================================================================
- * COMMISSION RATES ENGINE & EARLY SHIFT PENALTY RESOLVER
+ * COMMISSION RATES ENGINE & STRICT ADMIN PRIVILEGE RESOLVER
  * ============================================================================
  * 
  * Description:
  * Resolves net commission percentages per rider, date, and operational conditions:
- * - Admin Commission Exemption: 0% company remittance, 100% rider earnings.
+ * - Strict Admin Validation: Eliminates fuzzy substring matching and volatile
+ *   roster state checks, preventing ordinary riders from inheriting 0% fee exemptions.
  * - Date-specific Admin penalties and recurring/special calendar discounts.
- * - Early Shift Out Surcharge Resolver: inspects daily attendance records for
- *   unexcused early clock-outs and factors the surcharge directly into payable rates.
- * - Socket & Bandwidth Optimization: Scopes attendance login listeners strictly to
- *   today's date (`.orderByChild('date').equalTo(todayStr)`), eliminating full-tree
- *   download locks and preventing WebSocket connection degradation.
+ * - Early Shift Out Surcharge Resolver: factors unexcused early clock-outs directly
+ *   into payable company rates.
  * ============================================================================
  */
 
@@ -21,7 +19,7 @@ import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { ADMIN_IDS } from '../../config/constants.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
-import { isRiderMatch, isSameDateStr } from '../roster/rosterUtils.js';
+import { isSameDateStr } from '../roster/rosterUtils.js';
 
 export const SETTINGS_CACHE_KEY = 'lokalex_commission_settings_cache_v2';
 export const RECEIPTS_CACHE_KEY = 'lokalex_receipts_cache_v2';
@@ -43,7 +41,6 @@ export function setRecurringDiscount(val) { recurringDiscount = val; }
 export let specialDateDiscounts = {};
 export function setSpecialDateDiscounts(val) { specialDateDiscounts = val; }
 
-// LOAD COMMISSION SETTINGS & DATA FROM LOCAL CACHE
 export function loadCommissionSettingsCache() {
     try {
         const savedSettings = localStorage.getItem(SETTINGS_CACHE_KEY);
@@ -89,7 +86,6 @@ export function saveCommissionSettingsCache() {
 
 loadCommissionSettingsCache();
 
-// 100% FIREBASE USER TYPE LOADER
 export async function fetchRiderUserTypes() {
     if (!db) return;
     try {
@@ -99,9 +95,10 @@ export async function fetchRiderUserTypes() {
             const userTypes = {};
             Object.entries(val).forEach(([id, rider]) => {
                 const name = (rider.riderName || rider.name || "").toLowerCase().trim();
-                const type = (rider.userType || rider.type || "").toLowerCase().trim();
+                const type = (rider.userType || rider.type || "rider").toLowerCase().trim();
+                const cleanId = (rider.telegramId || rider.id || id).toString().trim();
                 if (name) userTypes[name] = type;
-                if (id) userTypes[id] = type;
+                if (cleanId) userTypes[cleanId] = type;
             });
             globalState.userTypesMap = userTypes;
         }
@@ -110,45 +107,42 @@ export async function fetchRiderUserTypes() {
     }
 }
 
-// STRICT CHECK IF A RIDER IS AN ADMIN
+/**
+ * STRICT CHECK IF A RIDER IS AN ADMIN
+ * Relies strictly on ADMIN_IDS and registered user accounts in `riders`.
+ * Never evaluates temporary roster state or loose substring matches.
+ */
 export function isRiderAdmin(riderName = "", telegramId = "") {
     const cleanName = (riderName || "").toString().toLowerCase().trim();
     const cleanId = (telegramId || "").toString().trim();
 
-    if (cleanId && ADMIN_IDS.some(id => id.toString().trim() === cleanId)) return true;
-    if (cleanName && ADMIN_IDS.some(id => isRiderMatch(cleanName, id.toString()))) return true;
-
-    if (globalState.userTypesMap) {
-        if (cleanId && globalState.userTypesMap[cleanId]) {
-            const type = globalState.userTypesMap[cleanId];
-            if (type === "admin" || type === "owner" || type === "manager") return true;
-        }
-        if (cleanName && globalState.userTypesMap[cleanName]) {
-            const type = globalState.userTypesMap[cleanName];
-            if (type === "admin" || type === "owner" || type === "manager") return true;
-        }
-
-        for (const [key, type] of Object.entries(globalState.userTypesMap)) {
-            if (type === "admin" || type === "owner" || type === "manager") {
-                if (isRiderMatch(cleanName, key, cleanId, key)) return true;
-            }
-        }
+    // 1. Direct match in ADMIN_IDS array
+    if (cleanId && ADMIN_IDS.some(id => id.toString().trim() === cleanId && cleanId !== "1234")) {
+        return true;
+    }
+    if (cleanName && ADMIN_IDS.some(id => id.toString().toLowerCase().trim() === cleanName && cleanName !== "regular")) {
+        return true;
     }
 
-    const rosterMem = (globalState.rosterMembers || []).find(m => 
-        isRiderMatch(cleanName, m.riderName || m.name || "", cleanId, m.telegramId || m.id)
-    );
-
-    if (rosterMem) {
-        const uType = (rosterMem.userType || "").toLowerCase().trim();
-        if (uType === "tl" || uType.includes("lead")) return false;
-        if (uType === "admin" || uType === "owner" || uType === "manager") return true;
+    // 2. Exact match in registered users map (from riders/)
+    if (globalState.userTypesMap) {
+        if (cleanId && globalState.userTypesMap[cleanId]) {
+            const type = globalState.userTypesMap[cleanId].toString().toLowerCase().trim();
+            if (['admin', 'owner', 'manager', 'superadmin', 'administrator'].includes(type)) {
+                return true;
+            }
+        }
+        if (cleanName && globalState.userTypesMap[cleanName]) {
+            const type = globalState.userTypesMap[cleanName].toString().toLowerCase().trim();
+            if (['admin', 'owner', 'manager', 'superadmin', 'administrator'].includes(type)) {
+                return true;
+            }
+        }
     }
 
     return false;
 }
 
-// GET DYNAMIC COMMISSION RATES PER RIDER (INCLUDES EARLY SHIFT OUT PENALTY)
 export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
     const dateFormatted = dateStr || getLocalTodayStr();
     const d = new Date(dateFormatted + "T00:00:00");
@@ -180,43 +174,26 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
     let baseCompanyPerc = defaultCommissionRate;
     let hasCustomOverride = false;
 
-    // 1. Direct ID or Name Match
     if (cleanId && customRiderRates[cleanId] !== undefined && customRiderRates[cleanId] !== null && customRiderRates[cleanId] !== "") {
         baseCompanyPerc = parseFloat(customRiderRates[cleanId]);
         hasCustomOverride = true;
     } else if (cleanName && customRiderRates[cleanName] !== undefined && customRiderRates[cleanName] !== null && customRiderRates[cleanName] !== "") {
         baseCompanyPerc = parseFloat(customRiderRates[cleanName]);
         hasCustomOverride = true;
-    } else {
-        for (const [rateKey, rateVal] of Object.entries(customRiderRates)) {
-            if (rateVal !== undefined && rateVal !== null && rateVal !== "") {
-                if (isRiderMatch(cleanName, rateKey, cleanId, rateKey)) {
-                    baseCompanyPerc = parseFloat(rateVal);
-                    hasCustomOverride = true;
-                    break;
-                }
-            }
-        }
     }
 
-    // 2. Fallback to globalRiderRates settings
     if (!hasCustomOverride && globalState.globalRiderRates) {
         if (globalState.globalRiderRates[cleanName]) {
             const setting = globalState.globalRiderRates[cleanName];
             baseCompanyPerc = parseFloat(setting.percentage || setting.basePercentage || defaultCommissionRate);
             hasCustomOverride = true;
-        } else {
-            for (const [rKey, setting] of Object.entries(globalState.globalRiderRates)) {
-                if (isRiderMatch(cleanName, rKey, cleanId, rKey)) {
-                    baseCompanyPerc = parseFloat(setting.percentage || setting.basePercentage || defaultCommissionRate);
-                    hasCustomOverride = true;
-                    break;
-                }
-            }
+        } else if (cleanId && globalState.globalRiderRates[cleanId]) {
+            const setting = globalState.globalRiderRates[cleanId];
+            baseCompanyPerc = parseFloat(setting.percentage || setting.basePercentage || defaultCommissionRate);
+            hasCustomOverride = true;
         }
     }
 
-    // 3. Admin date penalty lookup
     let manualPenaltyPerc = 0;
     let penaltyReason = "";
 
@@ -230,30 +207,17 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         if (directRecord && directRecord.penaltyPercentage) {
             manualPenaltyPerc = Math.max(0, parseFloat(directRecord.penaltyPercentage) || 0);
             penaltyReason = directRecord.reason || "";
-        } else {
-            for (const [key, rec] of Object.entries(globalState.globalCommissionPenalties)) {
-                if (!rec) continue;
-                if (isSameDateStr(rec.date, dateFormatted)) {
-                    const recRiderName = rec.riderName || key.split('_')[0] || "";
-                    const recRiderId = (rec.telegramId || "").toString().trim();
-                    if (isRiderMatch(riderName, recRiderName, cleanId, recRiderId)) {
-                        manualPenaltyPerc = Math.max(0, parseFloat(rec.penaltyPercentage) || 0);
-                        penaltyReason = rec.reason || "";
-                        break;
-                    }
-                }
-            }
         }
     }
 
-    // 4. Early Shift Out Penalty lookup (evaluated from attendance logins or roster)
     let earlyShiftPenaltyPerc = 0;
     let earlyShiftDeficitHours = 0;
 
     if (globalState.globalLogins && Array.isArray(globalState.globalLogins)) {
         const loginRec = globalState.globalLogins.find(l => 
             isSameDateStr(l.date, dateFormatted) &&
-            isRiderMatch(riderName, l.riderName || "", cleanId, (l.riderId || l.id || "").toString())
+            ((cleanId && (l.riderId || l.id || "").toString().trim() === cleanId) ||
+             (cleanName && (l.riderName || "").trim().toLowerCase() === cleanName))
         );
         if (loginRec && loginRec.earlyShiftPenaltyPercent) {
             earlyShiftPenaltyPerc = Math.max(0, parseFloat(loginRec.earlyShiftPenaltyPercent) || 0);
@@ -263,7 +227,8 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
 
     if (earlyShiftPenaltyPerc === 0 && isSameDateStr(dateFormatted, getLocalTodayStr()) && globalState.rosterMembers) {
         const rosterMem = globalState.rosterMembers.find(m => 
-            isRiderMatch(riderName, m.riderName || m.name || "", cleanId, (m.telegramId || m.id || "").toString())
+            (cleanId && (m.telegramId || m.id || "").toString().trim() === cleanId) ||
+            (cleanName && (m.riderName || m.name || "").trim().toLowerCase() === cleanName)
         );
         if (rosterMem && rosterMem.commissionSurcharge) {
             earlyShiftPenaltyPerc = Math.max(0, parseFloat(rosterMem.commissionSurcharge) || 0);
@@ -271,7 +236,6 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         }
     }
 
-    // 5. Promo calendar and recurring day discounts
     let promoDiscountPerc = 0;
 
     if (recurringDiscount && recurringDiscount.enabled && recurringDiscount.day === dayOfWeek) {
@@ -354,7 +318,6 @@ export async function fetchCommissionSettings() {
             if (window.refreshCommissionView) window.refreshCommissionView();
         });
 
-        // Date-scoped listener: streams strictly today's attendance instead of the entire root collection
         db.ref('logins')
             .orderByChild('date')
             .equalTo(todayStr)
@@ -365,4 +328,5 @@ export async function fetchCommissionSettings() {
             });
     }
 }
-// REMARKS: COMMISSION_RATES_BANDWIDTH_AND_SOCKET_OPTIMIZED_V2_COMPLETE
+
+// REMARKS: COMMISSION_RATES_STRICT_ADMIN_VALIDATION_V3_COMPLETE

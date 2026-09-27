@@ -7,17 +7,12 @@
  * 
  * Description:
  * Core utility and financial aggregation layer for the Lokalex dispatch roster:
+ * - Scoped Identity Evaluator: `getUserType(targetId, targetName)` evaluates target
+ *   rider accounts independently to prevent caller session role pollution.
+ * - Strict Name Matcher: Tightens `isRiderMatch()` to prevent loose substring
+ *   matches (e.g. "al" matching "allan").
  * - High-Performance Memoized Gross Index: Pre-computes daily rider totals in a
- *   single pass ($O(N)$), enabling instant $O(1)$ lookups during queue sorting
- *   and rendering without secondary database ledgers.
- * - Multi-Customer Comma Expansion: Automatically unbundles grouped multi-customer
- *   deliveries (e.g., "Gerald, Krystin") so every customer is accounted for.
- * - Resilient Date Fallback: Evaluates `rc.date`, `rc.completedDate`, `rc.timestamp`,
- *   and `rc.createdAt` to guarantee admin and direct receipts are never discarded.
- * - Dual-Key Deduplication: Keyed by `${txId}_${cleanCust}` to prevent multi-drop
- *   runs from clobbering sibling records.
- * - Intelligent Date Normalizer: Resolves ISO, Epoch, MM/DD/YYYY, and Philippine
- *   DD/MM/YYYY formats seamlessly.
+ *   single pass ($O(N)$), enabling instant $O(1)$ lookups during queue sorting.
  * - Shift Crossover Date Resolver (`resolveOrderDate`): Intelligently binds
  *   late-night deliveries (started PM, finished AM) to the originating shift date.
  * ============================================================================
@@ -97,9 +92,22 @@ export function getPHTDate() {
     }
 }
 
-export function getUserType() {
-    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
-    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+/**
+ * Resolves the role for a specific rider.
+ * Evaluates target parameters independently so admin callers do not assign
+ * their own admin status to target riders.
+ */
+export function getUserType(targetId = null, targetName = null) {
+    const isSpecific = !!(targetId || targetName);
+    const myId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (targetName || appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+
+    if (myId && ADMIN_IDS.some(id => id.toString().trim() === myId && id.toString().trim() !== "1234")) {
+        return "admin";
+    }
+    if (myName && ADMIN_IDS.some(id => id.toString().toLowerCase().trim() === myName && id.toString().toLowerCase().trim() !== "regular")) {
+        return "admin";
+    }
 
     if (globalState.userTypesMap) {
         if (myId && globalState.userTypesMap[myId]) {
@@ -110,14 +118,18 @@ export function getUserType() {
         }
     }
 
-    if (globalState.rosterMembers && myId) {
+    if (!isSpecific && globalState.rosterMembers && myId) {
         const myRosterRec = globalState.rosterMembers.find(m => (m.telegramId || "").toString().trim() === myId);
         if (myRosterRec && myRosterRec.userType) {
             return myRosterRec.userType.toString().trim().toLowerCase();
         }
     }
 
-    return (appState.userType || localStorage.getItem('userType') || "rider").toString().trim().toLowerCase();
+    if (!isSpecific) {
+        return (appState.userType || localStorage.getItem('userType') || "rider").toString().trim().toLowerCase();
+    }
+
+    return "rider";
 }
 
 export function isAdmin() {
@@ -163,6 +175,21 @@ export function hasTlPermission(permissionKey) {
         return myRecord.tlAdminPower === true;
     }
 
+    const cachedPermsStr = localStorage.getItem(`tl_permissions_${myId}`);
+    if (cachedPermsStr) {
+        try {
+            const parsed = JSON.parse(cachedPermsStr);
+            if (parsed && parsed[permissionKey] !== undefined) {
+                return parsed[permissionKey] === true;
+            }
+        } catch(e) {}
+    }
+
+    const cachedPower = localStorage.getItem(`tl_admin_power_${myId}`);
+    if (cachedPower !== null) {
+        return cachedPower === 'true';
+    }
+
     return false;
 }
 
@@ -186,6 +213,11 @@ export function canManageRoster() {
 
         if (myRecord && myRecord.tlAdminPower !== undefined) {
             return myRecord.tlAdminPower === true;
+        }
+
+        const cachedPower = localStorage.getItem(`tl_admin_power_${myId}`);
+        if (cachedPower !== null) {
+            return cachedPower === 'true';
         }
 
         return false;
@@ -286,13 +318,11 @@ export function normalizeToDateStr(val) {
     if (!val) return "";
     const str = String(val).trim();
     
-    // 1. ISO Format: YYYY-MM-DD
     const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
     if (isoMatch) {
         return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
     }
 
-    // 2. Slashed Dates: DD/MM/YYYY vs MM/DD/YYYY
     const slashMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
     if (slashMatch) {
         const p1 = parseInt(slashMatch[1], 10);
@@ -313,7 +343,6 @@ export function normalizeToDateStr(val) {
         return `${year}-${String(p1).padStart(2, '0')}-${String(p2).padStart(2, '0')}`;
     }
 
-    // 3. Epoch Milliseconds / Seconds
     if (/^\d{10,13}$/.test(str)) {
         const d = new Date(Number(str));
         if (!isNaN(d.getTime())) {
@@ -324,7 +353,6 @@ export function normalizeToDateStr(val) {
         }
     }
 
-    // 4. Human strings (e.g., "Sep 27, 2026")
     const d = new Date(str);
     if (!isNaN(d.getTime())) {
         const y = d.getFullYear();
@@ -403,6 +431,11 @@ export function isCustomerMatch(cust1 = "", cust2 = "") {
     return false;
 }
 
+/**
+ * Precise Rider Matching:
+ * Evaluates ID, full-name, or first-name tokens while preventing
+ * loose substring collisions (e.g. "al" matching "allan").
+ */
 export function isRiderMatch(targetName = "", recordName = "", targetId = "", recordId = "") {
     const tId = (targetId || "").toString().trim().toLowerCase();
     const rId = (recordId || "").toString().trim().toLowerCase();
@@ -419,18 +452,15 @@ export function isRiderMatch(targetName = "", recordName = "", targetId = "", re
         return true;
     }
 
-    if (tn.includes(rn) || rn.includes(tn)) {
-        return true;
+    if (tn.length >= 4 && rn.length >= 4) {
+        if (tn.startsWith(rn) || rn.startsWith(tn) || tn.endsWith(rn) || rn.endsWith(tn)) {
+            return true;
+        }
     }
 
     return false;
 }
 
-/**
- * 100% FINANCIAL & ROSTER SOURCE OF TRUTH
- * Expands multi-customer bundles and includes fallback timestamps to capture
- * admin direct receipts.
- */
 export function getMergedDeduplicatedCommissionList(forceFresh = false) {
     const now = Date.now();
     if (!forceFresh && cachedMergedCommissionList && cachedMergedCommissionList.length > 0 && (now - lastMergedListTimestamp < 500)) {
@@ -975,4 +1005,4 @@ export function playLineBeep() {
 
 export const playLineAlarm = playLineBeep;
 
-// REMARKS: ROSTER_UTILS_MULTI_CUSTOMER_COMMA_EXPANSION_V4_COMPLETE
+// REMARKS: ROSTER_UTILS_SAFE_ROLE_AND_NAME_MATCHING_V5_COMPLETE
