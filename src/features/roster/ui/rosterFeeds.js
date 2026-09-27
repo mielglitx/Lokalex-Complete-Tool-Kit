@@ -11,11 +11,14 @@
  * - High-Speed O(1) Pre-Indexed Lookup: Replaces heavy nested O(N*M) regex scanning
  *   with pre-built transaction and customer hash maps, rendering catered history
  *   instantly without blocking the main browser thread.
+ * - Multi-Field Date Matcher: Evaluates date, completedDate, timestamp, and createdAt
+ *   to ensure admin and direct receipts match today's date filter.
+ * - Cache-Bypassing Fresh Refresh: Supports `forceFresh` invalidation so asynchronous
+ *   Firebase payloads immediately bust cold-start caches upon arrival.
+ * - Multi-Customer Comma Support: Reliably renders individual customer cards
+ *   for multi-drop deliveries with split durations and fees.
  * - Single-Pass Timestamp Sorting: Evaluates parseTimeToMinutes once per record
  *   prior to sorting, eliminating redundant comparator regex parsing.
- * - Batched Frame Refresh: Leverages requestAnimationFrame (requestCateredFeedRefresh)
- *   to isolate feed updates from rapid roster rotation and break timer ticks.
- * - Multi-customer duration splits, milestone progression badges, and admin void controls.
  * ============================================================================
  */
 
@@ -33,24 +36,22 @@ import {
 import { getForcedCaterBadgeHtml } from './rosterBadge.js';
 
 let cateredFeedScheduled = false;
+let pendingForceFresh = false;
 
-/**
- * Batches incoming catered feed updates into a single animation frame,
- * preventing layout thrashing when multiple orders arrive or complete.
- */
-export function requestCateredFeedRefresh() {
+export function requestCateredFeedRefresh(forceFresh = false) {
+    if (forceFresh) pendingForceFresh = true;
     if (cateredFeedScheduled) return;
+
     cateredFeedScheduled = true;
     requestAnimationFrame(() => {
         cateredFeedScheduled = false;
-        loadGlobalCateredList();
+        const fresh = pendingForceFresh;
+        pendingForceFresh = false;
+        loadGlobalCateredList(fresh);
     });
 }
 
-/**
- * Renders the Catered Customers feed using single-pass O(1) indexed lookups.
- */
-export function loadGlobalCateredList() {
+export function loadGlobalCateredList(forceFresh = false) {
     const feed = document.getElementById('catered-customers-feed');
     const badge = document.getElementById('catered-count-badge');
     if (!feed) return;
@@ -61,14 +62,13 @@ export function loadGlobalCateredList() {
     }
 
     const todayStr = getLocalTodayStr();
-    const mergedList = getMergedDeduplicatedCommissionList();
+    const mergedList = getMergedDeduplicatedCommissionList(forceFresh);
 
     const todayHistory = mergedList.filter(item => {
-        const itemDate = item.date || item.completedDate;
+        const itemDate = item.date || item.completedDate || item.timestamp || item.createdAt;
         return itemDate && isSameDateStr(itemDate, todayStr);
     });
 
-    // Pre-calculate sorting minutes once per item to avoid O(N log N) regex parsing in comparator
     for (let i = 0; i < todayHistory.length; i++) {
         const item = todayHistory[i];
         const sTime = item.startTime || item.cateringStartTime || item.time || "";
@@ -85,7 +85,6 @@ export function loadGlobalCateredList() {
         return;
     }
 
-    // Build single-pass O(1) lookup tables for receipts and catered history
     const rcById = new Map();
     const rcByCustKey = new Map();
     (globalState.globalDailyReceipts || []).forEach(rc => {
@@ -126,11 +125,9 @@ export function loadGlobalCateredList() {
             voidBtn = `<button onclick="window.promptAdminDeleteCommissionRecord && window.promptAdminDeleteCommissionRecord('${escapeHtml(h.riderName || '')}', '${escapeHtml(h.customerName || '')}', '${escapeHtml(cDate)}', '${escapeHtml(recordTxId)}')" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-400 dark:border-red-700/50 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shrink-0 cursor-pointer"><i class="fa-solid fa-ban"></i> Void</button>`;
         }
 
-        // Instant O(1) resolution instead of nested O(N*M) linear scanning
         let rcMatch = (recordTxId && rcById.get(recordTxId)) || rcByCustKey.get(`${cleanCustKey}_${cDate}`) || null;
         let chMatch = (recordTxId && chById.get(recordTxId)) || chByCustKey.get(`${cleanCustKey}_${cDate}`) || null;
 
-        // Fallback to customer match only if direct key was absent
         if (!rcMatch && cleanCustKey) {
             rcMatch = (globalState.globalDailyReceipts || []).find(rc => 
                 isCustomerMatch(rc.customerName, h.customerName) && isSameDateStr(rc.date || rc.completedDate, cDate)
@@ -286,8 +283,8 @@ if (typeof window !== 'undefined') {
     window.requestCateredFeedRefresh = requestCateredFeedRefresh;
     window.loadGlobalLoginList = loadGlobalLoginList;
 
-    window.addEventListener('receiptsUpdated', () => requestCateredFeedRefresh());
-    window.addEventListener('cateredUpdated', () => requestCateredFeedRefresh());
+    window.addEventListener('receiptsUpdated', () => requestCateredFeedRefresh(true));
+    window.addEventListener('cateredUpdated', () => requestCateredFeedRefresh(true));
 }
 
-// REMARKS: ROSTER_FEEDS_FAST_MEMOIZED_CATERED_LIST_V2_COMPLETE
+// REMARKS: ROSTER_FEEDS_ALL_RECORDS_PRESERVED_V6_COMPLETE
