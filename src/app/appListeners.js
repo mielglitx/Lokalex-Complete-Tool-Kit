@@ -7,9 +7,9 @@
  * 
  * Description:
  * Subscribes to Firebase Realtime Database nodes for the entire platform:
- * - Unbounded Receipts & Catering Ingestion: Removed alphabetical `limitToLast`
- *   constraints that previously caused riders starting with 'A' (e.g., Allan,
- *   Amiel) to be truncated from daily records.
+ * - Chronological Index Filtering: Orders receipts and cateredHistory by `date`
+ *   using `.orderByChild('date').limitToLast(200)`, preventing alphabetical key
+ *   truncation (e.g., Allan, Amiel) while protecting monthly RTDB bandwidth.
  * - Broadcasts specific custom events (cateredUpdated, receiptsUpdated, rosterUpdated)
  *   to trigger batched animation frame renders.
  * ============================================================================
@@ -125,21 +125,20 @@ export function initRealtimeFirebaseListeners() {
             if (commission.refreshCommissionView) commission.refreshCommissionView();
         });
 
-        db.ref('logins').limitToLast(200).on('value', (snapshot) => {
+        // Indexed query on date to prevent alphabetical truncation and protect bandwidth
+        db.ref('logins').orderByChild('date').limitToLast(150).on('value', (snapshot) => {
             globalState.globalLogins = snapshot.val() ? Object.values(snapshot.val()) : [];
             if (roster && roster.saveRosterCache) roster.saveRosterCache();
             window.dispatchEvent(new Event('loginsUpdated'));
         });
 
-        // Unbounded to prevent alphabetical truncation of riders starting with 'A'
-        db.ref('cateredHistory').on('value', (snapshot) => {
+        db.ref('cateredHistory').orderByChild('date').limitToLast(200).on('value', (snapshot) => {
             globalState.globalCateredHistory = snapshot.val() ? Object.values(snapshot.val()) : [];
             if (roster && roster.saveRosterCache) roster.saveRosterCache();
             window.dispatchEvent(new Event('cateredUpdated'));
         });
 
-        // Unbounded to load all daily receipts across all riders
-        db.ref('receipts').on('value', (snapshot) => {
+        db.ref('receipts').orderByChild('date').limitToLast(200).on('value', (snapshot) => {
             globalState.globalDailyReceipts = snapshot.val() ? Object.values(snapshot.val()) : [];
             window.dispatchEvent(new Event('receiptsUpdated'));
         });
@@ -167,4 +166,4 @@ export function initRealtimeFirebaseListeners() {
     }
 }
 
-// REMARKS: APP_LISTENERS_UNBOUNDED_ALPHABETICAL_SCOPE_V4_COMPLETE
+// REMARKS: APP_LISTENERS_CHRONOLOGICAL_DATE_INDEX_QUERY_V5_COMPLETE

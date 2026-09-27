@@ -2,40 +2,41 @@
 
 /**
  * ============================================================================
- * DIRECTORY UI, DUAL-TIER ROUTING TOOLBAR & DYNAMIC DESTINATION SYNCHRONIZER
+ * DIRECTORY UI, DUAL-TIER ROUTING TOOLBAR & RESTAURANT MENU GALLERY ENGINE
  * ============================================================================
  * 
  * Description:
- * Manages presentation layer, card rendering, search filtering, and credit consumption:
+ * Manages presentation layer, card rendering, search filtering, and restaurant menus:
+ * - Firebase Storage Integration: Uploads compressed JPEG/WebP blobs directly to
+ *   Firebase Storage (`menus/${storeKey}/${pageId}.jpg`), writing only lightweight
+ *   HTTPS URLs (~120 bytes) to RTDB to prevent database bandwidth exhaustion.
+ * - Restaurant Menu Gallery System: Allows riders to view, register, and download
+ *   complete photo menus for any store in the Store Directory.
+ * - Device Photo Saving: Uses Web Share API with staggered anchor fallbacks to
+ *   download all menu pages directly to the rider's phone gallery.
+ * - Free Customer Directory Browsing: Browsing customer contacts is free.
+ * - Confirmed Location Unlock: Clicking "View Location" opens a modal requiring
+ *   the rider to confirm spending 1 credit before Google Maps is opened.
  * - Dynamic Destination Synchronization: Automatically updates the Destination
- *   dropdown whenever rates are rendered, ensuring newly added municipalities
- *   and accurate record counts are immediately visible without being expunged.
- * - Dual-Tier Routing Toolbar: Coordinates Origin Hub (`#dir-origin-hub-select`)
- *   and Destination Municipality (`#dir-destination-select`).
- * - Non-Blocking GPS Auto-Selection: Compares device GPS coordinates against
- *   municipal geographic anchors in the background to auto-select the user's
- *   local municipality without blocking initial page rendering.
- * - Anti-Clipping Typography: Uses flex wrapping and break-words for long barangay
- *   names (e.g., Cacamilingan Norte, Palimbo-Caarosipan) to prevent text cutoff.
- * - Contextual Rate Copy Engine: Formats copied customer fee advisories as:
- *   - Cross-Town: "The delivery fee from [Origin] to [Municipality], [Barangay] starts at ₱[rate]"
- *   - Local Town: "The delivery fee at [Municipality], [Barangay] starts at ₱[rate]"
+ *   dropdown whenever rates are rendered.
  * ============================================================================
  */
 
-import { db } from '../../config/firebase.js';
+import { db, storage } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { switchView } from '../../ui/router.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { escapeHtml, copyText } from '../../utils/helpers.js';
+import { idbGet, idbSet } from '../../utils/storageEngine.js';
 import { loadDirectoryCache } from './directoryStorage.js';
 import { checkAdminAccess } from './directoryPermissions.js';
 
 let lastJumpLetter = "";
 let creditsListenerActive = false;
 let hasAttemptedGpsAutoSelect = false;
+let pendingMapUnlock = null;
+let activeGalleryStore = null;
 
-// MUNICIPALITY GEOGRAPHIC ANCHORS FOR GPS DISTANCE COMPUTATION
 const MUNICIPALITY_COORDINATES = {
     "Camiling": { lat: 15.6881, lng: 120.4144 },
     "San Clemente": { lat: 15.7136, lng: 120.3598 },
@@ -56,9 +57,6 @@ export function getSectionLetter(name) {
     return /^[A-Z]$/.test(firstChar) ? firstChar : "#";
 }
 
-/**
- * Updates the rider credits pill display on the home roster dashboard.
- */
 export function updateRosterCreditsDisplay(credits) {
     const countEl = document.getElementById('rider-credits-count');
     const pillEl = document.getElementById('rider-credits-pill');
@@ -89,9 +87,6 @@ export function updateRosterCreditsDisplay(credits) {
     }
 }
 
-/**
- * Displays informational guidance when tapping the credits pill.
- */
 export function showCreditsInfoToast() {
     const isAdmin = checkAdminAccess();
     if (isAdmin) {
@@ -101,17 +96,13 @@ export function showCreditsInfoToast() {
 
     const cur = parseInt(localStorage.getItem('lokalex_rider_credits') || "0", 10);
     const config = globalState.directoryCreditsConfig || {};
-    const cost = config.costPerAccess !== undefined ? config.costPerAccess : 1;
     const custR = config.rewardCustomerRegistration !== undefined ? config.rewardCustomerRegistration : 5;
     const storeR = config.rewardStoreRegistration !== undefined ? config.rewardStoreRegistration : 10;
     const status = config.enabled !== false ? 'ACTIVE' : 'DISABLED';
 
-    showToast(`🪙 Directory Credits (${status})\n• Balance: ${cur} credits\n• -${cost} credit per Directory access\n• +${custR} credits per Customer registered\n• +${storeR} credits per Store registered`);
+    showToast(`🪙 Directory Credits (${status})\n• Balance: ${cur} credits\n• Libre ang Customer & Store browsing\n• -1 credit bawat Customer Location na titingnan\n• +${custR} credits bawat Customer registration\n• +${storeR} credits bawat Store registration`);
 }
 
-/**
- * Listens to real-time credit balance updates for the current rider from Firebase.
- */
 export function initRiderCreditsListener() {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     if (!myId || !db || creditsListenerActive) return;
@@ -125,10 +116,6 @@ export function initRiderCreditsListener() {
     });
 }
 
-/**
- * Populates the Destination dropdown with ONLY municipalities that have records
- * under the active Starting Hub. Automatically called whenever rates render.
- */
 export function populateDestinationDropdown() {
     const destSelect = document.getElementById('dir-destination-select');
     if (!destSelect) return [];
@@ -136,14 +123,12 @@ export function populateDestinationDropdown() {
     const activeOriginHub = (globalState.selectedOriginHub || "Camiling").trim().toLowerCase();
     const records = (globalState.records || []).filter(r => (r.type || 'customers') === 'barangays');
 
-    // Extract municipalities that have at least 1 record under the current Starting Hub
     const munCountMap = new Map();
 
     records.forEach(r => {
         const rOrigin = (r.originMunicipality || "Camiling").trim().toLowerCase();
         if (activeOriginHub === "all" || rOrigin === activeOriginHub) {
             const rawDest = (r.municipality || "Camiling").trim();
-            // Normalize casing for consistent grouping
             const destMun = rawDest.charAt(0).toUpperCase() + rawDest.slice(1);
             munCountMap.set(destMun, (munCountMap.get(destMun) || 0) + 1);
         }
@@ -151,7 +136,6 @@ export function populateDestinationDropdown() {
 
     const servicedMunicipalities = Array.from(munCountMap.keys()).sort((a, b) => a.localeCompare(b));
 
-    // Build options
     let optionsHtml = `<option value="ALL">🌐 All Destinations</option>`;
 
     servicedMunicipalities.forEach(mun => {
@@ -160,7 +144,6 @@ export function populateDestinationDropdown() {
 
     destSelect.innerHTML = optionsHtml;
 
-    // Validate current selection
     if (!globalState.selectedDestinationMun) {
         globalState.selectedDestinationMun = localStorage.getItem('lokalex_selected_destination_mun') || "ALL";
     }
@@ -169,7 +152,6 @@ export function populateDestinationDropdown() {
     const isAvailable = servicedMunicipalities.some(m => m.toLowerCase() === currentSelected.toLowerCase());
 
     if (currentSelected !== "ALL" && !isAvailable) {
-        // Fallback to Camiling if available, else ALL
         globalState.selectedDestinationMun = servicedMunicipalities.includes("Camiling") ? "Camiling" : "ALL";
     }
 
@@ -177,9 +159,6 @@ export function populateDestinationDropdown() {
     return servicedMunicipalities;
 }
 
-/**
- * Non-blocking background GPS locator: finds nearest municipality among serviced towns.
- */
 export function detectAndSetGpsDestination(servicedMunicipalities) {
     if (!servicedMunicipalities || servicedMunicipalities.length === 0) return;
 
@@ -200,7 +179,6 @@ export function detectAndSetGpsDestination(servicedMunicipalities) {
             }
         });
 
-        // 0.05 sq deg threshold (~20km distance radius)
         if (closestMun && minDistance < 0.05) {
             const destSelect = document.getElementById('dir-destination-select');
             if (destSelect && globalState.selectedDestinationMun !== closestMun) {
@@ -215,13 +193,11 @@ export function detectAndSetGpsDestination(servicedMunicipalities) {
         }
     };
 
-    // 1. Check existing cached GPS coordinates first
     if (appState.lat && appState.lon) {
         findNearest(appState.lat, appState.lon);
         return;
     }
 
-    // 2. Non-blocking native GPS query
     if (!hasAttemptedGpsAutoSelect && navigator.geolocation) {
         hasAttemptedGpsAutoSelect = true;
         navigator.geolocation.getCurrentPosition(
@@ -230,22 +206,18 @@ export function detectAndSetGpsDestination(servicedMunicipalities) {
                     findNearest(pos.coords.latitude, pos.coords.longitude);
                 }
             },
-            () => {}, // Ignore errors silently
+            () => {},
             { timeout: 4000, maximumAge: 300000, enableHighAccuracy: false }
         );
     }
 }
 
-/**
- * Handles switching the active Origin Starting Hub filter for rates.
- */
 export function handleOriginHubChange(selectedHub) {
     globalState.selectedOriginHub = selectedHub || "Camiling";
     try {
         localStorage.setItem('lokalex_selected_origin_hub', globalState.selectedOriginHub);
     } catch(e) {}
 
-    // Re-evaluate available destination municipalities for the selected origin
     populateDestinationDropdown();
     renderDirectoryList();
 
@@ -253,9 +225,6 @@ export function handleOriginHubChange(selectedHub) {
     showToast(`📍 Na-filter ang mga rates mula sa: ${hubLabel}`);
 }
 
-/**
- * Handles switching the active Destination Municipality filter for rates.
- */
 export function handleDestinationChange(selectedMun) {
     globalState.selectedDestinationMun = selectedMun || "ALL";
     try {
@@ -339,61 +308,554 @@ export function initDirectoryScrollListener() {
     }
 }
 
-/**
- * Navigates to directory view with dynamic credit validation and deduction.
- * Automatically synchronizes the dual-tier routing toolbar.
- */
-export async function openDirectory(type) {
-    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+// ============================================================================
+// CUSTOMER MAP LOCATION CONFIRMATION & CREDIT DEDUCTION MODAL
+// ============================================================================
+
+function getOrCreateLocationConfirmModal() {
+    let modal = document.getElementById('customer-location-confirm-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'customer-location-confirm-modal';
+        modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 hidden';
+        modal.innerHTML = `
+        <div class="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-3xl p-5 max-w-sm w-full shadow-2xl flex flex-col gap-4 animate-scaleUp">
+            <div class="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800/80">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                        <i class="fa-solid fa-map-location-dot text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-black text-sm text-gray-900 dark:text-white">View Saved Location</h3>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Customer Location Access</p>
+                    </div>
+                </div>
+                <button type="button" onclick="window.closeCustomerLocationConfirmModal && window.closeCustomerLocationConfirmModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 text-sm cursor-pointer">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div class="flex flex-col gap-2.5 text-xs">
+                <div class="bg-gray-50 dark:bg-black/30 border border-gray-200 dark:border-gray-800 p-3 rounded-2xl">
+                    <div class="text-[10px] text-gray-500 dark:text-gray-400">Customer:</div>
+                    <div id="loc-confirm-customer-name" class="font-black text-sm text-gray-900 dark:text-white truncate mt-0.5">Customer Name</div>
+                </div>
+
+                <div id="loc-confirm-credit-details" class="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-300 text-[11px] flex flex-col gap-1.5">
+                    <div class="flex justify-between items-center font-bold">
+                        <span>Fee to view location:</span>
+                        <span id="loc-confirm-cost-label" class="font-mono text-xs text-red-600 dark:text-red-400 font-black">-1 Directory Credit</span>
+                    </div>
+                    <div class="flex justify-between items-center text-[10px] text-gray-600 dark:text-gray-400 pt-1 border-t border-amber-200/50 dark:border-amber-500/20">
+                        <span>Your Current Balance:</span>
+                        <span id="loc-confirm-current-balance" class="font-mono font-bold text-gray-900 dark:text-white">0 credits</span>
+                    </div>
+                </div>
+
+                <div id="loc-confirm-warning" class="hidden text-[11px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-500/30 p-2.5 rounded-xl text-center">
+                    ⚠️ Hindi sapat ang iyong Directory Credits! Mag-rehistro muna ng customer (+5) o store (+10) para magka-credits.
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 pt-1">
+                <button type="button" onclick="window.closeCustomerLocationConfirmModal && window.closeCustomerLocationConfirmModal()" class="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold text-xs transition active:scale-95 cursor-pointer">
+                    Cancel
+                </button>
+                <button type="button" id="loc-confirm-proceed-btn" onclick="window.confirmAndOpenCustomerLocation && window.confirmAndOpenCustomerLocation()" class="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-xs transition active:scale-95 shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-unlock"></i> Proceed & Open
+                </button>
+            </div>
+        </div>`;
+        document.body.appendChild(modal);
+    }
+    return modal;
+}
+
+export function promptViewCustomerLocation(customerName, mapUrl) {
+    if (!mapUrl) {
+        showToast("⚠️ Walang naka-save na GPS link para sa customer na ito.");
+        return;
+    }
+
+    const modal = getOrCreateLocationConfirmModal();
+    const nameEl = document.getElementById('loc-confirm-customer-name');
+    const balanceEl = document.getElementById('loc-confirm-current-balance');
+    const costLabel = document.getElementById('loc-confirm-cost-label');
+    const warningEl = document.getElementById('loc-confirm-warning');
+    const proceedBtn = document.getElementById('loc-confirm-proceed-btn');
+
+    if (nameEl) nameEl.innerText = customerName || "Customer";
+
     const isAdmin = checkAdminAccess();
+    let currentCredits = parseInt(localStorage.getItem('lokalex_rider_credits') || "0", 10);
+    if (isNaN(currentCredits)) currentCredits = 0;
 
-    const creditConfig = globalState.directoryCreditsConfig || {
-        enabled: true,
-        costPerAccess: 1,
-        rewardCustomerRegistration: 5,
-        rewardStoreRegistration: 10
-    };
+    pendingMapUnlock = { customerName, mapUrl };
 
-    if (creditConfig.enabled && !isAdmin && myId) {
-        const cost = creditConfig.costPerAccess !== undefined ? creditConfig.costPerAccess : 1;
+    if (isAdmin) {
+        if (costLabel) costLabel.innerText = "0 Credits (Admin Free)";
+        if (balanceEl) balanceEl.innerText = "Unlimited (Admin)";
+        if (warningEl) warningEl.classList.add('hidden');
+        if (proceedBtn) {
+            proceedBtn.disabled = false;
+            proceedBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+            proceedBtn.innerHTML = `<i class="fa-solid fa-arrow-up-right-from-square"></i> Open Map`;
+        }
+    } else {
+        if (costLabel) costLabel.innerText = "-1 Directory Credit";
+        if (balanceEl) balanceEl.innerText = `${currentCredits} credit(s)`;
+
+        if (currentCredits < 1) {
+            if (warningEl) warningEl.classList.remove('hidden');
+            if (proceedBtn) {
+                proceedBtn.disabled = true;
+                proceedBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                proceedBtn.innerHTML = `⚠️ Insufficient Credits`;
+            }
+        } else {
+            if (warningEl) warningEl.classList.add('hidden');
+            if (proceedBtn) {
+                proceedBtn.disabled = false;
+                proceedBtn.classList.remove('opacity-40', 'cursor-not-allowed');
+                proceedBtn.innerHTML = `<i class="fa-solid fa-unlock"></i> Proceed & Open (-1)`;
+            }
+        }
+    }
+
+    modal.classList.remove('hidden');
+}
+
+export function closeCustomerLocationConfirmModal() {
+    const modal = document.getElementById('customer-location-confirm-modal');
+    if (modal) modal.classList.add('hidden');
+    pendingMapUnlock = null;
+}
+
+export async function confirmAndOpenCustomerLocation() {
+    if (!pendingMapUnlock || !pendingMapUnlock.mapUrl) {
+        closeCustomerLocationConfirmModal();
+        return;
+    }
+
+    const { customerName, mapUrl } = pendingMapUnlock;
+    const isAdmin = checkAdminAccess();
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+
+    if (!isAdmin && myId) {
         let currentCredits = parseInt(localStorage.getItem('lokalex_rider_credits') || "0", 10);
+        if (isNaN(currentCredits)) currentCredits = 0;
 
         if (db) {
             try {
                 const snap = await db.ref(`riders/${myId}/directoryCredits`).once('value');
                 if (snap.exists()) {
                     currentCredits = parseInt(snap.val(), 10) || 0;
-                    localStorage.setItem('lokalex_rider_credits', currentCredits.toString());
                 }
             } catch(e) {}
         }
 
-        if (currentCredits < cost) {
-            showToast(`⚠️ Kulang ang iyong Directory Credits (${currentCredits} natira)!\nKailangan ng ${cost} credit(s). Mag-rehistro ng Customer (+${creditConfig.rewardCustomerRegistration || 5}) o Store (+${creditConfig.rewardStoreRegistration || 10}) para magka-credits.`);
-            showSideNotification("LOW CREDITS", `Insufficient balance (${currentCredits} credits). Register new entries to earn.`, "fa-coins", "text-red-400", "border-red-500");
+        if (currentCredits < 1) {
+            showToast("⚠️ Kulang ang iyong credits para tingnan ang lokasyon.");
+            closeCustomerLocationConfirmModal();
             return;
         }
 
-        const newBalance = Math.max(0, currentCredits - cost);
+        const newBalance = Math.max(0, currentCredits - 1);
         localStorage.setItem('lokalex_rider_credits', newBalance.toString());
         appState.directoryCredits = newBalance;
         updateRosterCreditsDisplay(newBalance);
 
         if (db) {
-            db.ref(`riders/${myId}/directoryCredits`).transaction(c => Math.max(0, (c || cost) - cost));
-            db.ref(`roster/${myId}/directoryCredits`).transaction(c => Math.max(0, (c || cost) - cost)).catch(() => {});
+            db.ref(`riders/${myId}/directoryCredits`).transaction(c => Math.max(0, (c || 1) - 1));
+            db.ref(`roster/${myId}/directoryCredits`).transaction(c => Math.max(0, (c || 1) - 1)).catch(() => {});
         }
 
-        showToast(`🪙 -${cost} Credit used for ${type || 'Directory'}. Balance: ${newBalance}`);
+        showToast(`🪙 -1 Credit used for ${customerName}'s location. Balance: ${newBalance}`);
     }
 
-    globalState.currentType = type || 'customers';
+    closeCustomerLocationConfirmModal();
+    window.open(mapUrl, '_blank');
+}
 
-    // COORDINATE DUAL-TIER ROUTING TOOLBAR VISIBILITY
+// ============================================================================
+// RESTAURANT MENU PHOTO GALLERY & CLOUD STORAGE PIPELINE
+// ============================================================================
+
+function getOrCreateMenuGalleryModal() {
+    let modal = document.getElementById('store-menu-gallery-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'store-menu-gallery-modal';
+        modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-5 hidden';
+        modal.innerHTML = `
+        <div class="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-3xl max-w-2xl w-full max-h-[92vh] shadow-2xl flex flex-col overflow-hidden animate-scaleUp">
+            <!-- Header -->
+            <div class="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 dark:border-gray-800/80 bg-gray-50/60 dark:bg-black/20">
+                <div class="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
+                    <div class="w-9 h-9 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+                        <i class="fa-solid fa-book-open text-base"></i>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <h3 id="gallery-store-title" class="font-black text-sm text-gray-900 dark:text-white truncate">Store Menu</h3>
+                        <p id="gallery-store-subtitle" class="text-[10px] text-gray-500 dark:text-gray-400 truncate">Rider-contributed physical restaurant menu</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" id="btn-download-all-menu" onclick="window.downloadCompleteMenuToPhone && window.downloadCompleteMenuToPhone()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition active:scale-95 shadow-xs flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-cloud-arrow-down"></i> <span class="hidden sm:inline">Save to Phone</span>
+                    </button>
+                    <button type="button" onclick="window.closeStoreMenuGalleryModal && window.closeStoreMenuGalleryModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-2 text-base cursor-pointer">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Upload Bar -->
+            <div class="px-5 py-2.5 bg-amber-50/50 dark:bg-amber-950/20 border-b border-amber-200/50 dark:border-amber-500/20 flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-1 text-[11px] text-amber-800 dark:text-amber-300 font-bold">
+                    <i class="fa-solid fa-camera"></i>
+                    <span>Got an updated menu?</span>
+                </div>
+                <label class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-black px-3 py-1.5 rounded-xl cursor-pointer transition active:scale-95 shadow-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-plus"></i> Add Menu Page
+                    <input type="file" id="gallery-upload-input" accept="image/*" class="hidden" onchange="window.handleMenuPhotoUpload && window.handleMenuPhotoUpload(event)">
+                </label>
+            </div>
+
+            <!-- Body: Image Cards Grid -->
+            <div id="gallery-images-container" class="flex-1 overflow-y-auto p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="col-span-full text-center text-gray-500 italic py-16 text-xs">Loading menu photos...</div>
+            </div>
+
+            <!-- Lightbox / Preview Layer -->
+            <div id="gallery-lightbox" class="fixed inset-0 z-60 bg-black/95 flex flex-col items-center justify-center p-3 hidden" onclick="window.closeGalleryLightbox && window.closeGalleryLightbox()">
+                <div class="absolute top-4 right-4 flex items-center gap-2">
+                    <a id="lightbox-download-single" href="#" download="menu_page.jpg" onclick="event.stopPropagation()" class="bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 backdrop-blur-md">
+                        <i class="fa-solid fa-download"></i> Save Image
+                    </a>
+                    <button type="button" class="text-white text-xl p-2 cursor-pointer" onclick="window.closeGalleryLightbox && window.closeGalleryLightbox()">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <img id="lightbox-image" src="" alt="Menu Full View" class="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl select-none" onclick="event.stopPropagation()">
+                <div id="lightbox-caption" class="text-white text-xs font-bold mt-2 text-center bg-black/60 px-3 py-1 rounded-lg backdrop-blur-xs select-none"></div>
+            </div>
+        </div>`;
+        document.body.appendChild(modal);
+    }
+    return modal;
+}
+
+/**
+ * Compresses an image file on an off-screen HTML5 canvas to a binary Blob.
+ */
+function compressImageToBlob(file, maxWidth = 1400, quality = 0.82) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        resolve(blob);
+                    } else {
+                        reject(new Error("Canvas blob compression failed."));
+                    }
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = reject;
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+export async function openStoreMenuGalleryModal(storeName, compositeKey) {
+    const modal = getOrCreateMenuGalleryModal();
+    const cleanName = (storeName || "Store").trim();
+    const galleryKey = (compositeKey || cleanName).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    activeGalleryStore = {
+        name: cleanName,
+        key: galleryKey
+    };
+
+    const titleEl = document.getElementById('gallery-store-title');
+    const subEl = document.getElementById('gallery-store-subtitle');
+    const container = document.getElementById('gallery-images-container');
+    const dlBtn = document.getElementById('btn-download-all-menu');
+
+    if (titleEl) titleEl.innerText = `${cleanName} - Menu`;
+    if (subEl) subEl.innerText = `Complete physical menu for ${cleanName}`;
+    if (dlBtn) dlBtn.classList.add('hidden');
+
+    modal.classList.remove('hidden');
+
+    try {
+        const cached = await idbGet('storeMenuGalleries', galleryKey);
+        if (cached && cached.pages && cached.pages.length > 0) {
+            renderMenuPages(cached.pages, cleanName);
+        }
+    } catch(e) {}
+
+    if (db) {
+        db.ref(`directory/storeMenuGalleries/${galleryKey}`).on('value', (snap) => {
+            const val = snap.val() || {};
+            const pages = val.pages ? Object.values(val.pages) : [];
+
+            pages.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+
+            idbSet('storeMenuGalleries', galleryKey, { pages, updatedAt: val.updatedAt || Date.now() }).catch(() => {});
+            renderMenuPages(pages, cleanName);
+        });
+    }
+}
+
+export function closeStoreMenuGalleryModal() {
+    const modal = document.getElementById('store-menu-gallery-modal');
+    if (modal) modal.classList.add('hidden');
+    if (db && activeGalleryStore) {
+        db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}`).off();
+    }
+    activeGalleryStore = null;
+}
+
+function renderMenuPages(pages = [], storeName = "Store") {
+    const container = document.getElementById('gallery-images-container');
+    const dlBtn = document.getElementById('btn-download-all-menu');
+    if (!container) return;
+
+    if (pages.length === 0) {
+        if (dlBtn) dlBtn.classList.add('hidden');
+        container.innerHTML = `
+        <div class="col-span-full text-center text-gray-500 dark:text-gray-400 italic py-16 text-xs flex flex-col items-center gap-2">
+            <i class="fa-solid fa-camera-retro text-3xl text-amber-500/60"></i>
+            <span>Walang naka-save na photo menu para sa restaurant na ito.</span>
+            <span class="text-[11px] text-gray-400">Maging unang rider na mag-picture at mag-register ng menu gamit ang buton sa itaas!</span>
+        </div>`;
+        return;
+    }
+
+    if (dlBtn) dlBtn.classList.remove('hidden');
+
+    container.innerHTML = pages.map((page, idx) => {
+        const pageNum = idx + 1;
+        const caption = page.caption || `Page ${pageNum}`;
+        const uploader = page.uploaderName || "Rider";
+        const uploadedAt = page.uploadedAt ? ` • ${page.uploadedAt}` : "";
+        const safeUrl = page.imageUrl || "";
+
+        return `
+        <div class="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-gray-800 rounded-2xl p-2.5 flex flex-col gap-2 shadow-xs group">
+            <div class="relative w-full aspect-[4/3] bg-black/60 rounded-xl overflow-hidden cursor-pointer" onclick="window.openGalleryLightbox && window.openGalleryLightbox('${safeUrl}', '${escapeHtml(caption)}')">
+                <img src="${safeUrl}" alt="${escapeHtml(caption)}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+                <span class="absolute top-2 left-2 bg-black/70 backdrop-blur-xs text-amber-400 font-mono font-black text-[10px] px-2 py-0.5 rounded-lg border border-amber-500/30">
+                    Page ${pageNum}
+                </span>
+                <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-sm font-bold gap-1 pointer-events-none">
+                    <i class="fa-solid fa-magnifying-glass-plus"></i> View Full
+                </div>
+            </div>
+            
+            <div class="flex items-center justify-between text-xs pt-1">
+                <div class="flex flex-col min-w-0 pr-2">
+                    <span class="font-bold text-gray-900 dark:text-white truncate">${escapeHtml(caption)}</span>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 truncate">By ${escapeHtml(uploader)}${uploadedAt}</span>
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                    <a href="${safeUrl}" download="${storeName}_Menu_Page_${pageNum}.jpg" class="p-2 rounded-lg bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-emerald-500 transition" title="Save this page">
+                        <i class="fa-solid fa-download text-xs"></i>
+                    </a>
+                    ${checkAdminAccess() ? `
+                    <button type="button" onclick="window.deleteMenuGalleryPage && window.deleteMenuGalleryPage('${page.id}')" class="p-2 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 transition" title="Delete page">
+                        <i class="fa-solid fa-trash text-xs"></i>
+                    </button>` : ''}
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+/**
+ * Uploads compressed menu photo binary to Firebase Cloud Storage,
+ * then persists the lightweight download URL into RTDB.
+ */
+export async function handleMenuPhotoUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file || !activeGalleryStore) return;
+
+    const input = e.target;
+    showToast("⏳ Compressing and uploading menu photo...");
+
+    try {
+        const imageBlob = await compressImageToBlob(file, 1400, 0.82);
+        const riderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
+        const riderId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+        const pageId = `PAGE_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+        let finalImageUrl = "";
+
+        // 1. Primary: Upload binary blob to Firebase Cloud Storage
+        if (storage) {
+            const storageRef = storage.ref(`menus/${activeGalleryStore.key}/${pageId}.jpg`);
+            const uploadTask = await storageRef.put(imageBlob, {
+                contentType: 'image/jpeg',
+                customMetadata: {
+                    storeKey: activeGalleryStore.key,
+                    uploaderId: riderId,
+                    uploaderName: riderName
+                }
+            });
+            finalImageUrl = await uploadTask.ref.getDownloadURL();
+        } else {
+            // Fallback to data URL only if Storage SDK is missing
+            finalImageUrl = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(imageBlob);
+            });
+        }
+
+        const snap = await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages`).once('value');
+        const count = snap.exists() ? Object.keys(snap.val()).length : 0;
+
+        const pagePayload = {
+            id: pageId,
+            imageUrl: finalImageUrl,
+            caption: `Menu Page ${count + 1}`,
+            uploaderName: riderName,
+            uploaderId: riderId,
+            orderIndex: count + 1,
+            uploadedAt: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+        };
+
+        // Write only metadata & URL (~120 bytes) to RTDB
+        await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages/${pageId}`).set(pagePayload);
+        await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/updatedAt`).set(Date.now());
+        await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/storeName`).set(activeGalleryStore.name);
+
+        showToast(`✅ Page ${count + 1} added to ${activeGalleryStore.name}'s menu!`);
+        showSideNotification("MENU UPLOADED", `${activeGalleryStore.name} (Page ${count + 1})`, "fa-book-open", "text-emerald-400", "border-emerald-500");
+    } catch(err) {
+        console.error("Upload error:", err);
+        showToast("❌ Hindi na-save ang litrato: " + (err.message || "Upload failed"));
+    } finally {
+        if (input) input.value = "";
+    }
+}
+
+export async function downloadCompleteMenuToPhone() {
+    if (!activeGalleryStore || !db) return;
+
+    showToast("📥 Preparing complete menu for download...");
+
+    try {
+        const snap = await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages`).once('value');
+        const pages = snap.exists() ? Object.values(snap.val()) : [];
+
+        if (pages.length === 0) {
+            showToast("⚠️ Walang naka-save na mga litrato.");
+            return;
+        }
+
+        pages.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+
+        const filesToShare = [];
+        for (let i = 0; i < pages.length; i++) {
+            const p = pages[i];
+            const res = await fetch(p.imageUrl);
+            const blob = await res.blob();
+            const ext = blob.type.includes('webp') ? 'webp' : 'jpg';
+            const file = new File([blob], `${activeGalleryStore.name}_Menu_Page_${i + 1}.${ext}`, { type: blob.type });
+            filesToShare.push(file);
+        }
+
+        if (navigator.canShare && navigator.canShare({ files: filesToShare })) {
+            await navigator.share({
+                title: `${activeGalleryStore.name} Complete Menu`,
+                text: `Complete menu for ${activeGalleryStore.name} (${pages.length} pages)`,
+                files: filesToShare
+            });
+            showToast("🎉 Na-share / na-save sa gallery!");
+            return;
+        }
+
+        pages.forEach((p, idx) => {
+            setTimeout(() => {
+                const a = document.createElement('a');
+                a.href = p.imageUrl;
+                a.download = `${activeGalleryStore.name}_Menu_Page_${idx + 1}.jpg`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }, idx * 350);
+        });
+
+        showToast(`✅ Na-download ang ${pages.length} pahina ng menu!`);
+    } catch(err) {
+        if (err.name !== 'AbortError') {
+            console.error("Download error:", err);
+            showToast("⚠️ Hindi na-download ang kumpletong menu.");
+        }
+    }
+}
+
+export async function deleteMenuGalleryPage(pageId) {
+    if (!activeGalleryStore || !pageId || !db) return;
+    if (!confirm("Sigurado ka bang nais burahin ang page na ito?")) return;
+
+    try {
+        await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages/${pageId}`).remove();
+        if (storage) {
+            storage.ref(`menus/${activeGalleryStore.key}/${pageId}.jpg`).delete().catch(() => {});
+        }
+        showToast("🗑️ Nabura ang page sa gallery.");
+    } catch(e) {
+        showToast("❌ Hindi nabura ang page.");
+    }
+}
+
+export function openGalleryLightbox(url, caption) {
+    const lightbox = document.getElementById('gallery-lightbox');
+    const img = document.getElementById('lightbox-image');
+    const cap = document.getElementById('lightbox-caption');
+    const dlBtn = document.getElementById('lightbox-download-single');
+
+    if (img) img.src = url;
+    if (cap) cap.innerText = caption;
+    if (dlBtn) dlBtn.href = url;
+    if (lightbox) lightbox.classList.remove('hidden');
+}
+
+export function closeGalleryLightbox() {
+    const lightbox = document.getElementById('gallery-lightbox');
+    if (lightbox) lightbox.classList.add('hidden');
+}
+
+export async function openDirectory(type) {
+    const targetType = type || 'customers';
+    globalState.currentType = targetType;
+
     const originContainer = document.getElementById('dir-origin-hub-container');
     const originSelect = document.getElementById('dir-origin-hub-select');
 
-    if (type === 'barangays') {
+    if (targetType === 'barangays') {
         if (originContainer) originContainer.classList.remove('hidden');
         if (!globalState.selectedOriginHub) {
             globalState.selectedOriginHub = localStorage.getItem('lokalex_selected_origin_hub') || "Camiling";
@@ -403,8 +865,6 @@ export async function openDirectory(type) {
         loadDirectoryCache();
         const serviced = populateDestinationDropdown();
         renderDirectoryList();
-
-        // Non-blocking background GPS proximity check
         detectAndSetGpsDestination(serviced);
     } else {
         if (originContainer) originContainer.classList.add('hidden');
@@ -428,7 +888,6 @@ export async function openDirectory(type) {
     if (minIndicator) minIndicator.classList.add('hidden');
 
     restoreDirectorySearch();
-
     switchView('view-directory');
 
     window.scrollTo({ top: 0 });
@@ -437,8 +896,8 @@ export async function openDirectory(type) {
     
     const headerTitle = document.getElementById('header-title');
     if (headerTitle) {
-        if (type === 'customers') headerTitle.innerText = "Customer Directory";
-        else if (type === 'stores') headerTitle.innerText = "Store Directory";
+        if (targetType === 'customers') headerTitle.innerText = "Customer Directory";
+        else if (targetType === 'stores') headerTitle.innerText = "Store Directory";
         else headerTitle.innerText = "Rates & Barangays";
     }
 
@@ -506,11 +965,6 @@ export function clearDirectorySearch() {
     renderDirectoryList();
 }
 
-/**
- * Copies formatted delivery fee message for a barangay:
- * - Cross-Town: "The delivery fee from [Origin] to [Municipality], [Barangay] starts at ₱[rate]"
- * - Intra-Town: "The delivery fee at [Municipality], [Barangay] starts at ₱[rate]"
- */
 export function copyBarangayRate(barangayName, rawRate, destinationMun = "Camiling", originMun = "Camiling") {
     let rateNum = parseFloat((rawRate || "").replace(/[^0-9.]/g, ''));
     let amountStr = !isNaN(rateNum) ? rateNum.toFixed(0) : (rawRate || '0').replace(/[^0-9.]/g, '');
@@ -534,11 +988,6 @@ export function copyBarangayRate(barangayName, rawRate, destinationMun = "Camili
     showToast(`📋 Copied rate message for ${cleanBrgy}!`);
 }
 
-/**
- * Renders the directory cards list with sticky alphabetical sections,
- * anti-clipping titles, isolated Origin Hub, and Destination filtering.
- * Automatically synchronizes the Destination dropdown on render.
- */
 export function renderDirectoryList() {
     const listEl = document.getElementById('record-list');
     const searchVal = (document.getElementById('floating-search-input')?.value || document.getElementById('search-input')?.value || '').toLowerCase().trim();
@@ -549,16 +998,16 @@ export function renderDirectoryList() {
     }
 
     const isBarangay = globalState.currentType === 'barangays';
+    const isCustomer = globalState.currentType === 'customers';
+    const isStore = globalState.currentType === 'stores';
     const isAdminUser = checkAdminAccess();
 
-    // Dynamically rebuild destination options whenever rates are rendered
     if (isBarangay) {
         populateDestinationDropdown();
     }
 
     let records = globalState.records ? globalState.records.filter(r => (r.type || 'customers') === globalState.currentType) : [];
 
-    // ISOLATE RATES BY BOTH VECTOR AXES: ORIGIN HUB & DESTINATION MUNICIPALITY
     if (isBarangay) {
         const activeOriginHub = (globalState.selectedOriginHub || "Camiling").trim().toLowerCase();
         const activeDestination = (globalState.selectedDestinationMun || "ALL").trim().toLowerCase();
@@ -578,7 +1027,6 @@ export function renderDirectoryList() {
         }
     }
 
-    // Comprehensive Geographic Search Predicate
     if (searchVal) {
         records = records.filter(r => 
             (r.name || '').toLowerCase().includes(searchVal) ||
@@ -632,13 +1080,19 @@ export function renderDirectoryList() {
             </div>`;
         }
 
-        let mapBtn = '';
-        if (r.lat_lon_link) {
-            mapBtn = `<a href="${escapeHtml(r.lat_lon_link)}" target="_blank" class="text-xs text-blue-600 dark:text-blue-400 font-bold underline flex items-center gap-1 mt-1"><i class="fa-solid fa-map-location-dot"></i> View Location</a>`;
-        }
-
         const safeCompositeKey = escapeHtml(r.compositeKey || "");
         const safeRecordName = escapeHtml(r.name || "");
+        const safeEscapedName = (r.name || "").replace(/'/g, "\\'");
+        const safeMapLink = escapeHtml(r.lat_lon_link || "");
+
+        let mapBtn = '';
+        if (r.lat_lon_link) {
+            if (isCustomer) {
+                mapBtn = `<button type="button" onclick="window.promptViewCustomerLocation && window.promptViewCustomerLocation('${safeEscapedName}', '${safeMapLink}')" class="text-xs text-blue-600 dark:text-blue-400 font-bold underline flex items-center gap-1 mt-1 cursor-pointer hover:text-blue-500 transition active:scale-95"><i class="fa-solid fa-map-location-dot"></i> View Location</button>`;
+            } else {
+                mapBtn = `<a href="${safeMapLink}" target="_blank" class="text-xs text-blue-600 dark:text-blue-400 font-bold underline flex items-center gap-1 mt-1"><i class="fa-solid fa-map-location-dot"></i> View Location</a>`;
+            }
+        }
 
         const deleteBtnHtml = isAdminUser 
             ? `<button onclick="promptDeleteDirectoryRecord('${safeRecordName}', '${safeCompositeKey}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-red-600 dark:text-red-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Delete">
@@ -660,7 +1114,6 @@ export function renderDirectoryList() {
 
             const isCrossTown = originMun.toLowerCase() !== destMun.toLowerCase();
 
-            // Render Geographic Route Breadcrumb Subtitle
             const locationSubtitleHtml = isCrossTown
                 ? `<div class="text-[10px] text-amber-500 dark:text-amber-400 mt-0.5 font-bold flex items-center gap-1">
                      <i class="fa-solid fa-arrow-right text-[8.5px]"></i> From <span class="underline">${escapeHtml(originMun)}</span> to <span class="text-white">${escapeHtml(destMun)}</span>
@@ -669,7 +1122,6 @@ export function renderDirectoryList() {
                      <i class="fa-solid fa-location-dot text-[9px] text-emerald-500"></i> Local: ${escapeHtml(destMun)} Hub
                    </div>`;
 
-            // Anti-clipping header layout using break-words and leading-snug
             htmlBuilder += `
             <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-3.5 rounded-2xl flex justify-between items-center gap-2 shadow-xs my-1">
                 <div class="flex-1 min-w-0 pr-1">
@@ -692,16 +1144,27 @@ export function renderDirectoryList() {
                 </div>
             </div>`;
         } else {
+            // STORE & CUSTOMER CARDS
+            const menuGalleryBtn = isStore ? `
+                <button type="button" onclick="window.openStoreMenuGalleryModal && window.openStoreMenuGalleryModal('${safeEscapedName}', '${safeCompositeKey}')" class="bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1.5 cursor-pointer shadow-xs" title="View & Download Restaurant Menu">
+                    <i class="fa-solid fa-book-open text-xs"></i> <span>Menu</span>
+                </button>
+            ` : '';
+
             htmlBuilder += `
             <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-3.5 rounded-2xl flex justify-between items-start gap-2 shadow-xs my-1">
                 <div class="flex-1 min-w-0 pr-1">
-                    <div class="font-black text-sm text-gray-900 dark:text-white break-words leading-snug">${escapeHtml(r.name)}</div>
+                    <div class="font-black text-sm text-gray-900 dark:text-white break-words leading-snug flex items-center gap-1.5 flex-wrap">
+                        ${isStore ? '<i class="fa-solid fa-store text-orange-500 text-xs"></i>' : ''}
+                        <span>${escapeHtml(r.name)}</span>
+                    </div>
                     ${r.contact ? `<div class="text-xs text-gray-700 dark:text-gray-400 mt-0.5 font-bold font-mono"><i class="fa-solid fa-phone text-[10px] text-blue-500"></i> ${escapeHtml(r.contact)}</div>` : ''}
                     ${r.address ? `<div class="text-xs text-gray-700 dark:text-gray-300 mt-0.5 font-medium break-words"><i class="fa-solid fa-location-dot text-[10px] text-red-500"></i> ${escapeHtml(r.address)}</div>` : ''}
                     ${mapBtn}
                     ${metaInfoHtml}
                 </div>
-                <div class="flex gap-1 shrink-0 items-center">
+                <div class="flex gap-1.5 shrink-0 items-center">
+                    ${menuGalleryBtn}
                     <button onclick="editDirectoryRecord('${safeRecordName}', '${safeCompositeKey}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
@@ -859,6 +1322,16 @@ if (typeof window !== 'undefined') {
     window.handleDestinationChange = handleDestinationChange;
     window.populateDestinationDropdown = populateDestinationDropdown;
     window.copyBarangayRate = copyBarangayRate;
+    window.promptViewCustomerLocation = promptViewCustomerLocation;
+    window.closeCustomerLocationConfirmModal = closeCustomerLocationConfirmModal;
+    window.confirmAndOpenCustomerLocation = confirmAndOpenCustomerLocation;
+    window.openStoreMenuGalleryModal = openStoreMenuGalleryModal;
+    window.closeStoreMenuGalleryModal = closeStoreMenuGalleryModal;
+    window.handleMenuPhotoUpload = handleMenuPhotoUpload;
+    window.downloadCompleteMenuToPhone = downloadCompleteMenuToPhone;
+    window.deleteMenuGalleryPage = deleteMenuGalleryPage;
+    window.openGalleryLightbox = openGalleryLightbox;
+    window.closeGalleryLightbox = closeGalleryLightbox;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
@@ -871,4 +1344,4 @@ if (typeof window !== 'undefined') {
     }
 }
 
-// REMARKS: DIRECTORY_UI_DYNAMIC_DESTINATION_SYNC_V7_COMPLETE
+// REMARKS: DIRECTORY_UI_FIREBASE_STORAGE_MENU_GALLERY_V10_COMPLETE

@@ -1,4 +1,18 @@
 // src/config/firebase.js
+
+/**
+ * ============================================================================
+ * FIREBASE INITIALIZATION & DUAL-DATABASE SYNC PROXY
+ * ============================================================================
+ * 
+ * Description:
+ * Connects the Lokalex platform to Firebase services:
+ * - Realtime Database (Primary + Backup Dual-Write Proxy with Offline Outbox)
+ * - Firebase Storage: Binary file uploads for store photo menus and media
+ * - Firebase Authentication & Cloud Messaging (FCM)
+ * ============================================================================
+ */
+
 const firebaseConfig = {
     apiKey: "AIzaSyDVsi2niqDbQeAbj-Q5XUf4jdkaUVSpbu8",
     authDomain: "lokalexrtdb.firebaseapp.com",
@@ -27,6 +41,7 @@ export const backupDb = (fb && isBackupConfigured) ? fb.app().database(BACKUP_DB
 
 export const auth = fb ? fb.auth() : null;
 export const messaging = (fb && typeof fb.messaging === 'function' && fb.messaging.isSupported()) ? fb.messaging() : null;
+export const storage = (fb && typeof fb.storage === 'function') ? fb.storage() : null;
 
 // ============================================================================
 // 2. OPTIMISTIC OFFLINE OUTBOX QUEUE ENGINE
@@ -106,7 +121,6 @@ export async function drainOfflineOutbox() {
     }
 }
 
-// Monitor real-time connection state for automatic outbox replay
 if (primaryDb) {
     primaryDb.ref('.info/connected').on('value', (snap) => {
         isSocketConnected = !!snap.val();
@@ -163,7 +177,6 @@ function createRefWrapper(primaryRef, backupRef) {
             );
         },
 
-        // --- DUAL-WRITE OPERATIONS WITH OPTIMISTIC OFFLINE OUTBOX ---
         set(value, onComplete) {
             const relPath = getRelativeRefPath(primaryRef);
 
@@ -281,7 +294,6 @@ function createRefWrapper(primaryRef, backupRef) {
             };
         },
 
-        // --- READ & LISTENER OPERATIONS (ROUTED TO PRIMARY DB) ---
         on(eventType, callback, cancelCallbackOrContext, context) {
             return primaryRef.on(eventType, callback, cancelCallbackOrContext, context);
         },
@@ -292,7 +304,6 @@ function createRefWrapper(primaryRef, backupRef) {
             return primaryRef.off(eventType, callback, context);
         },
 
-        // --- QUERY BUILDER ATTACHMENTS ---
         orderByChild(path) {
             return createQueryWrapper(primaryRef.orderByChild(path), backupRef);
         },
@@ -300,7 +311,7 @@ function createRefWrapper(primaryRef, backupRef) {
             return createQueryWrapper(primaryRef.orderByKey(), backupRef);
         },
         orderByValue() {
-            return createQueryWrapper(primaryQuery ? primaryRef.orderByValue() : primaryRef.orderByValue(), backupRef);
+            return createQueryWrapper(primaryRef.orderByValue(), backupRef);
         },
         orderByPriority() {
             return createQueryWrapper(primaryRef.orderByPriority(), backupRef);
@@ -329,7 +340,7 @@ function createRefWrapper(primaryRef, backupRef) {
 }
 
 function createQueryWrapper(primaryQuery, backupRef) {
-    const queryWrapper = {
+    return {
         get ref() {
             return createRefWrapper(primaryQuery.ref, backupRef);
         },
@@ -373,11 +384,8 @@ function createQueryWrapper(primaryQuery, backupRef) {
             return primaryQuery.toString();
         }
     };
-
-    return queryWrapper;
 }
 
-// 4. Centralized Database Proxy Export
 export const db = fb ? {
     ref(path = '') {
         const pRef = primaryDb ? primaryDb.ref(path) : null;
@@ -398,3 +406,5 @@ export const db = fb ? {
 } : null;
 
 export default fb;
+
+// REMARKS: FIREBASE_CONFIG_STORAGE_EXPORT_V3_COMPLETE
