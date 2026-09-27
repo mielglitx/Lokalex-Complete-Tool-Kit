@@ -7,11 +7,11 @@
  * 
  * Description:
  * Manages presentation layer, card rendering, search filtering, and restaurant menus:
+ * - Multi-Photo Menu Upload: Allows riders to select and batch-upload multiple
+ *   menu pages at once with client-side canvas compression.
  * - Firebase Storage Integration: Uploads compressed JPEG/WebP blobs directly to
  *   Firebase Storage (`menus/${storeKey}/${pageId}.jpg`), writing only lightweight
  *   HTTPS URLs (~120 bytes) to RTDB to prevent database bandwidth exhaustion.
- * - Restaurant Menu Gallery System: Allows riders to view, register, and download
- *   complete photo menus for any store in the Store Directory.
  * - Device Photo Saving: Uses Web Share API with staggered anchor fallbacks to
  *   download all menu pages directly to the rider's phone gallery.
  * - Free Customer Directory Browsing: Browsing customer contacts is free.
@@ -478,7 +478,7 @@ export async function confirmAndOpenCustomerLocation() {
 }
 
 // ============================================================================
-// RESTAURANT MENU PHOTO GALLERY & CLOUD STORAGE PIPELINE
+// RESTAURANT MENU PHOTO GALLERY & CLOUD STORAGE PIPELINE (MULTI-FILE)
 // ============================================================================
 
 function getOrCreateMenuGalleryModal() {
@@ -510,15 +510,15 @@ function getOrCreateMenuGalleryModal() {
                 </div>
             </div>
 
-            <!-- Upload Bar -->
+            <!-- Upload Bar (Multiple Selection Enabled) -->
             <div class="px-5 py-2.5 bg-amber-50/50 dark:bg-amber-950/20 border-b border-amber-200/50 dark:border-amber-500/20 flex items-center justify-between gap-2 flex-wrap">
                 <div class="flex items-center gap-1 text-[11px] text-amber-800 dark:text-amber-300 font-bold">
                     <i class="fa-solid fa-camera"></i>
-                    <span>Got an updated menu?</span>
+                    <span>Got updated menu photos?</span>
                 </div>
                 <label class="bg-amber-600 hover:bg-amber-500 text-white text-xs font-black px-3 py-1.5 rounded-xl cursor-pointer transition active:scale-95 shadow-xs flex items-center gap-1.5">
-                    <i class="fa-solid fa-plus"></i> Add Menu Page
-                    <input type="file" id="gallery-upload-input" accept="image/*" class="hidden" onchange="window.handleMenuPhotoUpload && window.handleMenuPhotoUpload(event)">
+                    <i class="fa-solid fa-plus"></i> Add Menu Pages
+                    <input type="file" id="gallery-upload-input" accept="image/*" multiple class="hidden" onchange="window.handleMenuPhotoUpload && window.handleMenuPhotoUpload(event)">
                 </label>
             </div>
 
@@ -693,65 +693,68 @@ function renderMenuPages(pages = [], storeName = "Store") {
 }
 
 /**
- * Uploads compressed menu photo binary to Firebase Cloud Storage,
- * then persists the lightweight download URL into RTDB.
+ * Handles multi-file photo uploads with sequential canvas compression and Storage upload.
  */
 export async function handleMenuPhotoUpload(e) {
-    const file = e.target.files?.[0];
-    if (!file || !activeGalleryStore) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0 || !activeGalleryStore) return;
 
     const input = e.target;
-    showToast("⏳ Compressing and uploading menu photo...");
+    showToast(`⏳ Compressing and uploading ${files.length} menu photo(s)...`);
 
     try {
-        const imageBlob = await compressImageToBlob(file, 1400, 0.82);
         const riderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
         const riderId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
-        const pageId = `PAGE_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-
-        let finalImageUrl = "";
-
-        // 1. Primary: Upload binary blob to Firebase Cloud Storage
-        if (storage) {
-            const storageRef = storage.ref(`menus/${activeGalleryStore.key}/${pageId}.jpg`);
-            const uploadTask = await storageRef.put(imageBlob, {
-                contentType: 'image/jpeg',
-                customMetadata: {
-                    storeKey: activeGalleryStore.key,
-                    uploaderId: riderId,
-                    uploaderName: riderName
-                }
-            });
-            finalImageUrl = await uploadTask.ref.getDownloadURL();
-        } else {
-            // Fallback to data URL only if Storage SDK is missing
-            finalImageUrl = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.readAsDataURL(imageBlob);
-            });
-        }
+        const todayFormatted = new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 
         const snap = await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages`).once('value');
-        const count = snap.exists() ? Object.keys(snap.val()).length : 0;
+        let count = snap.exists() ? Object.keys(snap.val()).length : 0;
 
-        const pagePayload = {
-            id: pageId,
-            imageUrl: finalImageUrl,
-            caption: `Menu Page ${count + 1}`,
-            uploaderName: riderName,
-            uploaderId: riderId,
-            orderIndex: count + 1,
-            uploadedAt: new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
-        };
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            count++;
+            const pageId = `PAGE_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+            const imageBlob = await compressImageToBlob(file, 1400, 0.82);
 
-        // Write only metadata & URL (~120 bytes) to RTDB
-        await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages/${pageId}`).set(pagePayload);
+            let finalImageUrl = "";
+
+            if (storage) {
+                const storageRef = storage.ref(`menus/${activeGalleryStore.key}/${pageId}.jpg`);
+                const uploadTask = await storageRef.put(imageBlob, {
+                    contentType: 'image/jpeg',
+                    customMetadata: {
+                        storeKey: activeGalleryStore.key,
+                        uploaderId: riderId,
+                        uploaderName: riderName
+                    }
+                });
+                finalImageUrl = await uploadTask.ref.getDownloadURL();
+            } else {
+                finalImageUrl = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.readAsDataURL(imageBlob);
+                });
+            }
+
+            const pagePayload = {
+                id: pageId,
+                imageUrl: finalImageUrl,
+                caption: `Menu Page ${count}`,
+                uploaderName: riderName,
+                uploaderId: riderId,
+                orderIndex: count,
+                uploadedAt: todayFormatted
+            };
+
+            await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages/${pageId}`).set(pagePayload);
+        }
+
         await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/updatedAt`).set(Date.now());
         await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/storeName`).set(activeGalleryStore.name);
 
-        showToast(`✅ Page ${count + 1} added to ${activeGalleryStore.name}'s menu!`);
-        showSideNotification("MENU UPLOADED", `${activeGalleryStore.name} (Page ${count + 1})`, "fa-book-open", "text-emerald-400", "border-emerald-500");
+        showToast(`✅ Na-upload ang ${files.length} pahina ng menu para sa ${activeGalleryStore.name}!`);
+        showSideNotification("MENU UPLOADED", `${activeGalleryStore.name} (+${files.length} pages)`, "fa-book-open", "text-emerald-400", "border-emerald-500");
     } catch(err) {
         console.error("Upload error:", err);
         showToast("❌ Hindi na-save ang litrato: " + (err.message || "Upload failed"));
@@ -1144,7 +1147,6 @@ export function renderDirectoryList() {
                 </div>
             </div>`;
         } else {
-            // STORE & CUSTOMER CARDS
             const menuGalleryBtn = isStore ? `
                 <button type="button" onclick="window.openStoreMenuGalleryModal && window.openStoreMenuGalleryModal('${safeEscapedName}', '${safeCompositeKey}')" class="bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1.5 cursor-pointer shadow-xs" title="View & Download Restaurant Menu">
                     <i class="fa-solid fa-book-open text-xs"></i> <span>Menu</span>
@@ -1344,4 +1346,4 @@ if (typeof window !== 'undefined') {
     }
 }
 
-// REMARKS: DIRECTORY_UI_FIREBASE_STORAGE_MENU_GALLERY_V10_COMPLETE
+// REMARKS: DIRECTORY_UI_MULTI_PHOTO_GALLERY_STORAGE_V11_COMPLETE

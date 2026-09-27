@@ -7,6 +7,8 @@
  * 
  * Description:
  * Core state machine governing rider status mutations across the Lokalex platform:
+ * - Queue Preservation & Idempotency: Protects on-duty riders from losing their
+ *   first-in-line position or restarting their cooldown when tapping "Available".
  * - Direct updates and local/remote synchronization to Firebase Realtime Database.
  * - Manages shift login generation, shift clock-outs, and delivery archiving.
  * - Millisecond Attendance Timestamps: saves `loginTimestamp` and `clockOutTimestamp`
@@ -21,6 +23,7 @@
 import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
+import { showToast } from '../../ui/notifications.js';
 import { 
     parseQueueTime, 
     getUserType, 
@@ -35,8 +38,16 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
     const tName = targetName || appState.riderName || localStorage.getItem('riderName') || "Rider";
     const rosterMembers = globalState.rosterMembers || [];
 
-    let recordLogin = false;
     const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === tId);
+
+    // IDEMPOTENCY GUARD: If rider is ALREADY 'Available' and clicks 'Available' again accidentally:
+    // Prevent resetting queue position, recalculating max queue time, or restarting the cooldown buffer.
+    if (status === 'Available' && targetRecord && targetRecord.status === 'Available' && precalculatedQueueTime === null) {
+        showToast("ℹ️ Nakapila ka na (Already Available in line).");
+        return;
+    }
+
+    let recordLogin = false;
 
     if (status !== 'Catering' && targetRecord) {
         await archiveRiderCateringIfNeeded(targetRecord);
@@ -58,13 +69,17 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     let newQueueTime = precalculatedQueueTime !== null ? precalculatedQueueTime : 0;
     if (status === 'Available' && precalculatedQueueTime === null) {
-        const availableRiders = rosterMembers.filter(m => m.status === 'Available' && (m.telegramId || m.id || "").toString() !== tId);
-        let maxTime = new Date().getTime();
-        availableRiders.forEach(r => {
-            const t = parseQueueTime(r.queueTime);
-            if (t > maxTime) maxTime = t;
-        });
-        newQueueTime = maxTime + 1000;
+        if (targetRecord && targetRecord.status === 'Available' && targetRecord.queueTime) {
+            newQueueTime = parseQueueTime(targetRecord.queueTime);
+        } else {
+            const availableRiders = rosterMembers.filter(m => m.status === 'Available' && (m.telegramId || m.id || "").toString() !== tId);
+            let maxTime = new Date().getTime();
+            availableRiders.forEach(r => {
+                const t = parseQueueTime(r.queueTime);
+                if (t > maxTime) maxTime = t;
+            });
+            newQueueTime = maxTime + 1000;
+        }
     }
 
     const nowTimestamp = Date.now();
@@ -78,12 +93,18 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     let extraData = {};
     if (status === 'Available') {
+        const isAlreadyAvailable = targetRecord && targetRecord.status === 'Available';
+        const preservedAvailableTs = isAlreadyAvailable 
+            ? (targetRecord.availableTimestamp || targetRecord.queueTime || nowTimestamp)
+            : nowTimestamp;
+
         extraData = { 
             forcedCaters: null,
             forcedBy: null,
             isForcedCater: false,
             breakTimestamp: null,
             breakStartTime: null,
+            availableTimestamp: preservedAvailableTs,
             totalBreakMinutes: isStartingShift ? 0 : accumulatedBreakMins
         };
         if (isStartingShift) {
@@ -97,16 +118,19 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
             isForcedCater: false,
             breakTimestamp: null,
             breakStartTime: null,
+            availableTimestamp: null,
             totalBreakMinutes: accumulatedBreakMins
         };
     } else if (status === 'Catering') {
         extraData = {
             breakTimestamp: null,
             breakStartTime: null,
+            availableTimestamp: null,
             totalBreakMinutes: accumulatedBreakMins
         };
     } else if (status === 'Break') {
         extraData = {
+            availableTimestamp: null,
             totalBreakMinutes: accumulatedBreakMins
         };
     }
@@ -172,6 +196,23 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         ? extraData.totalBreakMinutes 
         : (existingRec?.totalBreakMinutes || 0);
 
+    // Preserve existing availableTimestamp if rider was already on duty
+    let currentAvailableTimestamp = null;
+    if (status === 'Available') {
+        if (extraData.availableTimestamp !== undefined) {
+            currentAvailableTimestamp = extraData.availableTimestamp;
+        } else if (existingRec && existingRec.status === 'Available') {
+            currentAvailableTimestamp = existingRec.availableTimestamp || existingRec.queueTime || nowTimestamp;
+        } else {
+            currentAvailableTimestamp = nowTimestamp;
+        }
+    }
+
+    let finalQueueTime = (queueTime !== null && queueTime !== undefined && queueTime !== 0) ? queueTime : nowTimestamp;
+    if (status === 'Available' && (!queueTime || queueTime === 0) && existingRec && existingRec.status === 'Available' && existingRec.queueTime) {
+        finalQueueTime = parseQueueTime(existingRec.queueTime);
+    }
+
     const rosterData = {
         telegramId: tId.toString(),
         id: tId.toString(),
@@ -182,7 +223,8 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         status: status,
         customerName: customerName || "",
         startTime: startTime || "",
-        queueTime: (queueTime !== null && queueTime !== undefined && queueTime !== 0) ? queueTime : nowTimestamp,
+        queueTime: finalQueueTime,
+        availableTimestamp: currentAvailableTimestamp,
         lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         lastActiveTimestamp: nowTimestamp,
         lat: appState.lat || 0,
@@ -218,7 +260,6 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
             lastActiveTimestamp: firebase.database.ServerValue.TIMESTAMP
         }).catch(() => {});
 
-        // Keep attendance login totalBreakMinutes synchronized
         db.ref(`logins/${tId}`).update({
             totalBreakMinutes: currentTotalBreak
         }).catch(() => {});
@@ -319,6 +360,7 @@ export async function clockOutRider(targetId = null) {
             isForcedCater: false,
             breakTimestamp: null,
             breakStartTime: null,
+            availableTimestamp: null,
             totalBreakMinutes: finalBreakMins,
             lastActiveTimestamp: nowTimestamp,
             lastUpdated: timeStr
@@ -332,6 +374,7 @@ export async function clockOutRider(targetId = null) {
         rMem.isForcedCater = false;
         rMem.breakTimestamp = null;
         rMem.breakStartTime = null;
+        rMem.availableTimestamp = null;
         rMem.totalBreakMinutes = finalBreakMins;
     }
 
@@ -347,4 +390,4 @@ export async function clockOutRider(targetId = null) {
     window.dispatchEvent(new CustomEvent('loginsUpdated'));
 }
 
-// REMARKS: ROSTER_STATUS_CORE_ACCUMULATED_BREAK_MINUTES_TRACKING_V1_COMPLETE
+// REMARKS: ROSTER_STATUS_CORE_AVAILABLE_QUEUE_PROTECTION_V2_COMPLETE
