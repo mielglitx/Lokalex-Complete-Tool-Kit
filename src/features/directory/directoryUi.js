@@ -7,6 +7,9 @@
  * 
  * Description:
  * Manages presentation layer, card rendering, search filtering, and restaurant menus:
+ * - Data-Attribute DOM Binding: Uses `data-store-name` and `data-composite-key`
+ *   to pass store and customer names to click handlers, preventing apostrophes
+ *   (e.g., Daniella's, Dax's) from triggering inline JavaScript SyntaxErrors.
  * - Multi-Photo Menu Upload: Allows riders to select and batch-upload multiple
  *   menu pages at once with client-side canvas compression.
  * - Firebase Storage Integration: Uploads compressed JPEG/WebP blobs directly to
@@ -371,6 +374,13 @@ function getOrCreateLocationConfirmModal() {
     return modal;
 }
 
+export function handleViewCustomerLocationClick(btn) {
+    if (!btn) return;
+    const custName = btn.getAttribute('data-customer-name') || "Customer";
+    const mapUrl = btn.getAttribute('data-map-link') || "";
+    promptViewCustomerLocation(custName, mapUrl);
+}
+
 export function promptViewCustomerLocation(customerName, mapUrl) {
     if (!mapUrl) {
         showToast("⚠️ Walang naka-save na GPS link para sa customer na ito.");
@@ -478,7 +488,7 @@ export async function confirmAndOpenCustomerLocation() {
 }
 
 // ============================================================================
-// RESTAURANT MENU PHOTO GALLERY & CLOUD STORAGE PIPELINE (MULTI-FILE)
+// RESTAURANT MENU PHOTO GALLERY & CLOUD STORAGE PIPELINE (COMPACT & SAFE)
 // ============================================================================
 
 function getOrCreateMenuGalleryModal() {
@@ -546,9 +556,6 @@ function getOrCreateMenuGalleryModal() {
     return modal;
 }
 
-/**
- * Compresses an image file on an off-screen HTML5 canvas to a binary Blob.
- */
 function compressImageToBlob(file, maxWidth = 1400, quality = 0.82) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -586,6 +593,16 @@ function compressImageToBlob(file, maxWidth = 1400, quality = 0.82) {
     });
 }
 
+/**
+ * Safe Click Handler: Reads store name & key directly from button data attributes.
+ */
+export function handleOpenMenuGalleryClick(btn) {
+    if (!btn) return;
+    const storeName = btn.getAttribute('data-store-name') || '';
+    const compositeKey = btn.getAttribute('data-composite-key') || '';
+    openStoreMenuGalleryModal(storeName, compositeKey);
+}
+
 export async function openStoreMenuGalleryModal(storeName, compositeKey) {
     const modal = getOrCreateMenuGalleryModal();
     const cleanName = (storeName || "Store").trim();
@@ -598,7 +615,6 @@ export async function openStoreMenuGalleryModal(storeName, compositeKey) {
 
     const titleEl = document.getElementById('gallery-store-title');
     const subEl = document.getElementById('gallery-store-subtitle');
-    const container = document.getElementById('gallery-images-container');
     const dlBtn = document.getElementById('btn-download-all-menu');
 
     if (titleEl) titleEl.innerText = `${cleanName} - Menu`;
@@ -692,9 +708,6 @@ function renderMenuPages(pages = [], storeName = "Store") {
     }).join('');
 }
 
-/**
- * Handles multi-file photo uploads with sequential canvas compression and Storage upload.
- */
 export async function handleMenuPhotoUpload(e) {
     const files = Array.from(e.target.files || []);
     if (files.length === 0 || !activeGalleryStore) return;
@@ -991,6 +1004,20 @@ export function copyBarangayRate(barangayName, rawRate, destinationMun = "Camili
     showToast(`📋 Copied rate message for ${cleanBrgy}!`);
 }
 
+export function handleEditDirectoryRecordClick(btn) {
+    if (!btn) return;
+    const name = btn.getAttribute('data-record-name') || '';
+    const key = btn.getAttribute('data-composite-key') || '';
+    if (window.editDirectoryRecord) window.editDirectoryRecord(name, key);
+}
+
+export function handleDeleteDirectoryRecordClick(btn) {
+    if (!btn) return;
+    const name = btn.getAttribute('data-record-name') || '';
+    const key = btn.getAttribute('data-composite-key') || '';
+    if (window.promptDeleteDirectoryRecord) window.promptDeleteDirectoryRecord(name, key);
+}
+
 export function renderDirectoryList() {
     const listEl = document.getElementById('record-list');
     const searchVal = (document.getElementById('floating-search-input')?.value || document.getElementById('search-input')?.value || '').toLowerCase().trim();
@@ -1084,21 +1111,21 @@ export function renderDirectoryList() {
         }
 
         const safeCompositeKey = escapeHtml(r.compositeKey || "");
-        const safeRecordName = escapeHtml(r.name || "");
-        const safeEscapedName = (r.name || "").replace(/'/g, "\\'");
+        const rawName = r.name || "";
+        const safeRecordName = escapeHtml(rawName);
         const safeMapLink = escapeHtml(r.lat_lon_link || "");
 
         let mapBtn = '';
         if (r.lat_lon_link) {
             if (isCustomer) {
-                mapBtn = `<button type="button" onclick="window.promptViewCustomerLocation && window.promptViewCustomerLocation('${safeEscapedName}', '${safeMapLink}')" class="text-xs text-blue-600 dark:text-blue-400 font-bold underline flex items-center gap-1 mt-1 cursor-pointer hover:text-blue-500 transition active:scale-95"><i class="fa-solid fa-map-location-dot"></i> View Location</button>`;
+                mapBtn = `<button type="button" data-customer-name="${safeRecordName}" data-map-link="${safeMapLink}" onclick="window.handleViewCustomerLocationClick && window.handleViewCustomerLocationClick(this)" class="text-xs text-blue-600 dark:text-blue-400 font-bold underline flex items-center gap-1 mt-1 cursor-pointer hover:text-blue-500 transition active:scale-95"><i class="fa-solid fa-map-location-dot"></i> View Location</button>`;
             } else {
                 mapBtn = `<a href="${safeMapLink}" target="_blank" class="text-xs text-blue-600 dark:text-blue-400 font-bold underline flex items-center gap-1 mt-1"><i class="fa-solid fa-map-location-dot"></i> View Location</a>`;
             }
         }
 
         const deleteBtnHtml = isAdminUser 
-            ? `<button onclick="promptDeleteDirectoryRecord('${safeRecordName}', '${safeCompositeKey}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-red-600 dark:text-red-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Delete">
+            ? `<button type="button" data-record-name="${safeRecordName}" data-composite-key="${safeCompositeKey}" onclick="window.handleDeleteDirectoryRecordClick && window.handleDeleteDirectoryRecordClick(this)" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-red-600 dark:text-red-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Delete">
                     <i class="fa-solid fa-trash"></i>
                </button>`
             : '';
@@ -1140,15 +1167,21 @@ export function renderDirectoryList() {
                     <button onclick="copyBarangayRate('${escapeHtml(resolvedBrgy)}', '${escapeHtml(displayRate)}', '${escapeHtml(destMun)}', '${escapeHtml(originMun)}')" class="bg-blue-50 hover:bg-blue-100 dark:bg-blue-600/30 dark:hover:bg-blue-600 text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-white border border-blue-200 dark:border-blue-500/50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1 cursor-pointer" title="Copy Rate Message">
                         <i class="fa-solid fa-copy"></i> Copy
                     </button>
-                    <button onclick="editDirectoryRecord('${safeRecordName}', '${safeCompositeKey}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Edit">
+                    <button type="button" data-record-name="${safeRecordName}" data-composite-key="${safeCompositeKey}" onclick="window.handleEditDirectoryRecordClick && window.handleEditDirectoryRecordClick(this)" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
                     ${deleteBtnHtml}
                 </div>
             </div>`;
         } else {
+            // Data-Attribute safe button: immune to apostrophes in store names
             const menuGalleryBtn = isStore ? `
-                <button type="button" onclick="window.openStoreMenuGalleryModal && window.openStoreMenuGalleryModal('${safeEscapedName}', '${safeCompositeKey}')" class="bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1.5 cursor-pointer shadow-xs" title="View & Download Restaurant Menu">
+                <button type="button"
+                        data-store-name="${safeRecordName}"
+                        data-composite-key="${safeCompositeKey}"
+                        onclick="window.handleOpenMenuGalleryClick && window.handleOpenMenuGalleryClick(this)"
+                        class="bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        title="View & Download Restaurant Menu">
                     <i class="fa-solid fa-book-open text-xs"></i> <span>Menu</span>
                 </button>
             ` : '';
@@ -1158,7 +1191,7 @@ export function renderDirectoryList() {
                 <div class="flex-1 min-w-0 pr-1">
                     <div class="font-black text-sm text-gray-900 dark:text-white break-words leading-snug flex items-center gap-1.5 flex-wrap">
                         ${isStore ? '<i class="fa-solid fa-store text-orange-500 text-xs"></i>' : ''}
-                        <span>${escapeHtml(r.name)}</span>
+                        <span>${safeRecordName}</span>
                     </div>
                     ${r.contact ? `<div class="text-xs text-gray-700 dark:text-gray-400 mt-0.5 font-bold font-mono"><i class="fa-solid fa-phone text-[10px] text-blue-500"></i> ${escapeHtml(r.contact)}</div>` : ''}
                     ${r.address ? `<div class="text-xs text-gray-700 dark:text-gray-300 mt-0.5 font-medium break-words"><i class="fa-solid fa-location-dot text-[10px] text-red-500"></i> ${escapeHtml(r.address)}</div>` : ''}
@@ -1167,7 +1200,7 @@ export function renderDirectoryList() {
                 </div>
                 <div class="flex gap-1.5 shrink-0 items-center">
                     ${menuGalleryBtn}
-                    <button onclick="editDirectoryRecord('${safeRecordName}', '${safeCompositeKey}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Edit">
+                    <button type="button" data-record-name="${safeRecordName}" data-composite-key="${safeCompositeKey}" onclick="window.handleEditDirectoryRecordClick && window.handleEditDirectoryRecordClick(this)" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
                     ${deleteBtnHtml}
@@ -1324,9 +1357,13 @@ if (typeof window !== 'undefined') {
     window.handleDestinationChange = handleDestinationChange;
     window.populateDestinationDropdown = populateDestinationDropdown;
     window.copyBarangayRate = copyBarangayRate;
+    window.handleViewCustomerLocationClick = handleViewCustomerLocationClick;
+    window.handleEditDirectoryRecordClick = handleEditDirectoryRecordClick;
+    window.handleDeleteDirectoryRecordClick = handleDeleteDirectoryRecordClick;
     window.promptViewCustomerLocation = promptViewCustomerLocation;
     window.closeCustomerLocationConfirmModal = closeCustomerLocationConfirmModal;
     window.confirmAndOpenCustomerLocation = confirmAndOpenCustomerLocation;
+    window.handleOpenMenuGalleryClick = handleOpenMenuGalleryClick;
     window.openStoreMenuGalleryModal = openStoreMenuGalleryModal;
     window.closeStoreMenuGalleryModal = closeStoreMenuGalleryModal;
     window.handleMenuPhotoUpload = handleMenuPhotoUpload;
@@ -1346,4 +1383,4 @@ if (typeof window !== 'undefined') {
     }
 }
 
-// REMARKS: DIRECTORY_UI_MULTI_PHOTO_GALLERY_STORAGE_V11_COMPLETE
+// REMARKS: DIRECTORY_UI_APOSTROPHE_SAFE_DATA_ATTRIBUTES_V12_COMPLETE
