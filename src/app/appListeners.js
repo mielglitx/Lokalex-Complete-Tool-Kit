@@ -1,4 +1,20 @@
 // src/app/appListeners.js
+
+/**
+ * ============================================================================
+ * REAL-TIME FIREBASE EVENT BUS & PERSISTENCE LISTENERS
+ * ============================================================================
+ * 
+ * Description:
+ * Subscribes to Firebase Realtime Database nodes for the entire platform:
+ * - Unbounded Receipts & Catering Ingestion: Removed alphabetical `limitToLast`
+ *   constraints that previously caused riders starting with 'A' (e.g., Allan,
+ *   Amiel) to be truncated from daily records.
+ * - Broadcasts specific custom events (cateredUpdated, receiptsUpdated, rosterUpdated)
+ *   to trigger batched animation frame renders.
+ * ============================================================================
+ */
+
 import { appState, globalState } from '../store/state.js';
 import { db } from '../config/firebase.js';
 import { showToast } from '../ui/notifications.js';
@@ -109,19 +125,21 @@ export function initRealtimeFirebaseListeners() {
             if (commission.refreshCommissionView) commission.refreshCommissionView();
         });
 
-        db.ref('logins').limitToLast(100).on('value', (snapshot) => {
+        db.ref('logins').limitToLast(200).on('value', (snapshot) => {
             globalState.globalLogins = snapshot.val() ? Object.values(snapshot.val()) : [];
             if (roster && roster.saveRosterCache) roster.saveRosterCache();
             window.dispatchEvent(new Event('loginsUpdated'));
         });
 
-        db.ref('cateredHistory').limitToLast(100).on('value', (snapshot) => {
+        // Unbounded to prevent alphabetical truncation of riders starting with 'A'
+        db.ref('cateredHistory').on('value', (snapshot) => {
             globalState.globalCateredHistory = snapshot.val() ? Object.values(snapshot.val()) : [];
             if (roster && roster.saveRosterCache) roster.saveRosterCache();
             window.dispatchEvent(new Event('cateredUpdated'));
         });
 
-        db.ref('receipts').limitToLast(100).on('value', (snapshot) => {
+        // Unbounded to load all daily receipts across all riders
+        db.ref('receipts').on('value', (snapshot) => {
             globalState.globalDailyReceipts = snapshot.val() ? Object.values(snapshot.val()) : [];
             window.dispatchEvent(new Event('receiptsUpdated'));
         });
@@ -148,3 +166,5 @@ export function initRealtimeFirebaseListeners() {
         console.error("Firebase listener setup error:", e);
     }
 }
+
+// REMARKS: APP_LISTENERS_UNBOUNDED_ALPHABETICAL_SCOPE_V4_COMPLETE

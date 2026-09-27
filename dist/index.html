@@ -32,6 +32,15 @@
 
     <!-- HEAD PARTIAL (TAILWIND, FONTAWESOME & MAPS) -->
     <!-- src/partials/head.html -->
+<!--
+  ============================================================================
+  GLOBAL HEAD PARTIAL & ASSET LOADER
+  ============================================================================
+  Description:
+  Loads global metadata, early theme hydration logic, Tailwind CSS configurations,
+  FontAwesome icon libraries, and free open-source mapping stylesheets (Leaflet.js).
+  Completely removes Google Maps SDK dependencies to eliminate API billing limits.
+-->
 <meta id="meta-theme-color" name="theme-color" content="#121212">
 
 <!-- THEME INITIALIZATION SCRIPT (PREVENTS FLASH OF UNSTYLED THEME ON LOAD) -->
@@ -100,10 +109,24 @@
     .bg-darkBg { background-color: var(--color-darkBg) !important; }
     .bg-cardBg { background-color: var(--color-cardBg) !important; }
     .bg-inputBg { background-color: var(--color-inputBg) !important; }
+
+    /* LEAFLET TILE FIXES FOR MOBILE APP CONTAINERS */
+    .leaflet-container {
+        font-family: inherit !important;
+        background-color: #1e293b !important;
+    }
+    .leaflet-control-zoom {
+        border: none !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
+    }
 </style>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBVAwn0UnyHJ926oHeK0k789ncADMzmX80&libraries=places" async defer></script>
+
+<!-- FREE OPEN-SOURCE MAPPING STACK (LEAFLET + OPENSTREETMAP) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<!-- REMARKS: HEAD_PARTIAL_LEAFLET_OSM_INTEGRATION_V1_COMPLETE -->
 
     <!-- GLOBAL HIGH-CONTRAST LIGHT MODE ENFORCEMENT -->
     <style>
@@ -227,7 +250,7 @@
             color: #ffffff !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-ElNNsRpQ.js"></script>
+  <script type="module" crossorigin src="./assets/index-CzwEhCGt.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-darkBg text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative">
 
@@ -971,15 +994,11 @@
   HOME DASHBOARD VIEW COMPONENT
   ============================================================================
   Description:
-  Primary operational dashboard for on-duty riders. Contains the 30-minute
-  advance order urgency banner, quick-action workflow dock, real-time customer/
-<<<<<<< HEAD
-  store chat feeds, roster rotation queue, daily shift logins, and completed
-  catered customer feeds.
-=======
-  store chat feeds, roster rotation queue, daily shift logins, completed
-  catered customer feeds, and administrative lineup/cooldown configuration tools.
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
+  Primary operational dashboard for on-duty riders. Contains the advance order
+  urgency banner, quick-action workflow dock with credit badges, real-time
+  customer/store chat feeds, roster rotation queue with live credits display
+  pill, daily shift logins, catered customer feeds, and administrative lineup,
+  credit settings, and early shift-out penalty configuration tools.
 -->
 <section id="view-home" class="hidden flex-1 flex flex-col p-3 gap-3 py-3">
     <!-- LIGHT MODE HIGH CONTRAST & CARD STYLING ENFORCEMENT -->
@@ -991,7 +1010,6 @@
             background-color: #ffffff !important;
             border-color: #e2e8f0 !important;
         }
-        /* Remove gray/black translucent backgrounds and force crisp white cards in light mode */
         html:not(.dark) #rider-cust-chats-feed > div,
         html:not(.dark) #login-list-feed > div,
         html:not(.dark) #catered-customers-feed > div {
@@ -999,7 +1017,6 @@
             border-color: #e2e8f0 !important;
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
         }
-        /* Enforce high-contrast dark text in light mode */
         html:not(.dark) #rider-cust-chats-feed > div span,
         html:not(.dark) #rider-cust-chats-feed > div div,
         html:not(.dark) #login-list-feed > div span,
@@ -1008,7 +1025,6 @@
         html:not(.dark) #catered-customers-feed > div div {
             color: #0f172a !important;
         }
-        /* Muted timestamps and secondary text */
         html:not(.dark) #rider-cust-chats-feed .text-gray-400,
         html:not(.dark) #rider-cust-chats-feed .text-gray-500,
         html:not(.dark) #login-list-feed .text-gray-400,
@@ -1017,7 +1033,6 @@
         html:not(.dark) #catered-customers-feed .text-gray-500 {
             color: #475569 !important;
         }
-        /* High visibility for primary highlights */
         html:not(.dark) #catered-customers-feed .text-orange-400,
         html:not(.dark) #catered-customers-feed .text-orange-500,
         html:not(.dark) #catered-customers-feed .text-orange-600 {
@@ -1041,7 +1056,7 @@
         }
     </style>
 
-    <!-- ADVANCE ORDER WARNING BANNER (URGENT SCHEDULE ALERTS: 30M, 15M, 5M) -->
+    <!-- ADVANCE ORDER WARNING BANNER -->
     <div id="adv-order-banner" class="hidden p-3 rounded-2xl shadow-xl flex items-center justify-between gap-2 cursor-pointer transition-all duration-200 select-none">
         <div class="flex items-center gap-2.5 min-w-0 flex-1">
             <div id="adv-banner-icon-box" class="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-sm shrink-0">
@@ -1058,71 +1073,71 @@
         </div>
     </div>
 
-    <!-- ULTRA-COMPACT 2-TIER QUICK ACTION DOCK (70% VERTICAL SPACE SAVER) -->
+    <!-- ULTRA-COMPACT 2-TIER QUICK ACTION DOCK -->
     <div class="flex flex-col gap-1.5 mt-0.5">
         <!-- TIER 1: PRIMARY WORKFLOW TOOLS (4-COL GRID) -->
         <div class="grid grid-cols-4 gap-1.5">
-            <!-- Smart Cart -->
-            <button onclick="window.switchView && window.switchView('view-cart')" class="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-500/30 dark:hover:border-emerald-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm">
+            <button onclick="window.switchView && window.switchView('view-cart')" class="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-500/30 dark:hover:border-emerald-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm cursor-pointer">
                 <i class="fa-solid fa-receipt text-emerald-600 dark:text-emerald-400 text-sm"></i>
                 <span class="text-[10px] font-bold text-emerald-900 dark:text-emerald-300 truncate w-full text-center">Smart Cart</span>
             </button>
 
-            <!-- Map Calculation -->
-            <button onclick="window.openMapCalcBoardModal && window.openMapCalcBoardModal()" class="bg-blue-50 hover:bg-blue-100 border border-blue-200 dark:bg-blue-950/40 dark:border-blue-500/30 dark:hover:border-blue-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm">
+            <button onclick="window.openMapCalcBoardModal && window.openMapCalcBoardModal()" class="bg-blue-50 hover:bg-blue-100 border border-blue-200 dark:bg-blue-950/40 dark:border-blue-500/30 dark:hover:border-blue-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm cursor-pointer">
                 <i class="fa-solid fa-calculator text-blue-600 dark:text-blue-400 text-sm"></i>
                 <span class="text-[10px] font-bold text-blue-900 dark:text-blue-300 truncate w-full text-center">Map Calc</span>
             </button>
 
-            <!-- Commission -->
-            <button onclick="window.openCommissionScreen && window.openCommissionScreen()" class="bg-amber-50 hover:bg-amber-100 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-500/30 dark:hover:border-amber-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm">
+            <button onclick="window.openCommissionScreen && window.openCommissionScreen()" class="bg-amber-50 hover:bg-amber-100 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-500/30 dark:hover:border-amber-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm cursor-pointer">
                 <i class="fa-solid fa-wallet text-amber-600 dark:text-amber-400 text-sm"></i>
                 <span class="text-[10px] font-bold text-amber-900 dark:text-amber-300 truncate w-full text-center">Commission</span>
             </button>
 
-            <!-- Adv. Orders -->
-            <button onclick="window.openAdvancedOrdersModal && window.openAdvancedOrdersModal()" class="bg-purple-50 hover:bg-purple-100 border border-purple-200 dark:bg-purple-950/40 dark:border-purple-500/30 dark:hover:border-purple-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm relative">
+            <button onclick="window.openAdvancedOrdersModal && window.openAdvancedOrdersModal()" class="bg-purple-50 hover:bg-purple-100 border border-purple-200 dark:bg-purple-950/40 dark:border-purple-500/30 dark:hover:border-purple-400 py-2 px-1 rounded-xl flex flex-col items-center justify-center gap-1 transition active:scale-90 shadow-sm relative cursor-pointer">
                 <i class="fa-solid fa-calendar-check text-purple-600 dark:text-purple-400 text-sm"></i>
                 <span class="text-[10px] font-bold text-purple-900 dark:text-purple-300 truncate w-full text-center">Adv. Orders</span>
                 <div id="adv-count-badge" class="hidden absolute -top-1 -right-1 bg-red-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full border border-cardBg animate-pulse">0</div>
             </button>
         </div>
 
-        <!-- TIER 2: TRACKER & DIRECTORY UTILITIES (5-COL GRID) -->
+        <!-- TIER 2: TRACKER & DIRECTORY UTILITIES -->
         <div class="grid grid-cols-5 gap-1.5">
-            <!-- Mutual Live GPS Tracker -->
-            <button onclick="window.promptStartLiveGpsSession && window.promptStartLiveGpsSession()" class="bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 dark:bg-indigo-950/40 dark:border-indigo-500/30 dark:hover:border-indigo-400 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-90 shadow-sm" title="Mutual Live GPS Tracker">
+            <button onclick="window.promptStartLiveGpsSession && window.promptStartLiveGpsSession()" class="bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 dark:bg-indigo-950/40 dark:border-indigo-500/30 dark:hover:border-indigo-400 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-90 shadow-sm cursor-pointer" title="Mutual Live GPS Tracker">
                 <i class="fa-solid fa-satellite-dish text-indigo-600 dark:text-indigo-400 text-xs animate-pulse"></i>
                 <span class="text-[9px] font-bold text-indigo-900 dark:text-indigo-300 truncate w-full text-center">Live GPS</span>
             </button>
 
-            <!-- Customers Directory -->
-            <button onclick="window.openDirectory && window.openDirectory('customers')" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-blue-500/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-90 shadow-sm">
-                <i class="fa-solid fa-users text-blue-600 dark:text-blue-400 text-xs"></i>
-                <span class="text-[9px] font-bold text-gray-700 dark:text-gray-300 truncate w-full text-center">Customers</span>
+            <button onclick="window.openDirectory && window.openDirectory('customers')" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-blue-500/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-90 shadow-sm relative cursor-pointer" title="Search Customers (-1 Credit)">
+                <div class="relative flex items-center justify-center">
+                    <i class="fa-solid fa-users text-blue-600 dark:text-blue-400 text-xs"></i>
+                    <span class="absolute -top-1.5 -right-3 text-[7.5px] font-mono font-black text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-0.5 rounded">-1</span>
+                </div>
+                <span class="text-[9px] font-bold text-gray-700 dark:text-gray-300 truncate w-full text-center mt-0.5">Customers</span>
             </button>
 
-            <!-- Stores Directory -->
-            <button onclick="window.openDirectory && window.openDirectory('stores')" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-orange-500/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-95 shadow-sm">
-                <i class="fa-solid fa-store text-orange-600 dark:text-orange-400 text-xs"></i>
-                <span class="text-[9px] font-bold text-gray-700 dark:text-gray-300 truncate w-full text-center">Stores</span>
+            <button onclick="window.openDirectory && window.openDirectory('stores')" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-orange-500/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-95 shadow-sm relative cursor-pointer" title="Search Stores (-1 Credit)">
+                <div class="relative flex items-center justify-center">
+                    <i class="fa-solid fa-store text-orange-600 dark:text-orange-400 text-xs"></i>
+                    <span class="absolute -top-1.5 -right-3 text-[7.5px] font-mono font-black text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-0.5 rounded">-1</span>
+                </div>
+                <span class="text-[9px] font-bold text-gray-700 dark:text-gray-300 truncate w-full text-center mt-0.5">Stores</span>
             </button>
 
-            <!-- Rates Directory -->
-            <button onclick="window.openDirectory && window.openDirectory('barangays')" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-emerald-500/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-95 shadow-sm">
-                <i class="fa-solid fa-map-location-dot text-emerald-600 dark:text-emerald-400 text-xs"></i>
-                <span class="text-[9px] font-bold text-gray-700 dark:text-gray-300 truncate w-full text-center">Rates</span>
+            <button onclick="window.openDirectory && window.openDirectory('barangays')" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-emerald-500/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-95 shadow-sm relative cursor-pointer" title="Search Barangay Rates (-1 Credit)">
+                <div class="relative flex items-center justify-center">
+                    <i class="fa-solid fa-map-location-dot text-emerald-600 dark:text-emerald-400 text-xs"></i>
+                    <span class="absolute -top-1.5 -right-3 text-[7.5px] font-mono font-black text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-0.5 rounded">-1</span>
+                </div>
+                <span class="text-[9px] font-bold text-gray-700 dark:text-gray-300 truncate w-full text-center mt-0.5">Rates</span>
             </button>
 
-            <!-- GCash Modal -->
-            <button onclick="window.openGCashModal && window.openGCashModal()" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-blue-400/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-95 shadow-sm">
+            <button onclick="window.openGCashModal && window.openGCashModal()" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-blue-400/50 py-1.5 px-1 rounded-xl flex flex-col items-center justify-center gap-0.5 transition active:scale-95 shadow-sm cursor-pointer">
                 <img src="./assets/gcash-logo-png_seeklogo-522261-l126IMUC.png" alt="GCash" class="w-3.5 h-3.5 object-contain">
                 <span class="text-[9px] font-bold text-gray-700 dark:text-gray-300 truncate w-full text-center">GCash</span>
             </button>
         </div>
     </div>
 
-    <!-- RIDER LIVE CUSTOMER & MERCHANT CHATS PANEL -->
+    <!-- RIDER LIVE CHATS PANEL -->
     <div class="bg-cardBg border border-gray-200 dark:border-gray-800 rounded-2xl flex flex-col overflow-hidden shadow-sm">
         <div class="bg-gray-50 dark:bg-gray-800/50 p-2.5 text-xs font-bold text-gray-800 dark:text-gray-200 flex flex-col gap-2 border-b border-gray-200 dark:border-gray-800">
             <div class="flex justify-between items-center">
@@ -1130,18 +1145,17 @@
                 <span class="text-[10px] text-gray-500 dark:text-gray-400 font-mono" id="rider-cust-chats-badge">0 threads</span>
             </div>
             <div class="flex bg-gray-200/80 dark:bg-black/40 p-1 rounded-xl border border-gray-200 dark:border-gray-800 text-center gap-1 overflow-x-auto no-scrollbar">
-                <!-- INBOX TAB WITH ACTIVE UNREAD BADGE -->
-                <button id="rider-chat-tab-inbox" onclick="window.setRiderChatFilter && window.setRiderChatFilter('inbox')" class="flex-1 min-w-[55px] py-1 rounded-lg bg-blue-600 text-white font-bold text-[10px] transition shadow-sm flex items-center justify-center gap-1">
+                <button id="rider-chat-tab-inbox" onclick="window.setRiderChatFilter && window.setRiderChatFilter('inbox')" class="flex-1 min-w-[55px] py-1 rounded-lg bg-blue-600 text-white font-bold text-[10px] transition shadow-sm flex items-center justify-center gap-1 cursor-pointer">
                     <span>Inbox</span>
                     <span id="rider-inbox-unread-badge" class="hidden bg-red-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full animate-pulse">0</span>
                 </button>
-                <button id="rider-chat-tab-catering" onclick="window.setRiderChatFilter && window.setRiderChatFilter('catering')" class="flex-1 min-w-[55px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition">Catering</button>
-                <button id="rider-chat-tab-stores" onclick="window.setRiderChatFilter && window.setRiderChatFilter('stores')" class="flex-1 min-w-[65px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition flex items-center justify-center gap-1">
+                <button id="rider-chat-tab-catering" onclick="window.setRiderChatFilter && window.setRiderChatFilter('catering')" class="flex-1 min-w-[55px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition cursor-pointer">Catering</button>
+                <button id="rider-chat-tab-stores" onclick="window.setRiderChatFilter && window.setRiderChatFilter('stores')" class="flex-1 min-w-[65px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition flex items-center justify-center gap-1 cursor-pointer">
                     <span>🏬 Stores</span>
                     <span id="rider-store-unread-badge" class="hidden bg-orange-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full animate-pulse">0</span>
                 </button>
-                <button id="rider-chat-tab-followup" onclick="window.setRiderChatFilter && window.setRiderChatFilter('followup')" class="flex-1 min-w-[60px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition">Follow Up</button>
-                <button id="rider-chat-tab-done" onclick="window.setRiderChatFilter && window.setRiderChatFilter('done')" class="flex-1 min-w-[45px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition">Done</button>
+                <button id="rider-chat-tab-followup" onclick="window.setRiderChatFilter && window.setRiderChatFilter('followup')" class="flex-1 min-w-[60px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition cursor-pointer">Follow Up</button>
+                <button id="rider-chat-tab-done" onclick="window.setRiderChatFilter && window.setRiderChatFilter('done')" class="flex-1 min-w-[45px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition cursor-pointer">Done</button>
             </div>
         </div>
 
@@ -1157,82 +1171,79 @@
             <h3 class="text-xs font-black tracking-wide text-gray-900 dark:text-white">🛵 LOKALEX RIDER ROTATION</h3>
             
             <div class="flex items-center gap-1.5 flex-wrap">
-                <!-- 1. DEDICATED RIDER DAY-OFF BUTTON (ALWAYS VISIBLE TO ALL RIDERS) -->
-                <button id="btn-rider-dayoff" onclick="window.openRiderDayOffModal && window.openRiderDayOffModal()" class="bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 dark:bg-teal-600/30 dark:hover:bg-teal-600 dark:text-teal-300 dark:border-teal-500/50 text-[9px] px-2 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 shadow-xs" title="Piliin ang iyong lingguhang Day-Off">
+                <!-- RIDER DIRECTORY CREDITS PILL -->
+                <div id="rider-credits-pill" onclick="window.showCreditsInfoToast && window.showCreditsInfoToast()" class="bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-500/40 text-amber-800 dark:text-amber-300 text-[10px] px-2.5 py-0.5 rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition select-none cursor-pointer" title="Directory Balance. Click for details.">
+                    <i class="fa-solid fa-coins text-amber-500"></i>
+                    <span>Credits:</span>
+                    <span id="rider-credits-count" class="font-mono font-black text-amber-600 dark:text-amber-400">0</span>
+                </div>
+
+                <!-- DEDICATED RIDER DAY-OFF BUTTON -->
+                <button id="btn-rider-dayoff" onclick="window.openRiderDayOffModal && window.openRiderDayOffModal()" class="bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 dark:bg-teal-600/30 dark:hover:bg-teal-600 dark:text-teal-300 dark:border-teal-500/50 text-[9px] px-2 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Piliin ang iyong lingguhang Day-Off">
                     <i class="fa-solid fa-umbrella-beach text-teal-500"></i> Day Off
                 </button>
 
-                <!-- 2. ADMIN STORE HUB BUTTON (GATED BY TOGGLE) -->
-                <button id="admin-store-hub-btn" onclick="window.openAdminStoreAccountModal && window.openAdminStoreAccountModal()" class="hidden bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 dark:bg-orange-600/30 dark:hover:bg-orange-600 dark:text-orange-300 dark:border-orange-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                <!-- ADMIN STORE HUB BUTTON -->
+                <button id="admin-store-hub-btn" onclick="window.openAdminStoreAccountModal && window.openAdminStoreAccountModal()" class="hidden bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 dark:bg-orange-600/30 dark:hover:bg-orange-600 dark:text-orange-300 dark:border-orange-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer">
                     <i class="fa-solid fa-shop"></i> Store Hub
                 </button>
 
-                <!-- 3. ADMIN MANAGE RIDERS BUTTON (GATED BY TOGGLE) -->
-                <button id="admin-manage-riders-btn" onclick="window.openAdminManageRidersModal && window.openAdminManageRidersModal()" class="hidden bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/30 dark:hover:bg-blue-600 dark:text-blue-300 dark:border-blue-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                <!-- ADMIN MANAGE RIDERS BUTTON -->
+                <button id="admin-manage-riders-btn" onclick="window.openAdminManageRidersModal && window.openAdminManageRidersModal()" class="hidden bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/30 dark:hover:bg-blue-600 dark:text-blue-300 dark:border-blue-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer">
                     <i class="fa-solid fa-users-gear"></i> Manage
                 </button>
 
-                <!-- 4. ADMIN TIME-IN SCHEDULE BUTTON (GATED BY TOGGLE) -->
-                <button id="admin-schedule-settings-btn" onclick="window.openAdminTimeInScheduleModal && window.openAdminTimeInScheduleModal()" class="hidden bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-purple-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1" title="Set Rider Time-In Schedules & Early Passes">
+                <!-- ADMIN TIME-IN SCHEDULE BUTTON -->
+                <button id="admin-schedule-settings-btn" onclick="window.openAdminTimeInScheduleModal && window.openAdminTimeInScheduleModal()" class="hidden bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-purple-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Set Rider Time-In Schedules & Early Passes">
                     <i class="fa-solid fa-clock"></i> Schedule
                 </button>
 
-                <!-- 5. ADMIN DAY-OFF SETTINGS BUTTON (GATED BY TOGGLE) -->
-                <button id="admin-dayoff-settings-btn" onclick="window.openAdminDayOffSettingsModal && window.openAdminDayOffSettingsModal()" class="hidden bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 dark:bg-teal-600/30 dark:hover:bg-teal-600 dark:text-teal-300 dark:border-teal-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1" title="Admin Day-Off Quotas & Reassignment Controls">
+                <!-- ADMIN DAY-OFF SETTINGS BUTTON -->
+                <button id="admin-dayoff-settings-btn" onclick="window.openAdminDayOffSettingsModal && window.openAdminDayOffSettingsModal()" class="hidden bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 dark:bg-teal-600/30 dark:hover:bg-teal-600 dark:text-teal-300 dark:border-teal-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Admin Day-Off Quotas & Controls">
                     <i class="fa-solid fa-sliders"></i> Day-Off Rules
                 </button>
 
-<<<<<<< HEAD
-                <!-- 6. ADMIN MAXIMUM ACTIVE BOOKINGS LIMIT BUTTON (GATED BY TOGGLE) -->
-=======
-                <!-- 6. ADMIN QUEUE LINEUP RULES BUTTON (GATED BY TOGGLE) -->
-                <button id="admin-queue-settings-btn" onclick="window.openAdminQueueSettingsModal && window.openAdminQueueSettingsModal()" class="hidden bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-purple-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1" title="Configure Available Queue Lineup (FIFO vs Lowest Gross) & Cooldown">
+                <!-- ADMIN QUEUE LINEUP RULES BUTTON -->
+                <button id="admin-queue-settings-btn" onclick="window.openAdminQueueSettingsModal && window.openAdminQueueSettingsModal()" class="hidden bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-purple-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Configure Lineup Rules">
                     <i class="fa-solid fa-arrow-down-short-wide"></i> Lineup Rules
                 </button>
 
-                <!-- 7. ADMIN MAXIMUM ACTIVE BOOKINGS LIMIT BUTTON (GATED BY TOGGLE) -->
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
-                <button id="admin-booking-limits-btn" onclick="window.openAdminBookingLimitsModal && window.openAdminBookingLimitsModal()" class="hidden bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-600/30 dark:hover:bg-rose-600 dark:text-rose-300 dark:border-rose-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1" title="Set Maximum Active Catering Bookings per Rider">
+                <!-- ADMIN MAXIMUM ACTIVE BOOKINGS LIMIT BUTTON -->
+                <button id="admin-booking-limits-btn" onclick="window.openAdminBookingLimitsModal && window.openAdminBookingLimitsModal()" class="hidden bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-600/30 dark:hover:bg-rose-600 dark:text-rose-300 dark:border-rose-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Set Maximum Active Catering Bookings">
                     <i class="fa-solid fa-layer-group"></i> Max Orders
                 </button>
 
-<<<<<<< HEAD
-                <!-- 7. ADMIN COMMISSION SETTINGS BUTTON (GATED BY TOGGLE) -->
-=======
-                <!-- 8. ADMIN COMMISSION SETTINGS BUTTON (GATED BY TOGGLE) -->
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
-                <button id="admin-commission-settings-btn" onclick="window.openAdminCommissionSettingsModal && window.openAdminCommissionSettingsModal()" class="hidden bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-600/30 dark:hover:bg-amber-600 dark:text-amber-300 dark:border-amber-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                <!-- ADMIN COMMISSION SETTINGS BUTTON -->
+                <button id="admin-commission-settings-btn" onclick="window.openAdminCommissionSettingsModal && window.openAdminCommissionSettingsModal()" class="hidden bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-600/30 dark:hover:bg-amber-600 dark:text-amber-300 dark:border-amber-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer">
                     <i class="fa-solid fa-percent"></i> Commission
                 </button>
 
-<<<<<<< HEAD
-                <!-- 8. ADMIN AUTO END SHIFT BUTTON (GATED BY TOGGLE) -->
-=======
-                <!-- 9. ADMIN AUTO END SHIFT BUTTON (GATED BY TOGGLE) -->
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
-                <button id="admin-auto-endshift-btn" onclick="window.openAdminAutoEndShiftModal && window.openAdminAutoEndShiftModal()" class="hidden bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-purple-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                <!-- ADMIN DIRECTORY CREDITS SETTINGS BUTTON -->
+                <button id="admin-credits-settings-btn" onclick="window.openAdminDirectoryCreditsModal && window.openAdminDirectoryCreditsModal()" class="hidden bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-600/30 dark:hover:bg-amber-600 dark:text-amber-300 dark:border-amber-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Configure Directory Credit Rules & Rewards">
+                    <i class="fa-solid fa-coins"></i> Credits
+                </button>
+
+                <!-- ADMIN EARLY SHIFT OUT PENALTY SETTINGS BUTTON -->
+                <button id="admin-early-shift-btn" onclick="window.openAdminEarlyShiftModal && window.openAdminEarlyShiftModal()" class="hidden bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-600/30 dark:hover:bg-red-600 dark:text-red-300 dark:border-red-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Configure 8-Hour Early Shift Out Penalty Rules">
+                    <i class="fa-solid fa-user-clock"></i> Early Out
+                </button>
+
+                <!-- ADMIN AUTO END SHIFT BUTTON -->
+                <button id="admin-auto-endshift-btn" onclick="window.openAdminAutoEndShiftModal && window.openAdminAutoEndShiftModal()" class="hidden bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-purple-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer">
                     <i class="fa-solid fa-clock-rotate-left"></i> Auto End
                 </button>
 
-<<<<<<< HEAD
-                <!-- 9. ADMIN BAN LIST BUTTON (GATED BY TOGGLE) -->
-=======
-                <!-- 10. ADMIN BAN LIST BUTTON (GATED BY TOGGLE) -->
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
-                <button id="admin-block-btn" onclick="window.openAdminBlockModal && window.openAdminBlockModal()" class="hidden bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-600/30 dark:hover:bg-red-600 dark:text-red-300 dark:border-red-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                <!-- ADMIN BAN LIST BUTTON -->
+                <button id="admin-block-btn" onclick="window.openAdminBlockModal && window.openAdminBlockModal()" class="hidden bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-600/30 dark:hover:bg-red-600 dark:text-red-300 dark:border-red-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer">
                     <i class="fa-solid fa-user-slash"></i> Ban List
                 </button>
 
-<<<<<<< HEAD
-                <!-- 10. ADMIN FIND RIDERS BUTTON (GATED BY TOGGLE) -->
-=======
-                <!-- 11. ADMIN FIND RIDERS BUTTON (GATED BY TOGGLE) -->
->>>>>>> 2dcde05 (Update Lokalex features from new PC)
-                <button id="admin-find-riders-btn" onclick="window.openFindRidersModal && window.openFindRidersModal()" class="hidden bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-600/30 dark:hover:bg-indigo-600 dark:text-indigo-300 dark:border-indigo-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1">
+                <!-- ADMIN FIND RIDERS BUTTON -->
+                <button id="admin-find-riders-btn" onclick="window.openFindRidersModal && window.openFindRidersModal()" class="hidden bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-600/30 dark:hover:bg-indigo-600 dark:text-indigo-300 dark:border-indigo-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer">
                     <i class="fa-solid fa-map-location-dot"></i> Find
                 </button>
 
-                <button id="admin-force-all-btn" onclick="window.forceAllEndShift && window.forceAllEndShift()" class="hidden bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-600/20 dark:border-red-600 dark:text-red-400 text-[9px] px-1.5 py-0.5 rounded font-bold transition active:scale-95">Force All End</button>
+                <button id="admin-force-all-btn" onclick="window.forceAllEndShift && window.forceAllEndShift()" class="hidden bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-600/20 dark:border-red-600 dark:text-red-400 text-[9px] px-1.5 py-0.5 rounded font-bold transition active:scale-95 cursor-pointer">Force All End</button>
 
                 <!-- MODERN SLIDER TOGGLE SWITCH FOR ADMIN CONTROLS -->
                 <div id="admin-toggle-wrapper" class="hidden">
@@ -1247,18 +1258,18 @@
             </div>
         </div>
 
-        <!-- ULTRA-COMPACT 4-COL ACTION BUTTONS (DIRECTLY ABOVE AVAILABLE QUEUE) -->
+        <!-- 4-COL ACTION BUTTONS -->
         <div class="grid grid-cols-4 gap-1.5 p-1 bg-gray-100 dark:bg-black/40 border border-gray-200 dark:border-gray-800 rounded-xl">
-             <button id="btn-status-avail" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('Available')" class="bg-white hover:bg-gray-50 border border-gray-200 dark:border-transparent dark:bg-tgBtn dark:hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-emerald-600 dark:text-green-400">
+             <button id="btn-status-avail" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('Available')" class="bg-white hover:bg-gray-50 border border-gray-200 dark:border-transparent dark:bg-tgBtn dark:hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-emerald-600 dark:text-green-400 cursor-pointer">
                  <div class="w-2 h-2 rounded-full bg-emerald-500"></div> Available
              </button>
-             <button id="btn-status-cater" onclick="window.promptCateringStatus && window.promptCateringStatus()" class="bg-white hover:bg-gray-50 border border-gray-200 dark:border-transparent dark:bg-tgBtn dark:hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-red-600 dark:text-red-400">
+             <button id="btn-status-cater" onclick="window.promptCateringStatus && window.promptCateringStatus()" class="bg-white hover:bg-gray-50 border border-gray-200 dark:border-transparent dark:bg-tgBtn dark:hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-red-600 dark:text-red-400 cursor-pointer">
                  <div class="w-2 h-2 rounded-full bg-red-500"></div> Catering
              </button>
-             <button id="btn-status-break" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('Break')" class="bg-white hover:bg-gray-50 border border-gray-200 dark:border-transparent dark:bg-tgBtn dark:hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-amber-600 dark:text-amber-300">
+             <button id="btn-status-break" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('Break')" class="bg-white hover:bg-gray-50 border border-gray-200 dark:border-transparent dark:bg-tgBtn dark:hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-amber-600 dark:text-amber-300 cursor-pointer">
                  ☕ Break
              </button>
-             <button id="btn-status-end" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('End')" class="bg-white hover:bg-gray-50 border border-gray-200 dark:border-transparent dark:bg-tgBtn dark:hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-gray-600 dark:text-gray-400">
+             <button id="btn-status-end" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('End')" class="bg-white hover:bg-gray-50 border border-gray-200 dark:border-transparent dark:bg-tgBtn dark:hover:bg-gray-700 py-1.5 px-1 rounded-lg flex items-center justify-center gap-1 font-bold text-[10px] transition active:scale-95 shadow-sm text-gray-600 dark:text-gray-400 cursor-pointer">
                  <div class="w-2 h-2 rounded-full bg-gray-400 dark:bg-black border border-gray-500"></div> End Shift
              </button>
         </div>
@@ -1269,7 +1280,6 @@
                 <div class="flex items-center gap-1.5 text-emerald-600 dark:text-green-500 font-bold text-xs">
                     <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_#22c55e]"></div> AVAILABLE (Queue):
                 </div>
-                <!-- HORIZONTALLY WRAPPED AVAILABLE QUEUE CONTAINER -->
                 <div class="pl-1 text-xs text-gray-600 dark:text-gray-400 mt-1.5 flex flex-wrap items-center gap-1.5" id="home-roster-avail">(Walang naka-duty)</div>
             </div>
             
@@ -1290,7 +1300,6 @@
                 <div class="pl-2 text-xs text-gray-600 dark:text-gray-400 mt-1 flex flex-col gap-1" id="home-roster-cooldown">(Walang naka-cooldown)</div>
             </div>
 
-            <!-- DEDICATED ON DAY OFF (TODAY) DISPLAY SECTION -->
             <div>
                 <div class="flex items-center gap-1.5 text-teal-600 dark:text-teal-400 font-bold text-xs">
                     🏝️ ON DAY OFF (Today):
@@ -1322,16 +1331,16 @@
         </div>
     </div>
     
-    <button onclick="window.logout && window.logout()" class="text-xs text-red-500 hover:text-red-700 dark:text-red-400/60 dark:hover:text-red-400 py-1.5 mt-1 font-bold transition">Log out of device</button>
+    <button onclick="window.logout && window.logout()" class="text-xs text-red-500 hover:text-red-700 dark:text-red-400/60 dark:hover:text-red-400 py-1.5 mt-1 font-bold transition cursor-pointer">Log out of device</button>
 
-    <!-- AVAILABLE QUEUE INFO & GPS AUDIT MODAL -->
+    <!-- AVAILABLE QUEUE INFO MODAL -->
     <div id="available-queue-info-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
         <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-xs rounded-2xl p-4 shadow-2xl flex flex-col gap-3 text-gray-900 dark:text-white">
             <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2">
                 <h3 class="text-xs font-black flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                     <i class="fa-solid fa-circle-info"></i> Queue Status Details
                 </h3>
-                <button type="button" onclick="window.closeQueueInfoModal && window.closeQueueInfoModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-xs">
+                <button type="button" onclick="window.closeQueueInfoModal && window.closeQueueInfoModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-xs cursor-pointer">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
@@ -1362,16 +1371,17 @@
             </div>
 
             <div class="flex gap-2 pt-1">
-                <a id="queue-info-map-btn" href="#" target="_blank" rel="noopener noreferrer" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md transition active:scale-95 text-center">
+                <a id="queue-info-map-btn" href="#" target="_blank" rel="noopener noreferrer" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md transition active:scale-95 text-center cursor-pointer">
                     <i class="fa-solid fa-map-location-dot"></i> View on Map
                 </a>
-                <button type="button" onclick="window.closeQueueInfoModal && window.closeQueueInfoModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 text-center">
+                <button type="button" onclick="window.closeQueueInfoModal && window.closeQueueInfoModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 text-center cursor-pointer">
                     Close
                 </button>
             </div>
         </div>
     </div>
 </section>
+<!-- REMARKS: HOME_DASHBOARD_COMPLETE_ADMIN_TOOLBAR_WITH_EARLY_OUT_AND_CREDITS_V1_COMPLETE -->
         <!-- src/partials/views/store-hub.html -->
 <section id="view-store-hub" class="hidden flex-1 flex flex-col p-4 gap-4 py-4 pb-20">
     <!-- LIGHT MODE CONTRAST STYLING -->
@@ -2056,14 +2066,14 @@
         </div>
 
         <div class="flex bg-gray-100 dark:bg-darkBg rounded-xl p-1 text-xs font-bold border border-gray-200 dark:border-gray-800">
-            <button id="comm-mode-earned" onclick="window.setCommissionMode && window.setCommissionMode('earned')" class="flex-1 py-2 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 dark:bg-emerald-600/20 dark:text-emerald-400 dark:border-emerald-500/50 font-black transition shadow-xs">My Earnings</button>
-            <button id="comm-mode-company" onclick="window.setCommissionMode && window.setCommissionMode('company')" class="flex-1 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition">To Pay (Company)</button>
+            <button id="comm-mode-earned" onclick="window.setCommissionMode && window.setCommissionMode('earned')" class="flex-1 py-2 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 dark:bg-emerald-600/20 dark:text-emerald-400 dark:border-emerald-500/50 font-black transition shadow-xs cursor-pointer">My Earnings</button>
+            <button id="comm-mode-company" onclick="window.setCommissionMode && window.setCommissionMode('company')" class="flex-1 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer">To Pay (Company)</button>
         </div>
 
         <div class="grid grid-cols-3 gap-1 bg-gray-100 dark:bg-darkBg rounded-xl p-1 text-[10px] font-bold border border-gray-200 dark:border-gray-800">
-            <button id="comm-period-daily" onclick="window.setCommissionPeriod && window.setCommissionPeriod('daily')" class="py-1.5 rounded-lg bg-blue-600 text-white font-bold transition shadow">Daily</button>
-            <button id="comm-period-weekly" onclick="window.setCommissionPeriod && window.setCommissionPeriod('weekly')" class="py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition">Weekly</button>
-            <button id="comm-period-monthly" onclick="window.setCommissionPeriod && window.setCommissionPeriod('monthly')" class="py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition">Monthly</button>
+            <button id="comm-period-daily" onclick="window.setCommissionPeriod && window.setCommissionPeriod('daily')" class="py-1.5 rounded-lg bg-blue-600 text-white font-bold transition shadow cursor-pointer">Daily</button>
+            <button id="comm-period-weekly" onclick="window.setCommissionPeriod && window.setCommissionPeriod('weekly')" class="py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer">Weekly</button>
+            <button id="comm-period-monthly" onclick="window.setCommissionPeriod && window.setCommissionPeriod('monthly')" class="py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer">Monthly</button>
         </div>
 
         <div class="flex justify-between items-center">
@@ -2074,7 +2084,9 @@
         </div>
     </div>
 
+    <!-- MAIN SUMMARY CARD WITH SETTLEMENT STATUS BADGE -->
     <div class="bg-white dark:bg-cardBg p-4 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xs flex flex-col gap-3 relative overflow-hidden text-gray-900 dark:text-white">
+        <div id="comm-status-badge" class="hidden absolute top-0 right-0 bg-red-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest shadow-md">UNPAID</div>
         <div class="text-xs text-gray-600 dark:text-gray-400 uppercase tracking-widest font-black text-center mt-2" id="comm-summary-title">Daily Summary</div>
         
         <div class="flex flex-col items-center justify-center py-2">
@@ -2084,22 +2096,41 @@
             </div>
             <div class="text-[10px] text-gray-500 dark:text-gray-400 font-mono font-bold mt-1">Gross Total: ₱<span id="comm-gross-amount">0.00</span></div>
         </div>
+
+        <button id="admin-mark-paid-btn" onclick="window.toggleSettlementStatus && window.toggleSettlementStatus()" class="hidden w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl text-xs transition active:scale-95 shadow-lg mt-1 border border-emerald-400/50 cursor-pointer">
+            <i class="fa-solid fa-check-double"></i> MARK AS PAID
+        </button>
     </div>
 
-    <button onclick="window.generateDailyReportText && window.generateDailyReportText()" class="w-full bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 dark:bg-blue-600/20 dark:border-blue-600/50 dark:hover:bg-blue-600 dark:text-blue-400 dark:hover:text-white font-bold py-3.5 rounded-2xl shadow-xs flex items-center justify-center gap-2 transition active:scale-95 text-xs">
+    <button onclick="window.generateDailyReportText && window.generateDailyReportText()" class="w-full bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 dark:bg-blue-600/20 dark:border-blue-600/50 dark:hover:bg-blue-600 dark:text-blue-400 dark:hover:text-white font-bold py-3.5 rounded-2xl shadow-xs flex items-center justify-center gap-2 transition active:scale-95 text-xs cursor-pointer">
         <i class="fa-solid fa-file-lines"></i> Generate Text Report
     </button>
 
     <div class="text-[10px] text-gray-600 dark:text-gray-400 uppercase tracking-wider font-bold mt-2 border-b border-gray-200 dark:border-gray-800 pb-1">Rider Summary</div>
     <div id="commission-rider-list" class="flex flex-col gap-3 pb-20"></div>
 </section>
+<!-- REMARKS: COMMISSION_HTML_SETTLEMENT_STATUS_BADGE_RESTORED_V1_COMPLETE -->
         <!-- src/partials/views/directory.html -->
+<!--
+  ============================================================================
+  DIRECTORY VIEW COMPONENT WITH DUAL-TIER ROUTING TOOLBAR
+  ============================================================================
+  Description:
+  Customer, Merchant, and Delivery Rate search registry. Features a dual-tier
+  geographic routing toolbar for the Rates directory:
+  - Row 1: Starting Hub (Origin) dropdown to isolate dispatches by branch.
+  - Row 2: Destination dropdown dynamically populated strictly with serviced
+    municipalities that contain active rate records, with zero-hang GPS auto-selection.
+  - Inline search bar with scroll-minimized floating action badge, overflow-
+    contained list with sticky alphabet headers, A-Z elastic scrubber bar,
+    and record creation FAB.
+-->
 <section id="view-directory" class="hidden flex-1 flex flex-col relative p-4">
-    <!-- INLINE PRIMARY SEARCH CONTAINER (SCROLLS NATURALLY WITH CONTENT, NO HEIGHT COLLAPSE) -->
-    <div id="dir-search-container" class="flex gap-2 mb-3 pr-6 transition-all duration-200">
+    <!-- INLINE PRIMARY SEARCH CONTAINER -->
+    <div id="dir-search-container" class="flex gap-2 mb-2 pr-6 transition-all duration-200">
         <div class="relative flex-1">
             <i class="fa-solid fa-search absolute left-3 top-3.5 text-gray-400 text-sm"></i>
-            <input type="text" id="search-input" name="search_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" oninput="window.filterDirectoryRecords && window.filterDirectoryRecords()" placeholder="Search records..." class="w-full bg-inputBg text-sm rounded-xl pl-9 pr-9 py-3 outline-none border border-transparent focus:border-blue-500 transition shadow-xs">
+            <input type="text" id="search-input" name="search_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" oninput="window.filterDirectoryRecords && window.filterDirectoryRecords()" placeholder="Search records..." class="w-full bg-inputBg text-sm rounded-xl pl-9 pr-9 py-3 outline-none border border-transparent focus:border-blue-500 transition shadow-xs text-gray-900 dark:text-white">
             <button type="button" id="clear-search-btn" onclick="window.clearDirectorySearch && window.clearDirectorySearch()" class="hidden absolute right-3 top-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-sm transition p-0.5 cursor-pointer" title="Clear Search">
                 <i class="fa-solid fa-circle-xmark"></i>
             </button>
@@ -2109,7 +2140,45 @@
         </button>
     </div>
 
-    <!-- MINIMIZED UPPER-RIGHT FLOATING SEARCH BADGE (PINNED FIXED WHEN SCROLLED DOWN) -->
+    <!-- DUAL-TIER ROUTING TOOLBAR (VISIBLE ONLY IN RATES DIRECTORY) -->
+    <div id="dir-origin-hub-container" class="hidden flex flex-col gap-2 bg-cardBg/90 dark:bg-cardBg/90 border border-amber-500/30 rounded-2xl p-2.5 mb-2 pr-6 shadow-xs">
+        <!-- ROW 1: STARTING HUB (ORIGIN) -->
+        <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 shrink-0">
+                <div class="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs shrink-0 border border-amber-500/30">
+                    <i class="fa-solid fa-location-crosshairs"></i>
+                </div>
+                <span class="text-[11px] font-bold text-gray-300">Starting Hub:</span>
+            </div>
+            <select id="dir-origin-hub-select" onchange="window.handleOriginHubChange && window.handleOriginHubChange(this.value)" class="bg-darkBg text-xs font-black text-amber-400 border border-amber-500/40 rounded-xl px-2.5 py-1.5 outline-none cursor-pointer max-w-[175px] truncate">
+                <option value="Camiling" selected>Camiling (Main Hub)</option>
+                <option value="San Clemente">San Clemente</option>
+                <option value="Santa Ignacia">Santa Ignacia</option>
+                <option value="Paniqui">Paniqui</option>
+                <option value="Mayantoc">Mayantoc</option>
+                <option value="Moncada">Moncada</option>
+                <option value="Gerona">Gerona</option>
+                <option value="Bayambang">Bayambang</option>
+                <option value="Mangatarem">Mangatarem</option>
+                <option value="ALL">🌐 All Starting Hubs</option>
+            </select>
+        </div>
+
+        <!-- ROW 2: DESTINATION (READABLE, RECORDS-ONLY & GPS AUTO-SELECTED) -->
+        <div class="flex items-center justify-between gap-2 pt-2 border-t border-gray-200/30 dark:border-gray-800/60">
+            <div class="flex items-center gap-1.5 shrink-0">
+                <div class="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs shrink-0 border border-emerald-500/30">
+                    <i class="fa-solid fa-map-location-dot"></i>
+                </div>
+                <span class="text-[11px] font-bold text-emerald-400">Destination:</span>
+            </div>
+            <select id="dir-destination-select" onchange="window.handleDestinationChange && window.handleDestinationChange(this.value)" class="bg-darkBg text-xs font-black text-emerald-400 border border-emerald-500/40 rounded-xl px-2.5 py-1.5 outline-none cursor-pointer max-w-[175px] truncate">
+                <option value="ALL">🌐 All Destinations</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- MINIMIZED UPPER-RIGHT FLOATING SEARCH BADGE -->
     <div id="dir-min-search-wrapper" class="hidden fixed top-[54px] right-4 z-40 flex items-center gap-1.5 transition-all duration-200">
         <button type="button" id="dir-min-search-btn" onclick="window.expandDirectorySearch && window.expandDirectorySearch()" class="bg-blue-600 hover:bg-blue-500 text-white shadow-xl px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-bold transition active:scale-90 cursor-pointer border border-blue-400/40" title="Open Search Bar">
             <i class="fa-solid fa-search text-[11px]"></i>
@@ -2121,7 +2190,7 @@
         </button>
     </div>
 
-    <!-- FLOATING EXPANDED SEARCH BAR OVERLAY (REVEALED WHEN TAPPING MINIMIZED BADGE WHILE SCROLLED) -->
+    <!-- FLOATING EXPANDED SEARCH BAR OVERLAY -->
     <div id="dir-floating-search-bar" class="hidden fixed top-[48px] sm:top-[52px] left-0 right-0 z-40 bg-cardBg/95 dark:bg-darkBg/95 backdrop-blur-md px-4 py-2 border-b border-gray-200 dark:border-gray-800 shadow-xl transition-all duration-200">
         <div class="max-w-md mx-auto flex gap-2 pr-6">
             <div class="relative flex-1">
@@ -2137,38 +2206,156 @@
         </div>
     </div>
     
+    <!-- DIRECTORY RECORD LIST -->
     <div id="record-list" class="flex-1 flex flex-col gap-3 pb-20 pr-8 overflow-y-auto"></div>
     
+    <!-- ALPHABET SCRUBBER -->
     <div id="alphabet-scrubber" class="fixed right-2 top-1/2 -translate-y-1/2 flex flex-col text-[10px] text-gray-400 font-bold z-30 touch-none select-none"></div>
 
+    <!-- RECORD CREATION FAB -->
     <button id="directory-add-fab" onclick="window.openForm && window.openForm(null)" class="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center text-xl z-40 transition active:scale-90 cursor-pointer">
         <i class="fa-solid fa-plus"></i>
     </button>
 </section>
-        <section id="view-form" class="hidden flex-1 flex flex-col gap-4 p-4 overflow-y-auto">
-    <div id="edit-warning" class="hidden bg-amber-500/10 border border-amber-500 p-3 rounded-xl flex items-center gap-3 text-amber-400 text-xs">
+<!-- REMARKS: DIRECTORY_HTML_DESTINATION_LABEL_AND_NO_CLIPPING_V5_COMPLETE -->
+        <!-- src/partials/views/form.html -->
+<!--
+  ============================================================================
+  DIRECTORY RECORD MUTATION FORM COMPONENT
+  ============================================================================
+  Description:
+  Dynamic entry and editing form for Customer, Merchant Store, and Delivery
+  Rate directory records. Automatically toggles between standard profile
+  inputs (Name, Contact, Address, Map Link) and a structured geographic
+  hierarchy with isolated Origin Starting Hubs (Origin Municipality ->
+  Destination Nationality -> Region -> Municipality -> Barangay -> Rate)
+  backed by real-time public geographic REST APIs.
+-->
+<section id="view-form" class="hidden flex-1 flex flex-col gap-4 p-4 overflow-y-auto">
+    <!-- EDITING STATE BANNER -->
+    <div id="edit-warning" class="hidden bg-amber-500/10 border border-amber-500 p-3 rounded-xl flex items-center gap-3 text-amber-400 text-xs shadow-xs">
         <i class="fa-solid fa-triangle-exclamation text-xl"></i>
         <div id="warning-text">Editing record.</div>
     </div>
-    <div class="flex flex-col gap-3">
-        <label class="text-xs text-gray-400 font-bold">Name / Store Name</label>
-        <input type="text" id="form-name" name="form_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+
+    <!-- 1. STANDARD FORM FIELDS (CUSTOMERS & STORES) -->
+    <div id="standard-form-fields" class="flex flex-col gap-3">
+        <label class="text-xs text-gray-400 font-bold">Name / Store Name *</label>
+        <input type="text" id="form-name" name="form_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Enter customer or merchant store name" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-blue-500 transition">
+
         <label class="text-xs text-gray-400 font-bold">Contact Number</label>
-        <input type="text" id="form-contact" name="form_contact_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+        <input type="text" id="form-contact" name="form_contact_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="e.g. 09123456789" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-mono focus:border-blue-500 transition">
+
         <label class="text-xs text-gray-400 font-bold">General Address</label>
-        <input type="text" id="form-address" name="form_address_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
+        <input type="text" id="form-address" name="form_address_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Street, Barangay, Landmarks" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white focus:border-blue-500 transition">
+
         <label class="text-xs text-gray-400 font-bold">Map Link (Lat_Lon_Link)</label>
         <div class="flex gap-2">
-            <input type="text" id="form-latlon" name="form_latlon_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Paste link or get from Map" class="flex-1 bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700">
-            <button onclick="window.openMapPicker && window.openMapPicker()" class="bg-blue-600 hover:bg-blue-500 px-4 rounded-xl text-white text-sm font-bold flex items-center gap-2 transition active:scale-95">
+            <input type="text" id="form-latlon" name="form_latlon_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Paste link or get from Map" class="flex-1 bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white text-xs font-mono focus:border-blue-500 transition">
+            <button type="button" onclick="window.openMapPicker && window.openMapPicker()" class="bg-blue-600 hover:bg-blue-500 px-4 rounded-xl text-white text-sm font-bold flex items-center gap-2 transition active:scale-95 cursor-pointer shadow-sm">
                 <i class="fa-solid fa-map-location-dot"></i> Map
             </button>
         </div>
     </div>
-    <button onclick="window.submitForm && window.submitForm()" id="form-submit-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold p-4 rounded-xl shadow-lg mt-auto transition active:scale-95">
+
+    <!-- 2. HIERARCHICAL GEOGRAPHIC RATE FIELDS (ISOLATED ORIGIN & DESTINATION) -->
+    <div id="rate-form-fields" class="hidden flex flex-col gap-3">
+        <!-- ORIGIN STARTING HUB / MUNICIPALITY (ISOLATION VECTOR) -->
+        <div class="bg-black/30 p-3 rounded-2xl border border-amber-500/30 flex flex-col gap-1.5">
+            <div class="flex justify-between items-center">
+                <label class="text-xs text-amber-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-location-crosshairs text-amber-400"></i> Origin Starting Hub (Departing From) *
+                </label>
+                <span class="text-[9.5px] text-gray-400 font-mono">Fare Base Point</span>
+            </div>
+            <select id="form-rate-origin" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-amber-500/50 text-amber-300 font-black focus:border-amber-400 transition cursor-pointer">
+                <option value="Camiling" selected>Camiling (Main Hub)</option>
+                <option value="San Clemente">San Clemente Branch</option>
+                <option value="Santa Ignacia">Santa Ignacia Branch</option>
+                <option value="Paniqui">Paniqui Branch</option>
+                <option value="Mayantoc">Mayantoc Branch</option>
+                <option value="Moncada">Moncada Branch</option>
+                <option value="Gerona">Gerona Branch</option>
+                <option value="Bayambang">Bayambang Branch</option>
+                <option value="Mangatarem">Mangatarem Branch</option>
+            </select>
+            <span class="text-[9.5px] text-gray-400 leading-tight">
+                Ang pamasahe ay kakalkulahin batay sa distansya mula sa napiling Starting Hub na ito.
+            </span>
+        </div>
+
+        <!-- DESTINATION NATIONALITY -->
+        <div>
+            <div class="flex justify-between items-center mb-1">
+                <label class="text-xs text-gray-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-globe text-blue-400"></i> Destination Nationality *
+                </label>
+                <span id="rate-geo-loading-nations" class="hidden text-[10px] text-blue-400"><i class="fa-solid fa-spinner fa-spin"></i> Detecting location...</span>
+            </div>
+            <select id="form-rate-nationality" onchange="window.handleRateNationalityChange && window.handleRateNationalityChange(this.value)" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition cursor-pointer">
+                <option value="" disabled selected>Loading all countries...</option>
+            </select>
+        </div>
+
+        <!-- DESTINATION REGION -->
+        <div>
+            <div class="flex justify-between items-center mb-1">
+                <label id="form-rate-region-label" class="text-xs text-gray-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-map text-emerald-400"></i> Destination Region *
+                </label>
+                <span id="rate-geo-loading-regions" class="hidden text-[10px] text-emerald-400"><i class="fa-solid fa-spinner fa-spin"></i> Loading regions...</span>
+            </div>
+            <select id="form-rate-region" onchange="window.handleRateRegionChange && window.handleRateRegionChange(this.value)" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition cursor-pointer">
+                <option value="" disabled selected>Select Region</option>
+            </select>
+            <input type="text" id="form-rate-region-custom" placeholder="Enter State / Province / Region" class="hidden w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition mt-1">
+        </div>
+
+        <!-- DESTINATION MUNICIPALITY / CITY -->
+        <div>
+            <div class="flex justify-between items-center mb-1">
+                <label id="form-rate-municipality-label" class="text-xs text-gray-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-city text-amber-400"></i> Destination Municipality / City *
+                </label>
+                <span id="rate-geo-loading-mun" class="hidden text-[10px] text-amber-400"><i class="fa-solid fa-spinner fa-spin"></i> Loading cities/municipalities...</span>
+            </div>
+            <select id="form-rate-municipality" onchange="window.handleRateMunicipalityChange && window.handleRateMunicipalityChange(this.value)" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition cursor-pointer">
+                <option value="" disabled selected>Select Municipality/City</option>
+            </select>
+            <input type="text" id="form-rate-municipality-custom" placeholder="Enter Municipality / City / Town" class="hidden w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition mt-1">
+        </div>
+
+        <!-- DESTINATION BARANGAY / DISTRICT -->
+        <div>
+            <div class="flex justify-between items-center mb-1">
+                <label id="form-rate-barangay-label" class="text-xs text-gray-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-map-pin text-red-400"></i> Destination Barangay / District *
+                </label>
+                <span id="rate-geo-loading-brgy" class="hidden text-[10px] text-red-400"><i class="fa-solid fa-spinner fa-spin"></i> Loading barangays...</span>
+            </div>
+            <input type="text" id="form-rate-barangay" list="form-rate-barangay-list" autocomplete="off" placeholder="Select or type Barangay / District name" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition">
+            <datalist id="form-rate-barangay-list"></datalist>
+            <span id="form-rate-barangay-hint" class="text-[10px] text-gray-500 mt-1 block">Pumili sa opisyal na listahan mula sa PSA PSGC API o mag-type ng sariling lugar.</span>
+        </div>
+
+        <!-- DELIVERY AMOUNT (RATE) -->
+        <div>
+            <label class="text-xs text-gray-400 font-bold flex items-center gap-1.5 mb-1">
+                <i class="fa-solid fa-peso-sign text-emerald-400"></i> Base Delivery Amount (₱) *
+            </label>
+            <div class="relative">
+                <span class="absolute left-3.5 top-3 text-emerald-400 font-bold text-sm">₱</span>
+                <input type="number" step="1" min="0" id="form-rate-amount" placeholder="e.g. 50, 95, 110" class="w-full bg-inputBg text-sm rounded-xl pl-8 pr-3 py-3 outline-none border border-gray-700 text-emerald-400 font-mono font-black focus:border-emerald-500 transition">
+            </div>
+        </div>
+    </div>
+
+    <!-- SUBMIT ACTION BUTTON -->
+    <button onclick="window.submitForm && window.submitForm()" id="form-submit-btn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold p-4 rounded-xl shadow-lg mt-auto transition active:scale-95 cursor-pointer">
         SAVE RECORD
     </button>
 </section>
+<!-- REMARKS: FORM_HTML_ISOLATED_ORIGIN_HUB_AND_HIERARCHICAL_DESTINATION_V4_COMPLETE -->
         <section id="view-map" class="hidden fixed inset-0 bg-darkBg z-[999999] flex flex-col w-full h-full overflow-hidden" style="z-index: 999999 !important;">
     <!-- HEADER -->
     <header class="bg-cardBg px-4 py-3 flex items-center justify-between shadow-md shrink-0 border-b border-gray-800 gap-2">
@@ -2872,7 +3059,14 @@
         </button>
     </div>
 </div>
-    <!-- ADMIN BLOCK USER MODAL -->
+    <!-- src/partials/modals/admin-controls.html -->
+<!--
+  ============================================================================
+  ADMIN & RIDER OPERATIONAL MODALS CONTAINER (ALL 17 MODALS INCLUDED)
+  ============================================================================
+-->
+
+<!-- 1. ADMIN BLOCK USER MODAL -->
 <div id="admin-block-user-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-red-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2">
@@ -2880,7 +3074,7 @@
                 <i class="fa-solid fa-user-slash text-red-400 text-lg"></i>
                 <h3 class="font-bold text-sm text-white">Ban / Block User Management</h3>
             </div>
-            <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="text-gray-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
+            <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="text-gray-400 hover:text-white text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
         <div class="flex flex-col gap-2">
@@ -2888,8 +3082,8 @@
                 <option value="" disabled selected>-- Select Rider / User --</option>
             </select>
 
-            <input type="text" id="block-reason-input" autocomplete="off" autocorrect="off" placeholder="Reason for blocking" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white">
-            <button onclick="window.submitBlockUser && window.submitBlockUser()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
+            <input type="text" id="block-reason-input" autocomplete="off" placeholder="Reason for blocking" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white">
+            <button onclick="window.submitBlockUser && window.submitBlockUser()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
                 🚫 Block Account
             </button>
         </div>
@@ -2897,15 +3091,13 @@
         <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-2">Blocked Users List</div>
         <div id="blocked-users-list" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 min-h-[120px]"></div>
 
-        <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
+        <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
             Close
         </button>
     </div>
 </div>
 
-<!-- ========================================================================= -->
-<!-- 1. RIDER PERSONAL DAY-OFF SELECTION MODAL (FOR ALL RIDERS)                -->
-<!-- ========================================================================= -->
+<!-- 2. RIDER PERSONAL DAY-OFF SELECTION MODAL -->
 <div id="rider-dayoff-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-teal-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3.5 max-h-[88vh] relative animate-in fade-in zoom-in duration-200">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2.5 shrink-0">
@@ -2918,11 +3110,10 @@
                     <p id="rider-dayoff-subtitle" class="text-[9px] text-teal-400 font-mono">Pumili ng iyong lingguhang araw ng pahinga</p>
                 </div>
             </div>
-            <button onclick="window.closeRiderDayOffModal && window.closeRiderDayOffModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            <button onclick="window.closeRiderDayOffModal && window.closeRiderDayOffModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
         <div class="flex flex-col gap-2.5 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
-            <!-- CURRENT DAY OFF STATUS CARD -->
             <div class="bg-darkBg p-3 rounded-2xl border border-teal-500/30 flex items-center justify-between">
                 <div>
                     <span class="text-[10px] text-gray-400 font-bold uppercase">Kasalukuyang Day-Off:</span>
@@ -2933,22 +3124,19 @@
                 </div>
             </div>
 
-            <!-- DAYS OF THE WEEK SLOTS & OCCUPANT LIST -->
             <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-1">Available Days & Slots:</div>
             <div id="rider-dayoff-days-list" class="flex flex-col gap-2 min-h-[140px]">
                 <div class="text-center text-gray-500 italic py-6 text-xs">Loading day-off schedule...</div>
             </div>
         </div>
 
-        <button onclick="window.closeRiderDayOffModal && window.closeRiderDayOffModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 shrink-0">
+        <button onclick="window.closeRiderDayOffModal && window.closeRiderDayOffModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 shrink-0 cursor-pointer">
             Close
         </button>
     </div>
 </div>
 
-<!-- ========================================================================= -->
-<!-- 2. ADMIN DAY-OFF SETTINGS & QUOTA MANAGER MODAL (ADMIN ONLY)              -->
-<!-- ========================================================================= -->
+<!-- 3. ADMIN DAY-OFF SETTINGS & QUOTA MANAGER MODAL -->
 <div id="admin-dayoff-settings-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-teal-500/60 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3.5 max-h-[90vh] relative animate-in fade-in zoom-in duration-200">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2.5 shrink-0">
@@ -2961,11 +3149,10 @@
                     <p class="text-[9px] text-teal-400 font-mono">Set Daily Caps, Limits & Move Day-Offs</p>
                 </div>
             </div>
-            <button onclick="window.closeAdminDayOffSettingsModal && window.closeAdminDayOffSettingsModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            <button onclick="window.closeAdminDayOffSettingsModal && window.closeAdminDayOffSettingsModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
         <div class="flex flex-col gap-3 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
-            <!-- MASTER TOGGLE -->
             <label class="bg-darkBg p-3 rounded-2xl border border-teal-500/30 flex justify-between items-center cursor-pointer select-none shrink-0">
                 <div>
                     <div class="font-bold text-white text-xs flex items-center gap-1.5">
@@ -2976,7 +3163,6 @@
                 <input type="checkbox" id="admin-dayoff-master-enabled" class="w-5 h-5 accent-teal-500 cursor-pointer">
             </label>
 
-            <!-- MONTHLY CHANGE LIMIT SETTING -->
             <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between shrink-0">
                 <div>
                     <div class="font-bold text-white text-xs flex items-center gap-1.5">
@@ -2990,7 +3176,6 @@
                 </div>
             </div>
 
-            <!-- DAILY SLOTS QUOTAS (SUNDAY TO SATURDAY) -->
             <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex flex-col gap-2 shrink-0">
                 <div class="font-bold text-white text-xs flex items-center gap-1.5">
                     <i class="fa-solid fa-users text-teal-400"></i> Max Allowed Riders Per Day (Quota)
@@ -3027,7 +3212,6 @@
                 </div>
             </div>
 
-            <!-- REASSIGN / OVERRIDE RIDER DAY OFF -->
             <div class="flex flex-col shrink-0 gap-1.5 pb-2">
                 <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex justify-between items-center">
                     <span>Reassign Rider Day-Off</span>
@@ -3040,15 +3224,13 @@
         </div>
 
         <div class="flex gap-2 pt-2 border-t border-gray-800 shrink-0">
-            <button onclick="window.closeAdminDayOffSettingsModal && window.closeAdminDayOffSettingsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-            <button onclick="window.saveAdminDayOffSettings && window.saveAdminDayOffSettings()" class="flex-1 bg-teal-600 hover:bg-teal-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Save Day-Off Settings</button>
+            <button onclick="window.closeAdminDayOffSettingsModal && window.closeAdminDayOffSettingsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.saveAdminDayOffSettings && window.saveAdminDayOffSettings()" class="flex-1 bg-teal-600 hover:bg-teal-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Day-Off Settings</button>
         </div>
     </div>
 </div>
 
-<!-- ========================================================================= -->
-<!-- 3. ADMIN MAXIMUM ACTIVE BOOKINGS LIMIT MODAL (AUTO + MANUAL MODES)        -->
-<!-- ========================================================================= -->
+<!-- 4. ADMIN MAXIMUM ACTIVE BOOKINGS LIMIT MODAL -->
 <div id="admin-booking-limits-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-rose-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3.5 relative animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2.5 shrink-0">
@@ -3061,25 +3243,23 @@
                     <p class="text-[9px] text-rose-400 font-mono">Dynamic or Fixed Limits per Rider</p>
                 </div>
             </div>
-            <button onclick="window.closeAdminBookingLimitsModal && window.closeAdminBookingLimitsModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            <button onclick="window.closeAdminBookingLimitsModal && window.closeAdminBookingLimitsModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
         <div class="flex flex-col gap-3 text-xs">
-            <!-- AUTO DYNAMIC TOGGLE SWITCH -->
             <label class="bg-darkBg p-3 rounded-2xl border border-rose-500/30 flex justify-between items-center cursor-pointer select-none">
                 <div>
                     <div class="font-bold text-white text-xs flex items-center gap-1.5">
                         <i class="fa-solid fa-wand-magic-sparkles text-rose-400"></i> Auto Income-Based Dynamic Limits
                     </div>
-                    <div class="text-[10px] text-gray-400 mt-0.5">Scale bookings dynamically based on today's gross rank (3+ riders)</div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Scale bookings dynamically based on gross rank (3+ riders)</div>
                 </div>
                 <input type="checkbox" id="admin-booking-limits-auto-toggle" onchange="window.toggleBookingLimitsModeUI && window.toggleBookingLimitsModeUI(this.checked)" class="w-5 h-5 accent-rose-500 cursor-pointer shrink-0">
             </label>
 
-            <!-- AUTO TIERING BREAKDOWN CARD -->
             <div id="admin-booking-limits-auto-section" class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex flex-col gap-2 transition duration-200">
                 <div class="text-[10px] font-black uppercase text-rose-300 tracking-wider flex items-center gap-1.5">
-                    <i class="fa-solid fa-chart-simple text-rose-400"></i> Dynamic Auto-Tier Distribution (3+ Active Riders)
+                    <i class="fa-solid fa-chart-simple text-rose-400"></i> Dynamic Auto-Tier Distribution
                 </div>
                 <div class="flex flex-col gap-1.5 text-[11px]">
                     <div class="flex justify-between items-center bg-black/40 p-2 rounded-xl border border-emerald-500/30">
@@ -3095,39 +3275,30 @@
                         <span class="bg-red-500/20 text-red-300 border border-red-500/40 px-2 py-0.5 rounded-lg font-black text-[10px]">Max 1 Booking</span>
                     </div>
                 </div>
-                <div class="text-[9px] text-gray-400 italic mt-0.5">
-                    * Kapag 1 o 2 riders lang ang active sa roster, kusa itong babalik sa <strong>Manual Fixed Limit</strong>.
-                </div>
             </div>
 
-            <!-- MANUAL FIXED ORDERS SECTION -->
             <div id="admin-booking-limits-manual-section" class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between transition duration-200">
                 <div>
                     <div class="font-bold text-white text-xs flex items-center gap-1.5">
                         <i class="fa-solid fa-user-tag text-gray-300"></i> Manual Fixed Limit
                     </div>
-                    <div class="text-[10px] text-gray-400 mt-0.5">Applied when Auto mode is disabled or < 3 riders</div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Applied when Auto mode is disabled or &lt; 3 riders</div>
                 </div>
                 <div class="flex items-center gap-1">
                     <input type="number" min="1" max="20" id="admin-max-active-bookings" value="2" class="w-16 bg-inputBg text-sm text-center font-mono font-black text-rose-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-rose-500">
                     <span class="text-gray-400 text-xs font-bold">cust</span>
                 </div>
             </div>
-
-            <div class="bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-xl text-[10px] text-rose-300 leading-relaxed">
-                <i class="fa-solid fa-circle-info mr-1 text-rose-400"></i>
-                <strong>Paalala:</strong> Hindi maaaring mag-book ng higit sa itinakdang limitasyon ang mga ordinaryong rider. Ang mga <strong>Admin</strong> ay palaging walang limitasyon.
-            </div>
         </div>
 
         <div class="flex gap-2 mt-1 shrink-0">
-            <button onclick="window.closeAdminBookingLimitsModal && window.closeAdminBookingLimitsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-            <button onclick="window.saveAdminBookingLimitsSettings && window.saveAdminBookingLimitsSettings()" class="flex-1 bg-rose-600 hover:bg-rose-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Save Limit</button>
+            <button onclick="window.closeAdminBookingLimitsModal && window.closeAdminBookingLimitsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.saveAdminBookingLimitsSettings && window.saveAdminBookingLimitsSettings()" class="flex-1 bg-rose-600 hover:bg-rose-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Limit</button>
         </div>
     </div>
 </div>
 
-<!-- ADMIN TIME-IN SCHEDULE & PERMANENT EARLY PASS MODAL (ADMIN ONLY) -->
+<!-- 5. ADMIN TIME-IN SCHEDULE & EARLY PASS MODAL -->
 <div id="admin-timein-schedule-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-purple-500/60 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3.5 max-h-[90vh] relative animate-in fade-in zoom-in duration-200">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2.5 shrink-0">
@@ -3137,25 +3308,23 @@
                 </div>
                 <div>
                     <h3 class="font-bold text-xs text-white">Rider Time-In Schedule Controls</h3>
-                    <p class="text-[9px] text-purple-400 font-mono">Shift Gate Restrictions & Permanent Early Passes</p>
+                    <p class="text-[9px] text-purple-400 font-mono">Shift Gate Restrictions & Early Passes</p>
                 </div>
             </div>
-            <button onclick="window.closeAdminTimeInScheduleModal && window.closeAdminTimeInScheduleModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            <button onclick="window.closeAdminTimeInScheduleModal && window.closeAdminTimeInScheduleModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
         <div class="flex flex-col gap-3 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
-            <!-- MASTER GLOBAL SWITCH -->
             <label class="bg-darkBg p-3 rounded-2xl border border-purple-500/30 flex justify-between items-center cursor-pointer select-none shrink-0">
                 <div>
                     <div class="font-bold text-white text-xs flex items-center gap-1.5">
                         <i class="fa-solid fa-shield-halved text-purple-400"></i> Enable Time-In Schedule Gate
                     </div>
-                    <div class="text-[10px] text-gray-400 mt-0.5">Disallow riders from timing in early unless granted an Early Pass</div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Disallow early time-in without an Early Pass</div>
                 </div>
                 <input type="checkbox" id="admin-schedule-master-enabled" class="w-5 h-5 accent-purple-500 cursor-pointer">
             </label>
 
-            <!-- GLOBAL DEFAULT TIME-IN -->
             <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between shrink-0">
                 <div>
                     <div class="font-bold text-white text-xs flex items-center gap-1.5">
@@ -3166,7 +3335,6 @@
                 <input type="time" id="admin-schedule-default-time" value="08:00" class="w-28 bg-inputBg text-xs text-center font-mono font-bold text-amber-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-amber-500">
             </div>
 
-            <!-- PER-RIDER CUSTOM OVERRIDES & PERMANENT EARLY PASS -->
             <div class="flex flex-col shrink-0 gap-1.5 pb-2">
                 <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex justify-between items-center">
                     <span>Individual Rider Schedules & Passes</span>
@@ -3179,13 +3347,13 @@
         </div>
 
         <div class="flex gap-2 pt-2 border-t border-gray-800 shrink-0">
-            <button onclick="window.closeAdminTimeInScheduleModal && window.closeAdminTimeInScheduleModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-            <button onclick="window.saveAdminTimeInScheduleSettings && window.saveAdminTimeInScheduleSettings()" class="flex-1 bg-purple-600 hover:bg-purple-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Save Schedule</button>
+            <button onclick="window.closeAdminTimeInScheduleModal && window.closeAdminTimeInScheduleModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.saveAdminTimeInScheduleSettings && window.saveAdminTimeInScheduleSettings()" class="flex-1 bg-purple-600 hover:bg-purple-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Schedule</button>
         </div>
     </div>
 </div>
 
-<!-- ADMIN COMMISSION FEE SETTINGS MODAL (ADMIN ONLY) -->
+<!-- 6. ADMIN COMMISSION FEE SETTINGS MODAL -->
 <div id="admin-commission-settings-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-amber-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3.5 max-h-[88vh] relative animate-in fade-in zoom-in duration-200">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2.5 shrink-0">
@@ -3198,11 +3366,10 @@
                     <p class="text-[9px] text-amber-400 font-mono">Set Percentage & Promo Rules</p>
                 </div>
             </div>
-            <button onclick="window.closeAdminCommissionSettingsModal && window.closeAdminCommissionSettingsModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            <button onclick="window.closeAdminCommissionSettingsModal && window.closeAdminCommissionSettingsModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
         <div class="flex flex-col gap-3 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
-            <!-- DEFAULT GLOBAL RATE -->
             <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between shrink-0">
                 <div>
                     <div class="font-bold text-white text-xs flex items-center gap-1.5">
@@ -3216,14 +3383,13 @@
                 </div>
             </div>
 
-            <!-- RECURRING DAY SPECIAL RULE -->
             <div class="bg-darkBg p-3 rounded-2xl border border-purple-500/40 flex flex-col gap-2 shrink-0">
                 <div class="flex items-center justify-between">
                     <div>
                         <div class="font-bold text-purple-300 text-xs flex items-center gap-1.5">
                             <i class="fa-solid fa-calendar-week text-purple-400"></i> Recurring Day Promo Less
                         </div>
-                        <div class="text-[10px] text-gray-400">Bawas komisyon sa partikular na araw</div>
+                        <div class="text-[10px] text-gray-400">Bawas komisyon sa araw na ito</div>
                     </div>
                     <input type="checkbox" id="admin-recurring-discount-enabled" class="w-4 h-4 accent-purple-500 cursor-pointer">
                 </div>
@@ -3251,7 +3417,6 @@
                 </div>
             </div>
 
-            <!-- SPECIFIC CALENDAR DATES PROMO RULE -->
             <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex flex-col gap-2 shrink-0">
                 <div class="font-bold text-white text-xs flex items-center gap-1.5">
                     <i class="fa-solid fa-calendar-day text-emerald-400"></i> Specific Promo Date Rules
@@ -3262,7 +3427,7 @@
                         <input type="number" step="0.5" min="1" max="100" id="admin-special-promo-disc" placeholder="5" value="5" class="w-14 bg-inputBg text-xs text-center font-bold text-emerald-400 rounded-xl p-2 border border-gray-700 outline-none">
                         <span class="text-xs text-gray-400 font-bold">%</span>
                     </div>
-                    <button type="button" onclick="window.addSpecialPromoDate && window.addSpecialPromoDate()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-2 rounded-xl text-xs transition active:scale-95 shrink-0 shadow">
+                    <button type="button" onclick="window.addSpecialPromoDate && window.addSpecialPromoDate()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-2 rounded-xl text-xs transition active:scale-95 shrink-0 shadow cursor-pointer">
                         <i class="fa-solid fa-plus"></i>
                     </button>
                 </div>
@@ -3272,7 +3437,6 @@
                 </div>
             </div>
 
-            <!-- INDIVIDUAL RIDER OVERRIDES -->
             <div class="flex flex-col shrink-0 pb-2">
                 <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1.5 flex justify-between items-center">
                     <span>Individual Rider Overrides</span>
@@ -3285,13 +3449,13 @@
         </div>
 
         <div class="flex gap-2 pt-2 border-t border-gray-800 shrink-0">
-            <button onclick="window.closeAdminCommissionSettingsModal && window.closeAdminCommissionSettingsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-            <button onclick="window.saveAdminCommissionSettings && window.saveAdminCommissionSettings()" class="flex-1 bg-amber-600 hover:bg-amber-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Save Settings</button>
+            <button onclick="window.closeAdminCommissionSettingsModal && window.closeAdminCommissionSettingsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.saveAdminCommissionSettings && window.saveAdminCommissionSettings()" class="flex-1 bg-amber-600 hover:bg-amber-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Settings</button>
         </div>
     </div>
 </div>
 
-<!-- ADMIN AUTO END SHIFT SETTINGS MODAL (ADMIN ONLY) -->
+<!-- 7. ADMIN AUTO END SHIFT SETTINGS MODAL -->
 <div id="admin-auto-endshift-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-purple-500/60 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3.5 relative animate-in fade-in zoom-in duration-200">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2.5">
@@ -3304,7 +3468,7 @@
                     <p class="text-[9px] text-purple-400 font-mono">Automated Daily Shift Termination</p>
                 </div>
             </div>
-            <button onclick="window.closeAdminAutoEndShiftModal && window.closeAdminAutoEndShiftModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            <button onclick="window.closeAdminAutoEndShiftModal && window.closeAdminAutoEndShiftModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
         <div class="flex flex-col gap-3 text-xs">
@@ -3330,26 +3494,221 @@
         </div>
 
         <div class="flex gap-2 mt-1">
-            <button onclick="window.closeAdminAutoEndShiftModal && window.closeAdminAutoEndShiftModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-            <button onclick="window.saveAdminAutoEndShiftSettings && window.saveAdminAutoEndShiftSettings()" class="flex-1 bg-purple-600 hover:bg-purple-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Save Settings</button>
+            <button onclick="window.closeAdminAutoEndShiftModal && window.closeAdminAutoEndShiftModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.saveAdminAutoEndShiftSettings && window.saveAdminAutoEndShiftSettings()" class="flex-1 bg-purple-600 hover:bg-purple-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Settings</button>
         </div>
     </div>
 </div>
 
-<!-- ADMIN MANAGE RIDERS MODAL (ACCOUNT TYPE & PERMISSIONS) -->
+<!-- 8. ADMIN DIRECTORY CREDITS SETTINGS MODAL -->
+<div id="admin-directory-credits-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-amber-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3.5 relative animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2.5 shrink-0">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-amber-600/20 text-amber-400 flex items-center justify-center text-sm font-bold border border-amber-500/30">
+                    <i class="fa-solid fa-coins"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-white">Directory Credit Settings</h3>
+                    <p class="text-[9px] text-amber-400 font-mono">Configure Lookup Costs & Rewards</p>
+                </div>
+            </div>
+            <button onclick="window.closeAdminDirectoryCreditsModal && window.closeAdminDirectoryCreditsModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex flex-col gap-3 text-xs">
+            <label class="bg-darkBg p-3 rounded-2xl border border-amber-500/30 flex justify-between items-center cursor-pointer select-none">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-shield-halved text-amber-400"></i> Enable Credit-Based Directory
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Deduct credits when non-admin riders access directory</div>
+                </div>
+                <input type="checkbox" id="admin-credits-enabled-toggle" class="w-5 h-5 accent-amber-500 cursor-pointer shrink-0">
+            </label>
+
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-circle-minus text-red-400"></i> Cost Per Directory Open
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Deducted when opening Customers/Stores/Rates</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <input type="number" min="0" max="50" id="admin-credits-cost-input" value="1" class="w-16 bg-inputBg text-sm text-center font-mono font-black text-amber-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-amber-500">
+                    <span class="text-gray-400 text-xs font-bold">cred</span>
+                </div>
+            </div>
+
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-user-plus text-emerald-400"></i> Reward: Add Customer
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Credits awarded for registering a customer</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <input type="number" min="0" max="100" id="admin-credits-cust-reward-input" value="5" class="w-16 bg-inputBg text-sm text-center font-mono font-black text-emerald-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-emerald-500">
+                    <span class="text-gray-400 text-xs font-bold">+</span>
+                </div>
+            </div>
+
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-store text-orange-400"></i> Reward: Add Store
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Credits awarded for registering a store</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <input type="number" min="0" max="100" id="admin-credits-store-reward-input" value="10" class="w-16 bg-inputBg text-sm text-center font-mono font-black text-orange-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-orange-500">
+                    <span class="text-gray-400 text-xs font-bold">+</span>
+                </div>
+            </div>
+
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-gift text-purple-400"></i> Starting Balance (New Riders)
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Initial credits for new rider accounts</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <input type="number" min="0" max="500" id="admin-credits-start-input" value="20" class="w-16 bg-inputBg text-sm text-center font-mono font-black text-purple-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-purple-500">
+                    <span class="text-gray-400 text-xs font-bold">creds</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-2 mt-1 shrink-0">
+            <button onclick="window.closeAdminDirectoryCreditsModal && window.closeAdminDirectoryCreditsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.saveAdminDirectoryCreditsSettings && window.saveAdminDirectoryCreditsSettings()" class="flex-1 bg-amber-600 hover:bg-amber-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Settings</button>
+        </div>
+    </div>
+</div>
+
+<!-- 9. ADMIN EARLY SHIFT OUT PENALTY & PER-RIDER DUTY SETTINGS MODAL (EXPANDED TO MAX-W-MD) -->
+<div id="admin-early-shift-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-red-500/60 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3.5 relative animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2.5 shrink-0">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-red-600/20 text-red-400 flex items-center justify-center text-sm font-bold border border-red-500/30">
+                    <i class="fa-solid fa-user-clock"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-white">Early Shift Out Penalty & Custom Duty</h3>
+                    <p class="text-[9px] text-red-400 font-mono">Shift Thresholds, Daily Targets & 1-Day Passes</p>
+                </div>
+            </div>
+            <button onclick="window.closeAdminEarlyShiftModal && window.closeAdminEarlyShiftModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex flex-col gap-3 text-xs">
+            <label class="bg-darkBg p-3 rounded-2xl border border-red-500/30 flex justify-between items-center cursor-pointer select-none">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-shield-halved text-red-400"></i> Enable Shift Duration Check
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Surcharge commission for shifts under target duty hours</div>
+                </div>
+                <input type="checkbox" id="admin-early-shift-enabled" class="w-5 h-5 accent-red-500 cursor-pointer shrink-0">
+            </label>
+
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-stopwatch text-amber-400"></i> Global Default Shift Duration
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Applied to riders without custom hourly duty</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <input type="number" step="0.5" min="1" max="24" id="admin-early-shift-target-hours" value="8" class="w-16 bg-inputBg text-sm text-center font-mono font-black text-amber-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-amber-500">
+                    <span class="text-gray-400 text-xs font-bold">hrs</span>
+                </div>
+            </div>
+
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-arrow-trend-up text-red-400"></i> Surcharge per Missing Hour
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Commission added for each incomplete hour</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <input type="number" step="0.5" min="0.5" max="50" id="admin-early-shift-rate-input" value="2.5" class="w-16 bg-inputBg text-sm text-center font-mono font-black text-red-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-red-500">
+                    <span class="text-gray-400 text-xs font-bold">%/hr</span>
+                </div>
+            </div>
+
+            <label class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex justify-between items-center cursor-pointer select-none">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-lock text-purple-400"></i> Cap Maximum Penalty
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Prevent surcharge from exceeding a maximum limit</div>
+                </div>
+                <input type="checkbox" id="admin-early-shift-cap-toggle" class="w-5 h-5 accent-purple-500 cursor-pointer shrink-0">
+            </label>
+
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-hand text-purple-400"></i> Maximum Penalty Surcharge
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Ceiling surcharge applied to commission</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <input type="number" step="0.5" min="1" max="100" id="admin-early-shift-max-cap-input" value="10" class="w-16 bg-inputBg text-sm text-center font-mono font-black text-purple-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-purple-500">
+                    <span class="text-gray-400 text-xs font-bold">%</span>
+                </div>
+            </div>
+
+            <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between">
+                <div>
+                    <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-hourglass-half text-teal-400"></i> Grace Period Allowance
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">Tolerance window before penalty triggers</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <input type="number" min="0" max="60" id="admin-early-shift-grace-input" value="15" class="w-16 bg-inputBg text-sm text-center font-mono font-black text-teal-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-teal-500">
+                    <span class="text-gray-400 text-xs font-bold">mins</span>
+                </div>
+            </div>
+
+            <!-- INDIVIDUAL RIDER SHIFT TARGETS & DAILY PASSES SECTION -->
+            <div class="flex flex-col shrink-0 gap-1.5 pt-2 border-t border-gray-800">
+                <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex justify-between items-center">
+                    <span>Individual Rider Duty & Daily Passes</span>
+                    <span class="text-[9px] text-red-400 lowercase">blank = default hours</span>
+                </div>
+                <div id="admin-early-shift-riders-list" class="flex flex-col gap-2 min-h-[100px] max-h-48 overflow-y-auto pr-1">
+                    <div class="text-center text-gray-500 italic py-6 text-xs">Loading riders roster...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-2 mt-1 shrink-0">
+            <button onclick="window.closeAdminEarlyShiftModal && window.closeAdminEarlyShiftModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.saveAdminEarlyShiftSettings && window.saveAdminEarlyShiftSettings()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Penalty Rules</button>
+        </div>
+    </div>
+</div>
+
+<!-- 10. ADMIN MANAGE RIDERS MODAL -->
 <div id="admin-manage-riders-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
-    <div class="bg-cardBg border border-blue-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
+    <div class="bg-cardBg border border-blue-500/60 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2">
             <div class="flex items-center gap-2">
                 <i class="fa-solid fa-users-gear text-blue-400 text-lg"></i>
                 <h3 class="font-bold text-sm text-white">Rider Accounts & Permissions</h3>
             </div>
-            <button onclick="window.closeAdminManageRidersModal && window.closeAdminManageRidersModal()" class="text-gray-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
+            <button onclick="window.closeAdminManageRidersModal && window.closeAdminManageRidersModal()" class="text-gray-400 hover:text-white text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
         <div class="flex justify-between items-center bg-darkBg p-2.5 rounded-2xl border border-gray-800">
             <span class="text-xs text-gray-300 font-bold">Rider Accounts List</span>
-            <button onclick="window.openAddRiderModal && window.openAddRiderModal()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs transition active:scale-95 shadow flex items-center gap-1">
+            <button onclick="window.openAddRiderModal && window.openAddRiderModal()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs transition active:scale-95 shadow flex items-center gap-1 cursor-pointer">
                 <i class="fa-solid fa-user-plus"></i> + Add Rider
             </button>
         </div>
@@ -3358,18 +3717,55 @@
             <div class="text-center text-gray-500 italic py-8 text-xs">Loading rider accounts...</div>
         </div>
 
-        <button onclick="window.closeAdminManageRidersModal && window.closeAdminManageRidersModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
+        <button onclick="window.closeAdminManageRidersModal && window.closeAdminManageRidersModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
             Close
         </button>
     </div>
 </div>
 
-<!-- ADMIN ADD / EDIT RIDER MODAL WITH GENERATE ID FEATURE -->
+<!-- 11. ADMIN RIDER APP ACCESS CONTROLS MODAL -->
+<div id="admin-rider-app-access-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-purple-500/50 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3.5 max-h-[90vh] overflow-hidden relative animate-in fade-in zoom-in duration-200">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2.5">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-purple-600/20 text-purple-400 flex items-center justify-center text-sm font-bold border border-purple-500/30">
+                    <i class="fa-solid fa-cubes"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-white">Rider App Access Controls</h3>
+                    <p id="rider-app-access-target-subtitle" class="text-[9px] text-purple-400 font-mono">Select Authorized App Sections</p>
+                </div>
+            </div>
+            <button onclick="window.closeRiderAppAccessModal && window.closeRiderAppAccessModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 px-1">
+            <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Permitted Features</span>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="window.toggleAllRiderFeatures && window.toggleAllRiderFeatures(true)" class="text-[9px] text-emerald-400 font-bold hover:underline cursor-pointer">Allow All</button>
+                <span class="text-gray-600 text-[10px]">|</span>
+                <button type="button" onclick="window.toggleAllRiderFeatures && window.toggleAllRiderFeatures(false)" class="text-[9px] text-red-400 font-bold hover:underline cursor-pointer">Restrict All</button>
+            </div>
+        </div>
+
+        <div id="rider-app-access-list-container" class="flex flex-col gap-2 overflow-y-auto flex-1 pr-1 min-h-0">
+            <div class="text-center text-gray-500 italic py-6 text-xs">Loading feature list...</div>
+        </div>
+
+        <div class="pt-2 border-t border-gray-800">
+            <button type="button" onclick="window.closeRiderAppAccessModal && window.closeRiderAppAccessModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
+                Done
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 12. ADMIN ADD / EDIT RIDER MODAL -->
 <div id="admin-edit-rider-modal" class="hidden fixed inset-0 bg-black/90 backdrop-blur-md z-[999999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-blue-500/60 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3 relative animate-in fade-in zoom-in duration-200">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2">
             <h3 id="admin-edit-rider-title" class="font-bold text-xs text-white">Add New Rider Account</h3>
-            <button onclick="window.closeAdminEditRiderModal && window.closeAdminEditRiderModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            <button onclick="window.closeAdminEditRiderModal && window.closeAdminEditRiderModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
         <div class="flex flex-col gap-2.5 text-xs">
@@ -3377,7 +3773,7 @@
                 <label class="text-[10px] text-gray-400 font-bold uppercase">Rider Login ID *</label>
                 <div class="flex gap-2 mt-1">
                     <input type="text" id="edit-rider-id-input" autocomplete="off" placeholder="e.g. 1001 or Telegram ID" class="flex-1 bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold font-mono">
-                    <button type="button" onclick="window.generateRandomRiderId && window.generateRandomRiderId()" class="bg-emerald-600/30 hover:bg-emerald-600 border border-emerald-500/50 text-emerald-300 hover:text-white px-3 py-2 rounded-xl text-xs font-bold transition active:scale-95 flex items-center gap-1.5 shrink-0" title="Generate Random ID">
+                    <button type="button" onclick="window.generateRandomRiderId && window.generateRandomRiderId()" class="bg-emerald-600/30 hover:bg-emerald-600 border border-emerald-500/50 text-emerald-300 hover:text-white px-3 py-2 rounded-xl text-xs font-bold transition active:scale-95 flex items-center gap-1.5 shrink-0 cursor-pointer" title="Generate Random ID">
                         <i class="fa-solid fa-dice"></i> Generate
                     </button>
                 </div>
@@ -3399,13 +3795,13 @@
         </div>
 
         <div class="flex gap-2 mt-2">
-            <button onclick="window.closeAdminEditRiderModal && window.closeAdminEditRiderModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
-            <button onclick="window.submitSaveRiderAccount && window.submitSaveRiderAccount()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Save Account</button>
+            <button onclick="window.closeAdminEditRiderModal && window.closeAdminEditRiderModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.submitSaveRiderAccount && window.submitSaveRiderAccount()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Account</button>
         </div>
     </div>
 </div>
 
-<!-- FIND MY RIDERS MAP MODAL (ADMIN ONLY) -->
+<!-- 13. FIND MY RIDERS MAP MODAL -->
 <div id="find-riders-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-indigo-500/40 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3 max-h-[85vh]">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2">
@@ -3413,10 +3809,10 @@
                 <i class="fa-solid fa-map-location-dot text-indigo-400"></i> Find My Riders (Active)
             </h3>
             <div class="flex items-center gap-2">
-                <button onclick="window.refreshFindRidersMap && window.refreshFindRidersMap()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/50 px-2.5 py-1 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5" title="Refresh Rider Positions">
+                <button onclick="window.refreshFindRidersMap && window.refreshFindRidersMap()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/50 px-2.5 py-1 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5 cursor-pointer" title="Refresh Rider Positions">
                     <i id="find-riders-refresh-icon" class="fa-solid fa-rotate"></i> Refresh
                 </button>
-                <button onclick="window.closeFindRidersModal && window.closeFindRidersModal()" class="text-gray-400 hover:text-white text-sm ml-1"><i class="fa-solid fa-xmark"></i></button>
+                <button onclick="window.closeFindRidersModal && window.closeFindRidersModal()" class="text-gray-400 hover:text-white text-sm ml-1 cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
             </div>
         </div>
         
@@ -3427,13 +3823,13 @@
         <div id="find-riders-status-summary" class="text-xs text-gray-300 bg-darkBg p-2.5 rounded-xl border border-gray-800 flex justify-around text-center">
         </div>
 
-        <button onclick="window.closeFindRidersModal && window.closeFindRidersModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
+        <button onclick="window.closeFindRidersModal && window.closeFindRidersModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
             Close
         </button>
     </div>
 </div>
 
-<!-- SWAP APPROVAL MODAL -->
+<!-- 14. SWAP APPROVAL MODAL -->
 <div id="swap-approval-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-purple-500/80 p-6 rounded-3xl w-full max-w-xs shadow-2xl text-center flex flex-col gap-4 animate-bounce">
         <div class="w-14 h-14 bg-purple-500/20 text-purple-400 rounded-full flex items-center justify-center mx-auto text-2xl">
@@ -3444,17 +3840,17 @@
             <p id="swap-approval-msg" class="text-xs text-gray-200 mt-2 leading-relaxed"></p>
         </div>
         <div class="flex gap-2">
-            <button id="swap-decline-btn" onclick="window.declineSwapRequest && window.declineSwapRequest()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-red-400 font-bold py-3 rounded-xl text-xs transition active:scale-95">
+            <button id="swap-decline-btn" onclick="window.declineSwapRequest && window.declineSwapRequest()" class="flex-1 bg-gray-800 hover:bg-gray-700 text-red-400 font-bold py-3 rounded-xl text-xs transition active:scale-95 cursor-pointer">
                 Decline
             </button>
-            <button id="swap-accept-btn" onclick="window.acceptSwapRequest && window.acceptSwapRequest()" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95">
+            <button id="swap-accept-btn" onclick="window.acceptSwapRequest && window.acceptSwapRequest()" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95 cursor-pointer">
                 Accept Swap
             </button>
         </div>
     </div>
 </div>
 
-<!-- SWAP CUSTOMER MODAL -->
+<!-- 15. SWAP CUSTOMER MODAL -->
 <div id="swap-customer-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-purple-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
         <div class="flex justify-between items-center border-b border-gray-800 pb-2.5">
@@ -3467,21 +3863,20 @@
                     <p id="swap-modal-source-label" class="text-[10px] text-purple-300 font-mono"></p>
                 </div>
             </div>
-            <button onclick="window.closeSwapCustomerModal && window.closeSwapCustomerModal()" class="text-gray-400 hover:text-white text-base"><i class="fa-solid fa-xmark"></i></button>
+            <button onclick="window.closeSwapCustomerModal && window.closeSwapCustomerModal()" class="text-gray-400 hover:text-white text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
         <div id="swap-riders-accordion-list" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 min-h-0"></div>
 
-        <button onclick="window.closeSwapCustomerModal && window.closeSwapCustomerModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 mt-1">
+        <button onclick="window.closeSwapCustomerModal && window.closeSwapCustomerModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 mt-1 cursor-pointer">
             Cancel
         </button>
     </div>
 </div>
 
-<!-- RIDER DETAILS & INFORMATION MODAL -->
+<!-- 16. RIDER DETAILS & INFORMATION MODAL -->
 <div id="rider-info-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-gray-200 dark:border-gray-800 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
-        <!-- HEADER -->
         <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-2.5">
             <div class="flex items-center gap-2">
                 <div class="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center text-sm font-bold border border-blue-500/30">
@@ -3492,12 +3887,11 @@
                     <p class="text-[9px] text-gray-500 dark:text-gray-400 font-mono">Lokalex Roster Profile</p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeRiderInfoModal && window.closeRiderInfoModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-sm transition">
+            <button type="button" onclick="window.closeRiderInfoModal && window.closeRiderInfoModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-sm transition cursor-pointer">
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
 
-        <!-- PROFILE PREVIEW -->
         <div class="flex flex-col items-center justify-center py-3 bg-gray-50 dark:bg-black/30 rounded-2xl border border-gray-200 dark:border-gray-800/80 gap-1.5">
             <img id="rider-info-avatar" src="https://ui-avatars.com/api/?name=Rider&background=0284c7&color=ffffff&bold=true&size=128" alt="Rider Avatar" class="w-18 h-18 rounded-full object-cover border-3 border-emerald-500 shadow-md">
             <span id="rider-info-name" class="font-black text-sm text-gray-900 dark:text-white mt-1">Rider Name</span>
@@ -3507,9 +3901,7 @@
             </div>
         </div>
 
-        <!-- DETAILS LIST -->
         <div class="flex flex-col gap-2 text-xs">
-            <!-- CONTACT NUMBER -->
             <div class="flex justify-between items-center bg-darkBg/50 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800/80">
                 <span class="text-gray-500 dark:text-gray-400 font-bold flex items-center gap-1.5">
                     <i class="fa-solid fa-phone text-emerald-500"></i> Mobile Number:
@@ -3522,7 +3914,6 @@
                 </div>
             </div>
 
-            <!-- GCASH DETAILS -->
             <div class="bg-darkBg/50 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800/80 flex flex-col gap-1">
                 <div class="flex justify-between items-center">
                     <span class="text-gray-500 dark:text-gray-400 font-bold flex items-center gap-1.5">
@@ -3538,7 +3929,6 @@
                 </div>
             </div>
 
-            <!-- PERFORMANCE TODAY -->
             <div class="grid grid-cols-2 gap-2">
                 <div class="bg-darkBg/50 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800/80 flex flex-col gap-0.5">
                     <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold">Today's Gross:</span>
@@ -3550,7 +3940,20 @@
                 </div>
             </div>
 
-            <!-- DAY OFF -->
+            <div class="flex justify-between items-center bg-darkBg/50 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800/80">
+                <span class="text-gray-500 dark:text-gray-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-coins text-amber-500"></i> Directory Credits:
+                </span>
+                <span id="rider-info-credits" class="font-mono font-black text-amber-600 dark:text-amber-400">0 creds</span>
+            </div>
+
+            <div class="flex justify-between items-center bg-darkBg/50 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800/80">
+                <span class="text-gray-500 dark:text-gray-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-user-clock text-purple-400"></i> Shift Compliance:
+                </span>
+                <span id="rider-info-shift" class="font-bold text-xs text-right text-gray-900 dark:text-gray-200">Not Shifted In</span>
+            </div>
+
             <div class="flex justify-between items-center bg-darkBg/50 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800/80">
                 <span class="text-gray-500 dark:text-gray-400 font-bold flex items-center gap-1.5">
                     <i class="fa-solid fa-umbrella-beach text-teal-500"></i> Scheduled Day-Off:
@@ -3558,7 +3961,6 @@
                 <span id="rider-info-dayoff" class="font-bold text-teal-600 dark:text-teal-300">None Assigned</span>
             </div>
 
-            <!-- ACTIVE CATERING ORDERS (CONDITIONAL) -->
             <div id="rider-info-active-catering-wrapper" class="hidden bg-orange-500/10 border border-orange-500/30 p-2.5 rounded-xl flex flex-col gap-1">
                 <span class="text-[10px] text-orange-400 font-bold uppercase flex items-center gap-1">
                     <i class="fa-solid fa-motorcycle"></i> Active Catering Session:
@@ -3567,12 +3969,76 @@
             </div>
         </div>
 
-        <!-- CLOSE BUTTON -->
-        <button type="button" onclick="window.closeRiderInfoModal && window.closeRiderInfoModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95">
+        <button type="button" onclick="window.closeRiderInfoModal && window.closeRiderInfoModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
             Close
         </button>
     </div>
 </div>
+
+<!-- 17. ADMIN ADJUST RIDER CREDITS MODAL -->
+<div id="admin-adjust-rider-credits-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-amber-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3.5 relative animate-in fade-in zoom-in duration-200">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2.5">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-amber-600/20 text-amber-400 flex items-center justify-center text-sm font-bold border border-amber-500/30">
+                    <i class="fa-solid fa-coins"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-white">Adjust Directory Credits</h3>
+                    <p id="adjust-credits-rider-subtitle" class="text-[9px] text-amber-400 font-mono">Manage Rider Balance</p>
+                </div>
+            </div>
+            <button onclick="window.closeAdjustRiderCreditsModal && window.closeAdjustRiderCreditsModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="bg-darkBg p-3 rounded-2xl border border-amber-500/30 flex items-center justify-between text-xs">
+            <span class="text-gray-400 font-bold uppercase text-[10px]">Current Balance:</span>
+            <div class="flex items-baseline gap-1">
+                <span id="adjust-credits-current-display" class="text-2xl font-black font-mono text-amber-400">0</span>
+                <span class="text-[10px] text-gray-400 font-bold">creds</span>
+            </div>
+        </div>
+
+        <div class="flex flex-col gap-1.5 text-xs">
+            <span class="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider">Quick Actions</span>
+            <div class="grid grid-cols-4 gap-1.5">
+                <button type="button" onclick="window.applyRiderCreditDelta && window.applyRiderCreditDelta(5)" class="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 py-1.5 rounded-xl font-mono font-bold text-xs transition active:scale-95 cursor-pointer">+5</button>
+                <button type="button" onclick="window.applyRiderCreditDelta && window.applyRiderCreditDelta(10)" class="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 py-1.5 rounded-xl font-mono font-bold text-xs transition active:scale-95 cursor-pointer">+10</button>
+                <button type="button" onclick="window.applyRiderCreditDelta && window.applyRiderCreditDelta(20)" class="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 py-1.5 rounded-xl font-mono font-bold text-xs transition active:scale-95 cursor-pointer">+20</button>
+                <button type="button" onclick="window.applyRiderCreditDelta && window.applyRiderCreditDelta(50)" class="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 py-1.5 rounded-xl font-mono font-bold text-xs transition active:scale-95 cursor-pointer">+50</button>
+                <button type="button" onclick="window.applyRiderCreditDelta && window.applyRiderCreditDelta(-1)" class="bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/30 py-1.5 rounded-xl font-mono font-bold text-xs transition active:scale-95 cursor-pointer">-1</button>
+                <button type="button" onclick="window.applyRiderCreditDelta && window.applyRiderCreditDelta(-5)" class="bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/30 py-1.5 rounded-xl font-mono font-bold text-xs transition active:scale-95 cursor-pointer">-5</button>
+                <button type="button" onclick="window.applyRiderCreditDelta && window.applyRiderCreditDelta(-10)" class="bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/30 py-1.5 rounded-xl font-mono font-bold text-xs transition active:scale-95 cursor-pointer">-10</button>
+                <button type="button" onclick="window.resetRiderCreditBalance && window.resetRiderCreditBalance()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 py-1.5 rounded-xl font-mono font-bold text-[10px] transition active:scale-95 cursor-pointer">Reset 0</button>
+            </div>
+        </div>
+
+        <div class="flex flex-col gap-1.5 text-xs pt-1 border-t border-gray-800">
+            <span class="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider">Custom Adjustment</span>
+            <div class="flex gap-1.5">
+                <input type="number" id="adjust-credits-input-amount" min="1" max="999" value="10" placeholder="Amount" class="w-20 bg-inputBg text-xs text-center font-mono font-bold text-white rounded-xl p-2 border border-gray-700 outline-none focus:border-amber-500">
+                <button type="button" onclick="window.submitCustomCreditDelta && window.submitCustomCreditDelta(true)" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1 cursor-pointer">
+                    <i class="fa-solid fa-plus"></i> Add
+                </button>
+                <button type="button" onclick="window.submitCustomCreditDelta && window.submitCustomCreditDelta(false)" class="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-1 cursor-pointer">
+                    <i class="fa-solid fa-minus"></i> Deduct
+                </button>
+            </div>
+        </div>
+
+        <p class="text-[9.5px] text-gray-400 leading-tight">
+            <i class="fa-solid fa-circle-info text-amber-400 mr-0.5"></i>
+            Ang mga <strong>Admin</strong> ay palaging <strong>Exempt (Unlimited)</strong> at hindi kailanman nababawasan ng credits.
+        </p>
+
+        <div class="pt-2 border-t border-gray-800">
+            <button type="button" onclick="window.closeAdjustRiderCreditsModal && window.closeAdjustRiderCreditsModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
+                Done
+            </button>
+        </div>
+    </div>
+</div>
+<!-- REMARKS: ADMIN_CONTROLS_ALL_17_MODALS_INCLUDING_CUSTOM_DUTY_HOURS_AND_DAILY_PASSES_V1_COMPLETE -->
     <!-- src/partials/modals/system-dialogs.html -->
 <!-- SYSTEM DIALOGS MASTER FACADE -->
 <!-- src/partials/modals/system-dialogs/cater-modals.html -->

@@ -10,12 +10,16 @@
  * - High-Performance Memoized Gross Index: Pre-computes daily rider totals in a
  *   single pass ($O(N)$), enabling instant $O(1)$ lookups during queue sorting
  *   and rendering without secondary database ledgers.
+ * - Multi-Customer Comma Expansion: Automatically unbundles grouped multi-customer
+ *   deliveries (e.g., "Gerald, Krystin") so every customer is accounted for.
+ * - Resilient Date Fallback: Evaluates `rc.date`, `rc.completedDate`, `rc.timestamp`,
+ *   and `rc.createdAt` to guarantee admin and direct receipts are never discarded.
+ * - Dual-Key Deduplication: Keyed by `${txId}_${cleanCust}` to prevent multi-drop
+ *   runs from clobbering sibling records.
+ * - Intelligent Date Normalizer: Resolves ISO, Epoch, MM/DD/YYYY, and Philippine
+ *   DD/MM/YYYY formats seamlessly.
  * - Shift Crossover Date Resolver (`resolveOrderDate`): Intelligently binds
  *   late-night deliveries (started PM, finished AM) to the originating shift date.
- * - Deduplicated commission gross calculations across receipts and history.
- * - Dual-mode Available Queue Sorting (FIFO vs. Lowest Gross with cooldown).
- * - Real-time break duration calculator (getElapsedBreakTime).
- * - Catering session completion archiving and audio alarm synthesizers.
  * ============================================================================
  */
 
@@ -38,7 +42,6 @@ const LOGINS_CACHE_KEY = 'lokalex_logins_cache';
 const CATERED_CACHE_KEY = 'lokalex_catered_cache_v2';
 const RECEIPTS_CACHE_KEY = 'lokalex_receipts_cache_v2';
 
-// High-speed in-memory memoization cache for O(1) gross lookups
 let cachedDailyGrossMap = null;
 let lastGrossCacheTimestamp = 0;
 let cachedMergedCommissionList = null;
@@ -85,7 +88,6 @@ export function loadRosterCache() {
 
 loadRosterCache();
 
-// Philippine Standard Time (PST/PHT, UTC+8) Date Helper
 export function getPHTDate() {
     try {
         const phtString = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
@@ -120,7 +122,6 @@ export function getUserType() {
 
 export function isAdmin() {
     const t = getUserType();
-    
     if (t === 'rider') return false;
 
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
@@ -139,7 +140,6 @@ export function isTL() {
     return validTlTypes.includes(t);
 }
 
-// Check granular permissions for Team Leads
 export function hasTlPermission(permissionKey) {
     if (isAdmin()) return true;
     if (!isTL()) return false;
@@ -161,21 +161,6 @@ export function hasTlPermission(permissionKey) {
 
     if (myRecord && myRecord.tlAdminPower !== undefined) {
         return myRecord.tlAdminPower === true;
-    }
-
-    const cachedPermsStr = localStorage.getItem(`tl_permissions_${myId}`);
-    if (cachedPermsStr) {
-        try {
-            const parsed = JSON.parse(cachedPermsStr);
-            if (parsed && parsed[permissionKey] !== undefined) {
-                return parsed[permissionKey] === true;
-            }
-        } catch(e) {}
-    }
-
-    const cachedPower = localStorage.getItem(`tl_admin_power_${myId}`);
-    if (cachedPower !== null) {
-        return cachedPower === 'true';
     }
 
     return false;
@@ -201,11 +186,6 @@ export function canManageRoster() {
 
         if (myRecord && myRecord.tlAdminPower !== undefined) {
             return myRecord.tlAdminPower === true;
-        }
-
-        const cachedPower = localStorage.getItem(`tl_admin_power_${myId}`);
-        if (cachedPower !== null) {
-            return cachedPower === 'true';
         }
 
         return false;
@@ -256,12 +236,6 @@ export function parseTimeToMinutes(timeStr) {
     return hours * 60 + minutes;
 }
 
-/**
- * Resolves the operational shift date of an order.
- * If an order started before midnight (e.g. 11:30 PM) and finishes after midnight
- * (e.g. 12:22 AM), this ensures the order fee is attributed to yesterday's shift
- * date instead of bleeding into the new calendar day.
- */
 export function resolveOrderDate(startTimeStr, explicitDate = null) {
     if (explicitDate && String(explicitDate).trim() !== "") {
         return normalizeToDateStr(explicitDate);
@@ -276,8 +250,6 @@ export function resolveOrderDate(startTimeStr, explicitDate = null) {
     const now = getPHTDate();
     const currentMins = now.getHours() * 60 + now.getMinutes();
 
-    // If order started before midnight (e.g. >= 11:00 PM) and current time is early AM (< startMins),
-    // the order originated on the prior calendar shift day
     if (currentMins < startMins) {
         const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
         const yYear = yesterday.getFullYear();
@@ -304,38 +276,44 @@ export function calculateSplitDuration(startTimeStr, completedTimeStr, customerC
     const hrs = Math.floor(splitMins / 60);
     const mins = splitMins % 60;
 
-    let durationText = "";
     if (hrs > 0) {
-        durationText = `${hrs}h ${mins}m`;
-    } else {
-        durationText = `${mins}m`;
+        return count > 1 ? `${hrs}h ${mins}m (${totalMins}m ÷ ${count})` : `${hrs}h ${mins}m`;
     }
-
-    if (count > 1) {
-        durationText += ` (${totalMins}m ÷ ${count})`;
-    }
-
-    return durationText;
+    return count > 1 ? `${mins}m (${totalMins}m ÷ ${count})` : `${mins}m`;
 }
 
-// Canonical date normalizer to handle ISO, slash, dash, and timestamps consistently
 export function normalizeToDateStr(val) {
     if (!val) return "";
     const str = String(val).trim();
     
-    // YYYY-MM-DD
+    // 1. ISO Format: YYYY-MM-DD
     const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
     if (isoMatch) {
         return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
     }
 
-    // MM/DD/YYYY or M/D/YYYY
+    // 2. Slashed Dates: DD/MM/YYYY vs MM/DD/YYYY
     const slashMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
     if (slashMatch) {
-        return `${slashMatch[3]}-${slashMatch[1].padStart(2, '0')}-${slashMatch[2].padStart(2, '0')}`;
+        const p1 = parseInt(slashMatch[1], 10);
+        const p2 = parseInt(slashMatch[2], 10);
+        const year = slashMatch[3];
+
+        if (p1 > 12) {
+            return `${year}-${String(p2).padStart(2, '0')}-${String(p1).padStart(2, '0')}`;
+        }
+        if (p2 > 12) {
+            return `${year}-${String(p1).padStart(2, '0')}-${String(p2).padStart(2, '0')}`;
+        }
+        const now = getPHTDate();
+        const curMonth = now.getMonth() + 1;
+        if (p2 === curMonth && p1 !== curMonth) {
+            return `${year}-${String(p2).padStart(2, '0')}-${String(p1).padStart(2, '0')}`;
+        }
+        return `${year}-${String(p1).padStart(2, '0')}-${String(p2).padStart(2, '0')}`;
     }
 
-    // Epoch timestamp
+    // 3. Epoch Milliseconds / Seconds
     if (/^\d{10,13}$/.test(str)) {
         const d = new Date(Number(str));
         if (!isNaN(d.getTime())) {
@@ -346,6 +324,7 @@ export function normalizeToDateStr(val) {
         }
     }
 
+    // 4. Human strings (e.g., "Sep 27, 2026")
     const d = new Date(str);
     if (!isNaN(d.getTime())) {
         const y = d.getFullYear();
@@ -362,10 +341,20 @@ export function isSameDateStr(date1, date2) {
     const n1 = normalizeToDateStr(date1);
     const n2 = normalizeToDateStr(date2);
     if (n1 && n2 && n1 === n2) return true;
+
+    try {
+        const d1 = new Date(date1);
+        const d2 = new Date(date2);
+        if (!isNaN(d1.getTime()) && !isNaN(d2.getTime())) {
+            return d1.getFullYear() === d2.getFullYear() &&
+                   d1.getMonth() === d2.getMonth() &&
+                   d1.getDate() === d2.getDate();
+        }
+    } catch(e) {}
+
     return false;
 }
 
-// Robust fee parser that strips currency symbols and cleans strings
 export function parseItemGross(item) {
     if (!item) return 0;
 
@@ -414,7 +403,6 @@ export function isCustomerMatch(cust1 = "", cust2 = "") {
     return false;
 }
 
-// Flexible rider matcher to handle ID and full-name/first-name differences
 export function isRiderMatch(targetName = "", recordName = "", targetId = "", recordId = "") {
     const tId = (targetId || "").toString().trim().toLowerCase();
     const rId = (recordId || "").toString().trim().toLowerCase();
@@ -438,10 +426,14 @@ export function isRiderMatch(targetName = "", recordName = "", targetId = "", re
     return false;
 }
 
-// 100% FINANCIAL & ROSTER SOURCE OF TRUTH (Cached for fast iterative access)
-export function getMergedDeduplicatedCommissionList() {
+/**
+ * 100% FINANCIAL & ROSTER SOURCE OF TRUTH
+ * Expands multi-customer bundles and includes fallback timestamps to capture
+ * admin direct receipts.
+ */
+export function getMergedDeduplicatedCommissionList(forceFresh = false) {
     const now = Date.now();
-    if (cachedMergedCommissionList && (now - lastMergedListTimestamp < 500)) {
+    if (!forceFresh && cachedMergedCommissionList && cachedMergedCommissionList.length > 0 && (now - lastMergedListTimestamp < 500)) {
         return cachedMergedCommissionList;
     }
 
@@ -452,91 +444,112 @@ export function getMergedDeduplicatedCommissionList() {
 
     const mergedMap = new Map();
     const processedSignatures = new Set();
+    const todayStr = getLocalTodayStr();
 
     (globalState.globalDailyReceipts || []).forEach(rc => {
         if (!rc) return;
-        const cName = (rc.customerName || "Customer").trim();
-        if (!cName || cName.toLowerCase() === 'sample' || cName.toLowerCase() === 'test') return;
+        const rawCName = (rc.customerName || "Customer").trim();
+        if (!rawCName || rawCName.toLowerCase() === 'sample' || rawCName.toLowerCase() === 'test') return;
 
         const sTime = rc.cateringStartTime || rc.startTime || rc.time || "";
-        const rcDate = resolveOrderDate(sTime, rc.date || rc.completedDate);
+        const rawDate = rc.date || rc.completedDate || rc.timestamp || rc.createdAt || todayStr;
+        const rcDate = resolveOrderDate(sTime, rawDate);
         if (!rcDate) return;
 
         const rName = (rc.riderName || "Rider").trim();
         const cleanRider = rName.toLowerCase();
-        const cleanCust = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
         let cTime = rc.completedTime || "";
-        let cCount = parseInt(rc.customerCount) || 1;
         let dur = rc.duration || "";
-        const txId = (rc.transactionId || rc.id || `${cleanRider}_${cleanCust}_${rcDate}_${sTime}`).toString().trim();
+        const baseTxId = (rc.transactionId || rc.id || `${cleanRider}_${rcDate}_${sTime}`).toString().trim();
+        const totalGross = parseItemGross(rc);
 
-        const gross = parseItemGross(rc);
+        const subCustomers = rawCName.includes(',')
+            ? rawCName.split(',').map(s => s.trim()).filter(Boolean)
+            : [rawCName];
 
-        const sigKey = `${cleanRider}_${cleanCust}_${rcDate}_${sTime || 'default'}`;
-        processedSignatures.add(sigKey);
-        if (txId) processedSignatures.add(txId);
+        const count = subCustomers.length;
+        const splitGross = count > 1 ? (totalGross / count) : totalGross;
 
-        mergedMap.set(txId, {
-            transactionId: txId,
-            id: txId,
-            telegramId: (rc.telegramId || rc.riderId || "").toString().trim(),
-            riderName: rName,
-            customerName: cName,
-            date: rcDate,
-            time: sTime,
-            startTime: sTime,
-            completedTime: cTime,
-            customerCount: cCount,
-            duration: dur,
-            totalFees: gross,
-            isReceipt: true
+        subCustomers.forEach(cName => {
+            const cleanCust = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const uniqueKey = `${baseTxId}_${cleanCust}`;
+            const sigKey = `${cleanRider}_${cleanCust}_${rcDate}_${sTime || 'default'}`;
+
+            processedSignatures.add(sigKey);
+            processedSignatures.add(uniqueKey);
+
+            mergedMap.set(uniqueKey, {
+                transactionId: baseTxId,
+                id: baseTxId,
+                telegramId: (rc.telegramId || rc.riderId || "").toString().trim(),
+                riderName: rName,
+                customerName: cName,
+                date: rcDate,
+                time: sTime,
+                startTime: sTime,
+                completedTime: cTime,
+                customerCount: count,
+                duration: dur,
+                totalFees: splitGross,
+                isReceipt: true
+            });
         });
     });
 
     (globalState.globalCateredHistory || []).forEach(ch => {
         if (!ch) return;
-        const cName = (ch.customerName || "Customer").trim();
-        if (!cName || cName.toLowerCase() === 'sample' || cName.toLowerCase() === 'test') return;
+        const rawCName = (ch.customerName || "Customer").trim();
+        if (!rawCName || rawCName.toLowerCase() === 'sample' || rawCName.toLowerCase() === 'test') return;
 
         const sTime = ch.startTime || ch.cateringStartTime || ch.time || "";
-        const chDate = resolveOrderDate(sTime, ch.completedDate || ch.date);
+        const rawDate = ch.completedDate || ch.date || ch.timestamp || ch.createdAt || todayStr;
+        const chDate = resolveOrderDate(sTime, rawDate);
         if (!chDate) return;
 
         const rName = (ch.riderName || "Rider").trim();
         const cleanRider = rName.toLowerCase();
-        const cleanCust = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
         const cTime = ch.completedTime || "";
-        const cCount = parseInt(ch.customerCount) || 1;
         const dur = ch.duration || "";
-        const txId = (ch.transactionId || ch.id || `${cleanRider}_${cleanCust}_${chDate}_${sTime}`).toString().trim();
+        const baseTxId = (ch.transactionId || ch.id || `${cleanRider}_${chDate}_${sTime}`).toString().trim();
+        const totalGross = parseItemGross(ch);
 
-        const sigKey = `${cleanRider}_${cleanCust}_${chDate}_${sTime || 'default'}`;
-        if (processedSignatures.has(sigKey) || (txId && processedSignatures.has(txId))) {
-            if (txId && mergedMap.has(txId)) {
-                const existing = mergedMap.get(txId);
-                if (!existing.completedTime && cTime) existing.completedTime = cTime;
-                if (!existing.duration && dur) existing.duration = dur;
-                if (existing.customerCount === 1 && cCount > 1) existing.customerCount = cCount;
+        const subCustomers = rawCName.includes(',')
+            ? rawCName.split(',').map(s => s.trim()).filter(Boolean)
+            : [rawCName];
+
+        const count = parseInt(ch.customerCount) || subCustomers.length || 1;
+        const splitGross = subCustomers.length > 1 ? (totalGross / subCustomers.length) : totalGross;
+
+        subCustomers.forEach(cName => {
+            const cleanCust = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const uniqueKey = `${baseTxId}_${cleanCust}`;
+            const sigKey = `${cleanRider}_${cleanCust}_${chDate}_${sTime || 'default'}`;
+
+            if (processedSignatures.has(sigKey) || processedSignatures.has(uniqueKey)) {
+                if (mergedMap.has(uniqueKey)) {
+                    const existing = mergedMap.get(uniqueKey);
+                    if (!existing.completedTime && cTime) existing.completedTime = cTime;
+                    if (!existing.duration && dur) existing.duration = dur;
+                    if (existing.customerCount === 1 && count > 1) existing.customerCount = count;
+                }
+                return;
             }
-            return;
-        }
 
-        const gross = parseItemGross(ch);
-
-        mergedMap.set(txId, {
-            transactionId: txId,
-            id: txId,
-            telegramId: (ch.telegramId || ch.riderId || "").toString().trim(),
-            riderName: rName,
-            customerName: cName,
-            date: chDate,
-            time: sTime,
-            startTime: sTime,
-            completedTime: cTime,
-            customerCount: cCount,
-            duration: dur,
-            totalFees: gross,
-            isReceipt: false
+            mergedMap.set(uniqueKey, {
+                transactionId: baseTxId,
+                id: baseTxId,
+                telegramId: (ch.telegramId || ch.riderId || "").toString().trim(),
+                riderName: rName,
+                customerName: cName,
+                date: chDate,
+                time: sTime,
+                startTime: sTime,
+                completedTime: cTime,
+                customerCount: count,
+                duration: dur,
+                totalFees: splitGross,
+                isReceipt: false
+            });
         });
     });
 
@@ -545,10 +558,6 @@ export function getMergedDeduplicatedCommissionList() {
     return cachedMergedCommissionList;
 }
 
-/**
- * Single-Pass Index Builder:
- * Constructs a fast O(1) in-memory lookup table for today's gross totals.
- */
 function buildDailyGrossIndex() {
     const todayStr = getLocalTodayStr();
     const mergedList = getMergedDeduplicatedCommissionList();
@@ -586,10 +595,6 @@ function buildDailyGrossIndex() {
     return grossIndex;
 }
 
-/**
- * Returns today's gross earnings for a rider in O(1) time.
- * Evaluates the memoized single-pass index instead of running heavy O(N*M) scans.
- */
 export function getRiderTodayGross(riderName, telegramId) {
     const tId = (telegramId || "").toString().trim();
     const rName = (riderName || "").trim().toLowerCase();
@@ -609,7 +614,6 @@ export function getRiderTodayGross(riderName, telegramId) {
         return cachedDailyGrossMap.get(`name_${rName}`);
     }
 
-    // Fallback matching by name segment in memoized keys
     for (const [key, amount] of cachedDailyGrossMap.entries()) {
         if (key.startsWith('name_')) {
             const kName = key.replace('name_', '');
@@ -622,11 +626,6 @@ export function getRiderTodayGross(riderName, telegramId) {
     return 0;
 }
 
-/**
- * Universal Available Queue Sorter.
- * Evaluates active lineup settings (FIFO vs Lowest Gross Income) and applies
- * cooldown buffers to keep recent arrivals at the end of the line.
- */
 export function sortAvailableRiders(availableList) {
     const settings = getQueueLineupSettings();
     const mode = settings.mode || 'lowest_gross';
@@ -635,7 +634,6 @@ export function sortAvailableRiders(availableList) {
     const now = Date.now();
 
     if (mode === 'fifo') {
-        // Mode A: First-In First-Out (FIFO)
         return (availableList || []).slice().sort((a, b) => {
             const timeA = a.availableTimestamp || parseQueueTime(a.queueTime) || 0;
             const timeB = b.availableTimestamp || parseQueueTime(b.queueTime) || 0;
@@ -643,7 +641,6 @@ export function sortAvailableRiders(availableList) {
         });
     }
 
-    // Mode B: Lowest Gross Income First with Cooldown Buffer
     return (availableList || []).slice().sort((a, b) => {
         const timeA = a.availableTimestamp || parseQueueTime(a.queueTime) || 0;
         const timeB = b.availableTimestamp || parseQueueTime(b.queueTime) || 0;
@@ -651,16 +648,13 @@ export function sortAvailableRiders(availableList) {
         const isCoolingA = cooldownMs > 0 && timeA > 0 && (now - timeA < cooldownMs);
         const isCoolingB = cooldownMs > 0 && timeB > 0 && (now - timeB < cooldownMs);
 
-        // Cooldown isolation: Riders in cooldown are pinned to the bottom of the list
         if (!isCoolingA && isCoolingB) return -1;
         if (isCoolingA && !isCoolingB) return 1;
 
-        // If both riders are cooling down, sort by earliest availability
         if (isCoolingA && isCoolingB) {
             return timeA - timeB;
         }
 
-        // Active sorting pool: Prioritize lowest gross earnings in O(1)
         const grossA = getRiderTodayGross(a.riderName || a.name, a.telegramId);
         const grossB = getRiderTodayGross(b.riderName || b.name, b.telegramId);
 
@@ -672,13 +666,8 @@ export function sortAvailableRiders(availableList) {
     });
 }
 
-// Backward-compatible alias for existing imports
 export const sortAvailableRidersByGross = sortAvailableRiders;
 
-/**
- * Archives completed catering delivery sessions.
- * Preserves operational shift date across midnight crossovers.
- */
 export async function archiveRiderCateringIfNeeded(targetRecord) {
     if (!targetRecord || targetRecord.status !== 'Catering' || !targetRecord.customerName) return;
 
@@ -833,21 +822,12 @@ export function getElapsedCateringTime(startTimeStr) {
     const hrs = Math.floor(totalMins / 60);
     const mins = totalMins % 60;
 
-    let durationStr = "";
     if (hrs > 0) {
-        durationStr = `${hrs}h ${mins}m`;
-    } else {
-        durationStr = `${mins}m`;
+        return ` • ${firstTime} [${hrs}h ${mins}m]`;
     }
-
-    return ` • ${firstTime} [${durationStr}]`;
+    return ` • ${firstTime} [${mins}m]`;
 }
 
-/**
- * Calculates consumed break duration.
- * Evaluates breakTimestamp (epoch ms) or parses breakStartTime / lastUpdated.
- * Returns human-readable elapsed duration (e.g., "12m", "1h 05m").
- */
 export function getElapsedBreakTime(rider) {
     if (!rider) return "0m";
     const now = Date.now();
@@ -995,4 +975,4 @@ export function playLineBeep() {
 
 export const playLineAlarm = playLineBeep;
 
-// REMARKS: ROSTER_UTILS_HIGH_PERFORMANCE_MEMOIZED_ENGINE_V1_COMPLETE
+// REMARKS: ROSTER_UTILS_MULTI_CUSTOMER_COMMA_EXPANSION_V4_COMPLETE
