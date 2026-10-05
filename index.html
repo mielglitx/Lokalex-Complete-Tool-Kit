@@ -177,6 +177,36 @@
         <load src="src/partials/views/directory.html" />
         <load src="src/partials/views/form.html" />
         <load src="src/partials/views/map-picker.html" />
+
+        <!-- PUBLIC CUSTOMER RESTAURANT MENUS CATALOG VIEW -->
+        <section id="view-customer-menus" class="hidden flex flex-col gap-3 pt-2">
+            <!-- Header Banner -->
+            <div class="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 rounded-2xl p-4 text-white shadow-md flex items-center justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                    <h2 class="text-sm sm:text-base font-black flex items-center gap-2 truncate">
+                        <i class="fa-solid fa-book-open"></i> Restaurant Menus
+                    </h2>
+                    <p class="text-[11px] text-amber-100 mt-0.5 truncate">Stores with available photo menus</p>
+                </div>
+                <button type="button" onclick="window.shareCustomerMenuCatalogLink && window.shareCustomerMenuCatalogLink()" class="bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3 py-1.5 rounded-xl backdrop-blur-md transition active:scale-95 flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer">
+                    <i class="fa-solid fa-share-nodes"></i> Share
+                </button>
+            </div>
+
+            <!-- Search Bar -->
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
+                <input type="text" id="cust-menu-search-input" oninput="window.filterCustomerMenuCatalog && window.filterCustomerMenuCatalog(this.value)" placeholder="Search restaurant name..." class="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 text-xs text-gray-900 dark:text-white outline-none focus:border-amber-500 shadow-xs">
+            </div>
+
+            <!-- Catalog Feed Container -->
+            <div id="cust-menu-catalog-feed" class="flex flex-col gap-2.5">
+                <div class="text-center text-gray-500 italic py-16 text-xs flex flex-col items-center gap-2">
+                    <i class="fa-solid fa-spinner fa-spin text-amber-500 text-lg"></i>
+                    <span>Loading available menus...</span>
+                </div>
+            </div>
+        </section>
     </main>
 
     <!-- MODALS & OVERLAYS -->
@@ -222,3 +252,4 @@
     <script type="module" src="./src/main.js"></script>
 </body>
 </html>
+<!-- REMARKS: INDEX_HTML_PUBLIC_CUSTOMER_MENUS_VIEW_V1_COMPLETE -->

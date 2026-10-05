@@ -7,6 +7,9 @@
  * 
  * Description:
  * Client-side view routing engine with built-in runtime permission gates:
+ * - Public Route Whitelisting: Allows unrestricted access to `view-customer-menus`
+ *   and `view-customer-home` so customers opening shared menu links never trigger
+ *   authentication or rider permission blocks.
  * - Digital clock heartbeat and theme state management.
  * - Runtime View Guard: intercepts navigation attempts to restricted sections
  *   (e.g., Smart Cart, Directory, Commission) and displays an alert toast.
@@ -138,8 +141,10 @@ export function isFeatureAllowed(featureKey) {
 
 /**
  * Validates route navigation requests against the rider's permitted features.
+ * Unconditionally permits public customer routes.
  */
 export function isViewPermittedForCurrentRider(targetViewId) {
+    if (targetViewId === 'view-customer-menus' || targetViewId === 'view-customer-home') return true;
     if (targetViewId === 'view-cart') return isFeatureAllowed('cart');
     if (targetViewId === 'view-directory') return isFeatureAllowed('directory');
     if (targetViewId === 'view-commission') return isFeatureAllowed('commission');
@@ -233,6 +238,17 @@ export function syncHeaderAndWidgets(targetViewId) {
     }
 
     if (appHeader) appHeader.classList.remove('hidden');
+
+    // Customer Menu Public View
+    if (targetViewId === 'view-customer-menus') {
+        if (!appState.telegramId) {
+            if (userSection) userSection.classList.add('hidden');
+            if (networkPill) networkPill.classList.add('hidden');
+            if (floatingChat) floatingChat.classList.add('hidden');
+            return;
+        }
+    }
+
     if (userSection) userSection.classList.remove('hidden');
 
     const activeRole = localStorage.getItem('lokalex_active_role');
@@ -291,12 +307,15 @@ export function renderViewUI(targetViewId) {
     const headerSpacer = document.getElementById('header-spacer');
     const headerTitle = document.getElementById('header-title');
 
-    if (targetViewId === 'view-home' || targetViewId === 'view-login' || targetViewId === 'view-customer-home' || targetViewId === 'view-store-hub') {
+    if (targetViewId === 'view-home' || targetViewId === 'view-login' || targetViewId === 'view-customer-home' || targetViewId === 'view-store-hub' || targetViewId === 'view-customer-menus') {
         if (appHeader) appHeader.classList.remove('hidden');
         if (backBtn) {
-            if (targetViewId === 'view-store-hub' && appState.telegramId) {
+            if ((targetViewId === 'view-store-hub' || targetViewId === 'view-customer-menus') && appState.telegramId) {
                 backBtn.classList.remove('hidden');
                 if (headerSpacer) headerSpacer.classList.add('hidden');
+            } else if (targetViewId === 'view-customer-menus' && !appState.telegramId) {
+                backBtn.classList.add('hidden');
+                if (headerSpacer) headerSpacer.classList.remove('hidden');
             } else {
                 backBtn.classList.add('hidden');
                 if (headerSpacer) headerSpacer.classList.remove('hidden');
@@ -308,6 +327,8 @@ export function renderViewUI(targetViewId) {
             syncRiderAppDockPermissions();
         } else if (targetViewId === 'view-customer-home' && headerTitle) {
             headerTitle.innerHTML = `L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Customer Portal`;
+        } else if (targetViewId === 'view-customer-menus' && headerTitle) {
+            headerTitle.innerHTML = `<i class="fa-solid fa-book-open text-amber-500 mr-1.5"></i> Restaurant Menus`;
         } else if (targetViewId === 'view-store-hub' && headerTitle) {
             const storeName = appState.merchantStoreName || localStorage.getItem('lokalex_merchant_store_name') || "Merchant Store";
             headerTitle.innerHTML = `<i class="fa-solid fa-shop text-orange-400 mr-1.5"></i> ${storeName}`;
@@ -333,7 +354,7 @@ export function goBack() {
         return;
     }
 
-    if (currentView === 'view-store-hub' && appState.telegramId) {
+    if ((currentView === 'view-store-hub' || currentView === 'view-customer-menus') && appState.telegramId) {
         switchView('view-home', true);
         return;
     }
@@ -356,7 +377,7 @@ export function goBack() {
 window.addEventListener('popstate', function(event) {
     const currentView = document.querySelector('main > section:not(.hidden)')?.id;
 
-    if (currentView === 'view-home' || currentView === 'view-login' || currentView === 'view-customer-home' || currentView === 'view-store-hub') {
+    if (currentView === 'view-home' || currentView === 'view-login' || currentView === 'view-customer-home' || currentView === 'view-store-hub' || currentView === 'view-customer-menus') {
         backPressCount++;
         if (backPressCount < 3) {
             history.pushState({ view: currentView }, '', '#' + currentView);
@@ -408,4 +429,5 @@ if (typeof window !== 'undefined') {
     window.isViewPermittedForCurrentRider = isViewPermittedForCurrentRider;
     window.syncRiderAppDockPermissions = syncRiderAppDockPermissions;
 }
-// REMARKS: ROUTER_APP_ACCESS_GUARD_AND_DOCK_SYNC_V1_COMPLETE
+
+// REMARKS: ROUTER_PUBLIC_CUSTOMER_MENUS_ACCESS_V2_COMPLETE

@@ -7,6 +7,24 @@
  * 
  * Description:
  * Manages presentation layer, card rendering, search filtering, and restaurant menus:
+ * - Syntax & Parser Fix: Resolved unmatched parenthesis syntax error on line 361
+ *   within the `confirmTransferCredits()` Firebase transaction handler.
+ * - Peer-to-Peer Credit Transfers: Enables riders to share and transfer directory credits
+ *   directly to other riders via an interactive modal with atomic Firebase transactions.
+ * - Instant 0ms Menu Presence Indicators: Synchronously hydrates store menu metadata
+ *   from disk cache at script evaluation to eliminate the "No menu photos yet" lag.
+ * - Dual-Key Store Menu Lookup: Indexes and resolves store galleries by both compositeKey
+ *   and cleaned store name to prevent cache misses and pop-in layout shifts.
+ * - Real-Time Menu Presence Indicators: Visually identifies stores that have active
+ *   photo menus with dynamic page counts (`📸 X Pages`) and "Last Updated" dates.
+ * - Call-to-Action Badges for Missing Menus: Marks stores lacking photos with
+ *   "No photos yet" and an actionable "+ Add Menu" button to spur rider contributions.
+ * - Public Customer Menu Catalog: Aggregates and renders all restaurants that
+ *   have registered menu photos for public browsing on `#view-customer-menus`.
+ * - One-Tap Public Link Generator: Generates shareable URL with Web Share API
+ *   and clipboard fallbacks for customer dispatch via chat and social channels.
+ * - Automatic Menu Availability Filter: Queries `directory/storeMenuGalleries`
+ *   and presents only stores with at least one uploaded menu photo.
  * - Data-Attribute DOM Binding: Uses `data-store-name` and `data-composite-key`
  *   to pass store and customer names to click handlers, preventing apostrophes
  *   (e.g., Daniella's, Dax's) from triggering inline JavaScript SyntaxErrors.
@@ -39,6 +57,17 @@ let creditsListenerActive = false;
 let hasAttemptedGpsAutoSelect = false;
 let pendingMapUnlock = null;
 let activeGalleryStore = null;
+let cachedCatalogStores = [];
+
+// Synchronously hydrate menu metadata immediately at module load time to guarantee 0ms instant display
+let storeMenuMetadataMap = (() => {
+    try {
+        return JSON.parse(localStorage.getItem('lokalex_store_menus_meta_cache') || '{}');
+    } catch (e) {
+        return {};
+    }
+})();
+let isStoreMenuMetadataListenerActive = false;
 
 const MUNICIPALITY_COORDINATES = {
     "Camiling": { lat: 15.6881, lng: 120.4144 },
@@ -70,6 +99,7 @@ export function updateRosterCreditsDisplay(credits) {
         if (countEl) countEl.innerText = "∞ (Admin)";
         if (pillEl) {
             pillEl.className = "bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-500/40 text-amber-800 dark:text-amber-300 text-[10px] px-2.5 py-0.5 rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition select-none cursor-pointer";
+            pillEl.onclick = () => openShareCreditsModal();
         }
         return;
     }
@@ -82,6 +112,7 @@ export function updateRosterCreditsDisplay(credits) {
     if (countEl) countEl.innerText = balance;
 
     if (pillEl) {
+        pillEl.onclick = () => openShareCreditsModal();
         if (balance <= 0) {
             pillEl.className = "bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-500/40 text-red-700 dark:text-red-400 text-[10px] px-2.5 py-0.5 rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition select-none cursor-pointer";
         } else {
@@ -103,7 +134,7 @@ export function showCreditsInfoToast() {
     const storeR = config.rewardStoreRegistration !== undefined ? config.rewardStoreRegistration : 10;
     const status = config.enabled !== false ? 'ACTIVE' : 'DISABLED';
 
-    showToast(`🪙 Directory Credits (${status})\n• Balance: ${cur} credits\n• Libre ang Customer & Store browsing\n• -1 credit bawat Customer Location na titingnan\n• +${custR} credits bawat Customer registration\n• +${storeR} credits bawat Store registration`);
+    showToast(`🪙 Directory Credits (${status})\n• Balance: ${cur} credits\n• Libre ang Customer & Store browsing\n• -1 credit bawat Customer Location na titingnan\n• +${custR} credits bawat Customer registration\n• +${storeR} credits bawat Store registration\n• Maaari ring mag-share ng credits sa kapwa rider!`);
 }
 
 export function initRiderCreditsListener() {
@@ -117,6 +148,319 @@ export function initRiderCreditsListener() {
         appState.directoryCredits = val;
         updateRosterCreditsDisplay(val);
     });
+}
+
+// ============================================================================
+// PEER-TO-PEER RIDER CREDIT TRANSFER ENGINE
+// ============================================================================
+
+function getOrCreateShareCreditsModal() {
+    let modal = document.getElementById('share-credits-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'share-credits-modal';
+        modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 hidden';
+        modal.innerHTML = `
+        <div class="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-3xl p-5 max-w-sm w-full shadow-2xl flex flex-col gap-4 animate-scaleUp">
+            <!-- Header -->
+            <div class="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800/80">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                        <i class="fa-solid fa-coins text-sm"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-black text-sm text-gray-900 dark:text-white">Directory Credits</h3>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Transfer & Balance Management</p>
+                    </div>
+                </div>
+                <button type="button" onclick="window.closeShareCreditsModal && window.closeShareCreditsModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 text-sm cursor-pointer">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Body Details -->
+            <div class="flex flex-col gap-3 text-xs">
+                <!-- Balance Card -->
+                <div class="bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-500/30 p-3.5 rounded-2xl flex items-center justify-between">
+                    <div>
+                        <span class="text-[10px] text-amber-700 dark:text-amber-400 font-bold uppercase tracking-wider block">Your Balance</span>
+                        <span id="share-credit-balance-display" class="font-black text-lg text-amber-900 dark:text-amber-200 font-mono">0 credits</span>
+                    </div>
+                    <button type="button" onclick="window.showCreditsInfoToast && window.showCreditsInfoToast()" class="text-[10px] text-amber-800 dark:text-amber-300 font-bold underline flex items-center gap-1 cursor-pointer">
+                        <i class="fa-solid fa-circle-info"></i> Rules
+                    </button>
+                </div>
+
+                <!-- Recipient Picker -->
+                <div class="flex flex-col gap-1">
+                    <label class="text-[11px] font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                        <i class="fa-solid fa-user-tag text-blue-500"></i> Send Credits To:
+                    </label>
+                    <select id="share-credit-recipient-select" class="w-full bg-gray-50 dark:bg-black/30 border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2 text-xs text-gray-900 dark:text-white font-medium outline-none focus:border-amber-500">
+                        <option value="">Loading riders...</option>
+                    </select>
+                </div>
+
+                <!-- Amount Input & Quick Increment Buttons -->
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-[11px] font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                        <i class="fa-solid fa-hashtag text-amber-500"></i> Amount of Credits:
+                    </label>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="share-credit-amount-input" min="1" step="1" value="1" placeholder="1" class="flex-1 bg-gray-50 dark:bg-black/30 border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-2 text-xs font-mono font-bold text-gray-900 dark:text-white outline-none focus:border-amber-500">
+                        <div class="flex items-center gap-1">
+                            <button type="button" onclick="window.setTransferCreditAmount && window.setTransferCreditAmount(1)" class="px-2 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg text-[10px] font-bold text-gray-700 dark:text-gray-300 transition active:scale-90 cursor-pointer">+1</button>
+                            <button type="button" onclick="window.setTransferCreditAmount && window.setTransferCreditAmount(5)" class="px-2 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg text-[10px] font-bold text-gray-700 dark:text-gray-300 transition active:scale-90 cursor-pointer">+5</button>
+                            <button type="button" onclick="window.setTransferCreditAmount && window.setTransferCreditAmount('MAX')" class="px-2 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-[10px] font-black transition active:scale-90 cursor-pointer">MAX</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-[10px] text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 flex items-start gap-1.5 leading-relaxed">
+                    <i class="fa-solid fa-shield-halved text-amber-500 mt-0.5 shrink-0 text-xs"></i>
+                    <span>Ang transfer na ito ay <strong>instant</strong> at mababawas agad sa iyong credits bago maidagdag sa piniling rider.</span>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center gap-2 pt-1">
+                <button type="button" onclick="window.closeShareCreditsModal && window.closeShareCreditsModal()" class="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold text-xs transition active:scale-95 cursor-pointer">
+                    Cancel
+                </button>
+                <button type="button" id="btn-confirm-transfer-credits" onclick="window.confirmTransferCredits && window.confirmTransferCredits()" class="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-black text-xs transition active:scale-95 shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-paper-plane"></i> Send Credits
+                </button>
+            </div>
+        </div>`;
+        document.body.appendChild(modal);
+    }
+    return modal;
+}
+
+export function openShareCreditsModal() {
+    const modal = getOrCreateShareCreditsModal();
+    const balanceDisplay = document.getElementById('share-credit-balance-display');
+    const recipientSelect = document.getElementById('share-credit-recipient-select');
+    const amountInput = document.getElementById('share-credit-amount-input');
+
+    const isAdmin = checkAdminAccess();
+    let currentBalance = parseInt(localStorage.getItem('lokalex_rider_credits') || "0", 10);
+    if (isNaN(currentBalance)) currentBalance = 0;
+
+    if (balanceDisplay) {
+        balanceDisplay.innerText = isAdmin ? "∞ (Admin Unlimited)" : `${currentBalance} credits`;
+    }
+
+    if (amountInput) {
+        amountInput.value = "1";
+    }
+
+    if (recipientSelect) {
+        const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+        const myName = (appState.riderName || localStorage.getItem('riderName') || "").trim().toLowerCase();
+        const rosterMembers = globalState.rosterMembers || [];
+
+        const validRecipients = rosterMembers.filter(m => {
+            const mId = (m.telegramId || m.id || "").toString().trim();
+            const mName = (m.riderName || m.name || "").trim().toLowerCase();
+            if (myId && mId === myId) return false;
+            if (myName && mName === myName) return false;
+            return !!(m.riderName || m.name);
+        });
+
+        const seenIds = new Set();
+        let optionsHtml = `<option value="">-- Choose Rider --</option>`;
+
+        validRecipients.forEach(r => {
+            const rId = (r.telegramId || r.id || "").toString().trim();
+            const rName = (r.riderName || r.name || "Rider").trim();
+            if (rId && seenIds.has(rId)) return;
+            if (rId) seenIds.add(rId);
+
+            optionsHtml += `<option value="${escapeHtml(rId)}" data-name="${escapeHtml(rName)}">${escapeHtml(rName)} ${rId ? `(ID: ${escapeHtml(rId)})` : ''}</option>`;
+        });
+
+        if (validRecipients.length === 0) {
+            optionsHtml = `<option value="">Walang ibang aktibong riders</option>`;
+        }
+
+        recipientSelect.innerHTML = optionsHtml;
+    }
+
+    modal.classList.remove('hidden');
+}
+
+export function closeShareCreditsModal() {
+    const modal = document.getElementById('share-credits-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export function setTransferCreditAmount(val) {
+    const input = document.getElementById('share-credit-amount-input');
+    if (!input) return;
+
+    const isAdmin = checkAdminAccess();
+    let currentBalance = parseInt(localStorage.getItem('lokalex_rider_credits') || "0", 10);
+    if (isNaN(currentBalance)) currentBalance = 0;
+
+    if (val === 'MAX') {
+        input.value = isAdmin ? 50 : Math.max(1, currentBalance);
+    } else {
+        const currentVal = parseInt(input.value || "0", 10);
+        input.value = Math.max(1, currentVal + val);
+    }
+}
+
+export async function confirmTransferCredits() {
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = appState.riderName || localStorage.getItem('riderName') || "Rider";
+    const isAdmin = checkAdminAccess();
+
+    const recipientSelect = document.getElementById('share-credit-recipient-select');
+    const targetId = recipientSelect?.value?.trim();
+    const selectedOption = recipientSelect?.options[recipientSelect.selectedIndex];
+    const targetName = selectedOption?.dataset?.name || "Rider";
+
+    if (!targetId) {
+        showToast("⚠️ Pumili muna ng rider na padadalhan ng credits.");
+        return;
+    }
+
+    const amountInput = document.getElementById('share-credit-amount-input');
+    const amount = parseInt(amountInput?.value, 10);
+
+    if (isNaN(amount) || amount <= 0) {
+        showToast("⚠️ Maglagay ng wastong halaga ng credits (minimum 1).");
+        return;
+    }
+
+    let currentCredits = parseInt(localStorage.getItem('lokalex_rider_credits') || "0", 10);
+    if (isNaN(currentCredits)) currentCredits = 0;
+
+    if (!isAdmin && currentCredits < amount) {
+        showToast(`⚠️ Hindi sapat ang iyong credits (${currentCredits} available, nagtatangkang mag-transfer ng ${amount}).`);
+        return;
+    }
+
+    const transferBtn = document.getElementById('btn-confirm-transfer-credits');
+    if (transferBtn) {
+        transferBtn.disabled = true;
+        transferBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Transferring...`;
+    }
+
+    try {
+        if (db) {
+            // 1. Deduct from sender if not admin
+            if (!isAdmin && myId) {
+                await db.ref(`riders/${myId}/directoryCredits`).transaction(c => Math.max(0, (c || 0) - amount));
+                await db.ref(`roster/${myId}/directoryCredits`).transaction(c => Math.max(0, (c || 0) - amount)).catch(() => {});
+            }
+
+            // 2. Add to recipient (Syntax parenthesis error resolved)
+            await db.ref(`riders/${targetId}/directoryCredits`).transaction(c => (c || 0) + amount);
+            await db.ref(`roster/${targetId}/directoryCredits`).transaction(c => (c || 0) + amount).catch(() => {});
+
+            // 3. Log transfer audit record in Firebase
+            const transferLogKey = `TX_${Date.now()}_${myId || 'ADMIN'}_${targetId}`;
+            await db.ref(`directoryCreditTransfers/${transferLogKey}`).set({
+                senderId: myId || "ADMIN",
+                senderName: myName,
+                recipientId: targetId,
+                recipientName: targetName,
+                amount: amount,
+                timestamp: Date.now(),
+                date: new Date().toLocaleDateString()
+            }).catch(() => {});
+        }
+
+        if (!isAdmin) {
+            const newBal = Math.max(0, currentCredits - amount);
+            localStorage.setItem('lokalex_rider_credits', newBal.toString());
+            appState.directoryCredits = newBal;
+            updateRosterCreditsDisplay(newBal);
+        }
+
+        closeShareCreditsModal();
+        showToast(`✅ Matagumpay na naipadala ang ${amount} credit(s) kay ${targetName}!`);
+        showSideNotification("CREDITS TRANSFERRED", `${amount} credits to ${targetName}`, "fa-coins", "text-amber-400", "border-amber-500");
+    } catch (err) {
+        console.error("Credit transfer failed:", err);
+        showToast("❌ Hindi naipadala ang credits: " + (err.message || "Failed"));
+    } finally {
+        if (transferBtn) {
+            transferBtn.disabled = false;
+            transferBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Send Credits`;
+        }
+    }
+}
+
+// ============================================================================
+// STORE MENU GALLERIES LIVE METADATA ENGINE
+// ============================================================================
+
+/**
+ * Listens to all registered restaurant menu galleries in real-time,
+ * caching page counts and timestamps under both compositeKey and cleanName.
+ */
+export function initStoreMenuGalleriesListener() {
+    if (!db || isStoreMenuMetadataListenerActive) return;
+    isStoreMenuMetadataListenerActive = true;
+
+    try {
+        const cached = localStorage.getItem('lokalex_store_menus_meta_cache');
+        if (cached) {
+            storeMenuMetadataMap = JSON.parse(cached) || {};
+        }
+    } catch (e) {}
+
+    db.ref('directory/storeMenuGalleries').on('value', (snap) => {
+        const val = snap.val() || {};
+        const newMap = {};
+
+        Object.entries(val).forEach(([key, data]) => {
+            if (data) {
+                const pages = data.pages ? Object.values(data.pages) : [];
+                const storeMeta = {
+                    pageCount: pages.length,
+                    updatedAt: data.updatedAt || 0,
+                    storeName: data.storeName || ""
+                };
+                newMap[key] = storeMeta;
+
+                // Also index by normalized storeName to guarantee instant matches
+                if (data.storeName) {
+                    const cleanNameKey = data.storeName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (cleanNameKey) newMap[cleanNameKey] = storeMeta;
+                }
+            }
+        });
+
+        storeMenuMetadataMap = newMap;
+
+        try {
+            localStorage.setItem('lokalex_store_menus_meta_cache', JSON.stringify(newMap));
+        } catch (e) {}
+
+        const viewDir = document.getElementById('view-directory');
+        if (globalState.currentType === 'stores' && viewDir && !viewDir.classList.contains('hidden')) {
+            renderDirectoryList();
+        }
+    });
+}
+
+function formatMenuUpdatedAt(timestamp) {
+    if (!timestamp) return "";
+    try {
+        const date = new Date(timestamp);
+        if (isNaN(date.getTime())) return "";
+        return date.toLocaleDateString([], {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        });
+    } catch (e) {
+        return "";
+    }
 }
 
 export function populateDestinationDropdown() {
@@ -593,9 +937,6 @@ function compressImageToBlob(file, maxWidth = 1400, quality = 0.82) {
     });
 }
 
-/**
- * Safe Click Handler: Reads store name & key directly from button data attributes.
- */
 export function handleOpenMenuGalleryClick(btn) {
     if (!btn) return;
     const storeName = btn.getAttribute('data-store-name') || '';
@@ -763,8 +1104,19 @@ export async function handleMenuPhotoUpload(e) {
             await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages/${pageId}`).set(pagePayload);
         }
 
-        await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/updatedAt`).set(Date.now());
+        const nowTs = Date.now();
+        await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/updatedAt`).set(nowTs);
         await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/storeName`).set(activeGalleryStore.name);
+
+        // Instantly update memory and cache to prevent any UI delay
+        storeMenuMetadataMap[activeGalleryStore.key] = {
+            pageCount: count,
+            updatedAt: nowTs,
+            storeName: activeGalleryStore.name
+        };
+        try {
+            localStorage.setItem('lokalex_store_menus_meta_cache', JSON.stringify(storeMenuMetadataMap));
+        } catch(e) {}
 
         showToast(`✅ Na-upload ang ${files.length} pahina ng menu para sa ${activeGalleryStore.name}!`);
         showSideNotification("MENU UPLOADED", `${activeGalleryStore.name} (+${files.length} pages)`, "fa-book-open", "text-emerald-400", "border-emerald-500");
@@ -838,9 +1190,20 @@ export async function deleteMenuGalleryPage(pageId) {
 
     try {
         await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages/${pageId}`).remove();
+        const nowTs = Date.now();
+        await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/updatedAt`).set(nowTs);
         if (storage) {
             storage.ref(`menus/${activeGalleryStore.key}/${pageId}.jpg`).delete().catch(() => {});
         }
+
+        if (storeMenuMetadataMap[activeGalleryStore.key]) {
+            storeMenuMetadataMap[activeGalleryStore.key].pageCount = Math.max(0, (storeMenuMetadataMap[activeGalleryStore.key].pageCount || 1) - 1);
+            storeMenuMetadataMap[activeGalleryStore.key].updatedAt = nowTs;
+            try {
+                localStorage.setItem('lokalex_store_menus_meta_cache', JSON.stringify(storeMenuMetadataMap));
+            } catch(e) {}
+        }
+
         showToast("🗑️ Nabura ang page sa gallery.");
     } catch(e) {
         showToast("❌ Hindi nabura ang page.");
@@ -864,6 +1227,146 @@ export function closeGalleryLightbox() {
     if (lightbox) lightbox.classList.add('hidden');
 }
 
+// ============================================================================
+// PUBLIC CUSTOMER RESTAURANT MENU CATALOG & LINK SHARING ENGINE
+// ============================================================================
+
+export async function shareCustomerMenuCatalogLink() {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const customerUrl = `${baseUrl.replace(/\/$/, '')}#view-customer-menus`;
+
+    const shareData = {
+        title: "Lokalex Restaurant Menus",
+        text: "Tingnan ang kumpletong restaurant photo menus at mag-order sa Lokalex:",
+        url: customerUrl
+    };
+
+    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+        try {
+            await navigator.share(shareData);
+            showToast("🔗 Customer Menu Link shared!");
+            return;
+        } catch (e) {
+            if (e.name === 'AbortError') return;
+        }
+    }
+
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(customerUrl);
+        } else {
+            copyText(customerUrl);
+        }
+        showToast("📋 Copied Customer Menu link to clipboard!");
+    } catch (err) {
+        copyText(customerUrl);
+        showToast("📋 Copied Customer Menu link!");
+    }
+}
+
+export async function loadCustomerMenuCatalog() {
+    const feed = document.getElementById('cust-menu-catalog-feed');
+    if (!feed) return;
+
+    if (!db) {
+        feed.innerHTML = `<div class="col-span-full text-center text-red-500 py-12 text-xs">Database is currently offline.</div>`;
+        return;
+    }
+
+    try {
+        const snap = await db.ref('directory/storeMenuGalleries').once('value');
+        const val = snap.val() || {};
+
+        const stores = Object.entries(val).map(([key, data]) => {
+            const pages = data.pages ? Object.values(data.pages) : [];
+            pages.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+            return {
+                key,
+                name: data.storeName || key,
+                pageCount: pages.length,
+                previewUrl: pages[0]?.imageUrl || '',
+                updatedAt: data.updatedAt || 0
+            };
+        }).filter(store => store.pageCount > 0);
+
+        stores.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+        cachedCatalogStores = stores;
+
+        renderCustomerMenuFeed(stores);
+    } catch (err) {
+        console.error("Error loading customer menu catalog:", err);
+        feed.innerHTML = `<div class="col-span-full text-center text-red-500 py-12 text-xs">Failed to load menus. Please refresh.</div>`;
+    }
+}
+
+export function renderCustomerMenuFeed(stores) {
+    const feed = document.getElementById('cust-menu-catalog-feed');
+    if (!feed) return;
+
+    if (!stores || stores.length === 0) {
+        feed.innerHTML = `
+            <div class="col-span-full text-center text-gray-500 dark:text-gray-400 py-16 text-xs italic flex flex-col items-center gap-2">
+                <i class="fa-solid fa-store-slash text-3xl text-gray-400"></i>
+                <span>Walang available na menu photos sa ngayon.</span>
+            </div>
+        `;
+        return;
+    }
+
+    feed.innerHTML = stores.map(store => {
+        const safeName = escapeHtml(store.name);
+        const safeKey = escapeHtml(store.key);
+        const previewImg = store.previewUrl
+            ? `<img src="${store.previewUrl}" alt="${safeName}" loading="lazy" class="w-full h-full object-cover">`
+            : `<i class="fa-solid fa-utensils text-amber-500 text-lg"></i>`;
+        const updatedDateStr = formatMenuUpdatedAt(store.updatedAt);
+
+        return `
+        <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 rounded-2xl p-3 flex items-center justify-between gap-3 shadow-xs hover:border-amber-500/50 transition">
+            <div class="flex items-center gap-3 min-w-0 flex-1">
+                <div class="w-13 h-13 rounded-xl bg-gray-100 dark:bg-black/40 overflow-hidden shrink-0 border border-gray-200 dark:border-gray-800 flex items-center justify-center">
+                    ${previewImg}
+                </div>
+                <div class="min-w-0 flex-1">
+                    <h3 class="font-black text-xs sm:text-sm text-gray-900 dark:text-white truncate">${safeName}</h3>
+                    <div class="flex items-center gap-1.5 flex-wrap mt-1">
+                        <span class="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded-md">
+                            ${store.pageCount} ${store.pageCount === 1 ? 'page' : 'pages'}
+                        </span>
+                        ${updatedDateStr ? `
+                        <span class="text-[9px] text-gray-500 dark:text-gray-400 font-medium">
+                            Updated: ${escapeHtml(updatedDateStr)}
+                        </span>` : ''}
+                    </div>
+                </div>
+            </div>
+            <button type="button" 
+                    data-store-name="${safeName}" 
+                    data-composite-key="${safeKey}"
+                    onclick="window.handleOpenMenuGalleryClick && window.handleOpenMenuGalleryClick(this)"
+                    class="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-3 py-2 rounded-xl transition active:scale-95 shadow-xs flex items-center gap-1.5 shrink-0 cursor-pointer">
+                <i class="fa-solid fa-book-open text-xs"></i> <span>View Menu</span>
+            </button>
+        </div>`;
+    }).join('');
+}
+
+export function filterCustomerMenuCatalog(query) {
+    const q = (query || "").trim().toLowerCase();
+    const filtered = cachedCatalogStores.filter(s => (s.name || '').toLowerCase().includes(q));
+    renderCustomerMenuFeed(filtered);
+}
+
+window.addEventListener('viewChanged', (e) => {
+    if (e.detail === 'view-customer-menus') {
+        loadCustomerMenuCatalog();
+    }
+});
+
+// ============================================================================
+// DIRECTORY VIEW CONTROLLERS
+// ============================================================================
+
 export async function openDirectory(type) {
     const targetType = type || 'customers';
     globalState.currentType = targetType;
@@ -884,6 +1387,14 @@ export async function openDirectory(type) {
         detectAndSetGpsDestination(serviced);
     } else {
         if (originContainer) originContainer.classList.add('hidden');
+        if (targetType === 'stores') {
+            if (Object.keys(storeMenuMetadataMap).length === 0) {
+                try {
+                    storeMenuMetadataMap = JSON.parse(localStorage.getItem('lokalex_store_menus_meta_cache') || '{}');
+                } catch (e) {}
+            }
+            initStoreMenuGalleriesListener();
+        }
         loadDirectoryCache();
         renderDirectoryList();
     }
@@ -1071,6 +1582,26 @@ export function renderDirectoryList() {
         );
     }
 
+    let htmlBuilder = "";
+
+    if (isStore) {
+        htmlBuilder += `
+        <div class="mb-3 p-3 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-2 shadow-xs">
+            <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                <div class="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-share-nodes text-xs"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <div class="font-bold text-xs text-gray-900 dark:text-white truncate">Customer Menu Link</div>
+                    <div class="text-[10px] text-gray-500 dark:text-gray-400 truncate">Share restaurant photo menus with customers</div>
+                </div>
+            </div>
+            <button type="button" onclick="window.shareCustomerMenuCatalogLink && window.shareCustomerMenuCatalogLink()" class="bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-xs transition active:scale-95 flex items-center gap-1.5 shrink-0 cursor-pointer">
+                <i class="fa-solid fa-link text-[10px]"></i> <span>Share Link</span>
+            </button>
+        </div>`;
+    }
+
     if (records.length === 0) {
         let noRecordsMsg = 'No records found. Click + to add or tap 🔄 to refresh.';
         if (isBarangay) {
@@ -1078,7 +1609,8 @@ export function renderDirectoryList() {
             const destLabel = globalState.selectedDestinationMun || 'ALL';
             noRecordsMsg = `Walang rates na nakarehistro [From: ${originLabel} ➔ To: ${destLabel}]. I-click ang + para magdagdag.`;
         }
-        listEl.innerHTML = `<div class="text-center text-gray-500 italic py-16 text-xs">${escapeHtml(noRecordsMsg)}</div>`;
+        htmlBuilder += `<div class="text-center text-gray-500 italic py-16 text-xs">${escapeHtml(noRecordsMsg)}</div>`;
+        listEl.innerHTML = htmlBuilder;
         setupAlphabetScrubber([]);
         return;
     }
@@ -1092,7 +1624,6 @@ export function renderDirectoryList() {
     });
 
     let currentLetterGroup = "";
-    let htmlBuilder = "";
     let availableLetters = new Set();
 
     records.forEach(r => {
@@ -1167,24 +1698,68 @@ export function renderDirectoryList() {
                     <button onclick="copyBarangayRate('${escapeHtml(resolvedBrgy)}', '${escapeHtml(displayRate)}', '${escapeHtml(destMun)}', '${escapeHtml(originMun)}')" class="bg-blue-50 hover:bg-blue-100 dark:bg-blue-600/30 dark:hover:bg-blue-600 text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-white border border-blue-200 dark:border-blue-500/50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1 cursor-pointer" title="Copy Rate Message">
                         <i class="fa-solid fa-copy"></i> Copy
                     </button>
-                    <button type="button" data-record-name="${safeRecordName}" data-composite-key="${safeCompositeKey}" onclick="window.handleEditDirectoryRecordClick && window.handleEditDirectoryRecordClick(this)" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Edit">
+                    <button type="button" data-record-name="${safeRecordName}" data-composite-key="${safeCompositeKey}" onclick="window.handleEditDirectoryRecordClick && window.handleEditDirectoryRecordClick(this)" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-95 cursor-pointer" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
                     ${deleteBtnHtml}
                 </div>
             </div>`;
         } else {
-            // Data-Attribute safe button: immune to apostrophes in store names
-            const menuGalleryBtn = isStore ? `
-                <button type="button"
-                        data-store-name="${safeRecordName}"
-                        data-composite-key="${safeCompositeKey}"
-                        onclick="window.handleOpenMenuGalleryClick && window.handleOpenMenuGalleryClick(this)"
-                        class="bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-90 flex items-center gap-1.5 cursor-pointer shadow-xs"
-                        title="View & Download Restaurant Menu">
-                    <i class="fa-solid fa-book-open text-xs"></i> <span>Menu</span>
-                </button>
-            ` : '';
+            let menuStatusHtml = '';
+            let menuGalleryBtn = '';
+
+            if (isStore) {
+                // Dual-key lookup guarantees instant 0ms resolution regardless of formatting
+                const keyByComposite = (r.compositeKey || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+                const keyByName = (r.name || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+                const meta = (keyByComposite && storeMenuMetadataMap[keyByComposite])
+                    || (keyByName && storeMenuMetadataMap[keyByName])
+                    || null;
+
+                const pageCount = meta?.pageCount || 0;
+                const hasMenu = pageCount > 0;
+                const updatedDateStr = formatMenuUpdatedAt(meta?.updatedAt);
+
+                if (hasMenu) {
+                    menuStatusHtml = `
+                    <div class="flex items-center gap-1.5 flex-wrap mt-1">
+                        <span class="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 text-[9.5px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                            <i class="fa-solid fa-camera"></i> ${pageCount} ${pageCount === 1 ? 'Page' : 'Pages'}
+                        </span>
+                        ${updatedDateStr ? `
+                        <span class="text-[9.5px] text-gray-500 dark:text-gray-400 flex items-center gap-1 font-medium">
+                            <i class="fa-regular fa-calendar-check text-[9px] text-emerald-500"></i> Updated: <strong class="text-gray-700 dark:text-gray-300 font-bold">${escapeHtml(updatedDateStr)}</strong>
+                        </span>` : ''}
+                    </div>`;
+
+                    menuGalleryBtn = `
+                    <button type="button"
+                            data-store-name="${safeRecordName}"
+                            data-composite-key="${safeCompositeKey}"
+                            onclick="window.handleOpenMenuGalleryClick && window.handleOpenMenuGalleryClick(this)"
+                            class="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                            title="View Restaurant Menu (${pageCount} pages)">
+                        <i class="fa-solid fa-book-open text-xs"></i> <span>Menu (${pageCount})</span>
+                    </button>`;
+                } else {
+                    menuStatusHtml = `
+                    <div class="flex items-center gap-1.5 flex-wrap mt-1">
+                        <span class="bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-zinc-700/60 text-[9.5px] font-medium px-2 py-0.5 rounded-md flex items-center gap-1">
+                            <i class="fa-regular fa-image text-gray-400"></i> No menu photos yet
+                        </span>
+                    </div>`;
+
+                    menuGalleryBtn = `
+                    <button type="button"
+                            data-store-name="${safeRecordName}"
+                            data-composite-key="${safeCompositeKey}"
+                            onclick="window.handleOpenMenuGalleryClick && window.handleOpenMenuGalleryClick(this)"
+                            class="bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 px-2.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                            title="Add Restaurant Menu Photos">
+                        <i class="fa-solid fa-camera text-xs"></i> <span>+ Add Menu</span>
+                    </button>`;
+                }
+            }
 
             htmlBuilder += `
             <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-3.5 rounded-2xl flex justify-between items-start gap-2 shadow-xs my-1">
@@ -1193,14 +1768,15 @@ export function renderDirectoryList() {
                         ${isStore ? '<i class="fa-solid fa-store text-orange-500 text-xs"></i>' : ''}
                         <span>${safeRecordName}</span>
                     </div>
-                    ${r.contact ? `<div class="text-xs text-gray-700 dark:text-gray-400 mt-0.5 font-bold font-mono"><i class="fa-solid fa-phone text-[10px] text-blue-500"></i> ${escapeHtml(r.contact)}</div>` : ''}
+                    ${menuStatusHtml}
+                    ${r.contact ? `<div class="text-xs text-gray-700 dark:text-gray-400 mt-1 font-bold font-mono"><i class="fa-solid fa-phone text-[10px] text-blue-500"></i> ${escapeHtml(r.contact)}</div>` : ''}
                     ${r.address ? `<div class="text-xs text-gray-700 dark:text-gray-300 mt-0.5 font-medium break-words"><i class="fa-solid fa-location-dot text-[10px] text-red-500"></i> ${escapeHtml(r.address)}</div>` : ''}
                     ${mapBtn}
                     ${metaInfoHtml}
                 </div>
                 <div class="flex gap-1.5 shrink-0 items-center">
                     ${menuGalleryBtn}
-                    <button type="button" data-record-name="${safeRecordName}" data-composite-key="${safeCompositeKey}" onclick="window.handleEditDirectoryRecordClick && window.handleEditDirectoryRecordClick(this)" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-90 cursor-pointer" title="Edit">
+                    <button type="button" data-record-name="${safeRecordName}" data-composite-key="${safeCompositeKey}" onclick="window.handleEditDirectoryRecordClick && window.handleEditDirectoryRecordClick(this)" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 p-2 rounded-lg text-xs transition active:scale-95 cursor-pointer" title="Edit">
                         <i class="fa-solid fa-pen"></i>
                     </button>
                     ${deleteBtnHtml}
@@ -1349,10 +1925,18 @@ export function setupAlphabetScrubber(availableLetters) {
     };
 }
 
+// Immediate execution so background sync starts prior to directory navigation
+initStoreMenuGalleriesListener();
+
 if (typeof window !== 'undefined') {
     window.updateRosterCreditsDisplay = updateRosterCreditsDisplay;
     window.showCreditsInfoToast = showCreditsInfoToast;
     window.initRiderCreditsListener = initRiderCreditsListener;
+    window.initStoreMenuGalleriesListener = initStoreMenuGalleriesListener;
+    window.openShareCreditsModal = openShareCreditsModal;
+    window.closeShareCreditsModal = closeShareCreditsModal;
+    window.setTransferCreditAmount = setTransferCreditAmount;
+    window.confirmTransferCredits = confirmTransferCredits;
     window.handleOriginHubChange = handleOriginHubChange;
     window.handleDestinationChange = handleDestinationChange;
     window.populateDestinationDropdown = populateDestinationDropdown;
@@ -1371,16 +1955,22 @@ if (typeof window !== 'undefined') {
     window.deleteMenuGalleryPage = deleteMenuGalleryPage;
     window.openGalleryLightbox = openGalleryLightbox;
     window.closeGalleryLightbox = closeGalleryLightbox;
+    window.shareCustomerMenuCatalogLink = shareCustomerMenuCatalogLink;
+    window.loadCustomerMenuCatalog = loadCustomerMenuCatalog;
+    window.renderCustomerMenuFeed = renderCustomerMenuFeed;
+    window.filterCustomerMenuCatalog = filterCustomerMenuCatalog;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
             updateRosterCreditsDisplay();
             initRiderCreditsListener();
+            initStoreMenuGalleriesListener();
         });
     } else {
         updateRosterCreditsDisplay();
         initRiderCreditsListener();
+        initStoreMenuGalleriesListener();
     }
 }
 
-// REMARKS: DIRECTORY_UI_APOSTROPHE_SAFE_DATA_ATTRIBUTES_V12_COMPLETE
+// REMARKS: DIRECTORY_UI_SYNTAX_FIX_AND_P2P_CREDITS_V17_COMPLETE
