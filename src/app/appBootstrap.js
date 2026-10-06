@@ -7,9 +7,9 @@
  * 
  * Description:
  * Coordinates app startup lifecycle, Tier-1/2/3 sync hydration, and route gating:
- * - Public Customer Menu Deep-Link Resolver: Intercepts `#view-customer-menus`
- *   and `?menus` during boot, bypassing rider login authentication so customers
- *   can browse restaurant menus friction-free without credentials.
+ * - Dedicated Customer Menu Catalog Integration: Imports and mounts the standalone
+ *   `customerMenuCatalog` module, routing deep-linked customers directly to the
+ *   catalog view without triggering rider login screens.
  * - Global Window Function Bridge: Mounts module APIs to `window` for HTML onclick bindings.
  * - Tier-1 Instant Local Storage Cache Hydration (IDB & LocalStorage).
  * - Tier-2 Realtime Firebase Listeners and background sync watchdog daemons.
@@ -32,6 +32,7 @@ import * as wizard from '../features/wizard.js';
 import * as liveTracker from '../features/liveTracker.js';
 import * as storeHub from '../features/storeHub/index.js';
 import * as customerStorefront from '../features/customer/customerStorefront.js';
+import * as customerMenuCatalog from '../features/customer/customerMenuCatalog.js';
 import * as profileSettings from '../features/profile/profileSettings.js';
 
 import * as modals from '../ui/modals.js';
@@ -52,7 +53,8 @@ export function initGlobalWindowBridge() {
     const allModules = [
         authFeature, cart, chat, roster, directory, commission, 
         advancedOrders, maps, wizard, liveTracker, storeHub, 
-        customerStorefront, profileSettings, modals, router, helpers, storageEngine
+        customerStorefront, customerMenuCatalog, profileSettings, 
+        modals, router, helpers, storageEngine
     ];
 
     allModules.forEach(mod => {
@@ -145,8 +147,8 @@ export function bootApp() {
         if (isCustomerMenusRoute) {
             history.replaceState({ view: 'view-customer-menus' }, '', '#view-customer-menus');
             router.renderViewUI('view-customer-menus');
-            if (directory && directory.loadCustomerMenuCatalog) {
-                directory.loadCustomerMenuCatalog();
+            if (customerMenuCatalog && customerMenuCatalog.loadCustomerMenuCatalog) {
+                customerMenuCatalog.loadCustomerMenuCatalog();
             }
             return;
         }
@@ -222,8 +224,8 @@ export function initAppLifecycleEvents() {
                 customerStorefront.initCustomerStorefront();
             }
         } else if (e.detail === 'view-customer-menus') {
-            if (directory && directory.loadCustomerMenuCatalog) {
-                directory.loadCustomerMenuCatalog();
+            if (customerMenuCatalog && customerMenuCatalog.loadCustomerMenuCatalog) {
+                customerMenuCatalog.loadCustomerMenuCatalog();
             }
         }
     });
@@ -232,11 +234,11 @@ export function initAppLifecycleEvents() {
         const hash = (window.location.hash || '').replace(/^#/, '').trim();
         if (hash === 'view-customer-menus') {
             router.renderViewUI('view-customer-menus');
-            if (directory && directory.loadCustomerMenuCatalog) {
-                directory.loadCustomerMenuCatalog();
+            if (customerMenuCatalog && customerMenuCatalog.loadCustomerMenuCatalog) {
+                customerMenuCatalog.loadCustomerMenuCatalog();
             }
         }
     });
 }
 
-// REMARKS: APP_BOOTSTRAP_PUBLIC_CUSTOMER_MENUS_BYPASS_V2_COMPLETE
+// REMARKS: APP_BOOTSTRAP_MODULAR_CUSTOMER_CATALOG_V3_COMPLETE

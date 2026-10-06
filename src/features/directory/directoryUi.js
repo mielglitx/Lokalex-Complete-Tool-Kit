@@ -6,38 +6,26 @@
  * ============================================================================
  * 
  * Description:
- * Manages presentation layer, card rendering, search filtering, and restaurant menus:
- * - Syntax & Parser Fix: Resolved unmatched parenthesis syntax error on line 361
- *   within the `confirmTransferCredits()` Firebase transaction handler.
- * - Peer-to-Peer Credit Transfers: Enables riders to share and transfer directory credits
- *   directly to other riders via an interactive modal with atomic Firebase transactions.
+ * Presentation layer and interactive controller for riders and store management:
+ * - Decoupled Architecture: Customer-facing catalog rendering has been migrated
+ *   to `customerMenuCatalog.js`, keeping this module strictly focused on directory records.
+ * - On-Demand Photo Gallery Modal: Provides the reusable popup modal (`openStoreMenuGalleryModal`)
+ *   and fullscreen lightbox for riders and customers exploring menu pages.
  * - Instant 0ms Menu Presence Indicators: Synchronously hydrates store menu metadata
  *   from disk cache at script evaluation to eliminate the "No menu photos yet" lag.
  * - Dual-Key Store Menu Lookup: Indexes and resolves store galleries by both compositeKey
  *   and cleaned store name to prevent cache misses and pop-in layout shifts.
- * - Real-Time Menu Presence Indicators: Visually identifies stores that have active
- *   photo menus with dynamic page counts (`📸 X Pages`) and "Last Updated" dates.
+ * - Peer-to-Peer Credit Transfers: Enables riders to share and transfer directory credits
+ *   directly to other riders via an interactive modal with atomic Firebase transactions.
  * - Call-to-Action Badges for Missing Menus: Marks stores lacking photos with
  *   "No photos yet" and an actionable "+ Add Menu" button to spur rider contributions.
- * - Public Customer Menu Catalog: Aggregates and renders all restaurants that
- *   have registered menu photos for public browsing on `#view-customer-menus`.
- * - One-Tap Public Link Generator: Generates shareable URL with Web Share API
- *   and clipboard fallbacks for customer dispatch via chat and social channels.
- * - Automatic Menu Availability Filter: Queries `directory/storeMenuGalleries`
- *   and presents only stores with at least one uploaded menu photo.
  * - Data-Attribute DOM Binding: Uses `data-store-name` and `data-composite-key`
  *   to pass store and customer names to click handlers, preventing apostrophes
  *   (e.g., Daniella's, Dax's) from triggering inline JavaScript SyntaxErrors.
  * - Multi-Photo Menu Upload: Allows riders to select and batch-upload multiple
  *   menu pages at once with client-side canvas compression.
- * - Firebase Storage Integration: Uploads compressed JPEG/WebP blobs directly to
- *   Firebase Storage (`menus/${storeKey}/${pageId}.jpg`), writing only lightweight
- *   HTTPS URLs (~120 bytes) to RTDB to prevent database bandwidth exhaustion.
  * - Device Photo Saving: Uses Web Share API with staggered anchor fallbacks to
  *   download all menu pages directly to the rider's phone gallery.
- * - Free Customer Directory Browsing: Browsing customer contacts is free.
- * - Confirmed Location Unlock: Clicking "View Location" opens a modal requiring
- *   the rider to confirm spending 1 credit before Google Maps is opened.
  * - Dynamic Destination Synchronization: Automatically updates the Destination
  *   dropdown whenever rates are rendered.
  * ============================================================================
@@ -57,7 +45,6 @@ let creditsListenerActive = false;
 let hasAttemptedGpsAutoSelect = false;
 let pendingMapUnlock = null;
 let activeGalleryStore = null;
-let cachedCatalogStores = [];
 
 // Synchronously hydrate menu metadata immediately at module load time to guarantee 0ms instant display
 let storeMenuMetadataMap = (() => {
@@ -356,7 +343,7 @@ export async function confirmTransferCredits() {
                 await db.ref(`roster/${myId}/directoryCredits`).transaction(c => Math.max(0, (c || 0) - amount)).catch(() => {});
             }
 
-            // 2. Add to recipient (Syntax parenthesis error resolved)
+            // 2. Add to recipient
             await db.ref(`riders/${targetId}/directoryCredits`).transaction(c => (c || 0) + amount);
             await db.ref(`roster/${targetId}/directoryCredits`).transaction(c => (c || 0) + amount).catch(() => {});
 
@@ -1228,142 +1215,6 @@ export function closeGalleryLightbox() {
 }
 
 // ============================================================================
-// PUBLIC CUSTOMER RESTAURANT MENU CATALOG & LINK SHARING ENGINE
-// ============================================================================
-
-export async function shareCustomerMenuCatalogLink() {
-    const baseUrl = window.location.origin + window.location.pathname;
-    const customerUrl = `${baseUrl.replace(/\/$/, '')}#view-customer-menus`;
-
-    const shareData = {
-        title: "Lokalex Restaurant Menus",
-        text: "Tingnan ang kumpletong restaurant photo menus at mag-order sa Lokalex:",
-        url: customerUrl
-    };
-
-    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
-        try {
-            await navigator.share(shareData);
-            showToast("🔗 Customer Menu Link shared!");
-            return;
-        } catch (e) {
-            if (e.name === 'AbortError') return;
-        }
-    }
-
-    try {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            await navigator.clipboard.writeText(customerUrl);
-        } else {
-            copyText(customerUrl);
-        }
-        showToast("📋 Copied Customer Menu link to clipboard!");
-    } catch (err) {
-        copyText(customerUrl);
-        showToast("📋 Copied Customer Menu link!");
-    }
-}
-
-export async function loadCustomerMenuCatalog() {
-    const feed = document.getElementById('cust-menu-catalog-feed');
-    if (!feed) return;
-
-    if (!db) {
-        feed.innerHTML = `<div class="col-span-full text-center text-red-500 py-12 text-xs">Database is currently offline.</div>`;
-        return;
-    }
-
-    try {
-        const snap = await db.ref('directory/storeMenuGalleries').once('value');
-        const val = snap.val() || {};
-
-        const stores = Object.entries(val).map(([key, data]) => {
-            const pages = data.pages ? Object.values(data.pages) : [];
-            pages.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
-            return {
-                key,
-                name: data.storeName || key,
-                pageCount: pages.length,
-                previewUrl: pages[0]?.imageUrl || '',
-                updatedAt: data.updatedAt || 0
-            };
-        }).filter(store => store.pageCount > 0);
-
-        stores.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
-        cachedCatalogStores = stores;
-
-        renderCustomerMenuFeed(stores);
-    } catch (err) {
-        console.error("Error loading customer menu catalog:", err);
-        feed.innerHTML = `<div class="col-span-full text-center text-red-500 py-12 text-xs">Failed to load menus. Please refresh.</div>`;
-    }
-}
-
-export function renderCustomerMenuFeed(stores) {
-    const feed = document.getElementById('cust-menu-catalog-feed');
-    if (!feed) return;
-
-    if (!stores || stores.length === 0) {
-        feed.innerHTML = `
-            <div class="col-span-full text-center text-gray-500 dark:text-gray-400 py-16 text-xs italic flex flex-col items-center gap-2">
-                <i class="fa-solid fa-store-slash text-3xl text-gray-400"></i>
-                <span>Walang available na menu photos sa ngayon.</span>
-            </div>
-        `;
-        return;
-    }
-
-    feed.innerHTML = stores.map(store => {
-        const safeName = escapeHtml(store.name);
-        const safeKey = escapeHtml(store.key);
-        const previewImg = store.previewUrl
-            ? `<img src="${store.previewUrl}" alt="${safeName}" loading="lazy" class="w-full h-full object-cover">`
-            : `<i class="fa-solid fa-utensils text-amber-500 text-lg"></i>`;
-        const updatedDateStr = formatMenuUpdatedAt(store.updatedAt);
-
-        return `
-        <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 rounded-2xl p-3 flex items-center justify-between gap-3 shadow-xs hover:border-amber-500/50 transition">
-            <div class="flex items-center gap-3 min-w-0 flex-1">
-                <div class="w-13 h-13 rounded-xl bg-gray-100 dark:bg-black/40 overflow-hidden shrink-0 border border-gray-200 dark:border-gray-800 flex items-center justify-center">
-                    ${previewImg}
-                </div>
-                <div class="min-w-0 flex-1">
-                    <h3 class="font-black text-xs sm:text-sm text-gray-900 dark:text-white truncate">${safeName}</h3>
-                    <div class="flex items-center gap-1.5 flex-wrap mt-1">
-                        <span class="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded-md">
-                            ${store.pageCount} ${store.pageCount === 1 ? 'page' : 'pages'}
-                        </span>
-                        ${updatedDateStr ? `
-                        <span class="text-[9px] text-gray-500 dark:text-gray-400 font-medium">
-                            Updated: ${escapeHtml(updatedDateStr)}
-                        </span>` : ''}
-                    </div>
-                </div>
-            </div>
-            <button type="button" 
-                    data-store-name="${safeName}" 
-                    data-composite-key="${safeKey}"
-                    onclick="window.handleOpenMenuGalleryClick && window.handleOpenMenuGalleryClick(this)"
-                    class="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-3 py-2 rounded-xl transition active:scale-95 shadow-xs flex items-center gap-1.5 shrink-0 cursor-pointer">
-                <i class="fa-solid fa-book-open text-xs"></i> <span>View Menu</span>
-            </button>
-        </div>`;
-    }).join('');
-}
-
-export function filterCustomerMenuCatalog(query) {
-    const q = (query || "").trim().toLowerCase();
-    const filtered = cachedCatalogStores.filter(s => (s.name || '').toLowerCase().includes(q));
-    renderCustomerMenuFeed(filtered);
-}
-
-window.addEventListener('viewChanged', (e) => {
-    if (e.detail === 'view-customer-menus') {
-        loadCustomerMenuCatalog();
-    }
-});
-
-// ============================================================================
 // DIRECTORY VIEW CONTROLLERS
 // ============================================================================
 
@@ -1955,10 +1806,6 @@ if (typeof window !== 'undefined') {
     window.deleteMenuGalleryPage = deleteMenuGalleryPage;
     window.openGalleryLightbox = openGalleryLightbox;
     window.closeGalleryLightbox = closeGalleryLightbox;
-    window.shareCustomerMenuCatalogLink = shareCustomerMenuCatalogLink;
-    window.loadCustomerMenuCatalog = loadCustomerMenuCatalog;
-    window.renderCustomerMenuFeed = renderCustomerMenuFeed;
-    window.filterCustomerMenuCatalog = filterCustomerMenuCatalog;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
@@ -1973,4 +1820,4 @@ if (typeof window !== 'undefined') {
     }
 }
 
-// REMARKS: DIRECTORY_UI_SYNTAX_FIX_AND_P2P_CREDITS_V17_COMPLETE
+// REMARKS: DIRECTORY_UI_CLEANED_MODULAR_CATALOG_DECOUPLED_V18_COMPLETE
