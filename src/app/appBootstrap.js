@@ -1,4 +1,22 @@
 // src/app/appBootstrap.js
+
+/**
+ * ============================================================================
+ * APPLICATION BOOTSTRAP, GLOBAL BRIDGE & ROUTING COORDINATOR
+ * ============================================================================
+ * 
+ * Description:
+ * Coordinates app startup lifecycle, Tier-1/2/3 sync hydration, and route gating:
+ * - Public Customer Menu Deep-Link Resolver: Intercepts `#view-customer-menus`
+ *   and `?menus` during boot, bypassing rider login authentication so customers
+ *   can browse restaurant menus friction-free without credentials.
+ * - Global Window Function Bridge: Mounts module APIs to `window` for HTML onclick bindings.
+ * - Tier-1 Instant Local Storage Cache Hydration (IDB & LocalStorage).
+ * - Tier-2 Realtime Firebase Listeners and background sync watchdog daemons.
+ * - Dynamic portal parameter handler (?track, ?mapcalc, ?livegps).
+ * ============================================================================
+ */
+
 import { appState } from '../store/state.js';
 import * as storageEngine from '../utils/storageEngine.js';
 
@@ -108,6 +126,7 @@ export function bootApp() {
 
         const urlParams = new URLSearchParams(window.location.search);
         
+        // Deep-link portal parameter handling
         if (urlParams.has('livegps') || urlParams.has('track') || urlParams.has('mapcalc')) {
             const loginView = document.getElementById('view-login');
             if (loginView) loginView.classList.add('hidden');
@@ -117,6 +136,19 @@ export function bootApp() {
             else if (urlParams.has('mapcalc') && maps.checkAndInitMapCalcPortal) maps.checkAndInitMapCalcPortal();
 
             return; 
+        }
+
+        // Public Customer Menu Route Bypass (Zero-login deep-link resolver)
+        const currentHash = (window.location.hash || '').replace(/^#/, '').trim();
+        const isCustomerMenusRoute = currentHash === 'view-customer-menus' || urlParams.has('menus') || urlParams.get('view') === 'customer-menus';
+
+        if (isCustomerMenusRoute) {
+            history.replaceState({ view: 'view-customer-menus' }, '', '#view-customer-menus');
+            router.renderViewUI('view-customer-menus');
+            if (directory && directory.loadCustomerMenuCatalog) {
+                directory.loadCustomerMenuCatalog();
+            }
+            return;
         }
 
         // Role-Gated Session Routing
@@ -189,6 +221,22 @@ export function initAppLifecycleEvents() {
             if (customerStorefront && customerStorefront.initCustomerStorefront) {
                 customerStorefront.initCustomerStorefront();
             }
+        } else if (e.detail === 'view-customer-menus') {
+            if (directory && directory.loadCustomerMenuCatalog) {
+                directory.loadCustomerMenuCatalog();
+            }
+        }
+    });
+
+    window.addEventListener('hashchange', () => {
+        const hash = (window.location.hash || '').replace(/^#/, '').trim();
+        if (hash === 'view-customer-menus') {
+            router.renderViewUI('view-customer-menus');
+            if (directory && directory.loadCustomerMenuCatalog) {
+                directory.loadCustomerMenuCatalog();
+            }
         }
     });
 }
+
+// REMARKS: APP_BOOTSTRAP_PUBLIC_CUSTOMER_MENUS_BYPASS_V2_COMPLETE
