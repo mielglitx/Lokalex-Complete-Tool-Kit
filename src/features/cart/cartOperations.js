@@ -292,10 +292,10 @@ export function validateAndProceedToWizard() {
 
     const unboughtItems = activeItems.filter(i => !i.isBought);
     if (unboughtItems.length > 0) {
-        return showToast(`⚠️ Paki-mark muna bilang Buy/Bought ang ${unboughtItems.length} active item(s)!`);
+        return showToast(`⚠️ Paki-mark muna bilang On Hand ang ${unboughtItems.length} active item(s)!`);
     }
 
-    const uncategorizedItems = activeItems.filter(i => !i.category || (i.category !== 'store' && i.category !== 'market'));
+    const uncategorizedItems = activeItems.filter(i => !i.isPaid && (!i.category || (i.category !== 'store' && i.category !== 'market')));
     if (uncategorizedItems.length > 0) {
         return showToast(`⚠️ Paki-pili kung Store o Market ang ${uncategorizedItems.length} item(s)!`);
     }

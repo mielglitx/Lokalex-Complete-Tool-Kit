@@ -83,42 +83,50 @@ export function copyLiveGpsLink(custName = "Customer", sessionKey = activeSessio
 
 export function startRiderGpsTracking(sessionKey) {
     if (!sessionKey) return;
-    if (riderGpsWatchId) navigator.geolocation.clearWatch(riderGpsWatchId);
-    if (!navigator.geolocation) return;
+    if (riderGpsWatchId && navigator.geolocation) navigator.geolocation.clearWatch(riderGpsWatchId);
 
     requestWakeLock();
     startBackgroundAudioPulse();
 
-    // Immediately record initial position
-    navigator.geolocation.getCurrentPosition((pos) => {
+    // Push cached device position if available
+    if (appState.lat && appState.lon && db) {
         const now = Date.now();
         lastPushTime = now;
         db.ref(`liveSessions/${sessionKey}/users/rider`).set({
             name: appState.riderName || "Rider",
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            speed: pos.coords.speed || 0,
+            lat: appState.lat,
+            lng: appState.lon,
+            speed: 0,
             updatedAt: now
-        });
-    }, () => {}, { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
+        }).catch(() => {});
+    }
 
-    riderGpsWatchId = navigator.geolocation.watchPosition(
-        (pos) => {
-            const now = Date.now();
-            if (now - lastPushTime >= PUSH_TICK_INTERVAL_MS) {
-                lastPushTime = now;
-                db.ref(`liveSessions/${sessionKey}/users/rider`).set({
-                    name: appState.riderName || "Rider",
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude,
-                    speed: pos.coords.speed || 0,
-                    updatedAt: now
-                });
-            }
-        },
-        (err) => {},
-        { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
-    );
+    if (!navigator.geolocation) return;
+
+    try {
+        riderGpsWatchId = navigator.geolocation.watchPosition(
+            (pos) => {
+                const now = Date.now();
+                if (now - lastPushTime >= PUSH_TICK_INTERVAL_MS) {
+                    lastPushTime = now;
+                    appState.lat = pos.coords.latitude;
+                    appState.lon = pos.coords.longitude;
+                    appState.gpsAccuracy = pos.coords.accuracy;
+                    if (db) {
+                        db.ref(`liveSessions/${sessionKey}/users/rider`).set({
+                            name: appState.riderName || "Rider",
+                            lat: pos.coords.latitude,
+                            lng: pos.coords.longitude,
+                            speed: pos.coords.speed || 0,
+                            updatedAt: now
+                        }).catch(() => {});
+                    }
+                }
+            },
+            () => {},
+            { enableHighAccuracy: false, timeout: 30000, maximumAge: 10000 }
+        );
+    } catch(e) {}
 }
 
 export function openLiveGpsManageModal() {

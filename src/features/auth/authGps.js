@@ -72,27 +72,6 @@ export function startBackgroundRosterGpsTracker() {
         backgroundGpsWatchId = null;
     }
 
-    navigator.geolocation.getCurrentPosition(
-        (pos) => {
-            const now = Date.now();
-            appState.lat = pos.coords.latitude;
-            appState.lon = pos.coords.longitude;
-            appState.gpsAccuracy = pos.coords.accuracy;
-            lastRosterGpsPushTime = now;
-
-            if (db && appState.telegramId) {
-                db.ref('roster/' + appState.telegramId).update({
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude,
-                    accuracy: pos.coords.accuracy,
-                    locationUpdatedAt: now,
-                    lastActiveTimestamp: now
-                }).catch(() => {});
-            }
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
 
     backgroundGpsWatchId = navigator.geolocation.watchPosition(
         (pos) => {

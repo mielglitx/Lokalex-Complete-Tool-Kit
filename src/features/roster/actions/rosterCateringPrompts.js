@@ -41,8 +41,6 @@ export function promptCateringStatus() {
     if (!myId && !myRecord) return showToast("⚠️ Missing Rider identity.");
 
     if (myRecord && !canManageRoster()) {
-        if (myRecord.status === 'End') return showToast("⚠️ Naka-End Shift ka. Mag-Available muna bago mag-Cater.");
-        if (myRecord.status === 'Break') return showToast("⚠️ Naka-Break ka. Mag-Available muna bago mag-Cater.");
         if (myRecord.status === 'Cooldown') return showToast("⚠️ Naka-penalty cooldown ka pa. Maghintay muna matapos.");
     }
 
@@ -81,209 +79,214 @@ export function promptCateringStatus() {
 }
 
 export async function confirmCateringStatus() {
-    const input = document.getElementById('catering-customer-name') || document.getElementById('admin-cater-cust-name');
-    const custSelect = document.getElementById('catering-customer-select') || document.getElementById('admin-cater-customer-select');
-    const penaltySelect = document.getElementById('catering-penalty-select') || document.getElementById('admin-cater-penalty-select');
+    try {
+        const input = document.getElementById('catering-customer-name') || document.getElementById('admin-cater-cust-name');
+        const custSelect = document.getElementById('catering-customer-select') || document.getElementById('admin-cater-customer-select');
+        const penaltySelect = document.getElementById('catering-penalty-select') || document.getElementById('admin-cater-penalty-select');
 
-    let custName = (input && input.value ? input.value.trim() : "") || (custSelect && custSelect.value ? custSelect.value.trim() : "");
-    if (!custName) return showToast("Please enter or select customer name");
+        let custName = (input && input.value ? input.value.trim() : "") || (custSelect && custSelect.value ? custSelect.value.trim() : "");
+        if (!custName) return showToast("Please enter or select customer name");
 
-    if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
-        loadRosterCache();
-    }
-    let liveRoster = globalState.rosterMembers || [];
-
-    const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
-    const currentName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
-
-    let myRecord = liveRoster.find(m => {
-        const mId = (m.telegramId || m.id || "").toString().trim();
-        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
-        if (currentId && mId && mId === currentId) return true;
-        if (currentName && mName && mName === currentName.toLowerCase()) return true;
-        return false;
-    });
-
-    const resolvedId = myRecord ? (myRecord.telegramId || myRecord.id || currentId) : currentId;
-    const myName = myRecord ? (myRecord.riderName || myRecord.name || currentName || "Rider") : (currentName || "Rider");
-
-    if (resolvedId && !appState.telegramId) {
-        appState.telegramId = resolvedId;
-        try { localStorage.setItem('telegramId', resolvedId); } catch(e) {}
-    }
-
-    if (myRecord && !canManageRoster()) {
-        if (myRecord.status === 'End') {
-            closeCateringModal();
-            return showToast("⚠️ Naka-End Shift ka. Hindi maaaring mag-Cater.");
+        if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
+            loadRosterCache();
         }
-        if (myRecord.status === 'Break') {
-            closeCateringModal();
-            return showToast("⚠️ Naka-Break ka. Hindi maaaring mag-Cater.");
-        }
-        if (myRecord.status === 'Cooldown') {
-            closeCateringModal();
-            return showToast("⚠️ Naka-penalty cooldown ka pa.");
-        }
-    }
+        let liveRoster = globalState.rosterMembers || [];
 
-    const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
-    const liveAvailableRiders = sortAvailableRidersByGross(liveRoster.filter(m => m.status === 'Available'));
-    const isFirstAvailable = liveAvailableRiders.length > 0 && (liveAvailableRiders[0]?.telegramId || liveAvailableRiders[0]?.id || "").toString().trim() === resolvedId;
+        const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+        const currentName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
 
-    const hasPenalty = penaltySelect && parseInt(penaltySelect.value) > 0;
-    const isPrivileged = canManageRoster();
-
-    const isQueueJump = liveAvailableRiders.length > 0 && !isFirstAvailable && !amIAlreadyCatering;
-    const isBypassingAvailability = !myRecord || (myRecord.status !== 'Available' && !amIAlreadyCatering);
-    const isForcedByRole = isPrivileged && (isQueueJump || isBypassingAvailability || hasPenalty);
-
-    if (!isPrivileged && !amIAlreadyCatering && liveAvailableRiders.length > 0 && !isFirstAvailable) {
-        closeCateringModal();
-        const firstAvailable = liveAvailableRiders[0];
-        const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
-        showToast(`🚫 Naunahan ka sa pila: Si ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) ang 1st in line.`);
-        return;
-    }
-
-    let existingCustomers = [];
-    let existingTimes = [];
-
-    if (myRecord && myRecord.status === 'Catering' && myRecord.customerName) {
-        existingCustomers = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-        existingTimes = myRecord.startTime ? myRecord.startTime.split(', ').map(t => t.trim()) : [];
-    }
-
-    const isAlreadyInList = existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase());
-
-    if (!isAlreadyInList) {
-        const limitCheck = canRiderTakeMoreBookings(resolvedId, myName);
-        if (!limitCheck.allowed) {
-            const modeLabel = limitCheck.isAuto ? " (Auto Income Tier Limit)" : "";
-            return showToast(`⚠️ Reached maximum limit of ${limitCheck.maxAllowed} active catering customer(s)${modeLabel}!`);
-        }
-    }
-
-    closeCateringModal();
-    const modalGeneral = document.getElementById('admin-catering-modal');
-    if (modalGeneral) modalGeneral.classList.add('hidden');
-    dismissQueueAlarm();
-
-    const startTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    if (!isAlreadyInList) {
-        existingCustomers.push(custName);
-        existingTimes.push(startTime);
-    }
-
-    const cleanCustKey = custName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const cleanCustTrimmed = custName.toLowerCase().trim();
-
-    let forcedCatersMap = {};
-    if (myRecord && myRecord.forcedCaters && typeof myRecord.forcedCaters === 'object') {
-        forcedCatersMap = { ...myRecord.forcedCaters };
-    }
-
-    if (isForcedByRole && resolvedId && cleanCustKey) {
-        const forcedPayload = {
-            customerName: custName,
-            forcedBy: myName,
-            isSelfForced: true,
-            timestamp: Date.now()
-        };
-
-        forcedCatersMap[cleanCustKey] = forcedPayload;
-        forcedCatersMap[cleanCustTrimmed] = forcedPayload;
-
-        if (myRecord) {
-            myRecord.forcedCaters = forcedCatersMap;
-            myRecord.forcedBy = myName;
-            myRecord.isForcedCater = true;
-        }
-
-        if (db) {
-            db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
-            db.ref(`roster/${resolvedId}`).update({
-                forcedBy: myName,
-                isForcedCater: true
-            }).catch(() => {});
-        }
-    } else if (!isForcedByRole && resolvedId && cleanCustKey) {
-        delete forcedCatersMap[cleanCustKey];
-        delete forcedCatersMap[cleanCustTrimmed];
-
-        if (db) {
-            db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
-            db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustTrimmed}`).remove().catch(() => {});
-        }
-    }
-
-    const hasAnyForcedCaters = Object.keys(forcedCatersMap).length > 0;
-    if (!hasAnyForcedCaters && myRecord) {
-        myRecord.forcedCaters = null;
-        myRecord.forcedBy = null;
-        myRecord.isForcedCater = false;
-        if (db && resolvedId) {
-            db.ref(`roster/${resolvedId}`).update({
-                forcedBy: null,
-                isForcedCater: false
-            }).catch(() => {});
-        }
-    }
-
-    if (db && custName) {
-        const cleanSearchName = custName.toLowerCase().trim();
-        db.ref('customerChatMeta').once('value', (snapshot) => {
-            const chats = snapshot.val();
-            if (chats) {
-                Object.keys(chats).forEach(custId => {
-                    const meta = chats[custId]?.metadata || chats[custId] || {};
-                    const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
-                    if (chatCustName && chatCustName === cleanSearchName) {
-                        const updateObj = {
-                            folder: 'catering',
-                            cateredByRiderId: resolvedId,
-                            cateredByRiderName: myName,
-                            cateredBy: myName,
-                            lastUpdated: Date.now()
-                        };
-                        if (isForcedByRole) {
-                            updateObj.forcedBy = myName;
-                            updateObj.isForcedCater = true;
-                        } else {
-                            updateObj.forcedBy = null;
-                            updateObj.isForcedCater = false;
-                        }
-                        db.ref(`customerChats/${custId}/metadata`).update(updateObj).catch(() => {});
-                    }
-                });
-            }
+        let myRecord = liveRoster.find(m => {
+            const mId = (m.telegramId || m.id || "").toString().trim();
+            const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+            if (currentId && mId && mId === currentId) return true;
+            if (currentName && mName && mName === currentName.toLowerCase()) return true;
+            return false;
         });
-    }
 
-    try { autoStartLiveGpsSession(existingCustomers.join(', ')); } catch(e) {}
+        const resolvedId = myRecord ? (myRecord.telegramId || myRecord.id || currentId) : currentId;
+        const myName = myRecord ? (myRecord.riderName || myRecord.name || currentName || "Rider") : (currentName || "Rider");
 
-    await updateRosterStatusData(
-        'Catering', 
-        existingCustomers.join(', '), 
-        existingTimes.join(', '), 
-        myRecord ? parseQueueTime(myRecord.queueTime) : Date.now(),
-        resolvedId,
-        myName,
-        [],
-        false,
-        "",
-        { 
-            forcedCaters: hasAnyForcedCaters ? forcedCatersMap : null,
-            forcedBy: hasAnyForcedCaters ? (myRecord?.forcedBy || myName) : null,
-            isForcedCater: hasAnyForcedCaters
+        if (!resolvedId) {
+            return showToast("⚠️ Rider identity not found. Please log in first.");
         }
-    );
 
-    saveRosterCache();
-    updateRosterUI();
+        if (resolvedId && !appState.telegramId) {
+            appState.telegramId = resolvedId;
+            try { localStorage.setItem('telegramId', resolvedId); } catch(e) {}
+        }
 
-    if (isForcedByRole) {
-        showToast(`⚡ Force Catered ${custName} (Self)`);
+        if (myRecord && !canManageRoster()) {
+            if (myRecord.status === 'Cooldown') {
+                closeCateringModal();
+                return showToast("⚠️ Naka-penalty cooldown ka pa.");
+            }
+        }
+
+        const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
+        const liveAvailableRiders = sortAvailableRidersByGross(liveRoster.filter(m => m.status === 'Available'));
+        const isFirstAvailable = liveAvailableRiders.length > 0 && (liveAvailableRiders[0]?.telegramId || liveAvailableRiders[0]?.id || "").toString().trim() === resolvedId;
+
+        const hasPenalty = penaltySelect && parseInt(penaltySelect.value) > 0;
+        const isPrivileged = canManageRoster();
+
+        const isQueueJump = liveAvailableRiders.length > 0 && !isFirstAvailable && !amIAlreadyCatering;
+        const isBypassingAvailability = !myRecord || (myRecord.status !== 'Available' && !amIAlreadyCatering);
+        const isForcedByRole = isPrivileged && (isQueueJump || isBypassingAvailability || hasPenalty);
+
+        if (!isPrivileged && !amIAlreadyCatering && liveAvailableRiders.length > 0 && !isFirstAvailable) {
+            closeCateringModal();
+            const firstAvailable = liveAvailableRiders[0];
+            const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
+            showToast(`🚫 Naunahan ka sa pila: Si ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) ang 1st in line.`);
+            return;
+        }
+
+        let existingCustomers = [];
+        let existingTimes = [];
+
+        if (myRecord && myRecord.status === 'Catering' && myRecord.customerName) {
+            existingCustomers = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+            existingTimes = myRecord.startTime ? myRecord.startTime.split(', ').map(t => t.trim()) : [];
+        }
+
+        const isAlreadyInList = existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase());
+
+        if (!isAlreadyInList) {
+            const limitCheck = canRiderTakeMoreBookings(resolvedId, myName);
+            if (!limitCheck.allowed) {
+                const modeLabel = limitCheck.isAuto ? " (Auto Income Tier Limit)" : "";
+                return showToast(`⚠️ Reached maximum limit of ${limitCheck.maxAllowed} active catering customer(s)${modeLabel}!`);
+            }
+        }
+
+        closeCateringModal();
+        const modalGeneral = document.getElementById('admin-catering-modal');
+        if (modalGeneral) modalGeneral.classList.add('hidden');
+        dismissQueueAlarm();
+
+        const startTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        if (!isAlreadyInList) {
+            existingCustomers.push(custName);
+            existingTimes.push(startTime);
+        }
+
+        const cleanCustKey = custName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanCustTrimmed = custName.toLowerCase().trim();
+
+        let forcedCatersMap = {};
+        if (myRecord && myRecord.forcedCaters && typeof myRecord.forcedCaters === 'object') {
+            forcedCatersMap = { ...myRecord.forcedCaters };
+        }
+
+        if (isForcedByRole && resolvedId && cleanCustKey) {
+            const forcedPayload = {
+                customerName: custName,
+                forcedBy: myName,
+                isSelfForced: true,
+                timestamp: Date.now()
+            };
+
+            forcedCatersMap[cleanCustKey] = forcedPayload;
+            forcedCatersMap[cleanCustTrimmed] = forcedPayload;
+
+            if (myRecord) {
+                myRecord.forcedCaters = forcedCatersMap;
+                myRecord.forcedBy = myName;
+                myRecord.isForcedCater = true;
+            }
+
+            if (db) {
+                db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
+                db.ref(`roster/${resolvedId}`).update({
+                    forcedBy: myName,
+                    isForcedCater: true
+                }).catch(() => {});
+            }
+        } else if (!isForcedByRole && resolvedId && cleanCustKey) {
+            delete forcedCatersMap[cleanCustKey];
+            delete forcedCatersMap[cleanCustTrimmed];
+
+            if (db) {
+                db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
+                db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustTrimmed}`).remove().catch(() => {});
+            }
+        }
+
+        const hasAnyForcedCaters = Object.keys(forcedCatersMap).length > 0;
+        if (!hasAnyForcedCaters && myRecord) {
+            myRecord.forcedCaters = null;
+            myRecord.forcedBy = null;
+            myRecord.isForcedCater = false;
+            if (db && resolvedId) {
+                db.ref(`roster/${resolvedId}`).update({
+                    forcedBy: null,
+                    isForcedCater: false
+                }).catch(() => {});
+            }
+        }
+
+        if (db && custName) {
+            const cleanSearchName = custName.toLowerCase().trim();
+            db.ref('customerChatMeta').once('value', (snapshot) => {
+                const chats = snapshot.val();
+                if (chats) {
+                    Object.keys(chats).forEach(custId => {
+                        const meta = chats[custId]?.metadata || chats[custId] || {};
+                        const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
+                        if (chatCustName && chatCustName === cleanSearchName) {
+                            const updateObj = {
+                                folder: 'catering',
+                                cateredByRiderId: resolvedId,
+                                cateredByRiderName: myName,
+                                cateredBy: myName,
+                                lastUpdated: Date.now()
+                            };
+                            if (isForcedByRole) {
+                                updateObj.forcedBy = myName;
+                                updateObj.isForcedCater = true;
+                            } else {
+                                updateObj.forcedBy = null;
+                                updateObj.isForcedCater = false;
+                            }
+                            db.ref(`customerChats/${custId}/metadata`).update(updateObj).catch(() => {});
+                        }
+                    });
+                }
+            });
+        }
+
+        const isStartingShift = !myRecord || !myRecord.status || myRecord.status === 'End';
+
+        await updateRosterStatusData(
+            'Catering', 
+            existingCustomers.join(', '), 
+            existingTimes.join(', '), 
+            myRecord ? parseQueueTime(myRecord.queueTime) : Date.now(),
+            resolvedId,
+            myName,
+            [],
+            isStartingShift,
+            "",
+            { 
+                forcedCaters: hasAnyForcedCaters ? forcedCatersMap : null,
+                forcedBy: hasAnyForcedCaters ? (myRecord?.forcedBy || myName) : null,
+                isForcedCater: hasAnyForcedCaters
+            }
+        );
+
+        saveRosterCache();
+        updateRosterUI();
+
+        if (input) input.value = "";
+
+        if (isForcedByRole) {
+            showToast(`⚡ Force Catered ${custName} (Self)`);
+        } else {
+            showToast(`🛵 Catering: ${custName}`);
+        }
+    } catch (err) {
+        console.error("Error in confirmCateringStatus:", err);
+        showToast("❌ Bigo mag-Cater: " + (err.message || err));
     }
 }

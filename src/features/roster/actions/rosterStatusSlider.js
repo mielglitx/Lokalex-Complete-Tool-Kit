@@ -20,7 +20,6 @@ import { db } from '../../../config/firebase.js';
 import { appState, globalState, multiCarts, activeCartSlot } from '../../../store/state.js';
 import { showToast, showSideNotification } from '../../../ui/notifications.js';
 import { openSlideDeleteModal, openRiderPasswordSetupModal } from '../../../ui/modals.js';
-import { calibrateGPS } from '../../auth/index.js';
 import { switchView } from '../../../ui/router.js';
 import { endLiveGpsSession } from '../../liveTracker.js';
 import { getLocalTodayStr } from '../../../utils/helpers.js';
@@ -36,32 +35,11 @@ import { updateRosterStatus, clockOutRider } from '../rosterStatusCore.js';
 import { dismissQueueAlarm } from './rosterAlarms.js';
 
 function getDeviceLocationQuick() {
-    return new Promise((resolve) => {
-        if (!navigator.geolocation) {
-            return resolve({
-                lat: appState.lat || null,
-                lon: appState.lon || null,
-                accuracy: appState.gpsAccuracy || null
-            });
-        }
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                resolve({
-                    lat: pos.coords.latitude,
-                    lon: pos.coords.longitude,
-                    accuracy: pos.coords.accuracy
-                });
-            },
-            () => {
-                resolve({
-                    lat: appState.lat || null,
-                    lon: appState.lon || null,
-                    accuracy: appState.gpsAccuracy || null
-                });
-            },
-            { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
-        );
-    });
+    return {
+        lat: appState.lat || null,
+        lon: appState.lon || null,
+        accuracy: appState.gpsAccuracy || null
+    };
 }
 
 /**
@@ -301,25 +279,7 @@ export async function triggerStatusWithSlide(targetStatus) {
             }
         }
 
-        if (isStartingShift) {
-            const coords = await calibrateGPS(() => {});
-
-            if (!coords || !coords.lat || !coords.lon || coords.accuracy > 500) {
-                showToast("❌ Bigo ang GPS. Paki-enable ang Location Access bago mag-Time In!");
-                return;
-            }
-
-            appState.lat = coords.lat;
-            appState.lon = coords.lon;
-            appState.gpsAccuracy = coords.accuracy;
-        }
-
-        const locationData = await getDeviceLocationQuick();
-        if (locationData && locationData.lat) {
-            appState.lat = locationData.lat;
-            appState.lon = locationData.lon;
-            appState.gpsAccuracy = locationData.accuracy;
-        }
+        const locationData = getDeviceLocationQuick();
 
         const availableTimestamp = Date.now();
         const availableTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -363,7 +323,7 @@ export async function triggerStatusWithSlide(targetStatus) {
             window.clearCartSlot();
         }
 
-        showToast("✅ Available na! GPS Location recorded.");
+        showToast("✅ Available na!");
 
     } else if (targetStatus === 'End') {
         const penaltyInfo = await evaluateEarlyShiftPenalty(myId, myRecord);

@@ -40,32 +40,11 @@ import { updateRosterStatusData } from '../rosterStatusCore.js';
 import { getTopQueueTime } from './rosterAlarms.js';
 
 function getDeviceLocationQuick() {
-    return new Promise((resolve) => {
-        if (!navigator.geolocation) {
-            return resolve({
-                lat: appState.lat || null,
-                lon: appState.lon || null,
-                accuracy: appState.gpsAccuracy || null
-            });
-        }
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                resolve({
-                    lat: pos.coords.latitude,
-                    lon: pos.coords.longitude,
-                    accuracy: pos.coords.accuracy
-                });
-            },
-            () => {
-                resolve({
-                    lat: appState.lat || null,
-                    lon: appState.lon || null,
-                    accuracy: appState.gpsAccuracy || null
-                });
-            },
-            { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
-        );
-    });
+    return {
+        lat: appState.lat || null,
+        lon: appState.lon || null,
+        accuracy: appState.gpsAccuracy || null
+    };
 }
 
 /**

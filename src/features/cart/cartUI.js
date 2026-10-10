@@ -231,7 +231,7 @@ export function renderCartItems() {
                     <i class="fa-solid fa-list-check text-blue-500"></i> Shopping Checklist
                 </span>
                 <span class="${boughtCount === totalActive && totalActive > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-700 dark:text-gray-300'} font-mono text-[10px]">
-                    ${boughtCount} of ${totalActive} bought (${progressPercent}%)
+                    ${boughtCount} of ${totalActive} on hand (${progressPercent}%)
                 </span>
             </div>
             <div class="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-1.5 overflow-hidden">
@@ -309,10 +309,10 @@ export function renderCartItems() {
             : '';
 
         const boughtBadge = !isUnavailable && isBought
-            ? `<span class="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1 shrink-0"><i class="fa-solid fa-check text-[8px]"></i> Bought</span>`
+            ? `<span class="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1 shrink-0"><i class="fa-solid fa-check text-[8px]"></i> On Hand</span>`
             : '';
 
-        const missingCategoryBadge = !isUnavailable && !hasCategory
+        const missingCategoryBadge = !isUnavailable && !hasCategory && !isPaid
             ? `<span class="bg-red-500/10 text-red-500 text-[9px] font-bold px-1.5 py-0.5 rounded border border-red-500/30 flex items-center gap-1 shrink-0"><i class="fa-solid fa-circle-exclamation text-[8px]"></i> No Category</span>`
             : '';
 
@@ -361,10 +361,10 @@ export function renderCartItems() {
                     </button>
                 </div>
 
-                <!-- Right: Buy/Bought, Paid, and N/A Grouped Together -->
+                <!-- Right: On Hand, Paid, and N/A Grouped Together -->
                 <div class="flex items-center gap-1.5 flex-wrap justify-end">
                     <button onclick="toggleItemBought(${index})" class="py-1.5 px-2.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${boughtBtnClass}">
-                        <i class="fa-solid fa-check"></i> ${isBought ? 'Bought' : 'Bought'}
+                        <i class="fa-solid fa-check"></i> On Hand
                     </button>
                     <button onclick="toggleItemPaid(${index})" class="py-1.5 px-2.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${paidBtnClass}">
                         <i class="fa-solid fa-receipt"></i> Paid

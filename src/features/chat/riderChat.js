@@ -20,6 +20,7 @@ import {
     getActiveRiderChatFilter 
 } from './riderChatFeed.js';
 import { listenToGlobalStoreChats } from './riderStoreChat.js';
+import { getPublicFbSendEndpoint } from './facebookApiAdmin.js';
 
 let activeRiderChatCustId = null;
 let activeRiderChatListener = null;
@@ -462,6 +463,18 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
         }));
     }
 
+    // Forward reply to Facebook Messenger customer if thread is from Facebook
+    if (targetChannel === 'messenger' || String(activeRiderChatCustId).startsWith('fb_')) {
+        forwardRiderReplyToMessenger({
+            custId: activeRiderChatCustId,
+            apiId: targetApiId,
+            text: text,
+            imageUrl: finalImageUrl,
+            locationCoords: customLocationCoords,
+            riderName: riderName
+        });
+    }
+
     if (input && !customText) input.value = "";
     cancelRiderReply();
 
@@ -473,6 +486,66 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
             container.scrollTop = container.scrollHeight;
             setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
         });
+    }
+}
+
+/**
+ * Forwards outbound rider chat message directly to Facebook Messenger via the webhook bridge
+ */
+async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, locationCoords, riderName }) {
+    try {
+        const cleanPsid = String(custId || '').replace(/^fb_/, '');
+        if (!cleanPsid) return;
+
+        let sendEndpoint = null;
+        if (typeof getPublicFbSendEndpoint === 'function') {
+            sendEndpoint = getPublicFbSendEndpoint(apiId);
+        }
+        if (!sendEndpoint && typeof window !== 'undefined' && typeof window.getPublicFbSendEndpoint === 'function') {
+            sendEndpoint = window.getPublicFbSendEndpoint(apiId);
+        }
+
+        // Fallback 1: Fetch directly from active channel in RTDB
+        if (!sendEndpoint && db && apiId) {
+            const snap = await db.ref(`facebookChannels/${apiId}/sendEndpoint`).once('value');
+            sendEndpoint = snap.val();
+        }
+
+        // Fallback 2: Any available sendEndpoint in RTDB
+        if (!sendEndpoint && db) {
+            const allSnap = await db.ref('facebookChannels').once('value');
+            const allVal = allSnap.val() || {};
+            const first = Object.values(allVal).find(c => c && c.sendEndpoint);
+            if (first) sendEndpoint = first.sendEndpoint;
+        }
+
+        if (!sendEndpoint) {
+            console.warn("⚠️ No sendEndpoint available for Facebook channel:", apiId);
+            return;
+        }
+
+        const resp = await fetch(sendEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                recipientId: cleanPsid,
+                text: text,
+                imageUrl: imageUrl,
+                locationCoords: locationCoords,
+                senderName: riderName,
+                apiId: apiId
+            })
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            console.warn("Facebook send reply error:", errData);
+            showToast(`⚠️ Messenger delivery issue: ${errData.error || 'Check Page permissions'}`);
+        } else {
+            console.log("✅ Rider reply delivered to Facebook Messenger!");
+        }
+    } catch (err) {
+        console.error("Failed to forward rider reply to Messenger:", err);
     }
 }
 

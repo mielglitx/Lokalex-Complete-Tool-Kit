@@ -138,6 +138,9 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
 
     if (!tId) return;
 
+    if (!globalState.rosterMembers) globalState.rosterMembers = [];
+    const existingRec = globalState.rosterMembers.find(m => (m.telegramId || m.id || "").toString() === tId);
+
     const nowTimestamp = Date.now();
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const isMe = !specificId || specificId.toString().trim() === myId;
@@ -216,8 +219,8 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         id: tId.toString(),
         riderName: tName,
         name: tName,
-        photoUrl: photoUrl,
-        userType: resolvedUserType,
+        photoUrl: photoUrl || "",
+        userType: resolvedUserType || "rider",
         status: status,
         customerName: customerName || "",
         startTime: startTime || "",
@@ -252,11 +255,23 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
 
     if (db) {
         const rosterRef = db.ref('roster/' + tId);
-        await rosterRef.update(rosterData);
+        
+        // Sanitize object so no undefined property ever reaches Firebase RTDB
+        const sanitizedRosterData = {};
+        for (const [k, v] of Object.entries(rosterData)) {
+            if (v !== undefined) {
+                sanitizedRosterData[k] = v;
+            }
+        }
 
-        rosterRef.onDisconnect().update({
-            lastActiveTimestamp: firebase.database.ServerValue.TIMESTAMP
-        }).catch(() => {});
+        await rosterRef.update(sanitizedRosterData);
+
+        const fb = window.firebase || (typeof firebase !== 'undefined' ? firebase : null);
+        if (fb?.database?.ServerValue?.TIMESTAMP) {
+            rosterRef.onDisconnect().update({
+                lastActiveTimestamp: fb.database.ServerValue.TIMESTAMP
+            }).catch(() => {});
+        }
 
         db.ref(`logins/${tId}`).update({
             totalBreakMinutes: currentTotalBreak

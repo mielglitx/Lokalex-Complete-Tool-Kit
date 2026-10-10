@@ -100,6 +100,12 @@ export function getPublicFbChannelName(apiId) {
     return channel ? channel.name : null;
 }
 
+export function getPublicFbSendEndpoint(apiId) {
+    if (!apiId) return null;
+    const channel = cachedPublicChannelsMap.get(apiId);
+    return channel?.sendEndpoint || null;
+}
+
 /**
  * Backward compatibility helper for single active channel queries
  */
@@ -225,6 +231,7 @@ export function listenToPublicFbChannels() {
                 cachedPublicChannelsMap.set(id, {
                     id: id,
                     name: data.name || "FB Channel",
+                    sendEndpoint: data.sendEndpoint || null,
                     isActive: data.isActive !== false,
                     createdAt: data.createdAt || 0
                 });
@@ -490,6 +497,7 @@ export function resetAdminFbApiForm() {
     const linkInput = document.getElementById('admin-fb-api-link');
     const pageIdInput = document.getElementById('admin-fb-api-pageid');
     const tokenInput = document.getElementById('admin-fb-api-token');
+    const accessTokenInput = document.getElementById('admin-fb-api-accesstoken');
     const editingIdInput = document.getElementById('admin-fb-api-editing-id');
     const submitBtn = document.getElementById('admin-fb-api-submit-btn');
     const cancelEditBtn = document.getElementById('admin-fb-api-cancel-edit-btn');
@@ -498,6 +506,7 @@ export function resetAdminFbApiForm() {
     if (linkInput) linkInput.value = '';
     if (pageIdInput) pageIdInput.value = '';
     if (tokenInput) tokenInput.value = '';
+    if (accessTokenInput) accessTokenInput.value = '';
     if (editingIdInput) editingIdInput.value = '';
 
     if (submitBtn) {
@@ -621,6 +630,7 @@ export function editAdminFbApi(apiId) {
     const linkInput = document.getElementById('admin-fb-api-link');
     const pageIdInput = document.getElementById('admin-fb-api-pageid');
     const tokenInput = document.getElementById('admin-fb-api-token');
+    const accessTokenInput = document.getElementById('admin-fb-api-accesstoken');
     const editingIdInput = document.getElementById('admin-fb-api-editing-id');
     const submitBtn = document.getElementById('admin-fb-api-submit-btn');
     const cancelEditBtn = document.getElementById('admin-fb-api-cancel-edit-btn');
@@ -629,6 +639,7 @@ export function editAdminFbApi(apiId) {
     if (linkInput) linkInput.value = api.apiLink || '';
     if (pageIdInput) pageIdInput.value = api.pageId || '';
     if (tokenInput) tokenInput.value = api.verifyToken || '';
+    if (accessTokenInput) accessTokenInput.value = api.pageAccessToken || '';
     if (editingIdInput) editingIdInput.value = api.id;
 
     if (submitBtn) {
@@ -651,12 +662,14 @@ export async function saveAdminFbApi() {
     const linkInput = document.getElementById('admin-fb-api-link');
     const pageIdInput = document.getElementById('admin-fb-api-pageid');
     const tokenInput = document.getElementById('admin-fb-api-token');
+    const accessTokenInput = document.getElementById('admin-fb-api-accesstoken');
     const editingIdInput = document.getElementById('admin-fb-api-editing-id');
 
     const name = (nameInput?.value || '').trim();
     const link = (linkInput?.value || '').trim();
     const pageId = (pageIdInput?.value || '').trim();
     const token = (tokenInput?.value || '').trim();
+    const accessToken = (accessTokenInput?.value || '').trim();
     const editingId = (editingIdInput?.value || '').trim();
 
     if (!name) {
@@ -670,9 +683,17 @@ export async function saveAdminFbApi() {
     const apiId = editingId || `fb_api_${Date.now()}`;
     const now = Date.now();
 
+    let sendEndpoint = null;
+    if (link) {
+        try {
+            sendEndpoint = link.replace(/\/webhook\/?$/, '') + '/api/send-reply';
+        } catch(e) {}
+    }
+
     const publicPayload = {
         id: apiId,
         name: name,
+        sendEndpoint: sendEndpoint,
         isActive: true,
         createdAt: now
     };
@@ -683,6 +704,7 @@ export async function saveAdminFbApi() {
         apiLink: link,
         pageId: pageId || null,
         verifyToken: token || null,
+        pageAccessToken: accessToken || null,
         isActive: true,
         updatedAt: now,
         createdBy: appState.riderName || (typeof localStorage !== 'undefined' ? localStorage.getItem('riderName') : null) || 'Admin'
@@ -813,5 +835,6 @@ if (typeof window !== 'undefined') {
     window.renderFbChannelSelector = renderFbChannelSelector;
     window.getActiveRiderFbChannel = getActiveRiderFbChannel;
     window.getPublicFbChannelName = getPublicFbChannelName;
+    window.getPublicFbSendEndpoint = getPublicFbSendEndpoint;
     window.listenToPublicFbChannels = listenToPublicFbChannels;
 }

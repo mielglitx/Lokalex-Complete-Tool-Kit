@@ -1049,6 +1049,14 @@
                     </div>
                 </div>
 
+                <!-- 4. Page Access Token (To fetch Customer Name & Profile Pic) -->
+                <div>
+                    <label class="block text-[9.5px] font-bold text-gray-500 dark:text-gray-400 mb-1">
+                        Page Access Token <span class="font-normal text-blue-500 dark:text-blue-400">(Required to display real customer Facebook names & photos)</span>
+                    </label>
+                    <input type="password" id="admin-fb-api-accesstoken" placeholder="EAAG... (from Meta Developer API Setup)" class="w-full bg-white dark:bg-inputBg text-xs font-mono rounded-xl p-2.5 border border-gray-200 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-blue-500 transition shadow-2xs">
+                </div>
+
                 <button type="button" id="admin-fb-api-submit-btn" onclick="window.saveAdminFbApi && window.saveAdminFbApi()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer mt-0.5">
                     <i class="fa-solid fa-plus"></i> Save & Connect API
                 </button>
