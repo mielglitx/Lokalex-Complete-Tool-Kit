@@ -25,6 +25,7 @@ import { escapeHtml } from '../../utils/helpers.js';
 import { isAdmin, saveRosterCache } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 import { updateRosterCreditsDisplay } from '../directory/directoryUi.js';
+import { getRiderStorageKey } from './rosterSchedule.js';
 
 let editingRiderTarget = null;
 let activeTlPermissionsTarget = null;
@@ -908,25 +909,79 @@ export async function executeDeleteRiderAccount(riderId, riderName) {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
     try {
+        const cleanId = (riderId || "").toString().trim();
+        const cleanName = (riderName || "").trim();
+        const storageKey = getRiderStorageKey(cleanId, cleanName);
+
         if (db) {
-            await db.ref(`riders/${riderId}`).remove();
-            await db.ref(`roster/${riderId}`).remove();
-            await db.ref(`settings/timeInSchedule/riderSchedules/${riderId}`).remove().catch(() => {});
-            await db.ref(`settings/userTypes/${riderId}`).remove().catch(() => {});
+            await db.ref(`riders/${cleanId}`).remove();
+            await db.ref(`roster/${cleanId}`).remove();
+            await db.ref(`settings/timeInSchedule/riderSchedules/${cleanId}`).remove().catch(() => {});
+            await db.ref(`settings/userTypes/${cleanId}`).remove().catch(() => {});
+
+            // Also purge rider from day off list in database
+            await db.ref(`riderDayoffs/${cleanId}`).remove().catch(() => {});
+            if (storageKey && storageKey !== cleanId) {
+                await db.ref(`riderDayoffs/${storageKey}`).remove().catch(() => {});
+            }
+            if (cleanName && cleanName.toLowerCase().trim() !== cleanId && cleanName.toLowerCase().trim() !== storageKey) {
+                await db.ref(`riderDayoffs/${cleanName.toLowerCase().trim()}`).remove().catch(() => {});
+            }
+
+            // Sweep any remaining records under riderDayoffs matching id or name
+            try {
+                const dayOffSnap = await db.ref('riderDayoffs').once('value');
+                if (dayOffSnap.exists()) {
+                    const val = dayOffSnap.val() || {};
+                    const deletePromises = [];
+                    Object.entries(val).forEach(([k, rec]) => {
+                        if (rec) {
+                            const rId = (rec.riderId || "").toString().trim();
+                            const rName = (rec.riderName || "").toString().trim().toLowerCase();
+                            if ((cleanId && rId === cleanId) || (cleanName && rName === cleanName.toLowerCase())) {
+                                deletePromises.push(db.ref(`riderDayoffs/${k}`).remove());
+                            }
+                        }
+                    });
+                    if (deletePromises.length > 0) {
+                        await Promise.all(deletePromises);
+                    }
+                }
+            } catch(e) {}
         }
 
         if (globalState.rosterMembers) {
-            globalState.rosterMembers = globalState.rosterMembers.filter(m => (m.telegramId || m.id || "").toString().trim() !== riderId.toString().trim());
+            globalState.rosterMembers = globalState.rosterMembers.filter(m => (m.telegramId || m.id || "").toString().trim() !== cleanId);
         }
 
         if (globalState.userTypesMap) {
-            delete globalState.userTypesMap[riderId];
-            delete globalState.userTypesMap[(riderName || "").toLowerCase()];
+            delete globalState.userTypesMap[cleanId];
+            if (cleanName) delete globalState.userTypesMap[cleanName.toLowerCase()];
+        }
+
+        // Purge rider from local day off state
+        if (globalState.riderDayOffs) {
+            delete globalState.riderDayOffs[cleanId];
+            if (storageKey) delete globalState.riderDayOffs[storageKey];
+            if (cleanName) delete globalState.riderDayOffs[cleanName.toLowerCase().trim()];
+            Object.keys(globalState.riderDayOffs).forEach(k => {
+                const rec = globalState.riderDayOffs[k];
+                if (rec) {
+                    const rId = (rec.riderId || "").toString().trim();
+                    const rName = (rec.riderName || "").toString().trim().toLowerCase();
+                    if ((cleanId && rId === cleanId) || (cleanName && rName === cleanName.toLowerCase())) {
+                        delete globalState.riderDayOffs[k];
+                    }
+                }
+            });
         }
 
         saveRosterCache();
-        showToast(`🗑️ Deleted rider account for ${riderName}`);
+        showToast(`🗑️ Deleted rider account for ${cleanName || cleanId}`);
         renderAdminRidersList();
+        if (typeof window.renderAdminDayOffSettingsList === 'function') {
+            try { window.renderAdminDayOffSettingsList(); } catch(e) {}
+        }
         updateRosterUI();
     } catch(e) {
         showToast("❌ Failed to delete rider account.");

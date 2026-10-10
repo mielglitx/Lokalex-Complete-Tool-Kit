@@ -14,7 +14,10 @@ import {
     hasTlPermission,
     canForceCaterTarget,
     archiveRiderCateringIfNeeded,
-    saveRosterCache 
+    saveRosterCache,
+    isRiderMatch,
+    isCustomerMatch,
+    isSameDateStr
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 import { getTopQueueTime, updateRosterStatus, updateRosterStatusData, voidSingleCateringCustomer, clockOutRider } from './rosterStatus.js';
@@ -316,15 +319,24 @@ export async function adminForceStatus(id, name, actionValue) {
             return showToast("⚠️ Unauthorized: You do not have permission to Void Active Orders.");
         }
         openSlideDeleteModal(`Void Order for ${name}?`, `Sigurado ka bang nais i-void ang active order ni ${name}? Malilipat sya sa #1 SPOT ng Available queue.`, async () => {
-            const topQueueTime = getTopQueueTime();
-            if (db) {
-                db.ref(`roster/${id}/forcedCaters`).remove().catch(() => {});
+            const rawCusts = targetRecord?.customerName ? targetRecord.customerName.split(/\s*,\s*/).map(c => c.trim()).filter(Boolean) : [];
+            if (rawCusts.length > 0) {
+                for (const c of rawCusts) {
+                    await voidSingleCateringCustomer(id, name, c);
+                }
+            } else {
+                const topQueueTime = getTopQueueTime();
+                if (db) {
+                    db.ref(`roster/${id}/forcedCaters`).remove().catch(() => {});
+                    db.ref(`roster/${id}/customerFees`).remove().catch(() => {});
+                }
+                if (targetRecord) {
+                    targetRecord.forcedCaters = null;
+                    targetRecord.customerFees = null;
+                }
+                await updateRosterStatusData('Available', '', '', topQueueTime, id, name, [], false, "", { forcedCaters: null });
+                showToast(`🚫 Voided order for ${name}. Placed in Available queue!`);
             }
-            if (targetRecord) {
-                targetRecord.forcedCaters = null;
-            }
-            await updateRosterStatusData('Available', '', '', topQueueTime, id, name, [], false, "", { forcedCaters: null });
-            showToast(`🚫 Voided order for ${name}. Placed in Available queue!`);
         });
         return;
     }
@@ -384,6 +396,176 @@ export async function adminVoidSpecificCustomer(targetId, targetName, custNameTo
     });
 }
 
+export function openEditCateringCustomerModal(riderId, riderName, currentCustomerName) {
+    if (!canManageRoster() && !hasTlPermission('canForceCater') && !isAdmin()) {
+        return showToast("⚠️ Unauthorized: Only Admin or authorized TL can edit customer names.");
+    }
+
+    const modal = document.getElementById('admin-edit-catering-customer-modal');
+    if (!modal) return;
+
+    const idInput = document.getElementById('edit-cater-rider-id');
+    const nameInput = document.getElementById('edit-cater-rider-name');
+    const oldNameInput = document.getElementById('edit-cater-old-cust-name');
+    const displayEl = document.getElementById('edit-cater-rider-display');
+    const newNameInput = document.getElementById('edit-cater-new-cust-name');
+
+    if (idInput) idInput.value = riderId || "";
+    if (nameInput) nameInput.value = riderName || "";
+    if (oldNameInput) oldNameInput.value = currentCustomerName || "";
+    if (displayEl) displayEl.innerText = `${riderName || 'Rider'} (ID: ${riderId || 'N/A'})`;
+    if (newNameInput) {
+        newNameInput.value = currentCustomerName || "";
+    }
+
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        if (newNameInput) {
+            newNameInput.focus();
+            newNameInput.select();
+        }
+    }, 100);
+}
+
+export function closeEditCateringCustomerModal() {
+    const modal = document.getElementById('admin-edit-catering-customer-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export async function submitEditCateringCustomerName() {
+    if (!canManageRoster() && !hasTlPermission('canForceCater') && !isAdmin()) {
+        return showToast("⚠️ Unauthorized: Admin or TL permission required.");
+    }
+
+    const riderId = document.getElementById('edit-cater-rider-id')?.value || "";
+    const riderName = document.getElementById('edit-cater-rider-name')?.value || "";
+    const oldName = (document.getElementById('edit-cater-old-cust-name')?.value || "").trim();
+    const newName = (document.getElementById('edit-cater-new-cust-name')?.value || "").trim();
+
+    if (!newName) {
+        return showToast("⚠️ Paki-lagay ang bagong pangalan ng customer.");
+    }
+
+    if (oldName.toLowerCase() === newName.toLowerCase()) {
+        closeEditCateringCustomerModal();
+        return showToast("ℹ️ Walang pagbabago sa pangalan.");
+    }
+
+    await executeEditCateringCustomerName(riderId, riderName, oldName, newName);
+}
+
+export async function executeEditCateringCustomerName(riderId, riderName, oldName, newName) {
+    const cleanId = (riderId || "").toString().trim();
+    const cleanName = (riderName || "").trim();
+
+    const roster = globalState.rosterMembers || [];
+    const targetRecord = roster.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").trim().toLowerCase();
+        return (cleanId && mId === cleanId) || (cleanName && mName === cleanName.toLowerCase());
+    });
+
+    if (!targetRecord || targetRecord.status !== 'Catering') {
+        closeEditCateringCustomerModal();
+        return showToast("⚠️ Hindi na aktibong nag-ke-cater ang rider na ito.");
+    }
+
+    const currentCusts = (targetRecord.customerName || "").split(', ').map(c => c.trim()).filter(Boolean);
+    const matchIdx = currentCusts.findIndex(c => c.toLowerCase() === oldName.toLowerCase());
+
+    if (matchIdx !== -1) {
+        currentCusts[matchIdx] = newName;
+    } else {
+        currentCusts.push(newName);
+    }
+
+    const updatedCustomerNames = currentCusts.join(', ');
+    const resolvedTargetId = (targetRecord.telegramId || targetRecord.id || cleanId).toString().trim();
+    const resolvedTargetName = targetRecord.riderName || targetRecord.name || cleanName;
+
+    const cleanOldKey = oldName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanNewKey = newName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const atomicUpdates = {};
+    atomicUpdates[`roster/${resolvedTargetId}/customerName`] = updatedCustomerNames;
+    atomicUpdates[`roster/${resolvedTargetId}/lastUpdated`] = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Migrate in-memory & cloud fees and forced caters
+    if (cleanOldKey && cleanNewKey && cleanOldKey !== cleanNewKey) {
+        if (targetRecord.customerFees && targetRecord.customerFees[cleanOldKey]) {
+            const feeVal = targetRecord.customerFees[cleanOldKey];
+            feeVal.customerName = newName;
+            targetRecord.customerFees[cleanNewKey] = feeVal;
+            delete targetRecord.customerFees[cleanOldKey];
+            atomicUpdates[`roster/${resolvedTargetId}/customerFees/${cleanNewKey}`] = feeVal;
+            atomicUpdates[`roster/${resolvedTargetId}/customerFees/${cleanOldKey}`] = null;
+        }
+
+        if (targetRecord.forcedCaters && (targetRecord.forcedCaters[cleanOldKey] || targetRecord.forcedCaters[oldName])) {
+            const fcVal = targetRecord.forcedCaters[cleanOldKey] || targetRecord.forcedCaters[oldName];
+            fcVal.customerName = newName;
+            targetRecord.forcedCaters[cleanNewKey] = fcVal;
+            delete targetRecord.forcedCaters[cleanOldKey];
+            delete targetRecord.forcedCaters[oldName];
+            atomicUpdates[`roster/${resolvedTargetId}/forcedCaters/${cleanNewKey}`] = fcVal;
+            atomicUpdates[`roster/${resolvedTargetId}/forcedCaters/${cleanOldKey}`] = null;
+        }
+    }
+
+    // Sync active customer chat and metadata
+    if (db) {
+        try {
+            const chatsSnap = await db.ref('customerChats').once('value');
+            if (chatsSnap.exists()) {
+                const allChats = chatsSnap.val() || {};
+                Object.keys(allChats).forEach(custId => {
+                    const meta = allChats[custId]?.metadata || allChats[custId] || {};
+                    const chatCustName = (meta.customerName || meta.name || "").trim().toLowerCase();
+                    if (chatCustName === oldName.toLowerCase()) {
+                        atomicUpdates[`customerChats/${custId}/metadata/customerName`] = newName;
+                        atomicUpdates[`customerChats/${custId}/metadata/name`] = newName;
+                        atomicUpdates[`customerChats/${custId}/metadata/lastUpdated`] = Date.now();
+                        atomicUpdates[`customerChatMeta/${custId}/customerName`] = newName;
+                        atomicUpdates[`customerChatMeta/${custId}/name`] = newName;
+                        atomicUpdates[`customerChatMeta/${custId}/lastUpdated`] = Date.now();
+                        atomicUpdates[`customers/${custId}/name`] = newName;
+                    }
+                });
+            }
+        } catch(e) {
+            console.warn('[executeEditCateringCustomerName] chat sync warning:', e);
+        }
+    }
+
+    if (db && Object.keys(atomicUpdates).length > 0) {
+        try {
+            await db.ref().update(atomicUpdates);
+        } catch(err) {
+            console.error('[executeEditCateringCustomerName] update error:', err);
+            return showToast("❌ Nabigo ang pag-update sa database: " + (err.message || "Error"));
+        }
+    }
+
+    targetRecord.customerName = updatedCustomerNames;
+
+    // If current logged-in device is this rider, update appState.selectedCateringClient
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").trim().toLowerCase();
+    if (resolvedTargetId === myId || (resolvedTargetName && resolvedTargetName.toLowerCase() === myName)) {
+        if (appState.selectedCateringClient && appState.selectedCateringClient.toLowerCase() === oldName.toLowerCase()) {
+            appState.selectedCateringClient = newName;
+        }
+    }
+
+    saveRosterCache();
+    window.dispatchEvent(new CustomEvent('rosterUpdated'));
+    updateRosterUI();
+
+    closeEditCateringCustomerModal();
+    showToast(`✅ Na-update ang customer name ni ${resolvedTargetName} sa [${newName}]!`);
+    showSideNotification("CUSTOMER RENAMED", `${oldName} ➔ ${newName} (${resolvedTargetName})`, "fa-pen-to-square", "text-amber-400", "border-amber-500");
+}
+
 export function promptVoidCustomer(riderName, customerName, completedDate = "", startTime = "", transactionId = "") {
     if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
 
@@ -410,14 +592,34 @@ export async function executeVoidCateredCustomer(riderName, customerName, comple
             if (transactionId) {
                 deletePromises.push(db.ref(`cateredHistory/${transactionId}`).remove());
                 deletePromises.push(db.ref(`receipts/${transactionId}`).remove());
+
+                // Also query records saved under push keys with matching transactionId
+                db.ref('receipts').orderByChild('transactionId').equalTo(transactionId).once('value', (snap) => {
+                    snap.forEach(child => child.ref.remove());
+                });
+                db.ref('cateredHistory').orderByChild('transactionId').equalTo(transactionId).once('value', (snap) => {
+                    snap.forEach(child => child.ref.remove());
+                });
             }
 
             if (completedDate) {
                 const snap = await db.ref('cateredHistory').orderByChild('completedDate').equalTo(completedDate).once('value');
                 const data = snap.val() || {};
                 Object.entries(data).forEach(([key, v]) => {
-                    const rMatch = (v.riderName || "").trim().toLowerCase() === cleanRider;
-                    const cMatch = (v.customerName || "").trim().toLowerCase() === cleanCust;
+                    const rMatch = isRiderMatch(cleanRider, v.riderName);
+                    const cMatch = isCustomerMatch(v.customerName, cleanCust) || (v.customerName || "").trim().toLowerCase() === cleanCust;
+                    const sMatch = !startTime || (v.startTime || "").trim() === startTime.trim();
+                    if (rMatch && cMatch && sMatch) {
+                        deletePromises.push(db.ref(`cateredHistory/${key}`).remove());
+                    }
+                });
+
+                // Also check cateredHistory with 'date' field instead of 'completedDate'
+                const snapDate = await db.ref('cateredHistory').orderByChild('date').equalTo(completedDate).once('value');
+                const dataDate = snapDate.val() || {};
+                Object.entries(dataDate).forEach(([key, v]) => {
+                    const rMatch = isRiderMatch(cleanRider, v.riderName);
+                    const cMatch = isCustomerMatch(v.customerName, cleanCust) || (v.customerName || "").trim().toLowerCase() === cleanCust;
                     const sMatch = !startTime || (v.startTime || "").trim() === startTime.trim();
                     if (rMatch && cMatch && sMatch) {
                         deletePromises.push(db.ref(`cateredHistory/${key}`).remove());
@@ -427,15 +629,15 @@ export async function executeVoidCateredCustomer(riderName, customerName, comple
                 const rcptSnap = await db.ref('receipts').orderByChild('date').equalTo(completedDate).once('value');
                 const rcptData = rcptSnap.val() || {};
                 Object.entries(rcptData).forEach(([key, r]) => {
-                    const rMatch = (r.riderName || "").trim().toLowerCase() === cleanRider;
-                    const cMatch = (r.customerName || "").trim().toLowerCase() === cleanCust;
+                    const rMatch = isRiderMatch(cleanRider, r.riderName);
+                    const cMatch = isCustomerMatch(r.customerName, cleanCust) || (r.customerName || "").trim().toLowerCase() === cleanCust;
                     if (rMatch && cMatch) {
                         deletePromises.push(db.ref(`receipts/${key}`).remove());
                     }
                 });
             }
 
-            const targetRoster = (globalState.rosterMembers || []).find(m => (m.riderName || m.name || "").trim().toLowerCase() === cleanRider);
+            const targetRoster = (globalState.rosterMembers || []).find(m => isRiderMatch(cleanRider, m.riderName || m.name));
             if (targetRoster && (targetRoster.telegramId || targetRoster.id) && cleanCustKey) {
                 const tId = targetRoster.telegramId || targetRoster.id;
                 deletePromises.push(db.ref(`roster/${tId}/customerFees/${cleanCustKey}`).remove());
@@ -448,9 +650,9 @@ export async function executeVoidCateredCustomer(riderName, customerName, comple
         if (globalState.globalCateredHistory) {
             globalState.globalCateredHistory = globalState.globalCateredHistory.filter(h => {
                 const txMatch = transactionId && (h.transactionId === transactionId || h.id === transactionId);
-                const match = (h.riderName || "").trim().toLowerCase() === cleanRider &&
-                              (h.customerName || "").trim().toLowerCase() === cleanCust &&
-                              (!completedDate || isSameDate(h.completedDate || h.date, completedDate));
+                const match = isRiderMatch(cleanRider, h.riderName) &&
+                              isCustomerMatch(h.customerName, cleanCust) &&
+                              (!completedDate || isSameDateStr(h.completedDate || h.date, completedDate));
                 return !(txMatch || match);
             });
         }
@@ -458,9 +660,9 @@ export async function executeVoidCateredCustomer(riderName, customerName, comple
         if (globalState.globalDailyReceipts) {
             globalState.globalDailyReceipts = globalState.globalDailyReceipts.filter(r => {
                 const txMatch = transactionId && (r.transactionId === transactionId || r.id === transactionId);
-                const match = (r.riderName || "").trim().toLowerCase() === cleanRider &&
-                              (r.customerName || "").trim().toLowerCase() === cleanCust &&
-                              (!completedDate || isSameDate(r.date || r.completedDate, completedDate));
+                const match = isRiderMatch(cleanRider, r.riderName) &&
+                              isCustomerMatch(r.customerName, cleanCust) &&
+                              (!completedDate || isSameDateStr(r.date || r.completedDate, completedDate));
                 return !(txMatch || match);
             });
         }
@@ -570,6 +772,10 @@ if (typeof window !== 'undefined') {
     window.toggleAdminControls = toggleAdminControls;
     window.openAdminCateringModal = openAdminCateringModal;
     window.submitAdminForceCatering = submitAdminForceCatering;
+    window.openEditCateringCustomerModal = openEditCateringCustomerModal;
+    window.closeEditCateringCustomerModal = closeEditCateringCustomerModal;
+    window.submitEditCateringCustomerName = submitEditCateringCustomerName;
+    window.executeEditCateringCustomerName = executeEditCateringCustomerName;
     window.adminForceStatus = adminForceStatus;
     window.adminVoidSpecificCustomer = adminVoidSpecificCustomer;
     window.promptVoidCustomer = promptVoidCustomer;

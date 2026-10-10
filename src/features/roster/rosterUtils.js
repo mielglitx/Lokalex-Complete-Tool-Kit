@@ -439,23 +439,34 @@ export function isCustomerMatch(cust1 = "", cust2 = "") {
 export function isRiderMatch(targetName = "", recordName = "", targetId = "", recordId = "") {
     const tId = (targetId || "").toString().trim().toLowerCase();
     const rId = (recordId || "").toString().trim().toLowerCase();
-    if (tId && rId && tId === rId) return true;
+    
+    // 1. If both IDs are present: ID match is definitive
+    if (tId && rId) {
+        return tId === rId;
+    }
 
     const tn = (targetName || "").trim().toLowerCase();
     const rn = (recordName || "").trim().toLowerCase();
     if (!tn || !rn) return false;
     if (tn === rn) return true;
 
-    const w1 = tn.split(/\s+/);
-    const w2 = rn.split(/\s+/);
-    if (w1[0] && w2[0] && w1[0] === w2[0] && w1[0].length >= 3) {
-        return true;
+    // Split into distinct word tokens
+    const w1 = tn.split(/\s+/).filter(Boolean);
+    const w2 = rn.split(/\s+/).filter(Boolean);
+
+    // 2. If both records have multiple names (first + last), never match if last name differs
+    if (w1.length >= 2 && w2.length >= 2) {
+        const firstMatch = w1[0] === w2[0];
+        const lastMatch = w1[w1.length - 1] === w2[w2.length - 1];
+        return firstMatch && lastMatch;
     }
 
-    if (tn.length >= 4 && rn.length >= 4) {
-        if (tn.startsWith(rn) || rn.startsWith(tn) || tn.endsWith(rn) || rn.endsWith(tn)) {
-            return true;
-        }
+    // 3. Single word against full name (e.g. "Allan" matching "Allan Reyes" or vice-versa)
+    if (w1.length === 1 && w2.length > 1 && w1[0].length >= 3) {
+        return w2.includes(w1[0]);
+    }
+    if (w2.length === 1 && w1.length > 1 && w2[0].length >= 3) {
+        return w1.includes(w2[0]);
     }
 
     return false;

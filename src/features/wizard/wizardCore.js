@@ -8,7 +8,7 @@ import { saveCartState, renderCartItems, renderCartTabs } from '../cart.js';
 import { getActiveCateringCustomersWithTimes, calculateSplitDuration, saveRosterCache, updateRosterUI } from '../roster/index.js';
 import { calculateGrandTotal, updateDiscountTypeUI } from './wizardCalc.js';
 import { renderFinalReceiptText } from './wizardTextReceipt.js';
-import { renderReceiptCanvas } from './wizardImageReceipt.js';
+import { renderReceiptCanvas, formatShortRef } from './wizardImageReceipt.js';
 
 export function isRiderActivelyCatering() {
     const myId = (appState.telegramId || "").toString();
@@ -97,6 +97,8 @@ export async function saveReceiptToDatabase(customerName) {
 
     const generatedTxId = `RCPT_${cleanRiderKey}_${cleanCustKey}_${todayClean}_${cleanTimeKey || '1'}`;
     wizState.currentReceiptTransactionId = generatedTxId;
+    const shortRef = formatShortRef(generatedTxId);
+    wizState.shortReceiptRef = shortRef;
 
     const activeCartIdx = globalState.activeCartIndex || 0;
     if (!globalState.cartTxIds) globalState.cartTxIds = ["", "", "", ""];
@@ -107,6 +109,7 @@ export async function saveReceiptToDatabase(customerName) {
         key: generatedTxId,
         type: "receipts",
         transactionId: generatedTxId,
+        shortRef: shortRef,
         telegramId: (appState.telegramId || "").toString().trim(),
         riderName: rName,
         customerName: cName,
@@ -146,6 +149,7 @@ export async function saveReceiptToDatabase(customerName) {
                     totalFees: totalFees,
                     fees: receiptPayload.fees,
                     transactionId: generatedTxId,
+                    shortRef: shortRef,
                     receiptTime: currentTimeStr
                 });
             }
@@ -193,12 +197,14 @@ export function completeReceiptDone() {
         gcashTotal: wizState.gcashTotal || 0,
         customerName: document.getElementById('rcpt-name')?.value.trim() || appState.selectedCateringClient || "Customer",
         txId: currentTx,
+        shortRef: formatShortRef(currentTx),
         timestamp: Date.now()
     };
 
     saveCartState();
 
     wizState.currentReceiptTransactionId = "";
+    wizState.shortReceiptRef = "";
     
     switchView('view-home');
     

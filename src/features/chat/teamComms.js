@@ -57,16 +57,28 @@ export * from './teamComms/teamCommsGroups.js';
 export function listenToFirebaseChat() {
     if (!db) return;
 
-    db.ref('teamChat/groups').on('value', (snap) => {
-        globalState.teamCommsGroups = {};
-        const val = snap.val();
-        if (val) {
-            Object.entries(val).forEach(([gId, gData]) => {
-                if (gData && gData.metadata) {
-                    globalState.teamCommsGroups[gId] = gData.metadata;
+    db.ref('teamChat/groupsMeta').on('value', (snap) => {
+        let val = snap.val();
+        if (!val || Object.keys(val).length === 0) {
+            // One-time fallback migration: seed groupsMeta from groups once
+            db.ref('teamChat/groups').once('value').then(gSnap => {
+                const gVal = gSnap.val();
+                if (gVal) {
+                    const batch = {};
+                    Object.entries(gVal).forEach(([gId, gData]) => {
+                        if (gData && gData.metadata) {
+                            batch[`teamChat/groupsMeta/${gId}`] = gData.metadata;
+                        }
+                    });
+                    if (Object.keys(batch).length > 0) {
+                        db.ref().update(batch).catch(() => {});
+                    }
                 }
-            });
+            }).catch(() => {});
+            return;
         }
+
+        globalState.teamCommsGroups = val || {};
         if (stateMod.teamCommsState.isChatOpen && globalState.teamCommsActiveChannel?.type === 'group') {
             groupsMod.renderGroupRoomsList();
         }

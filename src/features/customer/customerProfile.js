@@ -4,6 +4,7 @@ import { appState } from '../../store/state.js';
 import { showToast } from '../../ui/notifications.js';
 import { escapeHtml } from '../../utils/helpers.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
+import { uploadImage } from '../../utils/imageUpload.js';
 
 export let savedAddressesCache = {};
 export let selectedAddressId = localStorage.getItem('lokalex_selected_address_id') || null;
@@ -197,16 +198,26 @@ export async function submitSaveCustomerProfile() {
 
         if (db && rawCustId) {
             const custId = cleanFirebasePathKey(rawCustId);
+            let finalAvatar = stagedCustomerAvatarData || '';
+            if (finalAvatar && finalAvatar.startsWith('data:')) {
+                showToast("⏳ Uploading profile photo...");
+                try {
+                    finalAvatar = await uploadImage(finalAvatar, `avatars/cust_${custId}_${Date.now()}.jpg`);
+                } catch (e) {
+                    console.warn("Avatar upload fallback:", e);
+                }
+            }
+
             await db.ref(`customers/${custId}`).update({
                 name,
                 phoneNumber: phone,
-                avatarUrl: stagedCustomerAvatarData || null,
+                avatarUrl: finalAvatar || null,
                 updatedAt: Date.now()
             });
 
             await db.ref(`customerChats/${custId}/metadata`).update({
                 customerName: name,
-                avatarUrl: stagedCustomerAvatarData || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0084FF&color=fff`
+                avatarUrl: finalAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0084FF&color=fff`
             }).catch(() => {});
         }
 

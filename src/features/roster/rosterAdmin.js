@@ -318,7 +318,8 @@ export function toggleAdminControls(enabled) {
         'admin-auto-endshift-btn',
         'admin-block-btn',
         'admin-find-riders-btn',
-        'admin-force-all-btn'
+        'admin-force-all-btn',
+        'admin-fb-settings-btn'
     ];
 
     adminButtonIds.forEach(btnId => {

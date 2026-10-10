@@ -1,0 +1,194 @@
+{
+  "rules": {
+    "settings": {
+      ".read": true,
+      ".write": true
+    },
+    "adminSettings": {
+      ".read": true,
+      ".write": true
+    },
+    "facebookChannels": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["createdAt", "isActive"]
+    },
+    "customerChatMeta": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["lastUpdated", "folder", "unreadForRider", "apiId"]
+    },
+    "riderDayoffs": {
+      ".read": true,
+      ".write": true
+    },
+    "customerChats": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["metadata/customerName", "metadata/folder", "metadata/lastUpdated"],
+      "$custId": {
+        "messages": {
+          ".indexOn": ["timestamp"]
+        }
+      }
+    },
+    "storeRiderChats": {
+      ".read": true,
+      ".write": true,
+      "$chatId": {
+        "messages": {
+          ".indexOn": ["timestamp"]
+        }
+      }
+    },
+    "teamChat": {
+      ".read": true,
+      ".write": true,
+      "general": {
+        ".indexOn": ["timestamp"]
+      },
+      "dms": {
+        "$dmId": {
+          ".indexOn": ["timestamp"]
+        }
+      },
+      "groups": {
+        "$groupId": {
+          "metadata": {
+            ".indexOn": ["lastUpdated"]
+          },
+          "messages": {
+            ".indexOn": ["timestamp"]
+          }
+        }
+      }
+    },
+    "commissionSettings": {
+      ".read": true,
+      ".write": true
+    },
+    "commissionPenalties": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["date"]
+    },
+    "commissionSettlements": {
+      ".read": true,
+      ".write": true
+    },
+    "directory": {
+      ".read": true,
+      ".write": true,
+      "barangays": {
+        ".indexOn": ["originMunicipality", "municipality"]
+      }
+    },
+    "customers": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["phoneNumber"]
+    },
+    "roster": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["status", "queueTime", "lastActiveTimestamp"]
+    },
+    "riders": {
+      ".read": true,
+      ".write": true
+    },
+    "cateredHistory": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["completedDate", "date", "riderName", "telegramId", "transactionId"]
+    },
+    "catered": {
+      ".read": true,
+      ".write": true
+    },
+    "receipts": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["date", "riderName", "telegramId", "transactionId"]
+    },
+    "logins": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["date", "riderName", "riderId"]
+    },
+    "liveSessions": {
+      ".read": true,
+      ".write": true
+    },
+    "liveTracking": {
+      ".read": true,
+      ".write": true
+    },
+    "advancedOrders": {
+      ".read": true,
+      ".write": true
+    },
+    "mapCalculations": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["createdAt"]
+    },
+    "swapRequests": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["status", "targetRiderId", "sourceRiderId", "createdAt"]
+    },
+    "chat": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["timestamp"]
+    },
+    "phones": {
+      ".read": true,
+      ".write": true
+    },
+    "emails": {
+      ".read": true,
+      ".write": true
+    },
+    "gcash": {
+      ".read": true,
+      ".write": true
+    },
+    "blockedUsers": {
+      ".read": true,
+      ".write": true
+    },
+    "storeAccounts": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["username", "assignedStoreId"]
+    },
+    "stores": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["ownerAccountId"]
+    },
+    "storeMenus": {
+      ".read": true,
+      ".write": true,
+      "$storeId": {
+        "categories": {
+          ".indexOn": ["orderIndex"]
+        }
+      }
+    },
+    "orders": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["customerId", "assignedRiderId", "status", "timestamp"]
+    },
+    "storeOrders": {
+      ".read": true,
+      ".write": true,
+      "$storeId": {
+        ".indexOn": ["status", "timestamp", "customerId"]
+      }
+    }
+  }
+}

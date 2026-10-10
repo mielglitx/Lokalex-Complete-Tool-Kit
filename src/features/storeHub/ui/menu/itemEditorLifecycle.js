@@ -4,6 +4,7 @@ import { showToast } from '../../../../ui/notifications.js';
 import { escapeHtml } from '../../../../utils/helpers.js';
 import { RESERVED_ADDONS_CATEGORY, isAddonCategoryName, saveMenuItem } from '../../storeMenu.js';
 import { storeHubState, cleanFirebasePathKey } from '../storeHubState.js';
+import { uploadImage } from '../../../../utils/imageUpload.js';
 import { clearItemPhoto } from './storeMenuItemPhoto.js';
 import { updateBasePriceVoidState, updateAddonsSectionState } from './itemEditorFormState.js';
 import { addSizeVariantRow, addCustomAddonRow, renderAddonGroupsSelection } from './itemEditorVariants.js';
@@ -282,6 +283,16 @@ export async function submitSaveStoreItem() {
         });
     }
 
+    let finalImageUrl = finalImage;
+    if (finalImage && finalImage.startsWith('data:')) {
+        showToast("⏳ Uploading product photo...");
+        try {
+            finalImageUrl = await uploadImage(finalImage, `products/${storeId}/${id || Date.now()}.jpg`);
+        } catch (e) {
+            console.warn("Product image upload fallback:", e);
+        }
+    }
+
     const itemPayload = {
         id: id || null,
         name,
@@ -290,7 +301,7 @@ export async function submitSaveStoreItem() {
         isAddonOnly,
         category,
         description,
-        imageUrl: finalImage,
+        imageUrl: finalImageUrl,
         sizes,
         addonGroups,
         addons: flattenedAddons,

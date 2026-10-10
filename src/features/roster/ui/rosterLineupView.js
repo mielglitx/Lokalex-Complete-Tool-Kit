@@ -330,6 +330,18 @@ export function updateRosterUI() {
         else queueSettingsBtn.classList.add('hidden');
     }
 
+    const fbSettingsBtn = document.getElementById('admin-fb-settings-btn');
+    if (fbSettingsBtn) {
+        if (showControls || isAdmin()) fbSettingsBtn.classList.remove('hidden');
+        else fbSettingsBtn.classList.add('hidden');
+    }
+
+    const fbSettingsRosterBtn = document.getElementById('admin-fb-settings-roster-btn');
+    if (fbSettingsRosterBtn) {
+        if (showControls && isAdmin()) fbSettingsRosterBtn.classList.remove('hidden');
+        else fbSettingsRosterBtn.classList.add('hidden');
+    }
+
     const myRecord = rosterMembers.find(m => {
         const rId = (m.telegramId || m.id || "").toString().trim();
         const rName = (m.riderName || m.name || "").toString().trim().toLowerCase();
@@ -497,8 +509,11 @@ export function updateRosterUI() {
                         ` : ''}
 
                         ${showControls ? `
-                            <button type="button" onclick="window.adminVoidSpecificCustomer && window.adminVoidSpecificCustomer('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-300 dark:border-red-700/50 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Void specific customer">
-                                🚫 Void
+                            <button type="button" onclick="window.openEditCateringCustomerModal && window.openEditCateringCustomerModal('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-800 dark:text-amber-300 dark:border-amber-700/50 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1" title="Edit Customer Name">
+                                <i class="fa-solid fa-pen text-[9px]"></i> Edit
+                            </button>
+                            <button type="button" onclick="window.adminVoidSpecificCustomer && window.adminVoidSpecificCustomer('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-300 dark:border-red-700/50 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1" title="Void specific customer">
+                                <i class="fa-solid fa-ban text-[9px]"></i> Void
                             </button>
                         ` : ''}
                     </div>

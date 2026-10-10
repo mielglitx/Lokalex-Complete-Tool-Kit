@@ -37,7 +37,10 @@ export async function openRiderInfoModal(targetId, targetName = "") {
     if (!modal) return;
 
     const roster = globalState.rosterMembers || [];
-    let member = roster.find(m => isRiderMatch(cleanName, m.riderName || m.name || "", cleanId, (m.telegramId || m.id || "").toString()));
+    let member = cleanId ? roster.find(m => (m.telegramId || m.id || "").toString().trim() === cleanId) : null;
+    if (!member && cleanName) {
+        member = roster.find(m => isRiderMatch(cleanName, m.riderName || m.name || "", cleanId, (m.telegramId || m.id || "").toString()));
+    }
 
     const riderId = member ? (member.telegramId || member.id || cleanId).toString() : cleanId;
     const riderName = member ? (member.riderName || member.name || cleanName || "Rider") : (cleanName || "Rider");
@@ -50,7 +53,21 @@ export async function openRiderInfoModal(targetId, targetName = "") {
         } catch(e) {}
     }
 
-    const photoUrl = member?.photoUrl || cloudData?.photoUrl || localStorage.getItem(`lokalex_avatar_${riderId}`) || `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=0284c7&color=ffffff&bold=true&size=128`;
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myPhoto = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || "";
+
+    // Prioritize specific rider's cloud profile, then roster member record
+    let resolvedPhoto = cloudData?.photoUrl || member?.photoUrl || "";
+
+    // Safeguard: If inspecting another rider, never show viewer/admin photo even if historically polluted
+    if (riderId && riderId !== myId && resolvedPhoto && myPhoto && resolvedPhoto === myPhoto) {
+        resolvedPhoto = "";
+    }
+    if (!resolvedPhoto && riderId === myId) {
+        resolvedPhoto = myPhoto;
+    }
+
+    const photoUrl = resolvedPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=0284c7&color=ffffff&bold=true&size=128`;
     const userType = (member?.userType || cloudData?.userType || "rider").toUpperCase();
     const status = (member?.status || "End").toUpperCase();
     const phone = cloudData?.phone || cloudData?.mobile || member?.phone || "";
@@ -277,11 +294,27 @@ export async function openRiderInfoModal(targetId, targetName = "") {
     if (dayOffEl) dayOffEl.innerText = dayOffText;
 
     if (cateringWrapper && cateringText) {
+        const editCaterBtn = document.getElementById('btn-admin-edit-rider-info-catering');
         if (status === 'CATERING' && member?.customerName) {
             cateringText.innerText = member.customerName;
             cateringWrapper.classList.remove('hidden');
+
+            if (editCaterBtn) {
+                const canManage = typeof window.canManageRoster === 'function' ? window.canManageRoster() : false;
+                const canEditCust = isAdmin() || canManage || globalState.adminControlsEnabled;
+                if (canEditCust) {
+                    editCaterBtn.classList.remove('hidden');
+                    const firstCust = (member.customerName.split(', ')[0] || "Customer").trim();
+                    editCaterBtn.onclick = () => {
+                        window.openEditCateringCustomerModal && window.openEditCateringCustomerModal(riderId, riderName, firstCust);
+                    };
+                } else {
+                    editCaterBtn.classList.add('hidden');
+                }
+            }
         } else {
             cateringWrapper.classList.add('hidden');
+            if (editCaterBtn) editCaterBtn.classList.add('hidden');
         }
     }
 

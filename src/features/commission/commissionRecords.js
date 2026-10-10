@@ -359,6 +359,18 @@ export async function executeDeleteCommissionRecord(riderName, customerName, dat
         }
     }
 
+    const cleanCustKey = (customerName || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+    const targetRoster = (globalState.rosterMembers || []).find(m => isRiderMatch(cleanRider, m.riderName || m.name));
+    if (targetRoster && (targetRoster.telegramId || targetRoster.id) && cleanCustKey) {
+        const tId = targetRoster.telegramId || targetRoster.id;
+        if (targetRoster.customerFees && targetRoster.customerFees[cleanCustKey]) {
+            delete targetRoster.customerFees[cleanCustKey];
+        }
+        if (db) {
+            db.ref(`roster/${tId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
+        }
+    }
+
     saveRosterCache();
     showToast("🗑️ Record deleted successfully!");
     refreshCommissionView();

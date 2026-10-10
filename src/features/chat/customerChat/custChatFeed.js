@@ -2,6 +2,7 @@
 import { db } from '../../../config/firebase.js';
 import { appState } from '../../../store/state.js';
 import { showToast } from '../../../ui/notifications.js';
+import { uploadImage } from '../../../utils/imageUpload.js';
 import { 
     custChatState, 
     CUST_CHAT_BATCH_SIZE, 
@@ -179,7 +180,7 @@ export async function toggleCustomerMessageReaction(msgId, emoji) {
     }
 }
 
-export function sendCustomerToRiderChat(customText = "", customImageUrl = null, customLocationCoords = null) {
+export async function sendCustomerToRiderChat(customText = "", customImageUrl = null, customLocationCoords = null) {
     const input = document.getElementById('cust-rider-chat-input');
     const text = customText || (input ? input.value.trim() : "");
 
@@ -189,6 +190,16 @@ export function sendCustomerToRiderChat(customText = "", customImageUrl = null, 
     const custName = localStorage.getItem('customerName') || localStorage.getItem('lokalex_customer_name') || appState.customerName || "Customer";
     const custAvatar = localStorage.getItem('customerAvatarUrl') || localStorage.getItem('lokalex_customer_avatar') || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff`;
     const now = Date.now();
+
+    let finalImageUrl = customImageUrl;
+    if (customImageUrl && customImageUrl.startsWith('data:')) {
+        showToast("⏳ Uploading photo...");
+        try {
+            finalImageUrl = await uploadImage(customImageUrl, `chats/${custFbId}/${now}.jpg`);
+        } catch (e) {
+            console.warn("Chat image upload fallback:", e);
+        }
+    }
 
     const newMsg = {
         sender: custName,
@@ -209,13 +220,13 @@ export function sendCustomerToRiderChat(customText = "", customImageUrl = null, 
         };
     }
 
-    if (customImageUrl) newMsg.imageUrl = customImageUrl;
+    if (finalImageUrl) newMsg.imageUrl = finalImageUrl;
     if (customLocationCoords) newMsg.locationCoords = customLocationCoords;
 
     if (db) {
         db.ref(`customerChats/${custFbId}/messages`).push(sanitizeForFirebase(newMsg));
         db.ref(`customerChats/${custFbId}/metadata`).update(sanitizeForFirebase({
-            lastMessage: text || (customImageUrl ? "📷 Photo" : "📍 Shared Location"),
+            lastMessage: text || (finalImageUrl ? "📷 Photo" : "📍 Shared Location"),
             lastUpdated: now,
             customerName: custName,
             customerFbId: custFbId,

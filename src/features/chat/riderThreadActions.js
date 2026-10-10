@@ -5,6 +5,7 @@ import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
 import { toggleBodyScroll, compressAndResizeImage } from './chatUtils.js';
 import { voidSingleCateringCustomer } from '../roster/rosterStatus.js';
+import { uploadImage } from '../../utils/imageUpload.js';
 
 let stagedPodImageBase64 = null;
 
@@ -156,12 +157,22 @@ export async function submitProofOfDelivery(withPhoto = true) {
 
     closePodModal();
 
-    if (withPhoto && stagedPodImageBase64 && db && custId) {
+    let finalPodUrl = stagedPodImageBase64;
+    if (withPhoto && stagedPodImageBase64) {
+        showToast("⏳ Uploading POD photo...");
+        try {
+            finalPodUrl = await uploadImage(stagedPodImageBase64, `pod/${orderId || custId}_${Date.now()}.jpg`);
+        } catch (e) {
+            console.warn("POD storage upload fallback:", e);
+        }
+    }
+
+    if (withPhoto && finalPodUrl && db && custId) {
         const podMsg = {
             sender: riderName,
             senderType: 'rider',
             text: "📦 Order has been successfully delivered! [Proof of Delivery Attached]",
-            imageUrl: stagedPodImageBase64,
+            imageUrl: finalPodUrl,
             type: 'image',
             timestamp: now,
             isRider: true,
@@ -172,7 +183,7 @@ export async function submitProofOfDelivery(withPhoto = true) {
     }
 
     if (orderId && db) {
-        await updateOrderMilestone('delivered', orderId, stagedPodImageBase64);
+        await updateOrderMilestone('delivered', orderId, finalPodUrl);
     }
 
     executeThreadDone();

@@ -29,6 +29,7 @@ import { db } from '../../config/firebase.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { stopBackgroundRosterGpsTracker } from '../auth/authGps.js';
 import { closeProfileSettingsModal } from './profileUI.js';
+import { uploadImage } from '../../utils/imageUpload.js';
 
 export async function submitSaveProfileSettings() {
     const name = document.getElementById('prof-name-input')?.value.trim();
@@ -63,6 +64,18 @@ export async function submitSaveProfileSettings() {
 
     try {
         if (!db) throw new Error("Database offline.");
+
+        if (profileState.currentAvatarUrl && profileState.currentAvatarUrl.startsWith('data:')) {
+            showToast("⏳ Uploading profile photo...");
+            try {
+                const uploadedAvatar = await uploadImage(profileState.currentAvatarUrl, `avatars/user_${Date.now()}.jpg`);
+                if (uploadedAvatar) {
+                    profileState.currentAvatarUrl = uploadedAvatar;
+                }
+            } catch (e) {
+                console.warn("Avatar upload fallback:", e);
+            }
+        }
 
         if (profileState.activeRole === 'customer') {
             const custId = appState.customerFacebookId || localStorage.getItem('lokalex_customer_fb_id') || `CUST_${Date.now()}`;

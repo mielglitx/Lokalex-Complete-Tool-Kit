@@ -139,8 +139,11 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     if (!tId) return;
 
     const nowTimestamp = Date.now();
-    const existingRec = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === tId);
-    const photoUrl = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || existingRec?.photoUrl || "";
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const isMe = !specificId || specificId.toString().trim() === myId;
+    const photoUrl = isMe 
+        ? (appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || existingRec?.photoUrl || "")
+        : (existingRec?.photoUrl || "");
 
     const isResetStatus = status === 'Available' || status === 'End';
 

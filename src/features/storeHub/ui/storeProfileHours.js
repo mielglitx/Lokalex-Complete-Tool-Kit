@@ -6,6 +6,7 @@ import { getLocalTodayStr, isSameDate } from '../../../utils/helpers.js';
 import { syncHeaderAndWidgets } from '../../../ui/router.js';
 import { updateStoreOpenStatus, updateStoreProfile, updateStoreLogo } from '../storeMenu.js';
 import { storeHubState, cleanFirebasePathKey, compressImageFile } from './storeHubState.js';
+import { uploadImage } from '../../../utils/imageUpload.js';
 
 export function parseTimeToMinutes(timeStr) {
     if (!timeStr) return null;
@@ -363,7 +364,16 @@ export async function submitSaveStoreIcon() {
     }
 
     try {
-        await updateStoreLogo(storeId, storeHubState.stagedLogoData);
+        let finalLogo = storeHubState.stagedLogoData;
+        if (finalLogo && finalLogo.startsWith('data:')) {
+            showToast("⏳ Uploading store logo...");
+            try {
+                finalLogo = await uploadImage(finalLogo, `stores/${storeId}/logo_${Date.now()}.jpg`);
+            } catch (e) {
+                console.warn("Logo upload fallback:", e);
+            }
+        }
+        await updateStoreLogo(storeId, finalLogo);
         closeStoreIconModal();
     } catch (e) {
         showToast("❌ Failed to update store icon.");

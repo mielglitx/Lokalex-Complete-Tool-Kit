@@ -23,14 +23,13 @@ export function toggleBodyScroll(lock) {
 }
 
 // ============================================================================
-// 2. CATERING DROPDOWN POPULATOR (FIXED ROBUST MATCHING)
+// 2. CATERING DROPDOWN POPULATOR (BANDWIDTH OPTIMIZED VIA METADATA INDEX)
 // ============================================================================
-export function populateCateringCustomerDropdown() {
-    const selectEl = document.getElementById('catering-customer-select');
-    if (!selectEl || !db) return;
+export function populateCateringCustomerDropdown(cachedMeta = null) {
+    const selectEl = document.getElementById('catering-customer-select') || document.getElementById('admin-cater-customer-select');
+    if (!selectEl) return;
 
-    db.ref('customerChats').once('value', (snapshot) => {
-        const data = snapshot.val();
+    function applyData(data) {
         let optionsHtml = '<option value="">-- Select Active Customer --</option>';
 
         if (data) {
@@ -56,7 +55,18 @@ export function populateCateringCustomerDropdown() {
         }
 
         selectEl.innerHTML = optionsHtml;
-    });
+    }
+
+    if (cachedMeta && typeof cachedMeta === 'object') {
+        applyData(cachedMeta);
+        return;
+    }
+
+    if (db) {
+        db.ref('customerChatMeta').once('value', (snapshot) => {
+            applyData(snapshot.val());
+        });
+    }
 }
 
 // ============================================================================

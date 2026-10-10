@@ -3,6 +3,7 @@ import { appState, wizState } from '../../store/state.js';
 import { copyText } from '../../utils/helpers.js';
 import { getCurrentCart } from '../cart.js';
 import { getDailyRiderId } from './wizardCalc.js';
+import { formatShortRef, cleanItemDescription } from './wizardImageReceipt.js';
 
 export function renderFinalReceiptText() {
     const dateStr = new Date().toLocaleDateString('en-US', {
@@ -29,10 +30,11 @@ export function renderFinalReceiptText() {
     let itemsTxt = (currentCart.length > 0)
         ? currentCart.map(i => {
             const isPaid = !!i.isPaid || (parseFloat(i.price) || 0) <= 0;
+            const cleanName = cleanItemDescription(i.name || 'Item');
             if (isPaid) {
-                return `🔸 ${i.name || 'Item'} - PAID (₱0.00)`;
+                return `🔸 ${cleanName} - PAID (₱0.00)`;
             }
-            return `🔸 ${i.name || 'Item'} - ₱${Math.max(0, parseFloat(i.price) || 0).toFixed(2)}`;
+            return `🔸 ${cleanName} - ₱${Math.max(0, parseFloat(i.price) || 0).toFixed(2)}`;
         }).join("\n")
         : "🔸 (Walang items)";
 
@@ -57,17 +59,21 @@ export function renderFinalReceiptText() {
     let gcashTxt = "";
     if (gcashName || gcashNo) {
         gcashTxt = 
-`\n📱 **GCASH PAYMENT DETAILS:**
+`\n📱 **ePAYMENT DETAILS:**
 👤 Account Name: ${gcashName || 'N/A'}
-📱 GCash Number: \`${gcashNo || 'N/A'}\`
+📱 Mobile / Account No: \`${gcashNo || 'N/A'}\`
 ➖➖➖➖➖➖➖➖➖➖➖➖\n`;
     }
+
+    const rawTxId = wizState.currentReceiptTransactionId || "";
+    const shortRef = formatShortRef(rawTxId);
 
     const receiptEl = document.getElementById('final-receipt-text');
     if (receiptEl) {
         receiptEl.innerText = 
 `🧾 **LOKALEX OFFICIAL RECEIPT** 🧾
 
+🔖 **Ref #:** \`#${shortRef}\`
 📅 **Date:** ${dateStr}
 🛵 **Rider:** ${appState.riderName || 'Rider'}
 🔑 **Rider ID:** \`${dailyRiderId}\`
@@ -80,7 +86,7 @@ ${itemsTxt}
 📋 **FEES:**
 ${feesTxt}➖➖➖➖➖➖➖➖➖➖➖➖
 💰 **COD TOTAL (Cash): ₱${codTotal.toFixed(2)}**
-📱 **GCASH TOTAL (+₱${epayFee.toFixed(2)} Fee): ₱${gcashTotal.toFixed(2)}**
+📱 **ePAYMENT TOTAL (+₱${epayFee.toFixed(2)} Fee): ₱${gcashTotal.toFixed(2)}**
 ➖➖➖➖➖➖➖➖➖➖➖➖${gcashTxt}
 💙 Salamat sa pagtitiwala sa Lokalex!`;
     }

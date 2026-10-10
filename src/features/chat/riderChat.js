@@ -4,6 +4,8 @@ import { appState, globalState } from '../../store/state.js';
 import { escapeHtml } from '../../utils/helpers.js';
 import { toggleBodyScroll } from './chatUtils.js';
 import { openMapPicker } from '../maps.js';
+import { showToast } from '../../ui/notifications.js';
+import { uploadImage } from '../../utils/imageUpload.js';
 import { highlightActiveMilestoneUI } from './riderThreadActions.js';
 import { 
     showRiderInChatToast, 
@@ -399,7 +401,7 @@ export function sendRiderChatMessage(content = null, type = 'text') {
     sendRiderToCustomerChat(content, type === 'image' ? content : null);
 }
 
-export function sendRiderToCustomerChat(customText = "", customImageUrl = null, customLocationCoords = null) {
+export async function sendRiderToCustomerChat(customText = "", customImageUrl = null, customLocationCoords = null) {
     const input = document.getElementById('rider-cust-chat-input') || document.getElementById('rider-chat-input');
     const text = customText || (input ? input.value.trim() : "");
 
@@ -408,6 +410,19 @@ export function sendRiderToCustomerChat(customText = "", customImageUrl = null, 
     const riderName = appState.riderName || "Lokalex Rider";
     const now = Date.now();
 
+    let finalImageUrl = customImageUrl;
+    if (customImageUrl && customImageUrl.startsWith('data:')) {
+        showToast("⏳ Uploading photo...");
+        try {
+            finalImageUrl = await uploadImage(customImageUrl, `chats/${activeRiderChatCustId}/${now}.jpg`);
+        } catch (e) {
+            console.warn("Chat image upload fallback:", e);
+        }
+    }
+
+    const targetChannel = currentRiderChatMeta?.channel || (activeRiderChatCustId?.startsWith('fb_') ? 'messenger' : 'web');
+    const targetApiId = currentRiderChatMeta?.apiId || currentRiderChatMeta?.channelId || null;
+
     const newMsg = {
         sender: riderName,
         senderType: 'rider',
@@ -415,6 +430,8 @@ export function sendRiderToCustomerChat(customText = "", customImageUrl = null, 
         timestamp: now,
         isRider: true,
         status: 'sent',
+        channel: targetChannel,
+        apiId: targetApiId,
         deliveredAt: null,
         seenAt: null
     };
@@ -427,8 +444,8 @@ export function sendRiderToCustomerChat(customText = "", customImageUrl = null, 
         };
     }
 
-    if (customImageUrl) {
-        newMsg.imageUrl = customImageUrl;
+    if (finalImageUrl) {
+        newMsg.imageUrl = finalImageUrl;
         newMsg.type = 'image';
     }
     if (customLocationCoords) {
@@ -439,7 +456,7 @@ export function sendRiderToCustomerChat(customText = "", customImageUrl = null, 
     if (db) {
         db.ref(`customerChats/${activeRiderChatCustId}/messages`).push(sanitizeForFirebase(newMsg));
         db.ref(`customerChats/${activeRiderChatCustId}/metadata`).update(sanitizeForFirebase({
-            lastMessage: `You: ${text || (customImageUrl ? "📷 Photo" : "📍 Location")}`,
+            lastMessage: `You: ${text || (finalImageUrl ? "📷 Photo" : "📍 Location")}`,
             lastUpdated: now,
             unreadForRider: false
         }));

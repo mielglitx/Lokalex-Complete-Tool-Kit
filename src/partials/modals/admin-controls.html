@@ -901,9 +901,14 @@
             </div>
 
             <div id="rider-info-active-catering-wrapper" class="hidden bg-orange-500/10 border border-orange-500/30 p-2.5 rounded-xl flex flex-col gap-1">
-                <span class="text-[10px] text-orange-400 font-bold uppercase flex items-center gap-1">
-                    <i class="fa-solid fa-motorcycle"></i> Active Catering Session:
-                </span>
+                <div class="flex items-center justify-between">
+                    <span class="text-[10px] text-orange-400 font-bold uppercase flex items-center gap-1">
+                        <i class="fa-solid fa-motorcycle"></i> Active Catering Session:
+                    </span>
+                    <button type="button" id="btn-admin-edit-rider-info-catering" class="hidden bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-800 dark:text-amber-300 dark:border-amber-700/50 px-2 py-0.5 rounded text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1" title="Edit Customer Name">
+                        <i class="fa-solid fa-pen text-[9px]"></i> Edit
+                    </button>
+                </div>
                 <span id="rider-info-active-catering" class="font-bold text-xs text-orange-200"></span>
             </div>
         </div>
@@ -977,4 +982,95 @@
         </div>
     </div>
 </div>
-<!-- REMARKS: ADMIN_CONTROLS_ALL_17_MODALS_INCLUDING_CUSTOM_DUTY_HOURS_AND_DAILY_PASSES_V1_COMPLETE -->
+
+<!-- 18. ADMIN FACEBOOK MESSENGER API SETTINGS MODAL -->
+<div id="admin-fb-api-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-cardBg border border-blue-500/60 p-4 sm:p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3.5 max-h-[90vh] relative animate-in fade-in zoom-in duration-200">
+        <!-- HEADER -->
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5 shrink-0">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-500 flex items-center justify-center text-lg font-bold border border-blue-500/30">
+                    <i class="fa-brands fa-facebook-messenger"></i>
+                </div>
+                <div>
+                    <h3 class="font-black text-sm text-gray-900 dark:text-white">Facebook API Settings</h3>
+                    <p class="text-[9.5px] text-blue-500 dark:text-blue-400 font-mono">Live Chats API Hub (Hidden links from riders)</p>
+                </div>
+            </div>
+            <button onclick="window.closeAdminFbApiModal && window.closeAdminFbApiModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-base cursor-pointer p-1">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="flex flex-col gap-3.5 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
+            <!-- ADD / EDIT API FORM -->
+            <div class="bg-gray-50 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex flex-col gap-2.5">
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] font-black uppercase text-gray-700 dark:text-gray-300 tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-plus-circle text-blue-500"></i>
+                        <span>Add / Edit API Configuration</span>
+                    </span>
+                    <button type="button" id="admin-fb-api-cancel-edit-btn" onclick="window.resetAdminFbApiForm && window.resetAdminFbApiForm()" class="hidden text-[10px] text-amber-500 font-bold hover:underline cursor-pointer">
+                        Cancel Edit
+                    </button>
+                </div>
+
+                <input type="hidden" id="admin-fb-api-editing-id">
+
+                <!-- 1. Dedicated Name -->
+                <div>
+                    <label class="block text-[9.5px] font-bold text-gray-500 dark:text-gray-400 mb-1">
+                        Dedicated Name <span class="text-red-500">*</span> <span class="text-gray-400 dark:text-gray-500 font-normal">(Riders pick from this name)</span>
+                    </label>
+                    <input type="text" id="admin-fb-api-name" placeholder="e.g. Camiling Food Delivery or Tarlac Dispatch" class="w-full bg-white dark:bg-inputBg text-xs rounded-xl p-2.5 border border-gray-200 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold focus:border-blue-500 transition shadow-2xs">
+                </div>
+
+                <!-- 2. Webhook / API Link (Private) -->
+                <div>
+                    <label class="block text-[9.5px] font-bold text-gray-500 dark:text-gray-400 mb-1">
+                        API Link / Webhook URL <span class="text-red-500">*</span> <span class="text-amber-500 dark:text-amber-400 font-normal">(Strictly hidden from ordinary riders)</span>
+                    </label>
+                    <input type="url" id="admin-fb-api-link" placeholder="https://your-webhook.domain.com/camiling or Meta API URL" class="w-full bg-white dark:bg-inputBg text-xs font-mono rounded-xl p-2.5 border border-gray-200 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-blue-500 transition shadow-2xs">
+                </div>
+
+                <!-- 3. Optional Page ID & Verify Token -->
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[9px] font-bold text-gray-500 dark:text-gray-400 mb-1">
+                            Page ID <span class="font-normal">(Optional)</span>
+                        </label>
+                        <input type="text" id="admin-fb-api-pageid" placeholder="104928491823" class="w-full bg-white dark:bg-inputBg text-[11px] font-mono rounded-xl p-2 border border-gray-200 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-blue-500 transition shadow-2xs">
+                    </div>
+                    <div>
+                        <label class="block text-[9px] font-bold text-gray-500 dark:text-gray-400 mb-1">
+                            Verify Token <span class="font-normal">(Optional)</span>
+                        </label>
+                        <input type="text" id="admin-fb-api-token" placeholder="secret_verify_token" class="w-full bg-white dark:bg-inputBg text-[11px] font-mono rounded-xl p-2 border border-gray-200 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-blue-500 transition shadow-2xs">
+                    </div>
+                </div>
+
+                <button type="button" id="admin-fb-api-submit-btn" onclick="window.saveAdminFbApi && window.saveAdminFbApi()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer mt-0.5">
+                    <i class="fa-solid fa-plus"></i> Save & Connect API
+                </button>
+            </div>
+
+            <!-- CONFIGURED APIS LIST -->
+            <div class="flex flex-col gap-2">
+                <div class="flex justify-between items-center">
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Configured APIs</span>
+                    <span id="admin-fb-apis-count-badge" class="text-[9.5px] font-mono font-bold text-blue-500 dark:text-blue-400">0 configured</span>
+                </div>
+                <div id="admin-fb-apis-list" class="flex flex-col gap-2 min-h-[100px]">
+                    <div class="text-center text-gray-400 dark:text-gray-500 italic py-6 text-xs">Loading configured Facebook APIs...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="border-t border-gray-200 dark:border-gray-800 pt-2 shrink-0">
+            <button type="button" onclick="window.closeAdminFbApiModal && window.closeAdminFbApiModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-300 font-bold py-2 rounded-xl text-xs transition active:scale-95 cursor-pointer">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+<!-- REMARKS: ADMIN_CONTROLS_ALL_18_MODALS_INCLUDING_FACEBOOK_API_SETTINGS_V1_COMPLETE -->

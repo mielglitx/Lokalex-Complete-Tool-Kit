@@ -233,7 +233,7 @@ export async function confirmCateringStatus() {
 
     if (db && custName) {
         const cleanSearchName = custName.toLowerCase().trim();
-        db.ref('customerChats').once('value', (snapshot) => {
+        db.ref('customerChatMeta').once('value', (snapshot) => {
             const chats = snapshot.val();
             if (chats) {
                 Object.keys(chats).forEach(custId => {

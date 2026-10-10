@@ -1,42 +1,53 @@
 // src/sw.js
+import { clientsClaim } from 'workbox-core';
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
-import { CacheFirst } from 'workbox-strategies';
+import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 
-// 1. Precache all compiled Vite chunks, CSS, HTML, and local assets
+// 1. Take control of clients immediately on activation
+self.skipWaiting();
+clientsClaim();
+
+// 2. Precache all compiled Vite chunks, CSS, HTML, and local assets
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
-// 2. Cache external CDN scripts (Firebase SDKs, QR library, Tesseract OCR)
+// 3. Cache external CDN scripts (Firebase SDKs, QR library, Tesseract OCR, Tailwind, Leaflet)
 registerRoute(
-    ({ url }) => url.origin === 'https://www.gstatic.com' || url.origin === 'https://cdn.jsdelivr.net',
-    new CacheFirst({
+    ({ url }) => url.origin === 'https://www.gstatic.com' || 
+                 url.origin === 'https://cdn.jsdelivr.net' ||
+                 url.origin === 'https://cdn.tailwindcss.com' ||
+                 url.origin === 'https://unpkg.com',
+    new StaleWhileRevalidate({
         cacheName: 'external-cdn-scripts',
         plugins: [
             new CacheableResponsePlugin({
                 statuses: [0, 200]
             }),
             new ExpirationPlugin({
-                maxEntries: 40,
+                maxEntries: 50,
                 maxAgeSeconds: 60 * 24 * 60 * 60
             })
         ]
     })
 );
 
-// 3. Cache external stylesheets and icon fonts (FontAwesome, Google Fonts)
+// 4. Cache external stylesheets and icon fonts (FontAwesome, Google Fonts, Leaflet CSS)
 registerRoute(
-    ({ url }) => url.origin === 'https://cdnjs.cloudflare.com' || url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com',
-    new CacheFirst({
+    ({ url }) => url.origin === 'https://cdnjs.cloudflare.com' || 
+                 url.origin === 'https://fonts.googleapis.com' || 
+                 url.origin === 'https://fonts.gstatic.com' ||
+                 (url.origin === 'https://unpkg.com' && url.pathname.endsWith('.css')),
+    new StaleWhileRevalidate({
         cacheName: 'external-fonts-and-styles',
         plugins: [
             new CacheableResponsePlugin({
                 statuses: [0, 200]
             }),
             new ExpirationPlugin({
-                maxEntries: 30,
+                maxEntries: 40,
                 maxAgeSeconds: 90 * 24 * 60 * 60
             })
         ]
@@ -48,13 +59,13 @@ importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
 const firebaseConfig = {
-    apiKey: "AIzaSyD2ZbvO60h-udB_iNZ6zVbmXjMwYfbS_2w",
-    authDomain: "lokalex-hub.firebaseapp.com",
-    databaseURL: "https://lokalex-hub-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "lokalex-hub",
-    storageBucket: "lokalex-hub.appspot.com",
-    messagingSenderId: "102938475610",
-    appId: "1:102938475610:web:abcdef1234567890"
+    apiKey: "AIzaSyCH4wLvGZ3yI863kc-dX-N2GZRHSPB0cvY",
+    authDomain: "lokalexoptimized-rtdb.firebaseapp.com",
+    databaseURL: "https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "lokalexoptimized-rtdb",
+    storageBucket: "lokalexoptimized-rtdb.firebasestorage.app",
+    messagingSenderId: "654116118153",
+    appId: "1:654116118153:web:604c56fb7e0ede08bb3058"
 };
 
 firebase.initializeApp(firebaseConfig);

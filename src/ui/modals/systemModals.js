@@ -63,6 +63,11 @@ export function closeAdminCateringModal() {
     if (modal) modal.classList.add('hidden');
 }
 
+export function closeEditCateringCustomerModal() {
+    const modal = document.getElementById('admin-edit-catering-customer-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
 export function openPasswordModal() {
     const modal = document.getElementById('password-modal');
     if (modal) modal.classList.remove('hidden');
@@ -202,6 +207,7 @@ if (typeof window !== 'undefined') {
     window.closeGpsModal = closeGpsModal;
     window.closeCateringModal = closeCateringModal;
     window.closeAdminCateringModal = closeAdminCateringModal;
+    window.closeEditCateringCustomerModal = closeEditCateringCustomerModal;
     window.openPasswordModal = openPasswordModal;
     window.closePasswordModal = closePasswordModal;
     window.showBulkAddModal = showBulkAddModal;

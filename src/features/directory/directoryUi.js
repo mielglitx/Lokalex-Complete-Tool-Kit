@@ -39,6 +39,7 @@ import { escapeHtml, copyText } from '../../utils/helpers.js';
 import { idbGet, idbSet } from '../../utils/storageEngine.js';
 import { loadDirectoryCache } from './directoryStorage.js';
 import { checkAdminAccess } from './directoryPermissions.js';
+import { uploadImage } from '../../utils/imageUpload.js';
 
 let lastJumpLetter = "";
 let creditsListenerActive = false;
@@ -400,15 +401,35 @@ export function initStoreMenuGalleriesListener() {
         }
     } catch (e) {}
 
-    db.ref('directory/storeMenuGalleries').on('value', (snap) => {
-        const val = snap.val() || {};
-        const newMap = {};
+    db.ref('directory/storeMenuMeta').on('value', (snap) => {
+        let val = snap.val();
+        if (!val || Object.keys(val).length === 0) {
+            // One-time fallback migration: seed directory/storeMenuMeta from galleries once
+            db.ref('directory/storeMenuGalleries').once('value').then(gSnap => {
+                const gVal = gSnap.val() || {};
+                const metaBatch = {};
+                Object.entries(gVal).forEach(([k, d]) => {
+                    if (d) {
+                        const pages = d.pages ? Object.values(d.pages) : [];
+                        metaBatch[`directory/storeMenuMeta/${k}`] = {
+                            pageCount: pages.length,
+                            updatedAt: d.updatedAt || 0,
+                            storeName: d.storeName || ""
+                        };
+                    }
+                });
+                if (Object.keys(metaBatch).length > 0) {
+                    db.ref().update(metaBatch).catch(() => {});
+                }
+            }).catch(() => {});
+            return;
+        }
 
+        const newMap = {};
         Object.entries(val).forEach(([key, data]) => {
             if (data) {
-                const pages = data.pages ? Object.values(data.pages) : [];
                 const storeMeta = {
-                    pageCount: pages.length,
+                    pageCount: data.pageCount || 0,
                     updatedAt: data.updatedAt || 0,
                     storeName: data.storeName || ""
                 };
@@ -852,15 +873,21 @@ function getOrCreateMenuGalleryModal() {
             </div>
 
             <!-- Compact Upload Bar -->
-            <div class="px-4 py-2 bg-amber-50/50 dark:bg-amber-950/20 border-b border-amber-200/50 dark:border-amber-500/20 flex items-center justify-between gap-2 flex-wrap">
-                <div class="flex items-center gap-1 text-[10px] text-amber-800 dark:text-amber-300 font-bold">
-                    <i class="fa-solid fa-camera"></i>
+            <div class="px-4 py-2.5 bg-amber-50/60 dark:bg-amber-950/20 border-b border-amber-200/50 dark:border-amber-500/20 flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-1.5 text-[10px] text-amber-900 dark:text-amber-300 font-bold">
+                    <i class="fa-solid fa-camera text-amber-600 dark:text-amber-400"></i>
                     <span>Got updated photos?</span>
                 </div>
-                <label class="bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-black px-2.5 py-1 rounded-lg cursor-pointer transition active:scale-95 shadow-xs flex items-center gap-1">
-                    <i class="fa-solid fa-plus text-[9px]"></i> Add Pages
-                    <input type="file" id="gallery-upload-input" accept="image/*" multiple class="hidden" onchange="window.handleMenuPhotoUpload && window.handleMenuPhotoUpload(event)">
-                </label>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="window.openMenuCameraScanner && window.openMenuCameraScanner()" class="bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-black px-2.5 py-1.5 rounded-xl cursor-pointer transition active:scale-95 shadow-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-camera text-[10px]"></i> Take Photo
+                    </button>
+                    <label class="bg-white hover:bg-gray-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-gray-200 text-[11px] font-bold px-2.5 py-1.5 rounded-xl cursor-pointer transition active:scale-95 shadow-xs flex items-center gap-1.5 border border-gray-200 dark:border-zinc-700">
+                        <i class="fa-solid fa-images text-[10px] text-gray-500 dark:text-gray-400"></i> Gallery
+                        <input type="file" id="gallery-upload-input" accept="image/*" multiple class="hidden" onchange="window.handleMenuPhotoUpload && window.handleMenuPhotoUpload(event)">
+                    </label>
+                    <input type="file" id="gallery-camera-fallback-input" accept="image/*" capture="environment" class="hidden" onchange="window.handleMenuPhotoUpload && window.handleMenuPhotoUpload(event)">
+                </div>
             </div>
 
             <!-- Body: Compact 2-Column Mobile Grid -->
@@ -887,41 +914,435 @@ function getOrCreateMenuGalleryModal() {
     return modal;
 }
 
-function compressImageToBlob(file, maxWidth = 1400, quality = 0.82) {
+function compressImageToBlob(fileOrBlob, maxWidth = 1800, quality = 0.85, enhanceDocument = true) {
     return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => {
-                let width = img.width;
-                let height = img.height;
+        let objectUrl = "";
+        if (typeof fileOrBlob === 'string' && fileOrBlob.startsWith('data:')) {
+            objectUrl = fileOrBlob;
+        } else if (fileOrBlob instanceof Blob || fileOrBlob instanceof File) {
+            objectUrl = URL.createObjectURL(fileOrBlob);
+        } else {
+            return reject(new Error("Invalid image source for compression"));
+        }
 
-                if (width > maxWidth) {
-                    height = Math.round((height * maxWidth) / width);
-                    width = maxWidth;
+        const img = new Image();
+        img.onload = () => {
+            if (objectUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(objectUrl);
+            }
+
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext('2d');
+
+            if (enhanceDocument && ctx.filter !== undefined) {
+                // Subtle document enhancement: darker text, sharper price readability in dim lighting
+                ctx.filter = 'contrast(1.08) brightness(1.02) saturate(1.05)';
+            }
+
+            ctx.drawImage(img, 0, 0, width, height);
+
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    resolve(blob);
+                } else {
+                    reject(new Error("Canvas blob compression failed."));
                 }
-
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-
-                canvas.toBlob((blob) => {
-                    if (blob) {
-                        resolve(blob);
-                    } else {
-                        reject(new Error("Canvas blob compression failed."));
-                    }
-                }, 'image/jpeg', quality);
-            };
-            img.onerror = reject;
-            img.src = e.target.result;
+            }, 'image/jpeg', quality);
         };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
+        img.onerror = (err) => {
+            if (objectUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(objectUrl);
+            }
+            reject(err);
+        };
+        img.src = objectUrl;
     });
+}
+
+// ============================================================================
+// DIRECT IN-APP HIGH-RESOLUTION MENU CAMERA & DOCUMENT SCANNER MODULE
+// ============================================================================
+
+let activeCameraStream = null;
+let activeCameraFacingMode = 'environment';
+let isTorchOn = false;
+let capturedSnapshotBlob = null;
+
+export function getOrCreateMenuCameraModal() {
+    let modal = document.getElementById('store-menu-camera-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'store-menu-camera-modal';
+        modal.className = 'fixed inset-0 z-60 bg-black flex flex-col justify-between hidden select-none animate-scaleUp';
+        modal.innerHTML = `
+        <!-- Camera Top Bar -->
+        <div class="flex items-center justify-between px-4 py-3 bg-black/85 backdrop-blur-md text-white z-20 border-b border-white/10">
+            <button type="button" onclick="window.closeMenuCameraScanner && window.closeMenuCameraScanner()" class="p-2 text-white/80 hover:text-white text-base cursor-pointer">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div class="text-center min-w-0 flex-1 px-2">
+                <h4 id="menu-camera-title" class="text-xs sm:text-sm font-black truncate text-white">Menu Document Scanner</h4>
+                <p class="text-[9px] sm:text-[10px] text-amber-400 font-medium">Text Clarity & 4:3 High-Res Sensor Mode</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="button" id="menu-camera-torch-btn" onclick="window.toggleMenuCameraTorch && window.toggleMenuCameraTorch()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs transition cursor-pointer hidden" title="Toggle Flash / Torch">
+                    <i class="fa-solid fa-bolt"></i>
+                </button>
+                <button type="button" onclick="window.flipMenuCameraFacing && window.flipMenuCameraFacing()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs transition cursor-pointer" title="Flip Camera">
+                    <i class="fa-solid fa-camera-rotate"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Viewfinder Area -->
+        <div class="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
+            <video id="menu-camera-video" autoplay playsinline muted class="w-full h-full object-cover"></video>
+            
+            <!-- Framing overlay with document corners -->
+            <div id="menu-camera-framing-box" class="absolute inset-4 sm:inset-8 pointer-events-none flex flex-col items-center justify-between border-2 border-white/20 rounded-2xl p-4 shadow-2xl">
+                <!-- Top corners -->
+                <div class="w-full flex justify-between">
+                    <div class="w-6 h-6 border-t-4 border-l-4 border-amber-400 rounded-tl-lg shadow-sm"></div>
+                    <div class="w-6 h-6 border-t-4 border-r-4 border-amber-400 rounded-tr-lg shadow-sm"></div>
+                </div>
+                
+                <div class="bg-black/70 backdrop-blur-md px-3.5 py-1.5 rounded-full text-white/95 text-[10px] sm:text-xs font-bold tracking-wide flex items-center gap-1.5 shadow-lg border border-white/10">
+                    <i class="fa-solid fa-expand text-amber-400"></i>
+                    <span>Align menu page inside box</span>
+                </div>
+
+                <!-- Bottom corners -->
+                <div class="w-full flex justify-between">
+                    <div class="w-6 h-6 border-b-4 border-l-4 border-amber-400 rounded-bl-lg shadow-sm"></div>
+                    <div class="w-6 h-6 border-b-4 border-r-4 border-amber-400 rounded-br-lg shadow-sm"></div>
+                </div>
+            </div>
+
+            <!-- Snap review preview container (hidden until snapshot taken) -->
+            <div id="menu-camera-review-container" class="absolute inset-0 bg-black/95 flex flex-col justify-between hidden z-30">
+                <div class="px-4 py-2.5 bg-black/85 flex items-center justify-between text-white text-xs font-bold border-b border-white/10">
+                    <span class="flex items-center gap-1.5 text-amber-400">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Document Text Enhanced
+                    </span>
+                    <span id="menu-camera-review-page-label" class="text-[10px] text-gray-300">Page Preview</span>
+                </div>
+                
+                <div class="flex-1 flex items-center justify-center p-3 overflow-hidden">
+                    <img id="menu-camera-preview-img" src="" alt="Menu Snapshot" class="max-w-full max-h-full object-contain rounded-xl shadow-2xl border border-white/20">
+                </div>
+
+                <div class="p-3 sm:p-4 bg-zinc-900 border-t border-zinc-800 flex flex-col gap-2.5">
+                    <div class="flex items-center gap-2">
+                        <label for="menu-camera-caption-input" class="text-[11px] font-bold text-gray-300 shrink-0">Caption:</label>
+                        <input type="text" id="menu-camera-caption-input" placeholder="e.g. Menu Page 1, Drinks, Snacks" class="flex-1 bg-black/60 border border-zinc-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-amber-500">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="window.retakeMenuCameraSnapshot && window.retakeMenuCameraSnapshot()" class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs py-2.5 rounded-xl transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer">
+                            <i class="fa-solid fa-rotate-left"></i> Retake
+                        </button>
+                        <button type="button" id="menu-camera-confirm-btn" onclick="window.confirmAndUploadMenuSnapshot && window.confirmAndUploadMenuSnapshot()" class="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-black text-xs py-2.5 rounded-xl transition active:scale-95 shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
+                            <i class="fa-solid fa-cloud-arrow-up"></i> Save & Add Page
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Camera Bottom Controls Bar -->
+        <div id="menu-camera-bottom-bar" class="p-4 sm:p-5 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center gap-2 z-20 border-t border-white/10">
+            <div class="flex items-center justify-center w-full">
+                <button type="button" onclick="window.takeMenuCameraSnapshot && window.takeMenuCameraSnapshot()" class="w-18 h-18 rounded-full border-4 border-white flex items-center justify-center bg-white/20 active:scale-90 transition p-1 cursor-pointer shadow-2xl focus:outline-none" title="Capture Photo">
+                    <div class="w-14 h-14 rounded-full bg-amber-500 hover:bg-amber-400 transition shadow-inner"></div>
+                </button>
+            </div>
+            <p class="text-[10px] text-gray-400 font-medium tracking-wide">
+                Hold phone steady • Tap to capture sharp text & prices
+            </p>
+        </div>`;
+        document.body.appendChild(modal);
+    }
+    return modal;
+}
+
+export async function openMenuCameraScanner() {
+    if (!activeGalleryStore) {
+        showToast("⚠️ Paki-pili muna ang store bago mag-take ng photo.");
+        return;
+    }
+
+    const modal = getOrCreateMenuCameraModal();
+    const titleEl = document.getElementById('menu-camera-title');
+    if (titleEl) titleEl.innerText = `${activeGalleryStore.name} - Camera`;
+
+    const reviewContainer = document.getElementById('menu-camera-review-container');
+    if (reviewContainer) reviewContainer.classList.add('hidden');
+    const bottomBar = document.getElementById('menu-camera-bottom-bar');
+    if (bottomBar) bottomBar.classList.remove('hidden');
+
+    modal.classList.remove('hidden');
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast("⚠️ Hindi suportado ang in-app camera sa browser na ito. Bubuksan ang camera...");
+        closeMenuCameraScanner();
+        const fallbackInput = document.getElementById('gallery-camera-fallback-input');
+        if (fallbackInput) fallbackInput.click();
+        return;
+    }
+
+    await startMenuCameraStream();
+}
+
+async function startMenuCameraStream() {
+    const video = document.getElementById('menu-camera-video');
+    if (!video) return;
+
+    if (activeCameraStream) {
+        activeCameraStream.getTracks().forEach(t => t.stop());
+        activeCameraStream = null;
+    }
+
+    isTorchOn = false;
+    updateTorchBtnUi(false);
+
+    // Progressive camera constraints: 4:3 aspect ratio, Ultra-HD / Full-HD ideal resolution
+    const constraintSets = [
+        {
+            audio: false,
+            video: {
+                facingMode: { ideal: activeCameraFacingMode },
+                width: { ideal: 3840, min: 1920 },
+                height: { ideal: 2160, min: 1080 },
+                aspectRatio: { ideal: 4 / 3 }
+            }
+        },
+        {
+            audio: false,
+            video: {
+                facingMode: { ideal: activeCameraFacingMode },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            }
+        },
+        {
+            audio: false,
+            video: { facingMode: activeCameraFacingMode }
+        }
+    ];
+
+    let stream = null;
+    for (const constraints of constraintSets) {
+        try {
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+            if (stream) break;
+        } catch(e) {
+            // Try next constraint set
+        }
+    }
+
+    if (!stream) {
+        showToast("⚠️ Hindi ma-access ang camera. Gamitin ang native camera...");
+        closeMenuCameraScanner();
+        const fallbackInput = document.getElementById('gallery-camera-fallback-input');
+        if (fallbackInput) fallbackInput.click();
+        return;
+    }
+
+    activeCameraStream = stream;
+    video.srcObject = stream;
+    try {
+        await video.play();
+    } catch(e) {}
+
+    // Track capabilities: Torch and continuous auto-focus
+    const track = stream.getVideoTracks()[0];
+    if (track) {
+        try {
+            const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+            const torchBtn = document.getElementById('menu-camera-torch-btn');
+            if (torchBtn) {
+                if (capabilities.torch) {
+                    torchBtn.classList.remove('hidden');
+                } else {
+                    torchBtn.classList.add('hidden');
+                }
+            }
+
+            const advanced = {};
+            if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+                advanced.focusMode = 'continuous';
+            }
+            if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
+                advanced.exposureMode = 'continuous';
+            }
+            if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.includes('continuous')) {
+                advanced.whiteBalanceMode = 'continuous';
+            }
+
+            if (Object.keys(advanced).length > 0 && track.applyConstraints) {
+                await track.applyConstraints({ advanced: [advanced] });
+            }
+        } catch(err) {
+            console.warn('[MenuCamera] Capability configuration warning:', err);
+        }
+    }
+}
+
+export async function toggleMenuCameraTorch() {
+    if (!activeCameraStream) return;
+    const track = activeCameraStream.getVideoTracks()[0];
+    if (!track) return;
+
+    try {
+        const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+        if (!capabilities.torch) {
+            showToast("ℹ️ Hindi suportado ang flashlight sa camera na ito.");
+            return;
+        }
+
+        isTorchOn = !isTorchOn;
+        await track.applyConstraints({ advanced: [{ torch: isTorchOn }] });
+        updateTorchBtnUi(isTorchOn);
+    } catch(err) {
+        console.warn('[MenuCamera] Torch toggle error:', err);
+    }
+}
+
+function updateTorchBtnUi(on) {
+    const torchBtn = document.getElementById('menu-camera-torch-btn');
+    if (!torchBtn) return;
+    if (on) {
+        torchBtn.classList.remove('bg-white/10', 'text-white');
+        torchBtn.classList.add('bg-amber-400', 'text-black', 'shadow-md');
+    } else {
+        torchBtn.classList.remove('bg-amber-400', 'text-black', 'shadow-md');
+        torchBtn.classList.add('bg-white/10', 'text-white');
+    }
+}
+
+export async function flipMenuCameraFacing() {
+    activeCameraFacingMode = activeCameraFacingMode === 'environment' ? 'user' : 'environment';
+    await startMenuCameraStream();
+}
+
+export function closeMenuCameraScanner() {
+    const modal = document.getElementById('store-menu-camera-modal');
+    if (modal) modal.classList.add('hidden');
+
+    if (activeCameraStream) {
+        activeCameraStream.getTracks().forEach(t => t.stop());
+        activeCameraStream = null;
+    }
+
+    const video = document.getElementById('menu-camera-video');
+    if (video) video.srcObject = null;
+
+    const reviewContainer = document.getElementById('menu-camera-review-container');
+    if (reviewContainer) reviewContainer.classList.add('hidden');
+
+    capturedSnapshotBlob = null;
+    isTorchOn = false;
+    updateTorchBtnUi(false);
+}
+
+export function takeMenuCameraSnapshot() {
+    const video = document.getElementById('menu-camera-video');
+    if (!video || !activeCameraStream) return;
+
+    const vWidth = video.videoWidth || 1920;
+    const vHeight = video.videoHeight || 1080;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = vWidth;
+    canvas.height = vHeight;
+    const ctx = canvas.getContext('2d');
+
+    // Document Text Contrast Filter
+    if (ctx.filter !== undefined) {
+        ctx.filter = 'contrast(1.08) brightness(1.02) saturate(1.05)';
+    }
+    ctx.drawImage(video, 0, 0, vWidth, vHeight);
+
+    canvas.toBlob(async (blob) => {
+        if (!blob) {
+            showToast("❌ Nabigo ang pagkuha ng litrato.");
+            return;
+        }
+
+        capturedSnapshotBlob = blob;
+
+        const previewImg = document.getElementById('menu-camera-preview-img');
+        const reviewContainer = document.getElementById('menu-camera-review-container');
+        const captionInput = document.getElementById('menu-camera-caption-input');
+        const pageLabel = document.getElementById('menu-camera-review-page-label');
+
+        if (previewImg) previewImg.src = URL.createObjectURL(blob);
+
+        let nextIdx = 1;
+        if (activeGalleryStore && db) {
+            try {
+                const snap = await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages`).once('value');
+                if (snap.exists()) {
+                    nextIdx = Object.keys(snap.val()).length + 1;
+                }
+            } catch(e) {}
+        }
+
+        if (captionInput) captionInput.value = `Menu Page ${nextIdx}`;
+        if (pageLabel) pageLabel.innerText = `Page ${nextIdx} Preview`;
+        if (reviewContainer) reviewContainer.classList.remove('hidden');
+    }, 'image/jpeg', 0.92);
+}
+
+export function retakeMenuCameraSnapshot() {
+    const reviewContainer = document.getElementById('menu-camera-review-container');
+    if (reviewContainer) reviewContainer.classList.add('hidden');
+    capturedSnapshotBlob = null;
+}
+
+export async function confirmAndUploadMenuSnapshot() {
+    if (!capturedSnapshotBlob || !activeGalleryStore) return;
+
+    const confirmBtn = document.getElementById('menu-camera-confirm-btn');
+    const captionInput = document.getElementById('menu-camera-caption-input');
+    const captionText = (captionInput?.value || "").trim() || "Menu Page";
+
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
+    }
+
+    try {
+        const optimizedBlob = await compressImageToBlob(capturedSnapshotBlob, 1800, 0.85, true);
+        const result = await uploadSingleMenuBlob(optimizedBlob, captionText, activeGalleryStore.key, activeGalleryStore.name);
+
+        showToast(`✅ Na-save ang ${captionText} para sa ${activeGalleryStore.name}!`);
+        showSideNotification("MENU PAGE ADDED", `${activeGalleryStore.name} (${captionText})`, "fa-camera", "text-amber-400", "border-amber-500");
+
+        // Return to live camera so rider can capture next page or exit
+        retakeMenuCameraSnapshot();
+        const nextCaptionInput = document.getElementById('menu-camera-caption-input');
+        if (nextCaptionInput) nextCaptionInput.value = `Menu Page ${result.count + 1}`;
+        showToast("📸 Kumuha ng susunod na page o i-tap ang Back.");
+    } catch(err) {
+        console.error('[MenuCamera] Upload error:', err);
+        showToast("❌ Hindi na-save ang litrato: " + (err.message || "Upload failed"));
+    } finally {
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> Save & Add Page`;
+        }
+    }
 }
 
 export function handleOpenMenuGalleryClick(btn) {
@@ -972,6 +1393,7 @@ export async function openStoreMenuGalleryModal(storeName, compositeKey) {
 }
 
 export function closeStoreMenuGalleryModal() {
+    closeMenuCameraScanner();
     const modal = document.getElementById('store-menu-gallery-modal');
     if (modal) modal.classList.add('hidden');
     if (db && activeGalleryStore) {
@@ -991,7 +1413,10 @@ function renderMenuPages(pages = [], storeName = "Store") {
         <div class="col-span-full text-center text-gray-500 dark:text-gray-400 italic py-12 text-xs flex flex-col items-center gap-2">
             <i class="fa-solid fa-camera-retro text-2xl text-amber-500/60"></i>
             <span>Walang naka-save na photo menu para sa restaurant na ito.</span>
-            <span class="text-[10px] text-gray-400">Mag-picture at mag-register gamit ang buton sa itaas.</span>
+            <span class="text-[10px] text-gray-400">Mag-picture ng menu gamit ang high-resolution camera o mag-upload mula gallery.</span>
+            <button type="button" onclick="window.openMenuCameraScanner && window.openMenuCameraScanner()" class="mt-2 bg-amber-600 hover:bg-amber-500 text-white font-black text-xs px-4 py-2 rounded-xl transition active:scale-95 shadow-md flex items-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-camera text-xs"></i> Take Photo Now
+            </button>
         </div>`;
         return;
     }
@@ -1036,6 +1461,70 @@ function renderMenuPages(pages = [], storeName = "Store") {
     }).join('');
 }
 
+export async function uploadSingleMenuBlob(imageBlob, captionText, storeKey, storeName) {
+    const riderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
+    const riderId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const todayFormatted = new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+
+    let count = 1;
+    if (db) {
+        try {
+            const snap = await db.ref(`directory/storeMenuGalleries/${storeKey}/pages`).once('value');
+            if (snap.exists()) {
+                count = Object.keys(snap.val()).length + 1;
+            }
+        } catch(e) {}
+    }
+
+    const pageId = `PAGE_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const storagePath = `menus/${storeKey}/${pageId}.jpg`;
+
+    // Upload directly to Firebase Storage with long-lived Cache-Control
+    const finalImageUrl = await uploadImage(imageBlob, storagePath, {
+        storeKey: storeKey,
+        uploaderId: riderId,
+        uploaderName: riderName
+    });
+
+    const finalCaption = captionText && captionText.trim() !== "Menu Page" ? captionText.trim() : `Menu Page ${count}`;
+
+    const pagePayload = {
+        id: pageId,
+        imageUrl: finalImageUrl,
+        caption: finalCaption,
+        uploaderName: riderName,
+        uploaderId: riderId,
+        orderIndex: count,
+        uploadedAt: todayFormatted
+    };
+
+    if (db) {
+        await db.ref(`directory/storeMenuGalleries/${storeKey}/pages/${pageId}`).set(pagePayload);
+
+        const nowTs = Date.now();
+        await db.ref(`directory/storeMenuGalleries/${storeKey}/updatedAt`).set(nowTs);
+        await db.ref(`directory/storeMenuGalleries/${storeKey}/storeName`).set(storeName);
+        await db.ref(`directory/storeMenuMeta/${storeKey}`).set({
+            pageCount: count,
+            updatedAt: nowTs,
+            storeName: storeName
+        });
+    }
+
+    // Instantly update memory and cache to prevent any UI delay
+    const nowTs = Date.now();
+    storeMenuMetadataMap[storeKey] = {
+        pageCount: count,
+        updatedAt: nowTs,
+        storeName: storeName
+    };
+    try {
+        localStorage.setItem('lokalex_store_menus_meta_cache', JSON.stringify(storeMenuMetadataMap));
+    } catch(e) {}
+
+    return { count, pageId, finalImageUrl, caption: finalCaption };
+}
+
 export async function handleMenuPhotoUpload(e) {
     const files = Array.from(e.target.files || []);
     if (files.length === 0 || !activeGalleryStore) return;
@@ -1044,66 +1533,11 @@ export async function handleMenuPhotoUpload(e) {
     showToast(`⏳ Compressing and uploading ${files.length} menu photo(s)...`);
 
     try {
-        const riderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
-        const riderId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
-        const todayFormatted = new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-
-        const snap = await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages`).once('value');
-        let count = snap.exists() ? Object.keys(snap.val()).length : 0;
-
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            count++;
-            const pageId = `PAGE_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-            const imageBlob = await compressImageToBlob(file, 1400, 0.82);
-
-            let finalImageUrl = "";
-
-            if (storage) {
-                const storageRef = storage.ref(`menus/${activeGalleryStore.key}/${pageId}.jpg`);
-                const uploadTask = await storageRef.put(imageBlob, {
-                    contentType: 'image/jpeg',
-                    customMetadata: {
-                        storeKey: activeGalleryStore.key,
-                        uploaderId: riderId,
-                        uploaderName: riderName
-                    }
-                });
-                finalImageUrl = await uploadTask.ref.getDownloadURL();
-            } else {
-                finalImageUrl = await new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result);
-                    reader.readAsDataURL(imageBlob);
-                });
-            }
-
-            const pagePayload = {
-                id: pageId,
-                imageUrl: finalImageUrl,
-                caption: `Menu Page ${count}`,
-                uploaderName: riderName,
-                uploaderId: riderId,
-                orderIndex: count,
-                uploadedAt: todayFormatted
-            };
-
-            await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages/${pageId}`).set(pagePayload);
+            const imageBlob = await compressImageToBlob(file, 1800, 0.85, true);
+            await uploadSingleMenuBlob(imageBlob, `Menu Page`, activeGalleryStore.key, activeGalleryStore.name);
         }
-
-        const nowTs = Date.now();
-        await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/updatedAt`).set(nowTs);
-        await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/storeName`).set(activeGalleryStore.name);
-
-        // Instantly update memory and cache to prevent any UI delay
-        storeMenuMetadataMap[activeGalleryStore.key] = {
-            pageCount: count,
-            updatedAt: nowTs,
-            storeName: activeGalleryStore.name
-        };
-        try {
-            localStorage.setItem('lokalex_store_menus_meta_cache', JSON.stringify(storeMenuMetadataMap));
-        } catch(e) {}
 
         showToast(`✅ Na-upload ang ${files.length} pahina ng menu para sa ${activeGalleryStore.name}!`);
         showSideNotification("MENU UPLOADED", `${activeGalleryStore.name} (+${files.length} pages)`, "fa-book-open", "text-emerald-400", "border-emerald-500");
@@ -1804,6 +2238,13 @@ if (typeof window !== 'undefined') {
     window.handleMenuPhotoUpload = handleMenuPhotoUpload;
     window.downloadCompleteMenuToPhone = downloadCompleteMenuToPhone;
     window.deleteMenuGalleryPage = deleteMenuGalleryPage;
+    window.openMenuCameraScanner = openMenuCameraScanner;
+    window.closeMenuCameraScanner = closeMenuCameraScanner;
+    window.toggleMenuCameraTorch = toggleMenuCameraTorch;
+    window.flipMenuCameraFacing = flipMenuCameraFacing;
+    window.takeMenuCameraSnapshot = takeMenuCameraSnapshot;
+    window.retakeMenuCameraSnapshot = retakeMenuCameraSnapshot;
+    window.confirmAndUploadMenuSnapshot = confirmAndUploadMenuSnapshot;
     window.openGalleryLightbox = openGalleryLightbox;
     window.closeGalleryLightbox = closeGalleryLightbox;
 

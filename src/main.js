@@ -44,15 +44,29 @@ import { initRealtimeFirebaseListeners } from './app/appListeners.js';
 import { initGlobalWindowBridge, bootApp, initAppLifecycleEvents } from './app/appBootstrap.js';
 import { registerSW } from 'virtual:pwa-register';
 
-registerSW({
+const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
-    console.log("New content available; reload to update.");
+    console.log("⚡ New Lokalex version detected; activating latest modules...");
+    updateSW(true);
   },
   onOfflineReady() {
-    console.log("Lokalex is fully ready to work offline.");
+    console.log("⚡ Lokalex modules are cached and ready for full offline use.");
   }
 });
+
+// Proactively check for new modules whenever the device comes online or the app resumes
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && navigator.onLine) {
+      navigator.serviceWorker.ready.then(reg => reg.update()).catch(() => {});
+    }
+  });
+
+  window.addEventListener('online', () => {
+    navigator.serviceWorker.ready.then(reg => reg.update()).catch(() => {});
+  });
+}
 
 // Re-export all core members for system-wide imports
 export * from './app/appPush.js';

@@ -14,6 +14,7 @@ import {
 import { storesCache, isStoreCurrentlyOpen } from './customerStoresMenu.js';
 
 let activeCustomerOrderListener = null;
+let activeSingleOrderListener = null;
 let customerLiveMapObj = null;
 let customerRiderMarker = null;
 let customerDestMarker = null;
@@ -422,6 +423,10 @@ export function listenToActiveCustomerOrderStatus(custId) {
     if (!db || !custId) return;
 
     if (activeCustomerOrderListener) activeCustomerOrderListener.off();
+    if (activeSingleOrderListener) {
+        activeSingleOrderListener.off();
+        activeSingleOrderListener = null;
+    }
 
     activeCustomerOrderListener = db.ref(`customerChats/${custId}/metadata`);
     activeCustomerOrderListener.on('value', (snap) => {
@@ -429,11 +434,21 @@ export function listenToActiveCustomerOrderStatus(custId) {
         const latestOrderId = cleanFirebasePathKey(meta.latestOrderId);
 
         if (!latestOrderId || meta.folder === 'done' || meta.status === 'cancelled') {
+            if (activeSingleOrderListener) {
+                activeSingleOrderListener.off();
+                activeSingleOrderListener = null;
+            }
             renderCustomerMilestoneCard(null);
             return;
         }
 
-        db.ref(`orders/${latestOrderId}`).on('value', (orderSnap) => {
+        if (activeSingleOrderListener) {
+            activeSingleOrderListener.off();
+            activeSingleOrderListener = null;
+        }
+
+        activeSingleOrderListener = db.ref(`orders/${latestOrderId}`);
+        activeSingleOrderListener.on('value', (orderSnap) => {
             const orderData = orderSnap.val();
             if (!orderData || orderData.status === 'delivered') {
                 renderCustomerMilestoneCard(null);

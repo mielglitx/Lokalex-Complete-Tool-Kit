@@ -36,6 +36,18 @@ export function initRealtimeFirebaseListeners() {
             });
         }
 
+        const currentRole = (appState.userType || localStorage.getItem('userType') || '').toLowerCase();
+        const isCustomer = currentRole === 'customer';
+
+        if (chat && chat.listenToCustomerRiderChat) {
+            chat.listenToCustomerRiderChat();
+        }
+
+        // If the current session is an end-customer, skip internal rider/admin subscriptions
+        if (isCustomer) {
+            return;
+        }
+
         if (roster && roster.listenToSwapRequests) {
             roster.listenToSwapRequests();
         }
@@ -56,12 +68,12 @@ export function initRealtimeFirebaseListeners() {
             roster.listenToAutoEndShift();
         }
 
-        if (chat && chat.listenToCustomerRiderChat) {
-            chat.listenToCustomerRiderChat();
-        }
-
         if (chat && chat.listenToAllCustomerChatsForRider) {
             chat.listenToAllCustomerChatsForRider();
+        }
+
+        if (chat && chat.listenToPublicFbChannels) {
+            chat.listenToPublicFbChannels();
         }
 
         if (chat && chat.listenToFirebaseChat) {
@@ -125,30 +137,30 @@ export function initRealtimeFirebaseListeners() {
             if (commission.refreshCommissionView) commission.refreshCommissionView();
         });
 
-        // Indexed query on date to prevent alphabetical truncation and protect bandwidth
-        db.ref('logins').orderByChild('date').limitToLast(150).on('value', (snapshot) => {
+        // Optimized limits on historical streams to protect monthly RTDB bandwidth
+        db.ref('logins').orderByChild('date').limitToLast(25).on('value', (snapshot) => {
             globalState.globalLogins = snapshot.val() ? Object.values(snapshot.val()) : [];
             if (roster && roster.saveRosterCache) roster.saveRosterCache();
             window.dispatchEvent(new Event('loginsUpdated'));
         });
 
-        db.ref('cateredHistory').orderByChild('date').limitToLast(200).on('value', (snapshot) => {
+        db.ref('cateredHistory').orderByChild('date').limitToLast(40).on('value', (snapshot) => {
             globalState.globalCateredHistory = snapshot.val() ? Object.values(snapshot.val()) : [];
             if (roster && roster.saveRosterCache) roster.saveRosterCache();
             window.dispatchEvent(new Event('cateredUpdated'));
         });
 
-        db.ref('receipts').orderByChild('date').limitToLast(200).on('value', (snapshot) => {
+        db.ref('receipts').orderByChild('date').limitToLast(40).on('value', (snapshot) => {
             globalState.globalDailyReceipts = snapshot.val() ? Object.values(snapshot.val()) : [];
             window.dispatchEvent(new Event('receiptsUpdated'));
         });
 
-        db.ref('chat').limitToLast(50).on('value', (snapshot) => {
+        db.ref('chat').limitToLast(25).on('value', (snapshot) => {
             globalState.chatMessages = snapshot.val() ? Object.values(snapshot.val()) : [];
             window.dispatchEvent(new Event('chatUpdated'));
         });
 
-        db.ref('advancedOrders').on('value', (snapshot) => {
+        db.ref('advancedOrders').limitToLast(40).on('value', (snapshot) => {
             const val = snapshot.val();
             globalState.globalAdvancedOrders = val 
                 ? Object.entries(val).map(([id, item]) => ({ id, key: id, ...item })) 
@@ -157,7 +169,7 @@ export function initRealtimeFirebaseListeners() {
             if (advancedOrders.renderAdvancedOrdersList) advancedOrders.renderAdvancedOrdersList();
         });
 
-        db.ref('mapCalculations').limitToLast(50).on('value', (snapshot) => {
+        db.ref('mapCalculations').limitToLast(20).on('value', (snapshot) => {
             globalState.globalMapCalculations = snapshot.val() ? Object.values(snapshot.val()) : [];
             if (maps.renderMapCalcBoardList) maps.renderMapCalcBoardList();
         });

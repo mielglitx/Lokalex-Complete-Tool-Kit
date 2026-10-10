@@ -18,6 +18,29 @@ export function toTitleCase(str) {
         .join(' ');
 }
 
+export function cleanItemDescription(rawName) {
+    if (!rawName || typeof rawName !== 'string') return 'Item';
+    let cleaned = rawName
+        .replace(/\s*[-–—:@]\s*(?:[₱P]|PHP)?\s*\d+(?:[\.,]\d{2})?\s*$/i, '')
+        .replace(/\s*\((?:[₱P]|PHP)?\s*\d+(?:[\.,]\d{2})?\)\s*$/i, '')
+        .trim();
+    return cleaned || rawName.trim() || 'Item';
+}
+
+export function formatShortRef(rawTxId) {
+    if (!rawTxId) return `LKX-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const clean = String(rawTxId).trim();
+    if (!clean.startsWith('RCPT_') && clean.length <= 10 && /^[A-Z0-9-]+$/i.test(clean)) {
+        return clean.toUpperCase();
+    }
+    let hash = 5381;
+    for (let i = 0; i < clean.length; i++) {
+        hash = (((hash << 5) + hash) + clean.charCodeAt(i)) >>> 0;
+    }
+    const code = hash.toString(36).toUpperCase().padStart(6, '0').slice(-6);
+    return `LKX-${code}`;
+}
+
 export function ensureQrCodeLibraryLoaded() {
     return new Promise((resolve) => {
         if (window.QRCode) return resolve(true);
@@ -248,9 +271,9 @@ export async function renderReceiptCanvas() {
     const preparedItems = currentCart.map(item => {
         const isPaid = !!item.isPaid;
         const priceNum = Math.max(0, parseFloat(item.price) || 0);
-        const itemName = toTitleCase(item.name || 'Item');
+        const itemName = toTitleCase(cleanItemDescription(item.name || 'Item'));
 
-        const leftText = isPaid ? `${itemName} - PAID (P0.00)` : `${itemName} - P${priceNum.toFixed(2)}`;
+        const leftText = itemName;
         const rightText = isPaid ? "PAID" : `P${priceNum.toFixed(2)}`;
 
         const rightWidth = measureCtx.measureText(rightText).width;
@@ -375,8 +398,8 @@ export async function renderReceiptCanvas() {
     drawMetaRow("Rider:", `${riderName} (${dailyRiderId})`);
 
     const rawTxId = wizState.currentReceiptTransactionId || `E37FG-${Date.now().toString(36).toUpperCase()}`;
-    const cleanRefId = rawTxId.replace(/^RCPT_/, '');
-    drawMetaRow("Ref #:", `#${cleanRefId}`);
+    const shortRef = formatShortRef(rawTxId);
+    drawMetaRow("Ref #:", `#${shortRef}`);
 
     // Helper: Draw Dashed Divider Line
     const drawDashedDivider = (currY) => {
@@ -478,7 +501,7 @@ export async function renderReceiptCanvas() {
 
     y += 42;
 
-    // 8. GCash Payment Box (Rounded Light Green Tint)
+    // 8. ePayment Box (Rounded Light Green Tint)
     ctx.save();
     ctx.strokeStyle = "#86efac";
     ctx.lineWidth = 1.4;
@@ -491,7 +514,7 @@ export async function renderReceiptCanvas() {
     ctx.fillStyle = "#166534";
     ctx.textAlign = "left";
     ctx.font = "800 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-    ctx.fillText("GCASH PAYMENT", leftMargin + 10, y + 19);
+    ctx.fillText("ePAYMENT", leftMargin + 10, y + 19);
 
     ctx.font = "700 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
     ctx.fillText(`(+P${epayFee.toFixed(2)} Transfer Fee)`, leftMargin + 10, y + 33);
@@ -503,12 +526,12 @@ export async function renderReceiptCanvas() {
 
     y += 56;
 
-    // 9. Scan To Pay Via GCash & High-Scannability QR Code
+    // 9. Scan To Pay Via ePayment & High-Scannability QR Code
     if (hasGcashDetails) {
         ctx.fillStyle = "#111827";
         ctx.textAlign = "center";
         ctx.font = "800 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-        ctx.fillText("SCAN TO PAY VIA GCASH", width / 2, y);
+        ctx.fillText("SCAN TO PAY VIA ePAYMENT", width / 2, y);
         y += 17;
 
         ctx.font = "600 11.5px 'SF Mono', Consolas, 'Courier New', monospace";
@@ -584,8 +607,9 @@ export async function downloadReceiptImage() {
         return showToast("⚠️ Image receipt not ready yet.");
     }
 
-    const txId = wizState.currentReceiptTransactionId || Date.now().toString(36);
-    const fileName = `Lokalex_Receipt_${txId}.png`;
+    const rawTxId = wizState.currentReceiptTransactionId || Date.now().toString(36);
+    const shortRef = formatShortRef(rawTxId);
+    const fileName = `Lokalex_Receipt_${shortRef}.png`;
     const platform = getDevicePlatform();
 
     if (platform === 'android' || platform === 'pc') {
@@ -621,7 +645,7 @@ export async function downloadReceiptImage() {
                     await navigator.share({
                         files: [file],
                         title: 'Lokalex Receipt',
-                        text: `Official Receipt #${txId}`
+                        text: `Official Receipt #${shortRef}`
                     });
                     showToast("✅ Resibo naibahagi / nai-save!");
                     return;

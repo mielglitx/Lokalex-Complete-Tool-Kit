@@ -3,6 +3,7 @@ import { db } from '../../config/firebase.js';
 import { appState } from '../../store/state.js';
 import { toggleBodyScroll, isHdMode } from './chatUtils.js';
 import { showToast } from '../../ui/notifications.js';
+import { uploadImage } from '../../utils/imageUpload.js';
 
 const BRUSH_PRESETS = [
     { name: 'S', lineWidth: 3, dotSize: 6 },
@@ -571,7 +572,7 @@ export function closeImageEditorModal() {
     updateTextControlsUI();
 }
 
-export function exportAndSendEditedImage() {
+export async function exportAndSendEditedImage() {
     commitCanvasInlineText();
     const canvas = document.getElementById('photo-canvas');
     if (!canvas) return;
@@ -584,21 +585,29 @@ export function exportAndSendEditedImage() {
     const dataUrl = canvas.toDataURL('image/jpeg', isHdMode ? 0.85 : 0.45);
     const targetType = editorTargetType || 'customer';
     closeImageEditorModal();
+    showToast("⏳ Uploading photo...");
+
+    let finalImageUrl = dataUrl;
+    try {
+        finalImageUrl = await uploadImage(dataUrl, `chat/${targetType}_${Date.now()}.jpg`);
+    } catch (e) {
+        console.warn("Storage upload fallback:", e);
+    }
 
     if (targetType === 'customer') {
         if (window.sendCustomerToRiderChat && typeof window.sendCustomerToRiderChat === 'function') {
-            window.sendCustomerToRiderChat("", dataUrl);
+            window.sendCustomerToRiderChat("", finalImageUrl);
         }
     } else if (targetType === 'rider') {
         if (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function') {
-            window.sendRiderToCustomerChat("", dataUrl);
+            window.sendRiderToCustomerChat("", finalImageUrl);
         }
     } else if (targetType === 'team') {
         if (db) {
             db.ref('chat').push({
                 sender: appState.riderName || "Lokalex Rider",
                 text: "📷 [Shared Image]",
-                imageUrl: dataUrl,
+                imageUrl: finalImageUrl,
                 timestamp: Date.now()
             });
         }

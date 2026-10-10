@@ -117,6 +117,10 @@ export function forceReconnectFirebase() {
                     chat.listenToAllCustomerChatsForRider();
                 }
 
+                if (chat && chat.listenToPublicFbChannels) {
+                    chat.listenToPublicFbChannels();
+                }
+
                 if (chat && chat.listenToFirebaseChat) {
                     chat.listenToFirebaseChat();
                 }

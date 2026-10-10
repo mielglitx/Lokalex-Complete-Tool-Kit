@@ -140,6 +140,10 @@ export function clearRiderStoreChatSearch() {
 }
 
 export function renderStoreChatsInDashboard() {
+    if (window.getActiveRiderChatFilter && window.getActiveRiderChatFilter() !== 'stores') {
+        return;
+    }
+
     const feed = document.getElementById('rider-cust-chats-feed');
     if (!feed) return;
 
@@ -166,6 +170,10 @@ export function renderStoreChatsInDashboard() {
 }
 
 export function renderStoreChatsListOnly() {
+    if (window.getActiveRiderChatFilter && window.getActiveRiderChatFilter() !== 'stores') {
+        return;
+    }
+
     const listContainer = document.getElementById('rider-store-chats-list');
     const badge = document.getElementById('rider-cust-chats-badge');
     if (!listContainer) return;

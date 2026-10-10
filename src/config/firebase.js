@@ -14,16 +14,17 @@
  */
 
 const firebaseConfig = {
-    apiKey: "AIzaSyDVsi2niqDbQeAbj-Q5XUf4jdkaUVSpbu8",
-    authDomain: "lokalexrtdb.firebaseapp.com",
-    databaseURL: "https://lokalexrtdb-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "lokalexrtdb",
-    storageBucket: "lokalexrtdb.firebasestorage.app",
-    messagingSenderId: "963261909152",
-    appId: "1:963261909152:web:327976c26a6feb85e161c5"
+    apiKey: "AIzaSyCH4wLvGZ3yI863kc-dX-N2GZRHSPB0cvY",
+    authDomain: "lokalexoptimized-rtdb.firebaseapp.com",
+    databaseURL: "https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "lokalexoptimized-rtdb",
+    storageBucket: "lokalexoptimized-rtdb.firebasestorage.app",
+    messagingSenderId: "654116118153",
+    appId: "1:654116118153:web:604c56fb7e0ede08bb3058",
+    measurementId: "G-ZZ1NCDXLD4"
 };
 
-const DEFAULT_DB_URL = "https://lokalexrtdb-default-rtdb.asia-southeast1.firebasedatabase.app";
+const DEFAULT_DB_URL = "https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app";
 const BACKUP_DB_URL = null; // Disabled to prevent duplicate writes to the same database
 
 const fb = window.firebase || (typeof firebase !== 'undefined' ? firebase : null);
@@ -150,6 +151,63 @@ function getRelativeRefPath(ref) {
     }
 }
 
+function mirrorMetadataToMetaIndex(path, method, payload) {
+    if (!primaryDb) return;
+    try {
+        if (path && path.startsWith('customerChats/') && path.endsWith('/metadata')) {
+            const parts = path.split('/');
+            const custId = parts[1];
+            if (custId) {
+                const metaRef = primaryDb.ref(`customerChatMeta/${custId}`);
+                if (method === 'remove') {
+                    metaRef.remove().catch(() => {});
+                } else if (method === 'set') {
+                    metaRef.set(payload).catch(() => {});
+                } else if (method === 'update') {
+                    metaRef.update(payload).catch(() => {});
+                }
+            }
+        } else if (path && path.startsWith('customerChats/') && !path.includes('/', 14)) {
+            const parts = path.split('/');
+            const custId = parts[1];
+            if (custId && method === 'remove') {
+                primaryDb.ref(`customerChatMeta/${custId}`).remove().catch(() => {});
+            }
+        } else if (path && path.startsWith('teamChat/groups/') && path.endsWith('/metadata')) {
+            const parts = path.split('/');
+            const groupId = parts[2];
+            if (groupId) {
+                const metaRef = primaryDb.ref(`teamChat/groupsMeta/${groupId}`);
+                if (method === 'remove') {
+                    metaRef.remove().catch(() => {});
+                } else if (method === 'set') {
+                    metaRef.set(payload).catch(() => {});
+                } else if (method === 'update') {
+                    metaRef.update(payload).catch(() => {});
+                }
+            }
+        } else if (method === 'update' && payload && typeof payload === 'object') {
+            const metaUpdates = {};
+            let hasMetaUpdates = false;
+            Object.keys(payload).forEach(k => {
+                const match = k.match(/^customerChats\/([^/]+)\/metadata\/?(.*)$/);
+                if (match) {
+                    const custId = match[1];
+                    const subKey = match[2];
+                    const targetKey = subKey ? `customerChatMeta/${custId}/${subKey}` : `customerChatMeta/${custId}`;
+                    metaUpdates[targetKey] = payload[k];
+                    hasMetaUpdates = true;
+                }
+            });
+            if (hasMetaUpdates) {
+                primaryDb.ref().update(metaUpdates).catch(() => {});
+            }
+        }
+    } catch {
+        // Safe catch to ensure primary operations never fail
+    }
+}
+
 // ============================================================================
 // 3. DUAL-DATABASE PROXY ENGINE (REALTIME DUAL-WRITE & PRIMARY READ)
 // ============================================================================
@@ -179,6 +237,7 @@ function createRefWrapper(primaryRef, backupRef) {
 
         set(value, onComplete) {
             const relPath = getRelativeRefPath(primaryRef);
+            mirrorMetadataToMetaIndex(relPath, 'set', value);
 
             if (!navigator.onLine || !isSocketConnected) {
                 queueOfflineMutation(relPath, 'set', value);
@@ -200,6 +259,7 @@ function createRefWrapper(primaryRef, backupRef) {
         },
         update(values, onComplete) {
             const relPath = getRelativeRefPath(primaryRef);
+            mirrorMetadataToMetaIndex(relPath, 'update', values);
 
             if (!navigator.onLine || !isSocketConnected) {
                 queueOfflineMutation(relPath, 'update', values);
@@ -221,6 +281,7 @@ function createRefWrapper(primaryRef, backupRef) {
         },
         remove(onComplete) {
             const relPath = getRelativeRefPath(primaryRef);
+            mirrorMetadataToMetaIndex(relPath, 'remove', null);
 
             if (!navigator.onLine || !isSocketConnected) {
                 queueOfflineMutation(relPath, 'remove', null);

@@ -55,9 +55,9 @@ import * as rosterSwap from './rosterSwap.js';
 export * from './rosterUtils.js';
 export * from './rosterUI.js';
 export * from './rosterStatus.js';
-export * from './rosterAdminOps.js';
 export * from './rosterAccounts.js';
 export * from './rosterAdmin.js';
+export * from './rosterAdminOps.js';
 export * from './rosterSwap.js';
 
 // Bind all roster functions globally for HTML template event listeners
@@ -66,9 +66,9 @@ if (typeof window !== 'undefined') {
         rosterUtils, 
         rosterUI, 
         rosterStatus, 
-        rosterAdminOps, 
         rosterAccounts, 
         rosterAdmin, 
+        rosterAdminOps, 
         rosterSwap
     ];
     

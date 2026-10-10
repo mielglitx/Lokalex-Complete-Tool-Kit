@@ -7,12 +7,21 @@ import { escapeHtml, formatTitleCase } from '../../utils/helpers.js';
 let selectedAvatarUrl = "";
 
 export function getRiderAvatarUrl(rider = null) {
-    const photo = rider?.photoUrl || rider?.avatar || rider?.profilePic || appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || null;
-    if (photo && typeof photo === 'string' && photo.trim() !== '') {
-        return photo.trim();
+    if (rider) {
+        const photo = rider.photoUrl || rider.avatar || rider.profilePic;
+        if (photo && typeof photo === 'string' && photo.trim() !== '') {
+            return photo.trim();
+        }
+        const name = formatTitleCase(rider.riderName || rider.name || 'Rider');
+        return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0284c7&color=ffffff&bold=true&size=128`;
     }
-    const name = formatTitleCase(rider?.riderName || rider?.name || appState.riderName || localStorage.getItem('riderName') || 'Rider');
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0284c7&color=ffffff&bold=true&size=128`;
+
+    const myPhoto = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || null;
+    if (myPhoto && typeof myPhoto === 'string' && myPhoto.trim() !== '') {
+        return myPhoto.trim();
+    }
+    const myName = formatTitleCase(appState.riderName || localStorage.getItem('riderName') || 'Rider');
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(myName)}&background=0284c7&color=ffffff&bold=true&size=128`;
 }
 
 export function syncHeaderUserProfile() {

@@ -20,7 +20,7 @@ export const HUB_LOCATION = { lat: 15.6881, lng: 120.4144, mapUrl: "https://maps
 
 // Only keep the primary Admin ID (Amiel) here. If Allan was 5548562 or 4547425,
 // keeping only the true owner ID prevents ordinary riders from inheriting 0% fee exemptions.
-export const ADMIN_IDS = ["4547425"];
+export const ADMIN_IDS = ["4547425", "amiel"];
 
 // FACEBOOK APP & PAGE CONFIGURATION
 export const FB_APP_ID = "3509728395866188";

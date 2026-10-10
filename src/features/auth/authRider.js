@@ -114,7 +114,7 @@ export async function processLogin() {
 export async function executeRiderLoginSequence(idInput, cleanName, cleanUserType, riderRecord = {}) {
     const btn = document.getElementById('login-btn');
     if (btn) {
-        btn.innerHTML = `<i class="fa-solid fa-satellite-dish fa-spin"></i> Calibrating GPS...`;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Logging in...`;
         btn.disabled = true;
     }
 
@@ -131,21 +131,6 @@ export async function executeRiderLoginSequence(idInput, cleanName, cleanUserTyp
             appState.phoneNumber = riderRecord.phoneNumber;
             localStorage.setItem('lokalex_rider_phone', riderRecord.phoneNumber);
         }
-
-        showToast("📡 Calibrating GPS location...");
-        const coords = await calibrateGPS((accuracy) => {
-            showToast(`📡 Calibrating GPS: ±${Math.round(accuracy)}m`);
-        });
-
-        if (coords.lat === 0 && coords.lon === 0) {
-            showToast("⚠️ GPS Signal weak. Turn on location services.");
-        } else {
-            showToast(`✅ GPS Calibrated: ±${Math.round(coords.accuracy)}m`);
-        }
-
-        appState.lat = coords.lat;
-        appState.lon = coords.lon;
-        appState.gpsAccuracy = coords.accuracy;
 
         // Set active role explicitly
         localStorage.setItem('lokalex_active_role', 'rider');

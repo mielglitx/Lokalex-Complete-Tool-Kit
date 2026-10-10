@@ -16,7 +16,7 @@
  */
 
 import { db } from '../../../config/firebase.js';
-import { appState, globalState, multiCarts, activeCartSlot } from '../../../store/state.js';
+import { appState, globalState, multiCarts, activeCartSlot, wizState } from '../../../store/state.js';
 import { showToast, showSideNotification } from '../../../ui/notifications.js';
 import { switchView } from '../../../ui/router.js';
 import { openSlideDeleteModal } from '../../../ui/modals.js';
@@ -442,11 +442,11 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
     let remainingTimes = [];
 
     if (targetRecord && targetRecord.customerName) {
-        const custs = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-        const times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
+        const custs = targetRecord.customerName.split(/\s*,\s*/).map(c => c.trim()).filter(Boolean);
+        const times = targetRecord.startTime ? targetRecord.startTime.split(/\s*,\s*/).map(t => t.trim()) : [];
 
         custs.forEach((c, idx) => {
-            if (c.toLowerCase().trim() !== custNameToVoid.toLowerCase().trim()) {
+            if (c.toLowerCase().trim() !== custNameToVoid.toLowerCase().trim() && !isCustomerMatch(c, custNameToVoid)) {
                 remainingCusts.push(c);
                 remainingTimes.push(times[idx] || times[0] || "");
             }
@@ -474,6 +474,20 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         delete targetRecord.customerFees[cleanCustKey];
     }
 
+    // Reset lastReceiptFees if they were set for the voided customer
+    if (targetRecord && targetRecord.lastReceiptFees) {
+        targetRecord.lastReceiptFees = null;
+        targetRecord.lastReceiptTotalFees = 0;
+    }
+
+    // Reset wizard state if the voided customer was actively loaded in receipt wizard
+    if (wizState && appState.selectedCateringClient && (isCustomerMatch(appState.selectedCateringClient, custNameToVoid) || appState.selectedCateringClient.trim().toLowerCase() === cleanVoidCust)) {
+        appState.selectedCateringClient = "";
+        wizState.subtotal = 0;
+        wizState.currentReceiptTransactionId = "";
+        wizState.shortReceiptRef = "";
+    }
+
     // DEEP CART CLEANUP: Purge items, reset receipt summaries, and unlock barrier
     purgeCartSlotForCustomer(custNameToVoid);
 
@@ -483,15 +497,41 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
             const k = localStorage.key(i);
-            if (k && (k.includes(`receipt_done_${cleanRiderKey}_${cleanCustKey}`) || k.includes(`receipt_done_${cleanRiderKey}_${cleanVoidCust}`))) {
-                keysToRemove.push(k);
+            if (k && (k.includes(cleanCustKey) || k.includes(cleanVoidCust))) {
+                if (k.startsWith('receipt_done_')) {
+                    keysToRemove.push(k);
+                }
             }
         }
         keysToRemove.forEach(k => localStorage.removeItem(k));
     } catch(e) {}
 
-    // Update Firebase chat folders and clear fees
+    // PURGE ANY CREATED RECEIPTS IN MEMORY
+    if (globalState.globalDailyReceipts) {
+        globalState.globalDailyReceipts = globalState.globalDailyReceipts.filter(r => {
+            const matchRider = isRiderMatch(resolvedTargetName, r.riderName);
+            const matchCust = isCustomerMatch(r.customerName, custNameToVoid) || (r.id && r.id.toLowerCase().includes(cleanCustKey));
+            return !(matchRider && matchCust);
+        });
+    }
+
+    // Update Firebase chat folders, remove receipts, and clear fees
     if (db) {
+        // 1. Direct update to customerChats matching cleanCustKey
+        if (cleanCustKey) {
+            db.ref(`customerChats/${cleanCustKey}/metadata`).update({
+                folder: 'done',
+                status: 'cancelled',
+                cateredByRiderId: null,
+                cateredByRiderName: null,
+                cateredBy: null,
+                forcedBy: null,
+                isForcedCater: false,
+                lastUpdated: Date.now()
+            }).catch(() => {});
+        }
+
+        // 2. Query customerChats to cancel any chat referencing this customer
         db.ref('customerChats')
             .orderByChild('metadata/customerName')
             .equalTo(custNameToVoid)
@@ -507,14 +547,35 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
                         forcedBy: null,
                         isForcedCater: false,
                         lastUpdated: Date.now()
-                    });
+                    }).catch(() => {});
                 });
-            });
+            }).catch(() => {});
 
-        if (resolvedTargetId && cleanCustKey) {
-            db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanVoidCust}`).remove().catch(() => {});
+        // 3. Purge matching receipts from Firebase receipts node so commissions don't retain voided fees
+        const todayStr = getLocalTodayStr();
+        db.ref('receipts').orderByChild('date').equalTo(todayStr).once('value', (snap) => {
+            const rcpts = snap.val() || {};
+            Object.entries(rcpts).forEach(([rId, r]) => {
+                const matchRider = isRiderMatch(resolvedTargetName, r.riderName);
+                const matchCust = isCustomerMatch(r.customerName, custNameToVoid) || (rId && rId.toLowerCase().includes(cleanCustKey));
+                if (matchRider && matchCust) {
+                    db.ref(`receipts/${rId}`).remove().catch(() => {});
+                }
+            });
+        }).catch(() => {});
+
+        // 4. Clean roster customer fees and forced cater records
+        if (resolvedTargetId) {
+            db.ref(`roster/${resolvedTargetId}`).update({
+                lastReceiptFees: null,
+                lastReceiptTotalFees: 0
+            }).catch(() => {});
+
+            if (cleanCustKey) {
+                db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
+                db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
+                db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanVoidCust}`).remove().catch(() => {});
+            }
         }
     }
 

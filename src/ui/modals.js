@@ -76,6 +76,7 @@ import {
     closeGpsModal,
     closeCateringModal,
     closeAdminCateringModal,
+    closeEditCateringCustomerModal,
     openPasswordModal,
     closePasswordModal,
     showBulkAddModal,
@@ -142,6 +143,7 @@ export {
     closeGpsModal,
     closeCateringModal,
     closeAdminCateringModal,
+    closeEditCateringCustomerModal,
     openPasswordModal,
     closePasswordModal,
     showBulkAddModal,
@@ -200,6 +202,7 @@ if (typeof window !== 'undefined') {
     window.closeGpsModal = closeGpsModal;
     window.closeCateringModal = closeCateringModal;
     window.closeAdminCateringModal = closeAdminCateringModal;
+    window.closeEditCateringCustomerModal = closeEditCateringCustomerModal;
     window.openPasswordModal = openPasswordModal;
     window.closePasswordModal = closePasswordModal;
     window.showBulkAddModal = showBulkAddModal;
