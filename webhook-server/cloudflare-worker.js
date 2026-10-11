@@ -73,6 +73,7 @@ export default {
       return new Response(
         JSON.stringify({
           status: "online",
+          version: "2.1.0",
           service: "Lokalex Messenger Webhook Bridge",
           database: dbUrl,
           channel: defaultApiName,

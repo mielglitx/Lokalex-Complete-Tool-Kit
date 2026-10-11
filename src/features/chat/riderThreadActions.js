@@ -36,7 +36,11 @@ export function showCustomerDetails() {
             const addrEl = document.getElementById('cust-modal-address');
             const mapEl = document.getElementById('cust-modal-map');
 
-            if (nameEl) nameEl.innerText = data.name || "Customer";
+            const meta = (window.getCurrentRiderChatMeta && window.getCurrentRiderChatMeta()) || {};
+            const chatHeaderName = document.getElementById('rider-chat-cust-name')?.innerText?.trim();
+            const fallbackName = meta.customerName || (chatHeaderName && chatHeaderName !== 'Customer' ? chatHeaderName : 'Customer');
+
+            if (nameEl) nameEl.innerText = data.name || fallbackName;
             if (phoneEl) {
                 phoneEl.innerText = data.phoneNumber || "N/A";
                 phoneEl.href = `tel:${data.phoneNumber || ''}`;

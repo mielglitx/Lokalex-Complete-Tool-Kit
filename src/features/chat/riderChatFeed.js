@@ -10,7 +10,9 @@ import {
     isSourceSelected, 
     isAllSourcesSelected, 
     getActiveRiderSources, 
-    hasAnyFbSourceSelected 
+    hasAnyFbSourceSelected,
+    autoResolvePendingFacebookThreads,
+    getResolvedFbName
 } from './facebookApiAdmin.js';
 
 let activeRiderChatFilter = 'inbox';
@@ -235,10 +237,20 @@ export function listenToAllCustomerChatsForRider() {
                 isUnread = true;
             }
 
+            let displayName = meta.customerName || meta.name || "Customer";
+            let displayAvatar = meta.avatarUrl;
+            if (key.startsWith('fb_')) {
+                const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(key) : null;
+                if (cached && cached.name && (!displayName || displayName.startsWith('FB Customer ('))) {
+                    displayName = cached.name;
+                    displayAvatar = cached.avatarUrl || displayAvatar;
+                }
+            }
+
             const threadObj = {
                 custId: key,
-                customerName: meta.customerName || meta.name || "Customer",
-                avatarUrl: meta.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(meta.customerName || meta.name || "Customer")}&background=0084FF&color=fff`,
+                customerName: displayName,
+                avatarUrl: displayAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0084FF&color=fff`,
                 lastMessage: rawLastMsg || "No messages yet",
                 lastUpdated: meta.lastUpdated || 0,
                 folder: meta.folder || 'inbox',
@@ -282,6 +294,11 @@ export function listenToAllCustomerChatsForRider() {
         cachedCustomerThreadsMap = threadsMap;
 
         const allThreads = Array.from(threadsMap.values());
+        
+        // Auto-resolve Facebook customer names in the background
+        if (typeof autoResolvePendingFacebookThreads === 'function') {
+            autoResolvePendingFacebookThreads(allThreads);
+        }
         const unreadInboxCount = allThreads.filter(t => (!t.folder || t.folder === 'inbox') && !t.cateredByRiderName && t.isUnread).length;
         if (inboxBadge) {
             if (unreadInboxCount > 0) {

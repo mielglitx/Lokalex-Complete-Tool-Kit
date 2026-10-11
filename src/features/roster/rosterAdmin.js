@@ -20,7 +20,7 @@ import { appState, globalState } from '../../store/state.js';
 import { API_URL } from '../../config/constants.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { openSlideDeleteModal, closeAdminCateringModal } from '../../ui/modals.js';
-import { isSameDate, escapeHtml, getLocalTodayStr } from '../../utils/helpers.js';
+import { isSameDate, escapeHtml, getLocalTodayStr, sanitizeFirebaseKey } from '../../utils/helpers.js';
 import { populateCateringCustomerDropdown } from '../chat/index.js';
 import { 
     parseQueueTime, 
@@ -401,7 +401,7 @@ export async function submitAdminForceCatering() {
     if (!custName) return showToast("⚠️ Please select or enter customer name!");
 
     const adminName = appState.riderName || localStorage.getItem('riderName') || "Admin/TL";
-    const cleanCustKey = custName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanCustKey = sanitizeFirebaseKey(custName);
 
     const rosterMembers = globalState.rosterMembers || [];
     let targetRecord = rosterMembers.find(m => 
@@ -609,7 +609,7 @@ export async function adminVoidSpecificCustomer(targetId, targetName, custNameTo
     if (!targetId || !custNameToVoid) return;
 
     openSlideDeleteModal(`Void Customer: ${custNameToVoid}?`, `Sigurado ka bang nais i-void si ${custNameToVoid} para kay ${targetName}?`, async () => {
-        const cleanCustKey = custNameToVoid.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanCustKey = sanitizeFirebaseKey(custNameToVoid);
         if (db && cleanCustKey) {
             db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
         }
@@ -641,7 +641,7 @@ export async function executeVoidCateredCustomer(riderName, customerName, comple
 
     const cleanRider = (riderName || "").trim().toLowerCase();
     const cleanCust = (customerName || "").trim().toLowerCase();
-    const cleanCustKey = cleanCust.replace(/[^a-z0-9]/g, '');
+    const cleanCustKey = sanitizeFirebaseKey(cleanCust);
 
     try {
         if (db) {

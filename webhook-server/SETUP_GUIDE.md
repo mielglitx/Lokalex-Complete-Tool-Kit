@@ -29,12 +29,16 @@ Cloudflare Workers provides a free HTTPS endpoint that is active 24/7 with zero 
 
 ### Step 1: Deploy Worker in Cloudflare
 1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com/) and sign in.
-2. In the left menu, click **Workers & Pages** ➔ **Create application** ➔ **Create Worker**.
-3. Name it: `lokalex-messenger-webhook` and click **Deploy**.
-4. Click **Edit code** on the top right.
-5. Delete the starter code, copy and paste the entire code from [`webhook-server/cloudflare-worker.js`](./cloudflare-worker.js), and click **Save and Deploy**.
-6. Copy your Worker URL:
+2. In the left menu, click **Workers & Pages** ➔ select your worker (`lokalex-messenger-webhook`).
+3. Click **Edit code** on the top right.
+4. Replace the code by copying and pasting the entire file [`webhook-server/cloudflare-worker.js`](./cloudflare-worker.js).
+5. Click **Save and Deploy** (or **Deploy**).
+6. Verify your deployment: open your worker URL in your browser:
    `https://lokalex-messenger-webhook.<your-subdomain>.workers.dev`
+   You should see `"version": "2.1.0"` in the JSON response!
+
+> **💡 Automatic Name Resolution in Lokalex Web App:**
+> Even if Cloudflare Worker is not updated or Meta temporarily delays webhook indexing, the Lokalex Web App now has an automatic real-time resolver that catches any incoming `FB Customer (...)` messages, resolves their real name directly via Facebook Graph API, updates the display instantly, and saves the proper name back to Firebase.
 
 ---
 

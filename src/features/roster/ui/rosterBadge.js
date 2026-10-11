@@ -1,10 +1,11 @@
 // src/features/roster/ui/rosterBadge.js
-import { escapeHtml } from '../../../utils/helpers.js';
+import { escapeHtml, sanitizeFirebaseKey } from '../../../utils/helpers.js';
+import { isCustomerMatch } from '../rosterUtils.js';
 
 export function getForcedCaterBadgeHtml(record, customerName, riderName = "") {
     if (!record || !customerName) return "";
 
-    const cleanCustKey = customerName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanCustKey = sanitizeFirebaseKey(customerName);
     const cleanCustName = customerName.toLowerCase().trim();
     let forcedInfo = null;
 
@@ -15,13 +16,15 @@ export function getForcedCaterBadgeHtml(record, customerName, riderName = "") {
                          record.forcedCaters[customerName];
 
             if (!forcedInfo) {
-                const values = Array.isArray(record.forcedCaters) ? record.forcedCaters : Object.values(record.forcedCaters);
-                forcedInfo = values.find(fc => {
+                const entries = Object.entries(record.forcedCaters);
+                const found = entries.find(([k, fc]) => {
                     if (!fc) return false;
                     if (fc === true) return true;
-                    const fName = (fc.customerName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                    return fName && (fName === cleanCustKey || fName.includes(cleanCustKey) || cleanCustKey.includes(fName));
+                    if (isCustomerMatch(k, customerName)) return true;
+                    const fName = fc.customerName || '';
+                    return fName && isCustomerMatch(fName, customerName);
                 });
+                if (found) forcedInfo = found[1];
             }
         } else if (record.forcedCaters === true) {
             forcedInfo = { forcedBy: 'Admin' };

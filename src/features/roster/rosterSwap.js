@@ -3,7 +3,7 @@ import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { escapeHtml } from '../../utils/helpers.js';
-import { parseQueueTime, isAdmin } from './rosterUtils.js';
+import { parseQueueTime, isAdmin, isCustomerMatch } from './rosterUtils.js';
 import { autoStartLiveGpsSession } from '../liveTracker.js';
 import { canRiderTakeMoreBookings, getMaxActiveBookingsLimit } from './rosterStatus.js';
 
@@ -418,7 +418,7 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
             Object.keys(chats).forEach(custId => {
                 const meta = chats[custId]?.metadata || chats[custId] || {};
                 const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
-                if (chatCustName && chatCustName === cleanTargetCust) {
+                if (chatCustName && (chatCustName === cleanTargetCust || isCustomerMatch(chatCustName, cleanTargetCust))) {
                     atomicUpdates[`customerChats/${custId}/metadata/folder`] = 'catering';
                     atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderId`] = sourceRiderId;
                     atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderName`] = sourceRiderName;
@@ -495,13 +495,13 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
             const meta = chats[custId]?.metadata || chats[custId] || {};
             const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
 
-            if (chatCustName && chatCustName === cleanSrc) {
+            if (chatCustName && (chatCustName === cleanSrc || isCustomerMatch(chatCustName, cleanSrc))) {
                 atomicUpdates[`customerChats/${custId}/metadata/folder`] = 'catering';
                 atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderId`] = targetRiderId;
                 atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderName`] = targetRiderName;
                 atomicUpdates[`customerChats/${custId}/metadata/cateredBy`] = targetRiderName;
                 atomicUpdates[`customerChats/${custId}/metadata/lastUpdated`] = Date.now();
-            } else if (cleanTgt && chatCustName && chatCustName === cleanTgt) {
+            } else if (cleanTgt && chatCustName && (chatCustName === cleanTgt || isCustomerMatch(chatCustName, cleanTgt))) {
                 atomicUpdates[`customerChats/${custId}/metadata/folder`] = 'catering';
                 atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderId`] = sourceRiderId;
                 atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderName`] = sourceRiderName;

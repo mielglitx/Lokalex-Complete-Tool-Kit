@@ -11,7 +11,9 @@ import {
     getRiderTodayGross, 
     sortAvailableRidersByGross, 
     canManageRoster, 
-    saveRosterCache 
+    saveRosterCache,
+    sanitizeFirebaseKey,
+    isCustomerMatch
 } from '../rosterUtils.js';
 import { updateRosterUI } from '../rosterUI.js';
 import { canRiderTakeMoreBookings } from '../rosterStatusLimits.js';
@@ -171,8 +173,7 @@ export async function confirmCateringStatus() {
             existingTimes.push(startTime);
         }
 
-        const cleanCustKey = custName.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const cleanCustTrimmed = custName.toLowerCase().trim();
+        const cleanCustKey = sanitizeFirebaseKey(custName);
 
         let forcedCatersMap = {};
         if (myRecord && myRecord.forcedCaters && typeof myRecord.forcedCaters === 'object') {
@@ -188,7 +189,6 @@ export async function confirmCateringStatus() {
             };
 
             forcedCatersMap[cleanCustKey] = forcedPayload;
-            forcedCatersMap[cleanCustTrimmed] = forcedPayload;
 
             if (myRecord) {
                 myRecord.forcedCaters = forcedCatersMap;
@@ -205,11 +205,9 @@ export async function confirmCateringStatus() {
             }
         } else if (!isForcedByRole && resolvedId && cleanCustKey) {
             delete forcedCatersMap[cleanCustKey];
-            delete forcedCatersMap[cleanCustTrimmed];
 
             if (db) {
                 db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
-                db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustTrimmed}`).remove().catch(() => {});
             }
         }
 
@@ -234,7 +232,7 @@ export async function confirmCateringStatus() {
                     Object.keys(chats).forEach(custId => {
                         const meta = chats[custId]?.metadata || chats[custId] || {};
                         const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
-                        if (chatCustName && chatCustName === cleanSearchName) {
+                        if (chatCustName && (chatCustName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName))) {
                             const updateObj = {
                                 folder: 'catering',
                                 cateredByRiderId: resolvedId,

@@ -22,7 +22,7 @@
  */
 
 import { appState, globalState } from '../../../store/state.js';
-import { escapeHtml, formatTitleCase } from '../../../utils/helpers.js';
+import { escapeHtml, escapeJsAttr, formatTitleCase } from '../../../utils/helpers.js';
 import { 
     loadRosterCache, 
     canManageRoster, 
@@ -486,33 +486,33 @@ export function updateRosterUI() {
                     
                     <div class="flex items-center gap-1 shrink-0">
                         ${canComplete ? `
-                            <button type="button" onclick="window.completeSingleCateringCustomer && window.completeSingleCateringCustomer('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-0.5 rounded text-[10px] font-black transition active:scale-95 shadow-xs flex items-center gap-1 cursor-pointer" title="Mark this customer delivery as completed">
+                            <button type="button" onclick="window.completeSingleCateringCustomer && window.completeSingleCateringCustomer('${mId}', '${escapeJsAttr(mName)}', '${escapeJsAttr(cName)}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-0.5 rounded text-[10px] font-black transition active:scale-95 shadow-xs flex items-center gap-1 cursor-pointer" title="Mark this customer delivery as completed">
                                 <i class="fa-solid fa-check"></i> Done
                             </button>
                         ` : ''}
 
                         ${isMyLine ? `
-                            <button type="button" onclick="window.copyCustomerTrackingLink && window.copyCustomerTrackingLink('${escapeHtml(cName)}')" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/30 dark:hover:bg-blue-600 dark:text-blue-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Send Track Link">🔗 Link</button>
-                            <button type="button" onclick="window.openLiveCustomerMap && window.openLiveCustomerMap('${escapeHtml(cName)}')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Open Live Map">🗺️ Map</button>
+                            <button type="button" onclick="window.copyCustomerTrackingLink && window.copyCustomerTrackingLink('${escapeJsAttr(cName)}')" class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/30 dark:hover:bg-blue-600 dark:text-blue-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Send Track Link">🔗 Link</button>
+                            <button type="button" onclick="window.openLiveCustomerMap && window.openLiveCustomerMap('${escapeJsAttr(cName)}')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Open Live Map">🗺️ Map</button>
                         ` : ''}
 
                         ${canSwap ? `
-                            <button type="button" onclick="window.openSwapCustomerModal && window.openSwapCustomerModal('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Swap customer with another rider">
+                            <button type="button" onclick="window.openSwapCustomerModal && window.openSwapCustomerModal('${mId}', '${escapeJsAttr(mName)}', '${escapeJsAttr(cName)}')" class="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-transparent px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Swap customer with another rider">
                                 🔀 Swap
                             </button>
                         ` : ''}
 
                         ${!isMyLine ? `
-                            <button type="button" onclick="window.claimCustomerFromRider && window.claimCustomerFromRider('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-emerald-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Request to get this customer">
+                            <button type="button" onclick="window.claimCustomerFromRider && window.claimCustomerFromRider('${mId}', '${escapeJsAttr(mName)}', '${escapeJsAttr(cName)}')" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/30 dark:hover:bg-emerald-600 dark:text-emerald-300 dark:border-emerald-500/40 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95" title="Request to get this customer">
                                 📥 Get
                             </button>
                         ` : ''}
 
                         ${showControls ? `
-                            <button type="button" onclick="window.openEditCateringCustomerModal && window.openEditCateringCustomerModal('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-800 dark:text-amber-300 dark:border-amber-700/50 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1" title="Edit Customer Name">
+                            <button type="button" onclick="window.openEditCateringCustomerModal && window.openEditCateringCustomerModal('${mId}', '${escapeJsAttr(mName)}', '${escapeJsAttr(cName)}')" class="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-800 dark:text-amber-300 dark:border-amber-700/50 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1" title="Edit Customer Name">
                                 <i class="fa-solid fa-pen text-[9px]"></i> Edit
                             </button>
-                            <button type="button" onclick="window.adminVoidSpecificCustomer && window.adminVoidSpecificCustomer('${mId}', '${escapeHtml(mName)}', '${escapeHtml(cName)}')" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-300 dark:border-red-700/50 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1" title="Void specific customer">
+                            <button type="button" onclick="window.adminVoidSpecificCustomer && window.adminVoidSpecificCustomer('${mId}', '${escapeJsAttr(mName)}', '${escapeJsAttr(cName)}')" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-300 dark:border-red-700/50 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1" title="Void specific customer">
                                 <i class="fa-solid fa-ban text-[9px]"></i> Void
                             </button>
                         ` : ''}

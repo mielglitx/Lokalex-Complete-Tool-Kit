@@ -4,7 +4,7 @@ import { appState, globalState } from '../../store/state.js';
 import { API_URL } from '../../config/constants.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { openSlideDeleteModal, closeAdminCateringModal } from '../../ui/modals.js';
-import { isSameDate, escapeHtml } from '../../utils/helpers.js';
+import { isSameDate, escapeHtml, sanitizeFirebaseKey } from '../../utils/helpers.js';
 import { populateCateringCustomerDropdown } from '../chat/index.js';
 import { 
     loadRosterCache,
@@ -158,7 +158,7 @@ export async function submitAdminForceCatering() {
     if (!custName) return showToast("⚠️ Please select or enter customer name!");
 
     const adminName = appState.riderName || localStorage.getItem('riderName') || "Admin/TL";
-    const cleanCustKey = custName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanCustKey = sanitizeFirebaseKey(custName);
 
     if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
         loadRosterCache();
@@ -381,7 +381,7 @@ export async function adminVoidSpecificCustomer(targetId, targetName, custNameTo
     if (!targetId || !custNameToVoid) return;
 
     openSlideDeleteModal(`Void Customer: ${custNameToVoid}?`, `Sigurado ka bang nais i-void si ${custNameToVoid} para kay ${targetName}?`, async () => {
-        const cleanCustKey = custNameToVoid.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanCustKey = sanitizeFirebaseKey(custNameToVoid);
         if (db && cleanCustKey) {
             db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
         }
@@ -483,8 +483,8 @@ export async function executeEditCateringCustomerName(riderId, riderName, oldNam
     const resolvedTargetId = (targetRecord.telegramId || targetRecord.id || cleanId).toString().trim();
     const resolvedTargetName = targetRecord.riderName || targetRecord.name || cleanName;
 
-    const cleanOldKey = oldName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const cleanNewKey = newName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanOldKey = sanitizeFirebaseKey(oldName);
+    const cleanNewKey = sanitizeFirebaseKey(newName);
 
     const atomicUpdates = {};
     atomicUpdates[`roster/${resolvedTargetId}/customerName`] = updatedCustomerNames;
@@ -583,7 +583,7 @@ export async function executeVoidCateredCustomer(riderName, customerName, comple
 
     const cleanRider = (riderName || "").trim().toLowerCase();
     const cleanCust = (customerName || "").trim().toLowerCase();
-    const cleanCustKey = cleanCust.replace(/[^a-z0-9]/g, '');
+    const cleanCustKey = sanitizeFirebaseKey(cleanCust);
 
     try {
         if (db) {

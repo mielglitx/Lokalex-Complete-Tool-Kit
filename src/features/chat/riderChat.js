@@ -20,7 +20,11 @@ import {
     getActiveRiderChatFilter 
 } from './riderChatFeed.js';
 import { listenToGlobalStoreChats } from './riderStoreChat.js';
-import { getPublicFbSendEndpoint } from './facebookApiAdmin.js';
+import { 
+    getPublicFbSendEndpoint,
+    resolveFacebookCustomerName,
+    getResolvedFbName 
+} from './facebookApiAdmin.js';
 
 let activeRiderChatCustId = null;
 let activeRiderChatListener = null;
@@ -67,14 +71,36 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
     const nameEl = document.getElementById('rider-chat-cust-name');
     const avatarEl = document.getElementById('rider-chat-cust-avatar') || document.getElementById('rider-chat-avatar');
 
-    const resolvedAvatar = avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName || "Customer")}&background=0084FF&color=fff`;
+    let effectiveName = custName || "Customer";
+    let effectiveAvatar = avatarUrl;
 
-    if (nameEl) nameEl.innerText = custName || "Customer";
+    if (custId && custId.startsWith('fb_')) {
+        const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(custId) : null;
+        if (cached && cached.name && (!effectiveName || effectiveName.startsWith('FB Customer ('))) {
+            effectiveName = cached.name;
+            effectiveAvatar = cached.avatarUrl || effectiveAvatar;
+        } else if (!effectiveName || effectiveName.startsWith('FB Customer (')) {
+            if (typeof resolveFacebookCustomerName === 'function') {
+                resolveFacebookCustomerName(custId).then(resolved => {
+                    if (resolved && resolved.name && activeRiderChatCustId === custId) {
+                        if (nameEl) nameEl.innerText = resolved.name;
+                        if (avatarEl && avatarEl.tagName === 'IMG' && resolved.avatarUrl) {
+                            avatarEl.src = resolved.avatarUrl;
+                        }
+                    }
+                }).catch(() => {});
+            }
+        }
+    }
+
+    const resolvedAvatar = effectiveAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(effectiveName || "Customer")}&background=0084FF&color=fff`;
+
+    if (nameEl) nameEl.innerText = effectiveName || "Customer";
     if (avatarEl) {
         if (avatarEl.tagName === 'IMG') {
             avatarEl.src = resolvedAvatar;
         } else {
-            avatarEl.innerText = (custName || "CU").split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+            avatarEl.innerText = (effectiveName || "CU").split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
         }
     }
 
@@ -96,6 +122,14 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         activeRiderChatMetaListener = db.ref(`customerChats/${custId}/metadata`);
         activeRiderChatMetaListener.on('value', (snapshot) => {
             currentRiderChatMeta = snapshot.val() || {};
+            if (currentRiderChatMeta?.customerName && nameEl) {
+                if (!nameEl.innerText || nameEl.innerText === 'Customer' || nameEl.innerText.startsWith('FB Customer (')) {
+                    nameEl.innerText = currentRiderChatMeta.customerName;
+                }
+            }
+            if (currentRiderChatMeta?.avatarUrl && avatarEl && avatarEl.tagName === 'IMG') {
+                avatarEl.src = currentRiderChatMeta.avatarUrl;
+            }
             evaluateRiderChatLockPermissions();
             bindRiderToActiveStoreOrders(currentRiderChatMeta);
             syncMilestoneBarUI(currentRiderChatMeta);

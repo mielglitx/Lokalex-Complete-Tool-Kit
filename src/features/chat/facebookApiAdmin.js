@@ -808,6 +808,169 @@ export async function toggleAdminFbApiStatus(apiId, currentActive) {
     }
 }
 
+// In-memory cache & in-flight requests for resolved Facebook customer names
+const fbNameResolutionCache = new Map();
+const inFlightFbResolutions = new Map();
+let autoResolveDebounceTimer = null;
+
+export function getResolvedFbName(custId) {
+    if (!custId) return null;
+    const psid = String(custId).replace(/^fb_/, '').trim();
+    return fbNameResolutionCache.get(psid) || null;
+}
+
+/**
+ * Resolves the real customer name and avatar from Facebook Graph API.
+ * Uses targeted Page Conversations API (`user_id=${psid}`) which works for all public
+ * Facebook Messenger customers without requiring User Profile Advanced Access permissions.
+ */
+export async function resolveFacebookCustomerName(custId, force = false) {
+    if (!custId) return null;
+    const cleanId = String(custId).trim();
+    const psid = cleanId.replace(/^fb_/, '').trim();
+    if (!psid) return null;
+
+    if (!force && fbNameResolutionCache.has(psid)) {
+        return fbNameResolutionCache.get(psid);
+    }
+    if (inFlightFbResolutions.has(psid)) {
+        return inFlightFbResolutions.get(psid);
+    }
+
+    const resolutionPromise = (async () => {
+        try {
+            // 1. Retrieve configured Facebook APIs with Page Access Token
+            let apiList = Array.from(cachedAdminApisMap.values()).filter(a => a && a.pageAccessToken);
+            if (apiList.length === 0 && db) {
+                const apiSnap = await db.ref('adminSettings/facebookApis').once('value');
+                const apis = apiSnap.val() || {};
+                apiList = Object.values(apis).filter(a => a && a.pageAccessToken);
+            }
+
+            if (apiList.length === 0) {
+                return null;
+            }
+
+            for (const api of apiList) {
+                const pageId = api.pageId || "1098954353295816";
+                const token = (api.pageAccessToken || '').trim();
+                if (!token) continue;
+
+                // Method A: Targeted Page Conversations API by user_id
+                try {
+                    const convResp = await fetch(
+                        `https://graph.facebook.com/v19.0/${pageId}/conversations?user_id=${psid}&fields=participants,senders&access_token=${token}`
+                    );
+                    if (convResp.ok) {
+                        const convData = await convResp.json();
+                        if (Array.isArray(convData.data) && convData.data.length > 0) {
+                            const people = [
+                                ...(convData.data[0].participants?.data || []),
+                                ...(convData.data[0].senders?.data || [])
+                            ];
+                            const match = people.find(p => String(p.id) === String(psid));
+                            if (match && match.name) {
+                                const realName = match.name.trim();
+                                const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(realName)}&background=0084FF&color=fff`;
+                                const resolved = { name: realName, avatarUrl: avatar };
+                                fbNameResolutionCache.set(psid, resolved);
+
+                                // Update Firebase in the background
+                                if (db) {
+                                    await Promise.all([
+                                        db.ref(`customerChatMeta/${cleanId}`).update({
+                                            customerName: realName,
+                                            avatarUrl: avatar
+                                        }),
+                                        db.ref(`customerChats/${cleanId}/metadata`).update({
+                                            customerName: realName,
+                                            avatarUrl: avatar
+                                        })
+                                    ]).catch(() => {});
+                                }
+                                return resolved;
+                            }
+                        }
+                    }
+                } catch (errConv) {
+                    console.warn(`[FB Resolver] Conversations lookup error for PSID ${psid}:`, errConv);
+                }
+
+                // Method B: Direct PSID Node API (Fallback for app testers / admins with profile picture)
+                try {
+                    const profileResp = await fetch(
+                        `https://graph.facebook.com/v19.0/${psid}?fields=first_name,last_name,name,profile_pic&access_token=${token}`
+                    );
+                    if (profileResp.ok) {
+                        const profile = await profileResp.json();
+                        const fullName = (profile.name || `${profile.first_name || ''} ${profile.last_name || ''}`).trim();
+                        if (fullName) {
+                            const avatar = profile.profile_pic || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=0084FF&color=fff`;
+                            const resolved = { name: fullName, avatarUrl: avatar };
+                            fbNameResolutionCache.set(psid, resolved);
+
+                            if (db) {
+                                await Promise.all([
+                                    db.ref(`customerChatMeta/${cleanId}`).update({
+                                        customerName: fullName,
+                                        avatarUrl: avatar
+                                    }),
+                                    db.ref(`customerChats/${cleanId}/metadata`).update({
+                                        customerName: fullName,
+                                        avatarUrl: avatar
+                                    })
+                                ]).catch(() => {});
+                            }
+                            return resolved;
+                        }
+                    }
+                } catch (errProfile) {
+                    console.warn(`[FB Resolver] Profile lookup error for PSID ${psid}:`, errProfile);
+                }
+            }
+        } catch (e) {
+            console.error(`[FB Resolver] Failed resolving customer ${cleanId}:`, e);
+        } finally {
+            inFlightFbResolutions.delete(psid);
+        }
+        return null;
+    })();
+
+    inFlightFbResolutions.set(psid, resolutionPromise);
+    return resolutionPromise;
+}
+
+/**
+ * Automatically inspects the current list of threads and auto-resolves any
+ * Facebook threads that are missing real customer names in the background.
+ */
+export function autoResolvePendingFacebookThreads(threadsList) {
+    if (!Array.isArray(threadsList) || threadsList.length === 0) return;
+
+    if (autoResolveDebounceTimer) {
+        clearTimeout(autoResolveDebounceTimer);
+    }
+
+    autoResolveDebounceTimer = setTimeout(async () => {
+        const pending = threadsList.filter(t => {
+            if (!t) return false;
+            const cid = t.custId || t.id || '';
+            if (!cid.startsWith('fb_')) return false;
+            const name = (t.customerName || t.name || '').trim();
+            return !name || name.startsWith('FB Customer (') || name.toLowerCase() === 'customer';
+        });
+
+        if (pending.length === 0) return;
+
+        for (const t of pending) {
+            const cid = t.custId || t.id;
+            try {
+                await resolveFacebookCustomerName(cid);
+            } catch (e) {}
+        }
+    }, 1200);
+}
+
 export async function syncAllFacebookCustomerNames() {
     if (!db) return;
     try {
@@ -825,52 +988,71 @@ export async function syncAllFacebookCustomerNames() {
 
         let updatedCount = 0;
 
+        // 1. Process bulk conversations
         for (const api of apiList) {
             const pageId = api.pageId || "1098954353295816";
             const token = api.pageAccessToken.trim();
 
-            const convResp = await fetch(
-                `https://graph.facebook.com/v19.0/${pageId}/conversations?fields=participants,senders&limit=50&access_token=${token}`
-            );
-            if (!convResp.ok) continue;
+            try {
+                const convResp = await fetch(
+                    `https://graph.facebook.com/v19.0/${pageId}/conversations?fields=participants,senders&limit=100&access_token=${token}`
+                );
+                if (convResp.ok) {
+                    const convData = await convResp.json();
+                    if (Array.isArray(convData.data)) {
+                        const nameMap = new Map();
+                        convData.data.forEach(c => {
+                            const people = [
+                                ...(c.participants?.data || []),
+                                ...(c.senders?.data || [])
+                            ];
+                            people.forEach(p => {
+                                if (p.id && String(p.id) !== String(pageId) && p.name) {
+                                    nameMap.set(String(p.id).trim(), p.name.trim());
+                                }
+                            });
+                        });
 
-            const convData = await convResp.json();
-            if (!Array.isArray(convData.data)) continue;
+                        for (const [custId, item] of Object.entries(allMeta)) {
+                            if (!custId.startsWith('fb_')) continue;
+                            const psid = custId.replace(/^fb_/, '');
+                            const currentName = item.customerName || item.metadata?.customerName || '';
 
-            const nameMap = new Map();
-            convData.data.forEach(c => {
-                const people = [
-                    ...(c.participants?.data || []),
-                    ...(c.senders?.data || [])
-                ];
-                people.forEach(p => {
-                    if (p.id && String(p.id) !== String(pageId) && p.name) {
-                        nameMap.set(String(p.id).trim(), p.name.trim());
+                            if (nameMap.has(psid)) {
+                                const realName = nameMap.get(psid);
+                                if (realName && (realName !== currentName || currentName.startsWith('FB Customer ('))) {
+                                    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(realName)}&background=0084FF&color=fff`;
+                                    fbNameResolutionCache.set(psid, { name: realName, avatarUrl: avatar });
+                                    await Promise.all([
+                                        db.ref(`customerChatMeta/${custId}`).update({
+                                            customerName: realName,
+                                            avatarUrl: avatar
+                                        }),
+                                        db.ref(`customerChats/${custId}/metadata`).update({
+                                            customerName: realName,
+                                            avatarUrl: avatar
+                                        })
+                                    ]).catch(() => {});
+                                    item.customerName = realName;
+                                    updatedCount++;
+                                }
+                            }
+                        }
                     }
-                });
-            });
+                }
+            } catch (bulkErr) {
+                console.warn("Bulk conversations sync error:", bulkErr);
+            }
+        }
 
-            for (const [custId, item] of Object.entries(allMeta)) {
-                if (!custId.startsWith('fb_')) continue;
-                const psid = custId.replace(/^fb_/, '');
-                const currentName = item.customerName || item.metadata?.customerName || '';
-
-                if (nameMap.has(psid)) {
-                    const realName = nameMap.get(psid);
-                    if (realName && (realName !== currentName || currentName.startsWith('FB Customer ('))) {
-                        const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(realName)}&background=0084FF&color=fff`;
-                        await Promise.all([
-                            db.ref(`customerChatMeta/${custId}`).update({
-                                customerName: realName,
-                                avatarUrl: avatar
-                            }),
-                            db.ref(`customerChats/${custId}/metadata`).update({
-                                customerName: realName,
-                                avatarUrl: avatar
-                            })
-                        ]).catch(() => {});
-                        updatedCount++;
-                    }
+        // 2. Direct resolution fallback for any remaining FB Customer entries
+        for (const [custId, item] of Object.entries(allMeta)) {
+            if (!custId.startsWith('fb_')) continue;
+            const currentName = item.customerName || item.metadata?.customerName || '';
+            if (!currentName || currentName.startsWith('FB Customer (')) {
+                const resolved = await resolveFacebookCustomerName(custId, true);
+                if (resolved && resolved.name && resolved.name !== currentName) {
+                    updatedCount++;
                 }
             }
         }
@@ -896,6 +1078,9 @@ if (typeof window !== 'undefined') {
     window.toggleAdminFbApiStatus = toggleAdminFbApiStatus;
     window.toggleAdminFbLinkVisibility = toggleAdminFbLinkVisibility;
     window.syncAllFacebookCustomerNames = syncAllFacebookCustomerNames;
+    window.resolveFacebookCustomerName = resolveFacebookCustomerName;
+    window.autoResolvePendingFacebookThreads = autoResolvePendingFacebookThreads;
+    window.getResolvedFbName = getResolvedFbName;
     
     // Multi-source live chat selectors
     window.openRiderChatSourcesModal = openRiderChatSourcesModal;

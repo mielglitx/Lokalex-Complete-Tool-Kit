@@ -1,7 +1,7 @@
 // src/features/wizard/wizardCore.js
 import { appState, globalState, wizState, multiCarts } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
-import { getLocalTodayStr } from '../../utils/helpers.js';
+import { getLocalTodayStr, sanitizeFirebaseKey } from '../../utils/helpers.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { switchView } from '../../ui/router.js';
 import { saveCartState, renderCartItems, renderCartTabs } from '../cart.js';
@@ -75,7 +75,7 @@ export async function saveReceiptToDatabase(customerName) {
     }
 
     const cName = customerName.trim();
-    const cleanCustKey = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanCustKey = sanitizeFirebaseKey(cName);
     const rName = (appState.riderName || "").trim();
     const cleanRiderKey = rName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const todayStr = getLocalTodayStr();

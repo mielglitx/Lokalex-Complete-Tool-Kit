@@ -36,6 +36,7 @@ app.use((req, res, next) => {
 app.get('/', (req, res) => {
   res.json({
     status: "online",
+    version: "2.1.0",
     service: "Lokalex Messenger Webhook Server",
     database: FIREBASE_DB_URL,
     channel: DEFAULT_API_NAME
@@ -79,19 +80,78 @@ app.post('/webhook', async (req, res) => {
         const mid = item.message.mid ? String(item.message.mid).replace(/[.#$\[\]\/]/g, '_') : `msg_${timestamp}`;
         let messageText = item.message.text || (item.message.attachments ? "📷 [Attachment]" : "Facebook Message");
 
-        let customerName = `FB Customer (${senderId.slice(-4)})`;
-        let avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(customerName)}&background=0084FF&color=fff`;
+        const pageId = item.recipient?.id || entry.id || "1098954353295816";
 
-        if (PAGE_ACCESS_TOKEN) {
+        // 1. Check if thread in Firebase already has a valid customer name
+        let existingCustomerName = null;
+        let existingAvatarUrl = null;
+        try {
+          const metaResp = await fetch(`${FIREBASE_DB_URL}/customerChatMeta/${custId}.json`);
+          if (metaResp.ok) {
+            const ex = await metaResp.json();
+            if (ex && ex.customerName && !ex.customerName.startsWith("FB Customer (")) {
+              existingCustomerName = ex.customerName.trim();
+              existingAvatarUrl = ex.avatarUrl;
+            }
+          }
+        } catch(e) {}
+
+        // 2. Fetch Facebook Page Access Token & Page ID from Firebase if not in environment
+        let token = PAGE_ACCESS_TOKEN;
+        let resolvedPageId = pageId;
+        if (!token) {
           try {
-            const profileResp = await fetch(`https://graph.facebook.com/v19.0/${senderId}?fields=first_name,last_name,profile_pic&access_token=${PAGE_ACCESS_TOKEN}`);
-            if (profileResp.ok) {
-              const p = await profileResp.json();
-              const full = `${p.first_name || ''} ${p.last_name || ''}`.trim();
-              if (full) customerName = full;
-              if (p.profile_pic) avatarUrl = p.profile_pic;
+            const apiResp = await fetch(`${FIREBASE_DB_URL}/adminSettings/facebookApis/${DEFAULT_API_ID}.json`);
+            if (apiResp.ok) {
+              const apiData = await apiResp.json();
+              if (apiData?.pageAccessToken) token = apiData.pageAccessToken.trim();
+              if (apiData?.pageId) resolvedPageId = apiData.pageId.trim();
             }
           } catch(e) {}
+        }
+
+        let customerName = existingCustomerName || `FB Customer (${senderId.slice(-4)})`;
+        let avatarUrl = existingAvatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(customerName)}&background=0084FF&color=fff`;
+
+        // 3. Resolve customer name via Facebook Graph API
+        if (token && (!existingCustomerName || existingCustomerName.startsWith("FB Customer ("))) {
+          // Method A: Page Conversations API (Works for ALL public customers without requiring User Profile Advanced Access)
+          try {
+            const convResp = await fetch(
+              `https://graph.facebook.com/v19.0/${resolvedPageId}/conversations?user_id=${senderId}&fields=participants,senders&access_token=${token}`
+            );
+            if (convResp.ok) {
+              const convData = await convResp.json();
+              if (Array.isArray(convData.data) && convData.data.length > 0) {
+                const participants = [
+                  ...(convData.data[0].participants?.data || []),
+                  ...(convData.data[0].senders?.data || [])
+                ];
+                const matched = participants.find(p => String(p.id) === String(senderId));
+                if (matched && matched.name) {
+                  customerName = matched.name.trim();
+                  avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(customerName)}&background=0084FF&color=fff`;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("Conversations API name lookup failed:", e);
+          }
+
+          // Method B: Direct PSID Node API (Fallback / retrieves profile picture when available)
+          try {
+            const profileResp = await fetch(
+              `https://graph.facebook.com/v19.0/${senderId}?fields=first_name,last_name,name,profile_pic&access_token=${token}`
+            );
+            if (profileResp.ok) {
+              const profile = await profileResp.json();
+              const fullName = profile.name || `${profile.first_name || ""} ${profile.last_name || ""}`.trim();
+              if (fullName) customerName = fullName;
+              if (profile.profile_pic) avatarUrl = profile.profile_pic;
+            }
+          } catch (e) {
+            console.warn("Direct PSID profile lookup failed:", e);
+          }
         }
 
         const threadMeta = {

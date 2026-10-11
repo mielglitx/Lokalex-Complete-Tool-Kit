@@ -33,7 +33,8 @@ import {
     saveRosterCache,
     isAdmin,
     canManageRoster,
-    hasTlPermission
+    hasTlPermission,
+    sanitizeFirebaseKey
 } from '../rosterUtils.js';
 import { updateRosterUI } from '../rosterUI.js';
 import { updateRosterStatusData } from '../rosterStatusCore.js';
@@ -129,7 +130,7 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     }
 
     const cleanCust = custNameToComplete.toLowerCase().trim();
-    const cleanCustKey = cleanCust.replace(/[^a-z0-9]/g, '');
+    const cleanCustKey = sanitizeFirebaseKey(cleanCust);
     const todayStr = getLocalTodayStr();
     const todayClean = todayStr.replace(/-/g, '');
     const endTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -433,7 +434,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
     }
 
     const cleanVoidCust = custNameToVoid.toLowerCase().trim();
-    const cleanCustKey = cleanVoidCust.replace(/[^a-z0-9]/g, '');
+    const cleanCustKey = sanitizeFirebaseKey(cleanVoidCust);
 
     // Purge forced catering metadata
     if (targetRecord && targetRecord.forcedCaters) {

@@ -12,6 +12,56 @@ export function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
+/**
+ * Escapes strings for safe embedding inside inline HTML onclick single-quoted JavaScript arguments.
+ * Prevents unescaped single quotes or special characters from terminating string literals.
+ */
+export function escapeJsAttr(str) {
+    if (!str) return "";
+    return String(str)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+/**
+ * Generates a Firebase RTDB safe key while preserving full international unicode
+ * alphabets (Latin with accents/diacritics, Asian scripts, Arabic, Cyrillic, etc.).
+ * Guarantees a non-empty key free from Firebase-forbidden characters: . # $ [ ] /
+ */
+export function sanitizeFirebaseKey(raw) {
+    if (!raw) return 'cust_' + Date.now().toString(36);
+    let normalized = "";
+    try {
+        normalized = String(raw).normalize('NFKC').trim().toLowerCase();
+    } catch (e) {
+        normalized = String(raw).trim().toLowerCase();
+    }
+    // Replace characters forbidden by Firebase (. # $ [ ] /), control chars, and whitespace
+    let safe = normalized.replace(/[.#$\[\]\/\x00-\x1F\x7F\s]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!safe) {
+        safe = 'cust_' + Array.from(String(raw)).map(c => c.charCodeAt(0).toString(16)).join('').slice(0, 16) || ('cust_' + Date.now().toString(36));
+    }
+    return safe;
+}
+
+/**
+ * Normalizes customer name for unicode-tolerant matching across international scripts.
+ */
+export function cleanCustomerForMatch(name = "") {
+    if (!name) return "";
+    let normalized = "";
+    try {
+        normalized = String(name).normalize('NFKC').trim().toLowerCase();
+    } catch (e) {
+        normalized = String(name).trim().toLowerCase();
+    }
+    const cleaned = normalized.replace(/[^\p{L}\p{N}]/gu, '');
+    return cleaned || normalized.replace(/\s+/g, '');
+}
+
 export function formatTitleCase(str) {
     if (!str) return "";
     return String(str)
@@ -153,6 +203,9 @@ export function updateThemeToggleUI(activePref = 'system') {
 // Auto-run theme initialization
 if (typeof window !== 'undefined') {
     window.formatTitleCase = formatTitleCase;
+    window.escapeJsAttr = escapeJsAttr;
+    window.sanitizeFirebaseKey = sanitizeFirebaseKey;
+    window.cleanCustomerForMatch = cleanCustomerForMatch;
     window.getDevicePlatform = getDevicePlatform;
     window.initTheme = initTheme;
     window.setTheme = setTheme;

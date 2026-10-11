@@ -25,7 +25,7 @@ import { db } from '../../config/firebase.js';
 import { HUB_LOCATION } from '../../config/constants.js';
 import { showToast } from '../../ui/notifications.js';
 import { switchView } from '../../ui/router.js';
-import { copyText, getLocalTodayStr } from '../../utils/helpers.js';
+import { copyText, getLocalTodayStr, sanitizeFirebaseKey } from '../../utils/helpers.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
 import { getDeviceLocation } from '../auth/index.js';
 import { mapState, saveTrackingHistory, ensureLeafletLoaded, fetchOsrmDrivingRoute } from './mapState.js';
@@ -34,7 +34,7 @@ export function copyCustomerTrackingLink(custName, forceRefresh = false) {
     if (!custName) custName = "Customer";
     
     const rName = (appState.riderName || "RIDER").replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    const cleanCust = custName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const cleanCust = sanitizeFirebaseKey(custName).toUpperCase();
     const todayClean = getLocalTodayStr().replace(/-/g, '');
     const sessionKey = `${rName}_${cleanCust}_${todayClean}`;
 
@@ -175,7 +175,7 @@ export async function openLiveCustomerMap(custName) {
     if (!custName) custName = "Customer";
 
     const rName = (appState.riderName || "RIDER").replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    const cleanCust = custName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const cleanCust = sanitizeFirebaseKey(custName).toUpperCase();
     const todayClean = getLocalTodayStr().replace(/-/g, '');
     const sessionKey = `${rName}_${cleanCust}_${todayClean}`;
 

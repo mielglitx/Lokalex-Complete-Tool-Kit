@@ -22,8 +22,10 @@ import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { ADMIN_IDS } from '../../config/constants.js';
 import { showToast, unlockAudioContext } from '../../ui/notifications.js';
-import { getLocalTodayStr, isSameDate } from '../../utils/helpers.js';
+import { getLocalTodayStr, isSameDate, sanitizeFirebaseKey, cleanCustomerForMatch } from '../../utils/helpers.js';
 import { getQueueLineupSettings } from './rosterQueueSettings.js';
+
+export { sanitizeFirebaseKey, cleanCustomerForMatch };
 
 export let lineAlarmInterval = null;
 export let lineAlarmConfirmed = false;
@@ -422,8 +424,13 @@ export function parseItemGross(item) {
 }
 
 export function isCustomerMatch(cust1 = "", cust2 = "") {
-    const c1 = (cust1 || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-    const c2 = (cust2 || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!cust1 || !cust2) return false;
+    const s1 = String(cust1).trim().toLowerCase();
+    const s2 = String(cust2).trim().toLowerCase();
+    if (s1 === s2) return true;
+
+    const c1 = cleanCustomerForMatch(cust1);
+    const c2 = cleanCustomerForMatch(cust2);
     if (!c1 || !c2) return false;
     if (c1 === c2) return true;
     if (c1.length >= 4 && c2.includes(c1)) return true;
@@ -512,7 +519,7 @@ export function getMergedDeduplicatedCommissionList(forceFresh = false) {
         const splitGross = count > 1 ? (totalGross / count) : totalGross;
 
         subCustomers.forEach(cName => {
-            const cleanCust = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const cleanCust = sanitizeFirebaseKey(cName);
             const uniqueKey = `${baseTxId}_${cleanCust}`;
             const sigKey = `${cleanRider}_${cleanCust}_${rcDate}_${sTime || 'default'}`;
 
@@ -562,7 +569,7 @@ export function getMergedDeduplicatedCommissionList(forceFresh = false) {
         const splitGross = subCustomers.length > 1 ? (totalGross / subCustomers.length) : totalGross;
 
         subCustomers.forEach(cName => {
-            const cleanCust = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const cleanCust = sanitizeFirebaseKey(cName);
             const uniqueKey = `${baseTxId}_${cleanCust}`;
             const sigKey = `${cleanRider}_${cleanCust}_${chDate}_${sTime || 'default'}`;
 
@@ -745,7 +752,7 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
 
     for (let i = 0; i < custs.length; i++) {
         const cName = custs[i];
-        const cleanCustKey = cName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const cleanCustKey = sanitizeFirebaseKey(cName);
         const cleanRiderKey = tName.toLowerCase().replace(/[^a-z0-9]/g, '');
         const sTime = times[i] || times[0] || 'N/A';
         const resolvedDate = resolveOrderDate(sTime, todayStr);
@@ -943,7 +950,7 @@ export function hasReceiptForActiveSession(custName, custStartTime) {
     if (hasReceiptRecord) return true;
 
     const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === (appState.telegramId || "").toString()) : null;
-    const cleanCName = cName.replace(/[^a-z0-9]/g, '');
+    const cleanCName = sanitizeFirebaseKey(cName);
     if (myRecord && myRecord.customerFees && cleanCName && myRecord.customerFees[cleanCName]) {
         return true;
     }
