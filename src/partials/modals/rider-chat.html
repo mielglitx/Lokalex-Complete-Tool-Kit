@@ -9,9 +9,12 @@
                     CU
                 </div>
                 <div>
-                    <div class="flex items-center gap-2">
-                        <h3 id="rider-chat-cust-name" class="font-black text-sm text-gray-900 dark:text-white">Customer Name</h3>
-                        <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-6 h-6 rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-transparent hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-xs shadow-xs" title="View Customer Info">
+                    <div class="flex items-center gap-1.5">
+                        <h3 id="rider-chat-cust-name" class="font-black text-sm text-gray-900 dark:text-white truncate">Customer Name</h3>
+                        <button type="button" onclick="window.promptRenameCustomerChat && window.promptRenameCustomerChat()" class="text-gray-400 hover:text-blue-500 p-1 text-xs active:scale-90" title="Edit Customer Name">
+                            <i class="fa-solid fa-pen text-[10px]"></i>
+                        </button>
+                        <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-6 h-6 rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-transparent hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-xs shadow-xs shrink-0" title="View Customer Info">
                             <i class="fa-solid fa-circle-info"></i>
                         </button>
                     </div>

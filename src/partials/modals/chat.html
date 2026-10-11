@@ -10,7 +10,10 @@
                     <img id="rider-chat-cust-avatar" src="" class="w-8 h-8 rounded-full border border-blue-500 object-cover">
                     <div>
                         <div class="flex items-center gap-1.5">
-                            <h3 id="rider-chat-cust-name" class="font-bold text-xs text-white">Customer Chat</h3>
+                            <h3 id="rider-chat-cust-name" class="font-bold text-xs text-white truncate">Customer Chat</h3>
+                            <button type="button" onclick="window.promptRenameCustomerChat && window.promptRenameCustomerChat()" class="text-gray-400 hover:text-blue-400 p-1 text-xs active:scale-90" title="Edit Customer Name">
+                                <i class="fa-solid fa-pen text-[10px]"></i>
+                            </button>
                             <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-[10px] shadow shrink-0" title="View Customer Profile & GPS Pin">
                                 <i class="fa-solid fa-circle-info"></i>
                             </button>

@@ -557,6 +557,33 @@ export function sendRiderLocation() {
     openMapPicker('rider-chat');
 }
 
+export async function promptRenameCustomerChat() {
+    if (!activeRiderChatCustId) return;
+    const currentName = document.getElementById('rider-chat-cust-name')?.innerText || "";
+    const newName = prompt("I-edit ang pangalan ng Customer:", currentName);
+    if (!newName || !newName.trim() || newName.trim() === currentName.trim()) return;
+
+    const cleanName = newName.trim();
+    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=0084FF&color=fff`;
+
+    if (db && activeRiderChatCustId) {
+        await Promise.all([
+            db.ref(`customerChatMeta/${activeRiderChatCustId}`).update({
+                customerName: cleanName,
+                avatarUrl: avatar
+            }),
+            db.ref(`customerChats/${activeRiderChatCustId}/metadata`).update({
+                customerName: cleanName,
+                avatarUrl: avatar
+            })
+        ]).catch(() => {});
+        
+        const nameEl = document.getElementById('rider-chat-cust-name');
+        if (nameEl) nameEl.innerText = cleanName;
+        showToast(`✅ Na-update ang pangalan: ${cleanName}`);
+    }
+}
+
 if (typeof window !== 'undefined') {
     window.getActiveRiderChatCustId = getActiveRiderChatCustId;
     window.getCurrentRiderChatMeta = getCurrentRiderChatMeta;
@@ -567,6 +594,7 @@ if (typeof window !== 'undefined') {
     window.openRiderCustomerChatModal = openRiderCustomerChatModal;
     window.closeRiderChatModal = closeRiderChatModal;
     window.closeRiderCustomerChatModal = closeRiderCustomerChatModal;
+    window.promptRenameCustomerChat = promptRenameCustomerChat;
     window.sendRiderChatMessage = sendRiderChatMessage;
     window.sendRiderToCustomerChat = sendRiderToCustomerChat;
     window.sendChatLocationPin = sendChatLocationPin;

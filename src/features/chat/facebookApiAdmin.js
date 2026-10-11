@@ -808,6 +808,84 @@ export async function toggleAdminFbApiStatus(apiId, currentActive) {
     }
 }
 
+export async function syncAllFacebookCustomerNames() {
+    if (!db) return;
+    try {
+        showToast("🔄 Sinusuri ang mga customer names sa Facebook...");
+
+        const apiSnap = await db.ref('adminSettings/facebookApis').once('value');
+        const apis = apiSnap.val() || {};
+        const apiList = Object.values(apis).filter(a => a && a.pageAccessToken);
+        if (apiList.length === 0) {
+            return showToast("⚠️ Walang Facebook API na may Page Access Token.");
+        }
+
+        const metaSnap = await db.ref('customerChatMeta').once('value');
+        const allMeta = metaSnap.val() || {};
+
+        let updatedCount = 0;
+
+        for (const api of apiList) {
+            const pageId = api.pageId || "1098954353295816";
+            const token = api.pageAccessToken.trim();
+
+            const convResp = await fetch(
+                `https://graph.facebook.com/v19.0/${pageId}/conversations?fields=participants,senders&limit=50&access_token=${token}`
+            );
+            if (!convResp.ok) continue;
+
+            const convData = await convResp.json();
+            if (!Array.isArray(convData.data)) continue;
+
+            const nameMap = new Map();
+            convData.data.forEach(c => {
+                const people = [
+                    ...(c.participants?.data || []),
+                    ...(c.senders?.data || [])
+                ];
+                people.forEach(p => {
+                    if (p.id && String(p.id) !== String(pageId) && p.name) {
+                        nameMap.set(String(p.id).trim(), p.name.trim());
+                    }
+                });
+            });
+
+            for (const [custId, item] of Object.entries(allMeta)) {
+                if (!custId.startsWith('fb_')) continue;
+                const psid = custId.replace(/^fb_/, '');
+                const currentName = item.customerName || item.metadata?.customerName || '';
+
+                if (nameMap.has(psid)) {
+                    const realName = nameMap.get(psid);
+                    if (realName && (realName !== currentName || currentName.startsWith('FB Customer ('))) {
+                        const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(realName)}&background=0084FF&color=fff`;
+                        await Promise.all([
+                            db.ref(`customerChatMeta/${custId}`).update({
+                                customerName: realName,
+                                avatarUrl: avatar
+                            }),
+                            db.ref(`customerChats/${custId}/metadata`).update({
+                                customerName: realName,
+                                avatarUrl: avatar
+                            })
+                        ]).catch(() => {});
+                        updatedCount++;
+                    }
+                }
+            }
+        }
+
+        if (updatedCount > 0) {
+            showToast(`✅ Na-update ang ${updatedCount} Facebook customer name(s)!`);
+        } else {
+            showToast("ℹ️ Lahat ng Facebook customer names ay up-to-date na.");
+        }
+    } catch (err) {
+        console.error("syncAllFacebookCustomerNames error:", err);
+        showToast("⚠️ Bigo mag-sync ng FB names: " + (err.message || err));
+    }
+}
+
 if (typeof window !== 'undefined') {
     window.openAdminFbApiModal = openAdminFbApiModal;
     window.closeAdminFbApiModal = closeAdminFbApiModal;
@@ -817,6 +895,7 @@ if (typeof window !== 'undefined') {
     window.deleteAdminFbApi = deleteAdminFbApi;
     window.toggleAdminFbApiStatus = toggleAdminFbApiStatus;
     window.toggleAdminFbLinkVisibility = toggleAdminFbLinkVisibility;
+    window.syncAllFacebookCustomerNames = syncAllFacebookCustomerNames;
     
     // Multi-source live chat selectors
     window.openRiderChatSourcesModal = openRiderChatSourcesModal;

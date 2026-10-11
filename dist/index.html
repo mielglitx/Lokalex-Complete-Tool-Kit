@@ -251,7 +251,7 @@
             color: #ffffff !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-Do5-bxN2.js"></script>
+  <script type="module" crossorigin src="./assets/index-P1Tg7lTE.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-darkBg text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative">
 
@@ -2606,7 +2606,10 @@
                     <img id="rider-chat-cust-avatar" src="" class="w-8 h-8 rounded-full border border-blue-500 object-cover">
                     <div>
                         <div class="flex items-center gap-1.5">
-                            <h3 id="rider-chat-cust-name" class="font-bold text-xs text-white">Customer Chat</h3>
+                            <h3 id="rider-chat-cust-name" class="font-bold text-xs text-white truncate">Customer Chat</h3>
+                            <button type="button" onclick="window.promptRenameCustomerChat && window.promptRenameCustomerChat()" class="text-gray-400 hover:text-blue-400 p-1 text-xs active:scale-90" title="Edit Customer Name">
+                                <i class="fa-solid fa-pen text-[10px]"></i>
+                            </button>
                             <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-[10px] shadow shrink-0" title="View Customer Profile & GPS Pin">
                                 <i class="fa-solid fa-circle-info"></i>
                             </button>
@@ -2863,9 +2866,12 @@
                     CU
                 </div>
                 <div>
-                    <div class="flex items-center gap-2">
-                        <h3 id="rider-chat-cust-name" class="font-black text-sm text-gray-900 dark:text-white">Customer Name</h3>
-                        <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-6 h-6 rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-transparent hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-xs shadow-xs" title="View Customer Info">
+                    <div class="flex items-center gap-1.5">
+                        <h3 id="rider-chat-cust-name" class="font-black text-sm text-gray-900 dark:text-white truncate">Customer Name</h3>
+                        <button type="button" onclick="window.promptRenameCustomerChat && window.promptRenameCustomerChat()" class="text-gray-400 hover:text-blue-500 p-1 text-xs active:scale-90" title="Edit Customer Name">
+                            <i class="fa-solid fa-pen text-[10px]"></i>
+                        </button>
+                        <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-6 h-6 rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-transparent hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-xs shadow-xs shrink-0" title="View Customer Info">
                             <i class="fa-solid fa-circle-info"></i>
                         </button>
                     </div>
@@ -4250,7 +4256,12 @@
             <div class="flex flex-col gap-2">
                 <div class="flex justify-between items-center">
                     <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Configured APIs</span>
-                    <span id="admin-fb-apis-count-badge" class="text-[9.5px] font-mono font-bold text-blue-500 dark:text-blue-400">0 configured</span>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="window.syncAllFacebookCustomerNames && window.syncAllFacebookCustomerNames()" class="bg-blue-50 hover:bg-blue-100 text-blue-600 dark:bg-blue-600/20 dark:text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-blue-200 dark:border-blue-500/30 flex items-center gap-1 transition active:scale-95 cursor-pointer" title="Auto-match Facebook customers with their real names">
+                            <i class="fa-solid fa-arrows-rotate"></i> Sync FB Names
+                        </button>
+                        <span id="admin-fb-apis-count-badge" class="text-[9.5px] font-mono font-bold text-blue-500 dark:text-blue-400">0 configured</span>
+                    </div>
                 </div>
                 <div id="admin-fb-apis-list" class="flex flex-col gap-2 min-h-[100px]">
                     <div class="text-center text-gray-400 dark:text-gray-500 italic py-6 text-xs">Loading configured Facebook APIs...</div>
