@@ -1086,4 +1086,82 @@
         </div>
     </div>
 </div>
-<!-- REMARKS: ADMIN_CONTROLS_ALL_18_MODALS_INCLUDING_FACEBOOK_API_SETTINGS_V1_COMPLETE -->
+
+<!-- 19. ADMIN FULL BOOKING MODE MODAL -->
+<div id="admin-full-booking-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-rose-500/60 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3.5 max-h-[90vh] relative animate-in fade-in zoom-in duration-200">
+        <!-- HEADER -->
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5 shrink-0">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-500 flex items-center justify-center text-sm font-bold border border-rose-500/30">
+                    <i class="fa-solid fa-ban"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-gray-900 dark:text-white">Full Booking Auto-Reply Mode</h3>
+                    <p class="text-[9.5px] text-rose-500 dark:text-rose-400 font-mono font-medium">Admin Auto-Responder Configuration</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeFullBookingModal && window.closeFullBookingModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm cursor-pointer p-1">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="flex flex-col gap-3 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
+            <!-- TOGGLE CARD -->
+            <div class="bg-rose-50/70 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 p-3 rounded-2xl flex items-center justify-between gap-3">
+                <div class="flex flex-col gap-0.5">
+                    <span class="font-bold text-gray-900 dark:text-white text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-power-off text-rose-500 text-xs"></i> Full Booking Status
+                    </span>
+                    <span class="text-[10px] text-gray-600 dark:text-gray-400">
+                        When enabled, immediately replies to incoming messages in Inbox (excludes catering & follow up).
+                    </span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input type="checkbox" id="admin-full-booking-toggle" class="sr-only peer">
+                    <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-rose-600"></div>
+                </label>
+            </div>
+
+            <!-- CUSTOMIZABLE MESSAGE AREA -->
+            <div class="flex flex-col gap-1.5">
+                <div class="flex justify-between items-center">
+                    <label class="block text-[10px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                        Auto-Reply Message
+                    </label>
+                    <button type="button" onclick="window.resetFullBookingMessageDefault && window.resetFullBookingMessageDefault()" class="text-[9.5px] font-bold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1 cursor-pointer">
+                        <i class="fa-solid fa-arrow-rotate-left text-[8.5px]"></i> Reset Default
+                    </button>
+                </div>
+                <textarea id="admin-full-booking-message-input" rows="4" placeholder="Enter full booking auto-reply message..." class="w-full bg-white dark:bg-inputBg text-xs rounded-xl p-3 border border-gray-200 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-rose-500 transition shadow-2xs resize-none leading-relaxed"></textarea>
+                <span class="text-[9.5px] text-gray-500 dark:text-gray-400 italic">
+                    💡 This message will be automatically sent once per customer message when in Inbox.
+                </span>
+            </div>
+
+            <!-- TARGET FILTER INFO CALLOUT -->
+            <div class="bg-gray-50 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex flex-col gap-1.5">
+                <div class="text-[10px] font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                    <i class="fa-solid fa-shield-halved text-blue-500"></i> Safety & Filtering Rules:
+                </div>
+                <ul class="text-[10px] text-gray-600 dark:text-gray-400 list-disc list-inside space-y-0.5">
+                    <li><span class="font-bold text-emerald-600 dark:text-emerald-400">Inbox customers only:</span> New & pending inquiries.</li>
+                    <li><span class="font-bold text-amber-600 dark:text-amber-400">Catering excluded:</span> Active rider deliveries are unaffected.</li>
+                    <li><span class="font-bold text-blue-600 dark:text-blue-400">Follow-up excluded:</span> Ongoing client follow-ups are preserved.</li>
+                    <li><span class="font-bold text-purple-600 dark:text-purple-400">Multi-device sync:</span> Atomic locking prevents duplicate replies.</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- FOOTER ACTIONS -->
+        <div class="flex items-center gap-2 border-t border-gray-200 dark:border-gray-800 pt-3 shrink-0">
+            <button type="button" onclick="window.closeFullBookingModal && window.closeFullBookingModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" onclick="window.saveFullBookingSettings && window.saveFullBookingSettings()" class="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 shadow-sm flex items-center justify-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-floppy-disk text-xs"></i> Save Settings
+            </button>
+        </div>
+    </div>
+</div>
+<!-- REMARKS: ADMIN_CONTROLS_ALL_19_MODALS_INCLUDING_FULL_BOOKING_MODE_V1_COMPLETE -->

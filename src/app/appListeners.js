@@ -72,6 +72,10 @@ export function initRealtimeFirebaseListeners() {
             chat.listenToAllCustomerChatsForRider();
         }
 
+        if (chat && chat.initFullBookingListener) {
+            chat.initFullBookingListener();
+        }
+
         if (chat && chat.listenToPublicFbChannels) {
             chat.listenToPublicFbChannels();
         }
@@ -105,6 +109,7 @@ export function initRealtimeFirebaseListeners() {
 
             if (roster && roster.updateRosterUI) roster.updateRosterUI();
             if (commission && commission.refreshCommissionView) commission.refreshCommissionView();
+            if (chat && chat.updateFullBookingUI) chat.updateFullBookingUI();
         });
 
         db.ref('roster').on('value', (snapshot) => {

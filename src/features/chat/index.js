@@ -68,6 +68,7 @@ import * as riderStoreChat from './riderStoreChat.js';
 import * as riderThreadActions from './riderThreadActions.js';
 import * as teamComms from './teamComms.js';
 import * as facebookApiAdmin from './facebookApiAdmin.js';
+import * as fullBookingMode from './fullBookingMode.js';
 import { globalState, appState } from '../../store/state.js';
 import { escapeHtml, formatTitleCase } from '../../utils/helpers.js';
 import { showToast } from '../../ui/notifications.js';
@@ -84,6 +85,7 @@ export * from './riderStoreChat.js';
 export * from './riderThreadActions.js';
 export * from './teamComms.js';
 export * from './facebookApiAdmin.js';
+export * from './fullBookingMode.js';
 
 // Bind all chat functions to global window object with max booking limit safety
 if (typeof window !== 'undefined') {
@@ -98,7 +100,8 @@ if (typeof window !== 'undefined') {
         riderStoreChat, 
         riderThreadActions, 
         teamComms,
-        facebookApiAdmin
+        facebookApiAdmin,
+        fullBookingMode
     ];
     modules.forEach(mod => {
         if (mod) {

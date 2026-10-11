@@ -448,7 +448,7 @@ function evaluateRiderChatLockPermissions() {
         const modalDialog = document.querySelector('#rider-chat-modal > div') || document.querySelector('#rider-customer-chat-modal > div');
         if (modalDialog) {
             modalDialog.classList.remove('ring-2', 'ring-emerald-500', 'border-emerald-500', 'catering-glow-my', 'catering-glow-other', 'catering-glow-gold');
-            if (isCateringRider || cateredRiderId || cateredRiderName) {
+            if (isCateringRider) {
                 modalDialog.classList.add('catering-glow-gold');
             }
         }

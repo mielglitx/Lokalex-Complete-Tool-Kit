@@ -182,8 +182,11 @@ export function renderSharedQuickReplies(data) {
 
         return `
         <div class="quick-reply-card flex items-center justify-between gap-2.5 p-2 bg-white dark:bg-cardBg hover:bg-amber-50/70 dark:hover:bg-amber-950/20 border border-gray-200 dark:border-gray-800 hover:border-amber-400/60 rounded-xl shadow-2xs transition group cursor-pointer" data-id="${item.id}" draggable="true" ondragstart="window.handleQuickReplyDragStart && window.handleQuickReplyDragStart(event, '${item.id}')" ondragover="window.handleQuickReplyDragOver && window.handleQuickReplyDragOver(event)" ondrop="window.handleQuickReplyDrop && window.handleQuickReplyDrop(event, '${item.id}')">
-            <!-- REORDER CONTROLS (MOVE UP / DOWN) -->
+            <!-- REORDER CONTROLS (MOVE TO TOP / UP / DOWN) -->
             <div class="flex items-center gap-0.5 text-gray-400 shrink-0" onclick="event.stopPropagation()">
+                <button type="button" onclick="window.moveQuickReplyToTop && window.moveQuickReplyToTop('${item.id}')" ${isFirst ? 'disabled class="opacity-20 cursor-not-allowed w-6 h-6 flex items-center justify-center text-gray-400"' : 'class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 text-gray-500 hover:text-amber-600 transition active:scale-90 cursor-pointer"'} title="Move to top">
+                    <i class="fa-solid fa-angles-up text-[10px]"></i>
+                </button>
                 <button type="button" onclick="window.moveQuickReplyOrder && window.moveQuickReplyOrder('${item.id}', -1)" ${isFirst ? 'disabled class="opacity-20 cursor-not-allowed w-6 h-6 flex items-center justify-center text-gray-400"' : 'class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 text-gray-500 hover:text-amber-600 transition active:scale-90 cursor-pointer"'} title="Move up in order">
                     <i class="fa-solid fa-chevron-up text-[10px]"></i>
                 </button>
@@ -213,6 +216,18 @@ export function renderSharedQuickReplies(data) {
             </div>
         </div>`;
     }).join('');
+}
+
+export async function moveQuickReplyToTop(id) {
+    if (!currentQuickRepliesList || currentQuickRepliesList.length <= 1) return;
+    const currentIndex = currentQuickRepliesList.findIndex(item => item.id === id);
+    if (currentIndex <= 0) return;
+
+    const reordered = [...currentQuickRepliesList];
+    const [movedItem] = reordered.splice(currentIndex, 1);
+    reordered.unshift(movedItem);
+
+    await applyQuickRepliesReorder(reordered);
 }
 
 export async function moveQuickReplyOrder(id, direction) {
@@ -262,6 +277,7 @@ export async function handleQuickReplyDrop(event, targetId) {
 }
 
 async function applyQuickRepliesReorder(reorderedList) {
+    if (!Array.isArray(reorderedList) || reorderedList.length === 0) return;
     currentQuickRepliesList = reorderedList;
 
     const newCache = {};
@@ -273,11 +289,12 @@ async function applyQuickRepliesReorder(reorderedList) {
             ...(typeof item.raw === 'object' ? item.raw : { text: item.text }),
             title: item.title,
             text: item.text,
-            order: newOrder
+            order: newOrder,
+            createdAt: item.createdAt || Date.now(),
+            createdBy: item.raw?.createdBy || (appState.riderName || localStorage.getItem('riderName') || 'Rider')
         };
         newCache[item.id] = entry;
-        updates[`sharedQuickReplies/${item.id}/order`] = newOrder;
-        updates[`sharedQuickReplies/${item.id}/title`] = item.title;
+        updates[item.id] = entry;
     });
 
     try {
@@ -288,11 +305,20 @@ async function applyQuickRepliesReorder(reorderedList) {
 
     if (db) {
         try {
-            await db.ref().update(updates);
-            showToast("↕️ Order saved for all riders!");
+            await db.ref('sharedQuickReplies').update(updates);
+            showToast("↕️ Quick replies order saved!");
         } catch (err) {
-            console.warn("RTDB reorder error:", err);
-            showToast("↕️ Order updated locally.");
+            console.warn("RTDB sharedQuickReplies update error:", err);
+            try {
+                const promises = Object.entries(updates).map(([k, v]) =>
+                    db.ref(`sharedQuickReplies/${k}`).set(v)
+                );
+                await Promise.all(promises);
+                showToast("↕️ Quick replies order saved!");
+            } catch (fallbackErr) {
+                console.error("RTDB individual set error:", fallbackErr);
+                showToast("⚠️ Order updated locally.");
+            }
         }
     } else {
         showToast("↕️ Order updated locally.");
@@ -864,6 +890,7 @@ if (typeof window !== 'undefined') {
     window.backToQuickReplyChoiceView = backToQuickReplyChoiceView;
     window.sendEditedQuickReply = sendEditedQuickReply;
     window.closeQuickReplyActionModal = closeQuickReplyActionModal;
+    window.moveQuickReplyToTop = moveQuickReplyToTop;
     window.moveQuickReplyOrder = moveQuickReplyOrder;
     window.handleQuickReplyDragStart = handleQuickReplyDragStart;
     window.handleQuickReplyDragOver = handleQuickReplyDragOver;

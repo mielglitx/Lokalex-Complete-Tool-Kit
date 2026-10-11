@@ -16,6 +16,12 @@ import {
     autoResolvePendingFacebookThreads,
     getResolvedFbName
 } from './facebookApiAdmin.js';
+import { 
+    initFullBookingListener, 
+    sendFullBookingAutoReply, 
+    fullBookingState,
+    updateFullBookingUI
+} from './fullBookingMode.js';
 
 let activeRiderChatFilter = 'inbox';
 let cachedCustomerThreadsMap = new Map();
@@ -304,7 +310,7 @@ export function renderRiderCustomerChatFeed() {
             statusBadge = `<span class="bg-emerald-600 text-white font-black text-[9px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs tracking-wider animate-pulse shrink-0"><i class="fa-solid fa-user-check text-[8px]"></i> MY CUSTOMER</span>`;
         } else if (isOtherRiderCatering) {
             const rName = t.cateredByRiderName || 'Other Rider';
-            statusBadge = `<span class="bg-amber-600 text-white font-black text-[9px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs tracking-wider animate-pulse shrink-0"><i class="fa-solid fa-motorcycle text-[8px]"></i> ${escapeHtml(rName)}</span>`;
+            statusBadge = `<span class="bg-amber-600/90 text-white font-bold text-[9px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs tracking-wide shrink-0"><i class="fa-solid fa-motorcycle text-[8px]"></i> ${escapeHtml(rName)}</span>`;
         }
 
         let channelBadge = "";
@@ -317,21 +323,20 @@ export function renderRiderCustomerChatFeed() {
 
         const unreadDot = t.isUnread ? `<span class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>` : "";
         
-        // Distinct glowing borderline for both My Customer and Other Riders!
         let cardBorderClass = "border border-gray-200 dark:border-gray-800 bg-white dark:bg-cardBg";
         let avatarBorderClass = "border-blue-500";
         let nameClass = "font-black text-gray-900 dark:text-white text-xs";
 
         if (isCurrentlyCatering) {
-            // Radiant, unmistakable GOLD glowing border for MY CUSTOMER!
+            // Radiant, unmistakable GOLD glowing border ONLY for MY CUSTOMER!
             cardBorderClass = "catering-glow-gold bg-amber-50/80 dark:bg-amber-950/40";
             avatarBorderClass = "border-amber-400";
             nameClass = "font-black text-gray-900 dark:text-white text-xs";
         } else if (isOtherRiderCatering) {
-            // Radiant, unmistakable GOLD glowing border for OTHER RIDER'S CUSTOMER!
-            cardBorderClass = "catering-glow-gold bg-amber-50/80 dark:bg-amber-950/40";
-            avatarBorderClass = "border-amber-400";
-            nameClass = "font-black text-gray-900 dark:text-white text-xs";
+            // Other riders' customers do NOT glow on my side to make a clear distinction
+            cardBorderClass = "border border-gray-200 dark:border-gray-800 bg-white dark:bg-cardBg";
+            avatarBorderClass = "border-gray-300 dark:border-gray-700";
+            nameClass = "font-bold text-gray-800 dark:text-gray-200 text-xs";
         } else if (t.isUnread) {
             cardBorderClass = "border-2 border-blue-500 dark:border-blue-400 bg-blue-50/50 dark:bg-blue-950/30 shadow-md ring-1 ring-blue-400/40";
             avatarBorderClass = "border-blue-500 ring-2 ring-blue-400/50";
@@ -342,7 +347,7 @@ export function renderRiderCustomerChatFeed() {
             ? "text-xs text-gray-900 dark:text-white font-black" 
             : "text-[11px] text-gray-700 dark:text-gray-300 font-medium";
 
-        const timeClass = (isCurrentlyCatering || isOtherRiderCatering)
+        const timeClass = isCurrentlyCatering
             ? 'text-amber-700 dark:text-amber-300 font-black'
             : (t.isUnread ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-gray-500 dark:text-gray-400 font-medium');
 
@@ -380,6 +385,7 @@ export function renderRiderCustomerChatFeed() {
 
 export function listenToAllCustomerChatsForRider() {
     listenToGlobalStoreChats();
+    initFullBookingListener();
     if (!db || isCustomerChatMetaListening) return;
     isCustomerChatMetaListening = true;
 
@@ -414,6 +420,17 @@ export function listenToAllCustomerChatsForRider() {
             const meta = item.metadata || item;
             const rawLastMsg = (meta.lastMessage || '').trim();
             const hasValidLastMsg = rawLastMsg !== '' && rawLastMsg.toLowerCase() !== 'no messages yet';
+
+            // FULL BOOKING MODE AUTO-REPLY HOOK:
+            // Immediately dispatches automated full booking reply to incoming messages in Inbox (excludes catering & followup)
+            if (fullBookingState && fullBookingState.enabled && hasValidLastMsg) {
+                const threadFolder = (meta.folder || 'inbox').toLowerCase();
+                if (threadFolder === 'inbox' && !meta.cateredByRiderId && !meta.cateredByRiderName) {
+                    if (!rawLastMsg.startsWith('You:')) {
+                        sendFullBookingAutoReply(key, meta);
+                    }
+                }
+            }
 
             let displayName = (meta.customerName || meta.name || "").trim();
             if (key.startsWith('fb_')) {
@@ -567,6 +584,9 @@ if (typeof window !== 'undefined') {
     window.addEventListener('rosterUpdated', () => {
         if (activeRiderChatFilter !== 'stores') {
             renderRiderCustomerChatFeed();
+        }
+        if (typeof updateFullBookingUI === 'function') {
+            updateFullBookingUI();
         }
     });
 }
