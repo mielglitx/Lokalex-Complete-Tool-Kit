@@ -64,6 +64,12 @@ export async function executeGenerateFinalReceipt(customerName) {
     saveReceiptToDatabase(customerName);
 
     switchView('view-receipt-final');
+    const sendBtn = document.getElementById('send-receipt-to-cust-btn');
+    if (sendBtn) {
+        sendBtn.disabled = false;
+        sendBtn.className = "bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center cursor-pointer";
+        sendBtn.innerHTML = `<i class="fa-solid fa-paper-plane text-xs shrink-0"></i><span class="text-[11px] leading-tight">Send to Customer</span>`;
+    }
     renderFinalReceiptText();
     await renderReceiptCanvas();
 }

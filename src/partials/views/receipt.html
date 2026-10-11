@@ -23,18 +23,51 @@
     </div>
     
     <!-- ACTION BUTTONS: TIGHT, CENTERED ICON & TEXT LAYOUT -->
-    <div class="grid grid-cols-3 gap-2 shrink-0">
-        <button onclick="window.downloadReceiptImage && window.downloadReceiptImage()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
+        <button id="send-receipt-to-cust-btn" onclick="window.sendReceiptToRecipient && window.sendReceiptToRecipient()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center cursor-pointer">
+            <i class="fa-solid fa-paper-plane text-xs shrink-0"></i>
+            <span class="text-[11px] leading-tight">Send to Customer</span>
+        </button>
+        <button onclick="window.downloadReceiptImage && window.downloadReceiptImage()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center cursor-pointer">
             <i class="fa-solid fa-image text-xs shrink-0"></i>
             <span class="text-[11px] leading-tight">Save Receipt Image</span>
         </button>
-        <button onclick="window.copyFinalReceipt && window.copyFinalReceipt()" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2.5 px-1.5 rounded-xl shadow flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center">
+        <button onclick="window.copyFinalReceipt && window.copyFinalReceipt()" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2.5 px-1.5 rounded-xl shadow flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center cursor-pointer">
             <i class="fa-solid fa-file-lines text-xs shrink-0"></i>
             <span class="text-[11px] leading-tight">Copy Text</span>
         </button>
-        <button onclick="window.completeReceiptDone && window.completeReceiptDone()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center">
+        <button onclick="window.completeReceiptDone && window.completeReceiptDone()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center cursor-pointer">
             <i class="fa-solid fa-check-double text-xs shrink-0"></i>
             <span class="text-[11px] leading-tight">Done</span>
         </button>
+    </div>
+
+    <!-- RECIPIENT SELECTION MODAL FOR SENDING RECEIPT -->
+    <div id="receipt-recipient-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 select-none" style="z-index: 999999 !important;">
+        <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-4 shadow-2xl flex flex-col gap-3 max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-600/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-sm font-bold">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-xs text-gray-900 dark:text-white">Send Receipt</h3>
+                        <p id="receipt-recipient-modal-subtitle" class="text-[10px] text-gray-500 dark:text-gray-400">Select target customer recipient</p>
+                    </div>
+                </div>
+                <button onclick="window.closeReceiptRecipientModal && window.closeReceiptRecipientModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                <input type="text" id="receipt-recipient-search" placeholder="Search customer name..." oninput="window.filterReceiptRecipients && window.filterReceiptRecipients(this.value)" class="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-50 dark:bg-inputBg border border-gray-200 dark:border-gray-700 rounded-xl outline-none text-gray-900 dark:text-white focus:border-indigo-500">
+            </div>
+
+            <div id="receipt-recipients-list" class="flex-1 overflow-y-auto flex flex-col gap-1.5 min-h-[160px] max-h-[50vh] pr-0.5">
+                <div class="text-center text-gray-400 text-xs italic py-6">Loading recipient list...</div>
+            </div>
+        </div>
     </div>
 </section>

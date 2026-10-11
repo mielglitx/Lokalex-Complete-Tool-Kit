@@ -112,35 +112,191 @@ export function initSharedQuickRepliesListener() {
     });
 }
 
+let currentQuickRepliesList = [];
+let draggedQuickReplyId = null;
+
 export function renderSharedQuickReplies(data) {
     const container = document.getElementById('quick-replies-chips-container');
+    const badge = document.getElementById('quick-replies-count-badge');
     if (!container) return;
 
-    const entries = Object.entries(data || {});
-    if (entries.length === 0) {
-        container.innerHTML = `<span class="text-[10px] text-gray-500 dark:text-gray-400 italic shrink-0 py-1">No custom quick replies yet. Tap "+ Add" to create one!</span>`;
+    const rawEntries = Object.entries(data || {});
+    if (rawEntries.length === 0) {
+        if (badge) badge.textContent = "0";
+        currentQuickRepliesList = [];
+        container.innerHTML = `
+        <div class="text-center py-6 px-3 flex flex-col items-center gap-2">
+            <i class="fa-solid fa-bolt text-2xl text-amber-500/40"></i>
+            <span class="text-xs text-gray-500 dark:text-gray-400">No quick replies yet.</span>
+            <button type="button" onclick="window.promptAddQuickReply && window.promptAddQuickReply()" class="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold rounded-xl text-xs border border-amber-300 dark:border-amber-700/60 transition active:scale-95 cursor-pointer">
+                + Add Quick Reply
+            </button>
+        </div>`;
         return;
     }
 
-    // Sort newer first
-    entries.sort((a, b) => (b[1]?.createdAt || 0) - (a[1]?.createdAt || 0));
+    // Normalize each item with title, text, order, createdAt
+    const parsedList = rawEntries.map(([id, item], index) => {
+        let text = "";
+        let title = "";
+        let order = 9999;
+        let createdAt = 0;
 
-    container.innerHTML = entries.map(([id, item]) => {
-        const text = typeof item === 'string' ? item : (item.text || '');
-        if (!text) return '';
-        const escapedText = escapeHtml(text);
-        const encodedText = encodeURIComponent(text);
+        if (typeof item === 'string') {
+            text = item;
+            title = item.length > 26 ? item.substring(0, 24) + '...' : item;
+            order = index + 1;
+        } else if (item && typeof item === 'object') {
+            text = item.text || '';
+            title = item.title || (text.length > 26 ? text.substring(0, 24) + '...' : text) || 'Quick Reply';
+            order = item.order !== undefined && item.order !== null ? Number(item.order) : (index + 1);
+            createdAt = item.createdAt ? Number(item.createdAt) : 0;
+        }
+
+        return {
+            id,
+            title: title.trim(),
+            text: text.trim(),
+            order: isNaN(order) ? index + 1 : order,
+            createdAt: isNaN(createdAt) ? 0 : createdAt,
+            raw: item
+        };
+    }).filter(e => Boolean(e.text));
+
+    // Sort by order ascending; tiebreaker by createdAt ascending
+    parsedList.sort((a, b) => {
+        if (a.order !== b.order) return a.order - b.order;
+        return a.createdAt - b.createdAt;
+    });
+
+    currentQuickRepliesList = parsedList;
+    if (badge) badge.textContent = String(parsedList.length);
+
+    container.innerHTML = parsedList.map((item, index) => {
+        const isFirst = index === 0;
+        const isLast = index === parsedList.length - 1;
+        const escapedTitle = escapeHtml(item.title);
+        const escapedText = escapeHtml(item.text);
+        const encodedText = encodeURIComponent(item.text);
+        const encodedTitle = encodeURIComponent(item.title);
 
         return `
-        <div class="inline-flex items-center gap-1.5 bg-white dark:bg-cardBg hover:bg-amber-50 dark:hover:bg-amber-950/20 border border-gray-200 dark:border-gray-700/80 hover:border-amber-400/60 pl-3 pr-2 py-1 rounded-full text-xs font-bold text-gray-800 dark:text-gray-200 shadow-2xs whitespace-nowrap transition group shrink-0">
-            <span onclick="window.sendQuickReply && window.sendQuickReply(decodeURIComponent('${encodedText}'))" class="cursor-pointer active:scale-95 hover:text-amber-600 dark:hover:text-amber-400 select-none truncate max-w-[220px]" title="Tap to send this reply">
-                ${escapedText}
-            </span>
-            <button type="button" onclick="event.stopPropagation(); window.deleteQuickReply && window.deleteQuickReply('${id}')" class="text-gray-400 hover:text-red-500 ml-0.5 p-0.5 text-[10px] opacity-60 hover:opacity-100 transition active:scale-90" title="Delete reply">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
+        <div class="quick-reply-card flex items-center justify-between gap-2.5 p-2 bg-white dark:bg-cardBg hover:bg-amber-50/70 dark:hover:bg-amber-950/20 border border-gray-200 dark:border-gray-800 hover:border-amber-400/60 rounded-xl shadow-2xs transition group cursor-pointer" data-id="${item.id}" draggable="true" ondragstart="window.handleQuickReplyDragStart && window.handleQuickReplyDragStart(event, '${item.id}')" ondragover="window.handleQuickReplyDragOver && window.handleQuickReplyDragOver(event)" ondrop="window.handleQuickReplyDrop && window.handleQuickReplyDrop(event, '${item.id}')">
+            <!-- REORDER CONTROLS (MOVE UP / DOWN) -->
+            <div class="flex items-center gap-0.5 text-gray-400 shrink-0" onclick="event.stopPropagation()">
+                <button type="button" onclick="window.moveQuickReplyOrder && window.moveQuickReplyOrder('${item.id}', -1)" ${isFirst ? 'disabled class="opacity-20 cursor-not-allowed w-6 h-6 flex items-center justify-center text-gray-400"' : 'class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 text-gray-500 hover:text-amber-600 transition active:scale-90 cursor-pointer"'} title="Move up in order">
+                    <i class="fa-solid fa-chevron-up text-[10px]"></i>
+                </button>
+                <button type="button" onclick="window.moveQuickReplyOrder && window.moveQuickReplyOrder('${item.id}', 1)" ${isLast ? 'disabled class="opacity-20 cursor-not-allowed w-6 h-6 flex items-center justify-center text-gray-400"' : 'class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 text-gray-500 hover:text-amber-600 transition active:scale-90 cursor-pointer"'} title="Move down in order">
+                    <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                </button>
+            </div>
+
+            <!-- TITLE CARD (CLICK TO CHOOSE / SEND) -->
+            <div onclick="window.handleQuickReplyChipClick && window.handleQuickReplyChipClick(decodeURIComponent('${encodedText}'), decodeURIComponent('${encodedTitle}'))" class="flex-1 min-w-0 flex flex-col justify-center select-none py-0.5" title="Tap to select reply">
+                <div class="flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                    <span class="font-bold text-xs text-gray-900 dark:text-gray-100 truncate group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                        ${escapedTitle}
+                    </span>
+                </div>
+                <p class="text-[10px] text-gray-500 dark:text-gray-400 truncate pl-3 leading-tight pt-0.5">
+                    ${escapedText}
+                </p>
+            </div>
+
+            <!-- DELETE BUTTON -->
+            <div class="flex items-center gap-1 shrink-0" onclick="event.stopPropagation()">
+                <button type="button" onclick="window.deleteQuickReply && window.deleteQuickReply('${item.id}')" class="text-gray-400 hover:text-red-500 p-1.5 text-xs opacity-60 hover:opacity-100 transition active:scale-90 cursor-pointer" title="Delete reply">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            </div>
         </div>`;
     }).join('');
+}
+
+export async function moveQuickReplyOrder(id, direction) {
+    if (!currentQuickRepliesList || currentQuickRepliesList.length <= 1) return;
+    const currentIndex = currentQuickRepliesList.findIndex(item => item.id === id);
+    if (currentIndex === -1) return;
+
+    const targetIndex = currentIndex + direction;
+    if (targetIndex < 0 || targetIndex >= currentQuickRepliesList.length) return;
+
+    const reordered = [...currentQuickRepliesList];
+    const [movedItem] = reordered.splice(currentIndex, 1);
+    reordered.splice(targetIndex, 0, movedItem);
+
+    await applyQuickRepliesReorder(reordered);
+}
+
+export function handleQuickReplyDragStart(event, id) {
+    draggedQuickReplyId = id;
+    if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', id);
+    }
+}
+
+export function handleQuickReplyDragOver(event) {
+    event.preventDefault();
+    if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'move';
+    }
+}
+
+export async function handleQuickReplyDrop(event, targetId) {
+    event.preventDefault();
+    if (!draggedQuickReplyId || draggedQuickReplyId === targetId) return;
+
+    const fromIndex = currentQuickRepliesList.findIndex(item => item.id === draggedQuickReplyId);
+    const toIndex = currentQuickRepliesList.findIndex(item => item.id === targetId);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const reordered = [...currentQuickRepliesList];
+    const [movedItem] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, movedItem);
+
+    draggedQuickReplyId = null;
+    await applyQuickRepliesReorder(reordered);
+}
+
+async function applyQuickRepliesReorder(reorderedList) {
+    currentQuickRepliesList = reorderedList;
+
+    const newCache = {};
+    const updates = {};
+    reorderedList.forEach((item, idx) => {
+        const newOrder = idx + 1;
+        item.order = newOrder;
+        const entry = {
+            ...(typeof item.raw === 'object' ? item.raw : { text: item.text }),
+            title: item.title,
+            text: item.text,
+            order: newOrder
+        };
+        newCache[item.id] = entry;
+        updates[`sharedQuickReplies/${item.id}/order`] = newOrder;
+        updates[`sharedQuickReplies/${item.id}/title`] = item.title;
+    });
+
+    try {
+        localStorage.setItem('lokalex_shared_quick_replies_cache', JSON.stringify(newCache));
+    } catch (e) {}
+
+    renderSharedQuickReplies(newCache);
+
+    if (db) {
+        try {
+            await db.ref().update(updates);
+            showToast("↕️ Order saved for all riders!");
+        } catch (err) {
+            console.warn("RTDB reorder error:", err);
+            showToast("↕️ Order updated locally.");
+        }
+    } else {
+        showToast("↕️ Order updated locally.");
+    }
 }
 
 export function toggleQuickReplies() {
@@ -152,6 +308,93 @@ export function toggleQuickReplies() {
     }
 }
 
+let activeSelectedQuickReplyText = "";
+
+export function handleQuickReplyChipClick(text, title) {
+    if (!text) return;
+    activeSelectedQuickReplyText = text;
+
+    const modal = document.getElementById('quick-reply-action-modal');
+    const previewEl = document.getElementById('quick-reply-preview-text');
+    const editInput = document.getElementById('edit-quick-reply-textarea');
+    const choiceView = document.getElementById('quick-reply-choice-view');
+    const editView = document.getElementById('quick-reply-edit-view');
+    const titleEl = document.getElementById('quick-reply-modal-title');
+    const subtitleEl = document.getElementById('quick-reply-modal-subtitle');
+
+    if (previewEl) previewEl.textContent = text;
+    if (editInput) editInput.value = text;
+    if (choiceView) choiceView.classList.remove('hidden');
+    if (editView) editView.classList.add('hidden');
+    if (titleEl) titleEl.innerText = title ? `Quick Reply: ${title}` : "Quick Reply";
+    if (subtitleEl) subtitleEl.innerText = "Choose to send or edit before sending";
+
+    if (modal) {
+        modal.classList.remove('hidden');
+        toggleBodyScroll(true);
+    }
+}
+
+export function confirmSendQuickReply() {
+    if (!activeSelectedQuickReplyText) return;
+    const textToSend = activeSelectedQuickReplyText;
+    closeQuickReplyActionModal();
+    sendQuickReply(textToSend);
+}
+
+export function openEditQuickReplyModal() {
+    const choiceView = document.getElementById('quick-reply-choice-view');
+    const editView = document.getElementById('quick-reply-edit-view');
+    const editInput = document.getElementById('edit-quick-reply-textarea');
+    const titleEl = document.getElementById('quick-reply-modal-title');
+    const subtitleEl = document.getElementById('quick-reply-modal-subtitle');
+
+    if (choiceView) choiceView.classList.add('hidden');
+    if (editView) editView.classList.remove('hidden');
+    if (titleEl) titleEl.innerText = "Edit Quick Reply";
+    if (subtitleEl) subtitleEl.innerText = "Edit text before sending to customer";
+
+    if (editInput) {
+        editInput.value = activeSelectedQuickReplyText;
+        setTimeout(() => {
+            editInput.focus();
+            editInput.setSelectionRange(editInput.value.length, editInput.value.length);
+        }, 100);
+    }
+}
+
+export function backToQuickReplyChoiceView() {
+    const choiceView = document.getElementById('quick-reply-choice-view');
+    const editView = document.getElementById('quick-reply-edit-view');
+    const titleEl = document.getElementById('quick-reply-modal-title');
+    const subtitleEl = document.getElementById('quick-reply-modal-subtitle');
+
+    if (choiceView) choiceView.classList.remove('hidden');
+    if (editView) editView.classList.add('hidden');
+    if (titleEl) titleEl.innerText = "Quick Reply";
+    if (subtitleEl) subtitleEl.innerText = "Choose to send or edit before sending";
+}
+
+export function sendEditedQuickReply() {
+    const editInput = document.getElementById('edit-quick-reply-textarea');
+    const text = editInput ? editInput.value.trim() : '';
+    if (!text) {
+        showToast("⚠️ Please enter a message to send.");
+        return;
+    }
+    closeQuickReplyActionModal();
+    sendQuickReply(text);
+}
+
+export function closeQuickReplyActionModal() {
+    const modal = document.getElementById('quick-reply-action-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        toggleBodyScroll(false);
+    }
+    activeSelectedQuickReplyText = "";
+}
+
 export function sendQuickReply(text) {
     if (!text) return;
     if (window.sendRiderToCustomerChat) {
@@ -159,17 +402,22 @@ export function sendQuickReply(text) {
     } else if (window.sendCustomerToRiderChat) {
         window.sendCustomerToRiderChat(text);
     }
-    toggleQuickReplies();
+    const drawer = document.getElementById('quick-replies-drawer');
+    if (drawer && !drawer.classList.contains('hidden')) {
+        drawer.classList.add('hidden');
+    }
 }
 
 export function promptAddQuickReply() {
     const modal = document.getElementById('add-quick-reply-modal');
-    const input = document.getElementById('new-quick-reply-input');
+    const titleInput = document.getElementById('new-quick-reply-title');
+    const textInput = document.getElementById('new-quick-reply-input');
     if (modal) {
-        if (input) input.value = '';
+        if (titleInput) titleInput.value = '';
+        if (textInput) textInput.value = '';
         modal.classList.remove('hidden');
         toggleBodyScroll(true);
-        setTimeout(() => input?.focus(), 150);
+        setTimeout(() => (titleInput || textInput)?.focus(), 150);
     }
 }
 
@@ -192,17 +440,28 @@ function saveQuickReplyToLocalCache(id, item) {
 }
 
 export async function submitSaveQuickReply() {
-    const input = document.getElementById('new-quick-reply-input');
-    const text = input ? input.value.trim() : '';
+    const titleInput = document.getElementById('new-quick-reply-title');
+    const textInput = document.getElementById('new-quick-reply-input');
+    const text = textInput ? textInput.value.trim() : '';
     if (!text) {
-        showToast("⚠️ Paki-type ang quick reply bago i-save!");
+        showToast("⚠️ Paki-type ang message content bago i-save!");
         return;
+    }
+
+    let title = titleInput ? titleInput.value.trim() : '';
+    if (!title) {
+        title = text.length > 26 ? text.substring(0, 24) + '...' : text;
     }
 
     const riderName = appState.riderName || localStorage.getItem('riderName') || 'Rider';
     const localId = 'qr_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+    
+    // Find next order number
+    const maxOrder = currentQuickRepliesList.reduce((max, item) => Math.max(max, item.order || 0), 0);
     const newEntry = {
+        title: title,
         text: text,
+        order: maxOrder + 1,
         createdBy: riderName,
         createdAt: Date.now()
     };
@@ -231,6 +490,9 @@ export async function submitSaveQuickReply() {
 
 export async function deleteQuickReply(id) {
     if (!id) return;
+    if (!confirm("Sigurado ka bang nais mong tanggalin ang quick reply na ito para sa lahat ng riders?")) {
+        return;
+    }
     try {
         if (db) {
             await db.ref(`sharedQuickReplies/${id}`).remove();
@@ -596,6 +858,16 @@ if (typeof window !== 'undefined') {
     window.renderSharedQuickReplies = renderSharedQuickReplies;
     window.promptAddQuickReply = promptAddQuickReply;
     window.closeAddQuickReplyModal = closeAddQuickReplyModal;
+    window.handleQuickReplyChipClick = handleQuickReplyChipClick;
+    window.confirmSendQuickReply = confirmSendQuickReply;
+    window.openEditQuickReplyModal = openEditQuickReplyModal;
+    window.backToQuickReplyChoiceView = backToQuickReplyChoiceView;
+    window.sendEditedQuickReply = sendEditedQuickReply;
+    window.closeQuickReplyActionModal = closeQuickReplyActionModal;
+    window.moveQuickReplyOrder = moveQuickReplyOrder;
+    window.handleQuickReplyDragStart = handleQuickReplyDragStart;
+    window.handleQuickReplyDragOver = handleQuickReplyDragOver;
+    window.handleQuickReplyDrop = handleQuickReplyDrop;
     window.submitSaveQuickReply = submitSaveQuickReply;
     window.deleteQuickReply = deleteQuickReply;
     window.markThreadUndone = markThreadUndone;

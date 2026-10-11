@@ -521,7 +521,7 @@
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-C-9jj6iJ.js"></script>
+  <script type="module" crossorigin src="./assets/index-1TIur3Yz.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
@@ -2376,19 +2376,52 @@
     </div>
     
     <!-- ACTION BUTTONS: TIGHT, CENTERED ICON & TEXT LAYOUT -->
-    <div class="grid grid-cols-3 gap-2 shrink-0">
-        <button onclick="window.downloadReceiptImage && window.downloadReceiptImage()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
+        <button id="send-receipt-to-cust-btn" onclick="window.sendReceiptToRecipient && window.sendReceiptToRecipient()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center cursor-pointer">
+            <i class="fa-solid fa-paper-plane text-xs shrink-0"></i>
+            <span class="text-[11px] leading-tight">Send to Customer</span>
+        </button>
+        <button onclick="window.downloadReceiptImage && window.downloadReceiptImage()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center cursor-pointer">
             <i class="fa-solid fa-image text-xs shrink-0"></i>
             <span class="text-[11px] leading-tight">Save Receipt Image</span>
         </button>
-        <button onclick="window.copyFinalReceipt && window.copyFinalReceipt()" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2.5 px-1.5 rounded-xl shadow flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center">
+        <button onclick="window.copyFinalReceipt && window.copyFinalReceipt()" class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2.5 px-1.5 rounded-xl shadow flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center cursor-pointer">
             <i class="fa-solid fa-file-lines text-xs shrink-0"></i>
             <span class="text-[11px] leading-tight">Copy Text</span>
         </button>
-        <button onclick="window.completeReceiptDone && window.completeReceiptDone()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center">
+        <button onclick="window.completeReceiptDone && window.completeReceiptDone()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center cursor-pointer">
             <i class="fa-solid fa-check-double text-xs shrink-0"></i>
             <span class="text-[11px] leading-tight">Done</span>
         </button>
+    </div>
+
+    <!-- RECIPIENT SELECTION MODAL FOR SENDING RECEIPT -->
+    <div id="receipt-recipient-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 select-none" style="z-index: 999999 !important;">
+        <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-4 shadow-2xl flex flex-col gap-3 max-h-[85vh] animate-in fade-in zoom-in-95 duration-150">
+            <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-600/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-sm font-bold">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-xs text-gray-900 dark:text-white">Send Receipt</h3>
+                        <p id="receipt-recipient-modal-subtitle" class="text-[10px] text-gray-500 dark:text-gray-400">Select target customer recipient</p>
+                    </div>
+                </div>
+                <button onclick="window.closeReceiptRecipientModal && window.closeReceiptRecipientModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                <input type="text" id="receipt-recipient-search" placeholder="Search customer name..." oninput="window.filterReceiptRecipients && window.filterReceiptRecipients(this.value)" class="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-50 dark:bg-inputBg border border-gray-200 dark:border-gray-700 rounded-xl outline-none text-gray-900 dark:text-white focus:border-indigo-500">
+            </div>
+
+            <div id="receipt-recipients-list" class="flex-1 overflow-y-auto flex flex-col gap-1.5 min-h-[160px] max-h-[50vh] pr-0.5">
+                <div class="text-center text-gray-400 text-xs italic py-6">Loading recipient list...</div>
+            </div>
+        </div>
     </div>
 </section>
         <!-- src/partials/views/commission.html -->
@@ -3173,16 +3206,29 @@
             </button>
         </div>
 
-        <!-- SAVED QUICK REPLIES BAR -->
-        <div id="quick-replies-drawer" class="hidden bg-gray-50 dark:bg-darkBg/95 border-b border-gray-200 dark:border-gray-800 p-2.5 flex items-center gap-2 overflow-x-auto shrink-0 no-scrollbar">
-            <span class="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase shrink-0 flex items-center gap-1">
-                <i class="fa-solid fa-bolt"></i> Quick Replies:
-            </span>
-            <button type="button" onclick="window.promptAddQuickReply && window.promptAddQuickReply()" class="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition active:scale-95 flex items-center gap-1 shrink-0 shadow-xs" title="Create a new quick reply for everyone">
-                <i class="fa-solid fa-plus text-[10px]"></i> Add
-            </button>
-            <div id="quick-replies-chips-container" class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
-                <span class="text-[10px] text-gray-500 dark:text-gray-400 italic shrink-0 py-1">Loading quick replies...</span>
+        <!-- SAVED QUICK REPLIES VERTICAL PANEL -->
+        <div id="quick-replies-drawer" class="hidden bg-gray-50 dark:bg-darkBg/95 border-b border-gray-200 dark:border-gray-800 p-3 flex flex-col gap-2 shrink-0 max-h-72 sm:max-h-80 shadow-md">
+            <div class="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-gray-800 shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-bolt"></i> Quick Replies
+                    </span>
+                    <span id="quick-replies-count-badge" class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-300 dark:border-amber-700/60">0</span>
+                    <span class="text-[10px] text-gray-400 dark:text-gray-500 hidden sm:inline">• Use ▲ ▼ to sort</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <button type="button" onclick="window.promptAddQuickReply && window.promptAddQuickReply()" class="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Create a new quick reply">
+                        <i class="fa-solid fa-plus text-[10px]"></i> Add
+                    </button>
+                    <button type="button" onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs transition cursor-pointer" title="Close">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- VERTICAL LIST OF QUICK REPLY TITLE CARDS -->
+            <div id="quick-replies-chips-container" class="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5 max-h-56 sm:max-h-64 no-scrollbar">
+                <span class="text-xs text-gray-500 dark:text-gray-400 italic py-2">Loading quick replies...</span>
             </div>
         </div>
 
@@ -3192,25 +3238,34 @@
         </div>
 
         <!-- FOOTER INPUT BAR -->
-        <div class="p-3 bg-white dark:bg-darkBg/90 border-t border-gray-200 dark:border-gray-800 flex items-center gap-2 shrink-0">
-            <button type="button" id="chat-hd-toggle-btn" onclick="window.toggleHdMode && window.toggleHdMode()" class="px-2.5 py-1.5 bg-inputBg text-gray-700 dark:text-gray-300 rounded-xl border border-gray-300 dark:border-gray-700 hover:text-gray-900 dark:hover:text-white transition active:scale-95 text-xs font-black flex items-center justify-center shrink-0 min-w-[36px]" title="Toggle HD Mode">
-                <span id="chat-hd-label" class="text-[11px] font-black tracking-tight text-gray-700 dark:text-gray-300">HD</span>
-            </button>
-            <button onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="p-2.5 bg-inputBg hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs" title="Saved Quick Replies">
-                <i class="fa-solid fa-bolt"></i>
-            </button>
-            <button onclick="window.promptImageAttachmentSource && window.promptImageAttachmentSource()" class="p-2.5 bg-inputBg hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs" title="Send Image">
-                <i class="fa-solid fa-image"></i>
-            </button>
-            <button onclick="window.sendChatLocationPin && window.sendChatLocationPin()" class="p-2.5 bg-inputBg hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-xl border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs" title="Pick Rider Location Pin on Map">
-                <i class="fa-solid fa-location-dot"></i>
-            </button>
+        <div class="p-2.5 sm:p-3 bg-white dark:bg-darkBg/95 border-t border-gray-200 dark:border-gray-800 flex flex-col gap-2 shrink-0">
+            <!-- ACTION TOOLBAR: QUICK ACCESS BUTTONS -->
+            <div id="rider-chat-action-toolbar" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 shrink-0">
+                <button type="button" id="chat-hd-toggle-btn" onclick="window.toggleHdMode && window.toggleHdMode()" class="px-2.5 py-1 bg-inputBg text-gray-700 dark:text-gray-300 rounded-lg border border-gray-300 dark:border-gray-700 hover:text-gray-900 dark:hover:text-white transition active:scale-95 text-[11px] font-black flex items-center justify-center shrink-0 min-w-[34px]" title="Toggle HD Mode">
+                    <span id="chat-hd-label" class="text-[10px] font-black tracking-tight text-gray-700 dark:text-gray-300">HD</span>
+                </button>
+                <button type="button" onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="px-2.5 py-1 bg-inputBg hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Saved Quick Replies">
+                    <i class="fa-solid fa-bolt text-[11px]"></i>
+                    <span class="text-[10px] font-bold">Quick</span>
+                </button>
+                <button type="button" onclick="window.promptImageAttachmentSource && window.promptImageAttachmentSource()" class="px-2.5 py-1 bg-inputBg hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Send Image">
+                    <i class="fa-solid fa-image text-[11px]"></i>
+                    <span class="text-[10px] font-bold">Photo</span>
+                </button>
+                <button type="button" onclick="window.sendChatLocationPin && window.sendChatLocationPin()" class="px-2.5 py-1 bg-inputBg hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Pick Rider Location Pin on Map">
+                    <i class="fa-solid fa-location-dot text-[11px]"></i>
+                    <span class="text-[10px] font-bold">Pin</span>
+                </button>
+            </div>
 
-            <input type="text" id="rider-chat-input" placeholder="Type reply..." onkeydown="if(event.key === 'Enter') window.sendRiderChatMessage && window.sendRiderChatMessage()" class="flex-1 bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-blue-500">
+            <!-- MESSAGE INPUT ROW: MULTI-LINE TEXTAREA + ALWAYS VISIBLE DEDICATED SEND BUTTON -->
+            <div class="flex items-end gap-2 w-full">
+                <textarea id="rider-chat-input" rows="1" placeholder="Type reply..." oninput="this.style.height='auto'; this.style.height=Math.min(this.scrollHeight, 120)+'px';" onkeydown="if((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.sendRiderChatMessage && window.sendRiderChatMessage(); }" class="flex-1 min-w-0 bg-inputBg text-xs rounded-xl px-3 py-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-blue-500 resize-none max-h-28 overflow-y-auto leading-relaxed"></textarea>
 
-            <button id="rider-cust-send-btn" onclick="window.sendRiderChatMessage && window.sendRiderChatMessage()" class="p-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-lg transition active:scale-95 text-xs shrink-0">
-                <i class="fa-solid fa-paper-plane"></i>
-            </button>
+                <button type="button" id="rider-cust-send-btn" onclick="window.sendRiderChatMessage && window.sendRiderChatMessage()" class="w-10 h-10 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-md transition active:scale-90 flex items-center justify-center text-sm shrink-0 cursor-pointer" title="Send Message">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </div>
         </div>
 
         <input type="file" id="chat-camera-input" accept="image/*" capture="environment" class="hidden" onchange="window.handleChatImageUpload && window.handleChatImageUpload(this)">
@@ -3386,10 +3441,17 @@
             </button>
         </div>
 
-        <div class="flex flex-col gap-2">
-            <label for="new-quick-reply-input" class="text-xs font-bold text-gray-700 dark:text-gray-300">Quick Reply Message:</label>
-            <textarea id="new-quick-reply-input" rows="3" placeholder="e.g. Papunta na po ako sa drop-off location 🛵" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-amber-500 resize-none"></textarea>
-            <p class="text-[10px] text-gray-500 dark:text-gray-400 italic">This message will be instantly accessible by you and all other riders.</p>
+        <div class="flex flex-col gap-2.5">
+            <div class="flex flex-col gap-1">
+                <label for="new-quick-reply-title" class="text-xs font-bold text-gray-700 dark:text-gray-300">Title / Short Label:</label>
+                <input type="text" id="new-quick-reply-title" placeholder="e.g. Drop-off Arrived, Exact Amount..." class="w-full bg-inputBg text-xs rounded-xl px-3 py-2.5 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-amber-500 font-medium">
+                <p class="text-[10px] text-gray-500 dark:text-gray-400">Short label shown on the quick reply card.</p>
+            </div>
+            <div class="flex flex-col gap-1">
+                <label for="new-quick-reply-input" class="text-xs font-bold text-gray-700 dark:text-gray-300">Full Message Content:</label>
+                <textarea id="new-quick-reply-input" rows="3" placeholder="e.g. Papunta na po ako sa drop-off location 🛵" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-amber-500 resize-none leading-relaxed"></textarea>
+                <p class="text-[10px] text-gray-500 dark:text-gray-400 italic">This message will be sent to the customer.</p>
+            </div>
         </div>
 
         <div class="flex gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
@@ -3399,6 +3461,65 @@
             <button type="button" onclick="window.submitSaveQuickReply && window.submitSaveQuickReply()" class="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2.5 rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center justify-center gap-1.5">
                 <i class="fa-solid fa-floppy-disk"></i> Save Reply
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- QUICK REPLY ACTION & EDIT MODAL -->
+<div id="quick-reply-action-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" style="z-index: 999999 !important;">
+    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+        <!-- MODAL HEADER -->
+        <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-3">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center text-sm font-bold">
+                    <i class="fa-solid fa-bolt"></i>
+                </div>
+                <div>
+                    <h3 id="quick-reply-modal-title" class="font-bold text-sm text-gray-900 dark:text-white">Quick Reply</h3>
+                    <p id="quick-reply-modal-subtitle" class="text-[10px] text-gray-500 dark:text-gray-400">Choose to send or edit before sending</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeQuickReplyActionModal && window.closeQuickReplyActionModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- STAGE 1: CHOICE VIEW (Send Directly or Edit Before Sending) -->
+        <div id="quick-reply-choice-view" class="flex flex-col gap-4">
+            <div class="flex flex-col gap-1.5">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Selected Quick Reply:</span>
+                <div id="quick-reply-preview-text" class="p-3.5 bg-gray-50 dark:bg-black/30 border border-gray-200 dark:border-gray-800 rounded-2xl text-xs text-gray-800 dark:text-gray-200 leading-relaxed font-medium max-h-48 overflow-y-auto whitespace-pre-wrap break-words select-text"></div>
+            </div>
+
+            <div class="flex flex-col gap-2 pt-1">
+                <button type="button" onclick="window.confirmSendQuickReply && window.confirmSendQuickReply()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-4 rounded-xl shadow-md transition active:scale-95 flex items-center justify-center gap-2 text-xs">
+                    <i class="fa-solid fa-paper-plane"></i> Send Directly
+                </button>
+                <button type="button" onclick="window.openEditQuickReplyModal && window.openEditQuickReplyModal()" class="w-full bg-amber-500 hover:bg-amber-400 text-white font-bold py-3 px-4 rounded-xl shadow-md transition active:scale-95 flex items-center justify-center gap-2 text-xs">
+                    <i class="fa-solid fa-pen-to-square"></i> Edit Before Sending
+                </button>
+                <button type="button" onclick="window.closeQuickReplyActionModal && window.closeQuickReplyActionModal()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 py-2.5 rounded-xl text-xs font-bold transition active:scale-95">
+                    Cancel
+                </button>
+            </div>
+        </div>
+
+        <!-- STAGE 2: EDIT VIEW (Edit message with Send button) -->
+        <div id="quick-reply-edit-view" class="hidden flex flex-col gap-3">
+            <div class="flex flex-col gap-1.5">
+                <label for="edit-quick-reply-textarea" class="text-xs font-bold text-gray-700 dark:text-gray-300">Edit Message:</label>
+                <textarea id="edit-quick-reply-textarea" rows="4" placeholder="Edit your reply..." onkeydown="if((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.sendEditedQuickReply && window.sendEditedQuickReply(); }" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 resize-none leading-relaxed"></textarea>
+                <p class="text-[10px] text-gray-500 dark:text-gray-400 italic">Editing modifies only this sent message, not the saved template.</p>
+            </div>
+
+            <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                <button type="button" onclick="window.backToQuickReplyChoiceView && window.backToQuickReplyChoiceView()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 py-2.5 rounded-xl text-xs font-bold transition active:scale-95">
+                    Back
+                </button>
+                <button type="button" id="send-edited-quick-reply-btn" onclick="window.sendEditedQuickReply && window.sendEditedQuickReply()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-paper-plane"></i> Send
+                </button>
+            </div>
         </div>
     </div>
 </div>

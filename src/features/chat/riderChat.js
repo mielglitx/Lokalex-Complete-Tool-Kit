@@ -573,8 +573,14 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
     }
 
     if (!customText) {
-        if (input1) input1.value = "";
-        if (input2) input2.value = "";
+        if (input1) {
+            input1.value = "";
+            input1.style.height = 'auto';
+        }
+        if (input2) {
+            input2.value = "";
+            input2.style.height = 'auto';
+        }
     }
     cancelRiderReply();
 
@@ -592,7 +598,7 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
 /**
  * Forwards outbound rider chat message directly to Facebook Messenger via the webhook bridge
  */
-async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, locationCoords, riderName }) {
+export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, locationCoords, riderName }) {
     try {
         const cleanPsid = String(custId || '').replace(/^fb_/, '');
         if (!cleanPsid) return;
