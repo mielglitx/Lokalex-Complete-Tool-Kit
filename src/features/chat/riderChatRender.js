@@ -281,8 +281,8 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
     const messagesHtml = msgs.map(m => {
         const isRider = !!m.isRider || m.senderType === 'rider';
         const alignClass = isRider 
-            ? "self-end bg-blue-600 text-white rounded-tr-none" 
-            : "self-start bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-200 rounded-tl-none";
+            ? "self-end bg-[#076B57] text-white rounded-tr-none shadow-xs" 
+            : "self-start bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-200 rounded-tl-none shadow-xs";
         const timeStr = m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
 
         const senderName = m.sender || (isRider ? riderName : custName);
@@ -291,8 +291,13 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
         const replyBlockHtml = renderReplyPreviewInsideMessage(m.replyTo);
         const reactionsHtml = renderReactionsHtml(m.reactions, m.id);
 
-        const imgHtml = m.imageUrl || (m.type === 'image' ? m.text : null);
-        const imageMarkup = imgHtml ? `<img src="${imgHtml}" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgHtml)}', 'rider')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">` : '';
+        const imgHtml = m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null);
+        const isResolvingFbImage = !imgHtml && m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]'));
+        const imageMarkup = imgHtml 
+            ? `<img src="${imgHtml}" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgHtml)}', 'rider')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">` 
+            : (isResolvingFbImage 
+                ? `<div class="flex items-center gap-2 py-2 px-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-600 dark:text-blue-400 text-xs mt-1 font-medium"><i class="fa-solid fa-spinner fa-spin"></i><span>Loading photo...</span></div>` 
+                : '');
         
         let locationHtml = "";
         let lat = null;
@@ -330,6 +335,9 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
         const encodedText = encodeURIComponent(m.text || '');
         const encodedSender = encodeURIComponent(senderName);
 
+        const isPlaceholderText = m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]') || m.text === '📷 Photo' || m.text === 'Facebook Message');
+        const showText = m.text && (!imgHtml || !isPlaceholderText) && !isResolvingFbImage && !locationHtml;
+
         return `
         <div id="msg-bubble-${m.id}" class="flex items-start gap-1.5 ${isRider ? 'flex-row-reverse' : 'flex-row'} my-0.5">
             <img src="${senderAvatar}" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1 pointer-events-none">
@@ -340,7 +348,7 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
                 onpointercancel="window.handleMsgPointerUp(event, '${m.id}')"
                 oncontextmenu="window.handleMsgContextMenu(event, '${m.id}', 'rider-cust', '${encodedText}', '${encodedSender}')"
                 class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 text-xs ${alignClass} cursor-pointer transition active:scale-[0.98] select-none shadow-xs">
-                <div class="text-[9px] ${isRider ? 'text-blue-100' : 'text-blue-600 dark:text-blue-400'} font-bold flex justify-between gap-3 pointer-events-none">
+                <div class="text-[9px] ${isRider ? 'text-emerald-100' : 'text-teal-700 dark:text-teal-400'} font-bold flex justify-between gap-3 pointer-events-none">
                     <span>${escapeHtml(senderName)}</span>
                     <div class="flex items-center gap-1 opacity-80 font-mono">
                         <span>${timeStr}</span>
@@ -348,7 +356,7 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
                     </div>
                 </div>
                 ${replyBlockHtml}
-                ${(m.text && !imgHtml && !locationHtml) ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words pointer-events-none">${escapeHtml(m.text)}</div>` : ''}
+                ${showText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words pointer-events-none">${escapeHtml(m.text)}</div>` : ''}
                 ${imageMarkup}
                 ${locationHtml}
                 ${reactionsHtml}

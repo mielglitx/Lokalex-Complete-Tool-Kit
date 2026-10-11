@@ -80,5 +80,15 @@ if (typeof window !== 'undefined') {
 }
 
 // Reactive listeners to sync catering customer assignments when roster data updates
-window.addEventListener('rosterUpdated', cartUIMod.renderCartCustomerSelector);
-window.addEventListener('cateredUpdated', cartUIMod.renderCartCustomerSelector);
+window.addEventListener('rosterUpdated', () => {
+    cartUIMod.renderCartTabs();
+});
+window.addEventListener('cateredUpdated', () => {
+    cartUIMod.renderCartTabs();
+});
+window.addEventListener('viewChanged', (e) => {
+    if (e && e.detail === 'view-cart') {
+        cartUIMod.renderCartTabs();
+        cartUIMod.renderCartItems();
+    }
+});

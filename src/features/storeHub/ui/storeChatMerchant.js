@@ -219,12 +219,15 @@ export async function postStoreRiderMessage(text) {
 
     try {
         await db.ref(`storeRiderChats/${cleanOrderId}_${storeId}/messages`).push(sanitizeForFirebase(payload));
-        await db.ref(`storeRiderChats/${cleanOrderId}_${storeId}`).update(sanitizeForFirebase({
+        const metaUpdate = sanitizeForFirebase({
             lastMessage: text.trim(),
             lastTimestamp: Date.now(),
             storeName,
-            unreadForRider: true
-        }));
+            unreadForRider: true,
+            unreadForStore: false
+        });
+        await db.ref(`storeRiderChats/${cleanOrderId}_${storeId}`).update(metaUpdate);
+        db.ref(`storeRiderChatMeta/${cleanOrderId}_${storeId}`).update(metaUpdate).catch(() => {});
         cancelStoreReply();
     } catch(e) {
         console.error("postStoreRiderMessage error:", e);

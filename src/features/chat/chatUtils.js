@@ -72,30 +72,44 @@ export function populateCateringCustomerDropdown(cachedMeta = null) {
 // ============================================================================
 // 3. HD MODE TOGGLE & IMAGE COMPRESSION ENGINE
 // ============================================================================
+export function syncChatHdButtonUI() {
+    const chatHdBtn = document.getElementById('chat-hd-toggle-btn');
+    const chatHdLabel = document.getElementById('chat-hd-label');
+    if (!chatHdBtn) return;
+
+    if (isHdMode) {
+        chatHdBtn.className = "px-2.5 py-1.5 bg-emerald-600 text-white rounded-xl border border-emerald-400 transition active:scale-95 text-xs font-black flex items-center justify-center shrink-0 min-w-[36px] shadow-sm";
+        if (chatHdLabel) {
+            chatHdLabel.className = "text-[11px] font-black tracking-tight text-white";
+            chatHdLabel.innerText = "HD";
+        }
+    } else {
+        chatHdBtn.className = "px-2.5 py-1.5 bg-inputBg text-gray-700 dark:text-gray-300 rounded-xl border border-gray-300 dark:border-gray-700 hover:text-gray-900 dark:hover:text-white transition active:scale-95 text-xs font-black flex items-center justify-center shrink-0 min-w-[36px]";
+        if (chatHdLabel) {
+            chatHdLabel.className = "text-[11px] font-black tracking-tight text-gray-700 dark:text-gray-300";
+            chatHdLabel.innerText = "HD";
+        }
+    }
+}
+
 export function toggleHdMode() {
     isHdMode = !isHdMode;
 
-    const chatHdBtn = document.getElementById('chat-hd-toggle-btn');
-    const chatHdIcon = document.getElementById('chat-hd-icon');
     const editorHdBtn = document.getElementById('editor-hd-toggle-btn');
     const editorHdIcon = document.getElementById('editor-hd-icon');
     const editorHdLabel = document.getElementById('editor-hd-label');
 
-    if (isHdMode) {
-        showToast("🌟 HD Mode Enabled (High Quality)");
-        if (chatHdBtn) chatHdBtn.className = "p-2 bg-emerald-600 text-white rounded-xl border border-emerald-400 transition active:scale-95 text-xs font-black shadow-lg";
-        if (chatHdIcon) chatHdIcon.className = "fa-solid fa-high-definition text-white";
+    syncChatHdButtonUI();
 
+    if (isHdMode) {
+        showToast("🌟 HD Mode Enabled (High Quality Photos)");
         if (editorHdBtn) editorHdBtn.className = "px-3 py-2.5 rounded-xl bg-emerald-600 text-white border border-emerald-400 transition active:scale-95 flex items-center gap-1.5 text-xs font-black shadow-lg";
-        if (editorHdIcon) editorHdIcon.className = "fa-solid fa-high-definition text-white";
+        if (editorHdIcon) editorHdIcon.className = "fa-solid fa-camera text-white";
         if (editorHdLabel) editorHdLabel.innerText = "HD On";
     } else {
-        showToast("⚡ Standard Mode (Data Saver & High Compression)");
-        if (chatHdBtn) chatHdBtn.className = "p-2 bg-inputBg text-gray-400 rounded-xl border border-gray-700 hover:text-white transition active:scale-95 text-xs font-bold";
-        if (chatHdIcon) chatHdIcon.className = "fa-solid fa-compress text-gray-400";
-
+        showToast("⚡ Standard Mode (Data Saver & Faster Upload)");
         if (editorHdBtn) editorHdBtn.className = "px-3 py-2.5 rounded-xl bg-inputBg text-gray-400 border border-gray-700 hover:text-white transition active:scale-95 flex items-center gap-1.5 text-xs font-bold";
-        if (editorHdIcon) editorHdIcon.className = "fa-solid fa-compress text-gray-400";
+        if (editorHdIcon) editorHdIcon.className = "fa-solid fa-camera text-gray-400";
         if (editorHdLabel) editorHdLabel.innerText = "HD Off";
     }
 }
@@ -335,6 +349,7 @@ if (typeof window !== 'undefined') {
     window.toggleBodyScroll = toggleBodyScroll;
     window.populateCateringCustomerDropdown = populateCateringCustomerDropdown;
     window.toggleHdMode = toggleHdMode;
+    window.syncChatHdButtonUI = syncChatHdButtonUI;
     window.compressAndResizeImage = compressAndResizeImage;
     window.promptImageAttachmentSource = promptImageAttachmentSource;
     window.closeImagePickerModal = closeImagePickerModal;

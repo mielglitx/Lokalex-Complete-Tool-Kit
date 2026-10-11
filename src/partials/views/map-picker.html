@@ -1,18 +1,18 @@
-<section id="view-map" class="hidden fixed inset-0 bg-darkBg z-[999999] flex flex-col w-full h-full overflow-hidden" style="z-index: 999999 !important;">
+<section id="view-map" class="hidden fixed inset-0 bg-white dark:bg-darkBg text-gray-900 dark:text-white z-[999999] flex flex-col w-full h-full overflow-hidden" style="z-index: 999999 !important;">
     <!-- HEADER -->
-    <header class="bg-cardBg px-4 py-3 flex items-center justify-between shadow-md shrink-0 border-b border-gray-800 gap-2">
-        <button onclick="window.goBack && window.goBack()" class="text-red-400 font-semibold flex items-center gap-1.5 transition active:opacity-50 text-xs shrink-0">
+    <header class="bg-cardBg px-4 py-3 flex items-center justify-between shadow-md shrink-0 border-b border-gray-200 dark:border-gray-800 gap-2">
+        <button onclick="window.goBack && window.goBack()" class="text-red-500 dark:text-red-400 font-semibold flex items-center gap-1.5 transition active:opacity-50 text-xs shrink-0">
             <i class="fa-solid fa-xmark text-sm"></i> Cancel
         </button>
-        <h1 id="map-view-title" class="text-sm font-bold truncate">Pick Location Pin</h1>
+        <h1 id="map-view-title" class="text-sm font-bold truncate text-gray-900 dark:text-white">Pick Location Pin</h1>
         <div class="w-8 shrink-0"></div>
     </header>
 
     <!-- GOOGLE PLACES SEARCH BAR OVERLAY -->
-    <div id="map-search-bar-container" class="p-3 bg-cardBg border-b border-gray-800 z-10 shrink-0">
+    <div id="map-search-bar-container" class="p-3 bg-cardBg border-b border-gray-200 dark:border-gray-800 z-10 shrink-0">
         <div class="relative">
             <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-gray-400 text-xs"></i>
-            <input type="text" id="map-search-input" placeholder="Search address, store, or landmark..." class="w-full bg-inputBg text-xs text-white rounded-xl pl-9 pr-3 py-2.5 outline-none border border-gray-700 focus:border-blue-500 font-sans">
+            <input type="text" id="map-search-input" placeholder="Search address, store, or landmark..." class="w-full bg-inputBg text-xs text-gray-900 dark:text-white rounded-xl pl-9 pr-3 py-2.5 outline-none border border-gray-300 dark:border-gray-700 focus:border-blue-500 font-sans">
         </div>
     </div>
 
@@ -28,7 +28,7 @@
     </div>
 
     <!-- ACTION BUTTONS -->
-    <div class="p-3 bg-cardBg shadow-lg shrink-0 border-t border-gray-800 z-10 pb-6 sm:pb-3 flex flex-col gap-2">
+    <div class="p-3 bg-cardBg shadow-lg shrink-0 border-t border-gray-200 dark:border-gray-800 z-10 pb-6 sm:pb-3 flex flex-col gap-2">
         <button id="map-confirm-btn" onclick="window.confirmGoogleMapPin && window.confirmGoogleMapPin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 text-xs flex items-center justify-center gap-2">
             <i class="fa-solid fa-location-crosshairs"></i> <span id="map-confirm-btn-text">CONFIRM LOCATION PIN</span>
         </button>

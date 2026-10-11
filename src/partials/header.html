@@ -21,8 +21,14 @@
         </div>
     </div>
 
-    <!-- RIGHT: LIVE DIGITAL CLOCK, BATTERY INDICATOR & NETWORK STATUS PILL -->
+    <!-- RIGHT: LIVE DIGITAL CLOCK, BATTERY INDICATOR, THEME TOGGLE & NETWORK STATUS PILL -->
     <div class="flex items-center gap-1.5 shrink-0">
+        <!-- QUICK THEME TOGGLE BUTTON -->
+        <button type="button" onclick="window.toggleAppTheme && window.toggleAppTheme()" class="flex items-center justify-center w-7 h-7 rounded-xl bg-gray-100 dark:bg-black/40 hover:bg-emerald-50 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700/60 text-amber-500 dark:text-amber-400 transition active:scale-95 shadow-2xs cursor-pointer" title="Toggle Light / Dark Theme">
+            <i class="fa-solid fa-sun text-xs dark:hidden"></i>
+            <i class="fa-solid fa-moon text-xs hidden dark:inline"></i>
+        </button>
+
         <!-- LIVE DIGITAL CLOCK PILL -->
         <div id="header-clock-pill" class="flex items-center gap-1 bg-gray-100 dark:bg-black/40 border border-gray-300 dark:border-gray-700/60 px-2 py-1 rounded-xl text-[10px] font-mono font-bold text-gray-700 dark:text-gray-300 transition-all select-none shrink-0" title="Current Time">
             <i class="fa-regular fa-clock text-blue-500 text-[10px]"></i>

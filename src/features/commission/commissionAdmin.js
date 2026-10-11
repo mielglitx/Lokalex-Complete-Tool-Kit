@@ -105,24 +105,24 @@ export function renderAdminRiderCommissionRatesList() {
                 : `<span class="text-[9px] bg-gray-800 text-gray-400 font-bold px-1.5 py-0.5 rounded border border-gray-700">Default (${defaultCommissionRate}%)</span>`;
 
             return `
-            <div class="bg-black/40 border border-gray-800/80 p-2.5 rounded-2xl flex items-center justify-between gap-2 shadow text-xs">
+            <div class="bg-black/40 border border-gray-200 dark:border-gray-800/80 p-2.5 rounded-2xl flex items-center justify-between gap-2 shadow text-xs">
                 <div class="flex flex-col min-w-0 flex-1">
                     <div class="flex items-center gap-1.5 flex-wrap">
-                        <span class="font-bold text-white truncate">
-                            <i class="fa-solid fa-motorcycle text-amber-400 mr-1"></i>${escapeHtml(r.name)}
+                        <span class="font-bold text-gray-900 dark:text-white truncate">
+                            <i class="fa-solid fa-motorcycle text-amber-500 dark:text-amber-400 mr-1"></i>${escapeHtml(r.name)}
                         </span>
                         ${badgeHtml}
                     </div>
-                    <span class="text-[10px] text-gray-400 font-mono">ID: ${escapeHtml(r.id)}</span>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-mono">ID: ${escapeHtml(r.id)}</span>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
                     <input type="number" step="0.5" min="0" max="100" 
                         id="rider-comm-rate-${escapeHtml(r.id)}" 
                         placeholder="${defaultCommissionRate}%" 
                         value="${currentRiderRate}" 
-                        class="w-16 bg-inputBg text-xs text-center font-bold text-amber-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-amber-500">
-                    <span class="text-xs text-gray-400 font-bold">%</span>
-                    <button type="button" onclick="window.clearRiderCommissionOverride && window.clearRiderCommissionOverride('${escapeHtml(r.id)}')" class="text-gray-500 hover:text-red-400 p-1 text-xs transition" title="Clear override (Use Default)">
+                        class="w-16 bg-inputBg text-xs text-center font-bold text-amber-600 dark:text-amber-400 rounded-xl p-2 border border-gray-300 dark:border-gray-700 outline-none focus:border-amber-500">
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-bold">%</span>
+                    <button type="button" onclick="window.clearRiderCommissionOverride && window.clearRiderCommissionOverride('${escapeHtml(r.id)}')" class="text-gray-400 hover:text-red-500 p-1 text-xs transition" title="Clear override (Use Default)">
                         <i class="fa-solid fa-rotate-left"></i>
                     </button>
                 </div>
@@ -151,11 +151,11 @@ export function renderSpecialPromoDatesList() {
     }
 
     container.innerHTML = entries.map(([dateKey, discount]) => `
-        <div class="flex items-center justify-between bg-black/40 border border-purple-500/30 p-2 rounded-xl text-xs">
+        <div class="flex items-center justify-between bg-black/40 border border-purple-200 dark:border-purple-500/30 p-2 rounded-xl text-xs">
             <div class="flex items-center gap-2">
-                <i class="fa-solid fa-calendar-day text-purple-400"></i>
-                <span class="font-mono text-white font-bold">${escapeHtml(dateKey)}</span>
-                <span class="text-[10px] text-purple-300 font-bold bg-purple-500/20 px-2 py-0.5 rounded-lg border border-purple-500/30">-${discount}% Less</span>
+                <i class="fa-solid fa-calendar-day text-purple-600 dark:text-purple-400"></i>
+                <span class="font-mono text-gray-900 dark:text-white font-bold">${escapeHtml(dateKey)}</span>
+                <span class="text-[10px] text-purple-700 dark:text-purple-300 font-bold bg-purple-100 dark:bg-purple-500/20 px-2 py-0.5 rounded-lg border border-purple-200 dark:border-purple-500/30">-${discount}% Less</span>
             </div>
             <button onclick="window.removeSpecialPromoDate && window.removeSpecialPromoDate('${escapeHtml(dateKey)}')" class="text-red-400 hover:text-red-300 p-1 text-xs transition active:scale-95" title="Remove promo date">
                 <i class="fa-solid fa-trash"></i>

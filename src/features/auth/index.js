@@ -58,10 +58,9 @@ export * from './authAdmin.js';
 export * from './authCustomer.js';
 export * from './authRider.js';
 
-// Auto-boot background GPS and GCash cache for persistent rider sessions
+// Auto-boot GCash cache for persistent rider sessions
 if (appState.telegramId) {
     fetchGCashDetails();
-    authGps.startBackgroundRosterGpsTracker();
 }
 
 // Global window binding for HTML event handlers and backward compatibility

@@ -6,6 +6,7 @@ import { showToast } from '../../ui/notifications.js';
 export function isUserBlocked(idOrName) {
     if (!idOrName || !globalState.blockedUsers) return false;
     const clean = idOrName.toString().toLowerCase().trim();
+    if (!clean || clean.length < 2 || clean === 'rider' || clean === 'user' || clean === 'customer') return false;
 
     return Object.values(globalState.blockedUsers).some(b => {
         if (!b) return false;

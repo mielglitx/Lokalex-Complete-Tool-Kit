@@ -233,26 +233,30 @@ export async function submitAdminForceCatering() {
     }
 
     if (db && custName) {
-        const cleanSearchName = custName.trim();
-        db.ref('customerChats')
-            .orderByChild('metadata/customerName')
-            .equalTo(cleanSearchName)
-            .once('value', (snapshot) => {
-                const chats = snapshot.val();
-                if (chats) {
-                    Object.keys(chats).forEach(custId => {
-                        db.ref(`customerChats/${custId}/metadata`).update({
-                            folder: 'catering',
-                            cateredByRiderId: targetId,
-                            cateredByRiderName: targetName,
-                            cateredBy: targetName,
-                            forcedBy: adminName,
-                            isForcedCater: true,
-                            lastUpdated: Date.now()
-                        }).catch(() => {});
-                    });
+        const cleanSearchName = custName.trim().toLowerCase();
+        db.ref('customerChatMeta').once('value', (snapshot) => {
+            const chats = snapshot.val() || {};
+            Object.keys(chats).forEach(custId => {
+                const meta = chats[custId]?.metadata || chats[custId] || {};
+                const chatCustName = (meta.customerName || meta.name || "").trim().toLowerCase();
+                const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
+                const fbName = (resolvedFb?.name || "").trim().toLowerCase();
+
+                if (chatCustName === cleanSearchName || fbName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName) || (fbName && isCustomerMatch(fbName, cleanSearchName))) {
+                    const updateObj = {
+                        folder: 'catering',
+                        cateredByRiderId: targetId,
+                        cateredByRiderName: targetName,
+                        cateredBy: targetName,
+                        forcedBy: adminName,
+                        isForcedCater: true,
+                        lastUpdated: Date.now()
+                    };
+                    db.ref(`customerChats/${custId}/metadata`).update(updateObj).catch(() => {});
+                    db.ref(`customerChatMeta/${custId}`).update(updateObj).catch(() => {});
                 }
             });
+        }).catch(() => {});
     }
 
     await updateRosterStatusData(

@@ -327,11 +327,14 @@ export async function postMerchantPortalMessage(text) {
 
         try {
             await db.ref(`storeRiderChats/${orderId}_${storeId}/messages`).push(sanitizeForFirebase(payload));
-            await db.ref(`storeRiderChats/${orderId}_${storeId}`).update(sanitizeForFirebase({
+            const metaUpdate = sanitizeForFirebase({
                 lastMessage: text.trim(),
                 lastTimestamp: now,
-                unreadForRider: true
-            }));
+                unreadForRider: true,
+                unreadForStore: false
+            });
+            await db.ref(`storeRiderChats/${orderId}_${storeId}`).update(metaUpdate);
+            db.ref(`storeRiderChatMeta/${orderId}_${storeId}`).update(metaUpdate).catch(() => {});
         } catch(e) {
             showToast("❌ Failed to send message to rider.");
         }

@@ -58,9 +58,6 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
     }
 
     let locationLink = "";
-    if (appState.lat && appState.lon) {
-        locationLink = `https://www.google.com/maps/search/?api=1&query=${appState.lat.toFixed(6)},${appState.lon.toFixed(6)}`;
-    }
 
     let newQueueTime = precalculatedQueueTime !== null ? precalculatedQueueTime : 0;
     if (status === 'Available' && precalculatedQueueTime === null) {
@@ -228,8 +225,6 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         availableTimestamp: currentAvailableTimestamp,
         lastUpdated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         lastActiveTimestamp: nowTimestamp,
-        lat: appState.lat || 0,
-        lng: appState.lon || 0,
         ...extraData,
         forcedCaters: currentForcedCaters,
         forcedBy: currentForcedBy,
@@ -265,6 +260,13 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         }
 
         await rosterRef.update(sanitizedRosterData);
+
+        // Clean legacy GPS attributes from roster node
+        rosterRef.child('lat').remove().catch(() => {});
+        rosterRef.child('lng').remove().catch(() => {});
+        rosterRef.child('accuracy').remove().catch(() => {});
+        rosterRef.child('availableLocation').remove().catch(() => {});
+        rosterRef.child('locationUpdatedAt').remove().catch(() => {});
 
         const fb = window.firebase || (typeof firebase !== 'undefined' ? firebase : null);
         if (fb?.database?.ServerValue?.TIMESTAMP) {

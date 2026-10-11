@@ -274,8 +274,8 @@ export function initMapSearchAutocomplete() {
                 const lon = parseFloat(item.lon);
 
                 return `
-                <div class="nominatim-result-item p-2.5 border-b border-gray-800/80 hover:bg-blue-600/30 cursor-pointer transition flex items-start gap-2 text-white text-[11px]" data-lat="${lat}" data-lon="${lon}">
-                    <i class="fa-solid fa-location-dot text-red-400 text-xs mt-0.5 shrink-0"></i>
+                <div class="nominatim-result-item p-2.5 border-b border-gray-200 dark:border-gray-800/80 hover:bg-blue-50 dark:hover:bg-blue-600/30 cursor-pointer transition flex items-start gap-2 text-gray-900 dark:text-white text-[11px]" data-lat="${lat}" data-lon="${lon}">
+                    <i class="fa-solid fa-location-dot text-red-500 text-xs mt-0.5 shrink-0"></i>
                     <span class="truncate leading-snug">${displayName}</span>
                 </div>`;
             }).join('');

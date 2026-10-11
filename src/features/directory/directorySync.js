@@ -153,9 +153,6 @@ export async function silentSyncDirectory() {
             saveDirectoryCache();
             localStorage.setItem(SYNC_TTL_KEY, now.toString());
 
-            const avatarUrls = finalMerged.map(r => r.photoUrl).filter(Boolean);
-            if (avatarUrls.length > 0) prefetchMediaBatch(avatarUrls);
-
             const currentViewEl = document.querySelector('main > section:not(.hidden)');
             if (currentViewEl && currentViewEl.id === 'view-directory') {
                 if (globalState.currentType === 'barangays') {

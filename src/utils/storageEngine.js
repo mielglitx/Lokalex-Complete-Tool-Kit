@@ -148,12 +148,20 @@ export async function cacheMediaAsset(url) {
 
 export async function prefetchMediaBatch(urlList) {
     if (!Array.isArray(urlList) || urlList.length === 0) return;
-    const cleanUrls = [...new Set(urlList.filter(u => u && typeof u === 'string' && u.startsWith('http')))];
 
-    const workerQueue = cleanUrls.slice(0, 40);
-    workerQueue.forEach(url => {
-        cacheMediaAsset(url);
-    });
+    // Detect mobile data / data-saver mode
+    const conn = typeof navigator !== 'undefined' && (navigator.connection || navigator.mozConnection || navigator.webkitConnection);
+    const isMobileData = conn && (conn.saveData || conn.type === 'cellular' || ['slow-2g', '2g', '3g', '4g'].includes(conn.effectiveType));
+    
+    // Completely disable background media prefetching on mobile data
+    if (isMobileData) return;
+
+    // Throttle batch size on Wi-Fi to a max of 5 items
+    const cleanUrls = [...new Set(urlList.filter(u => u && typeof u === 'string' && u.startsWith('http')))];
+    const workerQueue = cleanUrls.slice(0, 5);
+    for (const url of workerQueue) {
+        await cacheMediaAsset(url);
+    }
 }
 
 if (typeof window !== 'undefined') {

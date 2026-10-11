@@ -112,8 +112,6 @@ export function openQueueInfoModal(riderId, riderName) {
     const posEl = document.getElementById('queue-info-position');
     const timeEl = document.getElementById('queue-info-time');
     const elapsedEl = document.getElementById('queue-info-elapsed');
-    const gpsEl = document.getElementById('queue-info-coords');
-    const mapBtn = document.getElementById('queue-info-map-btn');
 
     if (nameEl) nameEl.innerText = formatTitleCase(member.riderName || member.name || riderName || "Rider");
     if (posEl) posEl.innerText = queuePos;
@@ -132,19 +130,6 @@ export function openQueueInfoModal(riderId, riderName) {
         if (elapsedEl) elapsedEl.innerText = elapsedText;
     } else {
         if (elapsedEl) elapsedEl.innerText = "Just now";
-    }
-
-    const loc = member.availableLocation || null;
-    if (loc && loc.lat && loc.lon) {
-        const acc = loc.accuracy ? ` (±${Math.round(loc.accuracy)}m)` : '';
-        if (gpsEl) gpsEl.innerText = `${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}${acc}`;
-        if (mapBtn) {
-            mapBtn.href = `https://www.google.com/maps?q=${loc.lat},${loc.lon}`;
-            mapBtn.classList.remove('hidden');
-        }
-    } else {
-        if (gpsEl) gpsEl.innerText = "GPS Not Recorded / Calibrated";
-        if (mapBtn) mapBtn.classList.add('hidden');
     }
 
     modal.classList.remove('hidden');
@@ -429,15 +414,19 @@ export function updateRosterUI() {
         }
 
         availHtml.push(`
-            <div class="inline-flex items-center bg-white dark:bg-white/5 border border-gray-200 dark:border-gray-700/60 rounded-xl px-2 py-1 text-xs shadow-xs transition hover:border-emerald-500 gap-1.5">
-                <span class="font-black text-emerald-600 dark:text-green-400">${availCounter++}.</span>
-                <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${mId}', '${escapeHtml(mName)}')" class="font-bold text-gray-900 dark:text-gray-100 hover:text-emerald-500 dark:hover:text-emerald-400 hover:underline transition cursor-pointer text-left" title="View Rider Details">${escapeHtml(shortName)}</button>
-                <button type="button" onclick="window.openQueueInfoModal && window.openQueueInfoModal('${mId}', '${escapeHtml(mName)}')" class="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 transition active:scale-90 p-0.5 text-[11px]" title="View Queue Location & Time">
-                    <i class="fa-solid fa-circle-info"></i>
-                </button>
-                ${cooldownBadge}
-                ${controlsHtml}
-                <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
+            <div class="flex flex-wrap items-center justify-between bg-white dark:bg-white/5 border border-gray-200 dark:border-gray-700/60 rounded-xl px-2.5 py-1.5 text-xs shadow-xs transition hover:border-emerald-500 gap-1.5 max-w-full">
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <span class="font-black text-emerald-600 dark:text-green-400">${availCounter++}.</span>
+                    <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${mId}', '${escapeHtml(mName)}')" class="font-bold text-gray-900 dark:text-gray-100 hover:text-emerald-500 dark:hover:text-emerald-400 hover:underline transition cursor-pointer text-left" title="View Rider Details">${escapeHtml(shortName)}</button>
+                    <button type="button" onclick="window.openQueueInfoModal && window.openQueueInfoModal('${mId}', '${escapeHtml(mName)}')" class="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 transition active:scale-90 p-0.5 text-[11px]" title="View Queue Location & Time">
+                        <i class="fa-solid fa-circle-info"></i>
+                    </button>
+                    ${cooldownBadge}
+                </div>
+                <div class="flex items-center gap-1 flex-wrap shrink-0">
+                    ${controlsHtml}
+                    <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>
+                </div>
             </div>
         `);
     });
@@ -476,15 +465,14 @@ export function updateRosterUI() {
                 const cTime = times[idx] || times[0] || '';
                 const timeDetails = getElapsedCateringTime(cTime);
                 const forcedBadge = getForcedCaterBadgeHtml(m, cName, mName);
-
                 cardHtml += `
-                <div class="flex flex-wrap items-center justify-between gap-1 bg-white dark:bg-cardBg p-2 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white dark:bg-cardBg p-2 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs transition">
                     <div class="flex items-center gap-1.5 flex-wrap min-w-0">
                         <span class="text-gray-900 dark:text-orange-300 font-black">👤 ${escapeHtml(formattedCustName)} <span class="text-gray-600 dark:text-gray-400 text-[10px] font-normal font-mono">(${timeDetails})</span></span>
                         ${forcedBadge}
                     </div>
                     
-                    <div class="flex items-center gap-1 shrink-0">
+                    <div class="flex flex-wrap items-center gap-1 shrink-0 justify-start sm:justify-end">
                         ${canComplete ? `
                             <button type="button" onclick="window.completeSingleCateringCustomer && window.completeSingleCateringCustomer('${mId}', '${escapeJsAttr(mName)}', '${escapeJsAttr(cName)}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-0.5 rounded text-[10px] font-black transition active:scale-95 shadow-xs flex items-center gap-1 cursor-pointer" title="Mark this customer delivery as completed">
                                 <i class="fa-solid fa-check"></i> Done

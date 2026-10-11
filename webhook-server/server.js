@@ -43,6 +43,83 @@ app.get('/', (req, res) => {
   });
 });
 
+// Outbound Message Endpoint: Send reply from Lokalex Rider to Messenger Customer
+app.post('/api/send-reply', async (req, res) => {
+  try {
+    const { recipientId, text, imageUrl, locationCoords, tokenOverride, apiId } = req.body;
+
+    let token = tokenOverride || PAGE_ACCESS_TOKEN;
+    if (!token) {
+      try {
+        const tokenResp = await fetch(`${FIREBASE_DB_URL}/adminSettings/facebookApis/${apiId || DEFAULT_API_ID}/pageAccessToken.json`);
+        if (tokenResp.ok) {
+          const val = await tokenResp.json();
+          if (typeof val === 'string' && val.trim()) {
+            token = val.trim();
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to fetch token from Firebase:", e);
+      }
+    }
+
+    if (!token) {
+      return res.status(400).json({ error: "PAGE_ACCESS_TOKEN not configured in Firebase or environment" });
+    }
+
+    const cleanPsid = String(recipientId || "").replace(/^fb_/, "");
+
+    let msgPayload = { text: text || "Hello!" };
+    if (imageUrl) {
+      msgPayload = {
+        attachment: {
+          type: "image",
+          payload: { url: imageUrl, is_reusable: true }
+        }
+      };
+    } else if (locationCoords && locationCoords.lat && locationCoords.lng) {
+      msgPayload = {
+        text: `📍 Rider shared location: https://maps.google.com/?q=${locationCoords.lat},${locationCoords.lng}`
+      };
+    }
+
+    let sendBody = {
+      messaging_type: "RESPONSE",
+      recipient: { id: cleanPsid },
+      message: msgPayload,
+    };
+
+    let fbResp = await fetch("https://graph.facebook.com/v19.0/me/messages?access_token=" + token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sendBody),
+    });
+
+    let fbData = await fbResp.json();
+
+    // If outside 24-hour window (Meta error code 10), retry with MESSAGE_TAG CONFIRMED_EVENT_UPDATE
+    if (!fbResp.ok && fbData?.error?.code === 10) {
+      console.log("ℹ️ Outside 24h window, retrying with MESSAGE_TAG CONFIRMED_EVENT_UPDATE...");
+      sendBody = {
+        messaging_type: "MESSAGE_TAG",
+        tag: "CONFIRMED_EVENT_UPDATE",
+        recipient: { id: cleanPsid },
+        message: msgPayload,
+      };
+      fbResp = await fetch("https://graph.facebook.com/v19.0/me/messages?access_token=" + token, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sendBody),
+      });
+      fbData = await fbResp.json();
+    }
+
+    return res.status(fbResp.status).json(fbData);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // 1. Meta Webhook Verification
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
@@ -78,7 +155,25 @@ app.post('/webhook', async (req, res) => {
         const custId = `fb_${senderId}`;
         const timestamp = item.timestamp || Date.now();
         const mid = item.message.mid ? String(item.message.mid).replace(/[.#$\[\]\/]/g, '_') : `msg_${timestamp}`;
-        let messageText = item.message.text || (item.message.attachments ? "📷 [Attachment]" : "Facebook Message");
+        let messageText = item.message.text || "";
+        let hasAttachment = false;
+        let imageUrl = null;
+        let attachmentType = null;
+
+        // Check attachments in webhook payload
+        if (Array.isArray(item.message.attachments) && item.message.attachments.length > 0) {
+          hasAttachment = true;
+          for (const att of item.message.attachments) {
+            if (att.type === "image" && att.payload?.url) {
+              imageUrl = att.payload.url;
+              attachmentType = "image";
+              break;
+            } else if (att.payload?.url && !imageUrl) {
+              imageUrl = att.payload.url;
+              attachmentType = att.type || "attachment";
+            }
+          }
+        }
 
         const pageId = item.recipient?.id || entry.id || "1098954353295816";
 
@@ -108,6 +203,34 @@ app.post('/webhook', async (req, res) => {
               if (apiData?.pageId) resolvedPageId = apiData.pageId.trim();
             }
           } catch(e) {}
+        }
+
+        // Fallback: If message has attachments but url wasn't in webhook payload, query Meta Graph API
+        if (hasAttachment && !imageUrl && token && item.message.mid) {
+          try {
+            const midResp = await fetch(`https://graph.facebook.com/v19.0/${item.message.mid}?fields=attachments&access_token=${token}`);
+            if (midResp.ok) {
+              const midData = await midResp.json();
+              const graphAtt = midData?.attachments?.data?.[0];
+              const graphUrl = graphAtt?.image_data?.url || graphAtt?.payload?.url;
+              if (graphUrl) {
+                imageUrl = graphUrl;
+                attachmentType = "image";
+              }
+            }
+          } catch(e) {
+            console.warn("Failed to fetch attachment via Graph API:", e);
+          }
+        }
+
+        if (!messageText) {
+          if (imageUrl) {
+            messageText = "📷 Photo";
+          } else if (hasAttachment) {
+            messageText = `📷 [Facebook ${attachmentType || "attachment"}]`;
+          } else {
+            messageText = "Facebook Message";
+          }
         }
 
         let customerName = existingCustomerName || `FB Customer (${senderId.slice(-4)})`;
@@ -157,7 +280,7 @@ app.post('/webhook', async (req, res) => {
         const threadMeta = {
           customerName,
           avatarUrl,
-          lastMessage: messageText,
+          lastMessage: imageUrl && (!item.message.text || !item.message.text.trim()) ? "📷 Photo" : messageText,
           lastUpdated: timestamp,
           folder: "inbox",
           channel: "messenger",
@@ -177,6 +300,11 @@ app.post('/webhook', async (req, res) => {
           apiId: DEFAULT_API_ID,
           mid
         };
+
+        if (imageUrl) {
+          chatMsg.imageUrl = imageUrl;
+          chatMsg.type = "image";
+        }
 
         try {
           await Promise.all([

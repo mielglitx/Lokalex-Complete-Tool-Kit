@@ -80,14 +80,18 @@ export function promptCateringStatus() {
     if (input) input.focus();
 }
 
-export async function confirmCateringStatus() {
+export async function confirmCateringStatus(overrideCustName = null, overrideCustId = null) {
     try {
         const input = document.getElementById('catering-customer-name') || document.getElementById('admin-cater-cust-name');
         const custSelect = document.getElementById('catering-customer-select') || document.getElementById('admin-cater-customer-select');
         const penaltySelect = document.getElementById('catering-penalty-select') || document.getElementById('admin-cater-penalty-select');
 
-        let custName = (input && input.value ? input.value.trim() : "") || (custSelect && custSelect.value ? custSelect.value.trim() : "");
-        if (!custName) return showToast("Please enter or select customer name");
+        let custName = (typeof overrideCustName === 'string' && overrideCustName.trim() ? overrideCustName.trim() : "") ||
+                       (input && input.value ? input.value.trim() : "") || 
+                       (custSelect && custSelect.value ? custSelect.value.trim() : "");
+        if (!custName || custName.toLowerCase() === 'customer' || custName.toLowerCase() === 'customer name') {
+            return showToast("⚠️ Pakilagay o piliin ang totoong pangalan ng customer.");
+        }
 
         if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
             loadRosterCache();
@@ -224,37 +228,16 @@ export async function confirmCateringStatus() {
             }
         }
 
-        if (db && custName) {
-            const cleanSearchName = custName.toLowerCase().trim();
-            db.ref('customerChatMeta').once('value', (snapshot) => {
-                const chats = snapshot.val();
-                if (chats) {
-                    Object.keys(chats).forEach(custId => {
-                        const meta = chats[custId]?.metadata || chats[custId] || {};
-                        const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
-                        if (chatCustName && (chatCustName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName))) {
-                            const updateObj = {
-                                folder: 'catering',
-                                cateredByRiderId: resolvedId,
-                                cateredByRiderName: myName,
-                                cateredBy: myName,
-                                lastUpdated: Date.now()
-                            };
-                            if (isForcedByRole) {
-                                updateObj.forcedBy = myName;
-                                updateObj.isForcedCater = true;
-                            } else {
-                                updateObj.forcedBy = null;
-                                updateObj.isForcedCater = false;
-                            }
-                            db.ref(`customerChats/${custId}/metadata`).update(updateObj).catch(() => {});
-                        }
-                    });
-                }
-            });
-        }
-
         const isStartingShift = !myRecord || !myRecord.status || myRecord.status === 'End';
+
+        if (myRecord) {
+            myRecord.status = 'Catering';
+            myRecord.customerName = existingCustomers.join(', ');
+            myRecord.startTime = existingTimes.join(', ');
+            myRecord.forcedCaters = hasAnyForcedCaters ? forcedCatersMap : null;
+            myRecord.forcedBy = hasAnyForcedCaters ? (myRecord?.forcedBy || myName) : null;
+            myRecord.isForcedCater = hasAnyForcedCaters;
+        }
 
         await updateRosterStatusData(
             'Catering', 
@@ -276,6 +259,56 @@ export async function confirmCateringStatus() {
         saveRosterCache();
         updateRosterUI();
 
+        if (db && custName) {
+            const cleanSearchName = custName.toLowerCase().trim();
+            const applyChatCaterUpdate = (targetChatId) => {
+                if (!targetChatId || !db) return;
+                if (targetChatId.toString().toLowerCase() === 'customer' || targetChatId.toString().toLowerCase() === 'customer name') return;
+                const updateObj = {
+                    folder: 'catering',
+                    status: 'active',
+                    cateredByRiderId: resolvedId,
+                    cateredByRiderName: myName,
+                    cateredBy: myName,
+                    lastUpdated: Date.now()
+                };
+                if (isForcedByRole) {
+                    updateObj.forcedBy = myName;
+                    updateObj.isForcedCater = true;
+                } else {
+                    updateObj.forcedBy = null;
+                    updateObj.isForcedCater = false;
+                }
+                db.ref(`customerChats/${targetChatId}/metadata`).update(updateObj).catch(() => {});
+                db.ref(`customerChatMeta/${targetChatId}`).update(updateObj).catch(() => {});
+            };
+
+            if (overrideCustId) {
+                applyChatCaterUpdate(overrideCustId);
+            }
+
+            db.ref('customerChatMeta').once('value', (snapshot) => {
+                const chats = snapshot.val();
+                if (chats) {
+                    Object.keys(chats).forEach(custId => {
+                        const meta = chats[custId]?.metadata || chats[custId] || {};
+                        const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
+                        const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
+                        const fbName = (resolvedFb?.name || "").toLowerCase().trim();
+
+                        if (chatCustName === cleanSearchName || fbName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName) || (fbName && isCustomerMatch(fbName, cleanSearchName))) {
+                            applyChatCaterUpdate(custId);
+                        }
+                    });
+                }
+            });
+        }
+
+        // Switch to the catering filter so rider immediately sees customer thread
+        if (typeof window.setRiderChatFilter === 'function') {
+            window.setRiderChatFilter('catering');
+        }
+
         if (input) input.value = "";
 
         if (isForcedByRole) {
@@ -283,6 +316,14 @@ export async function confirmCateringStatus() {
         } else {
             showToast(`🛵 Catering: ${custName}`);
         }
+
+        try {
+            if (typeof autoStartLiveGpsSession === 'function') {
+                autoStartLiveGpsSession(custName);
+            }
+        } catch(e) {}
+
+        return true;
     } catch (err) {
         console.error("Error in confirmCateringStatus:", err);
         showToast("❌ Bigo mag-Cater: " + (err.message || err));

@@ -8,21 +8,38 @@
   FontAwesome icon libraries, and free open-source mapping stylesheets (Leaflet.js).
   Completely removes Google Maps SDK dependencies to eliminate API billing limits.
 -->
-<meta id="meta-theme-color" name="theme-color" content="#121212">
 
-<!-- THEME INITIALIZATION SCRIPT (PREVENTS FLASH OF UNSTYLED THEME ON LOAD) -->
+<!-- THEME INITIALIZATION SCRIPT (ENFORCES LIGHT THEME BY DEFAULT) -->
 <script>
     (function() {
-        const savedTheme = localStorage.getItem('lokalex_theme_preference') || 'system';
-        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const isDark = savedTheme === 'dark' || (savedTheme === 'system' && systemPrefersDark);
+        try {
+            const v3Flag = localStorage.getItem('lokalex_light_theme_enforced_v3');
+            if (!v3Flag) {
+                localStorage.setItem('lokalex_theme', 'light');
+                localStorage.setItem('lokalex_theme_preference', 'light');
+                localStorage.setItem('lokalex_light_theme_enforced_v3', 'true');
+            }
+        } catch (e) {}
+
+        let savedTheme = localStorage.getItem('lokalex_theme') || localStorage.getItem('lokalex_theme_preference') || 'light';
+        if (savedTheme === 'system') savedTheme = 'light';
         
+        const isDark = savedTheme === 'dark';
+        const root = document.documentElement;
         if (isDark) {
-            document.documentElement.classList.add('dark');
-            document.documentElement.classList.remove('light');
+            root.classList.add('dark');
+            root.classList.remove('light');
+            root.style.backgroundColor = '#0C1814';
+            root.style.colorScheme = 'dark';
         } else {
-            document.documentElement.classList.remove('dark');
-            document.documentElement.classList.add('light');
+            root.classList.remove('dark');
+            root.classList.add('light');
+            root.style.backgroundColor = '#EDF7F2';
+            root.style.colorScheme = 'light';
+        }
+        if (document.body) {
+            document.body.style.backgroundColor = isDark ? '#0C1814' : '#EDF7F2';
+            document.body.style.color = isDark ? '#F8FAFC' : '#0F172A';
         }
     })();
 </script>
@@ -37,6 +54,10 @@
                     darkBg: 'var(--color-darkBg)', 
                     cardBg: 'var(--color-cardBg)', 
                     inputBg: 'var(--color-inputBg)', 
+                    brandPrimary: 'var(--color-brandPrimary)',
+                    brandTeal: 'var(--color-brandTeal)',
+                    brandAmber: 'var(--color-brandAmber)',
+                    brandBubble: 'var(--color-brandBubble)',
                     tgBg: '#0e1621', 
                     tgCard: '#17212b', 
                     tgBtn: '#202b36' 
@@ -46,27 +67,31 @@
     }
 </script>
 
-<!-- THEME DYNAMIC CSS VARIABLES & SHADOW REMOVAL -->
+<!-- THEME DYNAMIC CSS VARIABLES & HIGH-CONTRAST READABILITY -->
 <style>
     :root {
-        --color-darkBg: #F8FAFC;
+        --color-darkBg: #EDF7F2;
         --color-cardBg: #FFFFFF;
-        --color-inputBg: #F1F5F9;
+        --color-inputBg: #FFFFFF;
         --color-textMain: #0F172A;
-        --color-textMuted: #64748B;
-        --color-border: #E2E8F0;
+        --color-textMuted: #475569;
+        --color-border: #DDEEE6;
+        --color-brandPrimary: #059669;
+        --color-brandTeal: #0D9488;
+        --color-brandAmber: #F59E0B;
+        --color-brandBubble: #076B57;
     }
     html.dark {
-        --color-darkBg: #121212;
-        --color-cardBg: #1E1E1E;
-        --color-inputBg: #2A2A2A;
-        --color-textMain: #F9FAFB;
-        --color-textMuted: #9CA3AF;
-        --color-border: #27272A;
-    }
-    *, ::before, ::after {
-        box-shadow: none !important;
-        text-shadow: none !important;
+        --color-darkBg: #0C1814;
+        --color-cardBg: #14251F;
+        --color-inputBg: #0E1D18;
+        --color-textMain: #F8FAFC;
+        --color-textMuted: #94A3B8;
+        --color-border: #1E3A30;
+        --color-brandPrimary: #10B981;
+        --color-brandTeal: #14B8A6;
+        --color-brandAmber: #FBBF24;
+        --color-brandBubble: #065F46;
     }
     body {
         background-color: var(--color-darkBg);
@@ -85,6 +110,69 @@
     .leaflet-control-zoom {
         border: none !important;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
+    }
+
+    /* ========================================================================== */
+    /* CATERING GLOWING BORDERS (MY CUSTOMERS vs OTHER RIDERS)                    */
+    /* ========================================================================== */
+    @keyframes cateringGlowMy {
+        0%, 100% {
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.5), 0 0 22px rgba(16, 185, 129, 0.25);
+            border-color: #10b981;
+        }
+        50% {
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.85), 0 0 35px rgba(16, 185, 129, 0.45);
+            border-color: #34d399;
+        }
+    }
+
+    @keyframes cateringGlowGold {
+        0%, 100% {
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.6), 0 0 22px rgba(245, 158, 11, 0.3);
+            border-color: #f59e0b;
+        }
+        50% {
+            box-shadow: 0 0 22px rgba(251, 191, 36, 0.95), 0 0 38px rgba(245, 158, 11, 0.55);
+            border-color: #fbbf24;
+        }
+    }
+
+    #rider-cust-chats-feed > div.catering-glow-gold,
+    #rider-cust-chats-feed > div.catering-glow-my,
+    #rider-cust-chats-feed > div.catering-glow-other,
+    .catering-glow-gold,
+    .catering-glow-my,
+    .catering-glow-other {
+        border-width: 2px !important;
+        border-style: solid !important;
+        border-color: #f59e0b !important;
+        border-left-width: 6px !important;
+        border-left-color: #d97706 !important;
+        box-shadow: 0 0 14px rgba(245, 158, 11, 0.7), 0 0 28px rgba(245, 158, 11, 0.35) !important;
+        background-color: #FFFBEB !important;
+        animation: cateringGlowGold 2.2s infinite ease-in-out !important;
+    }
+    html.dark #rider-cust-chats-feed > div.catering-glow-gold,
+    html.dark #rider-cust-chats-feed > div.catering-glow-my,
+    html.dark #rider-cust-chats-feed > div.catering-glow-other,
+    html.dark .catering-glow-gold,
+    html.dark .catering-glow-my,
+    html.dark .catering-glow-other {
+        border-color: #fbbf24 !important;
+        border-left-color: #f59e0b !important;
+        box-shadow: 0 0 18px rgba(251, 191, 36, 0.85), 0 0 35px rgba(251, 191, 36, 0.45) !important;
+        background-color: rgba(69, 26, 3, 0.4) !important;
+    }
+
+    .avatar-glow-gold,
+    .avatar-glow-other {
+        border-color: #f59e0b !important;
+        box-shadow: 0 0 10px rgba(245, 158, 11, 0.8) !important;
+    }
+
+    .avatar-glow-my {
+        border-color: #10b981 !important;
+        box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
     }
 </style>
 

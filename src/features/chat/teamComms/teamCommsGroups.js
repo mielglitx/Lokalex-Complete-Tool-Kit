@@ -63,20 +63,20 @@ export function renderGroupRoomsList() {
         const lastMsg = g.lastMessage ? escapeHtml(g.lastMessage) : "No messages yet";
 
         return `
-        <div onclick="window.openGroupChat('${escapeHtml(groupId)}')" class="bg-cardBg border border-gray-800 hover:border-purple-500/50 p-3 rounded-2xl flex items-center justify-between cursor-pointer transition active:scale-[0.98]">
+        <div onclick="window.openGroupChat('${escapeHtml(groupId)}')" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-purple-500/50 p-3 rounded-2xl flex items-center justify-between cursor-pointer transition active:scale-[0.98]">
             <div class="flex items-center gap-2.5 min-w-0 flex-1">
                 <div class="w-9 h-9 rounded-full bg-purple-600/20 text-purple-300 font-bold flex items-center justify-center text-sm shrink-0 border border-purple-500/30">
                     <i class="fa-solid fa-users"></i>
                 </div>
                 <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-1.5">
-                        <span class="font-bold text-xs text-white truncate">${escapeHtml(title)}</span>
-                        <span class="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded-full font-bold border border-purple-500/30">${memberCount}</span>
+                        <span class="font-bold text-xs text-gray-900 dark:text-white truncate">${escapeHtml(title)}</span>
+                        <span class="text-[9px] bg-purple-500/20 text-purple-700 dark:text-purple-300 px-1.5 py-0.2 rounded-full font-bold border border-purple-500/30">${memberCount}</span>
                     </div>
-                    <p class="text-[10px] text-gray-400 truncate mt-0.5">${lastMsg}</p>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400 truncate mt-0.5">${lastMsg}</p>
                 </div>
             </div>
-            <i class="fa-solid fa-chevron-right text-xs text-gray-600 shrink-0 ml-2"></i>
+            <i class="fa-solid fa-chevron-right text-xs text-gray-400 dark:text-gray-600 shrink-0 ml-2"></i>
         </div>`;
     }).join('');
 }
@@ -227,10 +227,10 @@ export function openManageGroupModal() {
             const canRemove = isGroupAdmin && (mId !== myId);
 
             return `
-            <div class="flex items-center justify-between p-2 rounded-xl bg-darkBg/60 border border-gray-800">
+            <div class="flex items-center justify-between p-2 rounded-xl bg-darkBg/60 border border-gray-200 dark:border-gray-800">
                 <div class="flex items-center gap-2">
-                    <span class="font-bold text-xs text-white">${escapeHtml(mName)}</span>
-                    ${isCreator ? `<span class="bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[9px] font-black px-1.5 py-0.5 rounded">ADMIN</span>` : ''}
+                    <span class="font-bold text-xs text-gray-900 dark:text-white">${escapeHtml(mName)}</span>
+                    ${isCreator ? `<span class="bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/40 text-[9px] font-black px-1.5 py-0.5 rounded">ADMIN</span>` : ''}
                 </div>
                 ${canRemove ? `
                     <button type="button" onclick="window.removeGroupMember('${escapeHtml(channel.id)}', '${escapeHtml(mId)}', '${escapeHtml(mName)}')" class="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded-lg hover:bg-red-900/30 transition">

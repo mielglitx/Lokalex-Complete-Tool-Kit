@@ -18,6 +18,11 @@
       ".write": true,
       ".indexOn": ["lastUpdated", "folder", "unreadForRider", "apiId"]
     },
+    "sharedQuickReplies": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["createdAt"]
+    },
     "riderDayoffs": {
       ".read": true,
       ".write": true
@@ -40,6 +45,16 @@
           ".indexOn": ["timestamp"]
         }
       }
+    },
+    "storeRiderChatMeta": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["lastTimestamp", "unreadForRider", "isDone", "status"]
+    },
+    "riderLiveLocations": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["updatedAt"]
     },
     "teamChat": {
       ".read": true,

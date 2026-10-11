@@ -160,7 +160,16 @@ export function bootApp() {
         const savedCustomerEmail = localStorage.getItem('lokalex_customer_email') || localStorage.getItem('customerPhone');
         const savedCustomerAvatar = localStorage.getItem('lokalex_customer_avatar') || localStorage.getItem('customerAvatarUrl');
 
-        if (appState.telegramId && (!activeUserRole || activeUserRole === 'rider')) {
+        const savedRiderId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+        const savedRiderName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
+
+        if ((savedRiderId || savedRiderName) && (!activeUserRole || activeUserRole === 'rider')) {
+            if (!appState.telegramId && savedRiderId) appState.telegramId = savedRiderId;
+            if (!appState.riderName && savedRiderName) appState.riderName = savedRiderName;
+            localStorage.setItem('telegramId', appState.telegramId || savedRiderId);
+            localStorage.setItem('riderName', appState.riderName || savedRiderName);
+            localStorage.setItem('lokalex_active_role', 'rider');
+
             history.replaceState({ view: 'view-home' }, '', '#view-home');
             router.renderViewUI('view-home');
             startBackgroundAudioPulse();

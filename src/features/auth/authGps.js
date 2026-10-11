@@ -64,43 +64,56 @@ export function calibrateGPS(onProgress) {
     });
 }
 
+export function updateRiderLiveLocation(lat, lng, accuracy = 0) {
+    const telegramId = appState.telegramId || localStorage.getItem('telegramId');
+    if (!telegramId || !db) return;
+    const now = Date.now();
+    if (now - lastRosterGpsPushTime < 45000) return;
+    lastRosterGpsPushTime = now;
+
+    // Writes strictly to riderLiveLocations, completely isolated from the roster node
+    db.ref(`riderLiveLocations/${telegramId}`).set({
+        lat,
+        lng,
+        accuracy: Math.round(accuracy || 0),
+        riderName: appState.riderName || localStorage.getItem('riderName') || '',
+        updatedAt: now
+    }).catch(() => {});
+}
+
+export function clearRiderLiveLocation() {
+    const telegramId = appState.telegramId || localStorage.getItem('telegramId');
+    if (!telegramId || !db) return;
+    db.ref(`riderLiveLocations/${telegramId}`).remove().catch(() => {});
+}
+
 export function startBackgroundRosterGpsTracker() {
-    if (!navigator.geolocation || !appState.telegramId) return;
+    if (backgroundGpsWatchId !== null) return;
+    if (!navigator.geolocation) return;
 
-    if (backgroundGpsWatchId !== null) {
-        navigator.geolocation.clearWatch(backgroundGpsWatchId);
-        backgroundGpsWatchId = null;
-    }
+    const telegramId = appState.telegramId || localStorage.getItem('telegramId');
+    if (!telegramId) return;
 
-
-    backgroundGpsWatchId = navigator.geolocation.watchPosition(
-        (pos) => {
-            const now = Date.now();
-            appState.lat = pos.coords.latitude;
-            appState.lon = pos.coords.longitude;
-            appState.gpsAccuracy = pos.coords.accuracy;
-
-            if (now - lastRosterGpsPushTime >= GPS_ROSTER_PULSE_MS && db && appState.telegramId) {
-                lastRosterGpsPushTime = now;
-                db.ref('roster/' + appState.telegramId).update({
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude,
-                    accuracy: pos.coords.accuracy,
-                    locationUpdatedAt: now,
-                    lastActiveTimestamp: now
-                }).catch(() => {});
-            }
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
-    );
+    try {
+        backgroundGpsWatchId = navigator.geolocation.watchPosition(
+            (position) => {
+                const { latitude, longitude, accuracy } = position.coords;
+                if (latitude && longitude) {
+                    updateRiderLiveLocation(latitude, longitude, accuracy);
+                }
+            },
+            () => {},
+            { enableHighAccuracy: false, timeout: 15000, maximumAge: 30000 }
+        );
+    } catch (_) {}
 }
 
 export function stopBackgroundRosterGpsTracker() {
-    if (backgroundGpsWatchId !== null) {
+    if (backgroundGpsWatchId !== null && navigator.geolocation) {
         navigator.geolocation.clearWatch(backgroundGpsWatchId);
         backgroundGpsWatchId = null;
     }
+    clearRiderLiveLocation();
 }
 
 export function getDeviceLocation() {

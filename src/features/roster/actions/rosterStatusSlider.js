@@ -34,13 +34,7 @@ import { checkRiderTimeInAllowed } from '../rosterStatusLimits.js';
 import { updateRosterStatus, clockOutRider } from '../rosterStatusCore.js';
 import { dismissQueueAlarm } from './rosterAlarms.js';
 
-function getDeviceLocationQuick() {
-    return {
-        lat: appState.lat || null,
-        lon: appState.lon || null,
-        accuracy: appState.gpsAccuracy || null
-    };
-}
+
 
 /**
  * Evaluates whether the rider has fulfilled their required shift duration.
@@ -279,8 +273,6 @@ export async function triggerStatusWithSlide(targetStatus) {
             }
         }
 
-        const locationData = getDeviceLocationQuick();
-
         const availableTimestamp = Date.now();
         const availableTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -302,8 +294,31 @@ export async function triggerStatusWithSlide(targetStatus) {
                 forcedBy: null,
                 isForcedCater: false,
                 availableTimestamp: availableTimestamp,
-                availableTimeStr: availableTimeStr,
-                availableLocation: locationData
+                availableTimeStr: availableTimeStr
+            }).catch(() => {});
+            db.ref(`roster/${myId}/availableLocation`).remove().catch(() => {});
+
+            // Auto-release any lingering customer chat threads that were locked to this rider in catering
+            db.ref('customerChatMeta').once('value', (snap) => {
+                const chats = snap.val() || {};
+                Object.entries(chats).forEach(([cId, meta]) => {
+                    const rId = (meta.cateredByRiderId || '').toString();
+                    const rName = (meta.cateredByRiderName || meta.cateredBy || '').trim().toLowerCase();
+                    if ((rId === myId || rName === myName.toLowerCase()) && meta.folder === 'catering') {
+                        const releasePayload = {
+                            folder: 'done',
+                            status: 'completed',
+                            cateredByRiderId: null,
+                            cateredByRiderName: null,
+                            cateredBy: null,
+                            forcedBy: null,
+                            isForcedCater: false,
+                            lastUpdated: Date.now()
+                        };
+                        db.ref(`customerChats/${cId}/metadata`).update(releasePayload).catch(() => {});
+                        db.ref(`customerChatMeta/${cId}`).update(releasePayload).catch(() => {});
+                    }
+                });
             }).catch(() => {});
         }
         if (myRecord) {
@@ -312,7 +327,7 @@ export async function triggerStatusWithSlide(targetStatus) {
             myRecord.isForcedCater = false;
             myRecord.availableTimestamp = availableTimestamp;
             myRecord.availableTimeStr = availableTimeStr;
-            myRecord.availableLocation = locationData;
+            myRecord.availableLocation = null;
         }
 
         await updateRosterStatus('Available', myId, myName, lockedQueueTime);

@@ -40,13 +40,7 @@ import { updateRosterUI } from '../rosterUI.js';
 import { updateRosterStatusData } from '../rosterStatusCore.js';
 import { getTopQueueTime } from './rosterAlarms.js';
 
-function getDeviceLocationQuick() {
-    return {
-        lat: appState.lat || null,
-        lon: appState.lon || null,
-        accuracy: appState.gpsAccuracy || null
-    };
-}
+
 
 /**
  * Deeply resets a cart slot across all memory arrays and unlocks barrier states.
@@ -237,20 +231,47 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
             completedTime: endTimeStr
         }).catch(() => {});
 
-        db.ref('customerChats')
-            .orderByChild('metadata/customerName')
-            .equalTo(custNameToComplete)
-            .once('value', (snapshot) => {
+        if (db) {
+            const markChatCompleted = (targetChatId) => {
+                if (!targetChatId) return;
+                const doneUpdate = {
+                    folder: 'done',
+                    status: 'completed',
+                    completedAt: Date.now(),
+                    completedByRiderId: resolvedTargetId,
+                    completedByRiderName: resolvedTargetName,
+                    cateredByRiderId: null,
+                    cateredByRiderName: null,
+                    cateredBy: null,
+                    forcedBy: null,
+                    isForcedCater: false,
+                    lastUpdated: Date.now()
+                };
+                db.ref(`customerChats/${targetChatId}/metadata`).update(doneUpdate).catch(() => {});
+                db.ref(`customerChatMeta/${targetChatId}`).update(doneUpdate).catch(() => {});
+            };
+
+            if (cleanCustKey) {
+                markChatCompleted(cleanCustKey);
+            }
+
+            db.ref('customerChatMeta').once('value', (snapshot) => {
                 const chats = snapshot.val() || {};
+                const targetLower = (custNameToComplete || "").trim().toLowerCase();
                 Object.keys(chats).forEach(custId => {
-                    db.ref(`customerChats/${custId}/metadata`).update({
-                        folder: 'done',
-                        status: 'completed',
-                        completedAt: Date.now(),
-                        lastUpdated: Date.now()
-                    });
+                    const meta = chats[custId]?.metadata || chats[custId] || {};
+                    const chatCustName = (meta.customerName || meta.name || "").trim().toLowerCase();
+                    const isRiderMatch = (meta.cateredByRiderId && meta.cateredByRiderId.toString() === resolvedTargetId.toString()) ||
+                                         (meta.cateredByRiderName && meta.cateredByRiderName.trim().toLowerCase() === resolvedTargetName.trim().toLowerCase());
+
+                    if (chatCustName && (chatCustName === targetLower || isCustomerMatch(chatCustName, targetLower))) {
+                        markChatCompleted(custId);
+                    } else if (isRiderMatch && (cleanCustKey && custId.includes(cleanCustKey))) {
+                        markChatCompleted(custId);
+                    }
                 });
-            });
+            }).catch(() => {});
+        }
 
         if (resolvedTargetId && cleanCustKey) {
             db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
@@ -315,14 +336,7 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         const topQueueTime = getTopQueueTime();
         const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString();
 
-        let locationData = null;
         if (resolvedTargetId === myId) {
-            locationData = await getDeviceLocationQuick();
-            if (locationData && locationData.lat) {
-                appState.lat = locationData.lat;
-                appState.lon = locationData.lon;
-                appState.gpsAccuracy = locationData.accuracy;
-            }
             endLiveGpsSession();
         }
 
@@ -332,6 +346,7 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         if (db && resolvedTargetId) {
             db.ref(`roster/${resolvedTargetId}/forcedCaters`).remove().catch(() => {});
             db.ref(`roster/${resolvedTargetId}/customerFees`).remove().catch(() => {});
+            db.ref(`roster/${resolvedTargetId}/availableLocation`).remove().catch(() => {});
             const updatePayload = {
                 forcedBy: null,
                 isForcedCater: false,
@@ -339,9 +354,6 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
                 availableTimeStr: availableTimeStr,
                 queueTime: availableTimestamp
             };
-            if (locationData) {
-                updatePayload.availableLocation = locationData;
-            }
             db.ref(`roster/${resolvedTargetId}`).update(updatePayload).catch(() => {});
         }
         if (targetRecord) {
@@ -352,9 +364,7 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
             targetRecord.availableTimestamp = availableTimestamp;
             targetRecord.availableTimeStr = availableTimeStr;
             targetRecord.queueTime = availableTimestamp;
-            if (locationData) {
-                targetRecord.availableLocation = locationData;
-            }
+            targetRecord.availableLocation = null;
         }
 
         await updateRosterStatusData(

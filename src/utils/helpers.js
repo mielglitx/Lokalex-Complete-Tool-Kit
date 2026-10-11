@@ -141,53 +141,73 @@ export function getDevicePlatform() {
 // -------------------------------------------------------------
 let systemThemeMediaQuery = null;
 
-export function initTheme() {
-    const preference = localStorage.getItem('lokalex_theme_preference') || 'system';
-    applyTheme(preference, false);
-
-    if (!systemThemeMediaQuery) {
-        systemThemeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-        systemThemeMediaQuery.addEventListener('change', () => {
-            const currentPref = localStorage.getItem('lokalex_theme_preference') || 'system';
-            if (currentPref === 'system') {
-                applyTheme('system', false);
-            }
-        });
-    }
+export function toggleAppTheme() {
+    const isDark = document.documentElement.classList.contains('dark');
+    const newTheme = isDark ? 'light' : 'dark';
+    setTheme(newTheme);
 }
 
-export function setTheme(preference = 'system') {
+export function initTheme() {
+    try {
+        const v3Flag = localStorage.getItem('lokalex_light_theme_enforced_v3');
+        if (!v3Flag) {
+            localStorage.setItem('lokalex_theme', 'light');
+            localStorage.setItem('lokalex_theme_preference', 'light');
+            localStorage.setItem('lokalex_light_theme_enforced_v3', 'true');
+        }
+    } catch(e) {}
+
+    let preference = localStorage.getItem('lokalex_theme_preference') || localStorage.getItem('lokalex_theme') || 'light';
+    if (preference === 'system') preference = 'light';
+    applyTheme(preference, false);
+}
+
+export function setTheme(preference = 'light') {
     localStorage.setItem('lokalex_theme_preference', preference);
+    localStorage.setItem('lokalex_theme', preference);
     appState.themePreference = preference;
     applyTheme(preference, true);
 }
 
-export function applyTheme(preference = 'system', notify = false) {
-    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const isDark = preference === 'dark' || (preference === 'system' && systemPrefersDark);
+export function applyTheme(preference = 'light', notify = false) {
+    if (preference === 'system') preference = 'light';
+    const isDark = preference === 'dark';
+    const root = document.documentElement;
 
     if (isDark) {
-        document.documentElement.classList.add('dark');
-        document.documentElement.classList.remove('light');
+        root.classList.add('dark');
+        root.classList.remove('light');
+        root.style.backgroundColor = '#0C1814';
+        root.style.colorScheme = 'dark';
+        if (document.body) {
+            document.body.style.backgroundColor = '#0C1814';
+            document.body.style.color = '#F8FAFC';
+        }
     } else {
-        document.documentElement.classList.remove('dark');
-        document.documentElement.classList.add('light');
+        root.classList.remove('dark');
+        root.classList.add('light');
+        root.style.backgroundColor = '#EDF7F2';
+        root.style.colorScheme = 'light';
+        if (document.body) {
+            document.body.style.backgroundColor = '#EDF7F2';
+            document.body.style.color = '#0F172A';
+        }
     }
 
     const metaTheme = document.getElementById('meta-theme-color');
     if (metaTheme) {
-        metaTheme.setAttribute('content', isDark ? '#121212' : '#FFFFFF');
+        metaTheme.setAttribute('content', isDark ? '#0C1814' : '#EDF7F2');
     }
 
     updateThemeToggleUI(preference);
 
     if (notify) {
-        const labels = { light: '☀️ Light Mode', dark: '🌙 Dark Mode', system: '💻 System Default' };
+        const labels = { light: '☀️ Light Mode', dark: '🌙 Dark Mode' };
         showToast(`Theme set to ${labels[preference] || preference}`);
     }
 }
 
-export function updateThemeToggleUI(activePref = 'system') {
+export function updateThemeToggleUI(activePref = 'light') {
     const lightBtn = document.getElementById('theme-btn-light');
     const systemBtn = document.getElementById('theme-btn-system');
     const darkBtn = document.getElementById('theme-btn-dark');
@@ -210,5 +230,6 @@ if (typeof window !== 'undefined') {
     window.initTheme = initTheme;
     window.setTheme = setTheme;
     window.applyTheme = applyTheme;
+    window.toggleAppTheme = toggleAppTheme;
     initTheme();
 }

@@ -14,25 +14,30 @@ let isReconnecting = false;
 let lastHeartbeatTime = Date.now();
 let backgroundSyncInProgress = false;
 
-export async function runBackgroundPersistenceSync() {
+const BG_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const LAST_BG_SYNC_KEY = 'lokalex_last_bg_sync_timestamp';
+
+export async function runBackgroundPersistenceSync(force = false) {
     if (!db || backgroundSyncInProgress) return;
+
+    if (!force) {
+        try {
+            const lastSync = parseInt(localStorage.getItem(LAST_BG_SYNC_KEY) || '0', 10);
+            if (Date.now() - lastSync < BG_SYNC_INTERVAL_MS) {
+                return;
+            }
+        } catch (_) {}
+    }
+
     backgroundSyncInProgress = true;
 
     try {
-        const mediaUrlsToPrefetch = [];
-
-        // 1. Stores Collection
+        // 1. Stores Collection (Lightweight metadata)
         const storesSnap = await db.ref('stores').once('value');
         const storesData = storesSnap.val();
         if (storesData && Object.keys(storesData).length > 0) {
             await storageEngine.idbSet('stores', 'all_stores', storesData);
             if (customerStorefront.setStoresCache) customerStorefront.setStoresCache(storesData);
-            
-            Object.values(storesData).forEach(s => {
-                if (s.photoUrl) mediaUrlsToPrefetch.push(s.photoUrl);
-                if (s.logoUrl) mediaUrlsToPrefetch.push(s.logoUrl);
-                if (s.imageUrl) mediaUrlsToPrefetch.push(s.imageUrl);
-            });
         }
 
         // 2. Store Menus
@@ -41,41 +46,26 @@ export async function runBackgroundPersistenceSync() {
         if (menusData && Object.keys(menusData).length > 0) {
             await storageEngine.idbSet('menus', 'all_menus', menusData);
             if (customerStorefront.setMenusCache) customerStorefront.setMenusCache(menusData);
-
-            Object.values(menusData).forEach(storeMenu => {
-                if (storeMenu && typeof storeMenu === 'object') {
-                    Object.values(storeMenu).forEach(item => {
-                        if (item && item.imageUrl) mediaUrlsToPrefetch.push(item.imageUrl);
-                    });
-                }
-            });
         }
 
         // 3. Customer Directory & Profiles
-        const custSnap = await db.ref('customers').limitToLast(300).once('value');
+        const custSnap = await db.ref('customers').limitToLast(150).once('value');
         const custData = custSnap.val();
         if (custData && Object.keys(custData).length > 0) {
             await storageEngine.idbSet('customers', 'all_customers', custData);
-            Object.values(custData).forEach(c => {
-                if (c.avatarUrl) mediaUrlsToPrefetch.push(c.avatarUrl);
-                if (c.photoUrl) mediaUrlsToPrefetch.push(c.photoUrl);
-            });
         }
 
-        // 4. Active Chat Threads & Recent History
-        const chatsSnap = await db.ref('customerChats').limitToLast(60).once('value');
+        // 4. Lightweight Chat Metadata only (no full chat message history!)
+        const chatsSnap = await db.ref('customerChatMeta').limitToLast(40).once('value');
         const chatsData = chatsSnap.val();
         if (chatsData && Object.keys(chatsData).length > 0) {
-            await storageEngine.idbSet('chats', 'recent_chats', chatsData);
-            Object.values(chatsData).forEach(thread => {
-                if (thread.metadata?.avatarUrl) mediaUrlsToPrefetch.push(thread.metadata.avatarUrl);
-            });
+            await storageEngine.idbSet('chats', 'recent_chat_meta', chatsData);
         }
 
-        // 5. Binary Media Prefetch into CacheStorage
-        if (mediaUrlsToPrefetch.length > 0) {
-            storageEngine.prefetchMediaBatch(mediaUrlsToPrefetch);
-        }
+        // Images are loaded on demand when rendered on screen (not prefetched in background)
+        try {
+            localStorage.setItem(LAST_BG_SYNC_KEY, Date.now().toString());
+        } catch (_) {}
     } catch (err) {
         console.warn('Background sync note:', err.message || err);
     } finally {
@@ -90,63 +80,23 @@ export function forceReconnectFirebase() {
 
     if (db) {
         try {
-            db.goOffline();
-            setTimeout(() => {
-                db.goOnline();
-                isReconnecting = false;
-                updateNetworkStatus(true);
+            // Reconnect Firebase without tearing down existing client socket prematurely
+            db.goOnline();
+            isReconnecting = false;
+            updateNetworkStatus(true);
 
-                db.ref('roster').once('value', (snapshot) => {
-                    const val = snapshot.val();
-                    if (val) {
-                        globalState.rosterMembers = Object.entries(val).map(([key, item]) => ({
-                            ...item,
-                            telegramId: (item.telegramId || item.id || key).toString().trim(),
-                            id: (item.telegramId || item.id || key).toString().trim()
-                        }));
-                    } else {
-                        globalState.rosterMembers = [];
-                    }
+            // Re-verify essential roster & chat states once network recovers
+            if (chat && chat.listenToAllCustomerChatsForRider) {
+                chat.listenToAllCustomerChatsForRider();
+            }
 
-                    if (roster && roster.saveRosterCache) roster.saveRosterCache();
-                    if (roster && roster.updateRosterUI) roster.updateRosterUI();
-                    if (roster && roster.loadGlobalCateredList) roster.loadGlobalCateredList();
-                });
+            if (chat && chat.listenToFirebaseChat) {
+                chat.listenToFirebaseChat();
+            }
 
-                if (chat && chat.listenToAllCustomerChatsForRider) {
-                    chat.listenToAllCustomerChatsForRider();
-                }
-
-                if (chat && chat.listenToPublicFbChannels) {
-                    chat.listenToPublicFbChannels();
-                }
-
-                if (chat && chat.listenToFirebaseChat) {
-                    chat.listenToFirebaseChat();
-                }
-
-                if (directory && directory.silentSyncDirectory) {
-                    directory.silentSyncDirectory();
-                }
-
-                if (commission && commission.fetchCommissionSettings) {
-                    commission.fetchCommissionSettings();
-                }
-
-                if (customerStorefront && customerStorefront.initCustomerStorefront) {
-                    customerStorefront.initCustomerStorefront();
-                }
-
-                if (appState.telegramId && authFeature.startBackgroundRosterGpsTracker) {
-                    authFeature.startBackgroundRosterGpsTracker();
-                }
-
-                if (roster && roster.checkAndTriggerAutoEndShift) {
-                    roster.checkAndTriggerAutoEndShift();
-                }
-
-                runBackgroundPersistenceSync();
-            }, 150);
+            if (roster && roster.checkAndTriggerAutoEndShift) {
+                roster.checkAndTriggerAutoEndShift();
+            }
         } catch (e) {
             isReconnecting = false;
             updateNetworkStatus(false);
@@ -158,7 +108,9 @@ export function forceReconnectFirebase() {
 }
 
 export function initSyncWatchdog() {
+    // Physical network online/offline events
     window.addEventListener('online', () => {
+        updateNetworkStatus('connecting');
         forceReconnectFirebase();
     });
 
@@ -166,11 +118,15 @@ export function initSyncWatchdog() {
         updateNetworkStatus(false);
     });
 
+    // Gentle visibility handler: Do NOT drop & reconnect Firebase or trigger background sync loops
     function handleAppVisibilityChange() {
         if (document.visibilityState === 'visible') {
-            forceReconnectFirebase();
-        } else {
-            updateNetworkStatus('connecting');
+            updateNetworkStatus(navigator.onLine);
+            if (db && navigator.onLine) {
+                try {
+                    db.goOnline();
+                } catch (_) {}
+            }
         }
     }
 
@@ -179,14 +135,18 @@ export function initSyncWatchdog() {
     window.addEventListener('focus', handleAppVisibilityChange);
     window.addEventListener('resume', handleAppVisibilityChange);
 
-    // Timer drift watchdog
+    // Deep sleep drift watchdog: Only act if device was suspended for over 2 minutes
     setInterval(() => {
         const now = Date.now();
         const drift = now - lastHeartbeatTime;
         lastHeartbeatTime = now;
 
-        if (drift > 10000 && document.visibilityState === 'visible') {
-            forceReconnectFirebase();
+        if (drift > 120000 && document.visibilityState === 'visible' && navigator.onLine) {
+            if (db) {
+                try {
+                    db.goOnline();
+                } catch (_) {}
+            }
         }
-    }, 4000);
+    }, 10000);
 }

@@ -172,17 +172,17 @@ export function fetchAndRenderMapCalculations() {
             }
 
             return `
-            <div class="bg-black/30 border border-gray-800/80 p-3.5 rounded-2xl flex flex-col gap-1.5 text-xs shadow-md mb-2">
+            <div class="bg-black/30 border border-gray-200 dark:border-gray-800/80 p-3.5 rounded-2xl flex flex-col gap-1.5 text-xs shadow-md mb-2">
                 <div class="flex justify-between items-center">
-                    <span class="font-bold text-sm text-white flex items-center gap-2">
-                        <i class="fa-solid fa-user text-blue-400 text-xs"></i> ${escapeHtml(custName)}
+                    <span class="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-user text-blue-500 dark:text-blue-400 text-xs"></i> ${escapeHtml(custName)}
                     </span>
                     <button onclick="event.stopPropagation(); window.deleteMapCalculation && window.deleteMapCalculation('${itemKey}', '${escapeHtml(custName)}')" class="text-red-400 hover:text-red-300 p-1 text-xs transition active:scale-90" title="Delete Entry">
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
                 </div>
-                <div class="text-[11px] text-gray-400 font-mono">
-                    Created by: <span class="text-gray-300 font-medium">${escapeHtml(creator)}</span> • ${formattedDate}
+                <div class="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
+                    Created by: <span class="text-gray-700 dark:text-gray-300 font-medium">${escapeHtml(creator)}</span> • ${formattedDate}
                 </div>
                 ${statusAndActions}
             </div>`;

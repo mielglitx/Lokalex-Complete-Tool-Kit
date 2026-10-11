@@ -31,6 +31,7 @@ import {
     parseTimeToMinutes, 
     getMergedDeduplicatedCommissionList, 
     isSameDateStr,
+    normalizeToDateStr,
     isCustomerMatch
 } from '../rosterUtils.js';
 import { getForcedCaterBadgeHtml } from './rosterBadge.js';
@@ -66,7 +67,7 @@ export function loadGlobalCateredList(forceFresh = false) {
 
     const todayHistory = mergedList.filter(item => {
         const itemDate = item.date || item.completedDate || item.timestamp || item.createdAt;
-        return itemDate && isSameDateStr(itemDate, todayStr);
+        return itemDate && (isSameDateStr(itemDate, todayStr) || (normalizeToDateStr(itemDate) === normalizeToDateStr(todayStr)));
     });
 
     for (let i = 0; i < todayHistory.length; i++) {
@@ -285,6 +286,7 @@ if (typeof window !== 'undefined') {
 
     window.addEventListener('receiptsUpdated', () => requestCateredFeedRefresh(true));
     window.addEventListener('cateredUpdated', () => requestCateredFeedRefresh(true));
+    window.addEventListener('rosterUpdated', () => requestCateredFeedRefresh(true));
 }
 
 // REMARKS: ROSTER_FEEDS_ALL_RECORDS_PRESERVED_V6_COMPLETE

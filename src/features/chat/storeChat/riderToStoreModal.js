@@ -196,6 +196,9 @@ export function openRiderToStoreChatModal(orderId, storeId, storeName) {
         db.ref(`storeRiderChats/${storeChatState.activeRiderStoreChatOrderId}_${storeChatState.activeRiderStoreChatStoreId}`).update({
             unreadForRider: false
         }).catch(() => {});
+        db.ref(`storeRiderChatMeta/${storeChatState.activeRiderStoreChatOrderId}_${storeChatState.activeRiderStoreChatStoreId}`).update({
+            unreadForRider: false
+        }).catch(() => {});
     }
 
     let modal = document.getElementById('rider-store-chat-window-modal');
@@ -451,13 +454,18 @@ export async function postRiderToStoreMessage(text) {
 
     try {
         await db.ref(`storeRiderChats/${orderId}_${storeId}/messages`).push(sanitizeForFirebase(payload));
-        await db.ref(`storeRiderChats/${orderId}_${storeId}`).update(sanitizeForFirebase({
+        const metaPayload = sanitizeForFirebase({
+            orderId,
+            storeId,
             lastMessage: text.trim(),
             lastTimestamp: Date.now(),
             riderName,
             storeName: storeChatState.activeRiderStoreChatStoreName,
-            unreadForStore: true
-        }));
+            unreadForStore: true,
+            unreadForRider: false
+        });
+        await db.ref(`storeRiderChats/${orderId}_${storeId}`).update(metaPayload);
+        db.ref(`storeRiderChatMeta/${orderId}_${storeId}`).update(metaPayload).catch(() => {});
         cancelRiderStoreReply();
     } catch(e) {
         showToast("❌ Failed to send message to store.");

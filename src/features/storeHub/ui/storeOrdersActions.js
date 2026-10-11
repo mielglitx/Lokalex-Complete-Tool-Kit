@@ -79,11 +79,16 @@ export async function acceptStoreOrderWithPrepTime(orderId, prepMinutes) {
             timestamp: now
         })).catch(() => {});
 
-        await db.ref(`storeRiderChats/${cleanOrderId}_${storeId}`).update(sanitizeForFirebase({
+        const acceptMeta = sanitizeForFirebase({
+            orderId: cleanOrderId,
+            storeId,
             lastMessage: `⏳ Preparing (~${prepMinutes}m)`,
             lastTimestamp: now,
-            unreadForRider: true
-        })).catch(() => {});
+            unreadForRider: true,
+            unreadForStore: false
+        });
+        await db.ref(`storeRiderChats/${cleanOrderId}_${storeId}`).update(acceptMeta).catch(() => {});
+        db.ref(`storeRiderChatMeta/${cleanOrderId}_${storeId}`).update(acceptMeta).catch(() => {});
 
         showToast(`🍳 Order accepted! Prep timer set to ${prepMinutes} mins.`);
         showSideNotification("ORDER ACCEPTED", `Kitchen set to ${prepMinutes}m prep for #${cleanOrderId}`, "fa-kitchen-set", "text-blue-400", "border-blue-500");
@@ -133,11 +138,16 @@ export async function markStoreOrderReadyForPickup(orderId) {
             timestamp: now
         })).catch(() => {});
 
-        await db.ref(`storeRiderChats/${cleanOrderId}_${storeId}`).update(sanitizeForFirebase({
+        const readyMeta = sanitizeForFirebase({
+            orderId: cleanOrderId,
+            storeId,
             lastMessage: `✅ READY FOR PICKUP!`,
             lastTimestamp: now,
-            unreadForRider: true
-        })).catch(() => {});
+            unreadForRider: true,
+            unreadForStore: false
+        });
+        await db.ref(`storeRiderChats/${cleanOrderId}_${storeId}`).update(readyMeta).catch(() => {});
+        db.ref(`storeRiderChatMeta/${cleanOrderId}_${storeId}`).update(readyMeta).catch(() => {});
 
         showToast("✅ Order marked Ready for Pickup! Rider notified.");
         showSideNotification("READY FOR PICKUP", `Order #${cleanOrderId} is ready!`, "fa-check-double", "text-emerald-400", "border-emerald-500");

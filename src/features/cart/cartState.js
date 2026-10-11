@@ -2,20 +2,63 @@
 import { appState, globalState, multiCarts, activeCartSlot, setActiveCartSlot } from '../../store/state.js';
 
 export function getMyCateringCustomers() {
-    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
     const rosterMembers = globalState.rosterMembers || [];
 
     const myRecord = rosterMembers.find(m => 
-        (myId && m.telegramId && m.telegramId.toString().trim() === myId) ||
-        (myName && m.riderName && m.riderName.toString().trim().toLowerCase() === myName)
+        (myId && (m.telegramId || m.id) && (m.telegramId || m.id).toString().trim() === myId) ||
+        (myName && (m.riderName || m.name) && (m.riderName || m.name).toString().trim().toLowerCase() === myName)
     );
 
-    if (!myRecord || !myRecord.customerName || myRecord.status !== 'Catering') {
+    if (!myRecord || myRecord.status !== 'Catering') {
         return [];
     }
 
-    return myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+    const list = [];
+    const addValidCustomer = (name) => {
+        const trimmed = (name || '').trim();
+        const lc = trimmed.toLowerCase();
+        if (trimmed && lc !== 'customer' && lc !== 'customer name' && lc !== 'undefined' && lc !== 'null') {
+            if (!list.includes(trimmed)) list.push(trimmed);
+        }
+    };
+
+    if (myRecord.customerName) {
+        myRecord.customerName.split(/\s*,\s*/).forEach(addValidCustomer);
+    }
+
+    if (myRecord.forcedCaters && typeof myRecord.forcedCaters === 'object') {
+        Object.entries(myRecord.forcedCaters).forEach(([fKey, fVal]) => {
+            const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
+            addValidCustomer(fName);
+        });
+    }
+
+    return list;
+}
+
+export function getMaxCartSlots() {
+    const myCustomers = getMyCateringCustomers();
+    let maxSlots = Math.max(1, myCustomers.length);
+
+    // If any higher cart has items in it or receipt summary, keep it visible
+    for (const slotKey in multiCarts) {
+        const num = Number(slotKey);
+        if (!isNaN(num) && num > maxSlots) {
+            const cart = multiCarts[slotKey];
+            if (cart && ((cart.items && cart.items.length > 0) || (cart.receiptSummary && Object.keys(cart.receiptSummary).length > 0))) {
+                maxSlots = num;
+            }
+        }
+    }
+
+    // Never clip the currently active cart slot while user is viewing it
+    if (activeCartSlot > maxSlots) {
+        maxSlots = activeCartSlot;
+    }
+
+    return maxSlots;
 }
 
 export function getCurrentCart() {
@@ -47,7 +90,7 @@ export function saveCartState() {
         }
         localStorage.setItem('lokalex_multi_carts_v2', JSON.stringify(serializable));
         localStorage.setItem('lokalex_active_cart_slot', activeCartSlot.toString());
-        localStorage.setItem('lokalex_cart_locked_state', JSON.stringify(globalState.cartLocked || [false, false, false, false]));
+        localStorage.setItem('lokalex_cart_locked_state', JSON.stringify(globalState.cartLocked || []));
     } catch(e) {}
 }
 
@@ -87,7 +130,7 @@ export function loadCartState() {
         if (savedLocks) {
             globalState.cartLocked = JSON.parse(savedLocks);
         } else if (!globalState.cartLocked) {
-            globalState.cartLocked = [false, false, false, false];
+            globalState.cartLocked = [];
         }
     } catch(e) {}
 }

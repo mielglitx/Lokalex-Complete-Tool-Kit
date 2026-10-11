@@ -68,7 +68,9 @@ export function listenToGlobalStoreChats() {
     }
 
     if (!storeChatState.globalStoreChatsListener) {
-        storeChatState.globalStoreChatsListener = db.ref('storeRiderChats');
+        // Listen strictly to the lightweight metadata index with limitToLast(30)
+        // Avoids downloading full messages trees across all stores in the database
+        storeChatState.globalStoreChatsListener = db.ref('storeRiderChatMeta').limitToLast(30);
         storeChatState.globalStoreChatsListener.on('value', (snapshot) => {
             storeChatState.cachedStoreChatsData = snapshot.val() || {};
             
@@ -103,12 +105,15 @@ export async function markStoreChatDone(orderId, storeId) {
     if (!cleanOrderId || !cleanStoreId || !db) return;
 
     try {
-        await db.ref(`storeRiderChats/${cleanOrderId}_${cleanStoreId}`).update({
+        const donePayload = {
             status: 'done',
             isDone: true,
             unreadForRider: false,
             doneAt: Date.now()
-        });
+        };
+
+        await db.ref(`storeRiderChats/${cleanOrderId}_${cleanStoreId}`).update(donePayload);
+        db.ref(`storeRiderChatMeta/${cleanOrderId}_${cleanStoreId}`).update(donePayload).catch(() => {});
 
         await db.ref(`storeOrders/${cleanStoreId}/${cleanOrderId}`).update({
             status: 'picked_up',

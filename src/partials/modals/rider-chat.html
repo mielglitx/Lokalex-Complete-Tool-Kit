@@ -1,5 +1,5 @@
 <!-- src/partials/modals/rider-chat.html -->
-<div id="rider-chat-modal" class="hidden fixed inset-0 z-[9990] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+<div id="rider-chat-modal" class="hidden fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
     <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-md h-[85vh] max-h-[640px] rounded-3xl shadow-2xl flex flex-col relative overflow-hidden">
         
         <!-- HEADER WITH INFO BUTTON -->
@@ -54,11 +54,11 @@
             </div>
         </div>
 
-        <!-- ACTION BUTTONS ROW WITH STORE CHATS LAUNCHER -->
+        <!-- ACTION BUTTONS ROW -->
         <div id="rider-chat-action-toolbar" class="p-2.5 bg-gray-100 dark:bg-darkBg/60 border-b border-gray-200 dark:border-gray-800/80 flex items-center gap-2 overflow-x-auto shrink-0 no-scrollbar">
-            <!-- STORE HUBS CONTACT BUTTON -->
-            <button id="rider-chat-store-hub-btn" onclick="window.openRiderStoreChatPicker && window.openRiderStoreChatPicker()" class="min-w-[85px] bg-orange-600 hover:bg-orange-500 text-white border border-orange-500/40 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm">
-                <i class="fa-solid fa-store"></i> Store Hub
+            <!-- CATER BUTTON -->
+            <button id="rider-chat-cater-btn" onclick="window.caterCurrentChatCustomer && window.caterCurrentChatCustomer()" class="flex-1 min-w-[75px] bg-teal-600 hover:bg-teal-500 text-white border border-teal-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm" title="Cater this customer">
+                <i class="fa-solid fa-motorcycle"></i> Cater
             </button>
 
             <button onclick="window.markThreadUndone && window.markThreadUndone()" class="flex-1 min-w-[80px] bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm">
@@ -77,19 +77,15 @@
 
         <!-- SAVED QUICK REPLIES BAR -->
         <div id="quick-replies-drawer" class="hidden bg-gray-50 dark:bg-darkBg/95 border-b border-gray-200 dark:border-gray-800 p-2.5 flex items-center gap-2 overflow-x-auto shrink-0 no-scrollbar">
-            <span class="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase shrink-0"><i class="fa-solid fa-bolt"></i> Saved:</span>
-            <button onclick="window.sendQuickReply && window.sendQuickReply('Papunta na po ako sa location niyo 🛵')" class="bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition active:scale-95">
-                🛵 Papunta na po ako
+            <span class="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase shrink-0 flex items-center gap-1">
+                <i class="fa-solid fa-bolt"></i> Quick Replies:
+            </span>
+            <button type="button" onclick="window.promptAddQuickReply && window.promptAddQuickReply()" class="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition active:scale-95 flex items-center gap-1 shrink-0 shadow-xs" title="Create a new quick reply for everyone">
+                <i class="fa-solid fa-plus text-[10px]"></i> Add
             </button>
-            <button onclick="window.sendQuickReply && window.sendQuickReply('Nandito na po ako sa labas/location 📍')" class="bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition active:scale-95">
-                📍 Nandito na po sa labas
-            </button>
-            <button onclick="window.sendQuickReply && window.sendQuickReply('Nabili/Nakuha na po ang order ninyo 🛒')" class="bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition active:scale-95">
-                🛒 Nabili na po order
-            </button>
-            <button onclick="window.sendQuickReply && window.sendQuickReply('Paki-handa po ang eksaktong pambayad 💵')" class="bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition active:scale-95">
-                💵 Paki-handa ang pambayad
-            </button>
+            <div id="quick-replies-chips-container" class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+                <span class="text-[10px] text-gray-500 dark:text-gray-400 italic shrink-0 py-1">Loading quick replies...</span>
+            </div>
         </div>
 
         <!-- CHAT MESSAGES BODY -->
@@ -99,8 +95,8 @@
 
         <!-- FOOTER INPUT BAR -->
         <div class="p-3 bg-white dark:bg-darkBg/90 border-t border-gray-200 dark:border-gray-800 flex items-center gap-2 shrink-0">
-            <button type="button" id="chat-hd-toggle-btn" onclick="window.toggleHdMode && window.toggleHdMode()" class="p-2 bg-inputBg text-gray-500 dark:text-gray-400 rounded-xl border border-gray-300 dark:border-gray-700 hover:text-gray-900 dark:hover:text-white transition active:scale-95 text-xs font-bold" title="Toggle HD Mode">
-                <i id="chat-hd-icon" class="fa-solid fa-compress"></i>
+            <button type="button" id="chat-hd-toggle-btn" onclick="window.toggleHdMode && window.toggleHdMode()" class="px-2.5 py-1.5 bg-inputBg text-gray-700 dark:text-gray-300 rounded-xl border border-gray-300 dark:border-gray-700 hover:text-gray-900 dark:hover:text-white transition active:scale-95 text-xs font-black flex items-center justify-center shrink-0 min-w-[36px]" title="Toggle HD Mode">
+                <span id="chat-hd-label" class="text-[11px] font-black tracking-tight text-gray-700 dark:text-gray-300">HD</span>
             </button>
             <button onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="p-2.5 bg-inputBg hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs" title="Saved Quick Replies">
                 <i class="fa-solid fa-bolt"></i>
@@ -126,7 +122,7 @@
 </div>
 
 <!-- PROOF OF DELIVERY (POD) CONFIRMATION MODAL -->
-<div id="pod-capture-modal" class="hidden fixed inset-0 z-[99999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+<div id="pod-capture-modal" class="hidden fixed inset-0 z-[999999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4" style="z-index: 999999 !important;">
     <div class="bg-white dark:bg-cardBg border border-emerald-500/40 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
         <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
             <div class="flex items-center gap-2">
@@ -177,7 +173,7 @@
 </div>
 
 <!-- MODAL: RIDER MULTI-SOURCE LIVE CHAT FILTER -->
-<div id="rider-chat-sources-modal" class="hidden fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+<div id="rider-chat-sources-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" style="z-index: 999999 !important;">
     <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-3.5 animate-in fade-in zoom-in-95 duration-150">
         <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
             <div class="flex items-center gap-2">
@@ -223,6 +219,87 @@
         <div class="pt-2 border-t border-gray-200 dark:border-gray-800">
             <button type="button" onclick="window.closeRiderChatSourcesModal && window.closeRiderChatSourcesModal()" class="w-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-xl text-xs font-black shadow-md transition active:scale-95 cursor-pointer">
                 Done & View Feed
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- CHAT IMAGE ATTACHMENT PICKER MODAL (CAMERA VS SAVED IMAGES) -->
+<div id="chat-image-picker-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-xs rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+        <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-3">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">
+                    <i class="fa-solid fa-camera"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm text-gray-900 dark:text-white">Send Image</h3>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Choose photo source</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeImagePickerModal && window.closeImagePickerModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <button type="button" onclick="window.triggerImageCapture && window.triggerImageCapture('camera')" class="p-4 rounded-2xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800/60 flex flex-col items-center justify-center gap-2 transition active:scale-95 group">
+                <div class="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-lg shadow-sm group-hover:scale-105 transition">
+                    <i class="fa-solid fa-camera"></i>
+                </div>
+                <div class="text-center">
+                    <div class="font-bold text-xs text-blue-900 dark:text-blue-200">Camera</div>
+                    <div class="text-[10px] text-blue-600 dark:text-blue-400 font-medium">Take a photo</div>
+                </div>
+            </button>
+
+            <button type="button" onclick="window.triggerImageCapture && window.triggerImageCapture('gallery')" class="p-4 rounded-2xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800/60 flex flex-col items-center justify-center gap-2 transition active:scale-95 group">
+                <div class="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center text-lg shadow-sm group-hover:scale-105 transition">
+                    <i class="fa-solid fa-images"></i>
+                </div>
+                <div class="text-center">
+                    <div class="font-bold text-xs text-purple-900 dark:text-purple-200">Saved Images</div>
+                    <div class="text-[10px] text-purple-600 dark:text-purple-400 font-medium">From gallery</div>
+                </div>
+            </button>
+        </div>
+
+        <button type="button" onclick="window.closeImagePickerModal && window.closeImagePickerModal()" class="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition active:scale-95">
+            Cancel
+        </button>
+    </div>
+</div>
+
+<!-- ADD SHARED QUICK REPLY MODAL -->
+<div id="add-quick-reply-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+        <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-3">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center text-sm font-bold">
+                    <i class="fa-solid fa-bolt"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm text-gray-900 dark:text-white">New Quick Reply</h3>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Available to all riders in real time</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeAddQuickReplyModal && window.closeAddQuickReplyModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="flex flex-col gap-2">
+            <label for="new-quick-reply-input" class="text-xs font-bold text-gray-700 dark:text-gray-300">Quick Reply Message:</label>
+            <textarea id="new-quick-reply-input" rows="3" placeholder="e.g. Papunta na po ako sa drop-off location 🛵" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-amber-500 resize-none"></textarea>
+            <p class="text-[10px] text-gray-500 dark:text-gray-400 italic">This message will be instantly accessible by you and all other riders.</p>
+        </div>
+
+        <div class="flex gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
+            <button type="button" onclick="window.closeAddQuickReplyModal && window.closeAddQuickReplyModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 py-2.5 rounded-xl text-xs font-bold transition active:scale-95">
+                Cancel
+            </button>
+            <button type="button" onclick="window.submitSaveQuickReply && window.submitSaveQuickReply()" class="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2.5 rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-floppy-disk"></i> Save Reply
             </button>
         </div>
     </div>

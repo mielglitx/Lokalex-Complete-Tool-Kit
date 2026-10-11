@@ -3,7 +3,7 @@ import { globalState, multiCarts, activeCartSlot } from '../../store/state.js';
 import { showToast } from '../../ui/notifications.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
 import { proceedToWizard } from '../wizard.js';
-import { getCurrentCart, saveCartState } from './cartState.js';
+import { getCurrentCart, saveCartState, getMaxCartSlots } from './cartState.js';
 import { renderCartTabs, renderCartItems, resetToCartOne } from './cartUI.js';
 
 let editingNameIndex = null;
@@ -342,7 +342,9 @@ export function clearCartSlot() {
 }
 
 export function clearAllCartSlots() {
-    for (let slot = 1; slot <= 4; slot++) {
+    const maxSlots = getMaxCartSlots();
+    const allKeys = new Set([...Object.keys(multiCarts).map(Number).filter(n => !isNaN(n)), ...Array.from({length: maxSlots}, (_, i) => i + 1)]);
+    allKeys.forEach(slot => {
         multiCarts[slot] = {
             items: [],
             selectedIds: new Set(),
@@ -351,9 +353,9 @@ export function clearAllCartSlots() {
             txId: "",
             receiptSummary: null
         };
-    }
-    globalState.cartLocked = [false, false, false, false];
-    if (globalState.cartTxIds) globalState.cartTxIds = ["", "", "", ""];
+    });
+    globalState.cartLocked = [];
+    if (globalState.cartTxIds) globalState.cartTxIds = [];
     saveCartState();
     resetToCartOne();
 }

@@ -101,9 +101,17 @@ export function getPublicFbChannelName(apiId) {
 }
 
 export function getPublicFbSendEndpoint(apiId) {
-    if (!apiId) return null;
-    const channel = cachedPublicChannelsMap.get(apiId);
-    return channel?.sendEndpoint || null;
+    if (apiId) {
+        const channel = cachedPublicChannelsMap.get(apiId);
+        if (channel?.sendEndpoint) return channel.sendEndpoint;
+    }
+    // Fallback: check any active channel in cache
+    for (const ch of cachedPublicChannelsMap.values()) {
+        if (ch?.sendEndpoint && ch.isActive !== false) {
+            return ch.sendEndpoint;
+        }
+    }
+    return "https://lokalex-messenger-webhook.lokaledeliver.workers.dev/api/send-reply";
 }
 
 /**
@@ -1068,7 +1076,64 @@ export async function syncAllFacebookCustomerNames() {
     }
 }
 
+const inFlightAttachmentResolutions = new Map();
+
+/**
+ * Resolves a missing image attachment URL from Meta Graph API for a Facebook message
+ */
+export async function resolveFacebookMessageAttachment(custId, msgId, rawMid) {
+    if (!custId || !msgId) return null;
+    const cleanMid = rawMid || msgId;
+    const cacheKey = `${custId}_${msgId}`;
+
+    if (inFlightAttachmentResolutions.has(cacheKey)) {
+        return inFlightAttachmentResolutions.get(cacheKey);
+    }
+
+    const promise = (async () => {
+        try {
+            let apiList = Array.from(cachedAdminApisMap.values()).filter(a => a && a.pageAccessToken);
+            if (apiList.length === 0 && db) {
+                const apiSnap = await db.ref('adminSettings/facebookApis').once('value');
+                const apis = apiSnap.val() || {};
+                apiList = Object.values(apis).filter(a => a && a.pageAccessToken);
+            }
+            if (apiList.length === 0) return null;
+
+            for (const api of apiList) {
+                const token = (api.pageAccessToken || '').trim();
+                if (!token) continue;
+
+                const resp = await fetch(`https://graph.facebook.com/v19.0/${cleanMid}?fields=id,message,attachments&access_token=${token}`);
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const att = data?.attachments?.data?.[0];
+                    const imgUrl = att?.image_data?.url || att?.payload?.url;
+                    if (imgUrl) {
+                        if (db) {
+                            db.ref(`customerChats/${custId}/messages/${msgId}`).update({
+                                imageUrl: imgUrl,
+                                type: 'image'
+                            }).catch(() => {});
+                        }
+                        return imgUrl;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn(`[FB Attachment] Resolution failed for mid ${cleanMid}:`, e);
+        } finally {
+            inFlightAttachmentResolutions.delete(cacheKey);
+        }
+        return null;
+    })();
+
+    inFlightAttachmentResolutions.set(cacheKey, promise);
+    return promise;
+}
+
 if (typeof window !== 'undefined') {
+    window.resolveFacebookMessageAttachment = resolveFacebookMessageAttachment;
     window.openAdminFbApiModal = openAdminFbApiModal;
     window.closeAdminFbApiModal = closeAdminFbApiModal;
     window.saveAdminFbApi = saveAdminFbApi;

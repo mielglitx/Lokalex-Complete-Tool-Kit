@@ -118,15 +118,15 @@ export function renderBubbleChatMessages(msgs) {
 
             <div class="flex flex-col max-w-[78%] ${isMine ? 'items-end' : 'items-start'}">
                 ${!isMine ? `
-                    <span class="text-[10px] font-bold text-gray-400 px-1 mb-0.5">${escapeHtml(senderName)}</span>
+                    <span class="text-[10px] font-bold text-gray-500 dark:text-gray-400 px-1 mb-0.5">${escapeHtml(senderName)}</span>
                 ` : ''}
 
-                <div class="relative p-2.5 rounded-2xl shadow-md text-xs select-text ${isMine ? 'bg-blue-600 text-white rounded-br-xs' : 'bg-gray-800 text-gray-100 rounded-bl-xs border border-gray-700/70'}">
+                <div class="relative p-2.5 rounded-2xl shadow-md text-xs select-text ${isMine ? 'bg-blue-600 text-white rounded-br-xs' : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-xs border border-gray-200 dark:border-gray-700/70'}">
                     ${replyHtml}
                     ${imageHtml}
                     ${msg.text ? `<p class="break-words leading-relaxed">${escapeHtml(msg.text)}</p>` : ''}
                     
-                    <div class="flex items-center justify-end gap-1 mt-1 text-[9px] text-white/60 font-mono">
+                    <div class="flex items-center justify-end gap-1 mt-1 text-[9px] ${isMine ? 'text-white/70' : 'text-gray-500 dark:text-white/60'} font-mono">
                         <span>${escapeHtml(timeStr)}</span>
                         ${isMine ? `<i class="fa-solid fa-check text-[8px] text-emerald-300"></i>` : ''}
                     </div>
@@ -270,15 +270,15 @@ export function renderDirectMessagesRidersList() {
         const status = r.status || 'Offline';
 
         return `
-        <div onclick="window.openDirectMessageChat('${escapeHtml(rId)}', '${escapeHtml(rName)}')" class="bg-cardBg border border-gray-800 hover:border-emerald-500/50 p-2.5 rounded-2xl flex items-center justify-between cursor-pointer transition active:scale-[0.98]">
+        <div onclick="window.openDirectMessageChat('${escapeHtml(rId)}', '${escapeHtml(rName)}')" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-emerald-500/50 p-2.5 rounded-2xl flex items-center justify-between cursor-pointer transition active:scale-[0.98]">
             <div class="flex items-center gap-2.5 min-w-0">
                 <img src="${escapeHtml(photoUrl)}" alt="${escapeHtml(rName)}" class="w-9 h-9 rounded-full object-cover border border-emerald-500/40 shrink-0">
                 <div class="min-w-0">
-                    <span class="font-bold text-xs text-white truncate block">${escapeHtml(rName)}</span>
-                    <span class="text-[9px] font-bold ${status === 'Available' ? 'text-emerald-400' : (status === 'Catering' ? 'text-red-400' : 'text-gray-400')} uppercase font-mono">${escapeHtml(status)}</span>
+                    <span class="font-bold text-xs text-gray-900 dark:text-white truncate block">${escapeHtml(rName)}</span>
+                    <span class="text-[9px] font-bold ${status === 'Available' ? 'text-emerald-600 dark:text-emerald-400' : (status === 'Catering' ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400')} uppercase font-mono">${escapeHtml(status)}</span>
                 </div>
             </div>
-            <button type="button" class="bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 w-7 h-7 rounded-xl flex items-center justify-center text-xs">
+            <button type="button" class="bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 w-7 h-7 rounded-xl flex items-center justify-center text-xs">
                 <i class="fa-solid fa-paper-plane"></i>
             </button>
         </div>`;

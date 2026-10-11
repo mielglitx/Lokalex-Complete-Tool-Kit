@@ -158,7 +158,6 @@ export async function executeRiderLoginSequence(idInput, cleanName, cleanUserTyp
         showToast("Login Successful!");
 
         fetchGCashDetails();
-        startBackgroundRosterGpsTracker();
 
         history.replaceState({ view: 'view-home' }, '', '#view-home');
         renderViewUI('view-home');

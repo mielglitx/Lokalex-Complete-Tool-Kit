@@ -23,7 +23,8 @@ import { listenToGlobalStoreChats } from './riderStoreChat.js';
 import { 
     getPublicFbSendEndpoint,
     resolveFacebookCustomerName,
-    getResolvedFbName 
+    getResolvedFbName,
+    resolveFacebookMessageAttachment
 } from './facebookApiAdmin.js';
 
 let activeRiderChatCustId = null;
@@ -67,9 +68,9 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         }).catch(() => {});
     }
 
-    const modal = document.getElementById('rider-customer-chat-modal') || document.getElementById('rider-chat-modal');
+    const modal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
     const nameEl = document.getElementById('rider-chat-cust-name');
-    const avatarEl = document.getElementById('rider-chat-cust-avatar') || document.getElementById('rider-chat-avatar');
+    const avatarEl = document.getElementById('rider-chat-avatar') || document.getElementById('rider-chat-cust-avatar');
 
     let effectiveName = custName || "Customer";
     let effectiveAvatar = avatarUrl;
@@ -84,8 +85,12 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
                 resolveFacebookCustomerName(custId).then(resolved => {
                     if (resolved && resolved.name && activeRiderChatCustId === custId) {
                         if (nameEl) nameEl.innerText = resolved.name;
-                        if (avatarEl && avatarEl.tagName === 'IMG' && resolved.avatarUrl) {
-                            avatarEl.src = resolved.avatarUrl;
+                        if (avatarEl) {
+                            if (avatarEl.tagName === 'IMG' && resolved.avatarUrl) {
+                                avatarEl.src = resolved.avatarUrl;
+                            } else if (resolved.avatarUrl) {
+                                avatarEl.innerHTML = `<img src="${resolved.avatarUrl}" class="w-full h-full rounded-full object-cover">`;
+                            }
                         }
                     }
                 }).catch(() => {});
@@ -100,13 +105,16 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         if (avatarEl.tagName === 'IMG') {
             avatarEl.src = resolvedAvatar;
         } else {
-            avatarEl.innerText = (effectiveName || "CU").split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+            avatarEl.innerHTML = `<img src="${resolvedAvatar}" class="w-full h-full rounded-full object-cover">`;
         }
     }
 
     if (modal) {
         modal.classList.remove('hidden');
         toggleBodyScroll(true);
+        if (typeof syncChatHdButtonUI === 'function') syncChatHdButtonUI();
+        else if (window.syncChatHdButtonUI) window.syncChatHdButtonUI();
+        if (window.initSharedQuickRepliesListener) window.initSharedQuickRepliesListener();
     }
 
     cancelRiderReply();
@@ -203,6 +211,20 @@ export function listenToRiderChatMessages(custId) {
             const isNew = !loadedRiderMsgsMap.has(key);
             loadedRiderMsgsMap.set(key, { id: key, ...msg });
 
+            // Auto-resolve missing Facebook image attachment from Graph API
+            if (String(custId).startsWith('fb_') && !msg.imageUrl && msg.text && (msg.text.includes('[Facebook image]') || msg.text.includes('[Facebook attachment]'))) {
+                resolveFacebookMessageAttachment(custId, key, msg.mid || key).then(url => {
+                    if (url && activeRiderChatCustId === custId) {
+                        const existing = loadedRiderMsgsMap.get(key);
+                        if (existing) {
+                            existing.imageUrl = url;
+                            existing.type = 'image';
+                            renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, 0, activeCustData);
+                        }
+                    }
+                }).catch(() => {});
+            }
+
             if (isNew && !isInitialLoad && !msg.isRider) {
                 newCustMsg = msg;
             }
@@ -282,6 +304,20 @@ async function loadOlderRiderMessages(container, custId) {
 
         entries.forEach(([key, msg]) => {
             loadedRiderMsgsMap.set(key, { id: key, ...msg });
+
+            // Auto-resolve missing Facebook image attachment from Graph API
+            if (String(custId).startsWith('fb_') && !msg.imageUrl && msg.text && (msg.text.includes('[Facebook image]') || msg.text.includes('[Facebook attachment]'))) {
+                resolveFacebookMessageAttachment(custId, key, msg.mid || key).then(url => {
+                    if (url && activeRiderChatCustId === custId) {
+                        const existing = loadedRiderMsgsMap.get(key);
+                        if (existing) {
+                            existing.imageUrl = url;
+                            existing.type = 'image';
+                            renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, 0, activeCustData);
+                        }
+                    }
+                }).catch(() => {});
+            }
         });
 
         const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
@@ -328,7 +364,7 @@ export function setRiderReply(msgId, senderName, text) {
         replyBar.classList.remove('hidden');
     }
 
-    const input = document.getElementById('rider-cust-chat-input') || document.getElementById('rider-chat-input');
+    const input = document.getElementById('rider-chat-input') || document.getElementById('rider-cust-chat-input');
     if (input) input.focus();
 }
 
@@ -357,7 +393,7 @@ export async function toggleRiderMessageReaction(msgId, emoji) {
 
 function evaluateRiderChatLockPermissions() {
     const lockBanner = document.getElementById('rider-chat-lock-banner');
-    const inputEl = document.getElementById('rider-cust-chat-input') || document.getElementById('rider-chat-input');
+    const inputEl = document.getElementById('rider-chat-input') || document.getElementById('rider-cust-chat-input');
     const sendBtn = document.getElementById('rider-cust-send-btn');
     const actionToolbar = document.getElementById('rider-chat-action-toolbar');
 
@@ -377,21 +413,29 @@ function evaluateRiderChatLockPermissions() {
 
     const isLocked = (cateredRiderId || cateredRiderName) && !isCateringRider && !adminControlsActive;
 
+    const caterBtn = document.getElementById('rider-chat-cater-btn');
+    const cancelBtn = document.getElementById('rider-chat-cancel-btn');
+
     if (isLocked) {
         if (lockBanner) {
             lockBanner.classList.remove('hidden');
+            lockBanner.className = "bg-amber-50 dark:bg-amber-500/20 border-b border-amber-200 dark:border-amber-500/40 px-3 py-1.5 text-[11px] text-amber-800 dark:text-amber-300 font-bold text-center shrink-0";
             lockBanner.innerHTML = `🔒 Being catered by <strong>${escapeHtml(currentRiderChatMeta.cateredByRiderName || currentRiderChatMeta.cateredBy)}</strong>. View only mode.`;
         }
         if (inputEl) inputEl.disabled = true;
         if (sendBtn) sendBtn.disabled = true;
         if (actionToolbar) actionToolbar.classList.add('opacity-50', 'pointer-events-none');
+        if (caterBtn) caterBtn.classList.add('hidden');
+        if (cancelBtn) cancelBtn.classList.add('hidden');
     } else {
         if (lockBanner) {
             if (isCateringRider) {
                 lockBanner.classList.remove('hidden');
-                lockBanner.innerHTML = `🛵 You are currently catering this customer.`;
+                lockBanner.className = "bg-emerald-50 dark:bg-emerald-950/40 border-b-2 border-emerald-500 px-3 py-1.5 text-[11px] text-emerald-800 dark:text-emerald-300 font-bold text-center shrink-0 flex items-center justify-center gap-1.5";
+                lockBanner.innerHTML = `<i class="fa-solid fa-user-check text-emerald-600"></i> Kasalukuyan mong kinacater ang customer na ito.`;
             } else if (adminControlsActive && (cateredRiderId || cateredRiderName)) {
                 lockBanner.classList.remove('hidden');
+                lockBanner.className = "bg-amber-50 dark:bg-amber-500/20 border-b border-amber-200 dark:border-amber-500/40 px-3 py-1.5 text-[11px] text-amber-800 dark:text-amber-300 font-bold text-center shrink-0";
                 lockBanner.innerHTML = `⚡ Admin Controls Enabled — Replying as Admin (Catered by ${escapeHtml(currentRiderChatMeta.cateredByRiderName || currentRiderChatMeta.cateredBy)}).`;
             } else {
                 lockBanner.classList.add('hidden');
@@ -400,6 +444,22 @@ function evaluateRiderChatLockPermissions() {
         if (inputEl) inputEl.disabled = false;
         if (sendBtn) sendBtn.disabled = false;
         if (actionToolbar) actionToolbar.classList.remove('opacity-50', 'pointer-events-none');
+
+        const modalDialog = document.querySelector('#rider-chat-modal > div') || document.querySelector('#rider-customer-chat-modal > div');
+        if (modalDialog) {
+            modalDialog.classList.remove('ring-2', 'ring-emerald-500', 'border-emerald-500', 'catering-glow-my', 'catering-glow-other', 'catering-glow-gold');
+            if (isCateringRider || cateredRiderId || cateredRiderName) {
+                modalDialog.classList.add('catering-glow-gold');
+            }
+        }
+
+        if (isCateringRider) {
+            if (caterBtn) caterBtn.classList.add('hidden');
+            if (cancelBtn) cancelBtn.classList.remove('hidden');
+        } else {
+            if (caterBtn) caterBtn.classList.remove('hidden');
+            if (cancelBtn) cancelBtn.classList.add('hidden');
+        }
     }
 }
 
@@ -408,7 +468,7 @@ export function closeRiderChatModal() {
 }
 
 export function closeRiderCustomerChatModal() {
-    const modal = document.getElementById('rider-customer-chat-modal') || document.getElementById('rider-chat-modal');
+    const modal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
     if (modal) {
         modal.classList.add('hidden');
         toggleBodyScroll(false);
@@ -437,8 +497,11 @@ export function sendRiderChatMessage(content = null, type = 'text') {
 }
 
 export async function sendRiderToCustomerChat(customText = "", customImageUrl = null, customLocationCoords = null) {
-    const input = document.getElementById('rider-cust-chat-input') || document.getElementById('rider-chat-input');
-    const text = customText || (input ? input.value.trim() : "");
+    const input1 = document.getElementById('rider-chat-input');
+    const input2 = document.getElementById('rider-cust-chat-input');
+    const val1 = input1 ? input1.value.trim() : "";
+    const val2 = input2 ? input2.value.trim() : "";
+    const text = (typeof customText === 'string' && customText.trim()) ? customText.trim() : (val1 || val2);
 
     if ((!text && !customImageUrl && !customLocationCoords) || !activeRiderChatCustId) return;
 
@@ -509,12 +572,15 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
         });
     }
 
-    if (input && !customText) input.value = "";
+    if (!customText) {
+        if (input1) input1.value = "";
+        if (input2) input2.value = "";
+    }
     cancelRiderReply();
 
     hideRiderInChatToast();
 
-    const container = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
+    const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
     if (container) {
         requestAnimationFrame(() => {
             container.scrollTop = container.scrollHeight;
@@ -553,9 +619,9 @@ async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, loc
             if (first) sendEndpoint = first.sendEndpoint;
         }
 
+        // Fallback 3: Production Cloudflare Worker endpoint
         if (!sendEndpoint) {
-            console.warn("⚠️ No sendEndpoint available for Facebook channel:", apiId);
-            return;
+            sendEndpoint = "https://lokalex-messenger-webhook.lokaledeliver.workers.dev/api/send-reply";
         }
 
         const resp = await fetch(sendEndpoint, {
@@ -574,9 +640,11 @@ async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, loc
         if (!resp.ok) {
             const errData = await resp.json().catch(() => ({}));
             console.warn("Facebook send reply error:", errData);
-            showToast(`⚠️ Messenger delivery issue: ${errData.error || 'Check Page permissions'}`);
+            const errMsg = errData.error?.message || errData.error || (typeof errData === 'string' ? errData : 'Check Page permissions');
+            showToast(`⚠️ Messenger delivery issue: ${errMsg}`);
         } else {
             console.log("✅ Rider reply delivered to Facebook Messenger!");
+            showToast("✅ Delivered to customer Messenger!");
         }
     } catch (err) {
         console.error("Failed to forward rider reply to Messenger:", err);

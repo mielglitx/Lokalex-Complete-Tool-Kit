@@ -4,6 +4,7 @@ import { showToast } from '../../ui/notifications.js';
 import { escapeHtml } from '../../utils/helpers.js';
 import { 
     getMyCateringCustomers, 
+    getMaxCartSlots,
     getCurrentCart, 
     saveCartState, 
     getEffectiveCartClient 
@@ -29,12 +30,31 @@ export function renderCartTabs() {
     const container = document.getElementById('cart-tabs-header');
     if (!container) return;
 
+    const maxSlots = getMaxCartSlots();
+
+    // If activeCartSlot was pointing beyond current maxSlots, reset to 1
+    if (activeCartSlot > maxSlots) {
+        setActiveCartSlot(1);
+        globalState.activeCartIndex = 0;
+        saveCartState();
+    }
+
+    const myCustomers = getMyCateringCustomers();
+
     let html = "";
-    for (let slot = 1; slot <= 4; slot++) {
+    for (let slot = 1; slot <= maxSlots; slot++) {
         const cart = multiCarts[slot] || { items: [] };
         const isActive = slot === activeCartSlot;
         const count = cart.items ? cart.items.length : 0;
         const isLocked = globalState.cartLocked && globalState.cartLocked[slot - 1];
+
+        // Auto-assign matching customer for this slot if not manually set
+        const assignedCust = myCustomers[slot - 1];
+        if (assignedCust && !cart.isManual) {
+            if (!cart.customerName || cart.customerName === "Sample" || !myCustomers.includes(cart.customerName)) {
+                cart.customerName = assignedCust;
+            }
+        }
 
         let tabColor = isActive 
             ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-950/50" 
@@ -43,9 +63,9 @@ export function renderCartTabs() {
         let lockBadge = isLocked ? `<i class="fa-solid fa-lock text-[10px] text-emerald-400 ml-1"></i>` : '';
 
         html += `
-            <button onclick="switchCartTab(${slot})" class="flex-1 py-2 px-1 rounded-xl border flex flex-col items-center justify-center transition active:scale-95 text-xs font-bold ${tabColor}">
-                <span>Cart ${slot}${lockBadge}</span>
-                <span class="text-[9px] font-normal opacity-80">${count} items</span>
+            <button onclick="switchCartTab(${slot})" class="flex-1 min-w-[70px] py-2 px-1 rounded-xl border flex flex-col items-center justify-center transition active:scale-95 text-xs font-bold ${tabColor}" title="Cart ${slot}${cart.customerName ? ` (${cart.customerName})` : ''}">
+                <span class="truncate max-w-full">Cart ${slot}${lockBadge}</span>
+                <span class="text-[9px] font-normal opacity-80 truncate max-w-full">${count} items</span>
             </button>`;
     }
     container.innerHTML = html;
@@ -405,4 +425,5 @@ if (typeof window !== 'undefined') {
     window.onCartCustomerSelected = onCartCustomerSelected;
     window.handleOverlaySlideEnd = handleOverlaySlideEnd;
     window.renderCartItems = renderCartItems;
+    window.getMaxCartSlots = getMaxCartSlots;
 }

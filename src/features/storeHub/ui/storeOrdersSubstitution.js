@@ -104,11 +104,16 @@ export async function submitItemSubstitution() {
                 timestamp: now
             }));
 
-            await db.ref(`storeRiderChats/${orderId}_${storeId}`).update(sanitizeForFirebase({
+            const substMeta = sanitizeForFirebase({
+                orderId,
+                storeId,
                 lastMessage: `⚠️ Substitution Alert: ${itemName}`,
                 lastTimestamp: now,
-                unreadForRider: true
-            }));
+                unreadForRider: true,
+                unreadForStore: false
+            });
+            await db.ref(`storeRiderChats/${orderId}_${storeId}`).update(substMeta);
+            db.ref(`storeRiderChatMeta/${orderId}_${storeId}`).update(substMeta).catch(() => {});
 
             await db.ref(`storeOrders/${storeId}/${orderId}`).update({
                 substitutionAlert: {

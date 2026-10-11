@@ -10,7 +10,7 @@ import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { getLocalTodayStr, copyText, getWeekString, getMonthString, escapeHtml } from '../../utils/helpers.js';
 import { switchView } from '../../ui/router.js';
-import { isAdmin as checkIsAdmin, getMergedDeduplicatedCommissionList, isSameDateStr, saveRosterCache, isRiderMatch } from '../roster/rosterUtils.js';
+import { isAdmin as checkIsAdmin, getMergedDeduplicatedCommissionList, isSameDateStr, normalizeToDateStr, saveRosterCache, isRiderMatch } from '../roster/rosterUtils.js';
 import { getCommissionRates, fetchCommissionSettings } from './commissionRates.js';
 
 export let viewSettings = {
@@ -39,11 +39,6 @@ export function initCommissionLiveListeners() {
     const todayStr = getLocalTodayStr();
     if (isCommissionListenerActive && activeListenerDate === todayStr) return;
 
-    try {
-        db.ref('receipts').off();
-        db.ref('cateredHistory').off();
-    } catch(e) {}
-
     isCommissionListenerActive = true;
     activeListenerDate = todayStr;
 
@@ -58,11 +53,14 @@ export function initCommissionLiveListeners() {
                 ...v
             })) : [];
 
-            const nonTodayExisting = (globalState.globalDailyReceipts || []).filter(r => !isSameDateStr(r.date || r.completedDate, todayStr));
-            globalState.globalDailyReceipts = [...nonTodayExisting, ...todayRecords];
+            const recordMap = new Map();
+            (globalState.globalDailyReceipts || []).forEach(r => recordMap.set(r.transactionId || r.id, r));
+            todayRecords.forEach(r => recordMap.set(r.transactionId || r.id, r));
+            globalState.globalDailyReceipts = Array.from(recordMap.values());
 
             saveRosterCache();
             refreshCommissionView();
+            window.dispatchEvent(new CustomEvent('receiptsUpdated'));
             window.dispatchEvent(new CustomEvent('rosterUpdated'));
         });
 
@@ -77,11 +75,14 @@ export function initCommissionLiveListeners() {
                 ...v
             })) : [];
 
-            const nonTodayExisting = (globalState.globalCateredHistory || []).filter(h => !isSameDateStr(h.completedDate || h.date, todayStr));
-            globalState.globalCateredHistory = [...nonTodayExisting, ...todayCatered];
+            const histMap = new Map();
+            (globalState.globalCateredHistory || []).forEach(h => histMap.set(h.transactionId || h.id, h));
+            todayCatered.forEach(h => histMap.set(h.transactionId || h.id, h));
+            globalState.globalCateredHistory = Array.from(histMap.values());
 
             saveRosterCache();
             refreshCommissionView();
+            window.dispatchEvent(new CustomEvent('cateredUpdated'));
             window.dispatchEvent(new CustomEvent('rosterUpdated'));
         });
 }
@@ -124,6 +125,9 @@ export async function fetchCommissionData() {
         }
 
         saveRosterCache();
+        window.dispatchEvent(new CustomEvent('cateredUpdated'));
+        window.dispatchEvent(new CustomEvent('receiptsUpdated'));
+        window.dispatchEvent(new CustomEvent('rosterUpdated'));
     } catch (e) {
         console.warn("Could not fetch commission records:", e);
     }
@@ -310,7 +314,7 @@ export function refreshCommissionView() {
         if (!rDate) return false;
         
         if (viewSettings.period === 'daily') {
-            return isSameDateStr(rDate, viewSettings.dateValue) || (normalizeDateStr(rDate) === normalizeDateStr(viewSettings.dateValue));
+            return isSameDateStr(rDate, viewSettings.dateValue) || (normalizeDateStr(rDate) === normalizeDateStr(viewSettings.dateValue)) || (normalizeToDateStr(rDate) === normalizeToDateStr(viewSettings.dateValue));
         }
         if (viewSettings.period === 'weekly') {
             const d = new Date(rDate.includes('-') || rDate.includes('/') ? rDate : Number(rDate));
@@ -774,5 +778,13 @@ export async function openCommissionScreen() {
 }
 
 window.addEventListener('loginsUpdated', () => {
+    refreshCommissionView();
+});
+
+window.addEventListener('cateredUpdated', () => {
+    refreshCommissionView();
+});
+
+window.addEventListener('receiptsUpdated', () => {
     refreshCommissionView();
 });

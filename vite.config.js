@@ -19,8 +19,8 @@ export default defineConfig({
         name: 'Lokalex Delivery Hub',
         short_name: 'Lokalex',
         description: 'Lokalex Logistics • On-Demand Express Delivery',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
+        theme_color: '#EDF7F2',
+        background_color: '#EDF7F2',
         display: 'standalone',
         start_url: './',
         icons: [

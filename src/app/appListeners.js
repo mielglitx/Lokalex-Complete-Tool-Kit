@@ -144,15 +144,35 @@ export function initRealtimeFirebaseListeners() {
             window.dispatchEvent(new Event('loginsUpdated'));
         });
 
-        db.ref('cateredHistory').orderByChild('date').limitToLast(40).on('value', (snapshot) => {
-            globalState.globalCateredHistory = snapshot.val() ? Object.values(snapshot.val()) : [];
+        db.ref('cateredHistory').limitToLast(250).on('value', (snapshot) => {
+            const val = snapshot.val();
+            const list = val ? Object.entries(val).map(([k, v]) => ({
+                id: k,
+                transactionId: v.transactionId || k,
+                ...v
+            })) : [];
+            const histMap = new Map();
+            (globalState.globalCateredHistory || []).forEach(h => histMap.set(h.transactionId || h.id, h));
+            list.forEach(h => histMap.set(h.transactionId || h.id, h));
+            globalState.globalCateredHistory = Array.from(histMap.values());
             if (roster && roster.saveRosterCache) roster.saveRosterCache();
             window.dispatchEvent(new Event('cateredUpdated'));
+            window.dispatchEvent(new Event('rosterUpdated'));
         });
 
-        db.ref('receipts').orderByChild('date').limitToLast(40).on('value', (snapshot) => {
-            globalState.globalDailyReceipts = snapshot.val() ? Object.values(snapshot.val()) : [];
+        db.ref('receipts').limitToLast(250).on('value', (snapshot) => {
+            const val = snapshot.val();
+            const list = val ? Object.entries(val).map(([k, v]) => ({
+                id: k,
+                transactionId: v.transactionId || k,
+                ...v
+            })) : [];
+            const rcptMap = new Map();
+            (globalState.globalDailyReceipts || []).forEach(r => rcptMap.set(r.transactionId || r.id, r));
+            list.forEach(r => rcptMap.set(r.transactionId || r.id, r));
+            globalState.globalDailyReceipts = Array.from(rcptMap.values());
             window.dispatchEvent(new Event('receiptsUpdated'));
+            window.dispatchEvent(new Event('rosterUpdated'));
         });
 
         db.ref('chat').limitToLast(25).on('value', (snapshot) => {

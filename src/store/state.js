@@ -1,6 +1,6 @@
 // src/store/state.js
 export const appState = {
-    telegramId: localStorage.getItem('telegramId') || "",
+    telegramId: localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "",
     riderName: localStorage.getItem('riderName') || "",
     userType: localStorage.getItem('userType') || "",
     photoUrl: localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || "",
@@ -9,7 +9,7 @@ export const appState = {
     gcashName: localStorage.getItem('lokalex_gcash_name') || "",
     gcashQrPayload: localStorage.getItem('lokalex_gcash_qr_payload') || "",
     gcashQrImg: localStorage.getItem('lokalex_gcash_qr_img') || "",
-    themePreference: localStorage.getItem('lokalex_theme_preference') || "system",
+    themePreference: localStorage.getItem('lokalex_theme_preference') || "light",
     lat: 0, 
     lon: 0,
     gpsAccuracy: 0,
@@ -47,8 +47,8 @@ export const globalState = {
     adminControlsEnabled: false,
     records: [],
     currentType: 'customers',
-    cartLocked: [false, false, false, false],
-    cartTxIds: ["", "", "", ""],
+    cartLocked: [],
+    cartTxIds: [],
     riderDayOffs: {},
     timeInSchedule: {},
     bookingLimits: {},

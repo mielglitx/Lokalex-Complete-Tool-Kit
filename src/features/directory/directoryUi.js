@@ -543,10 +543,13 @@ export function detectAndSetGpsDestination(servicedMunicipalities) {
                     localStorage.setItem('lokalex_selected_destination_mun', closestMun);
                 } catch(e) {}
                 renderDirectoryList();
-                showToast(`📍 GPS: Focused on destination [${closestMun}]`);
             }
         }
     };
+
+    if (globalState.selectedDestinationMun) {
+        return;
+    }
 
     if (appState.lat && appState.lon) {
         findNearest(appState.lat, appState.lon);
@@ -1961,8 +1964,8 @@ export function renderDirectoryList() {
             const isCrossTown = originMun.toLowerCase() !== destMun.toLowerCase();
 
             const locationSubtitleHtml = isCrossTown
-                ? `<div class="text-[10px] text-amber-500 dark:text-amber-400 mt-0.5 font-bold flex items-center gap-1">
-                     <i class="fa-solid fa-arrow-right text-[8.5px]"></i> From <span class="underline">${escapeHtml(originMun)}</span> to <span class="text-white">${escapeHtml(destMun)}</span>
+                ? `<div class="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5 font-bold flex items-center gap-1">
+                     <i class="fa-solid fa-arrow-right text-[8.5px]"></i> From <span class="underline">${escapeHtml(originMun)}</span> to <span class="text-gray-900 dark:text-white font-black">${escapeHtml(destMun)}</span>
                    </div>`
                 : `<div class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium flex items-center gap-1">
                      <i class="fa-solid fa-location-dot text-[9px] text-emerald-500"></i> Local: ${escapeHtml(destMun)} Hub

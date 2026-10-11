@@ -82,52 +82,9 @@
     </div>
 </div>
 
-<!-- RIDER-TO-CUSTOMER DIRECT CHAT MODAL WITH INFO BUTTON -->
-<div id="rider-customer-chat-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-3">
-    <div class="bg-cardBg border border-blue-500/60 p-4 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-2.5 h-[85vh] max-h-[620px] overflow-hidden text-gray-900 dark:text-white">
-        <div class="flex flex-col gap-1 border-b border-gray-200 dark:border-gray-800 pb-2 shrink-0">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center gap-2">
-                    <img id="rider-chat-cust-avatar" src="" class="w-8 h-8 rounded-full border border-blue-500 object-cover">
-                    <div>
-                        <div class="flex items-center gap-1.5">
-                            <h3 id="rider-chat-cust-name" class="font-bold text-xs text-gray-900 dark:text-white">Customer Chat</h3>
-                            <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-5 h-5 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-[10px] shadow shrink-0" title="View Customer Profile & GPS Pin">
-                                <i class="fa-solid fa-circle-info"></i>
-                            </button>
-                        </div>
-                        <span class="text-[9px] text-emerald-600 dark:text-emerald-400 font-mono">Real-time Connected</span>
-                    </div>
-                </div>
-                <button onclick="window.closeRiderCustomerChatModal && window.closeRiderCustomerChatModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div id="rider-chat-lock-banner" class="hidden text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-1.5 rounded-lg text-center font-bold"></div>
-        </div>
-
-        <div id="rider-chat-action-toolbar" class="grid grid-cols-4 gap-1 shrink-0 bg-gray-100 dark:bg-black/30 p-1.5 rounded-xl border border-gray-200 dark:border-gray-800">
-            <button onclick="window.markThreadUndone && window.markThreadUndone()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-700 dark:text-indigo-300 border border-indigo-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move thread back to inbox"><i class="fa-solid fa-rotate-left"></i> Undone </button>
-            <button onclick="window.markThreadFollowUp && window.markThreadFollowUp()" class="bg-amber-600/30 hover:bg-amber-600 text-amber-800 dark:text-amber-300 border border-amber-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move to Follow Up section"><i class="fa-solid fa-bookmark"></i> Follow Up</button>
-            <button onclick="window.markThreadDone && window.markThreadDone()" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-300 border border-emerald-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move to Done section"><i class="fa-solid fa-circle-check"></i> Done</button>
-            <button onclick="window.cancelCustomerThread && window.cancelCustomerThread()" class="bg-red-900/40 hover:bg-red-800 text-red-700 dark:text-red-300 border border-red-700/50 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Cancel & release thread"><i class="fa-solid fa-ban"></i> Cancel</button>
-        </div>
-
-        <div id="rider-cust-chat-messages" class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 p-2 text-xs bg-gray-50 dark:bg-black/30 rounded-2xl border border-gray-200 dark:border-gray-800">
-            <div class="text-center text-gray-500 italic py-10">Loading chat history...</div>
-        </div>
-
-        <div class="flex gap-1.5 items-center shrink-0 pt-1">
-            <input type="file" id="rider-chat-file-input" accept="image/*" class="hidden" onchange="if(this.files[0]) { window.openImageEditorModal && window.openImageEditorModal(this.files[0], 'rider'); this.value = ''; }">
-            <button onclick="document.getElementById('rider-chat-file-input').click()" class="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-blue-600 dark:text-blue-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Attach & Edit Photo"><i class="fa-solid fa-image"></i></button>
-            <button onclick="window.sendRiderLocation && window.sendRiderLocation()" class="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-emerald-600 dark:text-emerald-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Pick Rider Location Pin on Map"><i class="fa-solid fa-location-dot"></i></button>
-
-            <input type="text" id="rider-cust-chat-input" autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true" onkeydown="if(event.key==='Enter') window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" placeholder="Type reply..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white font-medium">
-            <button id="rider-cust-send-btn" onclick="window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0"><i class="fa-solid fa-paper-plane"></i></button>
-        </div>
-    </div>
-</div>
 
 <!-- CUSTOMER DETAILS MODAL (FOR RIDERS) -->
-<div id="customer-details-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+<div id="customer-details-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4" style="z-index: 999999 !important;">
     <div class="bg-cardBg border border-blue-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-4 relative animate-in fade-in zoom-in duration-200 text-gray-900 dark:text-white">
         <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
             <div class="flex items-center gap-2">

@@ -1,16 +1,16 @@
 <!-- index.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="light" style="background-color: #EDF7F2; color-scheme: light;">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Lokalex Toolkit</title>
 
     <!-- PWA & MOBILE APP STANDALONE CAPABILITIES (REMOVES ADDRESS BAR) -->
-    <meta name="theme-color" content="#09090b">
+    <meta id="meta-theme-color" name="theme-color" content="#EDF7F2">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Lokalex Hub">
     <link rel="manifest" href="./manifest.json">
     <link rel="apple-touch-icon" href="https://i.imgur.com/dbomHa2.png">
@@ -42,21 +42,38 @@
   FontAwesome icon libraries, and free open-source mapping stylesheets (Leaflet.js).
   Completely removes Google Maps SDK dependencies to eliminate API billing limits.
 -->
-<meta id="meta-theme-color" name="theme-color" content="#121212">
 
-<!-- THEME INITIALIZATION SCRIPT (PREVENTS FLASH OF UNSTYLED THEME ON LOAD) -->
+<!-- THEME INITIALIZATION SCRIPT (ENFORCES LIGHT THEME BY DEFAULT) -->
 <script>
     (function() {
-        const savedTheme = localStorage.getItem('lokalex_theme_preference') || 'system';
-        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const isDark = savedTheme === 'dark' || (savedTheme === 'system' && systemPrefersDark);
+        try {
+            const v3Flag = localStorage.getItem('lokalex_light_theme_enforced_v3');
+            if (!v3Flag) {
+                localStorage.setItem('lokalex_theme', 'light');
+                localStorage.setItem('lokalex_theme_preference', 'light');
+                localStorage.setItem('lokalex_light_theme_enforced_v3', 'true');
+            }
+        } catch (e) {}
+
+        let savedTheme = localStorage.getItem('lokalex_theme') || localStorage.getItem('lokalex_theme_preference') || 'light';
+        if (savedTheme === 'system') savedTheme = 'light';
         
+        const isDark = savedTheme === 'dark';
+        const root = document.documentElement;
         if (isDark) {
-            document.documentElement.classList.add('dark');
-            document.documentElement.classList.remove('light');
+            root.classList.add('dark');
+            root.classList.remove('light');
+            root.style.backgroundColor = '#0C1814';
+            root.style.colorScheme = 'dark';
         } else {
-            document.documentElement.classList.remove('dark');
-            document.documentElement.classList.add('light');
+            root.classList.remove('dark');
+            root.classList.add('light');
+            root.style.backgroundColor = '#EDF7F2';
+            root.style.colorScheme = 'light';
+        }
+        if (document.body) {
+            document.body.style.backgroundColor = isDark ? '#0C1814' : '#EDF7F2';
+            document.body.style.color = isDark ? '#F8FAFC' : '#0F172A';
         }
     })();
 </script>
@@ -71,6 +88,10 @@
                     darkBg: 'var(--color-darkBg)', 
                     cardBg: 'var(--color-cardBg)', 
                     inputBg: 'var(--color-inputBg)', 
+                    brandPrimary: 'var(--color-brandPrimary)',
+                    brandTeal: 'var(--color-brandTeal)',
+                    brandAmber: 'var(--color-brandAmber)',
+                    brandBubble: 'var(--color-brandBubble)',
                     tgBg: '#0e1621', 
                     tgCard: '#17212b', 
                     tgBtn: '#202b36' 
@@ -80,27 +101,31 @@
     }
 </script>
 
-<!-- THEME DYNAMIC CSS VARIABLES & SHADOW REMOVAL -->
+<!-- THEME DYNAMIC CSS VARIABLES & HIGH-CONTRAST READABILITY -->
 <style>
     :root {
-        --color-darkBg: #F8FAFC;
+        --color-darkBg: #EDF7F2;
         --color-cardBg: #FFFFFF;
-        --color-inputBg: #F1F5F9;
+        --color-inputBg: #FFFFFF;
         --color-textMain: #0F172A;
-        --color-textMuted: #64748B;
-        --color-border: #E2E8F0;
+        --color-textMuted: #475569;
+        --color-border: #DDEEE6;
+        --color-brandPrimary: #059669;
+        --color-brandTeal: #0D9488;
+        --color-brandAmber: #F59E0B;
+        --color-brandBubble: #076B57;
     }
     html.dark {
-        --color-darkBg: #121212;
-        --color-cardBg: #1E1E1E;
-        --color-inputBg: #2A2A2A;
-        --color-textMain: #F9FAFB;
-        --color-textMuted: #9CA3AF;
-        --color-border: #27272A;
-    }
-    *, ::before, ::after {
-        box-shadow: none !important;
-        text-shadow: none !important;
+        --color-darkBg: #0C1814;
+        --color-cardBg: #14251F;
+        --color-inputBg: #0E1D18;
+        --color-textMain: #F8FAFC;
+        --color-textMuted: #94A3B8;
+        --color-border: #1E3A30;
+        --color-brandPrimary: #10B981;
+        --color-brandTeal: #14B8A6;
+        --color-brandAmber: #FBBF24;
+        --color-brandBubble: #065F46;
     }
     body {
         background-color: var(--color-darkBg);
@@ -120,6 +145,69 @@
         border: none !important;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
     }
+
+    /* ========================================================================== */
+    /* CATERING GLOWING BORDERS (MY CUSTOMERS vs OTHER RIDERS)                    */
+    /* ========================================================================== */
+    @keyframes cateringGlowMy {
+        0%, 100% {
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.5), 0 0 22px rgba(16, 185, 129, 0.25);
+            border-color: #10b981;
+        }
+        50% {
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.85), 0 0 35px rgba(16, 185, 129, 0.45);
+            border-color: #34d399;
+        }
+    }
+
+    @keyframes cateringGlowGold {
+        0%, 100% {
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.6), 0 0 22px rgba(245, 158, 11, 0.3);
+            border-color: #f59e0b;
+        }
+        50% {
+            box-shadow: 0 0 22px rgba(251, 191, 36, 0.95), 0 0 38px rgba(245, 158, 11, 0.55);
+            border-color: #fbbf24;
+        }
+    }
+
+    #rider-cust-chats-feed > div.catering-glow-gold,
+    #rider-cust-chats-feed > div.catering-glow-my,
+    #rider-cust-chats-feed > div.catering-glow-other,
+    .catering-glow-gold,
+    .catering-glow-my,
+    .catering-glow-other {
+        border-width: 2px !important;
+        border-style: solid !important;
+        border-color: #f59e0b !important;
+        border-left-width: 6px !important;
+        border-left-color: #d97706 !important;
+        box-shadow: 0 0 14px rgba(245, 158, 11, 0.7), 0 0 28px rgba(245, 158, 11, 0.35) !important;
+        background-color: #FFFBEB !important;
+        animation: cateringGlowGold 2.2s infinite ease-in-out !important;
+    }
+    html.dark #rider-cust-chats-feed > div.catering-glow-gold,
+    html.dark #rider-cust-chats-feed > div.catering-glow-my,
+    html.dark #rider-cust-chats-feed > div.catering-glow-other,
+    html.dark .catering-glow-gold,
+    html.dark .catering-glow-my,
+    html.dark .catering-glow-other {
+        border-color: #fbbf24 !important;
+        border-left-color: #f59e0b !important;
+        box-shadow: 0 0 18px rgba(251, 191, 36, 0.85), 0 0 35px rgba(251, 191, 36, 0.45) !important;
+        background-color: rgba(69, 26, 3, 0.4) !important;
+    }
+
+    .avatar-glow-gold,
+    .avatar-glow-other {
+        border-color: #f59e0b !important;
+        box-shadow: 0 0 10px rgba(245, 158, 11, 0.8) !important;
+    }
+
+    .avatar-glow-my {
+        border-color: #10b981 !important;
+        box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
+    }
 </style>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -129,67 +217,213 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <!-- REMARKS: HEAD_PARTIAL_LEAFLET_OSM_INTEGRATION_V1_COMPLETE -->
 
-    <!-- GLOBAL HIGH-CONTRAST LIGHT MODE ENFORCEMENT -->
+    <!-- GLOBAL HIGH-CONTRAST UNIVERSAL THEME ENFORCEMENT -->
     <style>
-        html:not(.dark) {
+        html,
+        html:not(.dark),
+        html.light {
             color-scheme: light;
+            background-color: #EDF7F2 !important;
         }
-        html:not(.dark) body {
-            background-color: #f8fafc !important;
-            color: #0f172a !important;
+        body,
+        html:not(.dark) body,
+        html.light body {
+            background-color: #EDF7F2 !important;
+            color: #0F172A !important;
         }
-        html:not(.dark) .bg-cardBg {
-            background-color: #ffffff !important;
-            border-color: #e2e8f0 !important;
-            color: #0f172a !important;
+        html.dark {
+            color-scheme: dark;
+            background-color: #0C1814 !important;
         }
-        html:not(.dark) .bg-darkBg {
-            background-color: #f1f5f9 !important;
-            border-color: #e2e8f0 !important;
-            color: #0f172a !important;
+        html.dark body {
+            background-color: #0C1814 !important;
+            color: #F8FAFC !important;
         }
-        html:not(.dark) .bg-inputBg {
-            background-color: #ffffff !important;
-            border-color: #cbd5e1 !important;
-            color: #0f172a !important;
+        html:not(.dark) .bg-cardBg,
+        html.light .bg-cardBg {
+            background-color: #FFFFFF !important;
+            border-color: #DDEEE6 !important;
+            color: #0F172A !important;
+            box-shadow: 0 1px 3px 0 rgba(16, 24, 40, 0.05), 0 1px 2px -1px rgba(16, 24, 40, 0.05);
+        }
+        html:not(.dark) .bg-darkBg,
+        html.light .bg-darkBg,
+        html:not(.dark) .bg-\[\#EDF7F2\],
+        html.light .bg-\[\#EDF7F2\] {
+            background-color: #EDF7F2 !important;
+            border-color: #DDEEE6 !important;
+            color: #0F172A !important;
+        }
+        html:not(.dark) .bg-inputBg,
+        html.light .bg-inputBg {
+            background-color: #FFFFFF !important;
+            border-color: #CBD5E1 !important;
+            color: #0F172A !important;
         }
         html:not(.dark) input,
         html:not(.dark) select,
         html:not(.dark) textarea {
-            color: #0f172a !important;
-            background-color: #ffffff !important;
-            border-color: #cbd5e1 !important;
+            color: #0F172A !important;
+            background-color: #FFFFFF !important;
+            border-color: #CBD5E1 !important;
         }
         html:not(.dark) input::placeholder,
         html:not(.dark) textarea::placeholder {
-            color: #64748b !important;
+            color: #64748B !important;
         }
         /* Modal dialog backgrounds in light mode */
         html:not(.dark) [id$="-modal"] .bg-cardBg,
-        html:not(.dark) [id$="-modal"] .bg-\[\#1E1A1A\] {
-            background-color: #ffffff !important;
-            border-color: #cbd5e1 !important;
-            color: #0f172a !important;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+        html:not(.dark) [id$="-modal"] .bg-\[\#1E1A1A\],
+        html:not(.dark) [id$="-modal"] .bg-darkBg {
+            background-color: #FFFFFF !important;
+            border-color: #DDEEE6 !important;
+            color: #0F172A !important;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
         }
-        /* High contrast text overrides for light mode */
-        html:not(.dark) .text-white {
-            color: #0f172a !important;
+        
+        /* High contrast text overrides for light mode: convert default text-white to dark text ONLY inside non-colored containers */
+        html:not(.dark) body > .text-white,
+        html:not(.dark) .bg-cardBg > .text-white,
+        html:not(.dark) .bg-cardBg div:not([class*="bg-"]):not(button):not(a) > .text-white,
+        html:not(.dark) .bg-cardBg p.text-white,
+        html:not(.dark) .bg-cardBg h1.text-white:not([class*="bg-gradient-"]),
+        html:not(.dark) .bg-cardBg h2.text-white,
+        html:not(.dark) .bg-cardBg h3.text-white,
+        html:not(.dark) .bg-cardBg h4.text-white,
+        html:not(.dark) .bg-cardBg span.text-white:not([class*="bg-"]):not([class*="rounded-full"]):not([class*="badge-"]),
+        html:not(.dark) .bg-white span.text-white:not([class*="bg-"]):not([class*="rounded-full"]):not([class*="badge-"]),
+        html:not(.dark) .bg-\[\#EDF7F2\] span.text-white:not([class*="bg-"]):not([class*="rounded-full"]):not([class*="badge-"]),
+        html:not(.dark) main span.text-white:not([class*="bg-"]):not([class*="rounded-full"]):not([class*="badge-"]):not(button *),
+        html:not(.dark) [id$="-modal"] span.text-white:not([class*="bg-"]):not([class*="rounded-full"]):not([class*="badge-"]):not(button *) {
+            color: #0F172A !important;
         }
         html:not(.dark) .text-gray-200,
         html:not(.dark) .text-gray-300 {
-            color: #1e293b !important;
+            color: #1E293B !important;
         }
         html:not(.dark) .text-gray-400 {
-            color: #475569 !important;
+            color: #334155 !important;
         }
         html:not(.dark) .text-gray-500 {
-            color: #64748b !important;
+            color: #475569 !important;
         }
+
+        /* High-contrast colors for pastel action buttons and labels in light mode */
+        html:not(.dark) button[class*="bg-emerald-50"] span,
+        html:not(.dark) button[class*="bg-emerald-100"] span,
+        html:not(.dark) .text-emerald-900 {
+            color: #064E3B !important;
+        }
+        html:not(.dark) button[class*="bg-blue-50"] span,
+        html:not(.dark) button[class*="bg-blue-100"] span,
+        html:not(.dark) .text-blue-900 {
+            color: #1E3A8A !important;
+        }
+        html:not(.dark) button[class*="bg-purple-50"] span,
+        html:not(.dark) button[class*="bg-purple-100"] span,
+        html:not(.dark) .text-purple-900 {
+            color: #581C87 !important;
+        }
+        html:not(.dark) button[class*="bg-amber-50"] span,
+        html:not(.dark) button[class*="bg-amber-100"] span,
+        html:not(.dark) .text-amber-900 {
+            color: #78350F !important;
+        }
+        html:not(.dark) button[class*="bg-indigo-50"] span,
+        html:not(.dark) button[class*="bg-indigo-100"] span,
+        html:not(.dark) .text-indigo-900 {
+            color: #312E81 !important;
+        }
+        html:not(.dark) button[class*="bg-teal-50"] span,
+        html:not(.dark) button[class*="bg-teal-100"] span,
+        html:not(.dark) .text-teal-900 {
+            color: #134E4A !important;
+        }
+        html:not(.dark) button[class*="bg-rose-50"] span,
+        html:not(.dark) button[class*="bg-rose-100"] span,
+        html:not(.dark) .text-rose-900 {
+            color: #881337 !important;
+        }
+        html:not(.dark) button[class*="bg-red-50"] span,
+        html:not(.dark) button[class*="bg-red-100"] span,
+        html:not(.dark) .text-red-900 {
+            color: #7F1D1D !important;
+        }
+
+        html:not(.dark) .text-emerald-700,
+        html:not(.dark) .text-emerald-800 {
+            color: #047857 !important;
+        }
+        html:not(.dark) .text-blue-700,
+        html:not(.dark) .text-blue-800 {
+            color: #1D4ED8 !important;
+        }
+        html:not(.dark) .text-teal-700,
+        html:not(.dark) .text-teal-800 {
+            color: #0F766E !important;
+        }
+        html:not(.dark) .text-orange-700,
+        html:not(.dark) .text-orange-800 {
+            color: #C2410C !important;
+        }
+        html:not(.dark) .text-purple-700,
+        html:not(.dark) .text-purple-800 {
+            color: #7E22CE !important;
+        }
+        html:not(.dark) .text-rose-700,
+        html:not(.dark) .text-rose-800 {
+            color: #BE123C !important;
+        }
+        html:not(.dark) .text-amber-700,
+        html:not(.dark) .text-amber-800 {
+            color: #B45309 !important;
+        }
+        html:not(.dark) .text-red-700,
+        html:not(.dark) .text-red-800 {
+            color: #B91C1C !important;
+        }
+        html:not(.dark) .text-indigo-700,
+        html:not(.dark) .text-indigo-800 {
+            color: #4338CA !important;
+        }
+
+        /* Solid colored buttons, badges, gradients, and bubbles MUST ALWAYS have pure white text */
+        .bg-\[\#076B57\],
+        .bg-\[\#076B57\] *,
+        .bg-\[\#0D9488\],
+        .bg-\[\#0D9488\] *,
+        .bg-\[\#059669\],
+        .bg-\[\#059669\] *,
+        .bg-\[\#067A60\],
+        .bg-\[\#067A60\] *,
+        button[class*="bg-emerald-"]:not([class*="bg-emerald-50"]):not([class*="bg-emerald-100"]):not([class*="bg-emerald-200"]),
+        button[class*="bg-emerald-"]:not([class*="bg-emerald-50"]):not([class*="bg-emerald-100"]):not([class*="bg-emerald-200"]) *,
+        button[class*="bg-teal-"]:not([class*="bg-teal-50"]):not([class*="bg-teal-100"]):not([class*="bg-teal-200"]),
+        button[class*="bg-teal-"]:not([class*="bg-teal-50"]):not([class*="bg-teal-100"]):not([class*="bg-teal-200"]) *,
+        button[class*="bg-blue-"]:not([class*="bg-blue-50"]):not([class*="bg-blue-100"]),
+        button[class*="bg-blue-"]:not([class*="bg-blue-50"]):not([class*="bg-blue-100"]) *,
+        button[class*="bg-red-"]:not([class*="bg-red-50"]):not([class*="bg-red-100"]),
+        button[class*="bg-red-"]:not([class*="bg-red-50"]):not([class*="bg-red-100"]) *,
+        button[class*="bg-purple-"]:not([class*="bg-purple-50"]):not([class*="bg-purple-100"]),
+        button[class*="bg-purple-"]:not([class*="bg-purple-50"]):not([class*="bg-purple-100"]) *,
+        button[class*="bg-rose-"]:not([class*="bg-rose-50"]):not([class*="bg-rose-100"]),
+        button[class*="bg-rose-"]:not([class*="bg-rose-50"]):not([class*="bg-rose-100"]) *,
+        button[class*="bg-orange-"]:not([class*="bg-orange-50"]):not([class*="bg-orange-100"]),
+        button[class*="bg-orange-"]:not([class*="bg-orange-50"]):not([class*="bg-orange-100"]) *,
+        [class*="bg-gradient-"] h1,
+        [class*="bg-gradient-"] h2,
+        [class*="bg-gradient-"] h3,
+        [class*="bg-gradient-"] p,
+        [class*="bg-gradient-"] span.text-white,
+        .btn-primary,
+        .badge-count {
+            color: #FFFFFF !important;
+        }
+
         /* Saturated readable accents in light mode */
         html:not(.dark) .text-purple-300,
         html:not(.dark) .text-purple-400 {
-            color: #7e22ce !important;
+            color: #7E22CE !important;
             font-weight: 700 !important;
         }
         html:not(.dark) .text-emerald-300,
@@ -199,61 +433,97 @@
         }
         html:not(.dark) .text-blue-300,
         html:not(.dark) .text-blue-400 {
-            color: #1d4ed8 !important;
+            color: #1D4ED8 !important;
             font-weight: 700 !important;
         }
         html:not(.dark) .text-amber-300,
         html:not(.dark) .text-amber-400 {
-            color: #b45309 !important;
+            color: #B45309 !important;
             font-weight: 700 !important;
         }
         html:not(.dark) .text-orange-300,
         html:not(.dark) .text-orange-400 {
-            color: #c2410c !important;
+            color: #C2410C !important;
             font-weight: 700 !important;
         }
         html:not(.dark) .text-red-300,
         html:not(.dark) .text-red-400 {
-            color: #b91c1c !important;
+            color: #B91C1C !important;
             font-weight: 700 !important;
         }
         html:not(.dark) .text-teal-300,
         html:not(.dark) .text-teal-400 {
-            color: #0f766e !important;
+            color: #0F766E !important;
             font-weight: 700 !important;
         }
         html:not(.dark) .text-rose-300,
         html:not(.dark) .text-rose-400 {
-            color: #be123c !important;
+            color: #BE123C !important;
             font-weight: 700 !important;
         }
         /* Fix dark translucent inner cards in light mode */
         html:not(.dark) .bg-black\/40,
         html:not(.dark) .bg-black\/30,
         html:not(.dark) .bg-darkBg\/60 {
-            background-color: #f8fafc !important;
-            border-color: #e2e8f0 !important;
+            background-color: #EDF7F2 !important;
+            border-color: #DDEEE6 !important;
         }
-        /* Primary action button text preservation */
-        html:not(.dark) button.bg-blue-600,
-        html:not(.dark) button.bg-emerald-600,
-        html:not(.dark) button.bg-red-600,
-        html:not(.dark) button.bg-purple-600,
-        html:not(.dark) button.bg-teal-600,
-        html:not(.dark) button.bg-rose-600,
-        html:not(.dark) button.bg-amber-500,
-        html:not(.dark) .bg-blue-600.text-white,
-        html:not(.dark) .bg-emerald-600.text-white,
-        html:not(.dark) .bg-red-600.text-white,
-        html:not(.dark) .bg-purple-600.text-white,
-        html:not(.dark) .bg-teal-600.text-white,
-        html:not(.dark) .bg-rose-600.text-white {
-            color: #ffffff !important;
+
+        /* ========================================================================== */
+        /* CATERING GLOWING BORDERS (MY CUSTOMERS vs OTHER RIDERS)                    */
+        /* ========================================================================== */
+        @keyframes cateringGlowGold {
+            0%, 100% {
+                box-shadow: 0 0 10px rgba(245, 158, 11, 0.6), 0 0 22px rgba(245, 158, 11, 0.3);
+                border-color: #f59e0b;
+            }
+            50% {
+                box-shadow: 0 0 22px rgba(251, 191, 36, 0.95), 0 0 38px rgba(245, 158, 11, 0.55);
+                border-color: #fbbf24;
+            }
+        }
+
+        #rider-cust-chats-feed > div.catering-glow-gold,
+        #rider-cust-chats-feed > div.catering-glow-my,
+        #rider-cust-chats-feed > div.catering-glow-other,
+        .catering-glow-gold,
+        .catering-glow-my,
+        .catering-glow-other {
+            border-width: 2px !important;
+            border-style: solid !important;
+            border-color: #f59e0b !important;
+            border-left-width: 6px !important;
+            border-left-color: #d97706 !important;
+            box-shadow: 0 0 14px rgba(245, 158, 11, 0.7), 0 0 28px rgba(245, 158, 11, 0.35) !important;
+            background-color: #FFFBEB !important;
+            animation: cateringGlowGold 2.2s infinite ease-in-out !important;
+        }
+        html.dark #rider-cust-chats-feed > div.catering-glow-gold,
+        html.dark #rider-cust-chats-feed > div.catering-glow-my,
+        html.dark #rider-cust-chats-feed > div.catering-glow-other,
+        html.dark .catering-glow-gold,
+        html.dark .catering-glow-my,
+        html.dark .catering-glow-other {
+            border-color: #fbbf24 !important;
+            border-left-color: #f59e0b !important;
+            box-shadow: 0 0 18px rgba(251, 191, 36, 0.85), 0 0 35px rgba(251, 191, 36, 0.45) !important;
+            background-color: rgba(69, 26, 3, 0.4) !important;
+        }
+
+        .avatar-glow-gold,
+        .avatar-glow-other {
+            border-color: #f59e0b !important;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.8) !important;
+        }
+
+        .avatar-glow-my {
+            border-color: #10b981 !important;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-aays8SXU.js"></script>
+  <script type="module" crossorigin src="./assets/index-C-9jj6iJ.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
-<body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-darkBg text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative">
+<body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
     <div id="golden-first-line-border" class="hidden pointer-events-none fixed inset-0 border-[6px] border-yellow-400 shadow-[inset_0_0_30px_rgba(250,204,21,0.8)] z-[9999]"></div>
 
@@ -288,8 +558,14 @@
         </div>
     </div>
 
-    <!-- RIGHT: LIVE DIGITAL CLOCK, BATTERY INDICATOR & NETWORK STATUS PILL -->
+    <!-- RIGHT: LIVE DIGITAL CLOCK, BATTERY INDICATOR, THEME TOGGLE & NETWORK STATUS PILL -->
     <div class="flex items-center gap-1.5 shrink-0">
+        <!-- QUICK THEME TOGGLE BUTTON -->
+        <button type="button" onclick="window.toggleAppTheme && window.toggleAppTheme()" class="flex items-center justify-center w-7 h-7 rounded-xl bg-gray-100 dark:bg-black/40 hover:bg-emerald-50 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700/60 text-amber-500 dark:text-amber-400 transition active:scale-95 shadow-2xs cursor-pointer" title="Toggle Light / Dark Theme">
+            <i class="fa-solid fa-sun text-xs dark:hidden"></i>
+            <i class="fa-solid fa-moon text-xs hidden dark:inline"></i>
+        </button>
+
         <!-- LIVE DIGITAL CLOCK PILL -->
         <div id="header-clock-pill" class="flex items-center gap-1 bg-gray-100 dark:bg-black/40 border border-gray-300 dark:border-gray-700/60 px-2 py-1 rounded-xl text-[10px] font-mono font-bold text-gray-700 dark:text-gray-300 transition-all select-none shrink-0" title="Current Time">
             <i class="fa-regular fa-clock text-blue-500 text-[10px]"></i>
@@ -1005,26 +1281,48 @@
     <!-- LIGHT MODE HIGH CONTRAST & CARD STYLING ENFORCEMENT -->
     <style>
         html:not(.dark) #view-home {
-            color: #0f172a;
+            color: #0F172A;
         }
         html:not(.dark) #view-home .bg-cardBg {
-            background-color: #ffffff !important;
-            border-color: #e2e8f0 !important;
+            background-color: #FFFFFF !important;
+            border-color: #DDEEE6 !important;
         }
-        html:not(.dark) #rider-cust-chats-feed > div,
+        html:not(.dark) #rider-cust-chats-feed > div:not(.catering-glow-gold):not([class*="catering-glow"]):not([class*="border-blue"]),
         html:not(.dark) #login-list-feed > div,
         html:not(.dark) #catered-customers-feed > div {
-            background-color: #ffffff !important;
-            border-color: #e2e8f0 !important;
+            background-color: #FFFFFF !important;
+            border-color: #DDEEE6 !important;
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
         }
-        html:not(.dark) #rider-cust-chats-feed > div span,
-        html:not(.dark) #rider-cust-chats-feed > div div,
-        html:not(.dark) #login-list-feed > div span,
-        html:not(.dark) #login-list-feed > div div,
-        html:not(.dark) #catered-customers-feed > div span,
-        html:not(.dark) #catered-customers-feed > div div {
-            color: #0f172a !important;
+
+        /* LIVE CHAT FEED CATERING THREAD HIGHLIGHT (GOLD GLOWING BORDER) */
+        #rider-cust-chats-feed > div.catering-glow-gold,
+        #rider-cust-chats-feed > div.catering-glow-my,
+        #rider-cust-chats-feed > div.catering-glow-other {
+            border-width: 2px !important;
+            border-style: solid !important;
+            border-color: #f59e0b !important;
+            border-left-width: 6px !important;
+            border-left-color: #d97706 !important;
+            box-shadow: 0 0 14px rgba(245, 158, 11, 0.7), 0 0 28px rgba(245, 158, 11, 0.35) !important;
+            background-color: #FFFBEB !important;
+            animation: cateringGlowGold 2.2s infinite ease-in-out !important;
+        }
+        html.dark #rider-cust-chats-feed > div.catering-glow-gold,
+        html.dark #rider-cust-chats-feed > div.catering-glow-my,
+        html.dark #rider-cust-chats-feed > div.catering-glow-other {
+            border-color: #fbbf24 !important;
+            border-left-color: #f59e0b !important;
+            box-shadow: 0 0 18px rgba(251, 191, 36, 0.85), 0 0 35px rgba(251, 191, 36, 0.45) !important;
+            background-color: rgba(69, 26, 3, 0.4) !important;
+        }
+        html:not(.dark) #rider-cust-chats-feed > div span:not([class*="bg-"]):not([class*="badge"]),
+        html:not(.dark) #rider-cust-chats-feed > div div:not([class*="bg-"]),
+        html:not(.dark) #login-list-feed > div span:not([class*="bg-"]),
+        html:not(.dark) #login-list-feed > div div:not([class*="bg-"]),
+        html:not(.dark) #catered-customers-feed > div span:not([class*="bg-"]),
+        html:not(.dark) #catered-customers-feed > div div:not([class*="bg-"]) {
+            color: #0F172A !important;
         }
         html:not(.dark) #rider-cust-chats-feed .text-gray-400,
         html:not(.dark) #rider-cust-chats-feed .text-gray-500,
@@ -1037,7 +1335,7 @@
         html:not(.dark) #catered-customers-feed .text-orange-400,
         html:not(.dark) #catered-customers-feed .text-orange-500,
         html:not(.dark) #catered-customers-feed .text-orange-600 {
-            color: #ea580c !important;
+            color: #EA580C !important;
             font-weight: 800 !important;
         }
         html:not(.dark) #login-list-feed .text-blue-400,
@@ -1046,7 +1344,7 @@
         html:not(.dark) #catered-customers-feed .text-blue-400,
         html:not(.dark) #catered-customers-feed .text-blue-500,
         html:not(.dark) #catered-customers-feed .text-blue-600 {
-            color: #2563eb !important;
+            color: #2563EB !important;
             font-weight: 800 !important;
         }
         html:not(.dark) #catered-customers-feed .text-emerald-400,
@@ -1407,17 +1705,10 @@
                     <span id="queue-info-elapsed" class="font-mono font-bold text-amber-600 dark:text-amber-400">--</span>
                 </div>
 
-                <div class="flex flex-col gap-1 bg-gray-50 dark:bg-white/5 p-2 rounded-xl border border-gray-200 dark:border-gray-700/60">
-                    <span class="text-gray-500 dark:text-gray-400 font-bold">Location When Queued:</span>
-                    <span id="queue-info-coords" class="font-mono text-[11px] font-bold text-gray-900 dark:text-gray-200 break-words">--</span>
-                </div>
             </div>
 
-            <div class="flex gap-2 pt-1">
-                <a id="queue-info-map-btn" href="#" target="_blank" rel="noopener noreferrer" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md transition active:scale-95 text-center cursor-pointer">
-                    <i class="fa-solid fa-map-location-dot"></i> View on Map
-                </a>
-                <button type="button" onclick="window.closeQueueInfoModal && window.closeQueueInfoModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 text-center cursor-pointer">
+            <div class="pt-1">
+                <button type="button" onclick="window.closeQueueInfoModal && window.closeQueueInfoModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 text-center cursor-pointer">
                     Close
                 </button>
             </div>
@@ -1430,16 +1721,16 @@
     <!-- LIGHT MODE CONTRAST STYLING -->
     <style>
         html:not(.dark) #view-store-hub {
-            color: #0f172a;
+            color: #0F172A;
         }
         html:not(.dark) #view-store-hub .bg-cardBg {
-            background-color: #ffffff !important;
-            border-color: #e2e8f0 !important;
+            background-color: #FFFFFF !important;
+            border-color: #DDEEE6 !important;
         }
         html:not(.dark) #merch-orders-feed > div,
         html:not(.dark) #merch-items-feed > div {
-            background-color: #ffffff !important;
-            border: 1px solid #e2e8f0 !important;
+            background-color: #FFFFFF !important;
+            border: 1px solid #DDEEE6 !important;
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
         }
     </style>
@@ -1884,7 +2175,7 @@
 </section>
         <!-- src/partials/views/cart.html -->
 <section id="view-cart" class="hidden flex-1 flex flex-col text-gray-900 dark:text-white">
-    <div class="bg-white dark:bg-cardBg border-b border-gray-200 dark:border-gray-800 p-2 grid grid-cols-4 gap-1.5 shrink-0" id="cart-tabs-header"></div>
+    <div class="bg-white dark:bg-cardBg border-b border-gray-200 dark:border-gray-800 p-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0" id="cart-tabs-header"></div>
 
     <div class="bg-gray-50 dark:bg-inputBg/80 px-3 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0">
         <span class="text-xs font-bold text-amber-700 dark:text-amber-400 shrink-0 flex items-center gap-1.5">
@@ -1985,74 +2276,74 @@
             <label for="manual-client-toggle" class="text-xs text-gray-300">Type client name manually</label>
         </div>
 
-        <input type="text" id="rcpt-name" name="rcpt_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Customer / Store Name (Required)" class="w-full bg-inputBg text-sm rounded-lg p-2.5 mt-1 outline-none border border-gray-700 text-white font-bold">
-        <input type="text" id="rcpt-contact" name="rcpt_contact_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Contact Number / Address" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-700 mt-2 text-white">
+        <input type="text" id="rcpt-name" name="rcpt_name_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Customer / Store Name (Required)" class="w-full bg-inputBg text-sm rounded-lg p-2.5 mt-1 outline-none border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white font-bold">
+        <input type="text" id="rcpt-contact" name="rcpt_contact_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Contact Number / Address" class="w-full bg-inputBg text-sm rounded-lg p-2.5 outline-none border border-gray-300 dark:border-gray-700 mt-2 text-gray-900 dark:text-white">
     </div>
 
     <!-- AUTO-CALCULATED FEES PANEL -->
-    <div class="text-xs text-gray-400 mt-2 uppercase tracking-wider font-bold">Auto-Calculated Fees (Editable)</div>
-    <div class="bg-cardBg rounded-xl border border-gray-800 overflow-hidden text-sm flex flex-col gap-3 p-3">
+    <div class="text-xs text-gray-500 dark:text-gray-400 mt-2 uppercase tracking-wider font-bold">Auto-Calculated Fees (Editable)</div>
+    <div class="bg-cardBg rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden text-sm flex flex-col gap-3 p-3">
         <div class="flex justify-between items-center gap-2">
-            <span class="text-gray-300 flex-1">Handling Fee (Store)</span>
-            <input type="number" id="wiz-handling" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold text-white">
+            <span class="text-gray-700 dark:text-gray-300 flex-1">Handling Fee (Store)</span>
+            <input type="number" id="wiz-handling" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-300 dark:border-gray-700 font-bold text-gray-900 dark:text-white">
         </div>
         <div class="flex justify-between items-center gap-2">
-            <span class="text-gray-300 flex-1">Market Fee</span>
-            <input type="number" id="wiz-market" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold text-white">
+            <span class="text-gray-700 dark:text-gray-300 flex-1">Market Fee</span>
+            <input type="number" id="wiz-market" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-300 dark:border-gray-700 font-bold text-gray-900 dark:text-white">
         </div>
         <div class="flex justify-between items-center gap-2">
-            <span class="text-gray-300 flex-1">Multi-Stop Fee</span>
+            <span class="text-gray-700 dark:text-gray-300 flex-1">Multi-Stop Fee</span>
             <div class="flex items-center gap-2">
-                <button type="button" onclick="window.adjustStoreCount && window.adjustStoreCount(-1)" class="text-red-400 active:scale-95 transition"><i class="fa-solid fa-circle-minus"></i></button>
-                <span id="wiz-store-count" class="font-bold w-4 text-center text-white">1</span>
-                <button type="button" onclick="window.adjustStoreCount && window.adjustStoreCount(1)" class="text-green-400 active:scale-95 transition"><i class="fa-solid fa-circle-plus"></i></button>
-                <input type="number" id="wiz-multistop" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-20 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 text-blue-400 font-bold">
+                <button type="button" onclick="window.adjustStoreCount && window.adjustStoreCount(-1)" class="text-red-500 dark:text-red-400 active:scale-95 transition"><i class="fa-solid fa-circle-minus"></i></button>
+                <span id="wiz-store-count" class="font-bold w-4 text-center text-gray-900 dark:text-white">1</span>
+                <button type="button" onclick="window.adjustStoreCount && window.adjustStoreCount(1)" class="text-emerald-500 dark:text-green-400 active:scale-95 transition"><i class="fa-solid fa-circle-plus"></i></button>
+                <input type="number" id="wiz-multistop" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-20 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-300 dark:border-gray-700 text-blue-600 dark:text-blue-400 font-bold">
             </div>
         </div>
     </div>
 
     <!-- MANUAL ADJUSTMENTS PANEL WITH DISCOUNT MODE SWITCHER -->
-    <div class="text-xs text-gray-400 mt-2 uppercase tracking-wider font-bold">Manual Adjustments</div>
-    <div class="bg-cardBg rounded-xl border border-gray-800 overflow-hidden text-sm flex flex-col gap-3 p-3">
+    <div class="text-xs text-gray-500 dark:text-gray-400 mt-2 uppercase tracking-wider font-bold">Manual Adjustments</div>
+    <div class="bg-cardBg rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden text-sm flex flex-col gap-3 p-3">
         <div class="flex justify-between items-center gap-2">
-            <span class="text-gray-300 flex-1">Rider Delivery Fee</span>
-            <input type="number" id="wiz-delivery" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-700 font-bold text-white">
+            <span class="text-gray-700 dark:text-gray-300 flex-1">Rider Delivery Fee</span>
+            <input type="number" id="wiz-delivery" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-300 dark:border-gray-700 font-bold text-gray-900 dark:text-white">
         </div>
 
         <!-- DISCOUNT ROW WITH TOGGLE BUTTONS (₱ vs %) -->
         <div class="flex justify-between items-center gap-2">
             <div class="flex items-center gap-1.5 flex-1">
-                <span class="text-gray-300">Discount Bawas</span>
+                <span class="text-gray-700 dark:text-gray-300">Discount Bawas</span>
                 
                 <!-- TOGGLE SWITCH (AMOUNT ₱ / PERCENT %) -->
-                <div class="flex bg-darkBg border border-gray-700 rounded-lg p-0.5 ml-1">
+                <div class="flex bg-gray-100 dark:bg-darkBg border border-gray-300 dark:border-gray-700 rounded-lg p-0.5 ml-1">
                     <button type="button" id="wiz-discount-type-amount" onclick="window.toggleDiscountType && window.toggleDiscountType('amount')" class="px-2 py-1 bg-red-600 text-white font-bold rounded-md text-[10px] shadow transition active:scale-95">₱</button>
-                    <button type="button" id="wiz-discount-type-percent" onclick="window.toggleDiscountType && window.toggleDiscountType('percent')" class="px-2 py-1 bg-gray-800 text-gray-400 font-bold rounded-md text-[10px] hover:text-white transition active:scale-95">%</button>
+                    <button type="button" id="wiz-discount-type-percent" onclick="window.toggleDiscountType && window.toggleDiscountType('percent')" class="px-2 py-1 bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-400 font-bold rounded-md text-[10px] hover:text-gray-900 dark:hover:text-white transition active:scale-95">%</button>
                 </div>
             </div>
 
             <div class="relative flex items-center">
-                <span id="wiz-discount-icon" class="absolute left-2 text-xs font-bold text-red-400">₱</span>
-                <input type="number" id="wiz-discount" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded pl-5 pr-2 py-1 outline-none border border-gray-700 text-red-400 font-bold">
+                <span id="wiz-discount-icon" class="absolute left-2 text-xs font-bold text-red-500 dark:text-red-400">₱</span>
+                <input type="number" id="wiz-discount" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded pl-5 pr-2 py-1 outline-none border border-gray-300 dark:border-gray-700 text-red-500 dark:text-red-400 font-bold">
             </div>
         </div>
     </div>
 
     <!-- PAYMENT OPTIONS PANEL -->
-    <div class="text-xs text-gray-400 mt-2 uppercase tracking-wider font-bold">Payment Options</div>
+    <div class="text-xs text-gray-500 dark:text-gray-400 mt-2 uppercase tracking-wider font-bold">Payment Options</div>
 
-    <label class="bg-cardBg p-3 rounded-xl border border-gray-800 flex justify-between items-center cursor-pointer">
+    <label class="bg-cardBg p-3 rounded-xl border border-gray-200 dark:border-gray-800 flex justify-between items-center cursor-pointer">
         <div>
-            <div class="text-sm font-bold text-orange-400"><i class="fa-solid fa-gift"></i> Libreng Deliberi</div>
-            <div class="text-[10px] text-gray-400">Walang sasaguting fees ang customer</div>
+            <div class="text-sm font-bold text-orange-600 dark:text-orange-400"><i class="fa-solid fa-gift"></i> Libreng Deliberi</div>
+            <div class="text-[10px] text-gray-500 dark:text-gray-400">Walang sasaguting fees ang customer</div>
         </div>
         <input type="checkbox" id="wiz-free-delivery" onchange="window.calculateGrandTotal && window.calculateGrandTotal()" class="w-5 h-5 accent-orange-500">
     </label>
 
     <!-- GRAND TOTAL DISPLAY -->
-    <div class="mt-4 p-4 bg-emerald-900/20 border border-emerald-800/50 rounded-xl flex justify-between items-center">
-        <span class="text-gray-400 text-sm font-bold">GRAND TOTAL</span>
-        <span class="text-2xl font-black text-emerald-400">₱<span id="wiz-grand-total">0.00</span></span>
+    <div class="mt-4 p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 rounded-xl flex justify-between items-center">
+        <span class="text-gray-700 dark:text-gray-400 text-sm font-bold">GRAND TOTAL</span>
+        <span class="text-2xl font-black text-emerald-700 dark:text-emerald-400">₱<span id="wiz-grand-total">0.00</span></span>
     </div>
 
     <!-- SUBMIT BUTTON -->
@@ -2399,21 +2690,21 @@
     </button>
 </section>
 <!-- REMARKS: FORM_HTML_ISOLATED_ORIGIN_HUB_AND_HIERARCHICAL_DESTINATION_V4_COMPLETE -->
-        <section id="view-map" class="hidden fixed inset-0 bg-darkBg z-[999999] flex flex-col w-full h-full overflow-hidden" style="z-index: 999999 !important;">
+        <section id="view-map" class="hidden fixed inset-0 bg-white dark:bg-darkBg text-gray-900 dark:text-white z-[999999] flex flex-col w-full h-full overflow-hidden" style="z-index: 999999 !important;">
     <!-- HEADER -->
-    <header class="bg-cardBg px-4 py-3 flex items-center justify-between shadow-md shrink-0 border-b border-gray-800 gap-2">
-        <button onclick="window.goBack && window.goBack()" class="text-red-400 font-semibold flex items-center gap-1.5 transition active:opacity-50 text-xs shrink-0">
+    <header class="bg-cardBg px-4 py-3 flex items-center justify-between shadow-md shrink-0 border-b border-gray-200 dark:border-gray-800 gap-2">
+        <button onclick="window.goBack && window.goBack()" class="text-red-500 dark:text-red-400 font-semibold flex items-center gap-1.5 transition active:opacity-50 text-xs shrink-0">
             <i class="fa-solid fa-xmark text-sm"></i> Cancel
         </button>
-        <h1 id="map-view-title" class="text-sm font-bold truncate">Pick Location Pin</h1>
+        <h1 id="map-view-title" class="text-sm font-bold truncate text-gray-900 dark:text-white">Pick Location Pin</h1>
         <div class="w-8 shrink-0"></div>
     </header>
 
     <!-- GOOGLE PLACES SEARCH BAR OVERLAY -->
-    <div id="map-search-bar-container" class="p-3 bg-cardBg border-b border-gray-800 z-10 shrink-0">
+    <div id="map-search-bar-container" class="p-3 bg-cardBg border-b border-gray-200 dark:border-gray-800 z-10 shrink-0">
         <div class="relative">
             <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-gray-400 text-xs"></i>
-            <input type="text" id="map-search-input" placeholder="Search address, store, or landmark..." class="w-full bg-inputBg text-xs text-white rounded-xl pl-9 pr-3 py-2.5 outline-none border border-gray-700 focus:border-blue-500 font-sans">
+            <input type="text" id="map-search-input" placeholder="Search address, store, or landmark..." class="w-full bg-inputBg text-xs text-gray-900 dark:text-white rounded-xl pl-9 pr-3 py-2.5 outline-none border border-gray-300 dark:border-gray-700 focus:border-blue-500 font-sans">
         </div>
     </div>
 
@@ -2429,7 +2720,7 @@
     </div>
 
     <!-- ACTION BUTTONS -->
-    <div class="p-3 bg-cardBg shadow-lg shrink-0 border-t border-gray-800 z-10 pb-6 sm:pb-3 flex flex-col gap-2">
+    <div class="p-3 bg-cardBg shadow-lg shrink-0 border-t border-gray-200 dark:border-gray-800 z-10 pb-6 sm:pb-3 flex flex-col gap-2">
         <button id="map-confirm-btn" onclick="window.confirmGoogleMapPin && window.confirmGoogleMapPin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 text-xs flex items-center justify-center gap-2">
             <i class="fa-solid fa-location-crosshairs"></i> <span id="map-confirm-btn-text">CONFIRM LOCATION PIN</span>
         </button>
@@ -2596,56 +2887,6 @@
 </div>
     <!-- src/partials/modals/chat.html -->
 
-<!-- RIDER-TO-CUSTOMER DIRECT CHAT MODAL -->
-<div id="rider-customer-chat-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-3">
-    <div class="bg-cardBg border border-blue-500/60 p-4 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-2.5 h-[85vh] max-h-[620px] overflow-hidden">
-        <!-- HEADER -->
-        <div class="flex flex-col gap-1 border-b border-gray-800 pb-2 shrink-0">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center gap-2">
-                    <img id="rider-chat-cust-avatar" src="" class="w-8 h-8 rounded-full border border-blue-500 object-cover">
-                    <div>
-                        <div class="flex items-center gap-1.5">
-                            <h3 id="rider-chat-cust-name" class="font-bold text-xs text-white truncate">Customer Chat</h3>
-                            <button type="button" onclick="window.promptRenameCustomerChat && window.promptRenameCustomerChat()" class="text-gray-400 hover:text-blue-400 p-1 text-xs active:scale-90" title="Edit Customer Name">
-                                <i class="fa-solid fa-pen text-[10px]"></i>
-                            </button>
-                            <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-[10px] shadow shrink-0" title="View Customer Profile & GPS Pin">
-                                <i class="fa-solid fa-circle-info"></i>
-                            </button>
-                        </div>
-                        <span class="text-[9px] text-emerald-400 font-mono">Real-time Connected</span>
-                    </div>
-                </div>
-                <button onclick="window.closeRiderCustomerChatModal && window.closeRiderCustomerChatModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div id="rider-chat-lock-banner" class="hidden text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/30 p-1.5 rounded-lg text-center font-bold"></div>
-        </div>
-
-        <!-- ACTION TOOLBAR -->
-        <div id="rider-chat-action-toolbar" class="grid grid-cols-4 gap-1 shrink-0 bg-black/30 p-1.5 rounded-xl border border-gray-800">
-            <button onclick="window.markThreadUndone && window.markThreadUndone()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 border border-indigo-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move thread back to inbox"><i class="fa-solid fa-rotate-left"></i> Undone </button>
-            <button onclick="window.markThreadFollowUp && window.markThreadFollowUp()" class="bg-amber-600/30 hover:bg-amber-600 text-amber-300 border border-amber-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move to Follow Up section"><i class="fa-solid fa-bookmark"></i> Follow Up</button>
-            <button onclick="window.markThreadDone && window.markThreadDone()" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move to Done section"><i class="fa-solid fa-circle-check"></i> Done</button>
-            <button onclick="window.cancelCustomerThread && window.cancelCustomerThread()" class="bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700/50 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Cancel & release thread"><i class="fa-solid fa-ban"></i> Cancel</button>
-        </div>
-
-        <!-- CHAT MESSAGES BODY (SCROLLABLE INSIDE) -->
-        <div id="rider-cust-chat-messages" class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 p-2 text-xs bg-black/30 rounded-2xl border border-gray-800">
-            <div class="text-center text-gray-500 italic py-10">Loading chat history...</div>
-        </div>
-
-        <!-- FOOTER INPUT BAR -->
-        <div class="flex gap-1.5 items-center shrink-0 pt-1">
-            <input type="file" id="rider-chat-file-input" accept="image/*" class="hidden" onchange="if(this.files[0]) { window.openImageEditorModal && window.openImageEditorModal(this.files[0], 'rider'); this.value = ''; }">
-            <button onclick="document.getElementById('rider-chat-file-input').click()" class="bg-gray-800 hover:bg-gray-700 text-blue-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Attach & Edit Photo"><i class="fa-solid fa-image"></i></button>
-            <button onclick="window.sendRiderLocation && window.sendRiderLocation()" class="bg-gray-800 hover:bg-gray-700 text-emerald-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Pick Rider Location Pin on Map"><i class="fa-solid fa-location-dot"></i></button>
-
-            <input type="text" id="rider-cust-chat-input" name="rider_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" onkeydown="if(event.key==='Enter') window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" placeholder="Type reply..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-700 text-white">
-            <button id="rider-cust-send-btn" onclick="window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0"><i class="fa-solid fa-paper-plane"></i></button>
-        </div>
-    </div>
-</div>
 
 <!-- ========================================================================= -->
 <!-- COMPLETE TEAM COMMS MULTI-CHANNEL SYSTEM (DRAGGABLE WINDOW & DOCKED BUBBLE)-->
@@ -2856,7 +3097,7 @@
     </div>
 </div>
     <!-- src/partials/modals/rider-chat.html -->
-<div id="rider-chat-modal" class="hidden fixed inset-0 z-[9990] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+<div id="rider-chat-modal" class="hidden fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
     <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-md h-[85vh] max-h-[640px] rounded-3xl shadow-2xl flex flex-col relative overflow-hidden">
         
         <!-- HEADER WITH INFO BUTTON -->
@@ -2911,11 +3152,11 @@
             </div>
         </div>
 
-        <!-- ACTION BUTTONS ROW WITH STORE CHATS LAUNCHER -->
+        <!-- ACTION BUTTONS ROW -->
         <div id="rider-chat-action-toolbar" class="p-2.5 bg-gray-100 dark:bg-darkBg/60 border-b border-gray-200 dark:border-gray-800/80 flex items-center gap-2 overflow-x-auto shrink-0 no-scrollbar">
-            <!-- STORE HUBS CONTACT BUTTON -->
-            <button id="rider-chat-store-hub-btn" onclick="window.openRiderStoreChatPicker && window.openRiderStoreChatPicker()" class="min-w-[85px] bg-orange-600 hover:bg-orange-500 text-white border border-orange-500/40 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm">
-                <i class="fa-solid fa-store"></i> Store Hub
+            <!-- CATER BUTTON -->
+            <button id="rider-chat-cater-btn" onclick="window.caterCurrentChatCustomer && window.caterCurrentChatCustomer()" class="flex-1 min-w-[75px] bg-teal-600 hover:bg-teal-500 text-white border border-teal-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm" title="Cater this customer">
+                <i class="fa-solid fa-motorcycle"></i> Cater
             </button>
 
             <button onclick="window.markThreadUndone && window.markThreadUndone()" class="flex-1 min-w-[80px] bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm">
@@ -2934,19 +3175,15 @@
 
         <!-- SAVED QUICK REPLIES BAR -->
         <div id="quick-replies-drawer" class="hidden bg-gray-50 dark:bg-darkBg/95 border-b border-gray-200 dark:border-gray-800 p-2.5 flex items-center gap-2 overflow-x-auto shrink-0 no-scrollbar">
-            <span class="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase shrink-0"><i class="fa-solid fa-bolt"></i> Saved:</span>
-            <button onclick="window.sendQuickReply && window.sendQuickReply('Papunta na po ako sa location niyo 🛵')" class="bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition active:scale-95">
-                🛵 Papunta na po ako
+            <span class="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase shrink-0 flex items-center gap-1">
+                <i class="fa-solid fa-bolt"></i> Quick Replies:
+            </span>
+            <button type="button" onclick="window.promptAddQuickReply && window.promptAddQuickReply()" class="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition active:scale-95 flex items-center gap-1 shrink-0 shadow-xs" title="Create a new quick reply for everyone">
+                <i class="fa-solid fa-plus text-[10px]"></i> Add
             </button>
-            <button onclick="window.sendQuickReply && window.sendQuickReply('Nandito na po ako sa labas/location 📍')" class="bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition active:scale-95">
-                📍 Nandito na po sa labas
-            </button>
-            <button onclick="window.sendQuickReply && window.sendQuickReply('Nabili/Nakuha na po ang order ninyo 🛒')" class="bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition active:scale-95">
-                🛒 Nabili na po order
-            </button>
-            <button onclick="window.sendQuickReply && window.sendQuickReply('Paki-handa po ang eksaktong pambayad 💵')" class="bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition active:scale-95">
-                💵 Paki-handa ang pambayad
-            </button>
+            <div id="quick-replies-chips-container" class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+                <span class="text-[10px] text-gray-500 dark:text-gray-400 italic shrink-0 py-1">Loading quick replies...</span>
+            </div>
         </div>
 
         <!-- CHAT MESSAGES BODY -->
@@ -2956,8 +3193,8 @@
 
         <!-- FOOTER INPUT BAR -->
         <div class="p-3 bg-white dark:bg-darkBg/90 border-t border-gray-200 dark:border-gray-800 flex items-center gap-2 shrink-0">
-            <button type="button" id="chat-hd-toggle-btn" onclick="window.toggleHdMode && window.toggleHdMode()" class="p-2 bg-inputBg text-gray-500 dark:text-gray-400 rounded-xl border border-gray-300 dark:border-gray-700 hover:text-gray-900 dark:hover:text-white transition active:scale-95 text-xs font-bold" title="Toggle HD Mode">
-                <i id="chat-hd-icon" class="fa-solid fa-compress"></i>
+            <button type="button" id="chat-hd-toggle-btn" onclick="window.toggleHdMode && window.toggleHdMode()" class="px-2.5 py-1.5 bg-inputBg text-gray-700 dark:text-gray-300 rounded-xl border border-gray-300 dark:border-gray-700 hover:text-gray-900 dark:hover:text-white transition active:scale-95 text-xs font-black flex items-center justify-center shrink-0 min-w-[36px]" title="Toggle HD Mode">
+                <span id="chat-hd-label" class="text-[11px] font-black tracking-tight text-gray-700 dark:text-gray-300">HD</span>
             </button>
             <button onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="p-2.5 bg-inputBg hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs" title="Saved Quick Replies">
                 <i class="fa-solid fa-bolt"></i>
@@ -2983,7 +3220,7 @@
 </div>
 
 <!-- PROOF OF DELIVERY (POD) CONFIRMATION MODAL -->
-<div id="pod-capture-modal" class="hidden fixed inset-0 z-[99999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+<div id="pod-capture-modal" class="hidden fixed inset-0 z-[999999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4" style="z-index: 999999 !important;">
     <div class="bg-white dark:bg-cardBg border border-emerald-500/40 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
         <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
             <div class="flex items-center gap-2">
@@ -3034,7 +3271,7 @@
 </div>
 
 <!-- MODAL: RIDER MULTI-SOURCE LIVE CHAT FILTER -->
-<div id="rider-chat-sources-modal" class="hidden fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+<div id="rider-chat-sources-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" style="z-index: 999999 !important;">
     <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-3.5 animate-in fade-in zoom-in-95 duration-150">
         <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
             <div class="flex items-center gap-2">
@@ -3080,6 +3317,87 @@
         <div class="pt-2 border-t border-gray-200 dark:border-gray-800">
             <button type="button" onclick="window.closeRiderChatSourcesModal && window.closeRiderChatSourcesModal()" class="w-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-xl text-xs font-black shadow-md transition active:scale-95 cursor-pointer">
                 Done & View Feed
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- CHAT IMAGE ATTACHMENT PICKER MODAL (CAMERA VS SAVED IMAGES) -->
+<div id="chat-image-picker-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-xs rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+        <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-3">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">
+                    <i class="fa-solid fa-camera"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm text-gray-900 dark:text-white">Send Image</h3>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Choose photo source</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeImagePickerModal && window.closeImagePickerModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <button type="button" onclick="window.triggerImageCapture && window.triggerImageCapture('camera')" class="p-4 rounded-2xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800/60 flex flex-col items-center justify-center gap-2 transition active:scale-95 group">
+                <div class="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-lg shadow-sm group-hover:scale-105 transition">
+                    <i class="fa-solid fa-camera"></i>
+                </div>
+                <div class="text-center">
+                    <div class="font-bold text-xs text-blue-900 dark:text-blue-200">Camera</div>
+                    <div class="text-[10px] text-blue-600 dark:text-blue-400 font-medium">Take a photo</div>
+                </div>
+            </button>
+
+            <button type="button" onclick="window.triggerImageCapture && window.triggerImageCapture('gallery')" class="p-4 rounded-2xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800/60 flex flex-col items-center justify-center gap-2 transition active:scale-95 group">
+                <div class="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center text-lg shadow-sm group-hover:scale-105 transition">
+                    <i class="fa-solid fa-images"></i>
+                </div>
+                <div class="text-center">
+                    <div class="font-bold text-xs text-purple-900 dark:text-purple-200">Saved Images</div>
+                    <div class="text-[10px] text-purple-600 dark:text-purple-400 font-medium">From gallery</div>
+                </div>
+            </button>
+        </div>
+
+        <button type="button" onclick="window.closeImagePickerModal && window.closeImagePickerModal()" class="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition active:scale-95">
+            Cancel
+        </button>
+    </div>
+</div>
+
+<!-- ADD SHARED QUICK REPLY MODAL -->
+<div id="add-quick-reply-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+        <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-3">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center text-sm font-bold">
+                    <i class="fa-solid fa-bolt"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm text-gray-900 dark:text-white">New Quick Reply</h3>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Available to all riders in real time</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeAddQuickReplyModal && window.closeAddQuickReplyModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="flex flex-col gap-2">
+            <label for="new-quick-reply-input" class="text-xs font-bold text-gray-700 dark:text-gray-300">Quick Reply Message:</label>
+            <textarea id="new-quick-reply-input" rows="3" placeholder="e.g. Papunta na po ako sa drop-off location 🛵" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-amber-500 resize-none"></textarea>
+            <p class="text-[10px] text-gray-500 dark:text-gray-400 italic">This message will be instantly accessible by you and all other riders.</p>
+        </div>
+
+        <div class="flex gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
+            <button type="button" onclick="window.closeAddQuickReplyModal && window.closeAddQuickReplyModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 py-2.5 rounded-xl text-xs font-bold transition active:scale-95">
+                Cancel
+            </button>
+            <button type="button" onclick="window.submitSaveQuickReply && window.submitSaveQuickReply()" class="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2.5 rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-floppy-disk"></i> Save Reply
             </button>
         </div>
     </div>
@@ -4552,52 +4870,9 @@
     </div>
 </div>
 
-<!-- RIDER-TO-CUSTOMER DIRECT CHAT MODAL WITH INFO BUTTON -->
-<div id="rider-customer-chat-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-3">
-    <div class="bg-cardBg border border-blue-500/60 p-4 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-2.5 h-[85vh] max-h-[620px] overflow-hidden text-gray-900 dark:text-white">
-        <div class="flex flex-col gap-1 border-b border-gray-200 dark:border-gray-800 pb-2 shrink-0">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center gap-2">
-                    <img id="rider-chat-cust-avatar" src="" class="w-8 h-8 rounded-full border border-blue-500 object-cover">
-                    <div>
-                        <div class="flex items-center gap-1.5">
-                            <h3 id="rider-chat-cust-name" class="font-bold text-xs text-gray-900 dark:text-white">Customer Chat</h3>
-                            <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-5 h-5 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-[10px] shadow shrink-0" title="View Customer Profile & GPS Pin">
-                                <i class="fa-solid fa-circle-info"></i>
-                            </button>
-                        </div>
-                        <span class="text-[9px] text-emerald-600 dark:text-emerald-400 font-mono">Real-time Connected</span>
-                    </div>
-                </div>
-                <button onclick="window.closeRiderCustomerChatModal && window.closeRiderCustomerChatModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div id="rider-chat-lock-banner" class="hidden text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-1.5 rounded-lg text-center font-bold"></div>
-        </div>
-
-        <div id="rider-chat-action-toolbar" class="grid grid-cols-4 gap-1 shrink-0 bg-gray-100 dark:bg-black/30 p-1.5 rounded-xl border border-gray-200 dark:border-gray-800">
-            <button onclick="window.markThreadUndone && window.markThreadUndone()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-700 dark:text-indigo-300 border border-indigo-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move thread back to inbox"><i class="fa-solid fa-rotate-left"></i> Undone </button>
-            <button onclick="window.markThreadFollowUp && window.markThreadFollowUp()" class="bg-amber-600/30 hover:bg-amber-600 text-amber-800 dark:text-amber-300 border border-amber-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move to Follow Up section"><i class="fa-solid fa-bookmark"></i> Follow Up</button>
-            <button onclick="window.markThreadDone && window.markThreadDone()" class="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-800 dark:text-emerald-300 border border-emerald-500/40 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Move to Done section"><i class="fa-solid fa-circle-check"></i> Done</button>
-            <button onclick="window.cancelCustomerThread && window.cancelCustomerThread()" class="bg-red-900/40 hover:bg-red-800 text-red-700 dark:text-red-300 border border-red-700/50 text-[10px] font-bold py-1.5 rounded-lg transition active:scale-95 flex items-center justify-center gap-1" title="Cancel & release thread"><i class="fa-solid fa-ban"></i> Cancel</button>
-        </div>
-
-        <div id="rider-cust-chat-messages" class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 p-2 text-xs bg-gray-50 dark:bg-black/30 rounded-2xl border border-gray-200 dark:border-gray-800">
-            <div class="text-center text-gray-500 italic py-10">Loading chat history...</div>
-        </div>
-
-        <div class="flex gap-1.5 items-center shrink-0 pt-1">
-            <input type="file" id="rider-chat-file-input" accept="image/*" class="hidden" onchange="if(this.files[0]) { window.openImageEditorModal && window.openImageEditorModal(this.files[0], 'rider'); this.value = ''; }">
-            <button onclick="document.getElementById('rider-chat-file-input').click()" class="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-blue-600 dark:text-blue-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Attach & Edit Photo"><i class="fa-solid fa-image"></i></button>
-            <button onclick="window.sendRiderLocation && window.sendRiderLocation()" class="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-emerald-600 dark:text-emerald-400 p-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0" title="Pick Rider Location Pin on Map"><i class="fa-solid fa-location-dot"></i></button>
-
-            <input type="text" id="rider-cust-chat-input" autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true" onkeydown="if(event.key==='Enter') window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" placeholder="Type reply..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white font-medium">
-            <button id="rider-cust-send-btn" onclick="window.sendRiderToCustomerChat && window.sendRiderToCustomerChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0"><i class="fa-solid fa-paper-plane"></i></button>
-        </div>
-    </div>
-</div>
 
 <!-- CUSTOMER DETAILS MODAL (FOR RIDERS) -->
-<div id="customer-details-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+<div id="customer-details-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4" style="z-index: 999999 !important;">
     <div class="bg-cardBg border border-blue-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-4 relative animate-in fade-in zoom-in duration-200 text-gray-900 dark:text-white">
         <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
             <div class="flex items-center gap-2">
@@ -4849,7 +5124,7 @@
 </div>
 
 <!-- SCHEDULED DELIVERY / ADVANCED ORDERS MODAL -->
-<div id="adv-orders-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-[20000] flex items-center justify-center p-4" style="z-index: 20000 !important;">
+<div id="adv-orders-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-[999999] flex items-center justify-center p-4" style="z-index: 999999 !important;">
     <div class="bg-cardBg border border-gray-200 dark:border-gray-800 p-5 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col gap-4 max-h-[85vh] text-gray-900 dark:text-white">
         <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2">
             <h3 class="font-bold text-sm text-purple-600 dark:text-purple-400 flex items-center gap-2">
@@ -5117,7 +5392,7 @@
 </div>
 
 <!-- UNIVERSAL SLIDE CONFIRMATION MODAL -->
-<div id="slide-delete-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[99999] flex items-end sm:items-center justify-center p-4">
+<div id="slide-delete-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[999999] flex items-end sm:items-center justify-center p-4" style="z-index: 999999 !important;">
     <div class="bg-[#1E1A1A] border border-red-500/30 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl flex flex-col gap-4 text-white">
         <i id="slide-modal-icon" class="fa-solid fa-triangle-exclamation text-red-500 text-3xl mx-auto"></i>
         <h3 id="slide-delete-title" class="font-bold text-base">Confirm Action</h3>

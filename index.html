@@ -1,16 +1,16 @@
 <!-- index.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="light" style="background-color: #EDF7F2; color-scheme: light;">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Lokalex Toolkit</title>
 
     <!-- PWA & MOBILE APP STANDALONE CAPABILITIES (REMOVES ADDRESS BAR) -->
-    <meta name="theme-color" content="#09090b">
+    <meta id="meta-theme-color" name="theme-color" content="#EDF7F2">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Lokalex Hub">
     <link rel="manifest" href="./manifest.json">
     <link rel="apple-touch-icon" href="https://i.imgur.com/dbomHa2.png">
@@ -34,67 +34,213 @@
     <!-- HEAD PARTIAL (TAILWIND, FONTAWESOME & MAPS) -->
     <load src="src/partials/head.html" />
 
-    <!-- GLOBAL HIGH-CONTRAST LIGHT MODE ENFORCEMENT -->
+    <!-- GLOBAL HIGH-CONTRAST UNIVERSAL THEME ENFORCEMENT -->
     <style>
-        html:not(.dark) {
+        html,
+        html:not(.dark),
+        html.light {
             color-scheme: light;
+            background-color: #EDF7F2 !important;
         }
-        html:not(.dark) body {
-            background-color: #f8fafc !important;
-            color: #0f172a !important;
+        body,
+        html:not(.dark) body,
+        html.light body {
+            background-color: #EDF7F2 !important;
+            color: #0F172A !important;
         }
-        html:not(.dark) .bg-cardBg {
-            background-color: #ffffff !important;
-            border-color: #e2e8f0 !important;
-            color: #0f172a !important;
+        html.dark {
+            color-scheme: dark;
+            background-color: #0C1814 !important;
         }
-        html:not(.dark) .bg-darkBg {
-            background-color: #f1f5f9 !important;
-            border-color: #e2e8f0 !important;
-            color: #0f172a !important;
+        html.dark body {
+            background-color: #0C1814 !important;
+            color: #F8FAFC !important;
         }
-        html:not(.dark) .bg-inputBg {
-            background-color: #ffffff !important;
-            border-color: #cbd5e1 !important;
-            color: #0f172a !important;
+        html:not(.dark) .bg-cardBg,
+        html.light .bg-cardBg {
+            background-color: #FFFFFF !important;
+            border-color: #DDEEE6 !important;
+            color: #0F172A !important;
+            box-shadow: 0 1px 3px 0 rgba(16, 24, 40, 0.05), 0 1px 2px -1px rgba(16, 24, 40, 0.05);
+        }
+        html:not(.dark) .bg-darkBg,
+        html.light .bg-darkBg,
+        html:not(.dark) .bg-\[\#EDF7F2\],
+        html.light .bg-\[\#EDF7F2\] {
+            background-color: #EDF7F2 !important;
+            border-color: #DDEEE6 !important;
+            color: #0F172A !important;
+        }
+        html:not(.dark) .bg-inputBg,
+        html.light .bg-inputBg {
+            background-color: #FFFFFF !important;
+            border-color: #CBD5E1 !important;
+            color: #0F172A !important;
         }
         html:not(.dark) input,
         html:not(.dark) select,
         html:not(.dark) textarea {
-            color: #0f172a !important;
-            background-color: #ffffff !important;
-            border-color: #cbd5e1 !important;
+            color: #0F172A !important;
+            background-color: #FFFFFF !important;
+            border-color: #CBD5E1 !important;
         }
         html:not(.dark) input::placeholder,
         html:not(.dark) textarea::placeholder {
-            color: #64748b !important;
+            color: #64748B !important;
         }
         /* Modal dialog backgrounds in light mode */
         html:not(.dark) [id$="-modal"] .bg-cardBg,
-        html:not(.dark) [id$="-modal"] .bg-\[\#1E1A1A\] {
-            background-color: #ffffff !important;
-            border-color: #cbd5e1 !important;
-            color: #0f172a !important;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+        html:not(.dark) [id$="-modal"] .bg-\[\#1E1A1A\],
+        html:not(.dark) [id$="-modal"] .bg-darkBg {
+            background-color: #FFFFFF !important;
+            border-color: #DDEEE6 !important;
+            color: #0F172A !important;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
         }
-        /* High contrast text overrides for light mode */
-        html:not(.dark) .text-white {
-            color: #0f172a !important;
+        
+        /* High contrast text overrides for light mode: convert default text-white to dark text ONLY inside non-colored containers */
+        html:not(.dark) body > .text-white,
+        html:not(.dark) .bg-cardBg > .text-white,
+        html:not(.dark) .bg-cardBg div:not([class*="bg-"]):not(button):not(a) > .text-white,
+        html:not(.dark) .bg-cardBg p.text-white,
+        html:not(.dark) .bg-cardBg h1.text-white:not([class*="bg-gradient-"]),
+        html:not(.dark) .bg-cardBg h2.text-white,
+        html:not(.dark) .bg-cardBg h3.text-white,
+        html:not(.dark) .bg-cardBg h4.text-white,
+        html:not(.dark) .bg-cardBg span.text-white:not([class*="bg-"]):not([class*="rounded-full"]):not([class*="badge-"]),
+        html:not(.dark) .bg-white span.text-white:not([class*="bg-"]):not([class*="rounded-full"]):not([class*="badge-"]),
+        html:not(.dark) .bg-\[\#EDF7F2\] span.text-white:not([class*="bg-"]):not([class*="rounded-full"]):not([class*="badge-"]),
+        html:not(.dark) main span.text-white:not([class*="bg-"]):not([class*="rounded-full"]):not([class*="badge-"]):not(button *),
+        html:not(.dark) [id$="-modal"] span.text-white:not([class*="bg-"]):not([class*="rounded-full"]):not([class*="badge-"]):not(button *) {
+            color: #0F172A !important;
         }
         html:not(.dark) .text-gray-200,
         html:not(.dark) .text-gray-300 {
-            color: #1e293b !important;
+            color: #1E293B !important;
         }
         html:not(.dark) .text-gray-400 {
-            color: #475569 !important;
+            color: #334155 !important;
         }
         html:not(.dark) .text-gray-500 {
-            color: #64748b !important;
+            color: #475569 !important;
         }
+
+        /* High-contrast colors for pastel action buttons and labels in light mode */
+        html:not(.dark) button[class*="bg-emerald-50"] span,
+        html:not(.dark) button[class*="bg-emerald-100"] span,
+        html:not(.dark) .text-emerald-900 {
+            color: #064E3B !important;
+        }
+        html:not(.dark) button[class*="bg-blue-50"] span,
+        html:not(.dark) button[class*="bg-blue-100"] span,
+        html:not(.dark) .text-blue-900 {
+            color: #1E3A8A !important;
+        }
+        html:not(.dark) button[class*="bg-purple-50"] span,
+        html:not(.dark) button[class*="bg-purple-100"] span,
+        html:not(.dark) .text-purple-900 {
+            color: #581C87 !important;
+        }
+        html:not(.dark) button[class*="bg-amber-50"] span,
+        html:not(.dark) button[class*="bg-amber-100"] span,
+        html:not(.dark) .text-amber-900 {
+            color: #78350F !important;
+        }
+        html:not(.dark) button[class*="bg-indigo-50"] span,
+        html:not(.dark) button[class*="bg-indigo-100"] span,
+        html:not(.dark) .text-indigo-900 {
+            color: #312E81 !important;
+        }
+        html:not(.dark) button[class*="bg-teal-50"] span,
+        html:not(.dark) button[class*="bg-teal-100"] span,
+        html:not(.dark) .text-teal-900 {
+            color: #134E4A !important;
+        }
+        html:not(.dark) button[class*="bg-rose-50"] span,
+        html:not(.dark) button[class*="bg-rose-100"] span,
+        html:not(.dark) .text-rose-900 {
+            color: #881337 !important;
+        }
+        html:not(.dark) button[class*="bg-red-50"] span,
+        html:not(.dark) button[class*="bg-red-100"] span,
+        html:not(.dark) .text-red-900 {
+            color: #7F1D1D !important;
+        }
+
+        html:not(.dark) .text-emerald-700,
+        html:not(.dark) .text-emerald-800 {
+            color: #047857 !important;
+        }
+        html:not(.dark) .text-blue-700,
+        html:not(.dark) .text-blue-800 {
+            color: #1D4ED8 !important;
+        }
+        html:not(.dark) .text-teal-700,
+        html:not(.dark) .text-teal-800 {
+            color: #0F766E !important;
+        }
+        html:not(.dark) .text-orange-700,
+        html:not(.dark) .text-orange-800 {
+            color: #C2410C !important;
+        }
+        html:not(.dark) .text-purple-700,
+        html:not(.dark) .text-purple-800 {
+            color: #7E22CE !important;
+        }
+        html:not(.dark) .text-rose-700,
+        html:not(.dark) .text-rose-800 {
+            color: #BE123C !important;
+        }
+        html:not(.dark) .text-amber-700,
+        html:not(.dark) .text-amber-800 {
+            color: #B45309 !important;
+        }
+        html:not(.dark) .text-red-700,
+        html:not(.dark) .text-red-800 {
+            color: #B91C1C !important;
+        }
+        html:not(.dark) .text-indigo-700,
+        html:not(.dark) .text-indigo-800 {
+            color: #4338CA !important;
+        }
+
+        /* Solid colored buttons, badges, gradients, and bubbles MUST ALWAYS have pure white text */
+        .bg-\[\#076B57\],
+        .bg-\[\#076B57\] *,
+        .bg-\[\#0D9488\],
+        .bg-\[\#0D9488\] *,
+        .bg-\[\#059669\],
+        .bg-\[\#059669\] *,
+        .bg-\[\#067A60\],
+        .bg-\[\#067A60\] *,
+        button[class*="bg-emerald-"]:not([class*="bg-emerald-50"]):not([class*="bg-emerald-100"]):not([class*="bg-emerald-200"]),
+        button[class*="bg-emerald-"]:not([class*="bg-emerald-50"]):not([class*="bg-emerald-100"]):not([class*="bg-emerald-200"]) *,
+        button[class*="bg-teal-"]:not([class*="bg-teal-50"]):not([class*="bg-teal-100"]):not([class*="bg-teal-200"]),
+        button[class*="bg-teal-"]:not([class*="bg-teal-50"]):not([class*="bg-teal-100"]):not([class*="bg-teal-200"]) *,
+        button[class*="bg-blue-"]:not([class*="bg-blue-50"]):not([class*="bg-blue-100"]),
+        button[class*="bg-blue-"]:not([class*="bg-blue-50"]):not([class*="bg-blue-100"]) *,
+        button[class*="bg-red-"]:not([class*="bg-red-50"]):not([class*="bg-red-100"]),
+        button[class*="bg-red-"]:not([class*="bg-red-50"]):not([class*="bg-red-100"]) *,
+        button[class*="bg-purple-"]:not([class*="bg-purple-50"]):not([class*="bg-purple-100"]),
+        button[class*="bg-purple-"]:not([class*="bg-purple-50"]):not([class*="bg-purple-100"]) *,
+        button[class*="bg-rose-"]:not([class*="bg-rose-50"]):not([class*="bg-rose-100"]),
+        button[class*="bg-rose-"]:not([class*="bg-rose-50"]):not([class*="bg-rose-100"]) *,
+        button[class*="bg-orange-"]:not([class*="bg-orange-50"]):not([class*="bg-orange-100"]),
+        button[class*="bg-orange-"]:not([class*="bg-orange-50"]):not([class*="bg-orange-100"]) *,
+        [class*="bg-gradient-"] h1,
+        [class*="bg-gradient-"] h2,
+        [class*="bg-gradient-"] h3,
+        [class*="bg-gradient-"] p,
+        [class*="bg-gradient-"] span.text-white,
+        .btn-primary,
+        .badge-count {
+            color: #FFFFFF !important;
+        }
+
         /* Saturated readable accents in light mode */
         html:not(.dark) .text-purple-300,
         html:not(.dark) .text-purple-400 {
-            color: #7e22ce !important;
+            color: #7E22CE !important;
             font-weight: 700 !important;
         }
         html:not(.dark) .text-emerald-300,
@@ -104,60 +250,96 @@
         }
         html:not(.dark) .text-blue-300,
         html:not(.dark) .text-blue-400 {
-            color: #1d4ed8 !important;
+            color: #1D4ED8 !important;
             font-weight: 700 !important;
         }
         html:not(.dark) .text-amber-300,
         html:not(.dark) .text-amber-400 {
-            color: #b45309 !important;
+            color: #B45309 !important;
             font-weight: 700 !important;
         }
         html:not(.dark) .text-orange-300,
         html:not(.dark) .text-orange-400 {
-            color: #c2410c !important;
+            color: #C2410C !important;
             font-weight: 700 !important;
         }
         html:not(.dark) .text-red-300,
         html:not(.dark) .text-red-400 {
-            color: #b91c1c !important;
+            color: #B91C1C !important;
             font-weight: 700 !important;
         }
         html:not(.dark) .text-teal-300,
         html:not(.dark) .text-teal-400 {
-            color: #0f766e !important;
+            color: #0F766E !important;
             font-weight: 700 !important;
         }
         html:not(.dark) .text-rose-300,
         html:not(.dark) .text-rose-400 {
-            color: #be123c !important;
+            color: #BE123C !important;
             font-weight: 700 !important;
         }
         /* Fix dark translucent inner cards in light mode */
         html:not(.dark) .bg-black\/40,
         html:not(.dark) .bg-black\/30,
         html:not(.dark) .bg-darkBg\/60 {
-            background-color: #f8fafc !important;
-            border-color: #e2e8f0 !important;
+            background-color: #EDF7F2 !important;
+            border-color: #DDEEE6 !important;
         }
-        /* Primary action button text preservation */
-        html:not(.dark) button.bg-blue-600,
-        html:not(.dark) button.bg-emerald-600,
-        html:not(.dark) button.bg-red-600,
-        html:not(.dark) button.bg-purple-600,
-        html:not(.dark) button.bg-teal-600,
-        html:not(.dark) button.bg-rose-600,
-        html:not(.dark) button.bg-amber-500,
-        html:not(.dark) .bg-blue-600.text-white,
-        html:not(.dark) .bg-emerald-600.text-white,
-        html:not(.dark) .bg-red-600.text-white,
-        html:not(.dark) .bg-purple-600.text-white,
-        html:not(.dark) .bg-teal-600.text-white,
-        html:not(.dark) .bg-rose-600.text-white {
-            color: #ffffff !important;
+
+        /* ========================================================================== */
+        /* CATERING GLOWING BORDERS (MY CUSTOMERS vs OTHER RIDERS)                    */
+        /* ========================================================================== */
+        @keyframes cateringGlowGold {
+            0%, 100% {
+                box-shadow: 0 0 10px rgba(245, 158, 11, 0.6), 0 0 22px rgba(245, 158, 11, 0.3);
+                border-color: #f59e0b;
+            }
+            50% {
+                box-shadow: 0 0 22px rgba(251, 191, 36, 0.95), 0 0 38px rgba(245, 158, 11, 0.55);
+                border-color: #fbbf24;
+            }
+        }
+
+        #rider-cust-chats-feed > div.catering-glow-gold,
+        #rider-cust-chats-feed > div.catering-glow-my,
+        #rider-cust-chats-feed > div.catering-glow-other,
+        .catering-glow-gold,
+        .catering-glow-my,
+        .catering-glow-other {
+            border-width: 2px !important;
+            border-style: solid !important;
+            border-color: #f59e0b !important;
+            border-left-width: 6px !important;
+            border-left-color: #d97706 !important;
+            box-shadow: 0 0 14px rgba(245, 158, 11, 0.7), 0 0 28px rgba(245, 158, 11, 0.35) !important;
+            background-color: #FFFBEB !important;
+            animation: cateringGlowGold 2.2s infinite ease-in-out !important;
+        }
+        html.dark #rider-cust-chats-feed > div.catering-glow-gold,
+        html.dark #rider-cust-chats-feed > div.catering-glow-my,
+        html.dark #rider-cust-chats-feed > div.catering-glow-other,
+        html.dark .catering-glow-gold,
+        html.dark .catering-glow-my,
+        html.dark .catering-glow-other {
+            border-color: #fbbf24 !important;
+            border-left-color: #f59e0b !important;
+            box-shadow: 0 0 18px rgba(251, 191, 36, 0.85), 0 0 35px rgba(251, 191, 36, 0.45) !important;
+            background-color: rgba(69, 26, 3, 0.4) !important;
+        }
+
+        .avatar-glow-gold,
+        .avatar-glow-other {
+            border-color: #f59e0b !important;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.8) !important;
+        }
+
+        .avatar-glow-my {
+            border-color: #10b981 !important;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
 </head>
-<body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-darkBg text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative">
+<body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
     <div id="golden-first-line-border" class="hidden pointer-events-none fixed inset-0 border-[6px] border-yellow-400 shadow-[inset_0_0_30px_rgba(250,204,21,0.8)] z-[9999]"></div>
 

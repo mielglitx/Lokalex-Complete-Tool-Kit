@@ -171,22 +171,47 @@ export function renderFilteredCustomerChats(targetFolder = 'inbox') {
         // FILTER: Show chats currently being catered to
         filtered = allChats.filter(chat => {
             const meta = chat.metadata || chat;
-            const cName = (meta.customerName || meta.name || "").trim().toLowerCase();
-            const isFolderCatering = meta.folder === 'catering';
-            const hasRiderAssigned = !!(meta.cateredBy || meta.cateredByRiderName || meta.cateredByRiderId);
-            const isLiveInRoster = cName && activeCateringNames.has(cName);
+            const folder = (meta.folder || 'inbox').toLowerCase();
+            if (folder !== 'catering') return false;
+            if (meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled') return false;
 
-            return isFolderCatering || hasRiderAssigned || isLiveInRoster;
+            const rName = (meta.cateredByRiderName || meta.cateredBy || "").trim().toLowerCase();
+            const rId = (meta.cateredByRiderId || "").toString().trim();
+            if (rId || rName) {
+                const assignedRider = (globalState.rosterMembers || []).find(m => 
+                    (rId && (m.telegramId || m.id || "").toString() === rId) ||
+                    (rName && (m.riderName || m.name || "").trim().toLowerCase() === rName)
+                );
+                if (assignedRider && assignedRider.status !== 'Catering') {
+                    return false;
+                }
+            }
+
+            return true;
         });
     } else {
         // Standard folder filtering (inbox, followup, done, etc.)
         filtered = allChats.filter(chat => {
             const meta = chat.metadata || chat;
             const folder = (meta.folder || 'inbox').toLowerCase();
-            const hasRiderAssigned = !!(meta.cateredBy || meta.cateredByRiderName || meta.cateredByRiderId);
             
             if (targetFolder === 'inbox') {
-                return (folder === 'inbox') && !hasRiderAssigned;
+                return folder === 'inbox';
+            }
+            if (targetFolder === 'done') {
+                if (folder === 'done' || meta.status === 'completed' || meta.status === 'done') return true;
+                if (folder === 'catering') {
+                    const rName = (meta.cateredByRiderName || meta.cateredBy || "").trim().toLowerCase();
+                    const rId = (meta.cateredByRiderId || "").toString().trim();
+                    if (rId || rName) {
+                        const assignedRider = (globalState.rosterMembers || []).find(m => 
+                            (rId && (m.telegramId || m.id || "").toString() === rId) ||
+                            (rName && (m.riderName || m.name || "").trim().toLowerCase() === rName)
+                        );
+                        if (assignedRider && assignedRider.status === 'Available') return true;
+                    }
+                }
+                return false;
             }
             return folder === targetFolder.toLowerCase();
         });
@@ -208,20 +233,20 @@ export function renderFilteredCustomerChats(targetFolder = 'inbox') {
         const riderName = meta.cateredByRiderName || meta.cateredBy ? formatTitleCase(meta.cateredByRiderName || meta.cateredBy) : "";
 
         return `
-        <div onclick="window.openCustomerChatThread && window.openCustomerChatThread('${chat.id}')" class="bg-cardBg border border-gray-800 hover:border-blue-500/50 p-3 rounded-2xl flex items-center justify-between cursor-pointer transition active:scale-[0.98]">
+        <div onclick="window.openCustomerChatThread && window.openCustomerChatThread('${chat.id}')" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-blue-500/50 p-3 rounded-2xl flex items-center justify-between cursor-pointer transition active:scale-[0.98]">
             <div class="flex items-center gap-3 min-w-0 flex-1">
                 <div class="w-10 h-10 rounded-full bg-blue-600/20 text-blue-400 font-bold flex items-center justify-center text-sm shrink-0 border border-blue-500/30">
                     <i class="fa-solid fa-user"></i>
                 </div>
                 <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
-                        <span class="font-bold text-xs text-white truncate">${custName}</span>
+                        <span class="font-bold text-xs text-gray-900 dark:text-white truncate">${custName}</span>
                         ${riderName ? `<span class="bg-orange-500/20 text-orange-400 border border-orange-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0"><i class="fa-solid fa-motorcycle"></i> ${escapeHtml(riderName)}</span>` : ''}
                     </div>
-                    <p class="text-[11px] text-gray-400 truncate mt-0.5">${lastMsg}</p>
+                    <p class="text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5">${lastMsg}</p>
                 </div>
             </div>
-            <i class="fa-solid fa-chevron-right text-xs text-gray-600 shrink-0 ml-2"></i>
+            <i class="fa-solid fa-chevron-right text-xs text-gray-400 dark:text-gray-600 shrink-0 ml-2"></i>
         </div>`;
     }).join('');
 }

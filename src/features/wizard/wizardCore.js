@@ -175,12 +175,12 @@ export function completeReceiptDone() {
     const activeCartIdx = globalState.activeCartIndex || 0;
     const activeSlot = activeCartIdx + 1;
 
-    if (!globalState.cartLocked) globalState.cartLocked = [false, false, false, false];
+    if (!globalState.cartLocked) globalState.cartLocked = [];
     globalState.cartLocked[activeCartIdx] = true;
 
     const currentTx = wizState.currentReceiptTransactionId || "";
 
-    if (!globalState.cartTxIds) globalState.cartTxIds = ["", "", "", ""];
+    if (!globalState.cartTxIds) globalState.cartTxIds = [];
     globalState.cartTxIds[activeCartIdx] = currentTx;
 
     if (!multiCarts[activeSlot]) {

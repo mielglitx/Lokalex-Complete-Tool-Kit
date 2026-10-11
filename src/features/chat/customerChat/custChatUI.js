@@ -145,8 +145,8 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
         const isRider = !isStore && !!m.isRider;
         const isCustomer = !isStore && !isRider;
 
-        let alignClass = "self-end bg-blue-600 text-white rounded-tr-none";
-        let senderColor = "text-blue-100";
+        let alignClass = "self-end bg-[#076B57] text-white rounded-tr-none shadow-xs";
+        let senderColor = "text-emerald-100";
         let roleBadge = "";
 
         if (isStore) {
@@ -155,12 +155,13 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
             roleBadge = `<span class="bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 text-[8px] font-black px-1 rounded ml-1">STORE</span>`;
         } else if (isRider) {
             alignClass = "self-start bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-200 rounded-tl-none shadow-xs";
-            senderColor = "text-blue-600 dark:text-blue-400";
-            roleBadge = `<span class="bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-[8px] font-black px-1 rounded ml-1">RIDER</span>`;
+            senderColor = "text-teal-700 dark:text-teal-400";
+            roleBadge = `<span class="bg-teal-500/10 text-teal-700 dark:text-teal-400 border border-teal-500/30 text-[8px] font-black px-1 rounded ml-1">RIDER</span>`;
         }
 
         const timeStr = m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
-        const imgHtml = m.imageUrl ? `<img src="${m.imageUrl}" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(m.imageUrl)}', 'customer')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">` : '';
+        const imageSrc = m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null);
+        const imgHtml = imageSrc ? `<img src="${imageSrc}" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imageSrc)}', 'customer')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">` : '';
         
         let senderName = m.sender || "Lokalex";
         if (isCustomer) senderName = "You";
@@ -236,7 +237,7 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
                     </div>
                 </div>
                 ${replyBlockHtml}
-                ${(m.text && !imgHtml && !locationHtml) ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words pointer-events-none">${escapeHtml(m.text)}</div>` : ''}
+                ${(m.text && (!imgHtml || (!m.text.includes('[Facebook image]') && !m.text.includes('[Facebook attachment]') && m.text !== '📷 Photo' && m.text !== 'Facebook Message')) && !locationHtml) ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words pointer-events-none">${escapeHtml(m.text)}</div>` : ''}
                 ${imgHtml}
                 ${locationHtml}
                 ${reactionsHtml}

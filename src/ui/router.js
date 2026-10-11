@@ -51,23 +51,50 @@ export function updateHeaderClock() {
 // ============================================================================
 // 2. THEME ENGINE & MODAL SYNC
 // ============================================================================
+export function toggleAppTheme() {
+    const isDark = document.documentElement.classList.contains('dark');
+    const newTheme = isDark ? 'light' : 'dark';
+    setTheme(newTheme);
+}
+
 export function setTheme(themeMode) {
     localStorage.setItem('lokalex_theme', themeMode);
+    localStorage.setItem('lokalex_theme_preference', themeMode);
     applyTheme(themeMode);
     showToast(`🎨 Theme switched to ${themeMode.toUpperCase()}`);
 }
 
 export function applyTheme(themeMode) {
-    const savedTheme = themeMode || localStorage.getItem('lokalex_theme') || 'system';
+    let savedTheme = themeMode || localStorage.getItem('lokalex_theme') || localStorage.getItem('lokalex_theme_preference') || 'light';
+    if (savedTheme === 'system') {
+        savedTheme = 'light';
+    }
     const root = document.documentElement;
-
-    const isSystemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const shouldBeDark = savedTheme === 'dark' || (savedTheme === 'system' && isSystemDark);
+    const shouldBeDark = savedTheme === 'dark';
 
     if (shouldBeDark) {
         root.classList.add('dark');
+        root.classList.remove('light');
+        root.style.backgroundColor = '#0C1814';
+        root.style.colorScheme = 'dark';
+        if (document.body) {
+            document.body.style.backgroundColor = '#0C1814';
+            document.body.style.color = '#F8FAFC';
+        }
     } else {
         root.classList.remove('dark');
+        root.classList.add('light');
+        root.style.backgroundColor = '#EDF7F2';
+        root.style.colorScheme = 'light';
+        if (document.body) {
+            document.body.style.backgroundColor = '#EDF7F2';
+            document.body.style.color = '#0F172A';
+        }
+    }
+
+    const metaTheme = document.getElementById('meta-theme-color');
+    if (metaTheme) {
+        metaTheme.setAttribute('content', shouldBeDark ? '#0C1814' : '#EDF7F2');
     }
 
     syncThemeUI(savedTheme);
@@ -422,6 +449,7 @@ if (typeof window !== 'undefined') {
     window.syncHeaderAndWidgets = syncHeaderAndWidgets;
     window.setTheme = setTheme;
     window.applyTheme = applyTheme;
+    window.toggleAppTheme = toggleAppTheme;
     window.syncThemeUI = syncThemeUI;
     window.initHeaderClock = initHeaderClock;
     window.updateHeaderClock = updateHeaderClock;
