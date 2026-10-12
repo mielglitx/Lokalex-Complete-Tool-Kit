@@ -401,8 +401,16 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
     }).join('');
 
     let topHeader = '';
-    if (!hasMoreRiderMsgs) {
-        topHeader = `<div class="text-center text-gray-500 dark:text-gray-400 text-[10px] py-1.5 italic shrink-0">Beginning of message history</div>`;
+    if (hasMoreRiderMsgs && msgs.length >= 15) {
+        topHeader = `
+        <div class="flex justify-center my-1.5 shrink-0">
+            <button type="button" onclick="window.triggerLoadOlderRiderMessages && window.triggerLoadOlderRiderMessages()" class="px-3 py-1 bg-white dark:bg-cardBg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-full text-[11px] font-semibold border border-gray-200 dark:border-gray-700 shadow-2xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-clock-rotate-left text-[10px] text-teal-600 dark:text-teal-400"></i>
+                <span>Load older messages</span>
+            </button>
+        </div>`;
+    } else if (!hasMoreRiderMsgs) {
+        topHeader = `<div class="text-center text-gray-400 dark:text-gray-500 text-[10px] py-1.5 italic shrink-0">Beginning of message history</div>`;
     }
 
     container.innerHTML = topHeader + messagesHtml;
@@ -410,12 +418,12 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
     if (isInitialLoad) {
         requestAnimationFrame(() => {
             container.scrollTop = container.scrollHeight;
-            setTimeout(() => { container.scrollTop = container.scrollHeight; }, 80);
-            setTimeout(() => { container.scrollTop = container.scrollHeight; }, 250);
+            setTimeout(() => { container.scrollTop = container.scrollHeight; }, 60);
+            setTimeout(() => { container.scrollTop = container.scrollHeight; }, 180);
         });
     } else if (oldScrollHeight > 0) {
         const newScrollHeight = container.scrollHeight;
-        container.scrollTop = newScrollHeight - oldScrollHeight;
+        container.scrollTop = Math.max(0, newScrollHeight - oldScrollHeight);
     }
 }
 

@@ -1,6 +1,6 @@
 // src/features/chat/chatUtils.js
 import { db } from '../../config/firebase.js';
-import { appState } from '../../store/state.js';
+import { appState, globalState } from '../../store/state.js';
 import { showToast } from '../../ui/notifications.js';
 import { escapeHtml, copyText } from '../../utils/helpers.js';
 
@@ -23,49 +23,149 @@ export function toggleBodyScroll(lock) {
 }
 
 // ============================================================================
-// 2. CATERING DROPDOWN POPULATOR (BANDWIDTH OPTIMIZED VIA METADATA INDEX)
+// 2. CATERING DROPDOWN POPULATOR (ACTIVE INBOX CHATS + DIRECTORY)
 // ============================================================================
-export function populateCateringCustomerDropdown(cachedMeta = null) {
-    const selectEl = document.getElementById('catering-customer-select') || document.getElementById('admin-cater-customer-select');
-    if (!selectEl) return;
+export function populateCateringCustomerDropdown(targetSelectIdOrMeta = null) {
+    const selectElements = [];
 
-    function applyData(data) {
-        let optionsHtml = '<option value="">-- Select Active Customer --</option>';
-
-        if (data) {
-            const uniqueNames = new Set();
-
-            Object.keys(data).forEach(key => {
-                const item = data[key] || {};
-                const meta = item.metadata || item || {};
-                
-                // Case-insensitive folder & status normalization
-                const folder = (meta.folder || 'inbox').toString().trim().toLowerCase();
-                const status = (meta.status || 'active').toString().trim().toLowerCase();
-                
-                // Robust customer name resolution across multiple metadata schemas
-                const rawName = meta.customerName || meta.name || item.customerName || item.name || "";
-                const name = rawName ? rawName.trim() : "";
-
-                if ((folder === 'inbox') && status !== 'cancelled' && status !== 'done' && name && !uniqueNames.has(name.toLowerCase())) {
-                    uniqueNames.add(name.toLowerCase());
-                    optionsHtml += `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
-                }
-            });
-        }
-
-        selectEl.innerHTML = optionsHtml;
+    // If specific element ID was passed, include it
+    if (typeof targetSelectIdOrMeta === 'string' && targetSelectIdOrMeta.trim()) {
+        const specificEl = document.getElementById(targetSelectIdOrMeta.trim());
+        if (specificEl) selectElements.push(specificEl);
     }
 
-    if (cachedMeta && typeof cachedMeta === 'object') {
-        applyData(cachedMeta);
+    // Always ensure BOTH Cater Order and Admin Force Cater selects are included
+    const caterSelect = document.getElementById('catering-customer-select');
+    const adminSelect = document.getElementById('admin-cater-customer-select');
+    if (caterSelect && !selectElements.includes(caterSelect)) selectElements.push(caterSelect);
+    if (adminSelect && !selectElements.includes(adminSelect)) selectElements.push(adminSelect);
+
+    if (selectElements.length === 0) return;
+
+    function renderOptions(activeCustomerList) {
+        let optionsHtml = '<option value="">-- Select Active Customer --</option>';
+        const seenNames = new Set();
+
+        if (Array.isArray(activeCustomerList) && activeCustomerList.length > 0) {
+            let hasInboxOptgroup = false;
+            activeCustomerList.forEach(item => {
+                const name = (typeof item === 'string' ? item : (item.customerName || item.name || '')).trim();
+                const cleanLower = name.toLowerCase();
+                if (!name || cleanLower === 'customer' || cleanLower === 'customer name' || cleanLower === 'unknown' || seenNames.has(cleanLower)) {
+                    return;
+                }
+                seenNames.add(cleanLower);
+
+                if (!hasInboxOptgroup) {
+                    optionsHtml += '<optgroup label="--- Active Inbox Chats ---">';
+                    hasInboxOptgroup = true;
+                }
+
+                const channel = typeof item === 'object' ? (item.apiName || (item.channel === 'messenger' ? 'Camiling FB' : (item.channel === 'web' ? 'Web' : ''))) : '';
+                const channelBadge = channel ? ` (${channel})` : '';
+                const custId = typeof item === 'object' ? (item.custId || '') : '';
+                optionsHtml += `<option value="${escapeHtml(name)}" data-cust-id="${escapeHtml(custId)}">${escapeHtml(name)}${escapeHtml(channelBadge)}</option>`;
+            });
+            if (hasInboxOptgroup) {
+                optionsHtml += '</optgroup>';
+            }
+        }
+
+        // Also add customer directory records if available
+        try {
+            if (globalState && Array.isArray(globalState.records)) {
+                const dirCusts = globalState.records.filter(r => (r.type || 'customers') === 'customers');
+                const unaddedDirCusts = dirCusts.filter(r => r.name && !seenNames.has(r.name.trim().toLowerCase()));
+                if (unaddedDirCusts.length > 0) {
+                    optionsHtml += '<optgroup label="--- Customer Directory ---">';
+                    unaddedDirCusts.forEach(r => {
+                        const dName = r.name.trim();
+                        seenNames.add(dName.toLowerCase());
+                        const brgy = r.barangay ? ` (${r.barangay})` : '';
+                        optionsHtml += `<option value="${escapeHtml(dName)}" data-cust-id="dir_${escapeHtml(r.compositeKey || dName)}">${escapeHtml(dName)}${escapeHtml(brgy)}</option>`;
+                    });
+                    optionsHtml += '</optgroup>';
+                }
+            }
+        } catch(e) {}
+
+        selectElements.forEach(el => {
+            const currentVal = el.value;
+            el.innerHTML = optionsHtml;
+            if (currentVal && Array.from(el.options).some(o => o.value === currentVal)) {
+                el.value = currentVal;
+            }
+        });
+    }
+
+    // 1. First priority: Pull directly from active Inbox threads in memory
+    let activeInboxThreads = [];
+    if (typeof window !== 'undefined' && typeof window.getActiveInboxCustomerThreads === 'function') {
+        activeInboxThreads = window.getActiveInboxCustomerThreads();
+    }
+    if (activeInboxThreads.length > 0) {
+        renderOptions(activeInboxThreads);
         return;
     }
 
+    // Helper to parse metadata object
+    function parseMetadataObj(data) {
+        if (!data || typeof data !== 'object') return [];
+        const results = [];
+        const seen = new Set();
+
+        Object.keys(data).forEach(key => {
+            const item = data[key] || {};
+            const meta = item.metadata || item || {};
+            const folder = (meta.folder || 'inbox').toString().trim().toLowerCase();
+            const status = (meta.status || 'active').toString().trim().toLowerCase();
+            const isCatered = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy);
+
+            if (folder !== 'inbox' || isCatered || status === 'cancelled' || status === 'done' || status === 'completed') {
+                return;
+            }
+
+            let name = (meta.customerName || meta.name || item.customerName || item.name || '').trim();
+            if (key.startsWith('fb_')) {
+                const fbResolved = (typeof window !== 'undefined' && typeof window.getResolvedFbName === 'function') 
+                    ? window.getResolvedFbName(key) 
+                    : null;
+                if (fbResolved && fbResolved.name && (!name || name.startsWith('FB Customer ('))) {
+                    name = fbResolved.name;
+                }
+            }
+            if (meta.linkedDirectoryName && (!name || name.startsWith('FB Customer ('))) {
+                name = meta.linkedDirectoryName;
+            }
+
+            if (name && name.toLowerCase() !== 'customer' && name.toLowerCase() !== 'customer name' && !seen.has(name.toLowerCase())) {
+                seen.add(name.toLowerCase());
+                results.push({
+                    custId: key,
+                    customerName: name,
+                    apiName: meta.apiName || (key.startsWith('fb_') ? 'Camiling FB' : 'Web'),
+                    channel: meta.channel || (key.startsWith('fb_') ? 'messenger' : 'web')
+                });
+            }
+        });
+        return results;
+    }
+
+    // 2. Second priority: If metadata object passed
+    if (targetSelectIdOrMeta && typeof targetSelectIdOrMeta === 'object') {
+        const parsed = parseMetadataObj(targetSelectIdOrMeta);
+        renderOptions(parsed);
+        return;
+    }
+
+    // 3. Fallback: Query Firebase customerChatMeta
     if (db) {
         db.ref('customerChatMeta').once('value', (snapshot) => {
-            applyData(snapshot.val());
+            const parsed = parseMetadataObj(snapshot.val());
+            renderOptions(parsed);
         });
+    } else {
+        renderOptions([]);
     }
 }
 

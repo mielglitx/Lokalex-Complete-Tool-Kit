@@ -84,38 +84,123 @@
 
 
 <!-- CUSTOMER DETAILS MODAL (FOR RIDERS) -->
-<div id="customer-details-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4" style="z-index: 999999 !important;">
-    <div class="bg-cardBg border border-blue-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-4 relative animate-in fade-in zoom-in duration-200 text-gray-900 dark:text-white">
-        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-3">
+<div id="customer-details-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-3 sm:p-4" style="z-index: 999999 !important;">
+    <div class="bg-cardBg border border-blue-500/50 p-4 sm:p-5 rounded-3xl w-full max-w-xs sm:max-w-sm max-h-[90vh] shadow-2xl flex flex-col gap-3 relative animate-in fade-in zoom-in duration-200 text-gray-900 dark:text-white overflow-hidden">
+        
+        <!-- HEADER -->
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5 shrink-0">
             <div class="flex items-center gap-2">
                 <div class="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold border border-blue-500/30">
                     <i class="fa-solid fa-address-card"></i>
                 </div>
-                <h3 class="font-bold text-sm text-gray-900 dark:text-white">Customer Profile</h3>
+                <div>
+                    <h3 class="font-bold text-sm text-gray-900 dark:text-white leading-tight">Customer Profile</h3>
+                    <span id="cust-modal-thread-channel" class="text-[10px] text-gray-500 dark:text-gray-400">Live Chat Details</span>
+                </div>
             </div>
-            <button onclick="window.closeCustomerDetailsModal && window.closeCustomerDetailsModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm">
+            <button onclick="window.closeCustomerDetailsModal && window.closeCustomerDetailsModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm p-1 rounded-lg">
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
 
-        <div class="flex flex-col gap-3 text-xs">
-            <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800">
-                <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Full Name</span>
-                <span id="cust-modal-name" class="font-bold text-sm text-gray-900 dark:text-white mt-0.5 block">Customer Name</span>
-            </div>
+        <!-- SCROLLABLE BODY -->
+        <div class="flex flex-col gap-2.5 text-xs overflow-y-auto no-scrollbar pr-0.5">
 
-            <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex justify-between items-center">
-                <div>
-                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Mobile Number</span>
-                    <a id="cust-modal-phone" href="#" class="font-bold text-blue-600 dark:text-blue-400 font-mono mt-0.5 block hover:underline">---</a>
+            <!-- DIRECTORY LINK STATUS BANNER -->
+            <div id="cust-modal-link-status-banner" class="bg-gray-100 dark:bg-darkBg p-2.5 rounded-2xl border border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 transition-all">
+                <div class="flex items-center gap-2 min-w-0">
+                    <div id="cust-modal-link-status-icon" class="w-7 h-7 rounded-xl bg-gray-200 dark:bg-gray-800 text-gray-500 flex items-center justify-center text-xs shrink-0">
+                        <i class="fa-solid fa-address-book"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-1.5">
+                            <span id="cust-modal-link-status-title" class="font-bold text-[11px] text-gray-800 dark:text-gray-200 truncate">Customer Directory</span>
+                            <span id="cust-modal-link-status-badge" class="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300">Checking</span>
+                        </div>
+                        <span id="cust-modal-link-status-sub" class="text-[10px] text-gray-500 dark:text-gray-400 block truncate">Connecting directory records...</span>
+                    </div>
+                </div>
+                <div id="cust-modal-link-actions" class="flex items-center gap-1 shrink-0">
+                    <button type="button" id="cust-modal-auto-confirm-btn" onclick="window.confirmDirectoryAutoMatch && window.confirmDirectoryAutoMatch()" class="hidden text-[10px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2 py-1.5 rounded-xl shadow transition active:scale-95 flex items-center gap-1">
+                        <i class="fa-solid fa-check"></i> Link
+                    </button>
+                    <button type="button" id="cust-modal-link-btn" onclick="window.toggleDirectoryLinkPicker && window.toggleDirectoryLinkPicker()" class="text-[10px] bg-blue-600 hover:bg-blue-500 text-white font-bold px-2.5 py-1.5 rounded-xl shadow transition active:scale-95 flex items-center gap-1">
+                        <i class="fa-solid fa-link"></i> <span id="cust-modal-link-btn-text">Link</span>
+                    </button>
                 </div>
             </div>
 
+            <!-- DIRECTORY PICKER / SEARCH PANEL (TOGGLEABLE) -->
+            <div id="cust-modal-link-picker" class="hidden bg-gray-50 dark:bg-darkBg/95 border border-blue-500/40 rounded-2xl p-2.5 flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                        <i class="fa-solid fa-magnifying-glass text-blue-500"></i> Link to Directory Customer
+                    </span>
+                    <button type="button" onclick="window.toggleDirectoryLinkPicker(false)" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs p-1">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="relative">
+                    <input type="text" id="cust-modal-search-input" oninput="window.handleDirectorySearchInput && window.handleDirectorySearchInput(this.value)" placeholder="Search name, phone, address..." class="w-full bg-inputBg text-xs rounded-xl pl-8 pr-7 py-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-medium placeholder-gray-400">
+                    <i class="fa-solid fa-search absolute left-2.5 top-2.5 text-gray-400 text-xs pointer-events-none"></i>
+                    <button type="button" id="cust-modal-search-clear" onclick="window.clearDirectorySearch && window.clearDirectorySearch()" class="hidden absolute right-2.5 top-2 text-gray-400 hover:text-gray-600 text-xs">
+                        <i class="fa-solid fa-circle-xmark"></i>
+                    </button>
+                </div>
+
+                <!-- Live Search Results Header & List -->
+                <div class="flex items-center justify-between px-0.5 text-[10px] text-gray-500 dark:text-gray-400 font-medium">
+                    <span id="cust-modal-results-count">All Customers (A–Z)</span>
+                    <span class="text-[9px] text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-down-a-z"></i> A–Z Sorted
+                    </span>
+                </div>
+                <div id="cust-modal-search-results" class="max-h-56 sm:max-h-64 overflow-y-auto flex flex-col gap-1.5 no-scrollbar pr-0.5 overscroll-contain">
+                    <!-- Dynamic Items -->
+                </div>
+
+                <div class="flex items-center justify-between gap-2 pt-1 border-t border-gray-200 dark:border-gray-800">
+                    <button type="button" id="cust-modal-unlink-btn" onclick="window.unlinkCurrentChatDirectory && window.unlinkCurrentChatDirectory()" class="hidden text-[10px] text-red-500 hover:text-red-600 font-bold py-1 px-1.5 rounded-lg transition">
+                        <i class="fa-solid fa-link-slash"></i> Unlink
+                    </button>
+                    <button type="button" onclick="window.openNewDirectoryCustomerFromChat && window.openNewDirectoryCustomerFromChat()" class="text-[10px] text-blue-600 dark:text-blue-400 hover:underline font-bold py-1 px-1.5 ml-auto flex items-center gap-1">
+                        <i class="fa-solid fa-user-plus"></i> + Add New to Directory
+                    </button>
+                </div>
+            </div>
+
+            <!-- NAME CARD -->
+            <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex justify-between items-start gap-2">
+                <div class="min-w-0">
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Full Name</span>
+                    <span id="cust-modal-name" class="font-bold text-sm text-gray-900 dark:text-white mt-0.5 block truncate">Customer Name</span>
+                </div>
+                <div id="cust-modal-source-pill" class="shrink-0 mt-0.5"></div>
+            </div>
+
+            <!-- PHONE NUMBER CARD -->
+            <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex justify-between items-center gap-2">
+                <div class="min-w-0">
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Mobile Number</span>
+                    <a id="cust-modal-phone" href="#" class="font-bold text-sm text-blue-600 dark:text-blue-400 font-mono mt-0.5 block hover:underline truncate">---</a>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" id="cust-modal-phone-copy-btn" onclick="window.copyCustomerPhone && window.copyCustomerPhone()" class="hidden p-2 rounded-xl bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-blue-500 text-xs transition active:scale-95" title="Copy Number">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                    <a id="cust-modal-phone-call-btn" href="#" class="hidden px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow transition active:scale-95 flex items-center gap-1">
+                        <i class="fa-solid fa-phone"></i> Call
+                    </a>
+                </div>
+            </div>
+
+            <!-- ADDRESS CARD -->
             <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800">
                 <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Delivery Address</span>
                 <span id="cust-modal-address" class="text-gray-800 dark:text-gray-200 mt-0.5 block leading-relaxed font-medium">---</span>
             </div>
 
+            <!-- GPS LOCATION PIN CARD -->
             <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex flex-col gap-2">
                 <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
                     <i class="fa-solid fa-location-crosshairs"></i> Registered GPS Location Pin
@@ -123,11 +208,17 @@
                 <a id="cust-modal-map" href="#" target="_blank" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 text-xs flex items-center justify-center gap-2 shadow">
                     <i class="fa-solid fa-map-location-dot text-sm"></i> OPEN GPS PIN IN GOOGLE MAPS
                 </a>
+                <span id="cust-modal-no-map-hint" class="hidden text-[10px] text-amber-600 dark:text-amber-400 text-center italic">
+                    ⚠️ No GPS pin link recorded in directory.
+                </span>
             </div>
         </div>
 
-        <button onclick="window.closeCustomerDetailsModal && window.closeCustomerDetailsModal()" class="w-full bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-2.5 rounded-2xl text-xs transition active:scale-95">
-            Close
-        </button>
+        <!-- FOOTER CLOSE BUTTON -->
+        <div class="pt-1 border-t border-gray-200 dark:border-gray-800 shrink-0">
+            <button onclick="window.closeCustomerDetailsModal && window.closeCustomerDetailsModal()" class="w-full bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-2.5 rounded-2xl text-xs transition active:scale-95">
+                Close
+            </button>
+        </div>
     </div>
 </div>

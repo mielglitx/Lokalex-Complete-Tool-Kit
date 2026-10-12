@@ -35,11 +35,31 @@ let currentRiderChatMeta = null;
 let activeCustData = null;
 
 let activeRiderReplyTarget = null;
-const RIDER_CHAT_BATCH_SIZE = 25;
+const RIDER_CHAT_BATCH_SIZE = 15; // Initial partial load: only 15 messages
+const RIDER_CHAT_OLDER_BATCH_SIZE = 10; // On-demand chunk size when scrolling up
 let oldestRiderMsgTimestamp = null;
 let hasMoreRiderMsgs = true;
 let isLoadingRiderHistory = false;
+let isInitialScrollDone = false;
+let lastPaginationRequestTime = 0;
 let loadedRiderMsgsMap = new Map();
+
+function getMessageTimestamp(msg) {
+    if (msg.timestamp && typeof msg.timestamp === 'number') return msg.timestamp;
+    if (msg.timestamp && !isNaN(Number(msg.timestamp))) return Number(msg.timestamp);
+    if (msg.id && typeof msg.id === 'string' && msg.id.startsWith('-')) {
+        try {
+            const PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
+            let time = 0;
+            for (let i = 1; i < 9; i++) {
+                const c = msg.id.charAt(i);
+                time = time * 64 + PUSH_CHARS.indexOf(c);
+            }
+            if (time > 0) return time;
+        } catch (_) {}
+    }
+    return 0;
+}
 
 function sanitizeForFirebase(obj) {
     return JSON.parse(JSON.stringify(obj, (key, value) => {
@@ -192,6 +212,8 @@ export function listenToRiderChatMessages(custId) {
     oldestRiderMsgTimestamp = null;
     hasMoreRiderMsgs = true;
     isLoadingRiderHistory = false;
+    isInitialScrollDone = false;
+    lastPaginationRequestTime = 0;
     loadedRiderMsgsMap.clear();
 
     setupRiderScrollPagination(container, custId);
@@ -208,7 +230,12 @@ export function listenToRiderChatMessages(custId) {
         const isInitialLoad = loadedRiderMsgsMap.size === 0;
         let newCustMsg = null;
 
-        Object.entries(data).forEach(([key, msg]) => {
+        const entries = Object.entries(data);
+        if (isInitialLoad && entries.length < RIDER_CHAT_BATCH_SIZE) {
+            hasMoreRiderMsgs = false;
+        }
+
+        entries.forEach(([key, msg]) => {
             const isNew = !loadedRiderMsgsMap.has(key);
             loadedRiderMsgsMap.set(key, { id: key, ...msg });
 
@@ -241,11 +268,17 @@ export function listenToRiderChatMessages(custId) {
         const isNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 80;
 
         if (loadedRiderMsgsMap.size > 0) {
-            const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-            oldestRiderMsgTimestamp = sortedMsgs[0].timestamp || null;
+            const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+            oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
         }
 
         renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, isInitialLoad, 0, activeCustData);
+
+        if (isInitialLoad) {
+            setTimeout(() => {
+                isInitialScrollDone = true;
+            }, 300);
+        }
 
         if (newCustMsg && !isInitialLoad) {
             const isCatered = !!(currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredByRiderId || currentRiderChatMeta?.cateredBy || (currentRiderChatMeta?.folder || '').toLowerCase() === 'catering');
@@ -265,7 +298,16 @@ export function listenToRiderChatMessages(custId) {
 
 function setupRiderScrollPagination(container, custId) {
     container.onscroll = () => {
-        if (container.scrollTop < 50 && !isLoadingRiderHistory && hasMoreRiderMsgs && oldestRiderMsgTimestamp) {
+        const now = Date.now();
+        if (
+            isInitialScrollDone &&
+            container.scrollTop < 60 &&
+            !isLoadingRiderHistory &&
+            hasMoreRiderMsgs &&
+            oldestRiderMsgTimestamp &&
+            (now - lastPaginationRequestTime > 500)
+        ) {
+            lastPaginationRequestTime = now;
             loadOlderRiderMessages(container, custId);
         }
 
@@ -276,8 +318,12 @@ function setupRiderScrollPagination(container, custId) {
     };
 }
 
-async function loadOlderRiderMessages(container, custId) {
-    if (isLoadingRiderHistory || !hasMoreRiderMsgs || !oldestRiderMsgTimestamp) return;
+export async function loadOlderRiderMessages(container, custId) {
+    if (!container) {
+        container = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
+    }
+    const targetCustId = custId || activeRiderChatCustId;
+    if (!container || !targetCustId || isLoadingRiderHistory || !hasMoreRiderMsgs || !oldestRiderMsgTimestamp) return;
 
     isLoadingRiderHistory = true;
     showRiderTopSpinner(container);
@@ -285,10 +331,10 @@ async function loadOlderRiderMessages(container, custId) {
     const oldScrollHeight = container.scrollHeight;
 
     try {
-        const snap = await db.ref(`customerChats/${custId}/messages`)
+        const snap = await db.ref(`customerChats/${targetCustId}/messages`)
             .orderByChild('timestamp')
             .endAt(oldestRiderMsgTimestamp - 1)
-            .limitToLast(20)
+            .limitToLast(RIDER_CHAT_OLDER_BATCH_SIZE)
             .once('value');
 
         const data = snap.val();
@@ -302,7 +348,7 @@ async function loadOlderRiderMessages(container, custId) {
         }
 
         const entries = Object.entries(data);
-        if (entries.length < 20) {
+        if (entries.length < RIDER_CHAT_OLDER_BATCH_SIZE) {
             hasMoreRiderMsgs = false;
         }
 
@@ -310,9 +356,9 @@ async function loadOlderRiderMessages(container, custId) {
             loadedRiderMsgsMap.set(key, { id: key, ...msg });
 
             // Auto-resolve missing Facebook image attachment from Graph API
-            if (String(custId).startsWith('fb_') && !msg.imageUrl && msg.text && (msg.text.includes('[Facebook image]') || msg.text.includes('[Facebook attachment]'))) {
-                resolveFacebookMessageAttachment(custId, key, msg.mid || key).then(url => {
-                    if (url && activeRiderChatCustId === custId) {
+            if (String(targetCustId).startsWith('fb_') && !msg.imageUrl && msg.text && (msg.text.includes('[Facebook image]') || msg.text.includes('[Facebook attachment]'))) {
+                resolveFacebookMessageAttachment(targetCustId, key, msg.mid || key).then(url => {
+                    if (url && activeRiderChatCustId === targetCustId) {
                         const existing = loadedRiderMsgsMap.get(key);
                         if (existing) {
                             existing.imageUrl = url;
@@ -324,9 +370,9 @@ async function loadOlderRiderMessages(container, custId) {
             }
         });
 
-        const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
         if (sortedMsgs.length > 0) {
-            oldestRiderMsgTimestamp = sortedMsgs[0].timestamp || null;
+            oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
         }
 
         renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, oldScrollHeight, activeCustData);
@@ -721,6 +767,8 @@ if (typeof window !== 'undefined') {
     window.getActiveRiderChatFilter = getActiveRiderChatFilter;
     window.setRiderChatFilter = setRiderChatFilter;
     window.listenToAllCustomerChatsForRider = listenToAllCustomerChatsForRider;
+    window.loadOlderRiderMessages = loadOlderRiderMessages;
+    window.triggerLoadOlderRiderMessages = () => loadOlderRiderMessages(null, activeRiderChatCustId);
 
     listenToGlobalStoreChats();
 }

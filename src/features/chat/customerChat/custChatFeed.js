@@ -6,6 +6,7 @@ import { uploadImage } from '../../../utils/imageUpload.js';
 import { 
     custChatState, 
     CUST_CHAT_BATCH_SIZE, 
+    CUST_CHAT_OLDER_BATCH_SIZE, 
     sanitizeForFirebase 
 } from './custChatState.js';
 import { 
@@ -27,6 +28,8 @@ export function listenToCustomerRiderChat() {
     custChatState.oldestCustMsgTimestamp = null;
     custChatState.hasMoreCustMsgs = true;
     custChatState.isLoadingCustHistory = false;
+    custChatState.isInitialScrollDone = false;
+    custChatState.lastPaginationRequestTime = 0;
     custChatState.loadedCustMsgsMap.clear();
 
     setupCustScrollPagination(container, custFbId);
@@ -45,7 +48,12 @@ export function listenToCustomerRiderChat() {
         const isInitialLoad = custChatState.loadedCustMsgsMap.size === 0;
         let incomingMsg = null;
 
-        Object.entries(data).forEach(([key, msg]) => {
+        const entries = Object.entries(data);
+        if (isInitialLoad && entries.length < CUST_CHAT_BATCH_SIZE) {
+            custChatState.hasMoreCustMsgs = false;
+        }
+
+        entries.forEach(([key, msg]) => {
             const isNew = !custChatState.loadedCustMsgsMap.has(key);
             custChatState.loadedCustMsgsMap.set(key, { id: key, ...msg });
 
@@ -65,7 +73,18 @@ export function listenToCustomerRiderChat() {
 
         const isNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 80;
 
+        if (custChatState.loadedCustMsgsMap.size > 0) {
+            const sortedMsgs = Array.from(custChatState.loadedCustMsgsMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+            custChatState.oldestCustMsgTimestamp = sortedMsgs[0].timestamp || null;
+        }
+
         renderCustomerMessages(container, isInitialLoad);
+
+        if (isInitialLoad) {
+            setTimeout(() => {
+                custChatState.isInitialScrollDone = true;
+            }, 300);
+        }
 
         if (incomingMsg && !isInitialLoad) {
             if (!isNearBottom) {
@@ -82,7 +101,16 @@ export function listenToCustomerRiderChat() {
 
 export function setupCustScrollPagination(container, custFbId) {
     container.onscroll = () => {
-        if (container.scrollTop < 50 && !custChatState.isLoadingCustHistory && custChatState.hasMoreCustMsgs && custChatState.oldestCustMsgTimestamp) {
+        const now = Date.now();
+        if (
+            custChatState.isInitialScrollDone &&
+            container.scrollTop < 60 &&
+            !custChatState.isLoadingCustHistory &&
+            custChatState.hasMoreCustMsgs &&
+            custChatState.oldestCustMsgTimestamp &&
+            (now - custChatState.lastPaginationRequestTime > 500)
+        ) {
+            custChatState.lastPaginationRequestTime = now;
             loadOlderCustMessages(container, custFbId);
         }
 
@@ -105,7 +133,7 @@ export async function loadOlderCustMessages(container, custFbId) {
         const snap = await db.ref(`customerChats/${custFbId}/messages`)
             .orderByChild('timestamp')
             .endAt(custChatState.oldestCustMsgTimestamp - 1)
-            .limitToLast(20)
+            .limitToLast(CUST_CHAT_OLDER_BATCH_SIZE)
             .once('value');
 
         const data = snap.val();
@@ -119,13 +147,18 @@ export async function loadOlderCustMessages(container, custFbId) {
         }
 
         const entries = Object.entries(data);
-        if (entries.length < 20) {
+        if (entries.length < CUST_CHAT_OLDER_BATCH_SIZE) {
             custChatState.hasMoreCustMsgs = false;
         }
 
         entries.forEach(([key, msg]) => {
             custChatState.loadedCustMsgsMap.set(key, { id: key, ...msg });
         });
+
+        const sortedMsgs = Array.from(custChatState.loadedCustMsgsMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        if (sortedMsgs.length > 0) {
+            custChatState.oldestCustMsgTimestamp = sortedMsgs[0].timestamp || null;
+        }
 
         renderCustomerMessages(container, false, oldScrollHeight);
     } catch (e) {

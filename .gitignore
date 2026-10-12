@@ -1,0 +1,36 @@
+# Node dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Production build outputs (temporary caches)
+.vite/
+
+# Binary APK and AAB packages (distribute via GitHub Releases or Drive instead of Git history)
+*.apk
+*.aab
+
+# Android build outputs and caches
+.gradle/
+build/
+android/.gradle/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/build/
+android/.idea/
+android/local.properties
+android/*.iml
+android/*/*.iml
+android/.cxx/
+android/.externalNativeBuild/
+
+# OS and Editor metadata
+.DS_Store
+Thumbs.db
+.vscode/
+*.swp
+*.bak
+

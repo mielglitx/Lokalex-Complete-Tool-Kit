@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Lokalex Toolkit</title>
+    <title>Lokalex Hub</title>
 
     <!-- PWA & MOBILE APP STANDALONE CAPABILITIES (REMOVES ADDRESS BAR) -->
     <meta id="meta-theme-color" name="theme-color" content="#EDF7F2">
@@ -36,6 +36,23 @@
 
     <!-- GLOBAL HIGH-CONTRAST UNIVERSAL THEME ENFORCEMENT -->
     <style>
+        /* MOBILE APP STATUS BAR & SAFE AREA INSETS (PREVENTS SYSTEM ICONS / NOTCH OVERLAP) */
+        :root {
+            --sat: env(safe-area-inset-top, 0px);
+            --sab: env(safe-area-inset-bottom, 0px);
+        }
+        body {
+            padding-top: env(safe-area-inset-top, 0px);
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        #app-header {
+            padding-top: calc(0.625rem + env(safe-area-inset-top, 0px)) !important;
+        }
+        [id$="-modal"] {
+            padding-top: max(0.75rem, env(safe-area-inset-top, 0px)) !important;
+            padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px)) !important;
+        }
+
         html,
         html:not(.dark),
         html.light {

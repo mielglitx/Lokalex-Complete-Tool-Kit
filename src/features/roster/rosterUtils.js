@@ -496,6 +496,7 @@ export function getMergedDeduplicatedCommissionList(forceFresh = false) {
 
     (globalState.globalDailyReceipts || []).forEach(rc => {
         if (!rc) return;
+        if (rc.status === 'voided' || rc.voided === true || rc.isVoided === true) return;
         const rawCName = (rc.customerName || "Customer").trim();
         if (!rawCName || rawCName.toLowerCase() === 'sample' || rawCName.toLowerCase() === 'test') return;
 
@@ -546,6 +547,7 @@ export function getMergedDeduplicatedCommissionList(forceFresh = false) {
 
     (globalState.globalCateredHistory || []).forEach(ch => {
         if (!ch) return;
+        if (ch.status === 'voided' || ch.voided === true || ch.isVoided === true) return;
         const rawCName = (ch.customerName || "Customer").trim();
         if (!rawCName || rawCName.toLowerCase() === 'sample' || rawCName.toLowerCase() === 'test') return;
 

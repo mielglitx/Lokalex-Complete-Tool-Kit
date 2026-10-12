@@ -32,6 +32,28 @@ let rawCustomerChatMetaData = null;
 let isInitialCustomerChatMetaLoad = true;
 const lastKnownMessageStateMap = new Map();
 
+export function getCachedCustomerThreadsMap() {
+    return cachedCustomerThreadsMap;
+}
+
+export function getActiveInboxCustomerThreads() {
+    const list = [];
+    if (cachedCustomerThreadsMap && cachedCustomerThreadsMap.size > 0) {
+        for (const thread of cachedCustomerThreadsMap.values()) {
+            const folder = (thread.folder || 'inbox').toLowerCase();
+            const isCatered = !!(thread.cateredByRiderName || thread.cateredByRiderId || thread.cateredBy);
+            const isDone = thread.status === 'completed' || thread.status === 'done' || thread.status === 'cancelled';
+            const name = (thread.customerName || '').trim();
+            const isPlaceholder = !name || name.toLowerCase() === 'customer' || name.toLowerCase() === 'customer name' || name.toLowerCase() === 'unknown';
+            
+            if (folder === 'inbox' && !isCatered && !isDone && !isPlaceholder) {
+                list.push(thread);
+            }
+        }
+    }
+    return list;
+}
+
 export function getActiveRiderChatFilter() { 
     return activeRiderChatFilter; 
 }
@@ -769,6 +791,8 @@ export function toggleCustomerChatUnread(targetCustId) {
 }
 
 if (typeof window !== 'undefined') {
+    window.getCachedCustomerThreadsMap = getCachedCustomerThreadsMap;
+    window.getActiveInboxCustomerThreads = getActiveInboxCustomerThreads;
     window.renderRiderCustomerChatFeed = renderRiderCustomerChatFeed;
     window.isMyCustomerThread = isMyCustomerThread;
     window.markCustomerChatAsUnread = markCustomerChatAsUnread;

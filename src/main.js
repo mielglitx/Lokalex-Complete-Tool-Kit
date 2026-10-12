@@ -42,6 +42,7 @@ import { updateNetworkStatus, initBatteryMonitor } from './app/appMonitors.js';
 import { runBackgroundPersistenceSync, forceReconnectFirebase, initSyncWatchdog } from './app/appSync.js';
 import { initRealtimeFirebaseListeners } from './app/appListeners.js';
 import { initGlobalWindowBridge, bootApp, initAppLifecycleEvents } from './app/appBootstrap.js';
+import { initNativeBridge } from './native/nativeBridge.js';
 import { registerSW } from 'virtual:pwa-register';
 
 const updateSW = registerSW({
@@ -77,6 +78,9 @@ export * from './app/appBootstrap.js';
 
 // 1. Initialize global window bindings for HTML onclick compatibility
 initGlobalWindowBridge();
+
+// 2. Initialize Capacitor native bridge (hardware back button, haptics, lifecycle)
+initNativeBridge();
 
 // 2. Initialize connectivity & sleep watchdog listeners
 initSyncWatchdog();

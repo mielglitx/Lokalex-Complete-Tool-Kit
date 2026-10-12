@@ -1,8 +1,15 @@
 {
-  "appId": "com.lokalex.hub",
+  "appId": "com.lokalex.rider",
   "appName": "Lokalex Hub",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"
+  },
+  "plugins": {
+    "StatusBar": {
+      "style": "DARK",
+      "overlaysWebView": false,
+      "backgroundColor": "#0f172a"
+    }
   }
 }

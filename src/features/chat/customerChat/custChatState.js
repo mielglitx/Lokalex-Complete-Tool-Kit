@@ -1,12 +1,15 @@
 // src/features/chat/customerChat/custChatState.js
 
 export const MAPS_API_KEY = "AIzaSyBVAwn0UnyHJ926oHeK0k789ncADMzmX80";
-export const CUST_CHAT_BATCH_SIZE = 25;
+export const CUST_CHAT_BATCH_SIZE = 15;
+export const CUST_CHAT_OLDER_BATCH_SIZE = 10;
 
 export const custChatState = {
     oldestCustMsgTimestamp: null,
     hasMoreCustMsgs: true,
     isLoadingCustHistory: false,
+    isInitialScrollDone: false,
+    lastPaginationRequestTime: 0,
     loadedCustMsgsMap: new Map(),
     custChatListener: null,
     activeCustReplyTarget: null,

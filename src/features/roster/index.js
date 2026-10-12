@@ -51,6 +51,7 @@ import * as rosterAdminOps from './rosterAdminOps.js';
 import * as rosterAccounts from './rosterAccounts.js';
 import * as rosterAdmin from './rosterAdmin.js';
 import * as rosterSwap from './rosterSwap.js';
+import * as cateredSyncManager from './cateredSyncManager.js';
 
 export * from './rosterUtils.js';
 export * from './rosterUI.js';
@@ -59,6 +60,7 @@ export * from './rosterAccounts.js';
 export * from './rosterAdmin.js';
 export * from './rosterAdminOps.js';
 export * from './rosterSwap.js';
+export * from './cateredSyncManager.js';
 
 // Bind all roster functions globally for HTML template event listeners
 if (typeof window !== 'undefined') {
@@ -69,7 +71,8 @@ if (typeof window !== 'undefined') {
         rosterAccounts, 
         rosterAdmin, 
         rosterAdminOps, 
-        rosterSwap
+        rosterSwap,
+        cateredSyncManager
     ];
     
     modules.forEach(mod => {

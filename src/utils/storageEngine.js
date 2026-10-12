@@ -1,10 +1,10 @@
 // src/utils/storageEngine.js
 
-const DB_NAME = 'lokalex_idb_v1';
-const DB_VERSION = 1;
+const DB_NAME = 'lokalex_idb_v2';
+const DB_VERSION = 2;
 const MEDIA_CACHE_NAME = 'lokalex-media-v1';
 
-const STORES = ['directory', 'stores', 'menus', 'customers', 'chats', 'roster', 'meta'];
+const STORES = ['directory', 'stores', 'menus', 'customers', 'chats', 'roster', 'catered', 'receipts', 'meta'];
 
 let dbPromise = null;
 
@@ -106,6 +106,23 @@ export async function idbClear(storeName) {
     });
 }
 
+export async function idbDelete(storeName, key) {
+    const db = await getDB();
+    if (!db) return false;
+
+    return new Promise((resolve) => {
+        try {
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            const req = store.delete(key);
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => resolve(false);
+        } catch (err) {
+            resolve(false);
+        }
+    });
+}
+
 export async function idbSetBatch(storeName, keyValueMap) {
     const db = await getDB();
     if (!db || !keyValueMap) return false;
@@ -167,6 +184,7 @@ export async function prefetchMediaBatch(urlList) {
 if (typeof window !== 'undefined') {
     window.idbGet = idbGet;
     window.idbSet = idbSet;
+    window.idbDelete = idbDelete;
     window.idbGetAll = idbGetAll;
     window.idbSetBatch = idbSetBatch;
     window.cacheMediaAsset = cacheMediaAsset;
