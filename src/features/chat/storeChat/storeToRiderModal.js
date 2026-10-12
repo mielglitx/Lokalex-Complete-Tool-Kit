@@ -4,6 +4,7 @@ import { appState } from '../../../store/state.js';
 import { showToast } from '../../../ui/notifications.js';
 import { escapeHtml } from '../../../utils/helpers.js';
 import { storeChatState, cleanFirebasePathKey, sanitizeForFirebase } from './storeChatState.js';
+import { formatChatDateTime } from '../chatUtils.js';
 
 export function getMerchantPortalShareUrl(storeId, orderId = 'DIRECT', custId = '') {
     const origin = window.location.origin;
@@ -254,7 +255,7 @@ function listenToMerchantCustomerStream() {
 
     if (storeChatState.activeStoreToCustomerChatListener) storeChatState.activeStoreToCustomerChatListener.off();
 
-    storeChatState.activeStoreToCustomerChatListener = db.ref(`customerChats/${custId}/messages`).limitToLast(40);
+    storeChatState.activeStoreToCustomerChatListener = db.ref(`customerChats/${custId}/messages`);
     storeChatState.activeStoreToCustomerChatListener.on('value', (snap) => {
         if (storeChatState.activeMerchantActiveTab !== 'customer') return;
 
@@ -269,7 +270,7 @@ function listenToMerchantCustomerStream() {
         container.innerHTML = list.map(m => {
             const isStore = m.senderType === 'store' || m.isStore === true;
             const isRider = m.isRider || m.senderType === 'rider';
-            const timeStr = m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            const timeStr = formatChatDateTime(m.timestamp);
 
             let bubbleColor = "bg-white dark:bg-cardBg text-gray-900 dark:text-gray-100 rounded-bl-none border border-gray-200 dark:border-gray-700";
             if (isStore) {
@@ -353,11 +354,15 @@ export async function postMerchantPortalMessage(text) {
 
         try {
             await db.ref(`customerChats/${custId}/messages`).push(sanitizeForFirebase(payload));
-            await db.ref(`customerChats/${custId}/metadata`).update(sanitizeForFirebase({
+            const storeMetaUpdate = sanitizeForFirebase({
                 lastMessage: `${storeName}: ${text.trim()}`,
                 lastUpdated: now,
                 unreadForRider: false
-            }));
+            });
+            await Promise.all([
+                db.ref(`customerChats/${custId}/metadata`).update(storeMetaUpdate),
+                db.ref(`customerChatMeta/${custId}`).update(storeMetaUpdate).catch(() => {})
+            ]);
         } catch(e) {
             showToast("❌ Failed to send message to customer.");
         }

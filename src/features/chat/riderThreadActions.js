@@ -7,7 +7,7 @@ import { toggleBodyScroll, compressAndResizeImage } from './chatUtils.js';
 import { voidSingleCateringCustomer } from '../roster/rosterStatus.js';
 import { uploadImage } from '../../utils/imageUpload.js';
 import { escapeHtml, cleanCustomerForMatch } from '../../utils/helpers.js';
-import { isCustomerMatch } from '../roster/rosterUtils.js';
+import { isCustomerMatch, isAdmin, canManageRoster } from '../roster/rosterUtils.js';
 import { loadDirectoryCache } from '../directory/directoryStorage.js';
 import { idbGet } from '../../utils/storageEngine.js';
 
@@ -1201,13 +1201,16 @@ export function markThreadUndone() {
     if (!custId) return;
 
     if (db) {
-        db.ref(`customerChats/${custId}/metadata`).update({
+        const payload = {
             folder: 'inbox',
             cateredByRiderId: null,
             cateredByRiderName: null,
             cateredBy: null,
-            status: 'active'
-        });
+            status: 'active',
+            lastUpdated: Date.now()
+        };
+        db.ref(`customerChats/${custId}/metadata`).update(payload).catch(() => {});
+        db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
     }
 
     showToast("↩️ Moved thread back to Inbox!");
@@ -1312,6 +1315,18 @@ export async function submitProofOfDelivery(withPhoto = true) {
 }
 
 export function markThreadDone() {
+    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
+                        (typeof canManageRoster === 'function' && canManageRoster()) ||
+                        (typeof window.isAdmin === 'function' && window.isAdmin()) ||
+                        (typeof window.canManageRoster === 'function' && window.canManageRoster()) ||
+                        Boolean(globalState.adminControlsEnabled);
+
+    // If an admin or dispatcher is moving a thread to Done, execute directly without requiring motorcycle POD camera!
+    if (isUserAdmin) {
+        executeThreadDone();
+        return;
+    }
+
     const meta = window.getCurrentRiderChatMeta ? window.getCurrentRiderChatMeta() : {};
     const orderId = meta?.latestOrderId;
 
@@ -1327,12 +1342,17 @@ export function executeThreadDone() {
     if (!custId) return;
 
     if (db) {
-        db.ref(`customerChats/${custId}/metadata`).update({
+        const payload = {
             cateredByRiderId: null,
             cateredByRiderName: null,
             cateredBy: null,
-            folder: 'done'
-        });
+            folder: 'done',
+            status: 'done',
+            unreadForRider: false,
+            lastUpdated: Date.now()
+        };
+        db.ref(`customerChats/${custId}/metadata`).update(payload).catch(() => {});
+        db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
     }
 
     document.getElementById('rider-chat-cancel-btn')?.classList.add('hidden');
@@ -1350,7 +1370,9 @@ export function markThreadFollowUp() {
     const address = activeCustData?.address || "";
 
     if (db) {
-        db.ref(`customerChats/${custId}/metadata`).update({ folder: 'followup' });
+        const payload = { folder: 'followup', lastUpdated: Date.now() };
+        db.ref(`customerChats/${custId}/metadata`).update(payload).catch(() => {});
+        db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
     }
 
     const advModal = document.getElementById('adv-orders-modal');
@@ -1387,14 +1409,17 @@ export function cancelCustomerThread() {
         `Sigurado ka bang nais i-void si [${custName || 'Customer'}]?\nKung may iba ka pang dalang customer, mananatili ka sa Catering.`,
         async () => {
             if (db && custId) {
-                db.ref(`customerChats/${custId}/metadata`).update({
+                const cancelPayload = {
                     cateredByRiderId: null,
                     cateredByRiderName: null,
                     cateredBy: null,
                     folder: 'done',
                     status: 'cancelled',
+                    unreadForRider: false,
                     lastUpdated: Date.now()
-                });
+                };
+                db.ref(`customerChats/${custId}/metadata`).update(cancelPayload).catch(() => {});
+                db.ref(`customerChatMeta/${custId}`).update(cancelPayload).catch(() => {});
             }
 
             if (custName && myId) {
@@ -1488,6 +1513,7 @@ export async function updateOrderMilestone(stage, orderId, podImageUrl = null) {
     const custId = window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null;
     if (custId) {
         updates[`customerChats/${custId}/metadata/orderStatus`] = stage;
+        updates[`customerChatMeta/${custId}/orderStatus`] = stage;
     }
 
     try {

@@ -303,6 +303,9 @@ app.post('/webhook', async (req, res) => {
           apiName: DEFAULT_API_NAME,
           unreadForRider: true
         };
+        if (existingStatus === 'cancelled' || existingStatus === 'completed' || existingStatus === 'done') {
+          threadMeta.status = 'active';
+        }
         if (existingCateredRider) threadMeta.cateredByRiderName = existingCateredRider;
         if (existingCateredRiderId) threadMeta.cateredByRiderId = existingCateredRiderId;
 

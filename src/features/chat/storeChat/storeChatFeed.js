@@ -4,6 +4,7 @@ import { appState } from '../../../store/state.js';
 import { showToast } from '../../../ui/notifications.js';
 import { escapeHtml } from '../../../utils/helpers.js';
 import { storeChatState, cleanFirebasePathKey } from './storeChatState.js';
+import { formatChatDateParts } from '../chatUtils.js';
 
 export function renderReactionsHtml(reactions, msgId) {
     if (!reactions || typeof reactions !== 'object') return '';
@@ -264,7 +265,7 @@ export function renderStoreChatsListOnly() {
     }
 
     listContainer.innerHTML = allMerged.map(s => {
-        const timeStr = s.lastTimestamp ? new Date(s.lastTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+        const { dateStr, timeStr } = formatChatDateParts(s.lastTimestamp);
         const unreadDot = s.unread ? `<span class="bg-orange-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full animate-pulse shrink-0">NEW</span>` : "";
 
         const openStatusBadge = s.isOpen ? `
@@ -299,7 +300,12 @@ export function renderStoreChatsListOnly() {
             </div>
 
             <div class="flex items-center gap-2 shrink-0 ml-2">
-                ${timeStr ? `<div class="text-[9px] text-gray-400 font-mono font-medium">${timeStr}</div>` : ''}
+                ${timeStr ? `
+                    <div class="flex flex-col items-end leading-none">
+                        ${dateStr ? `<span class="text-[8px] text-gray-400 dark:text-gray-500 font-bold mb-0.5 whitespace-nowrap">${dateStr}</span>` : ''}
+                        <span class="text-[9px] text-gray-400 dark:text-gray-500 font-mono font-medium whitespace-nowrap">${timeStr}</span>
+                    </div>
+                ` : ''}
                 <div class="bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-200 dark:bg-orange-600/20 dark:hover:bg-orange-600/30 dark:text-orange-300 dark:border-orange-500/40 text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition flex items-center gap-1 shrink-0 shadow-xs">
                     <i class="fa-solid fa-comments text-[10px]"></i> Chat
                 </div>

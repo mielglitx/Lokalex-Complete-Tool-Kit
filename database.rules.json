@@ -33,7 +33,7 @@
       ".indexOn": ["metadata/customerName", "metadata/folder", "metadata/lastUpdated"],
       "$custId": {
         "messages": {
-          ".indexOn": ["timestamp"]
+          ".indexOn": ["timestamp", "$key"]
         }
       }
     },
@@ -42,7 +42,7 @@
       ".write": true,
       "$chatId": {
         "messages": {
-          ".indexOn": ["timestamp"]
+          ".indexOn": ["timestamp", "$key"]
         }
       }
     },

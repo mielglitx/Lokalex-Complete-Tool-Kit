@@ -2,6 +2,7 @@
 import { appState } from '../../../store/state.js';
 import { escapeHtml } from '../../../utils/helpers.js';
 import { custChatState, MAPS_API_KEY } from './custChatState.js';
+import { formatChatDateTime } from '../chatUtils.js';
 
 export function renderMessageStatusIndicator(msg) {
     const sentTime = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
@@ -159,7 +160,7 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
             roleBadge = `<span class="bg-teal-500/10 text-teal-700 dark:text-teal-400 border border-teal-500/30 text-[8px] font-black px-1 rounded ml-1">RIDER</span>`;
         }
 
-        const timeStr = m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+        const timeStr = formatChatDateTime(m.timestamp);
         const imageSrc = m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null);
         const imgHtml = imageSrc ? `<img src="${imageSrc}" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imageSrc)}', 'customer')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">` : '';
         

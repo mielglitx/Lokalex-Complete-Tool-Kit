@@ -35,10 +35,8 @@ export function listenToCustomerRiderChat() {
 
     setupCustScrollPagination(container, custFbId);
 
-    if (custChatState.custChatListener) custChatState.custChatListener.off();
-
-    // Fast indexed query using Firebase's native push-key ordering
-    custChatState.custChatListener = db.ref(`customerChats/${custFbId}/messages`).limitToLast(CUST_CHAT_BATCH_SIZE);
+    // Fast query using direct node reference (avoids Firebase unindexed key error)
+    custChatState.custChatListener = db.ref(`customerChats/${custFbId}/messages`);
 
     custChatState.custChatListener.on('value', (snapshot) => {
         const data = snapshot.val();
@@ -51,9 +49,7 @@ export function listenToCustomerRiderChat() {
         let incomingMsg = null;
 
         const entries = Object.entries(data);
-        if (entries.length < CUST_CHAT_BATCH_SIZE) {
-            custChatState.hasMoreCustMsgs = false;
-        }
+        custChatState.hasMoreCustMsgs = false;
 
         const seenUpdates = {};
         let hasUnseen = false;

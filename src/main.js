@@ -58,6 +58,15 @@ const updateSW = registerSW({
 
 // Proactively check for new modules whenever the device comes online or the app resumes
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  let swRefreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!swRefreshing) {
+      swRefreshing = true;
+      console.log("⚡ New service worker active; refreshing application...");
+      window.location.reload();
+    }
+  });
+
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && navigator.onLine) {
       navigator.serviceWorker.ready.then(reg => reg.update()).catch(() => {});

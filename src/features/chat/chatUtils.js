@@ -23,6 +23,45 @@ export function toggleBodyScroll(lock) {
 }
 
 // ============================================================================
+// 1.5. TIMESTAMP & DATE FORMATTING HELPERS
+// ============================================================================
+export function formatChatDate(timestamp) {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return "";
+
+    const now = new Date();
+    const isThisYear = date.getFullYear() === now.getFullYear();
+
+    return date.toLocaleDateString('en-US', isThisYear 
+        ? { month: 'short', day: 'numeric' } 
+        : { month: 'short', day: 'numeric', year: 'numeric' }
+    );
+}
+
+export function formatChatDateTime(timestamp) {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return "";
+
+    const dateStr = formatChatDate(timestamp);
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    return dateStr ? `${dateStr}, ${timeStr}` : timeStr;
+}
+
+export function formatChatDateParts(timestamp) {
+    if (!timestamp) return { dateStr: "", timeStr: "" };
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return { dateStr: "", timeStr: "" };
+
+    const dateStr = formatChatDate(timestamp);
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    return { dateStr, timeStr };
+}
+
+// ============================================================================
 // 2. CATERING DROPDOWN POPULATOR (ACTIVE INBOX CHATS + DIRECTORY)
 // ============================================================================
 export function populateCateringCustomerDropdown(targetSelectIdOrMeta = null) {
@@ -462,4 +501,7 @@ if (typeof window !== 'undefined') {
     window.handlePopoverReply = handlePopoverReply;
     window.handlePopoverCopy = handlePopoverCopy;
     window.scrollToBubble = scrollToBubble;
+    window.formatChatDate = formatChatDate;
+    window.formatChatDateTime = formatChatDateTime;
+    window.formatChatDateParts = formatChatDateParts;
 }

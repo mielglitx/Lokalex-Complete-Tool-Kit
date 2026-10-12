@@ -228,6 +228,11 @@ export function canManageRoster() {
     return false;
 }
 
+if (typeof window !== 'undefined') {
+    window.isAdmin = isAdmin;
+    window.canManageRoster = canManageRoster;
+}
+
 export function canForceCaterTarget(targetType, targetId = "") {
     if (isAdmin()) return true;
     if (isTL()) {
@@ -739,13 +744,17 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
                     const chats = snap.val();
                     if (chats) {
                         Object.keys(chats).forEach(custId => {
-                            db.ref(`customerChats/${custId}/metadata`).update({
+                            const donePayload = {
                                 folder: 'done',
+                                status: 'done',
                                 cateredByRiderId: null,
                                 cateredByRiderName: null,
                                 cateredBy: null,
+                                unreadForRider: false,
                                 lastUpdated: Date.now()
-                            });
+                            };
+                            db.ref(`customerChats/${custId}/metadata`).update(donePayload).catch(() => {});
+                            db.ref(`customerChatMeta/${custId}`).update(donePayload).catch(() => {});
                         });
                     }
                 });

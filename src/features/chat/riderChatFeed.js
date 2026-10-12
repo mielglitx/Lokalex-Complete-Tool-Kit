@@ -3,7 +3,7 @@ import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { escapeHtml } from '../../utils/helpers.js';
 import { showToast } from '../../ui/notifications.js';
-import { populateCateringCustomerDropdown } from './chatUtils.js';
+import { populateCateringCustomerDropdown, formatChatDateParts } from './chatUtils.js';
 import { listenToGlobalStoreChats, renderStoreChatsInDashboard } from './riderStoreChat.js';
 import { openRiderCustomerChatModal, closeRiderCustomerChatModal } from './riderChat.js';
 import { isCustomerMatch, isRiderMatch } from '../roster/rosterUtils.js';
@@ -152,6 +152,38 @@ export function isMyCustomerThread(t) {
     return false;
 }
 
+export function getActiveRosterCaterer(custName, custId, meta = {}) {
+    const liveRoster = globalState.rosterMembers || [];
+    if (!liveRoster || liveRoster.length === 0) return null;
+
+    const tCustName = (custName || meta?.customerName || meta?.name || '').toLowerCase().trim();
+    if (!tCustName || tCustName === 'customer' || tCustName === 'customer name') return null;
+
+    return liveRoster.find(m => {
+        if (m.status !== 'Catering') return false;
+
+        // 1. Check comma-separated customerName field
+        if (m.customerName) {
+            const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c && c !== 'customer' && c !== 'customer name');
+            if (custs.some(c => c === tCustName || isCustomerMatch(c, tCustName))) return true;
+        }
+
+        // 2. Check forcedCaters map
+        if (m.forcedCaters && typeof m.forcedCaters === 'object') {
+            for (const [fKey, fVal] of Object.entries(m.forcedCaters)) {
+                if (custId && fKey === custId && fKey !== 'customer') return true;
+                const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
+                const cleanFName = (fName || '').toLowerCase().trim();
+                if (cleanFName && cleanFName !== 'customer' && cleanFName !== 'customer name' && (cleanFName === tCustName || isCustomerMatch(fName, tCustName))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    });
+}
+
 export function renderRiderCustomerChatFeed() {
     if (activeRiderChatFilter === 'stores') return;
 
@@ -203,35 +235,48 @@ export function renderRiderCustomerChatFeed() {
 
     const liveRoster = globalState.rosterMembers || [];
     allThreads.forEach(t => {
-        // 1. If thread metadata already has an active catering rider, enforce folder = 'catering'
-        const hasExistingCaterer = !!(t.cateredByRiderName || t.cateredByRiderId) && t.status !== 'completed' && t.status !== 'done' && t.status !== 'cancelled';
-        if (hasExistingCaterer) {
-            t.folder = 'catering';
+        const isCompleted = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+        if (isCompleted) {
+            t.folder = 'done';
+            t.cateredByRiderId = null;
+            t.cateredByRiderName = null;
+            t.cateredBy = null;
+            return;
         }
 
-        // 2. Cross-reference with live roster
-        const activeCateringRider = liveRoster.find(m => {
-            if (m.status !== 'Catering') return false;
-            const tCustName = (t.customerName || '').toLowerCase().trim();
-            if (!tCustName || tCustName === 'customer' || tCustName === 'customer name') return false;
-            if (m.customerName && tCustName) {
-                const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c !== 'customer' && c !== 'customer name');
-                if (custs.some(c => c === tCustName || isCustomerMatch(c, t.customerName))) return true;
-            }
-            if (m.forcedCaters && typeof m.forcedCaters === 'object') {
-                for (const [fKey, fVal] of Object.entries(m.forcedCaters)) {
-                    if (fKey === t.custId && fKey !== 'customer') return true;
-                    const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
-                    const cleanFName = (fName || '').toLowerCase().trim();
-                    if (cleanFName !== 'customer' && cleanFName !== 'customer name' && tCustName && isCustomerMatch(fName, tCustName)) return true;
+        const activeCaterer = getActiveRosterCaterer(t.customerName, t.custId, t);
+
+        if (activeCaterer) {
+            t.folder = 'catering';
+            t.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+            t.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
+            t.cateredBy = t.cateredByRiderName;
+        } else if (liveRoster.length > 0) {
+            // Live roster is loaded and NO rider is currently catering this customer!
+            const hadStaleCaterer = !!(t.cateredByRiderName || t.cateredByRiderId);
+            const wasInCatering = (t.folder || '').toLowerCase() === 'catering';
+
+            if (hadStaleCaterer || wasInCatering) {
+                t.cateredByRiderId = null;
+                t.cateredByRiderName = null;
+                t.cateredBy = null;
+                if (wasInCatering) {
+                    t.folder = 'done';
+                }
+                // Auto-heal stale catering lock in Firebase
+                if (db && t.custId) {
+                    const healPayload = {
+                        cateredByRiderId: null,
+                        cateredByRiderName: null,
+                        cateredBy: null,
+                        folder: 'done',
+                        status: 'done',
+                        lastUpdated: Date.now()
+                    };
+                    db.ref(`customerChats/${t.custId}/metadata`).update(healPayload).catch(() => {});
+                    db.ref(`customerChatMeta/${t.custId}`).update(healPayload).catch(() => {});
                 }
             }
-            return false;
-        });
-        if (activeCateringRider) {
-            t.folder = 'catering';
-            t.cateredByRiderId = (activeCateringRider.telegramId || activeCateringRider.id || "").toString().trim();
-            t.cateredByRiderName = (activeCateringRider.riderName || activeCateringRider.name || "Rider").toString().trim();
         }
     });
 
@@ -290,6 +335,8 @@ export function renderRiderCustomerChatFeed() {
         return (b.lastUpdated || 0) - (a.lastUpdated || 0);
     });
 
+    updateInboxUnreadBadge();
+
     if (badge) {
         badge.innerText = `${filteredThreads.length} ${filteredThreads.length === 1 ? 'thread' : 'threads'}`;
     }
@@ -340,7 +387,7 @@ export function renderRiderCustomerChatFeed() {
     }
 
     const cardsHtml = filteredThreads.map(t => {
-        const timeStr = t.lastUpdated ? new Date(t.lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+        const { dateStr, timeStr } = formatChatDateParts(t.lastUpdated);
         const isMine = isMyCustomerThread(t);
         const isCateringTab = activeRiderChatFilter === 'catering';
         const isCurrentlyCatering = isMine && (isCateringTab || t.folder === 'catering' || (t.cateredByRiderName && t.status !== 'completed' && t.status !== 'done'));
@@ -413,11 +460,12 @@ export function renderRiderCustomerChatFeed() {
                     </div>
                 </div>
             </div>
-            <div class="flex flex-col items-end gap-1 shrink-0 ml-2 self-start mt-0.5">
-                <div class="text-[10px] ${timeClass} font-mono">${timeStr}</div>
+            <div class="flex flex-col items-end shrink-0 ml-2 self-start mt-0.5">
+                ${dateStr ? `<span class="text-[9px] text-gray-500 dark:text-gray-400 font-bold tracking-tight whitespace-nowrap leading-none mb-0.5">${dateStr}</span>` : ''}
+                <span class="text-[10px] ${timeClass} font-mono leading-none">${timeStr}</span>
                 <button type="button" 
                     onclick="event.stopPropagation(); window.toggleCustomerChatUnread && window.toggleCustomerChatUnread('${t.custId}')" 
-                    class="p-1 rounded-lg text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition active:scale-90 cursor-pointer flex items-center justify-center" 
+                    class="mt-1 p-1 rounded-lg text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition active:scale-90 cursor-pointer flex items-center justify-center" 
                     title="${t.isUnread ? 'Mark as read' : 'Mark as unread'}">
                     <i class="fa-${t.isUnread ? 'solid text-blue-500' : 'regular text-gray-400 dark:text-gray-500'} fa-envelope text-[11px]"></i>
                 </button>
@@ -430,6 +478,8 @@ export function renderRiderCustomerChatFeed() {
     if (typeof populateCateringCustomerDropdown === 'function') {
         populateCateringCustomerDropdown(rawCustomerChatMetaData);
     }
+
+    updateInboxUnreadBadge();
 }
 
 export function listenToAllCustomerChatsForRider() {
@@ -441,6 +491,11 @@ export function listenToAllCustomerChatsForRider() {
     db.ref('customerChatMeta').on('value', (snapshot) => {
         let data = snapshot.val();
         rawCustomerChatMetaData = data;
+        if (data && typeof data === 'object') {
+            try {
+                localStorage.setItem('lokalex_cached_customer_chat_meta', JSON.stringify(data));
+            } catch (_) {}
+        }
         const inboxBadge = document.getElementById('rider-inbox-unread-badge');
 
         if (!data || Object.keys(data).length === 0) {
@@ -572,24 +627,83 @@ export function listenToAllCustomerChatsForRider() {
             }
 
             let isUnread = false;
-            if (meta.unreadForRider === true) {
+            if (rawLastMsg && rawLastMsg.startsWith('You:')) {
+                // Outgoing rider messages can NEVER be unread
+                isUnread = false;
+                if (meta.unreadForRider === true && db && key) {
+                    db.ref(`customerChats/${key}/metadata/unreadForRider`).set(false).catch(() => {});
+                    db.ref(`customerChatMeta/${key}/unreadForRider`).set(false).catch(() => {});
+                }
+            } else if (meta.unreadForRider === true) {
                 isUnread = true;
             } else if (meta.unreadForRider === false) {
                 isUnread = false;
-            } else if (rawLastMsg && !rawLastMsg.startsWith('You:')) {
+            } else if (rawLastMsg && rawLastMsg.toLowerCase() !== 'no messages yet') {
                 isUnread = true;
             }
 
-            const hasCateringRider = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy);
             const isCompletedStatus = meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled';
             let threadFolder = (meta.folder || 'inbox').toLowerCase();
-            if (hasCateringRider && !isCompletedStatus) {
+
+            // Validate catering against live roster
+            const activeCaterer = getActiveRosterCaterer(displayName, key, meta);
+
+            if (isCompletedStatus) {
+                threadFolder = 'done';
+                meta.cateredByRiderId = null;
+                meta.cateredByRiderName = null;
+                meta.cateredBy = null;
+                if (db && key && (meta.folder !== 'done' || meta.cateredByRiderId || meta.cateredByRiderName)) {
+                    const donePayload = {
+                        folder: 'done',
+                        status: meta.status || 'done',
+                        cateredByRiderId: null,
+                        cateredByRiderName: null,
+                        cateredBy: null
+                    };
+                    db.ref(`customerChats/${key}/metadata`).update(donePayload).catch(() => {});
+                    db.ref(`customerChatMeta/${key}`).update(donePayload).catch(() => {});
+                }
+            } else if (activeCaterer) {
                 threadFolder = 'catering';
-                // If Firebase has this thread wrongly marked as 'inbox' (e.g. from an incoming webhook patch), auto-heal Firebase!
+                meta.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+                meta.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
+                meta.cateredBy = meta.cateredByRiderName;
                 if (meta.folder !== 'catering' && db && key) {
-                    const healPayload = { folder: 'catering', lastUpdated: meta.lastUpdated || Date.now() };
+                    const healPayload = {
+                        folder: 'catering',
+                        cateredByRiderId: meta.cateredByRiderId,
+                        cateredByRiderName: meta.cateredByRiderName,
+                        cateredBy: meta.cateredByRiderName,
+                        lastUpdated: meta.lastUpdated || Date.now()
+                    };
                     db.ref(`customerChats/${key}/metadata`).update(healPayload).catch(() => {});
                     db.ref(`customerChatMeta/${key}`).update(healPayload).catch(() => {});
+                }
+            } else if (globalState.rosterMembers && globalState.rosterMembers.length > 0) {
+                // Roster is loaded and NO rider is actively catering this customer!
+                const hadStaleCaterer = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy);
+                const wasInCatering = threadFolder === 'catering';
+
+                if (hadStaleCaterer || wasInCatering) {
+                    meta.cateredByRiderId = null;
+                    meta.cateredByRiderName = null;
+                    meta.cateredBy = null;
+                    if (wasInCatering) {
+                        threadFolder = 'done';
+                    }
+                    if (db && key) {
+                        const healPayload = {
+                            cateredByRiderId: null,
+                            cateredByRiderName: null,
+                            cateredBy: null,
+                            folder: 'done',
+                            status: 'done',
+                            lastUpdated: Date.now()
+                        };
+                        db.ref(`customerChats/${key}/metadata`).update(healPayload).catch(() => {});
+                        db.ref(`customerChatMeta/${key}`).update(healPayload).catch(() => {});
+                    }
                 }
             }
 
@@ -692,18 +806,55 @@ export function listenToAllCustomerChatsForRider() {
         if (activeRiderChatFilter !== 'stores') {
             renderRiderCustomerChatFeed();
         }
+    }, (error) => {
+        console.error("Firebase customerChatMeta listener error:", error);
     });
 }
 
 export function updateInboxUnreadBadge() {
     const inboxBadge = document.getElementById('rider-inbox-unread-badge');
     if (!inboxBadge) return;
+
+    const isAllSources = (typeof isAllSourcesSelected === 'function') ? isAllSourcesSelected() : true;
     const allThreads = Array.from(cachedCustomerThreadsMap.values());
+
     const unreadInboxCount = allThreads.filter(t => {
+        // 1. Must be marked unread
+        if (!t.isUnread) return false;
+
+        // 2. Outgoing rider messages can NEVER be unread
+        if (t.lastMessage && t.lastMessage.startsWith('You:')) return false;
+
+        // 3. Exclude completed / done / cancelled threads
+        const isDone = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+        if (isDone) return false;
+
+        // 4. Must be in inbox folder and not catered
         const folder = (t.folder || 'inbox').toLowerCase();
-        const isCatered = !!(t.cateredByRiderName || t.cateredByRiderId);
-        return folder === 'inbox' && !isCatered && t.isUnread;
+        const isCatered = !!(t.cateredByRiderName || t.cateredByRiderId || t.cateredBy);
+        if (folder !== 'inbox' || isCatered) return false;
+
+        // 5. Must match active chat sources filter
+        if (typeof isSourceSelected === 'function' && !isAllSources) {
+            if (t.channel === 'messenger') {
+                const threadFbId = t.apiId || t.channelId || t.fbApiId;
+                if (threadFbId) {
+                    if (!isSourceSelected(threadFbId)) return false;
+                } else {
+                    if (!isSourceSelected('messenger') && !hasAnyFbSourceSelected()) return false;
+                }
+            } else {
+                if (!isSourceSelected('web')) return false;
+            }
+        }
+
+        // 6. Exclude placeholder names without real messages
+        const name = (t.customerName || '').trim().toLowerCase();
+        if (!name || name === 'customer' || name === 'customer name' || name === 'unknown') return false;
+
+        return true;
     }).length;
+
     if (unreadInboxCount > 0) {
         inboxBadge.innerText = unreadInboxCount.toString();
         inboxBadge.classList.remove('hidden');

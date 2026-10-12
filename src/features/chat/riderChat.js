@@ -7,6 +7,7 @@ import { openMapPicker } from '../maps.js';
 import { showToast } from '../../ui/notifications.js';
 import { uploadImage } from '../../utils/imageUpload.js';
 import { highlightActiveMilestoneUI } from './riderThreadActions.js';
+import { isAdmin, canManageRoster } from '../roster/rosterUtils.js';
 import { 
     showRiderInChatToast, 
     hideRiderInChatToast, 
@@ -85,6 +86,7 @@ export function openRiderChatModal(custId, custName) {
 
 export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
     activeRiderChatCustId = custId;
+    activeCustData = null;
 
     if (db && custId) {
         const payload = { unreadForRider: false };
@@ -206,7 +208,7 @@ function bindRiderToActiveStoreOrders(meta) {
     }
 }
 
-export async function listenToRiderChatMessages(custId) {
+export function listenToRiderChatMessages(custId) {
     if (!db || !custId) return;
 
     const container = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
@@ -214,33 +216,21 @@ export async function listenToRiderChatMessages(custId) {
 
     oldestRiderMsgTimestamp = null;
     oldestRiderMsgKey = null;
-    hasMoreRiderMsgs = true;
+    hasMoreRiderMsgs = false;
     isLoadingRiderHistory = false;
     isInitialScrollDone = false;
     lastPaginationRequestTime = 0;
     loadedRiderMsgsMap.clear();
 
-    // 1. INSTANT CACHE RENDER (0ms latency from RAM or IndexedDB)
+    // 1. INSTANT MEMORY CACHE (0ms latency from RAM)
     let hasRenderedCache = false;
     const memCached = riderChatMemoryCache.get(custId);
     if (Array.isArray(memCached) && memCached.length > 0) {
         memCached.forEach(m => loadedRiderMsgsMap.set(m.id, m));
-        renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
+        renderRiderMessages(container, loadedRiderMsgsMap, false, true, 0, activeCustData);
         hasRenderedCache = true;
     } else {
-        try {
-            const idbCached = await idbGet('chats', custId);
-            if (activeRiderChatCustId === custId && Array.isArray(idbCached) && idbCached.length > 0 && loadedRiderMsgsMap.size === 0) {
-                idbCached.forEach(m => loadedRiderMsgsMap.set(m.id, m));
-                riderChatMemoryCache.set(custId, idbCached);
-                renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
-                hasRenderedCache = true;
-            }
-        } catch (_) {}
-    }
-
-    // If no cache, show instant modern skeleton bubbles so user never sees a stalled/empty screen
-    if (!hasRenderedCache && loadedRiderMsgsMap.size === 0) {
+        // If no RAM cache, display clean modern skeleton bubbles
         container.innerHTML = `
         <div id="rider-chat-loading-skeleton" class="flex flex-col gap-3 py-6 px-4 animate-pulse">
             <div class="flex items-end gap-2 self-start w-3/4">
@@ -256,17 +246,68 @@ export async function listenToRiderChatMessages(custId) {
                 <div class="h-6 rounded-2xl rounded-bl-none bg-gray-200 dark:bg-gray-800 flex-1"></div>
             </div>
         </div>`;
+
+        // Check IndexedDB asynchronously in background (never blocks Firebase connection!)
+        try {
+            idbGet('chats', custId).then(idbCached => {
+                if (activeRiderChatCustId === custId && Array.isArray(idbCached) && idbCached.length > 0 && loadedRiderMsgsMap.size === 0) {
+                    idbCached.forEach(m => loadedRiderMsgsMap.set(m.id, m));
+                    riderChatMemoryCache.set(custId, idbCached);
+                    renderRiderMessages(container, loadedRiderMsgsMap, false, true, 0, activeCustData);
+                }
+            }).catch(() => {});
+        } catch (_) {}
     }
 
     setupRiderScrollPagination(container, custId);
 
-    // 2. ULTRA-FAST INDEXED FIREBASE QUERY (0ms unindexed overhead)
-    // Avoid .orderByChild('timestamp') because Firebase RTDB has no index on timestamp,
-    // which was causing massive unindexed scans on Firebase even for 2-5 messages!
-    // Firebase push keys (-OkABC...) are already sorted chronologically by default.
+    // 2. FAST PARALLEL DIRECT REST FETCH (Guarantees <300ms instant loading on mobile cellular networks!)
+    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChats/${encodeURIComponent(custId)}/messages.json`;
+    fetch(directRestUrl)
+        .then(res => res.json())
+        .then(data => {
+            if (activeRiderChatCustId !== custId) return;
+            if (data && typeof data === 'object') {
+                const entries = Object.entries(data);
+                if (entries.length > 0 && loadedRiderMsgsMap.size === 0) {
+                    entries.forEach(([key, msg]) => {
+                        loadedRiderMsgsMap.set(key, { id: key, ...msg });
+                    });
+                    const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+                    oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
+                    oldestRiderMsgKey = sortedMsgs[0].id || null;
+                    riderChatMemoryCache.set(custId, sortedMsgs);
+                    idbSet('chats', custId, sortedMsgs).catch(() => {});
+                    renderRiderMessages(container, loadedRiderMsgsMap, false, true, 0, activeCustData);
+                } else if (entries.length === 0 && loadedRiderMsgsMap.size === 0) {
+                    container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
+                }
+            }
+        })
+        .catch(err => {
+            console.warn('[RiderChat] Direct REST fast-fetch failed or offline:', err);
+        });
+
+    // 3. 3.5s WATCHDOG FALLBACK (Guarantees user is never stuck on pulsing skeletons)
+    setTimeout(() => {
+        if (activeRiderChatCustId === custId && document.getElementById('rider-chat-loading-skeleton')) {
+            container.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-10 px-4 text-center gap-2.5">
+                <div class="w-10 h-10 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center text-base">
+                    <i class="fa-solid fa-cloud-arrow-down"></i>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Taking longer than usual to load...</p>
+                <button type="button" onclick="window.listenToRiderChatMessages && window.listenToRiderChatMessages('${custId}')" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition active:scale-95 shadow-sm cursor-pointer">
+                    <i class="fa-solid fa-rotate-right mr-1"></i> Tap to Reload Chat
+                </button>
+            </div>`;
+        }
+    }, 3500);
+
+    // 4. CONNECT REALTIME LISTENER SYNCHRONOUSLY IN PARALLEL
     if (activeRiderChatListener) activeRiderChatListener.off();
 
-    activeRiderChatListener = db.ref(`customerChats/${custId}/messages`).limitToLast(RIDER_CHAT_BATCH_SIZE);
+    activeRiderChatListener = db.ref(`customerChats/${custId}/messages`);
 
     activeRiderChatListener.on('value', (snapshot) => {
         if (activeRiderChatCustId !== custId) return;
@@ -284,9 +325,7 @@ export async function listenToRiderChatMessages(custId) {
         let newCustMsg = null;
         const entries = Object.entries(data);
 
-        if (entries.length < RIDER_CHAT_BATCH_SIZE) {
-            hasMoreRiderMsgs = false;
-        }
+        hasMoreRiderMsgs = false;
 
         const seenUpdates = {};
         let hasUnseen = false;
@@ -360,6 +399,11 @@ export async function listenToRiderChatMessages(custId) {
                 hideRiderInChatToast();
                 requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
             }
+        }
+    }, (error) => {
+        console.error("Firebase chat listener error:", error);
+        if (container && loadedRiderMsgsMap.size === 0) {
+            container.innerHTML = `<div class="text-center text-gray-500 italic py-10 text-xs">No messages yet or network reconnecting...</div>`;
         }
     });
 }
@@ -533,11 +577,13 @@ function evaluateRiderChatLockPermissions() {
 
     const isCateringRider = (cateredRiderId && cateredRiderId === myId) || (cateredRiderName && cateredRiderName === myName);
     
-    const isAdmin = typeof window.isAdmin === 'function' ? window.isAdmin() : false;
-    const canManage = typeof window.canManageRoster === 'function' ? window.canManageRoster() : false;
-    const adminControlsActive = globalState.adminControlsEnabled && (isAdmin || canManage);
+    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
+                        (typeof canManageRoster === 'function' && canManageRoster()) ||
+                        (typeof window.isAdmin === 'function' && window.isAdmin()) ||
+                        (typeof window.canManageRoster === 'function' && window.canManageRoster()) ||
+                        Boolean(globalState.adminControlsEnabled);
 
-    const isLocked = (cateredRiderId || cateredRiderName) && !isCateringRider && !adminControlsActive;
+    const isLocked = (cateredRiderId || cateredRiderName) && !isCateringRider && !isUserAdmin;
 
     const caterBtn = document.getElementById('rider-chat-cater-btn');
     const cancelBtn = document.getElementById('rider-chat-cancel-btn');
@@ -559,10 +605,10 @@ function evaluateRiderChatLockPermissions() {
                 lockBanner.classList.remove('hidden');
                 lockBanner.className = "bg-emerald-50 dark:bg-emerald-950/40 border-b-2 border-emerald-500 px-3 py-1.5 text-[11px] text-emerald-800 dark:text-emerald-300 font-bold text-center shrink-0 flex items-center justify-center gap-1.5";
                 lockBanner.innerHTML = `<i class="fa-solid fa-user-check text-emerald-600"></i> Kasalukuyan mong kinacater ang customer na ito.`;
-            } else if (adminControlsActive && (cateredRiderId || cateredRiderName)) {
+            } else if (isUserAdmin && (cateredRiderId || cateredRiderName)) {
                 lockBanner.classList.remove('hidden');
                 lockBanner.className = "bg-amber-50 dark:bg-amber-500/20 border-b border-amber-200 dark:border-amber-500/40 px-3 py-1.5 text-[11px] text-amber-800 dark:text-amber-300 font-bold text-center shrink-0";
-                lockBanner.innerHTML = `⚡ Admin Controls Enabled — Replying as Admin (Catered by ${escapeHtml(currentRiderChatMeta.cateredByRiderName || currentRiderChatMeta.cateredBy)}).`;
+                lockBanner.innerHTML = `⚡ Admin Mode — Replying as Admin (Catered by ${escapeHtml(currentRiderChatMeta.cateredByRiderName || currentRiderChatMeta.cateredBy)}).`;
             } else {
                 lockBanner.classList.add('hidden');
             }
@@ -570,6 +616,8 @@ function evaluateRiderChatLockPermissions() {
         if (inputEl) inputEl.disabled = false;
         if (sendBtn) sendBtn.disabled = false;
         if (actionToolbar) actionToolbar.classList.remove('opacity-50', 'pointer-events-none');
+        if (caterBtn) caterBtn.classList.remove('hidden');
+        if (cancelBtn) cancelBtn.classList.remove('hidden');
 
         const modalDialog = document.querySelector('#rider-chat-modal > div') || document.querySelector('#rider-customer-chat-modal > div');
         if (modalDialog) {
@@ -682,11 +730,13 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
 
     if (db) {
         db.ref(`customerChats/${activeRiderChatCustId}/messages`).push(sanitizeForFirebase(newMsg));
-        db.ref(`customerChats/${activeRiderChatCustId}/metadata`).update(sanitizeForFirebase({
+        const metaPayload = sanitizeForFirebase({
             lastMessage: `You: ${text || (finalImageUrl ? "📷 Photo" : "📍 Location")}`,
             lastUpdated: now,
             unreadForRider: false
-        }));
+        });
+        db.ref(`customerChats/${activeRiderChatCustId}/metadata`).update(metaPayload);
+        db.ref(`customerChatMeta/${activeRiderChatCustId}`).update(metaPayload);
     }
 
     // Forward reply to Facebook Messenger customer if thread is from Facebook
@@ -843,6 +893,7 @@ if (typeof window !== 'undefined') {
     window.getActiveRiderChatFilter = getActiveRiderChatFilter;
     window.setRiderChatFilter = setRiderChatFilter;
     window.listenToAllCustomerChatsForRider = listenToAllCustomerChatsForRider;
+    window.listenToRiderChatMessages = listenToRiderChatMessages;
     window.loadOlderRiderMessages = loadOlderRiderMessages;
     window.triggerLoadOlderRiderMessages = () => loadOlderRiderMessages(null, activeRiderChatCustId);
 

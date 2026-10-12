@@ -376,6 +376,9 @@ async function processMetaEntries(entries, cfg) {
         apiName: cfg.defaultApiName,
         unreadForRider: true,
       };
+      if (existingStatus === 'cancelled' || existingStatus === 'completed' || existingStatus === 'done') {
+        threadMeta.status = 'active';
+      }
       if (existingCateredRider) threadMeta.cateredByRiderName = existingCateredRider;
       if (existingCateredRiderId) threadMeta.cateredByRiderId = existingCateredRiderId;
 

@@ -215,10 +215,14 @@ export async function submitSaveCustomerProfile() {
                 updatedAt: Date.now()
             });
 
-            await db.ref(`customerChats/${custId}/metadata`).update({
+            const profileMetaUpdate = {
                 customerName: name,
                 avatarUrl: finalAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0084FF&color=fff`
-            }).catch(() => {});
+            };
+            await Promise.all([
+                db.ref(`customerChats/${custId}/metadata`).update(profileMetaUpdate).catch(() => {}),
+                db.ref(`customerChatMeta/${custId}`).update(profileMetaUpdate).catch(() => {})
+            ]);
         }
 
         renderCustomerHeaderProfile();

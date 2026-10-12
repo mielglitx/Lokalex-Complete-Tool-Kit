@@ -331,7 +331,7 @@ export async function sendMultiStoreOrderToRiders() {
             };
 
             await db.ref(`customerChats/${custId}/messages`).push(sanitizeForFirebase(chatMsg));
-            await db.ref(`customerChats/${custId}/metadata`).update(sanitizeForFirebase({
+            const orderChatMeta = sanitizeForFirebase({
                 lastMessage: `🛍️ Multi-Store Order #${orderId} (₱${grandItemsTotal.toFixed(2)})`,
                 lastUpdated: now,
                 customerName: custName,
@@ -343,7 +343,11 @@ export async function sendMultiStoreOrderToRiders() {
                 status: 'active',
                 orderStatus: 'placed',
                 unreadForRider: true
-            }));
+            });
+            await Promise.all([
+                db.ref(`customerChats/${custId}/metadata`).update(orderChatMeta),
+                db.ref(`customerChatMeta/${custId}`).update(orderChatMeta).catch(() => {})
+            ]);
 
             for (const sId of storeIds) {
                 const storeGroup = cart[sId];

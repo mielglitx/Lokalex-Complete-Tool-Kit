@@ -419,11 +419,18 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
                 const meta = chats[custId]?.metadata || chats[custId] || {};
                 const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
                 if (chatCustName && (chatCustName === cleanTargetCust || isCustomerMatch(chatCustName, cleanTargetCust))) {
+                    const now = Date.now();
                     atomicUpdates[`customerChats/${custId}/metadata/folder`] = 'catering';
                     atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderId`] = sourceRiderId;
                     atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderName`] = sourceRiderName;
                     atomicUpdates[`customerChats/${custId}/metadata/cateredBy`] = sourceRiderName;
-                    atomicUpdates[`customerChats/${custId}/metadata/lastUpdated`] = Date.now();
+                    atomicUpdates[`customerChats/${custId}/metadata/lastUpdated`] = now;
+
+                    atomicUpdates[`customerChatMeta/${custId}/folder`] = 'catering';
+                    atomicUpdates[`customerChatMeta/${custId}/cateredByRiderId`] = sourceRiderId;
+                    atomicUpdates[`customerChatMeta/${custId}/cateredByRiderName`] = sourceRiderName;
+                    atomicUpdates[`customerChatMeta/${custId}/cateredBy`] = sourceRiderName;
+                    atomicUpdates[`customerChatMeta/${custId}/lastUpdated`] = now;
                 }
             });
 
@@ -496,17 +503,31 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
             const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
 
             if (chatCustName && (chatCustName === cleanSrc || isCustomerMatch(chatCustName, cleanSrc))) {
+                const now = Date.now();
                 atomicUpdates[`customerChats/${custId}/metadata/folder`] = 'catering';
                 atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderId`] = targetRiderId;
                 atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderName`] = targetRiderName;
                 atomicUpdates[`customerChats/${custId}/metadata/cateredBy`] = targetRiderName;
-                atomicUpdates[`customerChats/${custId}/metadata/lastUpdated`] = Date.now();
+                atomicUpdates[`customerChats/${custId}/metadata/lastUpdated`] = now;
+
+                atomicUpdates[`customerChatMeta/${custId}/folder`] = 'catering';
+                atomicUpdates[`customerChatMeta/${custId}/cateredByRiderId`] = targetRiderId;
+                atomicUpdates[`customerChatMeta/${custId}/cateredByRiderName`] = targetRiderName;
+                atomicUpdates[`customerChatMeta/${custId}/cateredBy`] = targetRiderName;
+                atomicUpdates[`customerChatMeta/${custId}/lastUpdated`] = now;
             } else if (cleanTgt && chatCustName && (chatCustName === cleanTgt || isCustomerMatch(chatCustName, cleanTgt))) {
+                const now = Date.now();
                 atomicUpdates[`customerChats/${custId}/metadata/folder`] = 'catering';
                 atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderId`] = sourceRiderId;
                 atomicUpdates[`customerChats/${custId}/metadata/cateredByRiderName`] = sourceRiderName;
                 atomicUpdates[`customerChats/${custId}/metadata/cateredBy`] = sourceRiderName;
-                atomicUpdates[`customerChats/${custId}/metadata/lastUpdated`] = Date.now();
+                atomicUpdates[`customerChats/${custId}/metadata/lastUpdated`] = now;
+
+                atomicUpdates[`customerChatMeta/${custId}/folder`] = 'catering';
+                atomicUpdates[`customerChatMeta/${custId}/cateredByRiderId`] = sourceRiderId;
+                atomicUpdates[`customerChatMeta/${custId}/cateredByRiderName`] = sourceRiderName;
+                atomicUpdates[`customerChatMeta/${custId}/cateredBy`] = sourceRiderName;
+                atomicUpdates[`customerChatMeta/${custId}/lastUpdated`] = now;
             }
         });
 

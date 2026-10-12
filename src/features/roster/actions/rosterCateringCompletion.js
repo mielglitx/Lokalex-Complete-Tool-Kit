@@ -507,18 +507,22 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
 
     // Update Firebase chat folders, remove receipts, and clear fees
     if (db) {
+        const voidPayload = {
+            folder: 'done',
+            status: 'cancelled',
+            cateredByRiderId: null,
+            cateredByRiderName: null,
+            cateredBy: null,
+            forcedBy: null,
+            isForcedCater: false,
+            unreadForRider: false,
+            lastUpdated: Date.now()
+        };
+
         // 1. Direct update to customerChats matching cleanCustKey
         if (cleanCustKey) {
-            db.ref(`customerChats/${cleanCustKey}/metadata`).update({
-                folder: 'done',
-                status: 'cancelled',
-                cateredByRiderId: null,
-                cateredByRiderName: null,
-                cateredBy: null,
-                forcedBy: null,
-                isForcedCater: false,
-                lastUpdated: Date.now()
-            }).catch(() => {});
+            db.ref(`customerChats/${cleanCustKey}/metadata`).update(voidPayload).catch(() => {});
+            db.ref(`customerChatMeta/${cleanCustKey}`).update(voidPayload).catch(() => {});
         }
 
         // 2. Query customerChats to cancel any chat referencing this customer
@@ -528,16 +532,8 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             .once('value', (snapshot) => {
                 const chats = snapshot.val() || {};
                 Object.keys(chats).forEach(custId => {
-                    db.ref(`customerChats/${custId}/metadata`).update({
-                        folder: 'done',
-                        status: 'cancelled',
-                        cateredByRiderId: null,
-                        cateredByRiderName: null,
-                        cateredBy: null,
-                        forcedBy: null,
-                        isForcedCater: false,
-                        lastUpdated: Date.now()
-                    }).catch(() => {});
+                    db.ref(`customerChats/${custId}/metadata`).update(voidPayload).catch(() => {});
+                    db.ref(`customerChatMeta/${custId}`).update(voidPayload).catch(() => {});
                 });
             }).catch(() => {});
 

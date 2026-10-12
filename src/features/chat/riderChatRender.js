@@ -2,6 +2,7 @@
 import { appState, globalState } from '../../store/state.js';
 import { escapeHtml } from '../../utils/helpers.js';
 import { isRiderMatch } from '../roster/rosterUtils.js';
+import { formatChatDateTime } from './chatUtils.js';
 
 const MAPS_API_KEY = "AIzaSyBVAwn0UnyHJ926oHeK0k789ncADMzmX80";
 
@@ -319,7 +320,7 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
         const alignClass = isRider 
             ? "self-end bg-[#076B57] text-white rounded-tr-none shadow-xs" 
             : "self-start bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-200 rounded-tl-none shadow-xs";
-        const timeStr = m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+        const timeStr = formatChatDateTime(m.timestamp);
 
         const senderName = m.sender || (isRider ? (m.senderName || riderName) : custName);
         const senderAvatar = getMessageSenderAvatar(m, isRider, custAvatar);
@@ -368,8 +369,8 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
             </div>`;
         }
 
-        const encodedText = encodeURIComponent(m.text || '');
-        const encodedSender = encodeURIComponent(senderName);
+        const encodedText = encodeURIComponent(m.text || '').replace(/'/g, '%27');
+        const encodedSender = encodeURIComponent(senderName).replace(/'/g, '%27');
 
         const isPlaceholderText = m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]') || m.text === '📷 Photo' || m.text === 'Facebook Message');
         const showText = m.text && (!imgHtml || !isPlaceholderText) && !isResolvingFbImage && !locationHtml;
@@ -386,7 +387,7 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
                 class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 text-xs ${alignClass} cursor-pointer transition active:scale-[0.98] select-none shadow-xs">
                 <div class="text-[9px] ${isRider ? 'text-emerald-100' : 'text-teal-700 dark:text-teal-400'} font-bold flex justify-between gap-3 pointer-events-none">
                     <span>${escapeHtml(senderName)}</span>
-                    <div class="flex items-center gap-1 opacity-80 font-mono">
+                    <div class="flex items-center gap-1 opacity-80 font-mono shrink-0">
                         <span>${timeStr}</span>
                         ${statusIndicator}
                     </div>
