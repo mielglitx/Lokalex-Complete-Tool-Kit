@@ -210,6 +210,7 @@ function bindRiderToActiveStoreOrders(meta) {
 
 export function listenToRiderChatMessages(custId) {
     if (!db || !custId) return;
+    activeRiderChatCustId = custId;
 
     const container = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
     if (!container) return;
@@ -288,9 +289,9 @@ export function listenToRiderChatMessages(custId) {
             console.warn('[RiderChat] Direct REST fast-fetch failed or offline:', err);
         });
 
-    // 3. 3.5s WATCHDOG FALLBACK (Guarantees user is never stuck on pulsing skeletons)
+    // 3. 6s WATCHDOG FALLBACK (Guarantees user is never stuck on pulsing skeletons)
     setTimeout(() => {
-        if (activeRiderChatCustId === custId && document.getElementById('rider-chat-loading-skeleton')) {
+        if (activeRiderChatCustId === custId && loadedRiderMsgsMap.size === 0 && document.getElementById('rider-chat-loading-skeleton')) {
             container.innerHTML = `
             <div class="flex flex-col items-center justify-center py-10 px-4 text-center gap-2.5">
                 <div class="w-10 h-10 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center text-base">
@@ -302,7 +303,7 @@ export function listenToRiderChatMessages(custId) {
                 </button>
             </div>`;
         }
-    }, 3500);
+    }, 6000);
 
     // 4. CONNECT REALTIME LISTENER SYNCHRONOUSLY IN PARALLEL
     if (activeRiderChatListener) activeRiderChatListener.off();
