@@ -29,6 +29,10 @@ import { updateNetworkStatus } from './appMonitors.js';
 
 export function initRealtimeFirebaseListeners() {
     try {
+        if (db && typeof db.goOnline === 'function') {
+            try { db.goOnline(); } catch (_) {}
+        }
+
         if (db) {
             db.ref('.info/connected').on('value', (snap) => {
                 const isConnected = !!snap.val();
@@ -78,6 +82,10 @@ export function initRealtimeFirebaseListeners() {
 
         if (chat && chat.listenToPublicFbChannels) {
             chat.listenToPublicFbChannels();
+        }
+
+        if (chat && chat.listenToAdminFbApis) {
+            chat.listenToAdminFbApis();
         }
 
         if (chat && chat.listenToFirebaseChat) {

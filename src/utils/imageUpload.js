@@ -44,6 +44,8 @@ export function dataUrlToBlob(dataUrl) {
     }
 }
 
+let isStorageAvailable = true;
+
 /**
  * Uploads an image (File, Blob, or base64 DataURL) to Firebase Storage
  * and returns the public HTTPS download URL.
@@ -66,19 +68,25 @@ export async function uploadImage(fileOrBlobOrDataUrl, storagePath, metadata = {
         blob = dataUrlToBlob(fileOrBlobOrDataUrl);
     }
 
-    if (storage && blob) {
+    if (isStorageAvailable && storage && blob) {
         try {
             const cleanPath = (storagePath || `uploads/${Date.now()}_${Math.random().toString(36).substring(2, 6)}.jpg`).replace(/^\/+/, '');
             const storageRef = storage.ref(cleanPath);
-            const uploadTask = await storageRef.put(blob, {
+            const uploadPromise = storageRef.put(blob, {
                 contentType: blob.type || 'image/jpeg',
                 cacheControl: 'public,max-age=2592000,immutable', // Cache for 30 days
                 customMetadata: metadata
             });
+            // 2.5s timeout prevents Firebase Storage hanging indefinitely when bucket is 404/disabled
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Storage upload timeout (bucket unavailable)')), 2500)
+            );
+            const uploadTask = await Promise.race([uploadPromise, timeoutPromise]);
             const downloadUrl = await uploadTask.ref.getDownloadURL();
             return downloadUrl;
         } catch (err) {
-            console.warn('[ImageUpload] Firebase Storage upload failed, falling back:', err);
+            console.warn('[ImageUpload] Firebase Storage upload failed/timed out, falling back to base64:', err.message || err);
+            isStorageAvailable = false;
         }
     }
 

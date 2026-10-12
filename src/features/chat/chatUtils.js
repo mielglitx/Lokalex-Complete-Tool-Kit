@@ -315,39 +315,60 @@ export function triggerImageCapture(sourceType) {
     }
 }
 
-export function handleChatImageUpload(inputEl) {
+export async function handleChatImageUpload(inputEl) {
     const files = Array.from(inputEl?.files || []);
     if (files.length === 0) return;
 
-    if (files.length > 1) {
-        showToast(`📸 Sending ${files.length} images (${isHdMode ? 'HD' : 'Data Saver'})...`);
-        let sentCount = 0;
+    const total = files.length;
+    try {
+        if (total > 1) {
+            showToast(`📸 Sending 1 of ${total} images (${isHdMode ? 'HD' : 'Data Saver'})...`);
+            for (let i = 0; i < total; i++) {
+                const file = files[i];
+                if (i > 0) {
+                    showToast(`📸 Sending ${i + 1} of ${total} images...`);
+                    // Ensure slight timestamp separation so messages appear in sequential order
+                    await new Promise(r => setTimeout(r, 150));
+                }
 
-        files.forEach((file) => {
-            compressAndResizeImage(file, isHdMode, (base64Img) => {
-                if (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function') {
-                    window.sendRiderToCustomerChat("", base64Img);
-                } else if (window.sendCustomerToRiderChat && typeof window.sendCustomerToRiderChat === 'function') {
-                    window.sendCustomerToRiderChat("", base64Img);
+                const base64Img = await new Promise((resolve) => {
+                    compressAndResizeImage(file, isHdMode, (dataUrl) => {
+                        resolve(dataUrl);
+                    });
+                });
+
+                if (base64Img) {
+                    if (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function') {
+                        await window.sendRiderToCustomerChat("", base64Img);
+                    } else if (window.sendCustomerToRiderChat && typeof window.sendCustomerToRiderChat === 'function') {
+                        await window.sendCustomerToRiderChat("", base64Img);
+                    }
                 }
-                sentCount++;
-                if (sentCount === files.length) {
-                    showToast(`✅ ${files.length} images sent successfully!`);
-                }
-            });
-        });
-    } else {
-        showToast(isHdMode ? "📸 Processing HD Image..." : "⚡ Compressing Image (Data Saver)...");
-        compressAndResizeImage(files[0], isHdMode, (base64Img) => {
-            if (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function') {
-                window.sendRiderToCustomerChat("", base64Img);
-            } else if (window.sendCustomerToRiderChat && typeof window.sendCustomerToRiderChat === 'function') {
-                window.sendCustomerToRiderChat("", base64Img);
             }
-        });
-    }
+            showToast(`✅ All ${total} images sent successfully!`);
+        } else {
+            showToast(isHdMode ? "📸 Processing HD Image..." : "⚡ Compressing Image (Data Saver)...");
+            const base64Img = await new Promise((resolve) => {
+                compressAndResizeImage(files[0], isHdMode, (dataUrl) => {
+                    resolve(dataUrl);
+                });
+            });
 
-    inputEl.value = "";
+            if (base64Img) {
+                if (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function') {
+                    await window.sendRiderToCustomerChat("", base64Img);
+                } else if (window.sendCustomerToRiderChat && typeof window.sendCustomerToRiderChat === 'function') {
+                    await window.sendCustomerToRiderChat("", base64Img);
+                }
+                showToast("✅ Image sent!");
+            }
+        }
+    } catch (err) {
+        console.error("[ChatUpload] Error uploading chat images:", err);
+        showToast("⚠️ Failed to send some images. Please try again.");
+    } finally {
+        if (inputEl) inputEl.value = "";
+    }
 }
 
 // ============================================================================

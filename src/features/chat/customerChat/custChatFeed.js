@@ -270,7 +270,7 @@ export async function sendCustomerToRiderChat(customText = "", customImageUrl = 
     if (customLocationCoords) newMsg.locationCoords = customLocationCoords;
 
     if (db) {
-        db.ref(`customerChats/${custFbId}/messages`).push(sanitizeForFirebase(newMsg));
+        await db.ref(`customerChats/${custFbId}/messages`).push(sanitizeForFirebase(newMsg));
         
         let targetFolder = 'inbox';
         try {

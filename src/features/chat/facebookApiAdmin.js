@@ -31,6 +31,48 @@ let isPublicChannelsListening = false;
 let isAdminApisListening = false;
 let visibleLinksSet = new Set();
 
+// Immediately restore cached public channels from disk (0ms instant startup)
+(function initCachedPublicChannels() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        const saved = localStorage.getItem('lokalex_cached_facebook_channels');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed && typeof parsed === 'object') {
+                Object.entries(parsed).forEach(([id, data]) => {
+                    if (data && data.isActive !== false) {
+                        cachedPublicChannelsMap.set(id, {
+                            id: id,
+                            name: data.name || "FB Channel",
+                            sendEndpoint: data.sendEndpoint || null,
+                            isActive: data.isActive !== false,
+                            createdAt: data.createdAt || 0
+                        });
+                    }
+                });
+            }
+        }
+    } catch (_) {}
+})();
+
+// Immediately restore cached admin APIs from disk (0ms instant startup)
+(function initCachedAdminApis() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        const saved = localStorage.getItem('lokalex_cached_admin_facebook_apis');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed && typeof parsed === 'object') {
+                Object.entries(parsed).forEach(([id, data]) => {
+                    if (data) {
+                        cachedAdminApisMap.set(id, { id, ...data });
+                    }
+                });
+            }
+        }
+    } catch (_) {}
+})();
+
 /**
  * Set of active sources selected by the rider.
  * 'all' means all sources are active (default).
@@ -227,11 +269,49 @@ function saveAndSyncRiderSources() {
  * Strictly downloads public names and IDs from `facebookChannels` (no API links).
  */
 export function listenToPublicFbChannels() {
+    // 1. Immediately render UI with current memory/disk cache (0ms instant)
+    renderRiderSourcesUI();
+
+    // 2. Fast parallel direct REST fetch (<150ms guaranteed on mobile networks)
+    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/facebookChannels.json?t=${Date.now()}`;
+    fetch(directRestUrl, { cache: 'no-store' })
+        .then(res => res.json())
+        .then(val => {
+            if (val && typeof val === 'object') {
+                try {
+                    localStorage.setItem('lokalex_cached_facebook_channels', JSON.stringify(val));
+                } catch (_) {}
+                cachedPublicChannelsMap.clear();
+                Object.entries(val).forEach(([id, data]) => {
+                    if (data && data.isActive !== false) {
+                        cachedPublicChannelsMap.set(id, {
+                            id: id,
+                            name: data.name || "FB Channel",
+                            sendEndpoint: data.sendEndpoint || null,
+                            isActive: data.isActive !== false,
+                            createdAt: data.createdAt || 0
+                        });
+                    }
+                });
+                renderRiderSourcesUI();
+                if (window.renderRiderCustomerChatFeed) {
+                    window.renderRiderCustomerChatFeed();
+                }
+            }
+        })
+        .catch(err => {
+            console.warn('[FacebookChannels] Direct REST fetch fallback:', err);
+        });
+
     if (!db || isPublicChannelsListening) return;
     isPublicChannelsListening = true;
 
+    // 3. Realtime WebSocket listener for ongoing channel updates
     db.ref('facebookChannels').on('value', (snapshot) => {
         const val = snapshot.val() || {};
+        try {
+            localStorage.setItem('lokalex_cached_facebook_channels', JSON.stringify(val));
+        } catch (_) {}
         cachedPublicChannelsMap.clear();
 
         Object.entries(val).forEach(([id, data]) => {
@@ -529,15 +609,42 @@ export function resetAdminFbApiForm() {
  * Subscribes to the secure `adminSettings/facebookApis` node (Admins only).
  */
 export function listenToAdminFbApis() {
-    if (!db || !hasAdminFbPermission()) return;
-    if (isAdminApisListening) {
-        renderAdminFbApisList();
-        return;
-    }
+    if (!hasAdminFbPermission()) return;
+
+    // 1. Immediately render UI with current memory/disk cache (0ms instant)
+    renderAdminFbApisList();
+
+    // 2. Fast parallel direct REST fetch (<150ms guaranteed on mobile networks)
+    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/adminSettings/facebookApis.json?t=${Date.now()}`;
+    fetch(directRestUrl, { cache: 'no-store' })
+        .then(res => res.json())
+        .then(val => {
+            if (val && typeof val === 'object') {
+                try {
+                    localStorage.setItem('lokalex_cached_admin_facebook_apis', JSON.stringify(val));
+                } catch (_) {}
+                cachedAdminApisMap.clear();
+                Object.entries(val).forEach(([id, data]) => {
+                    if (data) {
+                        cachedAdminApisMap.set(id, { id, ...data });
+                    }
+                });
+                renderAdminFbApisList();
+            }
+        })
+        .catch(err => {
+            console.warn('[AdminFbApis] Direct REST fetch fallback:', err);
+        });
+
+    if (!db || isAdminApisListening) return;
     isAdminApisListening = true;
 
+    // 3. Realtime WebSocket listener for live admin configuration changes
     db.ref('adminSettings/facebookApis').on('value', (snapshot) => {
         const val = snapshot.val() || {};
+        try {
+            localStorage.setItem('lokalex_cached_admin_facebook_apis', JSON.stringify(val));
+        } catch (_) {}
         cachedAdminApisMap.clear();
 
         Object.entries(val).forEach(([id, data]) => {

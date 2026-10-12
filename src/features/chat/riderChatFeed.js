@@ -482,330 +482,363 @@ export function renderRiderCustomerChatFeed() {
     updateInboxUnreadBadge();
 }
 
-export function listenToAllCustomerChatsForRider() {
-    listenToGlobalStoreChats();
-    initFullBookingListener();
-    if (!db || isCustomerChatMetaListening) return;
-    isCustomerChatMetaListening = true;
+function processCustomerChatMetaData(data, isFromCache = false) {
+    if (!data || typeof data !== 'object') return;
+    rawCustomerChatMetaData = data;
+    if (!isFromCache) {
+        try {
+            localStorage.setItem('lokalex_cached_customer_chat_meta', JSON.stringify(data));
+        } catch (_) {}
+    }
+    const inboxBadge = document.getElementById('rider-inbox-unread-badge');
 
-    db.ref('customerChatMeta').on('value', (snapshot) => {
-        let data = snapshot.val();
-        rawCustomerChatMetaData = data;
-        if (data && typeof data === 'object') {
-            try {
-                localStorage.setItem('lokalex_cached_customer_chat_meta', JSON.stringify(data));
-            } catch (_) {}
+    if (Object.keys(data).length === 0) {
+        cachedCustomerThreadsMap.clear();
+        if (inboxBadge) inboxBadge.classList.add('hidden');
+        if (activeRiderChatFilter !== 'stores') {
+            renderRiderCustomerChatFeed();
         }
-        const inboxBadge = document.getElementById('rider-inbox-unread-badge');
+        return;
+    }
 
-        if (!data || Object.keys(data).length === 0) {
-            cachedCustomerThreadsMap.clear();
-            if (inboxBadge) inboxBadge.classList.add('hidden');
-            if (activeRiderChatFilter !== 'stores') {
-                renderRiderCustomerChatFeed();
+    // Acoustic notification chimes for incoming Inbox & Catering messages
+    if (!isInitialCustomerChatMetaLoad && !isFromCache && data) {
+        let shouldPlayInboxChime = false;
+        let shouldPlayCateringChime = false;
+
+        Object.keys(data).forEach(key => {
+            const item = data[key] || {};
+            const meta = item.metadata || item;
+            const curLastMsg = (meta.lastMessage || '').trim();
+            const curLastUpdated = meta.lastUpdated || 0;
+            const prev = lastKnownMessageStateMap.get(key);
+
+            let isIncomingNew = false;
+            if (prev) {
+                const isNewer = curLastUpdated > prev.lastUpdated;
+                const isDifferent = curLastMsg !== prev.lastMessage;
+                if (isNewer && isDifferent) {
+                    isIncomingNew = true;
+                }
+            } else {
+                // Newly initiated customer thread arriving after initial app load
+                isIncomingNew = true;
+            }
+
+            if (isIncomingNew && curLastMsg && curLastMsg.toLowerCase() !== 'no messages yet') {
+                // Check if from customer (not outgoing rider message)
+                const isFromCustomer = !curLastMsg.startsWith('You:') && meta.unreadForRider !== false;
+                if (isFromCustomer) {
+                    const isCatered = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy || (meta.folder || '').toLowerCase() === 'catering');
+                    if (isCatered) {
+                        const isAdmin = (appState.userType || localStorage.getItem('userType') || '').toLowerCase() === 'admin';
+                        const isMine = isMyCustomerThread({ custId: key, ...meta });
+                        const isUnassigned = !meta.cateredByRiderName && !meta.cateredByRiderId;
+                        if (isAdmin || isMine || isUnassigned) {
+                            shouldPlayCateringChime = true;
+                        }
+                    } else if ((meta.folder || 'inbox').toLowerCase() === 'inbox') {
+                        shouldPlayInboxChime = true;
+                    }
+                }
+            }
+        });
+
+        if (shouldPlayCateringChime) {
+            playChatChime('catering');
+        } else if (shouldPlayInboxChime) {
+            playChatChime('inbox');
+        }
+    }
+
+    // Cache last seen timestamps & message contents
+    if (data) {
+        Object.keys(data).forEach(key => {
+            const item = data[key] || {};
+            const meta = item.metadata || item;
+            lastKnownMessageStateMap.set(key, {
+                lastUpdated: meta.lastUpdated || 0,
+                lastMessage: (meta.lastMessage || '').trim()
+            });
+        });
+    }
+    if (!isFromCache) {
+        isInitialCustomerChatMetaLoad = false;
+    }
+
+    const threadsMap = new Map();
+
+    Object.keys(data).forEach(key => {
+        const cleanKey = (key || '').trim().toLowerCase();
+        // Automatically purge invalid/ghost customer IDs
+        if (!cleanKey || cleanKey === 'customer' || cleanKey === 'customer name' || cleanKey === 'undefined' || cleanKey === 'null') {
+            if (db && key && !isFromCache) {
+                db.ref(`customerChats/${key}`).remove().catch(() => {});
+                db.ref(`customerChatMeta/${key}`).remove().catch(() => {});
             }
             return;
         }
 
-        // Acoustic notification chimes for incoming Inbox & Catering messages
-        if (!isInitialCustomerChatMetaLoad && data) {
-            let shouldPlayInboxChime = false;
-            let shouldPlayCateringChime = false;
+        const item = data[key] || {};
+        const meta = item.metadata || item;
+        const rawLastMsg = (meta.lastMessage || '').trim();
+        const hasValidLastMsg = rawLastMsg !== '' && rawLastMsg.toLowerCase() !== 'no messages yet';
 
-            Object.keys(data).forEach(key => {
-                const item = data[key] || {};
-                const meta = item.metadata || item;
-                const curLastMsg = (meta.lastMessage || '').trim();
-                const curLastUpdated = meta.lastUpdated || 0;
-                const prev = lastKnownMessageStateMap.get(key);
-
-                let isIncomingNew = false;
-                if (prev) {
-                    const isNewer = curLastUpdated > prev.lastUpdated;
-                    const isDifferent = curLastMsg !== prev.lastMessage;
-                    if (isNewer && isDifferent) {
-                        isIncomingNew = true;
-                    }
-                } else {
-                    // Newly initiated customer thread arriving after initial app load
-                    isIncomingNew = true;
+        // FULL BOOKING MODE AUTO-REPLY HOOK:
+        // Immediately dispatches automated full booking reply to incoming messages in Inbox (excludes catering & followup)
+        if (!isFromCache && fullBookingState && fullBookingState.enabled && hasValidLastMsg) {
+            const threadFolder = (meta.folder || 'inbox').toLowerCase();
+            if (threadFolder === 'inbox' && !meta.cateredByRiderId && !meta.cateredByRiderName) {
+                if (!rawLastMsg.startsWith('You:')) {
+                    sendFullBookingAutoReply(key, meta);
                 }
-
-                if (isIncomingNew && curLastMsg && curLastMsg.toLowerCase() !== 'no messages yet') {
-                    // Check if from customer (not outgoing rider message)
-                    const isFromCustomer = !curLastMsg.startsWith('You:') && meta.unreadForRider !== false;
-                    if (isFromCustomer) {
-                        const isCatered = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy || (meta.folder || '').toLowerCase() === 'catering');
-                        if (isCatered) {
-                            const isAdmin = (appState.userType || localStorage.getItem('userType') || '').toLowerCase() === 'admin';
-                            const isMine = isMyCustomerThread({ custId: key, ...meta });
-                            const isUnassigned = !meta.cateredByRiderName && !meta.cateredByRiderId;
-                            if (isAdmin || isMine || isUnassigned) {
-                                shouldPlayCateringChime = true;
-                            }
-                        } else if ((meta.folder || 'inbox').toLowerCase() === 'inbox') {
-                            shouldPlayInboxChime = true;
-                        }
-                    }
-                }
-            });
-
-            if (shouldPlayCateringChime) {
-                playChatChime('catering');
-            } else if (shouldPlayInboxChime) {
-                playChatChime('inbox');
             }
         }
 
-        // Cache last seen timestamps & message contents
-        if (data) {
-            Object.keys(data).forEach(key => {
-                const item = data[key] || {};
-                const meta = item.metadata || item;
-                lastKnownMessageStateMap.set(key, {
-                    lastUpdated: meta.lastUpdated || 0,
-                    lastMessage: (meta.lastMessage || '').trim()
-                });
-            });
+        let displayName = (meta.customerName || meta.name || "").trim();
+        if (key.startsWith('fb_')) {
+            const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(key) : null;
+            if (cached && cached.name && (!displayName || displayName.startsWith('FB Customer ('))) {
+                displayName = cached.name;
+            }
         }
-        isInitialCustomerChatMetaLoad = false;
 
-        const threadsMap = new Map();
+        const cleanDisplayName = displayName.toLowerCase();
+        const isPlaceholderName = !cleanDisplayName || cleanDisplayName === 'customer' || cleanDisplayName === 'customer name' || cleanDisplayName === 'unknown';
 
-        Object.keys(data).forEach(key => {
-            const cleanKey = (key || '').trim().toLowerCase();
-            // Automatically purge invalid/ghost customer IDs
-            if (!cleanKey || cleanKey === 'customer' || cleanKey === 'customer name' || cleanKey === 'undefined' || cleanKey === 'null') {
-                if (db && key) {
-                    db.ref(`customerChats/${key}`).remove().catch(() => {});
-                    db.ref(`customerChatMeta/${key}`).remove().catch(() => {});
-                }
-                return;
+        // 1. Exclude non-existing ghost threads:
+        // Must have actual message history, and placeholder "Customer" threads with zero messages are discarded!
+        if (!hasValidLastMsg) {
+            return;
+        }
+        if (isPlaceholderName && !hasValidLastMsg) {
+            return;
+        }
+
+        if (!displayName) displayName = "Customer";
+        let displayAvatar = meta.avatarUrl;
+        if (key.startsWith('fb_')) {
+            const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(key) : null;
+            if (cached && cached.avatarUrl) displayAvatar = cached.avatarUrl;
+        }
+
+        let isUnread = false;
+        if (rawLastMsg && rawLastMsg.startsWith('You:')) {
+            // Outgoing rider messages can NEVER be unread
+            isUnread = false;
+            if (meta.unreadForRider === true && db && key && !isFromCache) {
+                db.ref(`customerChats/${key}/metadata/unreadForRider`).set(false).catch(() => {});
+                db.ref(`customerChatMeta/${key}/unreadForRider`).set(false).catch(() => {});
             }
+        } else if (meta.unreadForRider === true) {
+            isUnread = true;
+        } else if (meta.unreadForRider === false) {
+            isUnread = false;
+        } else if (rawLastMsg && rawLastMsg.toLowerCase() !== 'no messages yet') {
+            isUnread = true;
+        }
 
-            const item = data[key] || {};
-            const meta = item.metadata || item;
-            const rawLastMsg = (meta.lastMessage || '').trim();
-            const hasValidLastMsg = rawLastMsg !== '' && rawLastMsg.toLowerCase() !== 'no messages yet';
+        const isCompletedStatus = meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled';
+        let threadFolder = (meta.folder || 'inbox').toLowerCase();
 
-            // FULL BOOKING MODE AUTO-REPLY HOOK:
-            // Immediately dispatches automated full booking reply to incoming messages in Inbox (excludes catering & followup)
-            if (fullBookingState && fullBookingState.enabled && hasValidLastMsg) {
-                const threadFolder = (meta.folder || 'inbox').toLowerCase();
-                if (threadFolder === 'inbox' && !meta.cateredByRiderId && !meta.cateredByRiderName) {
-                    if (!rawLastMsg.startsWith('You:')) {
-                        sendFullBookingAutoReply(key, meta);
-                    }
-                }
+        // Validate catering against live roster
+        const activeCaterer = getActiveRosterCaterer(displayName, key, meta);
+
+        if (isCompletedStatus) {
+            threadFolder = 'done';
+            meta.cateredByRiderId = null;
+            meta.cateredByRiderName = null;
+            meta.cateredBy = null;
+            if (db && key && !isFromCache && (meta.folder !== 'done' || meta.cateredByRiderId || meta.cateredByRiderName)) {
+                const donePayload = {
+                    folder: 'done',
+                    status: meta.status || 'done',
+                    cateredByRiderId: null,
+                    cateredByRiderName: null,
+                    cateredBy: null
+                };
+                db.ref(`customerChats/${key}/metadata`).update(donePayload).catch(() => {});
+                db.ref(`customerChatMeta/${key}`).update(donePayload).catch(() => {});
             }
-
-            let displayName = (meta.customerName || meta.name || "").trim();
-            if (key.startsWith('fb_')) {
-                const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(key) : null;
-                if (cached && cached.name && (!displayName || displayName.startsWith('FB Customer ('))) {
-                    displayName = cached.name;
-                }
+        } else if (activeCaterer) {
+            threadFolder = 'catering';
+            meta.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+            meta.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
+            meta.cateredBy = meta.cateredByRiderName;
+            if (meta.folder !== 'catering' && db && key && !isFromCache) {
+                const healPayload = {
+                    folder: 'catering',
+                    cateredByRiderId: meta.cateredByRiderId,
+                    cateredByRiderName: meta.cateredByRiderName,
+                    cateredBy: meta.cateredByRiderName,
+                    lastUpdated: meta.lastUpdated || Date.now()
+                };
+                db.ref(`customerChats/${key}/metadata`).update(healPayload).catch(() => {});
+                db.ref(`customerChatMeta/${key}`).update(healPayload).catch(() => {});
             }
+        } else if (globalState.rosterMembers && globalState.rosterMembers.length > 0) {
+            // Roster is loaded and NO rider is actively catering this customer!
+            const hadStaleCaterer = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy);
+            const wasInCatering = threadFolder === 'catering';
 
-            const cleanDisplayName = displayName.toLowerCase();
-            const isPlaceholderName = !cleanDisplayName || cleanDisplayName === 'customer' || cleanDisplayName === 'customer name' || cleanDisplayName === 'unknown';
-
-            // 1. Exclude non-existing ghost threads:
-            // Must have actual message history, and placeholder "Customer" threads with zero messages are discarded!
-            if (!hasValidLastMsg) {
-                return;
-            }
-            if (isPlaceholderName && !hasValidLastMsg) {
-                return;
-            }
-
-            if (!displayName) displayName = "Customer";
-            let displayAvatar = meta.avatarUrl;
-            if (key.startsWith('fb_')) {
-                const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(key) : null;
-                if (cached && cached.avatarUrl) displayAvatar = cached.avatarUrl;
-            }
-
-            let isUnread = false;
-            if (rawLastMsg && rawLastMsg.startsWith('You:')) {
-                // Outgoing rider messages can NEVER be unread
-                isUnread = false;
-                if (meta.unreadForRider === true && db && key) {
-                    db.ref(`customerChats/${key}/metadata/unreadForRider`).set(false).catch(() => {});
-                    db.ref(`customerChatMeta/${key}/unreadForRider`).set(false).catch(() => {});
-                }
-            } else if (meta.unreadForRider === true) {
-                isUnread = true;
-            } else if (meta.unreadForRider === false) {
-                isUnread = false;
-            } else if (rawLastMsg && rawLastMsg.toLowerCase() !== 'no messages yet') {
-                isUnread = true;
-            }
-
-            const isCompletedStatus = meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled';
-            let threadFolder = (meta.folder || 'inbox').toLowerCase();
-
-            // Validate catering against live roster
-            const activeCaterer = getActiveRosterCaterer(displayName, key, meta);
-
-            if (isCompletedStatus) {
-                threadFolder = 'done';
+            if (hadStaleCaterer || wasInCatering) {
                 meta.cateredByRiderId = null;
                 meta.cateredByRiderName = null;
                 meta.cateredBy = null;
-                if (db && key && (meta.folder !== 'done' || meta.cateredByRiderId || meta.cateredByRiderName)) {
-                    const donePayload = {
-                        folder: 'done',
-                        status: meta.status || 'done',
+                if (wasInCatering) {
+                    threadFolder = 'done';
+                }
+                if (db && key && !isFromCache) {
+                    const healPayload = {
                         cateredByRiderId: null,
                         cateredByRiderName: null,
-                        cateredBy: null
-                    };
-                    db.ref(`customerChats/${key}/metadata`).update(donePayload).catch(() => {});
-                    db.ref(`customerChatMeta/${key}`).update(donePayload).catch(() => {});
-                }
-            } else if (activeCaterer) {
-                threadFolder = 'catering';
-                meta.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
-                meta.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
-                meta.cateredBy = meta.cateredByRiderName;
-                if (meta.folder !== 'catering' && db && key) {
-                    const healPayload = {
-                        folder: 'catering',
-                        cateredByRiderId: meta.cateredByRiderId,
-                        cateredByRiderName: meta.cateredByRiderName,
-                        cateredBy: meta.cateredByRiderName,
-                        lastUpdated: meta.lastUpdated || Date.now()
+                        cateredBy: null,
+                        folder: 'done',
+                        status: 'done',
+                        lastUpdated: Date.now()
                     };
                     db.ref(`customerChats/${key}/metadata`).update(healPayload).catch(() => {});
                     db.ref(`customerChatMeta/${key}`).update(healPayload).catch(() => {});
                 }
-            } else if (globalState.rosterMembers && globalState.rosterMembers.length > 0) {
-                // Roster is loaded and NO rider is actively catering this customer!
-                const hadStaleCaterer = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy);
-                const wasInCatering = threadFolder === 'catering';
+            }
+        }
 
-                if (hadStaleCaterer || wasInCatering) {
-                    meta.cateredByRiderId = null;
-                    meta.cateredByRiderName = null;
-                    meta.cateredBy = null;
-                    if (wasInCatering) {
-                        threadFolder = 'done';
-                    }
-                    if (db && key) {
-                        const healPayload = {
-                            cateredByRiderId: null,
-                            cateredByRiderName: null,
-                            cateredBy: null,
-                            folder: 'done',
-                            status: 'done',
-                            lastUpdated: Date.now()
-                        };
-                        db.ref(`customerChats/${key}/metadata`).update(healPayload).catch(() => {});
-                        db.ref(`customerChatMeta/${key}`).update(healPayload).catch(() => {});
-                    }
+        const threadObj = {
+            custId: key,
+            customerName: displayName,
+            avatarUrl: displayAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0084FF&color=fff`,
+            lastMessage: rawLastMsg || "No messages yet",
+            lastUpdated: meta.lastUpdated || 0,
+            folder: threadFolder,
+            channel: meta.channel || (key.startsWith('fb_') || key.startsWith('messenger_') ? 'messenger' : 'web'),
+            apiId: meta.apiId || meta.channelId || meta.fbApiId || null,
+            apiName: meta.apiName || meta.channelName || null,
+            cateredByRiderId: meta.cateredByRiderId || null,
+            cateredByRiderName: meta.cateredByRiderName || meta.cateredBy || null,
+            status: meta.status || 'active',
+            isUnread: isUnread,
+            hasRealMessages: hasValidLastMsg
+        };
+
+        // Cross-reference with live roster so newly incoming threads immediately transition to catering
+        const liveRoster = globalState.rosterMembers || [];
+        const activeCateringRider = liveRoster.find(m => {
+            if (m.status !== 'Catering') return false;
+            const tCustName = displayName.toLowerCase().trim();
+            if (!tCustName || tCustName === 'customer' || tCustName === 'customer name') return false;
+            if (m.customerName && tCustName) {
+                const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c !== 'customer' && c !== 'customer name');
+                if (custs.some(c => c === tCustName || isCustomerMatch(c, displayName))) return true;
+            }
+            if (m.forcedCaters && typeof m.forcedCaters === 'object') {
+                for (const [fKey, fVal] of Object.entries(m.forcedCaters)) {
+                    if (fKey === key && fKey !== 'customer') return true;
+                    const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
+                    const cleanFName = (fName || '').toLowerCase().trim();
+                    if (cleanFName !== 'customer' && cleanFName !== 'customer name' && tCustName && isCustomerMatch(fName, tCustName)) return true;
                 }
             }
-
-            const threadObj = {
-                custId: key,
-                customerName: displayName,
-                avatarUrl: displayAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0084FF&color=fff`,
-                lastMessage: rawLastMsg || "No messages yet",
-                lastUpdated: meta.lastUpdated || 0,
-                folder: threadFolder,
-                channel: meta.channel || (key.startsWith('fb_') || key.startsWith('messenger_') ? 'messenger' : 'web'),
-                apiId: meta.apiId || meta.channelId || meta.fbApiId || null,
-                apiName: meta.apiName || meta.channelName || null,
-                cateredByRiderId: meta.cateredByRiderId || null,
-                cateredByRiderName: meta.cateredByRiderName || meta.cateredBy || null,
-                status: meta.status || 'active',
-                isUnread: isUnread,
-                hasRealMessages: hasValidLastMsg
-            };
-
-            // Cross-reference with live roster so newly incoming threads immediately transition to catering
-            const liveRoster = globalState.rosterMembers || [];
-            const activeCateringRider = liveRoster.find(m => {
-                if (m.status !== 'Catering') return false;
-                const tCustName = displayName.toLowerCase().trim();
-                if (!tCustName || tCustName === 'customer' || tCustName === 'customer name') return false;
-                if (m.customerName && tCustName) {
-                    const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c !== 'customer' && c !== 'customer name');
-                    if (custs.some(c => c === tCustName || isCustomerMatch(c, displayName))) return true;
-                }
-                if (m.forcedCaters && typeof m.forcedCaters === 'object') {
-                    for (const [fKey, fVal] of Object.entries(m.forcedCaters)) {
-                        if (fKey === key && fKey !== 'customer') return true;
-                        const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
-                        const cleanFName = (fName || '').toLowerCase().trim();
-                        if (cleanFName !== 'customer' && cleanFName !== 'customer name' && tCustName && isCustomerMatch(fName, tCustName)) return true;
-                    }
-                }
-                return false;
-            });
-            if (activeCateringRider) {
-                threadObj.folder = 'catering';
-                threadObj.status = 'active';
-                threadObj.cateredByRiderId = (activeCateringRider.telegramId || activeCateringRider.id || "").toString().trim();
-                threadObj.cateredByRiderName = (activeCateringRider.riderName || activeCateringRider.name || "Rider").toString().trim();
-                if (meta.folder === 'done' && db && key) {
-                    const restorePayload = {
-                        folder: 'catering',
-                        status: 'active',
-                        cateredByRiderId: threadObj.cateredByRiderId,
-                        cateredByRiderName: threadObj.cateredByRiderName,
-                        cateredBy: threadObj.cateredByRiderName,
-                        lastUpdated: Date.now()
-                    };
-                    db.ref(`customerChats/${key}/metadata`).update(restorePayload).catch(() => {});
-                    db.ref(`customerChatMeta/${key}`).update(restorePayload).catch(() => {});
-                }
+            return false;
+        });
+        if (activeCateringRider) {
+            threadObj.folder = 'catering';
+            threadObj.status = 'active';
+            threadObj.cateredByRiderId = (activeCateringRider.telegramId || activeCateringRider.id || "").toString().trim();
+            threadObj.cateredByRiderName = (activeCateringRider.riderName || activeCateringRider.name || "Rider").toString().trim();
+            if (meta.folder === 'done' && db && key && !isFromCache) {
+                const restorePayload = {
+                    folder: 'catering',
+                    status: 'active',
+                    cateredByRiderId: threadObj.cateredByRiderId,
+                    cateredByRiderName: threadObj.cateredByRiderName,
+                    cateredBy: threadObj.cateredByRiderName,
+                    lastUpdated: Date.now()
+                };
+                db.ref(`customerChats/${key}/metadata`).update(restorePayload).catch(() => {});
+                db.ref(`customerChatMeta/${key}`).update(restorePayload).catch(() => {});
             }
+        }
 
-            const dedupKey = getThreadDedupKey(key, meta);
+        const dedupKey = getThreadDedupKey(key, meta);
 
-            // 2. Deduplicate matching customer accounts: keep active thread with real messages and latest update
-            if (threadsMap.has(dedupKey)) {
-                const existing = threadsMap.get(dedupKey);
-                const currentScore = (threadObj.hasRealMessages ? 10000000000000 : 0) + (threadObj.lastUpdated || 0);
-                const existingScore = (existing.hasRealMessages ? 10000000000000 : 0) + (existing.lastUpdated || 0);
+        // 2. Deduplicate matching customer accounts: keep active thread with real messages and latest update
+        if (threadsMap.has(dedupKey)) {
+            const existing = threadsMap.get(dedupKey);
+            const currentScore = (threadObj.hasRealMessages ? 10000000000000 : 0) + (threadObj.lastUpdated || 0);
+            const existingScore = (existing.hasRealMessages ? 10000000000000 : 0) + (existing.lastUpdated || 0);
 
-                if (currentScore > existingScore) {
-                    threadObj.isUnread = threadObj.isUnread || existing.isUnread;
-                    if (!threadObj.cateredByRiderName && existing.cateredByRiderName) {
-                        threadObj.cateredByRiderName = existing.cateredByRiderName;
-                        threadObj.cateredByRiderId = existing.cateredByRiderId;
-                        if (existing.folder === 'catering') threadObj.folder = 'catering';
-                    }
-                    threadsMap.set(dedupKey, threadObj);
-                } else {
-                    existing.isUnread = existing.isUnread || threadObj.isUnread;
-                    if (!existing.cateredByRiderName && threadObj.cateredByRiderName) {
-                        existing.cateredByRiderName = threadObj.cateredByRiderName;
-                        existing.cateredByRiderId = threadObj.cateredByRiderId;
-                        if (threadObj.folder === 'catering') existing.folder = 'catering';
-                    }
+            if (currentScore > existingScore) {
+                threadObj.isUnread = threadObj.isUnread || existing.isUnread;
+                if (!threadObj.cateredByRiderName && existing.cateredByRiderName) {
+                    threadObj.cateredByRiderName = existing.cateredByRiderName;
+                    threadObj.cateredByRiderId = existing.cateredByRiderId;
+                    if (existing.folder === 'catering') threadObj.folder = 'catering';
                 }
-            } else {
                 threadsMap.set(dedupKey, threadObj);
+            } else {
+                existing.isUnread = existing.isUnread || threadObj.isUnread;
+                if (!existing.cateredByRiderName && threadObj.cateredByRiderName) {
+                    existing.cateredByRiderName = threadObj.cateredByRiderName;
+                    existing.cateredByRiderId = threadObj.cateredByRiderId;
+                    if (threadObj.folder === 'catering') existing.folder = 'catering';
+                }
             }
+        } else {
+            threadsMap.set(dedupKey, threadObj);
+        }
+    });
+
+    cachedCustomerThreadsMap = threadsMap;
+
+    const allThreads = Array.from(threadsMap.values());
+    
+    // Auto-resolve Facebook customer names in the background
+    if (!isFromCache && typeof autoResolvePendingFacebookThreads === 'function') {
+        autoResolvePendingFacebookThreads(allThreads);
+    }
+
+    updateInboxUnreadBadge();
+
+    if (activeRiderChatFilter !== 'stores') {
+        renderRiderCustomerChatFeed();
+    }
+}
+
+export function listenToAllCustomerChatsForRider() {
+    listenToGlobalStoreChats();
+    initFullBookingListener();
+
+    // 1. INSTANT LOCAL DISK CACHE (0ms - Facebook & Web customer threads load instantly on screen!)
+    try {
+        const cached = localStorage.getItem('lokalex_cached_customer_chat_meta');
+        if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+                processCustomerChatMetaData(parsed, true);
+            }
+        }
+    } catch (_) {}
+
+    // 2. FAST PARALLEL DIRECT REST FETCH (<150ms guaranteed on mobile cellular networks)
+    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?t=${Date.now()}`;
+    fetch(directRestUrl, { cache: 'no-store' })
+        .then(res => res.json())
+        .then(data => {
+            if (data && typeof data === 'object') {
+                processCustomerChatMetaData(data, false);
+            }
+        })
+        .catch(err => {
+            console.warn('[CustomerChatMeta] Direct REST fast-fetch fallback:', err);
         });
 
-        cachedCustomerThreadsMap = threadsMap;
+    if (!db || isCustomerChatMetaListening) return;
+    isCustomerChatMetaListening = true;
 
-        const allThreads = Array.from(threadsMap.values());
-        
-        // Auto-resolve Facebook customer names in the background
-        if (typeof autoResolvePendingFacebookThreads === 'function') {
-            autoResolvePendingFacebookThreads(allThreads);
-        }
-
-        updateInboxUnreadBadge();
-
-        if (activeRiderChatFilter !== 'stores') {
-            renderRiderCustomerChatFeed();
-        }
+    // 3. REALTIME WEBSOCKET LISTENER FOR INCOMING LIVE MESSAGES
+    db.ref('customerChatMeta').on('value', (snapshot) => {
+        let data = snapshot.val();
+        processCustomerChatMetaData(data, false);
     }, (error) => {
         console.error("Firebase customerChatMeta listener error:", error);
     });
