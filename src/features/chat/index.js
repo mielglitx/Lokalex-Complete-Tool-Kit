@@ -69,6 +69,7 @@ import * as riderThreadActions from './riderThreadActions.js';
 import * as teamComms from './teamComms.js';
 import * as facebookApiAdmin from './facebookApiAdmin.js';
 import * as fullBookingMode from './fullBookingMode.js';
+import * as chatSoundManager from './chatSoundManager.js';
 import { globalState, appState } from '../../store/state.js';
 import { escapeHtml, formatTitleCase } from '../../utils/helpers.js';
 import { showToast } from '../../ui/notifications.js';
@@ -86,6 +87,7 @@ export * from './riderThreadActions.js';
 export * from './teamComms.js';
 export * from './facebookApiAdmin.js';
 export * from './fullBookingMode.js';
+export * from './chatSoundManager.js';
 
 // Bind all chat functions to global window object with max booking limit safety
 if (typeof window !== 'undefined') {
@@ -96,12 +98,13 @@ if (typeof window !== 'undefined') {
         customerChat, 
         riderChat, 
         riderChatFeed,
-        riderChatRender,
+        riderChatRender, 
         riderStoreChat, 
         riderThreadActions, 
         teamComms,
         facebookApiAdmin,
-        fullBookingMode
+        fullBookingMode,
+        chatSoundManager
     ];
     modules.forEach(mod => {
         if (mod) {
@@ -174,8 +177,9 @@ export function renderFilteredCustomerChats(targetFolder = 'inbox') {
         // FILTER: Show chats currently being catered to
         filtered = allChats.filter(chat => {
             const meta = chat.metadata || chat;
+            const isCatered = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy) && meta.status !== 'completed' && meta.status !== 'done' && meta.status !== 'cancelled';
             const folder = (meta.folder || 'inbox').toLowerCase();
-            if (folder !== 'catering') return false;
+            if (folder !== 'catering' && !isCatered) return false;
             if (meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled') return false;
 
             const rName = (meta.cateredByRiderName || meta.cateredBy || "").trim().toLowerCase();
@@ -196,9 +200,11 @@ export function renderFilteredCustomerChats(targetFolder = 'inbox') {
         // Standard folder filtering (inbox, followup, done, etc.)
         filtered = allChats.filter(chat => {
             const meta = chat.metadata || chat;
+            const isCatered = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy) && meta.status !== 'completed' && meta.status !== 'done' && meta.status !== 'cancelled';
             const folder = (meta.folder || 'inbox').toLowerCase();
             
             if (targetFolder === 'inbox') {
+                if (isCatered || folder === 'catering') return false;
                 return folder === 'inbox';
             }
             if (targetFolder === 'done') {

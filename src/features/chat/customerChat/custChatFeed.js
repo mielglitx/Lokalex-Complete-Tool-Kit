@@ -225,13 +225,29 @@ export async function sendCustomerToRiderChat(customText = "", customImageUrl = 
 
     if (db) {
         db.ref(`customerChats/${custFbId}/messages`).push(sanitizeForFirebase(newMsg));
+        
+        let targetFolder = 'inbox';
+        try {
+            const metaSnap = await db.ref(`customerChats/${custFbId}/metadata`).once('value');
+            const metaVal = metaSnap.val();
+            if (metaVal) {
+                const curFolder = (metaVal.folder || '').toLowerCase();
+                const isCatered = (metaVal.cateredByRiderId || metaVal.cateredByRiderName || curFolder === 'catering') && metaVal.status !== 'completed' && metaVal.status !== 'done';
+                if (isCatered) {
+                    targetFolder = 'catering';
+                } else if (curFolder === 'followup') {
+                    targetFolder = 'followup';
+                }
+            }
+        } catch (_) {}
+
         db.ref(`customerChats/${custFbId}/metadata`).update(sanitizeForFirebase({
             lastMessage: text || (finalImageUrl ? "📷 Photo" : "📍 Shared Location"),
             lastUpdated: now,
             customerName: custName,
             customerFbId: custFbId,
             avatarUrl: custAvatar,
-            folder: 'inbox',
+            folder: targetFolder,
             unreadForRider: true
         }));
     }

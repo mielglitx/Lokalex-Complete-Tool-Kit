@@ -24,9 +24,17 @@
                     </p>
                 </div>
             </div>
-            <button onclick="window.closeRiderChatModal && window.closeRiderChatModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-2 text-base transition">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
+            <div class="flex items-center gap-1">
+                <button type="button" onclick="window.markCustomerChatAsUnread && window.markCustomerChatAsUnread()" class="text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 p-2 text-sm transition" title="Mark as unread and return to Inbox">
+                    <i class="fa-solid fa-envelope"></i>
+                </button>
+                <button type="button" onclick="window.openChatSoundSettingsModal && window.openChatSoundSettingsModal()" class="text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 p-2 text-sm transition" title="Message Chimes & Ringtones">
+                    <i class="fa-solid fa-bell"></i>
+                </button>
+                <button onclick="window.closeRiderChatModal && window.closeRiderChatModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-2 text-base transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
         </div>
 
         <!-- LOCK BANNER -->
@@ -59,6 +67,11 @@
             <!-- CATER BUTTON -->
             <button id="rider-chat-cater-btn" onclick="window.caterCurrentChatCustomer && window.caterCurrentChatCustomer()" class="flex-1 min-w-[75px] bg-teal-600 hover:bg-teal-500 text-white border border-teal-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm" title="Cater this customer">
                 <i class="fa-solid fa-motorcycle"></i> Cater
+            </button>
+
+            <!-- UNREAD BUTTON -->
+            <button type="button" onclick="window.markCustomerChatAsUnread && window.markCustomerChatAsUnread()" class="flex-1 min-w-[80px] bg-sky-600 hover:bg-sky-500 text-white border border-sky-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm" title="Mark this chat as unread and return to Inbox">
+                <i class="fa-solid fa-envelope"></i> Unread
             </button>
 
             <button onclick="window.markThreadUndone && window.markThreadUndone()" class="flex-1 min-w-[80px] bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm">
@@ -389,6 +402,93 @@
                     <i class="fa-solid fa-paper-plane"></i> Send
                 </button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- MESSAGE CHIMES & RINGTONES SETTINGS MODAL -->
+<div id="chat-sound-settings-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-amber-500/60 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3.5 max-h-[90vh] relative animate-in fade-in zoom-in duration-200">
+        <!-- HEADER -->
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5 shrink-0">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center text-sm font-bold border border-amber-500/30">
+                    <i class="fa-solid fa-bell"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-gray-900 dark:text-white">Message Chimes & Ringtones</h3>
+                    <p class="text-[9.5px] text-amber-600 dark:text-amber-400 font-mono font-medium">Personalized notification sounds for <span id="sound-user-name-badge" class="font-bold">You</span></p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeChatSoundSettingsModal && window.closeChatSoundSettingsModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm cursor-pointer p-1">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="flex flex-col gap-3.5 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
+            <!-- INBOX CHIME SELECTOR -->
+            <div class="bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 p-3 rounded-2xl flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                    <span class="font-bold text-blue-900 dark:text-blue-300 text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-inbox text-blue-600 dark:text-blue-400"></i> Inbox Message Chime
+                    </span>
+                    <button type="button" onclick="window.previewSelectedModalChime && window.previewSelectedModalChime('inbox')" class="bg-blue-600 hover:bg-blue-500 text-white text-[9.5px] font-bold px-2.5 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Test play Inbox chime">
+                        <i class="fa-solid fa-play text-[8px]"></i> Play
+                    </button>
+                </div>
+                <p class="text-[9.5px] text-gray-500 dark:text-gray-400">Rings when new customer inquiries arrive in your Inbox feed.</p>
+                <select id="sound-select-inbox" class="w-full bg-white dark:bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-blue-500 font-medium">
+                    <!-- Populated dynamically by populateChimeDropdowns() -->
+                </select>
+            </div>
+
+            <!-- CATERING CHIME SELECTOR -->
+            <div class="bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 p-3 rounded-2xl flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                    <span class="font-bold text-amber-900 dark:text-amber-300 text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-motorcycle text-amber-600 dark:text-amber-400"></i> Catering Message Chime
+                    </span>
+                    <button type="button" onclick="window.previewSelectedModalChime && window.previewSelectedModalChime('catering')" class="bg-amber-600 hover:bg-amber-500 text-white text-[9.5px] font-bold px-2.5 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Test play Catering chime">
+                        <i class="fa-solid fa-play text-[8px]"></i> Play
+                    </button>
+                </div>
+                <p class="text-[9.5px] text-gray-500 dark:text-gray-400">Distinct tone for deliveries currently being catered by you.</p>
+                <select id="sound-select-catering" class="w-full bg-white dark:bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-amber-500 font-medium">
+                    <!-- Populated dynamically by populateChimeDropdowns() -->
+                </select>
+            </div>
+
+            <!-- VOLUME & MUTE CONTROLS -->
+            <div class="bg-gray-50 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex flex-col gap-2.5">
+                <div class="flex justify-between items-center">
+                    <span class="font-bold text-gray-700 dark:text-gray-300 text-[11px] flex items-center gap-1.5">
+                        <i class="fa-solid fa-volume-high text-gray-500"></i> Alert Volume
+                    </span>
+                    <span id="sound-volume-text" class="text-xs font-mono font-black text-blue-600 dark:text-blue-400">85%</span>
+                </div>
+                <input type="range" id="sound-volume-slider" min="10" max="100" value="85" oninput="window.handleSoundVolumeChange && window.handleSoundVolumeChange(this.value)" class="w-full accent-blue-600 cursor-pointer">
+
+                <div class="flex items-center justify-between pt-1 border-t border-gray-200 dark:border-gray-800">
+                    <div class="flex flex-col">
+                        <span class="font-bold text-gray-700 dark:text-gray-300 text-[11px]">Mute All Chimes</span>
+                        <span class="text-[9px] text-gray-400">Disable all incoming audio tones</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="sound-mute-checkbox" class="sr-only peer">
+                        <div class="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-red-500"></div>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- FOOTER ACTIONS -->
+        <div class="flex items-center gap-2 border-t border-gray-200 dark:border-gray-800 pt-2.5 shrink-0">
+            <button type="button" onclick="window.closeChatSoundSettingsModal && window.closeChatSoundSettingsModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" onclick="window.saveChatSoundSettingsFromModal && window.saveChatSoundSettingsFromModal()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 shadow-sm flex items-center justify-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-check text-xs"></i> Save Preferences
+            </button>
         </div>
     </div>
 </div>

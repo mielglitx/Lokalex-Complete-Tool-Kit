@@ -1,6 +1,7 @@
 // src/features/chat/riderChatRender.js
-import { appState } from '../../store/state.js';
+import { appState, globalState } from '../../store/state.js';
 import { escapeHtml } from '../../utils/helpers.js';
+import { isRiderMatch } from '../roster/rosterUtils.js';
 
 const MAPS_API_KEY = "AIzaSyBVAwn0UnyHJ926oHeK0k789ncADMzmX80";
 
@@ -270,13 +271,48 @@ export function hideRiderTopSpinner() {
     if (spinner) spinner.remove();
 }
 
+function getMessageSenderAvatar(m, isRider, custAvatar) {
+    if (!isRider) {
+        return m.avatarUrl || custAvatar;
+    }
+    // Check if the message has an explicit avatar/photo attached
+    if (m.senderAvatar && typeof m.senderAvatar === 'string' && m.senderAvatar.trim()) {
+        return m.senderAvatar.trim();
+    }
+    if (m.avatarUrl && typeof m.avatarUrl === 'string' && m.avatarUrl.trim()) {
+        return m.avatarUrl.trim();
+    }
+    if (m.photoUrl && typeof m.photoUrl === 'string' && m.photoUrl.trim()) {
+        return m.photoUrl.trim();
+    }
+
+    const senderName = (m.sender || m.senderName || "").trim();
+    if (senderName) {
+        // Look up sender in global roster to see if they have an uploaded profile photo
+        const roster = globalState.rosterMembers || [];
+        const member = roster.find(r => {
+            const rName = (r.riderName || r.name || "").trim().toLowerCase();
+            return rName && (rName === senderName.toLowerCase() || (typeof isRiderMatch === 'function' && isRiderMatch(rName, senderName.toLowerCase())));
+        });
+        if (member) {
+            const memberPhoto = member.photoUrl || member.avatar || member.profilePic;
+            if (memberPhoto && typeof memberPhoto === 'string' && memberPhoto.trim()) {
+                return memberPhoto.trim();
+            }
+        }
+        return `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=3B82F6&color=fff`;
+    }
+
+    const defaultRider = appState.riderName || "Rider";
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(defaultRider)}&background=3B82F6&color=fff`;
+}
+
 export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, isInitialLoad = false, oldScrollHeight = 0, activeCustData = null) {
     const msgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
     const riderName = appState.riderName || "Rider";
     const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
     const custAvatar = activeCustData?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff`;
-    const riderAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=3B82F6&color=fff`;
 
     const messagesHtml = msgs.map(m => {
         const isRider = !!m.isRider || m.senderType === 'rider';
@@ -285,8 +321,8 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
             : "self-start bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-200 rounded-tl-none shadow-xs";
         const timeStr = m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
 
-        const senderName = m.sender || (isRider ? riderName : custName);
-        const senderAvatar = isRider ? riderAvatar : custAvatar;
+        const senderName = m.sender || (isRider ? (m.senderName || riderName) : custName);
+        const senderAvatar = getMessageSenderAvatar(m, isRider, custAvatar);
         const statusIndicator = isRider ? renderRiderMessageStatusIndicator(m) : '';
         const replyBlockHtml = renderReplyPreviewInsideMessage(m.replyTo);
         const reactionsHtml = renderReactionsHtml(m.reactions, m.id);

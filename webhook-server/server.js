@@ -177,16 +177,26 @@ app.post('/webhook', async (req, res) => {
 
         const pageId = item.recipient?.id || entry.id || "1098954353295816";
 
-        // 1. Check if thread in Firebase already has a valid customer name
+        // 1. Check if thread in Firebase already has a valid customer name and existing catering/folder state
         let existingCustomerName = null;
         let existingAvatarUrl = null;
+        let existingFolder = null;
+        let existingCateredRider = null;
+        let existingCateredRiderId = null;
+        let existingStatus = null;
         try {
           const metaResp = await fetch(`${FIREBASE_DB_URL}/customerChatMeta/${custId}.json`);
           if (metaResp.ok) {
             const ex = await metaResp.json();
-            if (ex && ex.customerName && !ex.customerName.startsWith("FB Customer (")) {
-              existingCustomerName = ex.customerName.trim();
-              existingAvatarUrl = ex.avatarUrl;
+            if (ex) {
+              if (ex.customerName && !ex.customerName.startsWith("FB Customer (")) {
+                existingCustomerName = ex.customerName.trim();
+                existingAvatarUrl = ex.avatarUrl;
+              }
+              if (ex.folder) existingFolder = ex.folder;
+              if (ex.cateredByRiderName || ex.cateredBy) existingCateredRider = ex.cateredByRiderName || ex.cateredBy;
+              if (ex.cateredByRiderId) existingCateredRiderId = ex.cateredByRiderId;
+              if (ex.status) existingStatus = ex.status;
             }
           }
         } catch(e) {}
@@ -277,17 +287,24 @@ app.post('/webhook', async (req, res) => {
           }
         }
 
+        const isCurrentlyCatered = (existingCateredRider || existingCateredRiderId || existingFolder === 'catering') && existingStatus !== 'completed' && existingStatus !== 'done' && existingStatus !== 'cancelled';
+        const resolvedFolder = isCurrentlyCatered 
+          ? 'catering' 
+          : (existingFolder === 'followup' ? 'followup' : 'inbox');
+
         const threadMeta = {
           customerName,
           avatarUrl,
           lastMessage: imageUrl && (!item.message.text || !item.message.text.trim()) ? "📷 Photo" : messageText,
           lastUpdated: timestamp,
-          folder: "inbox",
+          folder: resolvedFolder,
           channel: "messenger",
           apiId: DEFAULT_API_ID,
           apiName: DEFAULT_API_NAME,
           unreadForRider: true
         };
+        if (existingCateredRider) threadMeta.cateredByRiderName = existingCateredRider;
+        if (existingCateredRiderId) threadMeta.cateredByRiderId = existingCateredRiderId;
 
         const chatMsg = {
           sender: customerName,

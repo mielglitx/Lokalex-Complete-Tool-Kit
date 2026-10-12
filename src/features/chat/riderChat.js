@@ -26,6 +26,7 @@ import {
     getResolvedFbName,
     resolveFacebookMessageAttachment
 } from './facebookApiAdmin.js';
+import { playChatChime } from './chatSoundManager.js';
 
 let activeRiderChatCustId = null;
 let activeRiderChatListener = null;
@@ -63,9 +64,9 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
     activeRiderChatCustId = custId;
 
     if (db && custId) {
-        db.ref(`customerChats/${custId}/metadata`).update({
-            unreadForRider: false
-        }).catch(() => {});
+        const payload = { unreadForRider: false };
+        db.ref(`customerChats/${custId}/metadata`).update(payload).catch(() => {});
+        db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
     }
 
     const modal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
@@ -247,6 +248,9 @@ export function listenToRiderChatMessages(custId) {
         renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, isInitialLoad, 0, activeCustData);
 
         if (newCustMsg && !isInitialLoad) {
+            const isCatered = !!(currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredByRiderId || currentRiderChatMeta?.cateredBy || (currentRiderChatMeta?.folder || '').toLowerCase() === 'catering');
+            playChatChime(isCatered ? 'catering' : 'inbox');
+
             const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
             if (!isNearBottom) {
                 const preview = newCustMsg.text || (newCustMsg.imageUrl ? "📷 Photo" : "📍 Location");
@@ -520,10 +524,13 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
 
     const targetChannel = currentRiderChatMeta?.channel || (activeRiderChatCustId?.startsWith('fb_') ? 'messenger' : 'web');
     const targetApiId = currentRiderChatMeta?.apiId || currentRiderChatMeta?.channelId || null;
+    const myPhoto = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || null;
 
     const newMsg = {
         sender: riderName,
         senderType: 'rider',
+        senderAvatar: myPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=3B82F6&color=fff`,
+        avatarUrl: myPhoto || null,
         text: text,
         timestamp: now,
         isRider: true,
