@@ -6,6 +6,7 @@ export const CUST_CHAT_OLDER_BATCH_SIZE = 10;
 
 export const custChatState = {
     oldestCustMsgTimestamp: null,
+    oldestCustMsgKey: null,
     hasMoreCustMsgs: true,
     isLoadingCustHistory: false,
     isInitialScrollDone: false,

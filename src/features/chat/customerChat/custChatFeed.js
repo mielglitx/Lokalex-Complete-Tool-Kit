@@ -26,6 +26,7 @@ export function listenToCustomerRiderChat() {
     if (!container) return;
 
     custChatState.oldestCustMsgTimestamp = null;
+    custChatState.oldestCustMsgKey = null;
     custChatState.hasMoreCustMsgs = true;
     custChatState.isLoadingCustHistory = false;
     custChatState.isInitialScrollDone = false;
@@ -36,22 +37,27 @@ export function listenToCustomerRiderChat() {
 
     if (custChatState.custChatListener) custChatState.custChatListener.off();
 
-    custChatState.custChatListener = db.ref(`customerChats/${custFbId}/messages`).orderByChild('timestamp').limitToLast(CUST_CHAT_BATCH_SIZE);
+    // Fast indexed query using Firebase's native push-key ordering
+    custChatState.custChatListener = db.ref(`customerChats/${custFbId}/messages`).limitToLast(CUST_CHAT_BATCH_SIZE);
 
     custChatState.custChatListener.on('value', (snapshot) => {
         const data = snapshot.val();
-        if (!data) {
+        if (!data || Object.keys(data).length === 0) {
             container.innerHTML = `<div class="text-center text-gray-400 dark:text-gray-500 italic py-12 text-xs">Pumili o mag-type ng mensahe para sa rider o merchant...</div>`;
             return;
         }
 
-        const isInitialLoad = custChatState.loadedCustMsgsMap.size === 0;
+        const isInitialLoad = !custChatState.isInitialScrollDone;
         let incomingMsg = null;
 
         const entries = Object.entries(data);
-        if (isInitialLoad && entries.length < CUST_CHAT_BATCH_SIZE) {
+        if (entries.length < CUST_CHAT_BATCH_SIZE) {
             custChatState.hasMoreCustMsgs = false;
         }
+
+        const seenUpdates = {};
+        let hasUnseen = false;
+        const now = Date.now();
 
         entries.forEach(([key, msg]) => {
             const isNew = !custChatState.loadedCustMsgsMap.has(key);
@@ -63,19 +69,25 @@ export function listenToCustomerRiderChat() {
                 incomingMsg = msg;
             }
 
+            // Batch mark as seen in ONE atomic update (and mark in memory immediately to prevent cascading listener loop!)
             if (isFromOther && msg.status !== 'seen') {
-                db.ref(`customerChats/${custFbId}/messages/${key}`).update({
-                    status: 'seen',
-                    seenAt: Date.now()
-                });
+                msg.status = 'seen';
+                seenUpdates[`customerChats/${custFbId}/messages/${key}/status`] = 'seen';
+                seenUpdates[`customerChats/${custFbId}/messages/${key}/seenAt`] = now;
+                hasUnseen = true;
             }
         });
+
+        if (hasUnseen && db) {
+            db.ref().update(seenUpdates).catch(() => {});
+        }
 
         const isNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 80;
 
         if (custChatState.loadedCustMsgsMap.size > 0) {
             const sortedMsgs = Array.from(custChatState.loadedCustMsgsMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
             custChatState.oldestCustMsgTimestamp = sortedMsgs[0].timestamp || null;
+            custChatState.oldestCustMsgKey = sortedMsgs[0].id || null;
         }
 
         renderCustomerMessages(container, isInitialLoad);
@@ -83,7 +95,7 @@ export function listenToCustomerRiderChat() {
         if (isInitialLoad) {
             setTimeout(() => {
                 custChatState.isInitialScrollDone = true;
-            }, 300);
+            }, 250);
         }
 
         if (incomingMsg && !isInitialLoad) {
@@ -107,7 +119,7 @@ export function setupCustScrollPagination(container, custFbId) {
             container.scrollTop < 60 &&
             !custChatState.isLoadingCustHistory &&
             custChatState.hasMoreCustMsgs &&
-            custChatState.oldestCustMsgTimestamp &&
+            custChatState.oldestCustMsgKey &&
             (now - custChatState.lastPaginationRequestTime > 500)
         ) {
             custChatState.lastPaginationRequestTime = now;
@@ -122,7 +134,7 @@ export function setupCustScrollPagination(container, custFbId) {
 }
 
 export async function loadOlderCustMessages(container, custFbId) {
-    if (custChatState.isLoadingCustHistory || !custChatState.hasMoreCustMsgs || !custChatState.oldestCustMsgTimestamp) return;
+    if (custChatState.isLoadingCustHistory || !custChatState.hasMoreCustMsgs || !custChatState.oldestCustMsgKey) return;
 
     custChatState.isLoadingCustHistory = true;
     showCustTopSpinner(container);
@@ -131,22 +143,26 @@ export async function loadOlderCustMessages(container, custFbId) {
 
     try {
         const snap = await db.ref(`customerChats/${custFbId}/messages`)
-            .orderByChild('timestamp')
-            .endAt(custChatState.oldestCustMsgTimestamp - 1)
-            .limitToLast(CUST_CHAT_OLDER_BATCH_SIZE)
+            .orderByKey()
+            .endAt(custChatState.oldestCustMsgKey)
+            .limitToLast(CUST_CHAT_OLDER_BATCH_SIZE + 1)
             .once('value');
 
-        const data = snap.val();
+        const data = snap.val() || {};
         hideCustTopSpinner();
 
-        if (!data || Object.keys(data).length === 0) {
+        if (data[custChatState.oldestCustMsgKey]) {
+            delete data[custChatState.oldestCustMsgKey];
+        }
+
+        const entries = Object.entries(data);
+        if (entries.length === 0) {
             custChatState.hasMoreCustMsgs = false;
             custChatState.isLoadingCustHistory = false;
             renderCustomerMessages(container, false, oldScrollHeight);
             return;
         }
 
-        const entries = Object.entries(data);
         if (entries.length < CUST_CHAT_OLDER_BATCH_SIZE) {
             custChatState.hasMoreCustMsgs = false;
         }
@@ -158,6 +174,7 @@ export async function loadOlderCustMessages(container, custFbId) {
         const sortedMsgs = Array.from(custChatState.loadedCustMsgsMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
         if (sortedMsgs.length > 0) {
             custChatState.oldestCustMsgTimestamp = sortedMsgs[0].timestamp || null;
+            custChatState.oldestCustMsgKey = sortedMsgs[0].id || null;
         }
 
         renderCustomerMessages(container, false, oldScrollHeight);

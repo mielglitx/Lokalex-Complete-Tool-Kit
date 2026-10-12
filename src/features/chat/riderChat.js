@@ -27,6 +27,7 @@ import {
     resolveFacebookMessageAttachment
 } from './facebookApiAdmin.js';
 import { playChatChime } from './chatSoundManager.js';
+import { idbGet, idbSet } from '../../utils/storageEngine.js';
 
 let activeRiderChatCustId = null;
 let activeRiderChatListener = null;
@@ -38,11 +39,13 @@ let activeRiderReplyTarget = null;
 const RIDER_CHAT_BATCH_SIZE = 15; // Initial partial load: only 15 messages
 const RIDER_CHAT_OLDER_BATCH_SIZE = 10; // On-demand chunk size when scrolling up
 let oldestRiderMsgTimestamp = null;
+let oldestRiderMsgKey = null;
 let hasMoreRiderMsgs = true;
 let isLoadingRiderHistory = false;
 let isInitialScrollDone = false;
 let lastPaginationRequestTime = 0;
 let loadedRiderMsgsMap = new Map();
+const riderChatMemoryCache = new Map(); // Fast RAM cache: custId -> Array of messages
 
 function getMessageTimestamp(msg) {
     if (msg.timestamp && typeof msg.timestamp === 'number') return msg.timestamp;
@@ -203,37 +206,91 @@ function bindRiderToActiveStoreOrders(meta) {
     }
 }
 
-export function listenToRiderChatMessages(custId) {
+export async function listenToRiderChatMessages(custId) {
     if (!db || !custId) return;
 
     const container = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
     if (!container) return;
 
     oldestRiderMsgTimestamp = null;
+    oldestRiderMsgKey = null;
     hasMoreRiderMsgs = true;
     isLoadingRiderHistory = false;
     isInitialScrollDone = false;
     lastPaginationRequestTime = 0;
     loadedRiderMsgsMap.clear();
 
+    // 1. INSTANT CACHE RENDER (0ms latency from RAM or IndexedDB)
+    let hasRenderedCache = false;
+    const memCached = riderChatMemoryCache.get(custId);
+    if (Array.isArray(memCached) && memCached.length > 0) {
+        memCached.forEach(m => loadedRiderMsgsMap.set(m.id, m));
+        renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
+        hasRenderedCache = true;
+    } else {
+        try {
+            const idbCached = await idbGet('chats', custId);
+            if (activeRiderChatCustId === custId && Array.isArray(idbCached) && idbCached.length > 0 && loadedRiderMsgsMap.size === 0) {
+                idbCached.forEach(m => loadedRiderMsgsMap.set(m.id, m));
+                riderChatMemoryCache.set(custId, idbCached);
+                renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
+                hasRenderedCache = true;
+            }
+        } catch (_) {}
+    }
+
+    // If no cache, show instant modern skeleton bubbles so user never sees a stalled/empty screen
+    if (!hasRenderedCache && loadedRiderMsgsMap.size === 0) {
+        container.innerHTML = `
+        <div id="rider-chat-loading-skeleton" class="flex flex-col gap-3 py-6 px-4 animate-pulse">
+            <div class="flex items-end gap-2 self-start w-3/4">
+                <div class="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-800 shrink-0"></div>
+                <div class="h-8 rounded-2xl rounded-bl-none bg-gray-200 dark:bg-gray-800 flex-1"></div>
+            </div>
+            <div class="flex items-end gap-2 self-end w-2/3 justify-end">
+                <div class="h-8 rounded-2xl rounded-br-none bg-emerald-600/20 dark:bg-emerald-600/30 w-3/4"></div>
+                <div class="w-7 h-7 rounded-full bg-emerald-600/20 dark:bg-emerald-600/30 shrink-0"></div>
+            </div>
+            <div class="flex items-end gap-2 self-start w-1/2">
+                <div class="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-800 shrink-0"></div>
+                <div class="h-6 rounded-2xl rounded-bl-none bg-gray-200 dark:bg-gray-800 flex-1"></div>
+            </div>
+        </div>`;
+    }
+
     setupRiderScrollPagination(container, custId);
 
-    activeRiderChatListener = db.ref(`customerChats/${custId}/messages`).orderByChild('timestamp').limitToLast(RIDER_CHAT_BATCH_SIZE);
+    // 2. ULTRA-FAST INDEXED FIREBASE QUERY (0ms unindexed overhead)
+    // Avoid .orderByChild('timestamp') because Firebase RTDB has no index on timestamp,
+    // which was causing massive unindexed scans on Firebase even for 2-5 messages!
+    // Firebase push keys (-OkABC...) are already sorted chronologically by default.
+    if (activeRiderChatListener) activeRiderChatListener.off();
+
+    activeRiderChatListener = db.ref(`customerChats/${custId}/messages`).limitToLast(RIDER_CHAT_BATCH_SIZE);
 
     activeRiderChatListener.on('value', (snapshot) => {
+        if (activeRiderChatCustId !== custId) return;
+
         const data = snapshot.val();
-        if (!data) {
+        if (!data || Object.keys(data).length === 0) {
+            loadedRiderMsgsMap.clear();
+            riderChatMemoryCache.set(custId, []);
+            idbSet('chats', custId, []).catch(() => {});
             container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
             return;
         }
 
-        const isInitialLoad = loadedRiderMsgsMap.size === 0;
+        const isInitialLoad = !isInitialScrollDone;
         let newCustMsg = null;
-
         const entries = Object.entries(data);
-        if (isInitialLoad && entries.length < RIDER_CHAT_BATCH_SIZE) {
+
+        if (entries.length < RIDER_CHAT_BATCH_SIZE) {
             hasMoreRiderMsgs = false;
         }
+
+        const seenUpdates = {};
+        let hasUnseen = false;
+        const now = Date.now();
 
         entries.forEach(([key, msg]) => {
             const isNew = !loadedRiderMsgsMap.has(key);
@@ -257,19 +314,30 @@ export function listenToRiderChatMessages(custId) {
                 newCustMsg = msg;
             }
 
+            // Batch mark as seen in ONE atomic update (and mark in memory immediately to prevent cascading listener loop!)
             if (!msg.isRider && msg.status !== 'seen') {
-                db.ref(`customerChats/${custId}/messages/${key}`).update({
-                    status: 'seen',
-                    seenAt: Date.now()
-                });
+                msg.status = 'seen';
+                seenUpdates[`customerChats/${custId}/messages/${key}/status`] = 'seen';
+                seenUpdates[`customerChats/${custId}/messages/${key}/seenAt`] = now;
+                hasUnseen = true;
             }
         });
+
+        // Fire single batch write for unseen messages to avoid triggering 5 separate listener events
+        if (hasUnseen && db) {
+            db.ref().update(seenUpdates).catch(() => {});
+        }
 
         const isNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 80;
 
         if (loadedRiderMsgsMap.size > 0) {
             const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
             oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
+            oldestRiderMsgKey = sortedMsgs[0].id || null;
+
+            // Persist to RAM & IndexedDB caches
+            riderChatMemoryCache.set(custId, sortedMsgs);
+            idbSet('chats', custId, sortedMsgs).catch(() => {});
         }
 
         renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, isInitialLoad, 0, activeCustData);
@@ -277,7 +345,7 @@ export function listenToRiderChatMessages(custId) {
         if (isInitialLoad) {
             setTimeout(() => {
                 isInitialScrollDone = true;
-            }, 300);
+            }, 250);
         }
 
         if (newCustMsg && !isInitialLoad) {
@@ -304,7 +372,7 @@ function setupRiderScrollPagination(container, custId) {
             container.scrollTop < 60 &&
             !isLoadingRiderHistory &&
             hasMoreRiderMsgs &&
-            oldestRiderMsgTimestamp &&
+            oldestRiderMsgKey &&
             (now - lastPaginationRequestTime > 500)
         ) {
             lastPaginationRequestTime = now;
@@ -323,7 +391,7 @@ export async function loadOlderRiderMessages(container, custId) {
         container = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
     }
     const targetCustId = custId || activeRiderChatCustId;
-    if (!container || !targetCustId || isLoadingRiderHistory || !hasMoreRiderMsgs || !oldestRiderMsgTimestamp) return;
+    if (!container || !targetCustId || isLoadingRiderHistory || !hasMoreRiderMsgs || !oldestRiderMsgKey) return;
 
     isLoadingRiderHistory = true;
     showRiderTopSpinner(container);
@@ -332,22 +400,27 @@ export async function loadOlderRiderMessages(container, custId) {
 
     try {
         const snap = await db.ref(`customerChats/${targetCustId}/messages`)
-            .orderByChild('timestamp')
-            .endAt(oldestRiderMsgTimestamp - 1)
-            .limitToLast(RIDER_CHAT_OLDER_BATCH_SIZE)
+            .orderByKey()
+            .endAt(oldestRiderMsgKey)
+            .limitToLast(RIDER_CHAT_OLDER_BATCH_SIZE + 1)
             .once('value');
 
-        const data = snap.val();
+        const data = snap.val() || {};
         hideRiderTopSpinner();
 
-        if (!data || Object.keys(data).length === 0) {
+        // Omit the boundary key which is already loaded
+        if (data[oldestRiderMsgKey]) {
+            delete data[oldestRiderMsgKey];
+        }
+
+        const entries = Object.entries(data);
+        if (entries.length === 0) {
             hasMoreRiderMsgs = false;
             isLoadingRiderHistory = false;
             renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, oldScrollHeight, activeCustData);
             return;
         }
 
-        const entries = Object.entries(data);
         if (entries.length < RIDER_CHAT_OLDER_BATCH_SIZE) {
             hasMoreRiderMsgs = false;
         }
@@ -373,6 +446,9 @@ export async function loadOlderRiderMessages(container, custId) {
         const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
         if (sortedMsgs.length > 0) {
             oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
+            oldestRiderMsgKey = sortedMsgs[0].id || null;
+            riderChatMemoryCache.set(targetCustId, sortedMsgs);
+            idbSet('chats', targetCustId, sortedMsgs).catch(() => {});
         }
 
         renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, oldScrollHeight, activeCustData);
