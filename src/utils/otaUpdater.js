@@ -112,17 +112,31 @@ export async function checkForOtaUpdate(isManual = false) {
     }
 
     try {
-        // Fetch version.json from GitHub with cache-busting timestamp
-        const manifestRes = await fetch(`${OTA_MANIFEST_URL}?t=${Date.now()}`, {
-            cache: 'no-store'
-        });
+        // Fetch version.json bypassing Fastly CDN cache by trying GitHub API first
+        let manifest = null;
+        try {
+            const apiRes = await fetch(`https://api.github.com/repos/mielglitx/LokalexOTAUpdate/contents/version.json?t=${Date.now()}`, {
+                headers: { 'Accept': 'application/vnd.github.v3.raw' },
+                cache: 'no-store'
+            });
+            if (apiRes.ok) {
+                manifest = await apiRes.json();
+            }
+        } catch (_) {}
 
-        if (!manifestRes.ok) {
+        if (!manifest) {
+            const manifestRes = await fetch(`${OTA_MANIFEST_URL}?t=${Date.now()}`, {
+                cache: 'no-store'
+            });
+            if (manifestRes.ok) {
+                manifest = await manifestRes.json();
+            }
+        }
+
+        if (!manifest) {
             if (isManual) showToast("ℹ️ Hindi ma-access ang OTA update repository.");
             return;
         }
-
-        const manifest = await manifestRes.json();
         const remoteVersion = manifest.version;
         const downloadUrl = manifest.url;
         const checksum = manifest.checksum;
