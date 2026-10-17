@@ -259,10 +259,12 @@ export async function sendCustomerToRiderChat(customText = "", customImageUrl = 
     };
 
     if (custChatState.activeCustReplyTarget) {
+        const target = custChatState.activeCustReplyTarget;
+        const replyText = target.text || (target.imageUrl ? "📷 Photo" : (target.locationCoords ? "📍 Location" : "Message"));
         newMsg.replyTo = {
-            id: custChatState.activeCustReplyTarget.id,
-            sender: custChatState.activeCustReplyTarget.sender,
-            text: custChatState.activeCustReplyTarget.text.substring(0, 120)
+            id: target.id,
+            sender: target.sender || "User",
+            text: String(replyText).substring(0, 120)
         };
     }
 

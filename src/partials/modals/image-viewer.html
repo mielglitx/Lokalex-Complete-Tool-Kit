@@ -7,9 +7,9 @@
         </div>
 
         <div class="flex items-center gap-2">
-            <a id="viewer-download-btn" href="#" download="lokalex_photo.jpg" target="_blank" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition flex items-center gap-1"><i class="fa-solid fa-download"></i> Download</a>
+            <button type="button" id="viewer-download-btn" onclick="window.downloadCurrentViewerImage && window.downloadCurrentViewerImage()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition flex items-center gap-1 cursor-pointer" title="Download / Save Image"><i class="fa-solid fa-download"></i> Download</button>
             <button onclick="window.editViewerImage && window.editViewerImage()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
-            <button onclick="window.closeImageViewerModal && window.closeImageViewerModal()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white p-2 rounded-xl text-xs active:scale-95 transition"><i class="fa-solid fa-xmark text-sm"></i></button>
+            <button type="button" onclick="window.closeImageViewerModal && window.closeImageViewerModal()" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer" title="Close"><i class="fa-solid fa-xmark text-xs"></i></button>
         </div>
     </div>
 

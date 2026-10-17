@@ -4,8 +4,8 @@ import { appState, globalState } from '../../store/state.js';
 import { escapeHtml } from '../../utils/helpers.js';
 import { toggleBodyScroll } from './chatUtils.js';
 import { openMapPicker } from '../maps.js';
-import { showToast } from '../../ui/notifications.js';
-import { uploadImage } from '../../utils/imageUpload.js';
+import { showToast, showNativeNotification, clearNativeNotification } from '../../ui/notifications.js';
+import { uploadImage, dataUrlToBlob } from '../../utils/imageUpload.js';
 import { highlightActiveMilestoneUI } from './riderThreadActions.js';
 import { isAdmin, canManageRoster } from '../roster/rosterUtils.js';
 import { 
@@ -13,19 +13,23 @@ import {
     hideRiderInChatToast, 
     showRiderTopSpinner, 
     hideRiderTopSpinner, 
-    renderRiderMessages 
+    renderRiderMessages,
+    appendOrUpdateSingleRiderMessage 
 } from './riderChatRender.js';
 import { 
     setRiderChatFilter, 
     listenToAllCustomerChatsForRider, 
-    getActiveRiderChatFilter 
+    getActiveRiderChatFilter,
+    isMyCustomerThread
 } from './riderChatFeed.js';
 import { listenToGlobalStoreChats } from './riderStoreChat.js';
 import { 
     getPublicFbSendEndpoint,
+    getFbPageAccessToken,
     resolveFacebookCustomerName,
     getResolvedFbName,
-    resolveFacebookMessageAttachment
+    resolveFacebookMessageAttachment,
+    resolveFacebookMessageReplyTo
 } from './facebookApiAdmin.js';
 import { playChatChime } from './chatSoundManager.js';
 import { idbGet, idbSet } from '../../utils/storageEngine.js';
@@ -88,7 +92,14 @@ export function openRiderChatModal(custId, custName) {
 
 export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
     activeRiderChatCustId = custId;
+    if (typeof window !== 'undefined') {
+        window.activeRiderChatCustId = custId;
+    }
     activeCustData = null;
+
+    if (custId) {
+        clearNativeNotification('chat_' + custId);
+    }
 
     if (db && typeof db.goOnline === 'function') {
         try { db.goOnline(); } catch (_) {}
@@ -98,6 +109,20 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         const payload = { unreadForRider: false };
         db.ref(`customerChats/${custId}/metadata`).update(payload).catch(() => {});
         db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
+    }
+
+    if (custId && typeof window.getCachedCustomerThreadsMap === 'function') {
+        const map = window.getCachedCustomerThreadsMap();
+        if (map) {
+            for (const thread of map.values()) {
+                if (thread.custId === custId) {
+                    thread.isUnread = false;
+                    break;
+                }
+            }
+        }
+        if (typeof window.updateInboxUnreadBadge === 'function') window.updateInboxUnreadBadge();
+        if (typeof window.updateDoneUnreadBadge === 'function') window.updateDoneUnreadBadge();
     }
 
     const modal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
@@ -238,6 +263,27 @@ export async function reloadRiderChatFromFirebase(custId) {
     listenToRiderChatMessages(targetCustId, true);
 }
 
+function autoResolveRecentFbCustomerReplies(custId, container, activeCustData) {
+    if (!String(custId).startsWith('fb_')) return;
+    const candidates = Array.from(loadedRiderMsgsMap.values())
+        .filter(m => m && !m.isRider && !m.replyTo && (m.mid || (m.id && m.id.startsWith('m_'))))
+        .slice(-8);
+    for (const m of candidates) {
+        resolveFacebookMessageReplyTo(custId, m.id, m.mid || m.id).then(replyToObj => {
+            if (replyToObj && activeRiderChatCustId === custId) {
+                const existing = loadedRiderMsgsMap.get(m.id);
+                if (existing) {
+                    existing.replyTo = replyToObj;
+                    const updatedSorted = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+                    riderChatMemoryCache.set(custId, updatedSorted);
+                    idbSet('chats', custId, updatedSorted).catch(() => {});
+                    appendOrUpdateSingleRiderMessage(container, existing, activeCustData);
+                }
+            }
+        }).catch(() => {});
+    }
+}
+
 export async function listenToRiderChatMessages(custId, forceReloadFromFirebase = false) {
     if (!db || !custId) return;
     activeRiderChatCustId = custId;
@@ -291,107 +337,11 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
     const hasLocalRecord = Array.isArray(localMessages) && localMessages.length > 0;
 
     if (hasLocalRecord) {
-        // ====================================================================
-        // PATH A: LOCAL STORAGE HIT (Preserves 100% of historical RTDB bandwidth!)
-        // Render instantly from phone's local storage and only subscribe to NEW messages.
-        // ====================================================================
         localMessages.forEach(m => loadedRiderMsgsMap.set(m.id, m));
-        const sortedLocal = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-        oldestRiderMsgTimestamp = getMessageTimestamp(sortedLocal[0]);
-        oldestRiderMsgKey = sortedLocal[0].id || null;
-
         renderRiderMessages(container, loadedRiderMsgsMap, false, true, 0, activeCustData);
         setTimeout(() => { isInitialScrollDone = true; }, 250);
-
-        const latestLocalMsg = sortedLocal[sortedLocal.length - 1];
-        const latestKey = latestLocalMsg?.id || null;
-        const latestTimestamp = getMessageTimestamp(latestLocalMsg);
-
-        // ONLY listen for NEW messages added after the latest locally-stored message!
-        let newMsgsQuery = db.ref(`customerChats/${custId}/messages`);
-        if (latestKey) {
-            try {
-                newMsgsQuery = newMsgsQuery.orderByKey().startAfter(latestKey);
-            } catch (_) {
-                newMsgsQuery = newMsgsQuery.orderByChild('timestamp').startAt(latestTimestamp + 1);
-            }
-        }
-
-        activeRiderChatChildListener = newMsgsQuery;
-        activeRiderChatChildListener.on('child_added', (snap) => {
-            if (activeRiderChatCustId !== custId) return;
-            const newMsg = snap.val();
-            if (!newMsg) return;
-            const key = snap.key;
-            if (loadedRiderMsgsMap.has(key)) return;
-
-            loadedRiderMsgsMap.set(key, { id: key, ...newMsg });
-
-            // Persist to local storage immediately
-            const updatedSorted = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-            riderChatMemoryCache.set(custId, updatedSorted);
-            idbSet('chats', custId, updatedSorted).catch(() => {});
-
-            // Auto-resolve Facebook attachment if needed
-            if (String(custId).startsWith('fb_') && !newMsg.imageUrl && newMsg.text && (newMsg.text.includes('[Facebook image]') || newMsg.text.includes('[Facebook attachment]'))) {
-                resolveFacebookMessageAttachment(custId, key, newMsg.mid || key).then(url => {
-                    if (url && activeRiderChatCustId === custId) {
-                        const existing = loadedRiderMsgsMap.get(key);
-                        if (existing) {
-                            existing.imageUrl = url;
-                            existing.type = 'image';
-                            renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, 0, activeCustData);
-                        }
-                    }
-                }).catch(() => {});
-            }
-
-            // Mark seen if not from rider
-            if (!newMsg.isRider && newMsg.status !== 'seen') {
-                newMsg.status = 'seen';
-                db.ref(`customerChats/${custId}/messages/${key}/status`).set('seen').catch(() => {});
-                db.ref(`customerChats/${custId}/messages/${key}/seenAt`).set(Date.now()).catch(() => {});
-            }
-
-            renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, 0, activeCustData);
-
-            if (!newMsg.isRider) {
-                const isCatered = !!(currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredByRiderId || currentRiderChatMeta?.cateredBy || (currentRiderChatMeta?.folder || '').toLowerCase() === 'catering');
-                playChatChime(isCatered ? 'catering' : 'inbox');
-
-                const isNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 80;
-                const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
-                if (!isNearBottom) {
-                    const preview = newMsg.text || (newMsg.imageUrl ? "📷 Photo" : "📍 Location");
-                    showRiderInChatToast(container, newMsg.sender || custName, preview);
-                } else {
-                    hideRiderInChatToast();
-                    requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
-                }
-            }
-        });
-
-        // Listen for child_changed on recent messages only (ticks & reactions)
-        activeRiderChatChangedListener = db.ref(`customerChats/${custId}/messages`).limitToLast(15);
-        activeRiderChatChangedListener.on('child_changed', (snap) => {
-            if (activeRiderChatCustId !== custId) return;
-            const updatedMsg = snap.val();
-            if (!updatedMsg) return;
-            const key = snap.key;
-            if (loadedRiderMsgsMap.has(key)) {
-                loadedRiderMsgsMap.set(key, { id: key, ...updatedMsg });
-                const updatedSorted = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-                riderChatMemoryCache.set(custId, updatedSorted);
-                idbSet('chats', custId, updatedSorted).catch(() => {});
-                renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, 0, activeCustData);
-            }
-        });
-
+        autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
     } else {
-        // ====================================================================
-        // PATH B: LOCAL STORAGE EMPTY (CLEARED CACHE / CLEARED DATA / BRAND NEW CHAT)
-        // Only load the full Firebase record when the phone has no local cache!
-        // ====================================================================
         container.innerHTML = `
         <div id="rider-chat-loading-skeleton" class="flex flex-col gap-3 py-6 px-4 animate-pulse">
             <div class="flex items-end gap-2 self-start w-3/4">
@@ -407,94 +357,132 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 <div class="h-6 rounded-2xl rounded-bl-none bg-gray-200 dark:bg-gray-800 flex-1"></div>
             </div>
         </div>`;
+    }
 
-        // Watchdog fallback
-        setTimeout(() => {
-            if (activeRiderChatCustId === custId && loadedRiderMsgsMap.size === 0 && document.getElementById('rider-chat-loading-skeleton')) {
-                container.innerHTML = `
-                <div class="flex flex-col items-center justify-center py-10 px-4 text-center gap-2.5">
-                    <div class="w-10 h-10 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center text-base">
-                        <i class="fa-solid fa-cloud-arrow-down"></i>
-                    </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Taking longer than usual to load...</p>
-                    <button type="button" onclick="window.reloadRiderChatFromFirebase && window.reloadRiderChatFromFirebase('${custId}')" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition active:scale-95 shadow-sm cursor-pointer">
-                        <i class="fa-solid fa-rotate-right mr-1"></i> Tap to Reload Chat
-                    </button>
-                </div>`;
-            }
-        }, 6000);
-
-        // Direct REST fetch to populate initial record into phone's local storage
-        const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChats/${encodeURIComponent(custId)}/messages.json?t=${Date.now()}`;
-        fetch(directRestUrl, { cache: 'no-store' })
-            .then(res => res.json())
-            .then(data => {
-                if (activeRiderChatCustId !== custId) return;
-                if (data && typeof data === 'object') {
-                    const entries = Object.entries(data);
-                    if (entries.length > 0 && loadedRiderMsgsMap.size === 0) {
-                        entries.forEach(([key, msg]) => {
-                            loadedRiderMsgsMap.set(key, { id: key, ...msg });
-                        });
-                        const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-                        oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
-                        oldestRiderMsgKey = sortedMsgs[0].id || null;
-
-                        // STORE LOCALLY ON THE PHONE IMMEDIATELY!
-                        riderChatMemoryCache.set(custId, sortedMsgs);
-                        idbSet('chats', custId, sortedMsgs).catch(() => {});
-
-                        renderRiderMessages(container, loadedRiderMsgsMap, false, true, 0, activeCustData);
-                        setTimeout(() => { isInitialScrollDone = true; }, 250);
-                    } else if (entries.length === 0 && loadedRiderMsgsMap.size === 0) {
-                        container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
-                    }
-                } else if (data === null && loadedRiderMsgsMap.size === 0) {
-                    container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
-                }
-            })
-            .catch(err => {
-                console.warn('[RiderChat] Direct REST fast-fetch fallback:', err);
-            });
-
-        // Realtime Firebase connection
-        activeRiderChatListener = db.ref(`customerChats/${custId}/messages`);
-        activeRiderChatListener.on('value', (snapshot) => {
+    // Direct REST fast-fetch fallback (useful on mobile networks before WebSocket establishes)
+    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChats/${encodeURIComponent(custId)}/messages.json?t=${Date.now()}`;
+    fetch(directRestUrl, { cache: 'no-store' })
+        .then(res => res.json())
+        .then(data => {
             if (activeRiderChatCustId !== custId) return;
+            if (data && typeof data === 'object') {
+                const entries = Object.entries(data);
+                if (entries.length > 0 && (!hasLocalRecord || loadedRiderMsgsMap.size < entries.length)) {
+                    entries.forEach(([key, msg]) => {
+                        loadedRiderMsgsMap.set(key, { id: key, ...msg });
+                    });
+                    const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+                    riderChatMemoryCache.set(custId, sortedMsgs);
+                    idbSet('chats', custId, sortedMsgs).catch(() => {});
+                    renderRiderMessages(container, loadedRiderMsgsMap, false, !isInitialScrollDone, 0, activeCustData);
+                    isInitialScrollDone = true;
+                }
+            }
+        })
+        .catch(() => {});
 
-            const data = snapshot.val();
-            if (!data || Object.keys(data).length === 0) {
-                loadedRiderMsgsMap.clear();
-                riderChatMemoryCache.set(custId, []);
-                idbSet('chats', custId, []).catch(() => {});
-                container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
-                return;
+    // Realtime Firebase connection - Single source of truth guaranteeing 100% synchronization
+    activeRiderChatListener = db.ref(`customerChats/${custId}/messages`);
+    activeRiderChatListener.on('value', (snapshot) => {
+        if (activeRiderChatCustId !== custId) return;
+
+        const data = snapshot.val();
+        if (!data || Object.keys(data).length === 0) {
+            loadedRiderMsgsMap.clear();
+            riderChatMemoryCache.set(custId, []);
+            idbSet('chats', custId, []).catch(() => {});
+            container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
+            return;
+        }
+
+        const entries = Object.entries(data);
+        const wasInitial = !isInitialScrollDone;
+        const newlyAddedMsgs = [];
+        let hasNewIncomingCustomerMsg = false;
+        let newestCustomerMsg = null;
+        const now = Date.now();
+        const seenUpdates = {};
+
+        entries.forEach(([key, msg]) => {
+            const isNew = !loadedRiderMsgsMap.has(key);
+            const prevMsg = loadedRiderMsgsMap.get(key);
+            const reactionsChanged = JSON.stringify(prevMsg?.reactions || {}) !== JSON.stringify(msg.reactions || {});
+            const statusChanged = prevMsg?.status !== msg.status;
+
+            const fullMsg = { id: key, ...msg };
+            loadedRiderMsgsMap.set(key, fullMsg);
+
+            const isFromCustomer = !msg.isRider && msg.senderType !== 'rider';
+
+            if (isNew) {
+                newlyAddedMsgs.push(fullMsg);
+                if (!wasInitial && isFromCustomer) {
+                    hasNewIncomingCustomerMsg = true;
+                    newestCustomerMsg = fullMsg;
+                }
             }
 
-            const entries = Object.entries(data);
-            entries.forEach(([key, msg]) => {
-                loadedRiderMsgsMap.set(key, { id: key, ...msg });
-            });
-
-            const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-            oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
-            oldestRiderMsgKey = sortedMsgs[0].id || null;
-
-            // SAVE LOCALLY ON THE PHONE
-            riderChatMemoryCache.set(custId, sortedMsgs);
-            idbSet('chats', custId, sortedMsgs).catch(() => {});
-
-            renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, !isInitialScrollDone, 0, activeCustData);
-            if (!isInitialScrollDone) {
-                setTimeout(() => { isInitialScrollDone = true; }, 250);
+            // Batch mark incoming customer messages as seen
+            if (isFromCustomer && msg.status !== 'seen') {
+                msg.status = 'seen';
+                seenUpdates[`customerChats/${custId}/messages/${key}/status`] = 'seen';
+                seenUpdates[`customerChats/${custId}/messages/${key}/seenAt`] = now;
             }
-        }, (error) => {
-            console.error("Firebase chat listener error:", error);
-            if (container && loadedRiderMsgsMap.size === 0) {
-                container.innerHTML = `<div class="text-center text-gray-500 italic py-10 text-xs">No messages yet or network reconnecting...</div>`;
+
+            // Re-render message bubble in-place if reactions or delivery status changed
+            if (!isNew && (reactionsChanged || statusChanged)) {
+                appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
             }
         });
-    }
+
+        if (Object.keys(seenUpdates).length > 0 && db) {
+            db.ref().update(seenUpdates).catch(() => {});
+        }
+
+        const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+        if (sortedMsgs.length > 0) {
+            oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
+            oldestRiderMsgKey = sortedMsgs[0].id || null;
+        }
+
+        // Keep local cache fresh
+        riderChatMemoryCache.set(custId, sortedMsgs);
+        idbSet('chats', custId, sortedMsgs).catch(() => {});
+
+        const isNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 120;
+        const existingBubbleCount = container.querySelectorAll('[id^="msg-bubble-"]').length;
+
+        if (wasInitial || existingBubbleCount === 0 || newlyAddedMsgs.length > 3) {
+            renderRiderMessages(container, loadedRiderMsgsMap, false, true, 0, activeCustData);
+            isInitialScrollDone = true;
+            autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
+        } else if (newlyAddedMsgs.length > 0) {
+            newlyAddedMsgs.sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+            newlyAddedMsgs.forEach(m => {
+                appendOrUpdateSingleRiderMessage(container, m, activeCustData);
+            });
+
+            if (hasNewIncomingCustomerMsg) {
+                const isCatered = !!(currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredByRiderId || currentRiderChatMeta?.cateredBy || (currentRiderChatMeta?.folder || '').toLowerCase() === 'catering');
+                const isMine = isMyCustomerThread({ custId, ...(currentRiderChatMeta || {}) });
+                if (isCatered) {
+                    if (isMine) playChatChime('catering');
+                } else {
+                    playChatChime('inbox');
+                }
+            }
+
+            if (isNearBottom) {
+                requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+            } else if (newestCustomerMsg) {
+                const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
+                const preview = newestCustomerMsg.text || (newestCustomerMsg.imageUrl ? "📷 Photo" : "📍 Location");
+                showRiderInChatToast(container, newestCustomerMsg.sender || custName, preview);
+            }
+        }
+    }, (error) => {
+        console.error("Firebase chat listener error:", error);
+    });
 }
 
 function setupRiderScrollPagination(container, custId) {
@@ -594,7 +582,23 @@ export async function loadOlderRiderMessages(container, custId) {
 }
 
 export function setRiderReply(msgId, senderName, text) {
-    activeRiderReplyTarget = { id: msgId, sender: senderName, text: text };
+    let previewText = text;
+    let targetMsg = null;
+    if (loadedRiderMsgsMap && loadedRiderMsgsMap.has(msgId)) {
+        targetMsg = loadedRiderMsgsMap.get(msgId);
+    }
+    if (!previewText && targetMsg) {
+        previewText = targetMsg.text || (targetMsg.imageUrl ? "📷 Photo" : (targetMsg.locationCoords ? "📍 Location" : "Message"));
+    }
+    if (!previewText) previewText = "Quoted Message";
+
+    activeRiderReplyTarget = { 
+        id: msgId, 
+        sender: senderName, 
+        text: previewText,
+        metaMid: targetMsg?.metaMid || null,
+        mid: targetMsg?.mid || null
+    };
     
     let replyBar = document.getElementById('rider-chat-reply-bar');
     if (!replyBar) {
@@ -613,7 +617,7 @@ export function setRiderReply(msgId, senderName, text) {
                 <i class="fa-solid fa-reply text-blue-500 text-xs shrink-0"></i>
                 <div class="min-w-0 flex-1 text-[11px] leading-tight">
                     <div class="font-bold text-blue-600 dark:text-blue-300 truncate">Replying to ${escapeHtml(senderName || 'User')}</div>
-                    <div class="text-gray-600 dark:text-gray-300 truncate text-[10px]">${escapeHtml(text || '📷 Attachment / Location')}</div>
+                    <div class="text-gray-600 dark:text-gray-300 truncate text-[10px]">${escapeHtml(previewText)}</div>
                 </div>
             </div>
             <button type="button" onclick="window.cancelRiderReply()" class="text-gray-400 hover:text-red-500 p-1 text-xs transition active:scale-90" title="Cancel Reply">
@@ -640,13 +644,97 @@ export async function toggleRiderMessageReaction(msgId, emoji) {
     try {
         const ref = db.ref(`customerChats/${activeRiderChatCustId}/messages/${msgId}/reactions/${emoji}/${myId}`);
         const snap = await ref.once('value');
-        if (snap.exists()) {
-            await ref.remove();
-        } else {
+        const willReact = !snap.exists();
+        if (willReact) {
             await ref.set(true);
+        } else {
+            await ref.remove();
+        }
+
+        // Vis-a-vis reaction forwarding for Facebook Messenger threads
+        if (String(activeRiderChatCustId).startsWith('fb_')) {
+            forwardRiderReactionToMessenger({
+                custId: activeRiderChatCustId,
+                msgId: msgId,
+                emoji: emoji,
+                action: willReact ? 'react' : 'unreact'
+            });
         }
     } catch(e) {
         console.error("Error toggling rider reaction:", e);
+    }
+}
+
+export async function forwardRiderReactionToMessenger({ custId, msgId, emoji, action = 'react' }) {
+    try {
+        const cleanPsid = String(custId || '').replace(/^fb_/, '');
+        if (!cleanPsid || !msgId) return;
+
+        // Find the actual Facebook mid from loaded messages or fetch from db
+        let fbMid = msgId;
+        const msg = loadedRiderMsgsMap.get(msgId);
+        // Meta Graph API explicitly rejects Pages reacting to their own messages (Error subcode 2018468)
+        if (msg && (msg.isRider || msg.sender === 'rider' || msg.sender === 'bot')) {
+            return;
+        }
+        if (msg) {
+            fbMid = msg.metaMid || msg.mid || msgId;
+        }
+        if (fbMid && fbMid.startsWith('mid__')) {
+            fbMid = fbMid.replace(/^mid__/, 'mid.$');
+        }
+
+        const apiId = currentRiderChatMeta?.apiId || currentRiderChatMeta?.channelId || null;
+        const token = (typeof getFbPageAccessToken === 'function') 
+            ? await getFbPageAccessToken(apiId) 
+            : null;
+
+        let sent = false;
+        if (token && fbMid) {
+            const body = {
+                recipient: { id: cleanPsid },
+                sender_action: action,
+                payload: {
+                    message_id: fbMid
+                }
+            };
+            if (action === 'react' && emoji) {
+                body.payload.reaction = emoji;
+            }
+
+            try {
+                const res = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (res.ok) sent = true;
+            } catch (e) {
+                console.warn("Direct Meta reaction call failed, fallback will be used:", e);
+            }
+        }
+
+        // Fallback to Cloudflare Worker endpoint if direct call wasn't made or failed
+        if (!sent && fbMid) {
+            const sendReactionEndpoint = "https://lokalex-messenger-webhook.lokaledeliver.workers.dev/api/send-reaction";
+            try {
+                await fetch(sendReactionEndpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        recipientId: cleanPsid,
+                        mid: fbMid,
+                        emoji: emoji || '',
+                        action: action,
+                        apiId: apiId
+                    })
+                });
+            } catch (e) {
+                // Ignore offline / worker network glitch
+            }
+        }
+    } catch(err) {
+        console.warn("forwardRiderReactionToMessenger error:", err);
     }
 }
 
@@ -664,7 +752,12 @@ function evaluateRiderChatLockPermissions() {
     const cateredRiderId = (currentRiderChatMeta.cateredByRiderId || "").toString().trim();
     const cateredRiderName = (currentRiderChatMeta.cateredByRiderName || currentRiderChatMeta.cateredBy || "").toString().trim().toLowerCase();
 
-    const isCateringRider = (cateredRiderId && cateredRiderId === myId) || (cateredRiderName && cateredRiderName === myName);
+    // Check active roster catering list for current rider
+    const myCateringCusts = (typeof window.getMyCateringCustomers === 'function') ? window.getMyCateringCustomers() : [];
+    const custDisplayName = (currentRiderChatMeta.customerName || currentRiderChatMeta.name || '').trim();
+    const isCustomerInMyList = myCateringCusts.some(c => c.toLowerCase() === custDisplayName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(c, custDisplayName)));
+
+    const isCateringRider = (cateredRiderId && cateredRiderId === myId) || (cateredRiderName && cateredRiderName === myName) || isCustomerInMyList;
     
     const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
                         (typeof canManageRoster === 'function' && canManageRoster()) ||
@@ -676,6 +769,7 @@ function evaluateRiderChatLockPermissions() {
 
     const caterBtn = document.getElementById('rider-chat-cater-btn');
     const cancelBtn = document.getElementById('rider-chat-cancel-btn');
+    const goCartBtn = document.getElementById('rider-chat-go-cart-btn');
 
     if (isLocked) {
         if (lockBanner) {
@@ -688,12 +782,16 @@ function evaluateRiderChatLockPermissions() {
         if (actionToolbar) actionToolbar.classList.add('opacity-50', 'pointer-events-none');
         if (caterBtn) caterBtn.classList.add('hidden');
         if (cancelBtn) cancelBtn.classList.add('hidden');
+        if (goCartBtn) goCartBtn.classList.add('hidden');
     } else {
         if (lockBanner) {
             if (isCateringRider) {
                 lockBanner.classList.remove('hidden');
-                lockBanner.className = "bg-emerald-50 dark:bg-emerald-950/40 border-b-2 border-emerald-500 px-3 py-1.5 text-[11px] text-emerald-800 dark:text-emerald-300 font-bold text-center shrink-0 flex items-center justify-center gap-1.5";
-                lockBanner.innerHTML = `<i class="fa-solid fa-user-check text-emerald-600"></i> Kasalukuyan mong kinacater ang customer na ito.`;
+                lockBanner.className = "bg-emerald-50 dark:bg-emerald-950/40 border-b-2 border-emerald-500 px-3 py-1.5 text-[11px] text-emerald-800 dark:text-emerald-300 font-bold text-center shrink-0 flex items-center justify-between gap-1.5";
+                lockBanner.innerHTML = `<span class="truncate"><i class="fa-solid fa-user-check text-emerald-600"></i> Kasalukuyan mong kinacater ang customer na ito.</span>
+                <button type="button" onclick="window.goToCustomerCartFromChat && window.goToCustomerCartFromChat()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black px-2.5 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer shrink-0">
+                    <i class="fa-solid fa-cart-shopping"></i> Go to Cart
+                </button>`;
             } else if (isUserAdmin && (cateredRiderId || cateredRiderName)) {
                 lockBanner.classList.remove('hidden');
                 lockBanner.className = "bg-amber-50 dark:bg-amber-500/20 border-b border-amber-200 dark:border-amber-500/40 px-3 py-1.5 text-[11px] text-amber-800 dark:text-amber-300 font-bold text-center shrink-0";
@@ -719,9 +817,11 @@ function evaluateRiderChatLockPermissions() {
         if (isCateringRider) {
             if (caterBtn) caterBtn.classList.add('hidden');
             if (cancelBtn) cancelBtn.classList.remove('hidden');
+            if (goCartBtn) goCartBtn.classList.remove('hidden');
         } else {
             if (caterBtn) caterBtn.classList.remove('hidden');
             if (cancelBtn) cancelBtn.classList.add('hidden');
+            if (goCartBtn) goCartBtn.classList.add('hidden');
         }
     }
 }
@@ -754,6 +854,9 @@ export function closeRiderCustomerChatModal() {
         activeRiderChatMetaListener = null;
     }
     activeRiderChatCustId = null;
+    if (typeof window !== 'undefined') {
+        window.activeRiderChatCustId = null;
+    }
     currentRiderChatMeta = null;
 
     oldestRiderMsgTimestamp = null;
@@ -761,6 +864,10 @@ export function closeRiderCustomerChatModal() {
     isLoadingRiderHistory = false;
     loadedRiderMsgsMap.clear();
     cancelRiderReply();
+
+    if (typeof window !== 'undefined' && typeof window.renderRiderCustomerChatFeed === 'function') {
+        window.renderRiderCustomerChatFeed();
+    }
 }
 
 export function sendRiderChatMessage(content = null, type = 'text') {
@@ -809,10 +916,11 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
     };
 
     if (activeRiderReplyTarget) {
+        const targetText = activeRiderReplyTarget.text || (activeRiderReplyTarget.imageUrl ? "📷 Photo" : (activeRiderReplyTarget.locationCoords ? "📍 Location" : "Message"));
         newMsg.replyTo = {
             id: activeRiderReplyTarget.id,
-            sender: activeRiderReplyTarget.sender,
-            text: activeRiderReplyTarget.text.substring(0, 120)
+            sender: activeRiderReplyTarget.sender || "User",
+            text: String(targetText).substring(0, 120)
         };
     }
 
@@ -825,29 +933,50 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
         newMsg.type = 'location';
     }
 
+    let newMsgKey = null;
     if (db) {
-        const pushRef = await db.ref(`customerChats/${activeRiderChatCustId}/messages`).push(sanitizeForFirebase(newMsg));
-        const newMsgKey = pushRef ? pushRef.key : null;
-        if (newMsgKey) {
-            loadedRiderMsgsMap.set(newMsgKey, { id: newMsgKey, ...newMsg });
-            const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-            riderChatMemoryCache.set(activeRiderChatCustId, sortedMsgs);
-            idbSet('chats', activeRiderChatCustId, sortedMsgs).catch(() => {});
-            const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
-            if (container) {
-                renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, 0, activeCustData);
+        try {
+            const pushRef = await db.ref(`customerChats/${activeRiderChatCustId}/messages`).push(sanitizeForFirebase(newMsg));
+            newMsgKey = pushRef ? pushRef.key : null;
+            if (newMsgKey) {
+                const fullNewMsg = { id: newMsgKey, ...newMsg };
+                loadedRiderMsgsMap.set(newMsgKey, fullNewMsg);
+                const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+                riderChatMemoryCache.set(activeRiderChatCustId, sortedMsgs);
+                idbSet('chats', activeRiderChatCustId, sortedMsgs).catch(() => {});
+                const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
+                if (container) {
+                    appendOrUpdateSingleRiderMessage(container, fullNewMsg, activeCustData);
+                    requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+                }
             }
+            const currentName = activeCustData?.name || activeCustData?.customerName || currentRiderChatMeta?.customerName;
+            const metaPayload = sanitizeForFirebase({
+                lastMessage: `You: ${text || (finalImageUrl ? "📷 Photo" : "📍 Location")}`,
+                lastUpdated: now,
+                unreadForRider: false
+            });
+            if (currentName) {
+                metaPayload.customerName = currentName;
+            } else if (activeRiderChatCustId && activeRiderChatCustId.startsWith('cust_')) {
+                const ext = activeRiderChatCustId.replace(/^cust_/, '').replace(/_/g, ' ').trim();
+                if (ext) metaPayload.customerName = ext.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+            }
+            await Promise.all([
+                db.ref(`customerChats/${activeRiderChatCustId}/metadata`).update(metaPayload),
+                db.ref(`customerChatMeta/${activeRiderChatCustId}`).update(metaPayload)
+            ]).catch(() => {});
+        } catch (dbErr) {
+            console.warn("Failed pushing chat message to db:", dbErr);
         }
-        const metaPayload = sanitizeForFirebase({
-            lastMessage: `You: ${text || (finalImageUrl ? "📷 Photo" : "📍 Location")}`,
-            lastUpdated: now,
-            unreadForRider: false
-        });
-        await Promise.all([
-            db.ref(`customerChats/${activeRiderChatCustId}/metadata`).update(metaPayload),
-            db.ref(`customerChatMeta/${activeRiderChatCustId}`).update(metaPayload)
-        ]).catch(() => {});
     }
+
+    const targetMsg = activeRiderReplyTarget?.id ? loadedRiderMsgsMap.get(activeRiderReplyTarget.id) : null;
+    let replyTargetMid = targetMsg?.metaMid || targetMsg?.mid || activeRiderReplyTarget?.metaMid || activeRiderReplyTarget?.mid || activeRiderReplyTarget?.id || null;
+    if (replyTargetMid && replyTargetMid.startsWith('mid__')) {
+        replyTargetMid = replyTargetMid.replace(/^mid__/, 'mid.$');
+    }
+    const replyTargetText = activeRiderReplyTarget?.text || targetMsg?.text || (activeRiderReplyTarget?.imageUrl ? "📷 Photo" : "");
 
     // Forward reply to Facebook Messenger customer if thread is from Facebook
     if (targetChannel === 'messenger' || String(activeRiderChatCustId).startsWith('fb_')) {
@@ -857,8 +986,11 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
             text: text,
             imageUrl: finalImageUrl,
             locationCoords: customLocationCoords,
-            riderName: riderName
-        });
+            riderName: riderName,
+            replyToMid: replyTargetMid,
+            replyToText: replyTargetText,
+            newMsgKey: newMsgKey
+        }).catch(err => console.warn("forwardRiderReplyToMessenger error:", err));
     }
 
     if (!customText) {
@@ -887,11 +1019,231 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
 /**
  * Forwards outbound rider chat message directly to Facebook Messenger via the webhook bridge
  */
-export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, locationCoords, riderName }) {
+export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, locationCoords, riderName, replyToMid, replyToText, newMsgKey }) {
     try {
         const cleanPsid = String(custId || '').replace(/^fb_/, '');
         if (!cleanPsid) return;
 
+        const recordFbMid = async (rawMid) => {
+            if (!newMsgKey || !rawMid || !db) return;
+            const safeMid = String(rawMid).replace(/[.#$\[\]\/]/g, '_');
+            const local = loadedRiderMsgsMap.get(newMsgKey);
+            if (local) {
+                local.mid = safeMid;
+                local.metaMid = rawMid;
+            }
+            await Promise.all([
+                db.ref(`customerChats/${custId}/messages/${newMsgKey}`).update({ mid: safeMid, metaMid: rawMid }),
+                db.ref(`customerChats/${custId}/midIndex/${safeMid}`).set(newMsgKey),
+                db.ref(`customerChats/${custId}/midIndex/${rawMid}`).set(newMsgKey)
+            ]).catch(e => console.warn("Failed to record fb mid:", e));
+        };
+
+        const token = (typeof getFbPageAccessToken === 'function') 
+            ? await getFbPageAccessToken(apiId) 
+            : null;
+
+        // 1. DIRECT ATTACHMENT UPLOAD TO META GRAPH API (Instant, bypasses size limits, 100% reliable)
+        if (imageUrl) {
+            // Case A: Base64 data URL (Photo upload, canvas screenshot, receipt)
+            if (imageUrl.startsWith('data:') && token) {
+                try {
+                    const blob = dataUrlToBlob(imageUrl);
+                    if (blob) {
+                        const formData = new FormData();
+                        formData.append('message', JSON.stringify({
+                            attachment: {
+                                type: 'image',
+                                payload: { is_reusable: true }
+                            }
+                        }));
+                        const isPng = imageUrl.startsWith('data:image/png');
+                        formData.append('filedata', blob, isPng ? 'receipt.png' : 'image.jpg');
+
+                        const uploadResp = await fetch(`https://graph.facebook.com/v19.0/me/message_attachments?access_token=${token}`, {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        if (uploadResp.ok) {
+                            const uploadData = await uploadResp.json();
+                            const attachmentId = uploadData.attachment_id;
+                            if (attachmentId) {
+                                let sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        messaging_type: 'RESPONSE',
+                                        recipient: { id: cleanPsid },
+                                        message: {
+                                            attachment: {
+                                                type: 'image',
+                                                payload: { attachment_id: attachmentId }
+                                            }
+                                        }
+                                    })
+                                });
+
+                                let sendData = await sendResp.json().catch(() => ({}));
+
+                                // Retry with MESSAGE_TAG if outside 24h window (error code 10)
+                                if (!sendResp.ok && sendData?.error?.code === 10) {
+                                    sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            messaging_type: 'MESSAGE_TAG',
+                                            tag: 'CONFIRMED_EVENT_UPDATE',
+                                            recipient: { id: cleanPsid },
+                                            message: {
+                                                attachment: {
+                                                    type: 'image',
+                                                    payload: { attachment_id: attachmentId }
+                                                }
+                                            }
+                                        })
+                                    });
+                                    sendData = await sendResp.json().catch(() => ({}));
+                                }
+
+                                if (sendResp.ok) {
+                                    if (sendData?.message_id) recordFbMid(sendData.message_id);
+                                    console.log("✅ Photo delivered directly to Facebook Messenger via attachment_id!");
+                                    if (text && typeof text === 'string' && text.trim()) {
+                                        await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey });
+                                    }
+                                    showToast("✅ Litrato naipadala sa customer sa Messenger!");
+                                    return;
+                                } else {
+                                    console.warn("Direct Facebook attachment send returned error:", sendData);
+                                }
+                            }
+                        } else {
+                            const uploadErr = await uploadResp.json().catch(() => ({}));
+                            console.warn("Direct Facebook attachment upload failed:", uploadErr);
+                        }
+                    }
+                } catch (directErr) {
+                    console.warn("Direct Facebook upload threw error, falling back to webhook bridge:", directErr);
+                }
+            } else if (imageUrl.startsWith('https://') && token) {
+                // Case B: Public HTTPS Image URL
+                try {
+                    let sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            messaging_type: 'RESPONSE',
+                            recipient: { id: cleanPsid },
+                            message: {
+                                attachment: {
+                                    type: 'image',
+                                    payload: { url: imageUrl, is_reusable: true }
+                                }
+                            }
+                        })
+                    });
+
+                    let sendData = await sendResp.json().catch(() => ({}));
+
+                    if (!sendResp.ok && sendData?.error?.code === 10) {
+                        sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                messaging_type: 'MESSAGE_TAG',
+                                tag: 'CONFIRMED_EVENT_UPDATE',
+                                recipient: { id: cleanPsid },
+                                message: {
+                                    attachment: {
+                                        type: 'image',
+                                        payload: { url: imageUrl, is_reusable: true }
+                                    }
+                                }
+                            })
+                        });
+                        sendData = await sendResp.json().catch(() => ({}));
+                    }
+
+                    if (sendResp.ok) {
+                        if (sendData?.message_id) recordFbMid(sendData.message_id);
+                        console.log("✅ HTTPS Photo delivered directly to Facebook Messenger!");
+                        if (text && typeof text === 'string' && text.trim()) {
+                            await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey });
+                        }
+                        showToast("✅ Litrato naipadala sa customer sa Messenger!");
+                        return;
+                    }
+                } catch (e) {
+                    console.warn("Direct HTTPS photo send threw:", e);
+                }
+            }
+        }
+
+        // 2. DIRECT TEXT SENDING WITH NATIVE THREADED QUOTE
+        if (text && typeof text === 'string' && text.trim() && token && !imageUrl && !locationCoords) {
+            try {
+                const sendText = text.trim();
+
+                const sendPayload = {
+                    messaging_type: 'RESPONSE',
+                    recipient: { id: cleanPsid },
+                    message: { text: sendText }
+                };
+                if (replyToMid) {
+                    sendPayload.reply_to = { mid: replyToMid };
+                }
+                let sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(sendPayload)
+                });
+                let sendData = await sendResp.json().catch(() => ({}));
+
+                // If Meta rejects the reply_to parameter (e.g. invalid mid or outside threading context), retry without reply_to
+                if (!sendResp.ok && replyToMid && (sendData?.error?.message?.toLowerCase().includes('reply_to') || sendData?.error?.code === 100)) {
+                    console.warn("Direct reply_to rejected by Meta, retrying without reply_to:", sendData?.error?.message);
+                    sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            messaging_type: 'RESPONSE',
+                            recipient: { id: cleanPsid },
+                            message: { text: sendText }
+                        })
+                    });
+                    sendData = await sendResp.json().catch(() => ({}));
+                }
+
+                if (!sendResp.ok && sendData?.error?.code === 10) {
+                    const tagPayload = {
+                        messaging_type: 'MESSAGE_TAG',
+                        tag: 'CONFIRMED_EVENT_UPDATE',
+                        recipient: { id: cleanPsid },
+                        message: { text: sendText }
+                    };
+                    if (replyToMid) {
+                        tagPayload.reply_to = { mid: replyToMid };
+                    }
+                    sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(tagPayload)
+                    });
+                    sendData = await sendResp.json().catch(() => ({}));
+                }
+                if (sendResp.ok) {
+                    if (sendData?.message_id) recordFbMid(sendData.message_id);
+                    console.log("✅ Text reply delivered directly to Facebook Messenger!");
+                    showToast("✅ Delivered to customer Messenger!");
+                    return;
+                }
+            } catch (err) {
+                console.warn("Direct text send to Meta failed, falling back to endpoint:", err);
+            }
+        }
+
+        // 3. FALLBACK: WEBHOOK BRIDGE / CLOUDFLARE WORKER ENDPOINT
         let sendEndpoint = null;
         if (typeof getPublicFbSendEndpoint === 'function') {
             sendEndpoint = getPublicFbSendEndpoint(apiId);
@@ -902,14 +1254,14 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
 
         // Fallback 1: Fetch directly from active channel in RTDB
         if (!sendEndpoint && db && apiId) {
-            const snap = await db.ref(`facebookChannels/${apiId}/sendEndpoint`).once('value');
-            sendEndpoint = snap.val();
+            const snap = await db.ref(`facebookChannels/${apiId}/sendEndpoint`).once('value').catch(() => null);
+            sendEndpoint = snap?.val();
         }
 
         // Fallback 2: Any available sendEndpoint in RTDB
         if (!sendEndpoint && db) {
-            const allSnap = await db.ref('facebookChannels').once('value');
-            const allVal = allSnap.val() || {};
+            const allSnap = await db.ref('facebookChannels').once('value').catch(() => null);
+            const allVal = allSnap?.val() || {};
             const first = Object.values(allVal).find(c => c && c.sendEndpoint);
             if (first) sendEndpoint = first.sendEndpoint;
         }
@@ -919,25 +1271,52 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
             sendEndpoint = "https://lokalex-messenger-webhook.lokaledeliver.workers.dev/api/send-reply";
         }
 
+        let finalFbImageUrl = imageUrl;
+        if (finalFbImageUrl && finalFbImageUrl.startsWith('data:')) {
+            try {
+                finalFbImageUrl = await uploadImage(finalFbImageUrl, `chats/${custId}/${Date.now()}.jpg`);
+            } catch (err) {
+                console.warn("[RiderChat] uploadImage before Messenger send failed:", err);
+            }
+        }
+        const safeFbImageUrl = finalFbImageUrl || null;
+
         const resp = await fetch(sendEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 recipientId: cleanPsid,
-                text: text,
-                imageUrl: imageUrl,
+                text: text || "",
+                imageUrl: safeFbImageUrl,
                 locationCoords: locationCoords,
                 senderName: riderName,
-                apiId: apiId
+                apiId: apiId,
+                msgKey: newMsgKey || null,
+                replyToMid: replyToMid || null,
+                replyToText: replyToText || null
             })
         });
 
         if (!resp.ok) {
-            const errData = await resp.json().catch(() => ({}));
-            console.warn("Facebook send reply error:", errData);
-            const errMsg = errData.error?.message || errData.error || (typeof errData === 'string' ? errData : 'Check Page permissions');
+            const errText = await resp.text().catch(() => "");
+            let errMsg = 'Check Page permissions';
+            try {
+                const errData = JSON.parse(errText);
+                errMsg = errData.error?.message || errData.error || errMsg;
+            } catch (_) {
+                if (errText.includes('502') || errText.includes('Bad Gateway')) {
+                    errMsg = 'Server busy, please retry in a moment.';
+                } else if (errText.length > 0 && errText.length < 80) {
+                    errMsg = errText;
+                }
+            }
+            console.warn("Facebook send reply error:", errMsg);
             showToast(`⚠️ Messenger delivery issue: ${errMsg}`);
         } else {
+            const respData = await resp.json().catch(() => ({}));
+            if (respData?.message_id || respData?.mid) {
+                recordFbMid(respData.message_id || respData.mid);
+            }
             console.log("✅ Rider reply delivered to Facebook Messenger!");
             showToast("✅ Delivered to customer Messenger!");
         }
@@ -1009,4 +1388,12 @@ if (typeof window !== 'undefined') {
     window.triggerLoadOlderRiderMessages = () => loadOlderRiderMessages(null, activeRiderChatCustId);
 
     listenToGlobalStoreChats();
+
+    if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && activeRiderChatCustId) {
+                clearNativeNotification('chat_' + activeRiderChatCustId);
+            }
+        });
+    }
 }

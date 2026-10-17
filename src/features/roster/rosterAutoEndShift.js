@@ -23,7 +23,7 @@ import { appState, globalState } from '../../store/state.js';
 import { API_URL } from '../../config/constants.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { getLocalTodayStr, isSameDate } from '../../utils/helpers.js';
-import { parseTimeToMinutes, isAdmin, archiveRiderCateringIfNeeded, saveRosterCache } from './rosterUtils.js';
+import { parseTimeToMinutes, isAdmin, hasTlPermission, archiveRiderCateringIfNeeded, saveRosterCache } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 import { sanitizeForFirebase } from './rosterSchedule.js';
 
@@ -31,7 +31,7 @@ let autoEndShiftTimer = null;
 let hasSweptPriorDaysOnStartup = false;
 
 export function openAdminAutoEndShiftModal() {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageAutoEndShift')) return showToast("⚠️ Unauthorized: Admin access required.");
     const modal = document.getElementById('admin-auto-endshift-modal');
     if (!modal) return;
 
@@ -57,7 +57,7 @@ export function closeAdminAutoEndShiftModal() {
 }
 
 export async function saveAdminAutoEndShiftSettings() {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageAutoEndShift')) return showToast("⚠️ Unauthorized: Admin access required.");
     const enabledToggle = document.getElementById('auto-endshift-enabled');
     const timeInput = document.getElementById('auto-endshift-time');
 

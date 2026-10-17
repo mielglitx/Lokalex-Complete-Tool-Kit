@@ -211,9 +211,11 @@ async function fetchRecipientsList(suggestedName = "") {
             if (!meta) continue;
             const cName = meta.customerName || meta.name || "";
             if (isCustomerMatch(cName, cleanName)) {
-                matchedId = cId;
-                matchedMeta = meta;
-                break;
+                if (cId.startsWith('fb_') || !matchedId) {
+                    matchedId = cId;
+                    matchedMeta = meta;
+                    if (cId.startsWith('fb_')) break;
+                }
             }
         }
 
@@ -327,6 +329,9 @@ export function filterReceiptRecipients(query) {
 export async function executeSendReceiptToCustId(targetCustId, recipientName) {
     if (!targetCustId) return;
 
+    // 0. Close recipient modal immediately for instantaneous responsiveness
+    closeReceiptRecipientModal();
+
     const btn = document.getElementById('send-receipt-to-cust-btn');
     const oldBtnHtml = btn ? btn.innerHTML : "";
     if (btn) {
@@ -342,35 +347,25 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
         const riderName = appState.riderName || localStorage.getItem('riderName') || "Lokalex Rider";
         const now = Date.now();
 
-        // 1. Upload receipt image to Firebase Storage for clean HTTPS download link
-        const imgData = currentReceiptDataUrl || (currentReceiptCanvas ? currentReceiptCanvas.toDataURL('image/png') : null);
-        let finalImageUrl = imgData;
-
-        if (imgData && imgData.startsWith('data:')) {
+        // 1. Instant receipt image generation (JPEG 0.82 for ~50KB payload size and ultra-fast transmission)
+        let finalImageUrl = currentReceiptDataUrl;
+        if (!finalImageUrl && currentReceiptCanvas) {
             try {
-                finalImageUrl = await uploadImage(imgData, `chats/${targetCustId}/receipt_${now}.png`);
-            } catch (err) {
-                console.warn("Storage upload fallback for receipt:", err);
-            }
+                finalImageUrl = currentReceiptCanvas.toDataURL('image/jpeg', 0.82);
+            } catch (_) {}
         }
 
-        // 2. Fetch channel metadata to forward to Messenger if appropriate
-        let meta = {};
-        if (db) {
-            try {
-                const metaSnap = await db.ref(`customerChats/${targetCustId}/metadata`).once('value');
-                meta = metaSnap.val() || {};
-            } catch (e) {}
-        }
-
-        const targetChannel = meta.channel || (String(targetCustId).startsWith('fb_') ? 'messenger' : 'web');
-        const targetApiId = meta.apiId || meta.channelId || null;
-        const receiptText = `🧾 Official Delivery Receipt #${shortRef}`;
+        // 2. Resolve channel metadata from cached recipients list (0ms lookup, no DB round-trip delay)
+        const cachedRecipient = (cachedRecipientsList || []).find(r => r.custId === targetCustId);
+        const isFbTarget = String(targetCustId).startsWith('fb_') || String(targetCustId).startsWith('messenger_') || cachedRecipient?.channel === 'messenger';
+        const targetChannel = isFbTarget ? 'messenger' : (cachedRecipient?.channel || 'messenger');
+        const targetApiId = cachedRecipient?.apiId || 'fb_api_1791648211091';
+        const targetApiName = cachedRecipient?.apiName || 'Camiling FB';
 
         const newMsg = {
             sender: riderName,
             senderType: 'rider',
-            text: receiptText,
+            text: "",
             imageUrl: finalImageUrl,
             type: 'image',
             timestamp: now,
@@ -382,29 +377,40 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
             seenAt: null
         };
 
-        // 3. Write to Firebase Realtime Database
+        const metaUpdate = sanitizeForFirebase({
+            lastMessage: `You: 🧾 Official Delivery Receipt #${shortRef}`,
+            lastUpdated: now,
+            customerName: recipientName || (targetCustId.startsWith('cust_') ? targetCustId.replace(/^cust_/, '').replace(/_/g, ' ') : null),
+            channel: targetChannel,
+            apiId: targetApiId,
+            apiName: targetApiName,
+            unreadForRider: false
+        });
+
+        // 3. Fast parallel write to Firebase Realtime Database
+        let newMsgKey = null;
         if (db) {
-            await db.ref(`customerChats/${targetCustId}/messages`).push(sanitizeForFirebase(newMsg));
-            const metaUpdate = sanitizeForFirebase({
-                lastMessage: `You: 🧾 Official Delivery Receipt #${shortRef}`,
-                lastUpdated: now,
-                unreadForRider: false
-            });
-            await db.ref(`customerChats/${targetCustId}/metadata`).update(metaUpdate);
-            await db.ref(`customerChatMeta/${targetCustId}`).update(metaUpdate).catch(() => {});
+            const pushRef = db.ref(`customerChats/${targetCustId}/messages`).push();
+            newMsgKey = pushRef.key;
+            Promise.all([
+                pushRef.set(sanitizeForFirebase(newMsg)),
+                db.ref(`customerChats/${targetCustId}/metadata`).update(metaUpdate),
+                db.ref(`customerChatMeta/${targetCustId}`).update(metaUpdate)
+            ]).catch(err => console.warn("Firebase receipt write warning:", err));
         }
 
         // 4. Relay directly to Facebook Messenger webhook if customer came from Facebook
         if (targetChannel === 'messenger' || String(targetCustId).startsWith('fb_')) {
             try {
                 if (typeof forwardRiderReplyToMessenger === 'function') {
-                    await forwardRiderReplyToMessenger({
+                    forwardRiderReplyToMessenger({
                         custId: targetCustId,
                         apiId: targetApiId,
-                        text: receiptText,
+                        text: "", // Never send text alongside image receipt to Messenger
                         imageUrl: finalImageUrl,
-                        riderName: riderName
-                    });
+                        riderName: riderName,
+                        newMsgKey: newMsgKey
+                    }).catch(fbErr => console.warn("Forwarding receipt to Messenger warning:", fbErr));
                 }
             } catch (fbErr) {
                 console.warn("Forwarding receipt to Messenger warning:", fbErr);
@@ -412,7 +418,6 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
         }
 
         // 5. Success notifications and UI updates
-        closeReceiptRecipientModal();
         showToast(`✅ Resibo matagumpay na naipadala kay ${recipientName || 'customer'}!`);
         showSideNotification("RECEIPT SENT", `Delivered to ${recipientName || 'customer'}`, "fa-paper-plane", "text-blue-400", "border-blue-500");
 

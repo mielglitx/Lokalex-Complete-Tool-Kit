@@ -4,7 +4,7 @@ import { globalState } from '../../store/state.js';
 import { showToast } from '../../ui/notifications.js';
 import { escapeHtml, getLocalTodayStr } from '../../utils/helpers.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
-import { checkScheduledDeliveryAlerts } from './advancedOrdersAlerts.js';
+import { checkScheduledDeliveryAlerts, parseScheduledDateTime } from './advancedOrdersAlerts.js';
 import { 
     editingAdvancedOrderId, 
     setEditingAdvancedOrderId 
@@ -319,6 +319,92 @@ function attachSwipeGesturesToCards(container) {
     });
 }
 
+/**
+ * Computes scheduled delivery timestamp in milliseconds.
+ */
+export function getAdvancedOrderDeliveryTimestamp(ord) {
+    if (!ord) return Infinity;
+    const timeStr = (ord.timeToReceive || '').trim();
+    const dateStr = (ord.dateToReceive || '').trim();
+
+    if (timeStr) {
+        const dt = parseScheduledDateTime(dateStr, timeStr);
+        if (dt && !isNaN(dt.getTime())) return dt.getTime();
+    }
+
+    if (dateStr) {
+        const d = parseScheduledDateTime(dateStr, '00:00');
+        if (d && !isNaN(d.getTime())) return d.getTime();
+        const parsed = new Date(dateStr);
+        if (!isNaN(parsed.getTime())) return parsed.getTime();
+    }
+
+    return ord.createdAt || Infinity;
+}
+
+/**
+ * Determines whether an order has not been catered yet (Active / Pending / Catering).
+ */
+export function isOrderNotCatered(ord) {
+    if (!ord) return false;
+    const status = (ord.status || 'Pending').toString().trim().toLowerCase();
+    const isCatered = status === 'catered' || status === 'done' || status === 'completed';
+    const isCancelled = status === 'cancelled';
+    return !isCatered && !isCancelled;
+}
+
+/**
+ * Sorts scheduled delivery reminders:
+ * 1. Orders that have NOT been catered are ALWAYS moved to the TOP list.
+ * 2. Uncatered orders are sorted chronologically by delivery date and time (earliest first).
+ * 3. Completed/Catered and Cancelled orders are placed at the bottom, sorted by delivery date/time descending.
+ */
+export function sortAdvancedOrders(orders) {
+    if (!orders || !Array.isArray(orders)) return [];
+
+    return [...orders].sort((a, b) => {
+        const uncateredA = isOrderNotCatered(a);
+        const uncateredB = isOrderNotCatered(b);
+
+        // 1. Move reminders that have NOT been catered to the TOP list
+        if (uncateredA && !uncateredB) return -1;
+        if (!uncateredA && uncateredB) return 1;
+
+        const timeA = getAdvancedOrderDeliveryTimestamp(a);
+        const timeB = getAdvancedOrderDeliveryTimestamp(b);
+
+        // 2. Both are UNCATERED (Active scheduled deliveries):
+        if (uncateredA && uncateredB) {
+            // Sort chronologically by date and time of delivery (earliest first)
+            if (timeA !== timeB) return timeA - timeB;
+
+            // Tie-breaker: Pending before Catering
+            const statusA = (a.status || 'Pending').toString().trim().toLowerCase();
+            const statusB = (b.status || 'Pending').toString().trim().toLowerCase();
+            const isPendingA = statusA === 'pending';
+            const isPendingB = statusB === 'pending';
+            if (isPendingA && !isPendingB) return -1;
+            if (!isPendingA && isPendingB) return 1;
+
+            return (b.createdAt || 0) - (a.createdAt || 0);
+        }
+
+        // 3. Both are FINISHED: Catered before Cancelled
+        const statusA = (a.status || '').toString().trim().toLowerCase();
+        const statusB = (b.status || '').toString().trim().toLowerCase();
+        const isCancelledA = statusA === 'cancelled';
+        const isCancelledB = statusB === 'cancelled';
+
+        if (!isCancelledA && isCancelledB) return -1;
+        if (isCancelledA && !isCancelledB) return 1;
+
+        // Sort finished orders by delivery date and time descending (most recently completed first)
+        if (timeA !== timeB) return timeB - timeA;
+
+        return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+}
+
 export function renderAdvancedOrdersList() {
     const container = document.getElementById('adv-tab-list-content');
     if (!container) return;
@@ -330,6 +416,8 @@ export function renderAdvancedOrdersList() {
     if (orders.length === 0) {
         selectedOrderIds.clear();
         container.innerHTML = `<div class="text-center text-gray-500 italic py-8 text-xs">No scheduled advanced orders found.</div>`;
+        const listBtn = document.getElementById('adv-tab-btn-list');
+        if (listBtn) listBtn.innerHTML = 'Orders List';
         return;
     }
 
@@ -337,6 +425,19 @@ export function renderAdvancedOrdersList() {
     selectedOrderIds.forEach(id => {
         if (!validKeys.has(id)) selectedOrderIds.delete(id);
     });
+
+    const sortedOrders = sortAdvancedOrders(orders);
+    const uncateredCount = sortedOrders.filter(isOrderNotCatered).length;
+    const cateredCount = sortedOrders.filter(o => {
+        const s = (o.status || '').toLowerCase();
+        return s === 'catered' || s === 'done' || s === 'completed';
+    }).length;
+    const cancelledCount = sortedOrders.filter(o => (o.status || '').toLowerCase() === 'cancelled').length;
+
+    const listBtn = document.getElementById('adv-tab-btn-list');
+    if (listBtn) {
+        listBtn.innerHTML = `Orders List ${uncateredCount > 0 ? `(${uncateredCount})` : ''}`;
+    }
 
     const isAllSelected = orders.length > 0 && selectedOrderIds.size === orders.length;
     const selectedCount = selectedOrderIds.size;
@@ -348,6 +449,7 @@ export function renderAdvancedOrdersList() {
                 ${isAllSelected ? 'checked' : ''}
                 onchange="window.toggleSelectAllAdvancedOrders && window.toggleSelectAllAdvancedOrders(this.checked)">
             <span>Select All (<span id="adv-selected-count">${selectedCount}</span>/${orders.length})</span>
+            ${uncateredCount > 0 ? `<span class="bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 text-[9.5px] font-black px-1.5 py-0.5 rounded-md border border-purple-200 dark:border-purple-800/60 ml-1">${uncateredCount} To Cater</span>` : ''}
         </label>
         
         <button type="button" id="adv-bulk-delete-btn" onclick="window.promptDeleteSelectedAdvancedOrders && window.promptDeleteSelectedAdvancedOrders()"
@@ -356,12 +458,43 @@ export function renderAdvancedOrdersList() {
         </button>
     </div>`;
 
-    const cardsHtml = orders.slice().reverse().map(ord => {
+    let hasRenderedCateredHeader = false;
+    let hasRenderedCancelledHeader = false;
+
+    const cardsHtml = sortedOrders.map(ord => {
         const ordId = (ord.id || ord.key || "").toString();
         const status = ord.status || "Pending";
         const displayDate = ord.dateToReceive || getLocalTodayStr();
         const cateredBy = ord.cateredBy || "Unassigned";
         const isChecked = selectedOrderIds.has(ordId);
+
+        let sectionHeaderHtml = "";
+        const uncatered = isOrderNotCatered(ord);
+        const statusLower = status.toLowerCase();
+
+        if (!uncatered) {
+            if ((statusLower === 'catered' || statusLower === 'done' || statusLower === 'completed') && !hasRenderedCateredHeader) {
+                hasRenderedCateredHeader = true;
+                sectionHeaderHtml = `
+                <div class="flex items-center gap-2 my-2.5 px-1 select-none text-[11px] font-bold text-gray-500 dark:text-gray-400">
+                    <div class="h-px bg-gray-200 dark:bg-gray-800 flex-1"></div>
+                    <span class="flex items-center gap-1.5 uppercase tracking-wider text-[10px] text-emerald-600 dark:text-emerald-400 font-black">
+                        <i class="fa-solid fa-check-double"></i> Completed / Catered (${cateredCount})
+                    </span>
+                    <div class="h-px bg-gray-200 dark:bg-gray-800 flex-1"></div>
+                </div>`;
+            } else if (statusLower === 'cancelled' && !hasRenderedCancelledHeader) {
+                hasRenderedCancelledHeader = true;
+                sectionHeaderHtml = `
+                <div class="flex items-center gap-2 my-2.5 px-1 select-none text-[11px] font-bold text-gray-500 dark:text-gray-400">
+                    <div class="h-px bg-gray-200 dark:bg-gray-800 flex-1"></div>
+                    <span class="flex items-center gap-1.5 uppercase tracking-wider text-[10px] text-red-500 dark:text-red-400 font-black">
+                        <i class="fa-solid fa-ban"></i> Cancelled (${cancelledCount})
+                    </span>
+                    <div class="h-px bg-gray-200 dark:bg-gray-800 flex-1"></div>
+                </div>`;
+            }
+        }
 
         let statusBadge = ""; 
         let actionBtns = "";
@@ -401,7 +534,7 @@ export function renderAdvancedOrdersList() {
                 </div>`;
         }
 
-        return `
+        return sectionHeaderHtml + `
         <div class="adv-swipe-item relative overflow-hidden rounded-2xl mb-2.5 select-none shadow-xs shrink-0 w-full" style="min-height: fit-content;" data-id="${escapeHtml(ordId)}" data-cust-name="${escapeHtml(ord.custName)}">
             <!-- Background Swipe Reveal -->
             <div class="adv-swipe-bg absolute inset-0 bg-red-600 text-white flex items-center justify-between px-4 rounded-2xl opacity-0 transition-opacity duration-150">
@@ -445,6 +578,9 @@ export function renderAdvancedOrdersList() {
 if (typeof window !== 'undefined') {
     window.switchAdvTab = switchAdvTab;
     window.renderAdvancedOrdersList = renderAdvancedOrdersList;
+    window.sortAdvancedOrders = sortAdvancedOrders;
+    window.isOrderNotCatered = isOrderNotCatered;
+    window.getAdvancedOrderDeliveryTimestamp = getAdvancedOrderDeliveryTimestamp;
     window.toggleSelectAdvancedOrder = toggleSelectAdvancedOrder;
     window.toggleSelectAllAdvancedOrders = toggleSelectAllAdvancedOrders;
     window.promptDeleteSingleAdvancedOrder = promptDeleteSingleAdvancedOrder;

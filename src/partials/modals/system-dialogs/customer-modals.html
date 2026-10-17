@@ -10,8 +10,8 @@
                 </div>
                 <h3 class="font-bold text-sm text-gray-900 dark:text-white">Edit Account Details</h3>
             </div>
-            <button onclick="window.closeEditCustomerProfileModal && window.closeEditCustomerProfileModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeEditCustomerProfileModal && window.closeEditCustomerProfileModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -98,8 +98,8 @@
                     <span id="cust-modal-thread-channel" class="text-[10px] text-gray-500 dark:text-gray-400">Live Chat Details</span>
                 </div>
             </div>
-            <button onclick="window.closeCustomerDetailsModal && window.closeCustomerDetailsModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm p-1 rounded-lg">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeCustomerDetailsModal && window.closeCustomerDetailsModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -136,8 +136,8 @@
                     <span class="text-[11px] font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
                         <i class="fa-solid fa-magnifying-glass text-blue-500"></i> Link to Directory Customer
                     </span>
-                    <button type="button" onclick="window.toggleDirectoryLinkPicker(false)" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs p-1">
-                        <i class="fa-solid fa-xmark"></i>
+                    <button type="button" onclick="window.toggleDirectoryLinkPicker(false)" class="w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                        <i class="fa-solid fa-xmark text-[11px]"></i>
                     </button>
                 </div>
                 <div class="relative">
@@ -147,6 +147,11 @@
                         <i class="fa-solid fa-circle-xmark"></i>
                     </button>
                 </div>
+
+                <!-- DIRECT PROFILE CREATION BUTTON (NO TYPING REQUIRED) -->
+                <button type="button" onclick="window.openNewDirectoryCustomerFromChat && window.openNewDirectoryCustomerFromChat()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 text-xs shadow-sm cursor-pointer shrink-0">
+                    <i class="fa-solid fa-user-plus text-xs"></i> + Create Customer Directory Profile
+                </button>
 
                 <!-- Live Search Results Header & List -->
                 <div class="flex items-center justify-between px-0.5 text-[10px] text-gray-500 dark:text-gray-400 font-medium">

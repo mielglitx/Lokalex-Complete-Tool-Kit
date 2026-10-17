@@ -22,7 +22,7 @@ import { appState, globalState } from '../../store/state.js';
 import { showToast } from '../../ui/notifications.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
 import { escapeHtml } from '../../utils/helpers.js';
-import { isAdmin, canManageRoster } from '../roster/rosterUtils.js';
+import { isAdmin, canManageRoster, hasTlPermission } from '../roster/rosterUtils.js';
 import { toggleBodyScroll } from './chatUtils.js';
 
 let cachedPublicChannelsMap = new Map();
@@ -154,6 +154,41 @@ export function getPublicFbSendEndpoint(apiId) {
         }
     }
     return "https://lokalex-messenger-webhook.lokaledeliver.workers.dev/api/send-reply";
+}
+
+export async function getFbPageAccessToken(apiId) {
+    if (apiId) {
+        const cached = cachedAdminApisMap.get(apiId);
+        if (cached?.pageAccessToken && typeof cached.pageAccessToken === 'string' && cached.pageAccessToken.trim()) {
+            return cached.pageAccessToken.trim();
+        }
+    }
+    // Any cached with pageAccessToken
+    for (const api of cachedAdminApisMap.values()) {
+        if (api?.pageAccessToken && typeof api.pageAccessToken === 'string' && api.pageAccessToken.trim()) {
+            return api.pageAccessToken.trim();
+        }
+    }
+    // RTDB fallback
+    if (db) {
+        try {
+            if (apiId) {
+                const snap = await db.ref(`adminSettings/facebookApis/${apiId}/pageAccessToken`).once('value');
+                const val = snap.val();
+                if (val && typeof val === 'string' && val.trim()) return val.trim();
+            }
+            const allSnap = await db.ref('adminSettings/facebookApis').once('value');
+            const allVal = allSnap.val() || {};
+            for (const api of Object.values(allVal)) {
+                if (api?.pageAccessToken && typeof api.pageAccessToken === 'string' && api.pageAccessToken.trim()) {
+                    return api.pageAccessToken.trim();
+                }
+            }
+        } catch (e) {
+            console.warn("[FbApiAdmin] Error fetching Page Access Token:", e);
+        }
+    }
+    return null;
 }
 
 /**
@@ -550,7 +585,7 @@ export function closeRiderChatSourcesModal() {
 // ============================================================================
 
 export function hasAdminFbPermission() {
-    if (isAdmin() || canManageRoster()) return true;
+    if (isAdmin() || canManageRoster() || hasTlPermission('canManageFbApis')) return true;
     if (globalState.adminControlsEnabled === true) return true;
     if (typeof localStorage !== 'undefined' && localStorage.getItem('adminControlsEnabled') === 'true') return true;
     const myName = (appState.riderName || (typeof localStorage !== 'undefined' ? localStorage.getItem('riderName') : '') || '').toLowerCase().trim();
@@ -973,9 +1008,13 @@ export async function resolveFacebookCustomerName(custId, force = false) {
 
                 // Method A: Targeted Page Conversations API by user_id
                 try {
-                    const convResp = await fetch(
-                        `https://graph.facebook.com/v19.0/${pageId}/conversations?user_id=${psid}&fields=participants,senders&access_token=${token}`
-                    );
+                    const convEndpoint = api.pageId 
+                        ? `https://graph.facebook.com/v19.0/${api.pageId}/conversations?user_id=${psid}&fields=participants,senders&access_token=${token}`
+                        : `https://graph.facebook.com/v19.0/me/conversations?user_id=${psid}&fields=participants,senders&access_token=${token}`;
+                    let convResp = await fetch(convEndpoint);
+                    if (!convResp.ok) {
+                        convResp = await fetch(`https://graph.facebook.com/v19.0/me/conversations?user_id=${psid}&fields=participants,senders&access_token=${token}`);
+                    }
                     if (convResp.ok) {
                         const convData = await convResp.json();
                         if (Array.isArray(convData.data) && convData.data.length > 0) {
@@ -1239,8 +1278,108 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid) {
     return promise;
 }
 
+const inFlightReplyToResolutions = new Map();
+
+/**
+ * Resolves quoted reply_to message details from Meta Graph API when missing in Firebase
+ */
+export async function resolveFacebookMessageReplyTo(custId, msgId, rawMid) {
+    if (!custId || !msgId) return null;
+    const cleanMid = rawMid || msgId;
+    const cacheKey = `${custId}_${msgId}`;
+
+    if (inFlightReplyToResolutions.has(cacheKey)) {
+        return inFlightReplyToResolutions.get(cacheKey);
+    }
+
+    const promise = (async () => {
+        try {
+            let apiList = Array.from(cachedAdminApisMap.values()).filter(a => a && a.pageAccessToken);
+            if (apiList.length === 0 && db) {
+                const apiSnap = await db.ref('adminSettings/facebookApis').once('value');
+                const apis = apiSnap.val() || {};
+                apiList = Object.values(apis).filter(a => a && a.pageAccessToken);
+            }
+            if (apiList.length === 0) return null;
+
+            for (const api of apiList) {
+                const token = (api.pageAccessToken || '').trim();
+                if (!token) continue;
+
+                const resp = await fetch(`https://graph.facebook.com/v19.0/${cleanMid}?fields=id,message,from,reply_to&access_token=${token}`);
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data?.reply_to?.mid) {
+                        const refMid = data.reply_to.mid;
+                        const safeRefMid = refMid.replace(/[.#$\[\]\/]/g, '_');
+                        let mappedKey = null;
+                        let refText = '';
+                        let refSender = 'Rider';
+
+                        // 1. Check midIndex in Firebase
+                        if (db) {
+                            try {
+                                const indexSnap = await db.ref(`customerChats/${custId}/midIndex/${safeRefMid}`).once('value');
+                                mappedKey = indexSnap.val();
+                                if (mappedKey) {
+                                    const origSnap = await db.ref(`customerChats/${custId}/messages/${mappedKey}`).once('value');
+                                    const orig = origSnap.val();
+                                    if (orig) {
+                                        refText = orig.text || (orig.imageUrl ? "📷 Photo" : (orig.locationCoords ? "📍 Location" : "Message"));
+                                        refSender = orig.sender || (orig.isRider ? "Rider" : "Customer");
+                                    }
+                                }
+                            } catch (_) {}
+                        }
+
+                        // 2. Query Meta directly for the original quoted message text & sender
+                        if (!refText) {
+                            try {
+                                const qResp = await fetch(`https://graph.facebook.com/v19.0/${refMid}?fields=id,message,from,attachments&access_token=${token}`);
+                                if (qResp.ok) {
+                                    const qData = await qResp.json();
+                                    if (qData) {
+                                        let rawText = qData.message || (qData.attachments?.data?.[0]?.type ? `📷 ${qData.attachments.data[0].type}` : "Message");
+                                        refText = rawText.replace(/^💬 In reply to [^\n]+\n\n/, '');
+                                        refSender = qData.from?.name || "Rider";
+                                    }
+                                }
+                            } catch (_) {}
+                        }
+
+                        if (refText) {
+                            refText = refText.replace(/^💬 In reply to [^\n]+\n\n/, '');
+                            const replyToObj = {
+                                id: mappedKey || safeRefMid,
+                                mid: refMid,
+                                text: String(refText).substring(0, 140),
+                                sender: refSender
+                            };
+                            if (db) {
+                                db.ref(`customerChats/${custId}/messages/${msgId}`).update({
+                                    replyTo: replyToObj
+                                }).catch(() => {});
+                            }
+                            return replyToObj;
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn(`[FB ReplyTo] Resolution failed for mid ${cleanMid}:`, e);
+        } finally {
+            inFlightReplyToResolutions.delete(cacheKey);
+        }
+        return null;
+    })();
+
+    inFlightReplyToResolutions.set(cacheKey, promise);
+    return promise;
+}
+
 if (typeof window !== 'undefined') {
     window.resolveFacebookMessageAttachment = resolveFacebookMessageAttachment;
+    window.resolveFacebookMessageReplyTo = resolveFacebookMessageReplyTo;
     window.openAdminFbApiModal = openAdminFbApiModal;
     window.closeAdminFbApiModal = closeAdminFbApiModal;
     window.saveAdminFbApi = saveAdminFbApi;
@@ -1272,5 +1411,6 @@ if (typeof window !== 'undefined') {
     window.getActiveRiderFbChannel = getActiveRiderFbChannel;
     window.getPublicFbChannelName = getPublicFbChannelName;
     window.getPublicFbSendEndpoint = getPublicFbSendEndpoint;
+    window.getFbPageAccessToken = getFbPageAccessToken;
     window.listenToPublicFbChannels = listenToPublicFbChannels;
 }

@@ -30,15 +30,24 @@ export function renderReactionsHtml(reactions, msgId) {
 }
 
 export function renderReplyPreviewInsideMessage(replyTo) {
-    if (!replyTo || !replyTo.text) return '';
-    const clickHandler = replyTo.id ? `event.stopPropagation(); window.scrollToBubble('${replyTo.id}')` : '';
+    if (!replyTo) return '';
+    const textPreview = replyTo.text 
+        || replyTo.message?.text 
+        || (typeof replyTo.message === 'string' ? replyTo.message : null)
+        || (replyTo.imageUrl || replyTo.message?.imageUrl ? '📷 Photo' : (replyTo.locationCoords ? '📍 Location' : 'Quoted Message'));
+    if (!textPreview) return '';
+    const sender = (replyTo.sender && replyTo.sender !== 'Unknown')
+        ? replyTo.sender 
+        : (replyTo.message?.sender || replyTo.message?.senderName || 'Reply');
+    const bubbleId = replyTo.id || replyTo.key || replyTo.mid;
+    const clickHandler = bubbleId ? `event.stopPropagation(); window.scrollToBubble && window.scrollToBubble('${bubbleId}')` : '';
     return `
     <div ${clickHandler ? `onclick="${clickHandler}"` : ''} class="bg-black/10 dark:bg-black/40 border-l-2 border-amber-400 px-2 py-1 rounded-r-lg mb-1.5 text-[10px] opacity-90 truncate max-w-full cursor-pointer hover:opacity-100 transition">
         <div class="font-bold text-amber-600 dark:text-amber-300 truncate flex items-center gap-1">
             <i class="fa-solid fa-reply text-[8px]"></i>
-            <span>${escapeHtml(replyTo.sender || 'Reply')}</span>
+            <span>${escapeHtml(sender)}</span>
         </div>
-        <div class="text-gray-700 dark:text-gray-200 truncate">${escapeHtml(replyTo.text)}</div>
+        <div class="text-gray-700 dark:text-gray-200 truncate">${escapeHtml(textPreview)}</div>
     </div>`;
 }
 

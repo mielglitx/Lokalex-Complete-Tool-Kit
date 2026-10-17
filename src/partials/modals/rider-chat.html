@@ -3,7 +3,7 @@
     <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-md h-[85vh] max-h-[640px] rounded-3xl shadow-2xl flex flex-col relative overflow-hidden">
         
         <!-- HEADER WITH INFO BUTTON -->
-        <div class="p-3 sm:p-4 bg-gray-50 dark:bg-darkBg/90 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0">
+        <div class="p-3 sm:p-4 bg-gray-50 dark:bg-cardBg border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0">
             <div class="flex items-center gap-2.5 min-w-0 flex-1">
                 <div id="rider-chat-avatar" class="w-10 h-10 rounded-full bg-emerald-600 text-white font-black flex items-center justify-center text-sm shadow-sm shrink-0">
                     CU
@@ -25,14 +25,11 @@
                 </div>
             </div>
             <div class="flex items-center gap-0.5 sm:gap-1 shrink-0">
-                <button type="button" onclick="window.markCustomerChatAsUnread && window.markCustomerChatAsUnread()" class="text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 p-2 text-sm transition shrink-0" title="Mark as unread and return to Inbox">
-                    <i class="fa-solid fa-envelope"></i>
-                </button>
                 <button type="button" onclick="window.openChatSoundSettingsModal && window.openChatSoundSettingsModal()" class="text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 p-2 text-sm transition shrink-0" title="Message Chimes & Ringtones">
                     <i class="fa-solid fa-bell"></i>
                 </button>
-                <button onclick="window.closeRiderChatModal && window.closeRiderChatModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-2 text-base transition shrink-0" title="Close">
-                    <i class="fa-solid fa-xmark"></i>
+                <button onclick="window.closeRiderChatModal && window.closeRiderChatModal()" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer" title="Close">
+                    <i class="fa-solid fa-xmark text-sm"></i>
                 </button>
             </div>
         </div>
@@ -63,10 +60,15 @@
         </div>
 
         <!-- ACTION BUTTONS ROW -->
-        <div id="rider-chat-action-toolbar" class="p-2.5 bg-gray-100 dark:bg-darkBg/60 border-b border-gray-200 dark:border-gray-800/80 flex items-center gap-2 overflow-x-auto shrink-0 no-scrollbar">
+        <div id="rider-chat-action-toolbar" class="p-2.5 bg-gray-100 dark:bg-cardBg border-b border-gray-200 dark:border-gray-800 flex items-center gap-2 overflow-x-auto shrink-0 no-scrollbar">
             <!-- CATER BUTTON -->
             <button id="rider-chat-cater-btn" onclick="window.caterCurrentChatCustomer && window.caterCurrentChatCustomer()" class="flex-1 min-w-[75px] bg-teal-600 hover:bg-teal-500 text-white border border-teal-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm" title="Cater this customer">
                 <i class="fa-solid fa-motorcycle"></i> Cater
+            </button>
+
+            <!-- GO TO CART BUTTON (CATERING RIDER ONLY) -->
+            <button id="rider-chat-go-cart-btn" type="button" onclick="window.goToCustomerCartFromChat && window.goToCustomerCartFromChat()" class="hidden flex-1 min-w-[95px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white border border-blue-400/30 py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0" title="Open this customer's Cart">
+                <i class="fa-solid fa-cart-shopping"></i> Go to Cart
             </button>
 
             <!-- UNREAD BUTTON -->
@@ -102,8 +104,8 @@
                     <button type="button" onclick="window.promptAddQuickReply && window.promptAddQuickReply()" class="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Create a new quick reply">
                         <i class="fa-solid fa-plus text-[10px]"></i> Add
                     </button>
-                    <button type="button" onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs transition cursor-pointer" title="Close">
-                        <i class="fa-solid fa-xmark"></i>
+                    <button type="button" onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer" title="Close">
+                        <i class="fa-solid fa-xmark text-[11px]"></i>
                     </button>
                 </div>
             </div>
@@ -169,8 +171,8 @@
                     <p class="text-[10px] text-gray-500 dark:text-gray-400">Capture drop-off confirmation photo</p>
                 </div>
             </div>
-            <button onclick="window.closePodModal && window.closePodModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                <i class="fa-solid fa-xmark"></i>
+            <button onclick="window.closePodModal && window.closePodModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -220,8 +222,8 @@
                     <p class="text-[10px] text-gray-500 dark:text-gray-400">Pick which channels appear in your live feed</p>
                 </div>
             </div>
-            <button onclick="window.closeRiderChatSourcesModal && window.closeRiderChatSourcesModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition cursor-pointer">
-                <i class="fa-solid fa-xmark"></i>
+            <button onclick="window.closeRiderChatSourcesModal && window.closeRiderChatSourcesModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -272,8 +274,8 @@
                     <p class="text-[10px] text-gray-500 dark:text-gray-400">Choose photo source</p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeImagePickerModal && window.closeImagePickerModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeImagePickerModal && window.closeImagePickerModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -318,8 +320,8 @@
                     <p class="text-[10px] text-gray-500 dark:text-gray-400">Available to all riders in real time</p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeAddQuickReplyModal && window.closeAddQuickReplyModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeAddQuickReplyModal && window.closeAddQuickReplyModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -361,8 +363,8 @@
                     <p id="quick-reply-modal-subtitle" class="text-[10px] text-gray-500 dark:text-gray-400">Choose to send or edit before sending</p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeQuickReplyActionModal && window.closeQuickReplyActionModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeQuickReplyActionModal && window.closeQuickReplyActionModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -420,8 +422,8 @@
                     <p class="text-[9.5px] text-amber-600 dark:text-amber-400 font-mono font-medium">Personalized notification sounds for <span id="sound-user-name-badge" class="font-bold">You</span></p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeChatSoundSettingsModal && window.closeChatSoundSettingsModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm cursor-pointer p-1">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeChatSoundSettingsModal && window.closeChatSoundSettingsModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer p-1">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -488,6 +490,236 @@
             </button>
             <button type="button" onclick="window.saveChatSoundSettingsFromModal && window.saveChatSoundSettingsFromModal()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 shadow-sm flex items-center justify-center gap-1.5 cursor-pointer">
                 <i class="fa-solid fa-check text-xs"></i> Save Preferences
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- PHONE NUMBER ACTION SHEET (CALL OR TEXT) -->
+<div id="chat-phone-action-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-3 sm:p-4">
+    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-xs rounded-3xl p-4 shadow-2xl flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-4 duration-150">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-lg shrink-0">
+                <i class="fa-solid fa-phone"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+                <h4 id="chat-phone-action-number" class="text-sm font-black text-gray-900 dark:text-white truncate font-mono">+639xxxxxxxxx</h4>
+                <p class="text-[10px] text-gray-500 dark:text-gray-400">Pumili ng aksyon para sa number na ito</p>
+            </div>
+        </div>
+        <div class="flex flex-col gap-2 pt-1">
+            <button type="button" id="chat-phone-call-btn" onclick="window.executeChatPhoneAction && window.executeChatPhoneAction('call')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 text-xs shadow-sm cursor-pointer">
+                <i class="fa-solid fa-phone text-xs"></i> Tumawag (Call)
+            </button>
+            <button type="button" id="chat-phone-sms-btn" onclick="window.executeChatPhoneAction && window.executeChatPhoneAction('text')" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 text-xs shadow-sm cursor-pointer">
+                <i class="fa-solid fa-comment-sms text-xs"></i> Mag-text (SMS)
+            </button>
+            <button type="button" id="chat-phone-save-details-btn" onclick="window.executeChatPhoneAction && window.executeChatPhoneAction('save_details')" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 text-xs shadow-sm cursor-pointer">
+                <i class="fa-solid fa-address-card text-xs"></i> I-save sa Customer Details
+            </button>
+            <button type="button" onclick="window.closeChatPhoneModal && window.closeChatPhoneModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-2 px-3 rounded-xl transition active:scale-95 text-xs text-center cursor-pointer mt-0.5">
+                Cancel
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ADMIN BROADCAST (SEND TO MANY) MODAL -->
+<div id="admin-broadcast-modal" class="fixed inset-0 z-[9999] bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 hidden transition-opacity select-none">
+    <div class="bg-cardBg dark:bg-tgBg border border-gray-200 dark:border-gray-800 w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-scale-up">
+        <!-- MODAL HEADER -->
+        <div class="p-3.5 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-xs">
+                    <i class="fa-solid fa-bullhorn"></i>
+                </div>
+                <div class="flex flex-col min-w-0">
+                    <h3 class="text-sm font-black text-gray-900 dark:text-white flex items-center gap-1.5 truncate">
+                        Send to Many <span class="text-[10px] bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded-full font-bold">Admin Broadcast</span>
+                    </h3>
+                    <p class="text-[10.5px] text-gray-500 dark:text-gray-400 truncate">Ipadala ang mensahe sa multiple recipients nang sabay-sabay</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeBroadcastModal && window.closeBroadcastModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg w-7 h-7 flex items-center justify-center rounded-lg transition active:scale-95 cursor-pointer" title="Close">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- MODAL BODY -->
+        <div class="p-3.5 overflow-y-auto flex-1 flex flex-col gap-3 text-xs">
+            <!-- TARGET AUDIENCE SELECTOR TABS -->
+            <div class="flex flex-col gap-1.5">
+                <label class="text-[11px] font-black text-gray-700 dark:text-gray-300 flex items-center justify-between">
+                    <span>1. PUMILI NG AUDIENCE (Target Recipients)</span>
+                    <span id="broadcast-target-count-badge" class="text-indigo-600 dark:text-indigo-400 font-bold font-mono text-[10px]">0 Recipient(s)</span>
+                </label>
+                <div class="flex bg-gray-100 dark:bg-black/40 p-1 rounded-xl border border-gray-200 dark:border-gray-800 gap-1 text-center">
+                    <button type="button" id="broadcast-tab-choice" onclick="window.setBroadcastMode && window.setBroadcastMode('choice')" class="flex-1 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-user-check text-[10px]"></i> Choice Customer
+                    </button>
+                    <button type="button" id="broadcast-tab-all" onclick="window.setBroadcastMode && window.setBroadcastMode('all')" class="flex-1 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-globe text-[10px]"></i> Send to All
+                    </button>
+                    <button type="button" id="broadcast-tab-group" onclick="window.setBroadcastMode && window.setBroadcastMode('group')" class="flex-1 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-layer-group text-[10px]"></i> Specific Group
+                    </button>
+                </div>
+            </div>
+
+            <!-- AUDIENCE DETAILS PANELS -->
+            <!-- 1. CHOICE CUSTOMER CONTAINER -->
+            <div id="broadcast-container-choice" class="flex flex-col gap-2">
+                <div class="flex items-center gap-2">
+                    <div class="flex-1 flex items-center gap-2 bg-white dark:bg-black/40 px-2.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                        <i class="fa-solid fa-magnifying-glass text-gray-400 text-xs shrink-0"></i>
+                        <input type="text" id="broadcast-customer-search" placeholder="Search customer name or message..." class="flex-1 bg-transparent text-xs text-gray-900 dark:text-white outline-none placeholder-gray-400" oninput="window.handleBroadcastCustomerSearch && window.handleBroadcastCustomerSearch(this.value)">
+                    </div>
+                    <button type="button" onclick="window.broadcastSelectAllVisible && window.broadcastSelectAllVisible()" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[10px] font-bold px-2 py-1.5 rounded-xl transition active:scale-95 shrink-0 cursor-pointer">
+                        Select All
+                    </button>
+                    <button type="button" onclick="window.broadcastDeselectAll && window.broadcastDeselectAll()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-[10px] font-bold px-1.5 py-1.5 transition active:scale-95 shrink-0 cursor-pointer">
+                        Clear
+                    </button>
+                </div>
+
+                <!-- SCROLLABLE CUSTOMERS LIST -->
+                <div id="broadcast-customers-list" class="flex flex-col gap-1.5 max-h-48 overflow-y-auto p-1 bg-gray-50/50 dark:bg-black/20 rounded-xl border border-gray-200/80 dark:border-gray-800/80">
+                    <!-- Populated dynamically by renderChoiceCustomersList() -->
+                </div>
+            </div>
+
+            <!-- 2. ALL CUSTOMERS CONTAINER -->
+            <div id="broadcast-container-all" class="hidden flex flex-col gap-2">
+                <div id="broadcast-all-summary">
+                    <!-- Populated dynamically by renderAllModeSummary() -->
+                </div>
+            </div>
+
+            <!-- 3. SPECIFIC GROUP CONTAINER -->
+            <div id="broadcast-container-group" class="hidden flex flex-col gap-2">
+                <div id="broadcast-group-cards" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <!-- Populated dynamically by renderGroupModeCards() -->
+                </div>
+            </div>
+
+            <!-- MESSAGE COMPOSER -->
+            <div class="flex flex-col gap-1.5 pt-1">
+                <div class="flex items-center justify-between">
+                    <label class="text-[11px] font-black text-gray-700 dark:text-gray-300">2. MENSAHE (Broadcast Message)</label>
+                    <span id="broadcast-char-counter" class="text-[10px] text-gray-400 font-mono">0 / 1000</span>
+                </div>
+
+                <!-- QUICK TEMPLATE PILLS -->
+                <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                    <span class="text-[9.5px] font-bold text-gray-400 shrink-0">Templates:</span>
+                    <button type="button" onclick="window.applyBroadcastTemplate && window.applyBroadcastTemplate('volume')" class="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[9.5px] font-bold px-2 py-0.5 rounded-lg shrink-0 transition active:scale-95 cursor-pointer">
+                        ⏳ High Volume
+                    </button>
+                    <button type="button" onclick="window.applyBroadcastTemplate && window.applyBroadcastTemplate('available')" class="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[9.5px] font-bold px-2 py-0.5 rounded-lg shrink-0 transition active:scale-95 cursor-pointer">
+                        🛵 Available Now
+                    </button>
+                    <button type="button" onclick="window.applyBroadcastTemplate && window.applyBroadcastTemplate('delivery')" class="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[9.5px] font-bold px-2 py-0.5 rounded-lg shrink-0 transition active:scale-95 cursor-pointer">
+                        📦 Delivery Notice
+                    </button>
+                    <button type="button" onclick="window.applyBroadcastTemplate && window.applyBroadcastTemplate('holiday')" class="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[9.5px] font-bold px-2 py-0.5 rounded-lg shrink-0 transition active:scale-95 cursor-pointer">
+                        ✨ Advisory
+                    </button>
+                </div>
+
+                <textarea id="broadcast-message-input" rows="4" maxlength="1000" placeholder="I-type dito ang anunsyo o mensahe na nais i-send sa mga napiling customer..." class="w-full bg-white dark:bg-black/40 border border-gray-300 dark:border-gray-700 focus:border-indigo-500 dark:focus:border-indigo-400 rounded-xl p-2.5 text-xs text-gray-900 dark:text-white outline-none resize-none placeholder-gray-400 transition" oninput="window.updateBroadcastCharCount && window.updateBroadcastCharCount()"></textarea>
+
+                <div class="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 pt-0.5">
+                    <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                        <input type="checkbox" id="broadcast-include-sig-check" checked class="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                        <span>Isama ang Dispatch signature ("— Lokalex Dispatch")</span>
+                    </label>
+                    <span class="text-gray-400 flex items-center gap-1">
+                        <i class="fa-solid fa-shield-halved text-[9px] text-emerald-500"></i> FB & Web Direct Sync
+                    </span>
+                </div>
+            </div>
+
+            <!-- SENDING PROGRESS BAR -->
+            <div id="broadcast-progress-container" class="hidden flex flex-col gap-1.5 p-2.5 bg-indigo-50/80 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800/60 animate-pulse">
+                <div class="flex justify-between items-center text-[10px] font-bold text-indigo-700 dark:text-indigo-300">
+                    <span id="broadcast-progress-text">Sending broadcast...</span>
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                    <div id="broadcast-progress-bar" class="bg-indigo-600 h-full transition-all duration-150 rounded-full" style="width: 0%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL FOOTER -->
+        <div class="p-3 bg-gray-50 dark:bg-gray-800/60 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0">
+            <button type="button" onclick="window.closeBroadcastModal && window.closeBroadcastModal()" class="bg-white dark:bg-cardBg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 font-bold py-2 px-3.5 rounded-xl transition active:scale-95 text-xs cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" id="broadcast-send-btn" onclick="window.executeBroadcastSend && window.executeBroadcastSend()" class="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-2 px-4 rounded-xl shadow-md transition active:scale-95 flex items-center gap-1.5 text-xs cursor-pointer">
+                <i class="fa-solid fa-paper-plane text-xs"></i>
+                <span id="broadcast-send-btn-text">Send to 0 Recipient(s)</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: CONFIRM DELIVERY COMPLETION SAFEGUARD -->
+<div id="rider-chat-confirm-done-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" style="z-index: 999999 !important;">
+    <div class="bg-white dark:bg-cardBg border border-emerald-500/40 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150 text-gray-900 dark:text-white">
+        <!-- HEADER -->
+        <div class="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-base font-black shrink-0 shadow-inner">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+                <div>
+                    <h3 id="confirm-done-modal-title" class="font-black text-sm text-gray-900 dark:text-white leading-tight">Confirm Completion</h3>
+                    <p id="confirm-done-modal-subtitle" class="text-[10px] text-gray-500 dark:text-gray-400">Order Delivery Safeguard</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeConfirmDoneModal && window.closeConfirmDoneModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+
+        <!-- BODY / DETAILS -->
+        <div class="flex flex-col gap-3">
+            <!-- Customer Card -->
+            <div class="p-3 rounded-2xl bg-gray-50 dark:bg-darkBg/60 border border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center text-xs font-bold shrink-0">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                    <div class="flex flex-col min-w-0">
+                        <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Customer</span>
+                        <span id="confirm-done-cust-name" class="text-xs font-black text-gray-900 dark:text-white truncate">Customer Name</span>
+                    </div>
+                </div>
+                <div id="confirm-done-status-badge" class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0">
+                    Catering
+                </div>
+            </div>
+
+            <!-- Description Message -->
+            <div id="confirm-done-message-box" class="p-3 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-500/20 text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
+                Sigurado ka bang tapos na ang delivery? Ima-mark ito bilang <strong>Done</strong> sa catering roster, ire-record ang service fees, at ililipat ang chat sa Done folder.
+            </div>
+
+            <!-- Receipt Notice / Warning -->
+            <div id="confirm-done-receipt-notice" class="hidden p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/50 text-[11px] text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                <i class="fa-solid fa-receipt text-amber-600 shrink-0"></i>
+                <span id="confirm-done-receipt-text">Siguraduhing may resibo bago i-confirm.</span>
+            </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="flex items-center gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
+            <button type="button" onclick="window.closeConfirmDoneModal && window.closeConfirmDoneModal()" class="flex-1 py-2.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-bold text-xs transition active:scale-95 cursor-pointer text-center">
+                Cancel
+            </button>
+            <button type="button" id="confirm-done-proceed-btn" onclick="window.confirmAndExecuteDone && window.confirmAndExecuteDone()" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-xs transition active:scale-95 shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-check"></i> Yes, Mark Done
             </button>
         </div>
     </div>

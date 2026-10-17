@@ -2,11 +2,22 @@
 import { toggleBodyScroll } from './chatUtils.js';
 import { showToast } from '../../ui/notifications.js';
 import { openImageEditorModal } from './imageEditor.js';
+import { saveImageToDevice } from '../../utils/imageSaver.js';
 
 let currentViewerImageUrl = null;
 let currentViewerTargetType = 'customer';
 let viewerZoomScale = 1;
 let isViewerPinchInitialized = false;
+
+export async function downloadCurrentViewerImage() {
+    if (!currentViewerImageUrl) {
+        showToast("⚠️ Walang litrato na mase-save.");
+        return;
+    }
+    showToast("⏳ Sine-save ang litrato...");
+    const filename = `Lokalex_Photo_${Date.now()}.jpg`;
+    await saveImageToDevice(currentViewerImageUrl, filename);
+}
 
 export function setViewerZoom(scale) {
     viewerZoomScale = Math.max(0.5, Math.min(4.0, scale));
@@ -27,10 +38,11 @@ export function resetViewerZoom() {
     setViewerZoom(1.0);
 }
 
-export function openImageViewerModal(imageUrl, targetType = 'customer') {
+export function openImageViewerModal(imageUrl, targetType = null) {
     if (!imageUrl) return;
+    const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
     currentViewerImageUrl = imageUrl;
-    currentViewerTargetType = targetType;
+    currentViewerTargetType = targetType || (activeCustId ? 'rider' : 'customer');
 
     const modal = document.getElementById('image-viewer-modal');
     const img = document.getElementById('viewer-image');
@@ -65,7 +77,8 @@ export function closeImageViewerModal() {
 export function editViewerImage() {
     if (!currentViewerImageUrl) return;
     const imgUrl = currentViewerImageUrl;
-    const targetType = currentViewerTargetType || 'customer';
+    const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
+    const targetType = currentViewerTargetType || (activeCustId ? 'rider' : 'customer');
     closeImageViewerModal();
 
     const img = new Image();
@@ -111,4 +124,14 @@ function setupImageViewerPinchGestures() {
         e.preventDefault();
         zoomViewerImage(e.deltaY < 0 ? 0.15 : -0.15);
     }, { passive: false });
+}
+
+if (typeof window !== 'undefined') {
+    window.openImageViewerModal = openImageViewerModal;
+    window.closeImageViewerModal = closeImageViewerModal;
+    window.setViewerZoom = setViewerZoom;
+    window.zoomViewerImage = zoomViewerImage;
+    window.resetViewerZoom = resetViewerZoom;
+    window.editViewerImage = editViewerImage;
+    window.downloadCurrentViewerImage = downloadCurrentViewerImage;
 }

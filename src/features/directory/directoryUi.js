@@ -1923,9 +1923,9 @@ export function renderDirectoryList() {
             const headerLabel = letterHeader === "#" ? "# (Special & Foreign)" : letterHeader;
 
             htmlBuilder += `
-            <div id="dir-section-${letterHeader === "#" ? "SPECIAL" : letterHeader}" data-section="${letterHeader}" style="scroll-margin-top: 56px;" class="scroll-mt-14 sticky top-0 z-20 bg-gray-100/95 dark:bg-cardBg/95 backdrop-blur-md text-amber-700 dark:text-amber-400 font-black text-xs px-3 py-2 border-b border-gray-200 dark:border-gray-800 rounded-xl shadow-xs my-1 flex items-center justify-between">
+            <div id="dir-section-${letterHeader === "#" ? "SPECIAL" : letterHeader}" data-section="${letterHeader}" style="scroll-margin-top: 56px;" class="scroll-mt-14 sticky top-0 z-20 bg-amber-100/95 dark:bg-amber-950/70 backdrop-blur-md text-amber-900 dark:text-amber-300 font-black text-xs px-3 py-2 border border-amber-300 dark:border-amber-700/60 rounded-xl shadow-xs my-1 flex items-center justify-between">
                 <span>${headerLabel}</span>
-                <span class="text-[9px] text-gray-500 dark:text-gray-400 font-medium">Section Header</span>
+                <span class="text-[9px] text-amber-700/80 dark:text-amber-400/80 font-bold uppercase tracking-wider">Section</span>
             </div>`;
         }
 

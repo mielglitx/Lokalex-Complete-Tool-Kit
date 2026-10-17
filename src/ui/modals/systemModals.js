@@ -1,5 +1,5 @@
 // src/ui/modals/systemModals.js
-import { showToast } from '../notifications.js';
+import { showToast, clearNativeNotification } from '../notifications.js';
 
 let slideDeleteCallback = null;
 let isSlideDragValid = false;
@@ -36,6 +36,9 @@ export function closeSampleReceiptModal() {
 export function openAdvancedOrdersModal() {
     const modal = document.getElementById('adv-orders-modal');
     if (modal) modal.classList.remove('hidden');
+    if (typeof window.stopReminderAlarm === 'function') window.stopReminderAlarm();
+    if (typeof clearNativeNotification === 'function') clearNativeNotification('adv_orders');
+    if (typeof window.renderAdvancedOrdersList === 'function') window.renderAdvancedOrdersList();
 }
 
 export function closeAdvancedOrdersModal() {

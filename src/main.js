@@ -43,6 +43,7 @@ import { runBackgroundPersistenceSync, forceReconnectFirebase, initSyncWatchdog 
 import { initRealtimeFirebaseListeners } from './app/appListeners.js';
 import { initGlobalWindowBridge, bootApp, initAppLifecycleEvents } from './app/appBootstrap.js';
 import { initNativeBridge } from './native/nativeBridge.js';
+import { initOtaUpdater, syncVersionTrackerElements } from './utils/otaUpdater.js';
 import { registerSW } from 'virtual:pwa-register';
 
 const updateSW = registerSW({
@@ -91,10 +92,13 @@ initGlobalWindowBridge();
 // 2. Initialize Capacitor native bridge (hardware back button, haptics, lifecycle)
 initNativeBridge();
 
-// 2. Initialize connectivity & sleep watchdog listeners
+// 3. Initialize OTA live update engine & version tracking
+initOtaUpdater().catch(() => {});
+
+// 4. Initialize connectivity & sleep watchdog listeners
 initSyncWatchdog();
 
-// 3. Initialize application lifecycle & session change events
+// 5. Initialize application lifecycle & session change events
 initAppLifecycleEvents();
 
 // 4. Run application boot sequence

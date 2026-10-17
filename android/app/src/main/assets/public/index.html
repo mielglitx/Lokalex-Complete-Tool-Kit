@@ -13,7 +13,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Lokalex Hub">
     <link rel="manifest" href="./manifest.json">
-    <link rel="apple-touch-icon" href="https://i.imgur.com/dbomHa2.png">
+    <link rel="icon" type="image/png" href="./Logo.png">
+    <link rel="apple-touch-icon" href="./Logo.png">
 
     <!-- CONTENT SECURITY POLICY ENABLING TESSERACT OCR WORKERS & NETWORK FETCHING -->
     <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' blob:; worker-src * blob: data: 'unsafe-inline' 'unsafe-eval'; child-src * blob: data:; connect-src * blob: data:; style-src * 'unsafe-inline'; font-src * data:; img-src * data: blob:;">
@@ -191,7 +192,7 @@
         border-color: #fbbf24 !important;
         border-left-color: #f59e0b !important;
         box-shadow: 0 0 18px rgba(251, 191, 36, 0.85), 0 0 35px rgba(251, 191, 36, 0.45) !important;
-        background-color: rgba(69, 26, 3, 0.4) !important;
+        background-color: #261608 !important;
     }
 
     .avatar-glow-gold {
@@ -481,6 +482,78 @@
             border-color: #DDEEE6 !important;
         }
 
+        /* High-contrast and accessible close / cancel buttons in light mode */
+        html:not(.dark) [id$="-modal"] button[class*="bg-gray-800"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):not([class*="bg-purple"]):not([class*="bg-amber"]):not([class*="bg-rose"]):not([class*="bg-orange"]):not([class*="bg-teal"]),
+        html:not(.dark) [id$="-modal"] button[class*="bg-gray-900"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):not([class*="bg-purple"]):not([class*="bg-amber"]):not([class*="bg-rose"]):not([class*="bg-orange"]):not([class*="bg-teal"]),
+        html:not(.dark) .bg-cardBg button[class*="bg-gray-800"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):not([class*="bg-purple"]):not([class*="bg-amber"]):not([class*="bg-rose"]):not([class*="bg-orange"]):not([class*="bg-teal"]),
+        html:not(.dark) .bg-cardBg button[class*="bg-gray-900"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):not([class*="bg-purple"]):not([class*="bg-amber"]):not([class*="bg-rose"]):not([class*="bg-orange"]):not([class*="bg-teal"]) {
+            background-color: #F1F5F9 !important;
+            color: #1E293B !important;
+            border: 1px solid #CBD5E1 !important;
+        }
+
+        html:not(.dark) [id$="-modal"] button[class*="bg-gray-800"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):hover,
+        html:not(.dark) [id$="-modal"] button[class*="bg-gray-900"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):hover,
+        html:not(.dark) .bg-cardBg button[class*="bg-gray-800"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):hover,
+        html:not(.dark) .bg-cardBg button[class*="bg-gray-900"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):hover {
+            background-color: #E2E8F0 !important;
+            color: #0F172A !important;
+        }
+
+        /* Modal circular close (X) buttons in light mode */
+        html:not(.dark) [id$="-modal"] button.rounded-full,
+        html:not(.dark) button.rounded-full[onclick*="close"],
+        html:not(.dark) button.rounded-full[onclick*="toggleChatWindow"],
+        html:not(.dark) button[onclick*="close"]:has(i.fa-xmark),
+        html:not(.dark) button:has(i.fa-xmark) {
+            background-color: #F1F5F9 !important;
+            color: #334155 !important;
+            border-color: #CBD5E1 !important;
+        }
+        html:not(.dark) [id$="-modal"] button.rounded-full:hover,
+        html:not(.dark) button.rounded-full[onclick*="close"]:hover,
+        html:not(.dark) button:has(i.fa-xmark):hover {
+            background-color: #E2E8F0 !important;
+            color: #0F172A !important;
+        }
+        html:not(.dark) [id$="-modal"] button.rounded-full i,
+        html:not(.dark) button:has(i.fa-xmark) i,
+        html:not(.dark) i.fa-xmark {
+            color: #334155 !important;
+        }
+
+        /* Rider account card action buttons (Edit & Delete & Key) in light mode */
+        html:not(.dark) #admin-riders-list-container button.text-blue-400,
+        html:not(.dark) #admin-riders-list-container button[class*="text-blue"] {
+            background-color: #EFF6FF !important;
+            color: #2563EB !important;
+            border: 1px solid #BFDBFE !important;
+        }
+        html:not(.dark) #admin-riders-list-container button.text-red-400,
+        html:not(.dark) #admin-riders-list-container button[class*="text-red"] {
+            background-color: #FEF2F2 !important;
+            color: #DC2626 !important;
+            border: 1px solid #FECACA !important;
+        }
+        html:not(.dark) #admin-riders-list-container button.text-amber-400,
+        html:not(.dark) #admin-riders-list-container button[class*="text-amber"] {
+            background-color: #FFFBEB !important;
+            color: #D97706 !important;
+            border: 1px solid #FDE68A !important;
+        }
+        html:not(.dark) #admin-riders-list-container span.border-emerald-300,
+        html:not(.dark) #admin-riders-list-container span[class*="text-emerald"] {
+            background-color: #ECFDF5 !important;
+            color: #047857 !important;
+            border: 1px solid #A7F3D0 !important;
+        }
+        html:not(.dark) #admin-riders-list-container span.border-gray-700,
+        html:not(.dark) #admin-riders-list-container span[class*="text-gray"] {
+            background-color: #F1F5F9 !important;
+            color: #334155 !important;
+            border: 1px solid #CBD5E1 !important;
+        }
+
         /* ========================================================================== */
         /* CATERING GLOWING BORDERS (MY CUSTOMERS vs OTHER RIDERS)                    */
         /* ========================================================================== */
@@ -528,7 +601,7 @@
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-C9rgs0aU.js"></script>
+  <script type="module" crossorigin src="./assets/index-BbHD3-R3.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
@@ -554,7 +627,7 @@
         <div id="header-user-section" onclick="window.handleHeaderUserClick && window.handleHeaderUserClick()" class="flex items-center gap-2 min-w-0 cursor-pointer group transition active:scale-95" title="Click to view & edit profile settings">
             <div class="relative shrink-0">
                 <img id="header-user-avatar" src="https://ui-avatars.com/api/?name=User&background=0284c7&color=ffffff&bold=true&size=128" alt="Profile" class="w-8 h-8 rounded-full object-cover border-2 border-emerald-500 shadow-sm group-hover:border-emerald-400 transition">
-                <span id="header-user-badge" class="absolute -bottom-1 -right-1 bg-gray-900 text-gray-300 group-hover:text-white rounded-full p-0.5 text-[8px] border border-gray-700 shadow flex items-center justify-center w-3.5 h-3.5">
+                <span id="header-user-badge" class="absolute -bottom-1 -right-1 bg-emerald-600 text-white rounded-full text-[9px] border-2 border-white dark:border-gray-900 shadow-md flex items-center justify-center w-4 h-4">
                     <i id="header-user-badge-icon" class="fa-solid fa-pen"></i>
                 </span>
             </div>
@@ -770,6 +843,13 @@
                 <input type="password" id="login-pass" autocomplete="current-password" placeholder="Enter Rider Password" class="w-full bg-inputBg text-xs rounded-xl pl-10 pr-10 py-3 outline-none border border-gray-700 focus:border-blue-500 transition text-white font-bold">
                 <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('login-pass', 'login-rider-pass-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-white transition">
                     <i id="login-rider-pass-eye" class="fa-solid fa-eye"></i>
+                </button>
+            </div>
+
+            <div class="flex justify-between items-center text-[10px] px-0.5">
+                <span class="text-gray-400">Nakalimutan ang password?</span>
+                <button type="button" onclick="window.showRiderForgotPassHelp && window.showRiderForgotPassHelp()" class="text-blue-400 hover:text-blue-300 font-bold hover:underline cursor-pointer">
+                    Humiling ng Reset sa Admin
                 </button>
             </div>
         </div>
@@ -1014,8 +1094,8 @@
                         <p class="text-[10px] text-gray-500 dark:text-gray-400">Update photo and account details</p>
                     </div>
                 </div>
-                <button onclick="window.closeEditCustomerProfileModal && window.closeEditCustomerProfileModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="window.closeEditCustomerProfileModal && window.closeEditCustomerProfileModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-xs"></i>
                 </button>
             </div>
 
@@ -1084,8 +1164,8 @@
                         <i class="fa-solid fa-cart-shopping text-xs"></i>
                         <span class="cust-modal-cart-count font-mono font-bold">0</span>
                     </button>
-                    <button onclick="window.closeCustomerStoreMenuModal && window.closeCustomerStoreMenuModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1.5 text-sm transition">
-                        <i class="fa-solid fa-xmark"></i>
+                    <button type="button" onclick="window.closeCustomerStoreMenuModal && window.closeCustomerStoreMenuModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                        <i class="fa-solid fa-xmark text-xs"></i>
                     </button>
                 </div>
             </div>
@@ -1106,8 +1186,8 @@
                         Base: ₱<span id="customizer-item-base-price">0.00</span>
                     </div>
                 </div>
-                <button onclick="window.closeItemCustomizerModal && window.closeItemCustomizerModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="window.closeItemCustomizerModal && window.closeItemCustomizerModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-xs"></i>
                 </button>
             </div>
 
@@ -1161,8 +1241,8 @@
                         <p class="text-[9px] text-gray-500 dark:text-gray-400">Items grouped by store</p>
                     </div>
                 </div>
-                <button onclick="window.closeCustomerCartModal && window.closeCustomerCartModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="window.closeCustomerCartModal && window.closeCustomerCartModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-xs"></i>
                 </button>
             </div>
 
@@ -1188,10 +1268,10 @@
             <div class="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-gray-800 p-2.5 rounded-2xl flex items-center justify-between shrink-0 text-xs">
                 <span class="font-bold text-gray-700 dark:text-gray-300">Payment:</span>
                 <div class="flex items-center gap-1">
-                    <button type="button" id="pay-mode-cod" onclick="window.setCheckoutPaymentMode('cod')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] bg-blue-600 text-white transition shadow-xs">
+                    <button type="button" id="pay-mode-cod" onclick="window.setCheckoutPaymentMode('cod')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] bg-blue-600 text-white transition shadow-xs cursor-pointer">
                         Cash on Delivery
                     </button>
-                    <button type="button" id="pay-mode-gcash" onclick="window.setCheckoutPaymentMode('gcash')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] text-gray-500 dark:text-gray-400 hover:text-white transition">
+                    <button type="button" id="pay-mode-gcash" onclick="window.setCheckoutPaymentMode('gcash')" class="px-2.5 py-1 rounded-lg font-bold text-[10px] bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition cursor-pointer">
                         GCash
                     </button>
                 </div>
@@ -1222,8 +1302,8 @@
                         <p class="text-[10px] text-gray-500 dark:text-gray-400">Save Home, Work, and custom delivery pins</p>
                     </div>
                 </div>
-                <button onclick="window.closeAddressBookModal && window.closeAddressBookModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="window.closeAddressBookModal && window.closeAddressBookModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-xs"></i>
                 </button>
             </div>
 
@@ -1294,17 +1374,24 @@
             background-color: #FFFFFF !important;
             border-color: #DDEEE6 !important;
         }
-        html:not(.dark) #rider-cust-chats-feed > div:not(.catering-glow-gold):not([class*="catering-glow"]):not([class*="border-blue"]),
+        html:not(.dark) #rider-cust-chats-feed > div:not(.thread-swipe-wrapper):not(.catering-glow-gold):not([class*="catering-glow"]):not([class*="border-blue"]),
         html:not(.dark) #login-list-feed > div,
         html:not(.dark) #catered-customers-feed > div {
             background-color: #FFFFFF !important;
             border-color: #DDEEE6 !important;
             box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
         }
+        html:not(.dark) #rider-cust-chats-feed > div.thread-swipe-wrapper {
+            background-color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
 
         /* LIVE CHAT FEED CATERING THREAD HIGHLIGHT (GOLD GLOWING BORDER FOR MY CUSTOMER ONLY) */
         #rider-cust-chats-feed > div.catering-glow-gold,
-        #rider-cust-chats-feed > div.catering-glow-my {
+        #rider-cust-chats-feed > div.catering-glow-my,
+        #rider-cust-chats-feed .catering-glow-gold,
+        #rider-cust-chats-feed .catering-glow-my {
             border-width: 2px !important;
             border-style: solid !important;
             border-color: #f59e0b !important;
@@ -1315,11 +1402,13 @@
             animation: cateringGlowGold 2.2s infinite ease-in-out !important;
         }
         html.dark #rider-cust-chats-feed > div.catering-glow-gold,
-        html.dark #rider-cust-chats-feed > div.catering-glow-my {
+        html.dark #rider-cust-chats-feed > div.catering-glow-my,
+        html.dark #rider-cust-chats-feed .catering-glow-gold,
+        html.dark #rider-cust-chats-feed .catering-glow-my {
             border-color: #fbbf24 !important;
             border-left-color: #f59e0b !important;
             box-shadow: 0 0 18px rgba(251, 191, 36, 0.85), 0 0 35px rgba(251, 191, 36, 0.45) !important;
-            background-color: rgba(69, 26, 3, 0.4) !important;
+            background-color: #261608 !important;
         }
         html:not(.dark) #rider-cust-chats-feed > div span:not([class*="bg-"]):not([class*="badge"]),
         html:not(.dark) #rider-cust-chats-feed > div div:not([class*="bg-"]),
@@ -1444,8 +1533,8 @@
     <!-- RIDER LIVE CHATS PANEL -->
     <div class="bg-cardBg border border-gray-200 dark:border-gray-800 rounded-2xl flex flex-col overflow-hidden shadow-sm">
         <div class="bg-gray-50 dark:bg-gray-800/50 p-2.5 text-xs font-bold text-gray-800 dark:text-gray-200 flex flex-col gap-2 border-b border-gray-200 dark:border-gray-800">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center gap-2">
+            <div class="flex justify-between items-center flex-wrap gap-1.5">
+                <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="font-black text-gray-900 dark:text-white flex items-center gap-1.5">
                         <i class="fa-solid fa-comments text-blue-600 dark:text-blue-400"></i> Live Chats Feed
                     </span>
@@ -1455,8 +1544,23 @@
                     <button id="chat-chimes-settings-btn" type="button" onclick="window.openChatSoundSettingsModal && window.openChatSoundSettingsModal()" class="bg-white dark:bg-cardBg hover:bg-amber-50 dark:hover:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-gray-300 dark:border-gray-700 text-[9.5px] font-bold px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer" title="Configure Message Chimes & Ringtones">
                         <i class="fa-solid fa-bell text-amber-500 text-[9px]"></i> Chimes
                     </button>
+                    <button id="admin-clear-inbox-btn" type="button" onclick="window.clearAllInboxThreads && window.clearAllInboxThreads()" class="hidden bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-700/60 text-[9.5px] font-black px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer" title="Move all active Inbox threads to Done folder">
+                        <i class="fa-solid fa-broom text-rose-500 text-[9px]"></i> Clear Inbox
+                    </button>
+                    <button id="admin-send-many-btn" type="button" onclick="window.openBroadcastModal && window.openBroadcastModal()" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white text-[9.5px] font-black px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Send message to multiple customers (Broadcast)">
+                        <i class="fa-solid fa-bullhorn text-[9px]"></i> Send to Many
+                    </button>
                 </div>
                 <span class="text-[10px] text-gray-500 dark:text-gray-400 font-mono" id="rider-cust-chats-badge">0 threads</span>
+            </div>
+
+            <!-- SEARCH INPUT BAR (Always visible, search across all folders) -->
+            <div id="rider-chat-search-bar" class="flex items-center gap-2 bg-white dark:bg-black/50 px-2.5 py-1.5 rounded-xl border border-gray-300 dark:border-gray-700 focus-within:border-blue-500 dark:focus-within:border-blue-400 shadow-2xs transition-all">
+                <i class="fa-solid fa-magnifying-glass text-gray-400 dark:text-gray-500 text-xs shrink-0"></i>
+                <input type="text" id="rider-chat-search-input" placeholder="Search customer, phone, or message across ALL folders..." class="flex-1 bg-transparent text-xs text-gray-900 dark:text-white outline-none placeholder-gray-400 dark:placeholder-gray-500" oninput="window.handleRiderChatSearchInput && window.handleRiderChatSearchInput(this.value)">
+                <button type="button" onclick="window.clearRiderChatSearch && window.clearRiderChatSearch()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs px-1 cursor-pointer" title="Clear Search">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
             </div>
 
             <!-- RIDER MULTI-SOURCE CHANNEL SELECTOR (Zero API Link Exposure) -->
@@ -1472,13 +1576,10 @@
                         <span id="rider-sources-count-badge" class="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700/50 text-[9px] font-black px-1.5 py-0.2 rounded-full shrink-0">All</span>
                     </div>
 
-                    <!-- ACTION BUTTONS: RESET TO ALL, ADD API, & FULL BOOKING -->
+                    <!-- ACTION BUTTONS: RESET TO ALL & FULL BOOKING -->
                     <div class="flex items-center gap-1 shrink-0">
                         <button type="button" onclick="window.selectAllRiderSources && window.selectAllRiderSources()" id="rider-sources-reset-all-btn" class="hidden text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 text-[9px] font-bold px-1 py-0.5 transition cursor-pointer" title="Reset filter to show all sources">
                             Show All
-                        </button>
-                        <button type="button" onclick="window.openAdminFbApiModal && window.openAdminFbApiModal()" class="bg-blue-600 hover:bg-blue-500 text-white text-[9px] font-black px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shrink-0 cursor-pointer shadow-xs" title="Add or Manage Facebook APIs">
-                            <i class="fa-solid fa-plus text-[8px]"></i> Add API
                         </button>
                         <button type="button" id="btn-full-booking-trigger" onclick="window.openFullBookingModal && window.openFullBookingModal()" class="hidden bg-white dark:bg-cardBg hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-700 dark:text-rose-400 border border-gray-300 dark:border-gray-700 text-[9px] font-bold px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs" title="Full Booking Auto-Reply Mode">
                             <i class="fa-solid fa-ban text-rose-500 text-[8px]"></i> Full Booking
@@ -1507,21 +1608,24 @@
                     <span id="rider-store-unread-badge" class="hidden bg-orange-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full animate-pulse">0</span>
                 </button>
                 <button id="rider-chat-tab-followup" onclick="window.setRiderChatFilter && window.setRiderChatFilter('followup')" class="flex-1 min-w-[60px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition cursor-pointer">Follow Up</button>
-                <button id="rider-chat-tab-done" onclick="window.setRiderChatFilter && window.setRiderChatFilter('done')" class="flex-1 min-w-[45px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition cursor-pointer">Done</button>
+                <button id="rider-chat-tab-done" onclick="window.setRiderChatFilter && window.setRiderChatFilter('done')" class="flex-1 min-w-[45px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition flex items-center justify-center gap-1 cursor-pointer">
+                    <span>Done</span>
+                    <span id="rider-done-unread-badge" class="hidden bg-red-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full animate-pulse">0</span>
+                </button>
             </div>
         </div>
 
         <!-- FULL BOOKING MODE ACTIVE BANNER -->
         <div id="full-booking-active-banner" class="hidden bg-rose-500/10 border-b-2 border-rose-500/80 dark:border-rose-500/60 p-2.5 flex items-center justify-between gap-2 shadow-xs animate-pulse">
             <div class="flex items-center gap-2 min-w-0">
-                <div class="w-6 h-6 rounded-lg bg-rose-600 text-white flex items-center justify-center text-[10px] font-black shrink-0 shadow-xs">
-                    <i class="fa-solid fa-ban"></i>
+                <div id="full-booking-banner-icon-box" class="w-6 h-6 rounded-lg bg-rose-600 text-white flex items-center justify-center text-[10px] font-black shrink-0 shadow-xs">
+                    <i id="full-booking-banner-icon-i" class="fa-solid fa-ban"></i>
                 </div>
                 <div class="flex flex-col min-w-0">
-                    <span class="text-xs font-black text-rose-700 dark:text-rose-300 flex items-center gap-1">
+                    <span id="full-booking-banner-title" class="text-xs font-black text-rose-700 dark:text-rose-300 flex items-center gap-1">
                         🛑 Full Booking Mode Active
                     </span>
-                    <span class="text-[10px] text-rose-600/90 dark:text-rose-400 font-medium truncate">
+                    <span id="full-booking-banner-subtext" class="text-[10px] text-rose-600/90 dark:text-rose-400 font-medium truncate">
                         Auto-replying to new inbox inquiries (catering & follow-up excluded).
                     </span>
                 </div>
@@ -1536,7 +1640,7 @@
             </div>
         </div>
 
-        <div id="rider-cust-chats-feed" class="p-3 flex flex-col gap-2 text-xs max-h-56 overflow-y-auto min-h-[120px]">
+        <div id="rider-cust-chats-feed" class="p-3 flex flex-col gap-2 text-xs max-h-[360px] overflow-y-auto min-h-[140px]">
             <div class="text-gray-400 dark:text-gray-500 italic text-center py-4">No active messages yet.</div>
         </div>
     </div>
@@ -1588,6 +1692,11 @@
                 <!-- ADMIN MAXIMUM ACTIVE BOOKINGS LIMIT BUTTON -->
                 <button id="admin-booking-limits-btn" onclick="window.openAdminBookingLimitsModal && window.openAdminBookingLimitsModal()" class="hidden bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-600/30 dark:hover:bg-rose-600 dark:text-rose-300 dark:border-rose-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Set Maximum Active Catering Bookings">
                     <i class="fa-solid fa-layer-group"></i> Max Orders
+                </button>
+
+                <!-- ADMIN FULL BOOKING AUTO-REPLY BUTTON -->
+                <button id="admin-full-booking-btn" onclick="window.openFullBookingModal && window.openFullBookingModal()" class="hidden bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-600/30 dark:hover:bg-rose-600 dark:text-rose-300 dark:border-rose-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Full Booking Auto-Reply Mode">
+                    <i class="fa-solid fa-ban"></i> Full Booking
                 </button>
 
                 <!-- ADMIN COMMISSION SETTINGS BUTTON -->
@@ -1710,6 +1819,16 @@
     
     <button onclick="window.logout && window.logout()" class="text-xs text-red-500 hover:text-red-700 dark:text-red-400/60 dark:hover:text-red-400 py-1.5 mt-1 font-bold transition cursor-pointer">Log out of device</button>
 
+    <!-- VERSION TRACKER -->
+    <div class="flex flex-col items-center justify-center gap-1 mt-1 mb-6">
+        <button type="button" onclick="window.checkForOtaUpdate && window.checkForOtaUpdate(true)" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition hover:bg-gray-100 dark:hover:bg-gray-800/60 cursor-pointer" title="Tap to check for updates">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Lokalex Hub</span>
+            <span class="app-version-tracker font-mono font-bold text-gray-600 dark:text-gray-300">v1.0.4</span>
+            <span class="text-[9px] px-1.5 py-0.2 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 rounded-md font-mono font-semibold">OTA Live</span>
+        </button>
+    </div>
+
     <!-- AVAILABLE QUEUE INFO MODAL -->
     <div id="available-queue-info-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
         <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-xs rounded-2xl p-4 shadow-2xl flex flex-col gap-3 text-gray-900 dark:text-white">
@@ -1717,8 +1836,8 @@
                 <h3 class="text-xs font-black flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                     <i class="fa-solid fa-circle-info"></i> Queue Status Details
                 </h3>
-                <button type="button" onclick="window.closeQueueInfoModal && window.closeQueueInfoModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-xs cursor-pointer">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="window.closeQueueInfoModal && window.closeQueueInfoModal()" class="w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-[11px]"></i>
                 </button>
             </div>
 
@@ -1923,8 +2042,8 @@
                         <p class="text-[10px] text-gray-500 dark:text-gray-400">Update store name and address</p>
                     </div>
                 </div>
-                <button onclick="window.closeEditStoreProfileModal && window.closeEditStoreProfileModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="window.closeEditStoreProfileModal && window.closeEditStoreProfileModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-xs"></i>
                 </button>
             </div>
 
@@ -1959,8 +2078,8 @@
                         <p class="text-[10px] text-gray-500 dark:text-gray-400">Upload a photo or enter an image link</p>
                     </div>
                 </div>
-                <button onclick="window.closeStoreIconModal && window.closeStoreIconModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="window.closeStoreIconModal && window.closeStoreIconModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-xs"></i>
                 </button>
             </div>
 
@@ -2015,8 +2134,8 @@
                         <p class="text-[10px] text-gray-500 dark:text-gray-400">Organize your menu sections and add-on groups</p>
                     </div>
                 </div>
-                <button onclick="window.closeAddCategoryModal && window.closeAddCategoryModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="window.closeAddCategoryModal && window.closeAddCategoryModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-xs"></i>
                 </button>
             </div>
 
@@ -2082,8 +2201,8 @@
                         <p class="text-[10px] text-gray-500 dark:text-gray-400">Drag items to reorder manually or apply automatic sorting</p>
                     </div>
                 </div>
-                <button onclick="window.closeArrangeCategoriesModal && window.closeArrangeCategoriesModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="window.closeArrangeCategoriesModal && window.closeArrangeCategoriesModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-xs"></i>
                 </button>
             </div>
 
@@ -2128,8 +2247,8 @@
                         <p class="text-[10px] text-gray-500 dark:text-gray-400">Automate daily store open/close</p>
                     </div>
                 </div>
-                <button onclick="window.closeOperatingHoursModal && window.closeOperatingHoursModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="window.closeOperatingHoursModal && window.closeOperatingHoursModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-xs"></i>
                 </button>
             </div>
 
@@ -2179,8 +2298,8 @@
                         <p id="store-chat-order-id" class="text-[10px] text-gray-500 dark:text-gray-400 font-mono truncate">Order #ORD_000</p>
                     </div>
                 </div>
-                <button onclick="window.closeStoreRiderChatModal && window.closeStoreRiderChatModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-2 text-sm transition">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="window.closeStoreRiderChatModal && window.closeStoreRiderChatModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-xs"></i>
                 </button>
             </div>
 
@@ -2250,8 +2369,8 @@
                 <h3 class="text-xs font-black text-gray-900 dark:text-white flex items-center gap-1.5">
                     <i class="fa-solid fa-tag text-emerald-500"></i> Set Item Price
                 </h3>
-                <button type="button" onclick="window.closeAddPriceModal && window.closeAddPriceModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-xs">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="window.closeAddPriceModal && window.closeAddPriceModal()" class="w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-[11px]"></i>
                 </button>
             </div>
             
@@ -2278,8 +2397,8 @@
                 <h3 class="text-xs font-black text-gray-900 dark:text-white flex items-center gap-1.5">
                     <i class="fa-solid fa-pen text-blue-500"></i> Edit Item Name
                 </h3>
-                <button type="button" onclick="window.closeEditNameModal && window.closeEditNameModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-xs">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="window.closeEditNameModal && window.closeEditNameModal()" class="w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-[11px]"></i>
                 </button>
             </div>
 
@@ -2317,56 +2436,56 @@
     </div>
 
     <!-- AUTO-CALCULATED FEES PANEL -->
-    <div class="text-xs text-gray-500 dark:text-gray-400 mt-2 uppercase tracking-wider font-bold">Auto-Calculated Fees (Editable)</div>
+    <div class="text-xs text-gray-700 dark:text-gray-300 mt-2 uppercase tracking-wider font-extrabold">Auto-Calculated Fees (Editable)</div>
     <div class="bg-cardBg rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden text-sm flex flex-col gap-3 p-3">
         <div class="flex justify-between items-center gap-2">
-            <span class="text-gray-700 dark:text-gray-300 flex-1">Handling Fee (Store)</span>
+            <span class="text-gray-900 dark:text-gray-100 flex-1 font-medium">Handling Fee (Store)</span>
             <input type="number" id="wiz-handling" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-300 dark:border-gray-700 font-bold text-gray-900 dark:text-white">
         </div>
         <div class="flex justify-between items-center gap-2">
-            <span class="text-gray-700 dark:text-gray-300 flex-1">Market Fee</span>
+            <span class="text-gray-900 dark:text-gray-100 flex-1 font-medium">Market Fee</span>
             <input type="number" id="wiz-market" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-300 dark:border-gray-700 font-bold text-gray-900 dark:text-white">
         </div>
         <div class="flex justify-between items-center gap-2">
-            <span class="text-gray-700 dark:text-gray-300 flex-1">Multi-Stop Fee</span>
+            <span class="text-gray-900 dark:text-gray-100 flex-1 font-medium">Multi-Stop Fee</span>
             <div class="flex items-center gap-2">
-                <button type="button" onclick="window.adjustStoreCount && window.adjustStoreCount(-1)" class="text-red-500 dark:text-red-400 active:scale-95 transition"><i class="fa-solid fa-circle-minus"></i></button>
+                <button type="button" onclick="window.adjustStoreCount && window.adjustStoreCount(-1)" class="text-red-600 dark:text-red-400 active:scale-95 transition"><i class="fa-solid fa-circle-minus"></i></button>
                 <span id="wiz-store-count" class="font-bold w-4 text-center text-gray-900 dark:text-white">1</span>
-                <button type="button" onclick="window.adjustStoreCount && window.adjustStoreCount(1)" class="text-emerald-500 dark:text-green-400 active:scale-95 transition"><i class="fa-solid fa-circle-plus"></i></button>
+                <button type="button" onclick="window.adjustStoreCount && window.adjustStoreCount(1)" class="text-emerald-600 dark:text-green-400 active:scale-95 transition"><i class="fa-solid fa-circle-plus"></i></button>
                 <input type="number" id="wiz-multistop" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-20 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-300 dark:border-gray-700 text-blue-600 dark:text-blue-400 font-bold">
             </div>
         </div>
     </div>
 
     <!-- MANUAL ADJUSTMENTS PANEL WITH DISCOUNT MODE SWITCHER -->
-    <div class="text-xs text-gray-500 dark:text-gray-400 mt-2 uppercase tracking-wider font-bold">Manual Adjustments</div>
+    <div class="text-xs text-gray-700 dark:text-gray-300 mt-2 uppercase tracking-wider font-extrabold">Manual Adjustments</div>
     <div class="bg-cardBg rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden text-sm flex flex-col gap-3 p-3">
         <div class="flex justify-between items-center gap-2">
-            <span class="text-gray-700 dark:text-gray-300 flex-1">Rider Delivery Fee</span>
+            <span class="text-gray-900 dark:text-gray-100 flex-1 font-medium">Rider Delivery Fee</span>
             <input type="number" id="wiz-delivery" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded px-2 py-1 outline-none border border-gray-300 dark:border-gray-700 font-bold text-gray-900 dark:text-white">
         </div>
 
         <!-- DISCOUNT ROW WITH TOGGLE BUTTONS (₱ vs %) -->
         <div class="flex justify-between items-center gap-2">
             <div class="flex items-center gap-1.5 flex-1">
-                <span class="text-gray-700 dark:text-gray-300">Discount Bawas</span>
+                <span class="text-gray-900 dark:text-gray-100 font-medium">Discount Bawas</span>
                 
                 <!-- TOGGLE SWITCH (AMOUNT ₱ / PERCENT %) -->
-                <div class="flex bg-gray-100 dark:bg-darkBg border border-gray-300 dark:border-gray-700 rounded-lg p-0.5 ml-1">
-                    <button type="button" id="wiz-discount-type-amount" onclick="window.toggleDiscountType && window.toggleDiscountType('amount')" class="px-2 py-1 bg-red-600 text-white font-bold rounded-md text-[10px] shadow transition active:scale-95">₱</button>
-                    <button type="button" id="wiz-discount-type-percent" onclick="window.toggleDiscountType && window.toggleDiscountType('percent')" class="px-2 py-1 bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-400 font-bold rounded-md text-[10px] hover:text-gray-900 dark:hover:text-white transition active:scale-95">%</button>
+                <div class="flex bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg p-0.5 ml-1">
+                    <button type="button" id="wiz-discount-type-amount" onclick="window.toggleDiscountType && window.toggleDiscountType('amount')" class="px-2.5 py-1 bg-red-600 text-white font-black rounded-md text-[10px] shadow transition active:scale-95">₱</button>
+                    <button type="button" id="wiz-discount-type-percent" onclick="window.toggleDiscountType && window.toggleDiscountType('percent')" class="px-2.5 py-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 font-black rounded-md text-[10px] transition active:scale-95">%</button>
                 </div>
             </div>
 
             <div class="relative flex items-center">
-                <span id="wiz-discount-icon" class="absolute left-2 text-xs font-bold text-red-500 dark:text-red-400">₱</span>
-                <input type="number" id="wiz-discount" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded pl-5 pr-2 py-1 outline-none border border-gray-300 dark:border-gray-700 text-red-500 dark:text-red-400 font-bold">
+                <span id="wiz-discount-icon" class="absolute left-2 text-xs font-black text-red-600 dark:text-red-400">₱</span>
+                <input type="number" id="wiz-discount" oninput="window.calculateGrandTotal && window.calculateGrandTotal()" placeholder="0" class="w-24 bg-inputBg text-right rounded pl-5 pr-2 py-1 outline-none border border-gray-300 dark:border-gray-700 text-red-600 dark:text-red-400 font-black">
             </div>
         </div>
     </div>
 
     <!-- PAYMENT OPTIONS PANEL -->
-    <div class="text-xs text-gray-500 dark:text-gray-400 mt-2 uppercase tracking-wider font-bold">Payment Options</div>
+    <div class="text-xs text-gray-700 dark:text-gray-300 mt-2 uppercase tracking-wider font-extrabold">Payment Options</div>
 
     <label class="bg-cardBg p-3 rounded-xl border border-gray-200 dark:border-gray-800 flex justify-between items-center cursor-pointer">
         <div>
@@ -2444,8 +2563,8 @@
                         <p id="receipt-recipient-modal-subtitle" class="text-[10px] text-gray-500 dark:text-gray-400">Select target customer recipient</p>
                     </div>
                 </div>
-                <button onclick="window.closeReceiptRecipientModal && window.closeReceiptRecipientModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="window.closeReceiptRecipientModal && window.closeReceiptRecipientModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-xs"></i>
                 </button>
             </div>
             
@@ -2840,9 +2959,9 @@
         </div>
 
         <div class="flex items-center gap-2">
-            <a id="viewer-download-btn" href="#" download="lokalex_photo.jpg" target="_blank" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition flex items-center gap-1"><i class="fa-solid fa-download"></i> Download</a>
+            <button type="button" id="viewer-download-btn" onclick="window.downloadCurrentViewerImage && window.downloadCurrentViewerImage()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition flex items-center gap-1 cursor-pointer" title="Download / Save Image"><i class="fa-solid fa-download"></i> Download</button>
             <button onclick="window.editViewerImage && window.editViewerImage()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition flex items-center gap-1"><i class="fa-solid fa-pen-to-square"></i> Edit</button>
-            <button onclick="window.closeImageViewerModal && window.closeImageViewerModal()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white p-2 rounded-xl text-xs active:scale-95 transition"><i class="fa-solid fa-xmark text-sm"></i></button>
+            <button type="button" onclick="window.closeImageViewerModal && window.closeImageViewerModal()" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer" title="Close"><i class="fa-solid fa-xmark text-xs"></i></button>
         </div>
     </div>
 
@@ -2866,8 +2985,8 @@
             <h3 class="font-bold text-sm text-white flex items-center gap-2">
                 <i class="fa-solid fa-wand-magic-sparkles text-blue-400"></i> Edit & Annotate Photo
             </h3>
-            <button onclick="window.closeImageEditorModal && window.closeImageEditorModal()" class="text-gray-400 hover:text-white transition text-sm">
-                <i class="fa-solid fa-xmark"></i>
+            <button onclick="window.closeImageEditorModal && window.closeImageEditorModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -2985,8 +3104,8 @@
                     <i class="fa-solid fa-users-gear"></i>
                 </button>
                 <!-- Close Comms Window -->
-                <button type="button" onclick="event.stopPropagation(); window.toggleChatWindow && window.toggleChatWindow(false)" class="text-gray-400 hover:text-white p-1 text-sm transition active:scale-90" title="Close">
-                    <i class="fa-solid fa-xmark"></i>
+                <button type="button" onclick="event.stopPropagation(); window.toggleChatWindow && window.toggleChatWindow(false)" class="w-7 h-7 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 hover:text-white flex items-center justify-center transition active:scale-90 cursor-pointer" title="Close">
+                    <i class="fa-solid fa-xmark text-xs"></i>
                 </button>
             </div>
         </div>
@@ -3089,7 +3208,9 @@
                     <p class="text-[9px] text-purple-400 font-mono">Add riders to your custom team room</p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeCreateGroupModal && window.closeCreateGroupModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeCreateGroupModal && window.closeCreateGroupModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="flex flex-col gap-2.5 text-xs flex-1 overflow-y-auto pr-1">
@@ -3107,7 +3228,7 @@
         </div>
 
         <div class="flex gap-2 pt-2 border-t border-gray-800">
-            <button type="button" onclick="window.closeCreateGroupModal && window.closeCreateGroupModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">Cancel</button>
+            <button type="button" onclick="window.closeCreateGroupModal && window.closeCreateGroupModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 transition active:scale-95 cursor-pointer">Cancel</button>
             <button type="button" onclick="window.submitCreateGroupChat && window.submitCreateGroupChat()" class="flex-1 bg-purple-600 hover:bg-purple-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow">Create Room</button>
         </div>
     </div>
@@ -3128,7 +3249,9 @@
                     <p id="manage-group-modal-subtitle" class="text-[9px] text-purple-400 font-mono">Members & Room Controls</p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeManageGroupModal && window.closeManageGroupModal()" class="text-gray-400 hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeManageGroupModal && window.closeManageGroupModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="flex flex-col gap-3 text-xs flex-1 overflow-y-auto pr-1">
@@ -3159,7 +3282,7 @@
             <button type="button" id="manage-group-leave-btn" onclick="window.leaveOrDeleteGroup && window.leaveOrDeleteGroup()" class="flex-1 bg-red-900/40 hover:bg-red-800 text-red-300 border border-red-700/50 py-2.5 rounded-xl text-xs font-bold transition active:scale-95">
                 🚪 Leave Group
             </button>
-            <button type="button" onclick="window.closeManageGroupModal && window.closeManageGroupModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95">
+            <button type="button" onclick="window.closeManageGroupModal && window.closeManageGroupModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 transition active:scale-95 cursor-pointer">
                 Close
             </button>
         </div>
@@ -3170,7 +3293,7 @@
     <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-md h-[85vh] max-h-[640px] rounded-3xl shadow-2xl flex flex-col relative overflow-hidden">
         
         <!-- HEADER WITH INFO BUTTON -->
-        <div class="p-3 sm:p-4 bg-gray-50 dark:bg-darkBg/90 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0">
+        <div class="p-3 sm:p-4 bg-gray-50 dark:bg-cardBg border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0">
             <div class="flex items-center gap-2.5 min-w-0 flex-1">
                 <div id="rider-chat-avatar" class="w-10 h-10 rounded-full bg-emerald-600 text-white font-black flex items-center justify-center text-sm shadow-sm shrink-0">
                     CU
@@ -3192,14 +3315,11 @@
                 </div>
             </div>
             <div class="flex items-center gap-0.5 sm:gap-1 shrink-0">
-                <button type="button" onclick="window.markCustomerChatAsUnread && window.markCustomerChatAsUnread()" class="text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 p-2 text-sm transition shrink-0" title="Mark as unread and return to Inbox">
-                    <i class="fa-solid fa-envelope"></i>
-                </button>
                 <button type="button" onclick="window.openChatSoundSettingsModal && window.openChatSoundSettingsModal()" class="text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 p-2 text-sm transition shrink-0" title="Message Chimes & Ringtones">
                     <i class="fa-solid fa-bell"></i>
                 </button>
-                <button onclick="window.closeRiderChatModal && window.closeRiderChatModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-2 text-base transition shrink-0" title="Close">
-                    <i class="fa-solid fa-xmark"></i>
+                <button onclick="window.closeRiderChatModal && window.closeRiderChatModal()" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer" title="Close">
+                    <i class="fa-solid fa-xmark text-sm"></i>
                 </button>
             </div>
         </div>
@@ -3230,10 +3350,15 @@
         </div>
 
         <!-- ACTION BUTTONS ROW -->
-        <div id="rider-chat-action-toolbar" class="p-2.5 bg-gray-100 dark:bg-darkBg/60 border-b border-gray-200 dark:border-gray-800/80 flex items-center gap-2 overflow-x-auto shrink-0 no-scrollbar">
+        <div id="rider-chat-action-toolbar" class="p-2.5 bg-gray-100 dark:bg-cardBg border-b border-gray-200 dark:border-gray-800 flex items-center gap-2 overflow-x-auto shrink-0 no-scrollbar">
             <!-- CATER BUTTON -->
             <button id="rider-chat-cater-btn" onclick="window.caterCurrentChatCustomer && window.caterCurrentChatCustomer()" class="flex-1 min-w-[75px] bg-teal-600 hover:bg-teal-500 text-white border border-teal-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm" title="Cater this customer">
                 <i class="fa-solid fa-motorcycle"></i> Cater
+            </button>
+
+            <!-- GO TO CART BUTTON (CATERING RIDER ONLY) -->
+            <button id="rider-chat-go-cart-btn" type="button" onclick="window.goToCustomerCartFromChat && window.goToCustomerCartFromChat()" class="hidden flex-1 min-w-[95px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white border border-blue-400/30 py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0" title="Open this customer's Cart">
+                <i class="fa-solid fa-cart-shopping"></i> Go to Cart
             </button>
 
             <!-- UNREAD BUTTON -->
@@ -3269,8 +3394,8 @@
                     <button type="button" onclick="window.promptAddQuickReply && window.promptAddQuickReply()" class="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Create a new quick reply">
                         <i class="fa-solid fa-plus text-[10px]"></i> Add
                     </button>
-                    <button type="button" onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs transition cursor-pointer" title="Close">
-                        <i class="fa-solid fa-xmark"></i>
+                    <button type="button" onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer" title="Close">
+                        <i class="fa-solid fa-xmark text-[11px]"></i>
                     </button>
                 </div>
             </div>
@@ -3336,8 +3461,8 @@
                     <p class="text-[10px] text-gray-500 dark:text-gray-400">Capture drop-off confirmation photo</p>
                 </div>
             </div>
-            <button onclick="window.closePodModal && window.closePodModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                <i class="fa-solid fa-xmark"></i>
+            <button onclick="window.closePodModal && window.closePodModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -3387,8 +3512,8 @@
                     <p class="text-[10px] text-gray-500 dark:text-gray-400">Pick which channels appear in your live feed</p>
                 </div>
             </div>
-            <button onclick="window.closeRiderChatSourcesModal && window.closeRiderChatSourcesModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition cursor-pointer">
-                <i class="fa-solid fa-xmark"></i>
+            <button onclick="window.closeRiderChatSourcesModal && window.closeRiderChatSourcesModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -3439,8 +3564,8 @@
                     <p class="text-[10px] text-gray-500 dark:text-gray-400">Choose photo source</p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeImagePickerModal && window.closeImagePickerModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeImagePickerModal && window.closeImagePickerModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -3485,8 +3610,8 @@
                     <p class="text-[10px] text-gray-500 dark:text-gray-400">Available to all riders in real time</p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeAddQuickReplyModal && window.closeAddQuickReplyModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeAddQuickReplyModal && window.closeAddQuickReplyModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -3528,8 +3653,8 @@
                     <p id="quick-reply-modal-subtitle" class="text-[10px] text-gray-500 dark:text-gray-400">Choose to send or edit before sending</p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeQuickReplyActionModal && window.closeQuickReplyActionModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeQuickReplyActionModal && window.closeQuickReplyActionModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -3587,8 +3712,8 @@
                     <p class="text-[9.5px] text-amber-600 dark:text-amber-400 font-mono font-medium">Personalized notification sounds for <span id="sound-user-name-badge" class="font-bold">You</span></p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeChatSoundSettingsModal && window.closeChatSoundSettingsModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm cursor-pointer p-1">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeChatSoundSettingsModal && window.closeChatSoundSettingsModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer p-1">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -3655,6 +3780,236 @@
             </button>
             <button type="button" onclick="window.saveChatSoundSettingsFromModal && window.saveChatSoundSettingsFromModal()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 shadow-sm flex items-center justify-center gap-1.5 cursor-pointer">
                 <i class="fa-solid fa-check text-xs"></i> Save Preferences
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- PHONE NUMBER ACTION SHEET (CALL OR TEXT) -->
+<div id="chat-phone-action-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-3 sm:p-4">
+    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-xs rounded-3xl p-4 shadow-2xl flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-4 duration-150">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-lg shrink-0">
+                <i class="fa-solid fa-phone"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+                <h4 id="chat-phone-action-number" class="text-sm font-black text-gray-900 dark:text-white truncate font-mono">+639xxxxxxxxx</h4>
+                <p class="text-[10px] text-gray-500 dark:text-gray-400">Pumili ng aksyon para sa number na ito</p>
+            </div>
+        </div>
+        <div class="flex flex-col gap-2 pt-1">
+            <button type="button" id="chat-phone-call-btn" onclick="window.executeChatPhoneAction && window.executeChatPhoneAction('call')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 text-xs shadow-sm cursor-pointer">
+                <i class="fa-solid fa-phone text-xs"></i> Tumawag (Call)
+            </button>
+            <button type="button" id="chat-phone-sms-btn" onclick="window.executeChatPhoneAction && window.executeChatPhoneAction('text')" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 text-xs shadow-sm cursor-pointer">
+                <i class="fa-solid fa-comment-sms text-xs"></i> Mag-text (SMS)
+            </button>
+            <button type="button" id="chat-phone-save-details-btn" onclick="window.executeChatPhoneAction && window.executeChatPhoneAction('save_details')" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 text-xs shadow-sm cursor-pointer">
+                <i class="fa-solid fa-address-card text-xs"></i> I-save sa Customer Details
+            </button>
+            <button type="button" onclick="window.closeChatPhoneModal && window.closeChatPhoneModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-2 px-3 rounded-xl transition active:scale-95 text-xs text-center cursor-pointer mt-0.5">
+                Cancel
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ADMIN BROADCAST (SEND TO MANY) MODAL -->
+<div id="admin-broadcast-modal" class="fixed inset-0 z-[9999] bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 hidden transition-opacity select-none">
+    <div class="bg-cardBg dark:bg-tgBg border border-gray-200 dark:border-gray-800 w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-scale-up">
+        <!-- MODAL HEADER -->
+        <div class="p-3.5 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-xs">
+                    <i class="fa-solid fa-bullhorn"></i>
+                </div>
+                <div class="flex flex-col min-w-0">
+                    <h3 class="text-sm font-black text-gray-900 dark:text-white flex items-center gap-1.5 truncate">
+                        Send to Many <span class="text-[10px] bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded-full font-bold">Admin Broadcast</span>
+                    </h3>
+                    <p class="text-[10.5px] text-gray-500 dark:text-gray-400 truncate">Ipadala ang mensahe sa multiple recipients nang sabay-sabay</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeBroadcastModal && window.closeBroadcastModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg w-7 h-7 flex items-center justify-center rounded-lg transition active:scale-95 cursor-pointer" title="Close">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- MODAL BODY -->
+        <div class="p-3.5 overflow-y-auto flex-1 flex flex-col gap-3 text-xs">
+            <!-- TARGET AUDIENCE SELECTOR TABS -->
+            <div class="flex flex-col gap-1.5">
+                <label class="text-[11px] font-black text-gray-700 dark:text-gray-300 flex items-center justify-between">
+                    <span>1. PUMILI NG AUDIENCE (Target Recipients)</span>
+                    <span id="broadcast-target-count-badge" class="text-indigo-600 dark:text-indigo-400 font-bold font-mono text-[10px]">0 Recipient(s)</span>
+                </label>
+                <div class="flex bg-gray-100 dark:bg-black/40 p-1 rounded-xl border border-gray-200 dark:border-gray-800 gap-1 text-center">
+                    <button type="button" id="broadcast-tab-choice" onclick="window.setBroadcastMode && window.setBroadcastMode('choice')" class="flex-1 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-user-check text-[10px]"></i> Choice Customer
+                    </button>
+                    <button type="button" id="broadcast-tab-all" onclick="window.setBroadcastMode && window.setBroadcastMode('all')" class="flex-1 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-globe text-[10px]"></i> Send to All
+                    </button>
+                    <button type="button" id="broadcast-tab-group" onclick="window.setBroadcastMode && window.setBroadcastMode('group')" class="flex-1 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-layer-group text-[10px]"></i> Specific Group
+                    </button>
+                </div>
+            </div>
+
+            <!-- AUDIENCE DETAILS PANELS -->
+            <!-- 1. CHOICE CUSTOMER CONTAINER -->
+            <div id="broadcast-container-choice" class="flex flex-col gap-2">
+                <div class="flex items-center gap-2">
+                    <div class="flex-1 flex items-center gap-2 bg-white dark:bg-black/40 px-2.5 py-1.5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                        <i class="fa-solid fa-magnifying-glass text-gray-400 text-xs shrink-0"></i>
+                        <input type="text" id="broadcast-customer-search" placeholder="Search customer name or message..." class="flex-1 bg-transparent text-xs text-gray-900 dark:text-white outline-none placeholder-gray-400" oninput="window.handleBroadcastCustomerSearch && window.handleBroadcastCustomerSearch(this.value)">
+                    </div>
+                    <button type="button" onclick="window.broadcastSelectAllVisible && window.broadcastSelectAllVisible()" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[10px] font-bold px-2 py-1.5 rounded-xl transition active:scale-95 shrink-0 cursor-pointer">
+                        Select All
+                    </button>
+                    <button type="button" onclick="window.broadcastDeselectAll && window.broadcastDeselectAll()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-[10px] font-bold px-1.5 py-1.5 transition active:scale-95 shrink-0 cursor-pointer">
+                        Clear
+                    </button>
+                </div>
+
+                <!-- SCROLLABLE CUSTOMERS LIST -->
+                <div id="broadcast-customers-list" class="flex flex-col gap-1.5 max-h-48 overflow-y-auto p-1 bg-gray-50/50 dark:bg-black/20 rounded-xl border border-gray-200/80 dark:border-gray-800/80">
+                    <!-- Populated dynamically by renderChoiceCustomersList() -->
+                </div>
+            </div>
+
+            <!-- 2. ALL CUSTOMERS CONTAINER -->
+            <div id="broadcast-container-all" class="hidden flex flex-col gap-2">
+                <div id="broadcast-all-summary">
+                    <!-- Populated dynamically by renderAllModeSummary() -->
+                </div>
+            </div>
+
+            <!-- 3. SPECIFIC GROUP CONTAINER -->
+            <div id="broadcast-container-group" class="hidden flex flex-col gap-2">
+                <div id="broadcast-group-cards" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <!-- Populated dynamically by renderGroupModeCards() -->
+                </div>
+            </div>
+
+            <!-- MESSAGE COMPOSER -->
+            <div class="flex flex-col gap-1.5 pt-1">
+                <div class="flex items-center justify-between">
+                    <label class="text-[11px] font-black text-gray-700 dark:text-gray-300">2. MENSAHE (Broadcast Message)</label>
+                    <span id="broadcast-char-counter" class="text-[10px] text-gray-400 font-mono">0 / 1000</span>
+                </div>
+
+                <!-- QUICK TEMPLATE PILLS -->
+                <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                    <span class="text-[9.5px] font-bold text-gray-400 shrink-0">Templates:</span>
+                    <button type="button" onclick="window.applyBroadcastTemplate && window.applyBroadcastTemplate('volume')" class="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[9.5px] font-bold px-2 py-0.5 rounded-lg shrink-0 transition active:scale-95 cursor-pointer">
+                        ⏳ High Volume
+                    </button>
+                    <button type="button" onclick="window.applyBroadcastTemplate && window.applyBroadcastTemplate('available')" class="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[9.5px] font-bold px-2 py-0.5 rounded-lg shrink-0 transition active:scale-95 cursor-pointer">
+                        🛵 Available Now
+                    </button>
+                    <button type="button" onclick="window.applyBroadcastTemplate && window.applyBroadcastTemplate('delivery')" class="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[9.5px] font-bold px-2 py-0.5 rounded-lg shrink-0 transition active:scale-95 cursor-pointer">
+                        📦 Delivery Notice
+                    </button>
+                    <button type="button" onclick="window.applyBroadcastTemplate && window.applyBroadcastTemplate('holiday')" class="bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[9.5px] font-bold px-2 py-0.5 rounded-lg shrink-0 transition active:scale-95 cursor-pointer">
+                        ✨ Advisory
+                    </button>
+                </div>
+
+                <textarea id="broadcast-message-input" rows="4" maxlength="1000" placeholder="I-type dito ang anunsyo o mensahe na nais i-send sa mga napiling customer..." class="w-full bg-white dark:bg-black/40 border border-gray-300 dark:border-gray-700 focus:border-indigo-500 dark:focus:border-indigo-400 rounded-xl p-2.5 text-xs text-gray-900 dark:text-white outline-none resize-none placeholder-gray-400 transition" oninput="window.updateBroadcastCharCount && window.updateBroadcastCharCount()"></textarea>
+
+                <div class="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 pt-0.5">
+                    <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                        <input type="checkbox" id="broadcast-include-sig-check" checked class="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                        <span>Isama ang Dispatch signature ("— Lokalex Dispatch")</span>
+                    </label>
+                    <span class="text-gray-400 flex items-center gap-1">
+                        <i class="fa-solid fa-shield-halved text-[9px] text-emerald-500"></i> FB & Web Direct Sync
+                    </span>
+                </div>
+            </div>
+
+            <!-- SENDING PROGRESS BAR -->
+            <div id="broadcast-progress-container" class="hidden flex flex-col gap-1.5 p-2.5 bg-indigo-50/80 dark:bg-indigo-950/40 rounded-xl border border-indigo-200 dark:border-indigo-800/60 animate-pulse">
+                <div class="flex justify-between items-center text-[10px] font-bold text-indigo-700 dark:text-indigo-300">
+                    <span id="broadcast-progress-text">Sending broadcast...</span>
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                    <div id="broadcast-progress-bar" class="bg-indigo-600 h-full transition-all duration-150 rounded-full" style="width: 0%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL FOOTER -->
+        <div class="p-3 bg-gray-50 dark:bg-gray-800/60 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0">
+            <button type="button" onclick="window.closeBroadcastModal && window.closeBroadcastModal()" class="bg-white dark:bg-cardBg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 font-bold py-2 px-3.5 rounded-xl transition active:scale-95 text-xs cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" id="broadcast-send-btn" onclick="window.executeBroadcastSend && window.executeBroadcastSend()" class="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-2 px-4 rounded-xl shadow-md transition active:scale-95 flex items-center gap-1.5 text-xs cursor-pointer">
+                <i class="fa-solid fa-paper-plane text-xs"></i>
+                <span id="broadcast-send-btn-text">Send to 0 Recipient(s)</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: CONFIRM DELIVERY COMPLETION SAFEGUARD -->
+<div id="rider-chat-confirm-done-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" style="z-index: 999999 !important;">
+    <div class="bg-white dark:bg-cardBg border border-emerald-500/40 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150 text-gray-900 dark:text-white">
+        <!-- HEADER -->
+        <div class="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-base font-black shrink-0 shadow-inner">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+                <div>
+                    <h3 id="confirm-done-modal-title" class="font-black text-sm text-gray-900 dark:text-white leading-tight">Confirm Completion</h3>
+                    <p id="confirm-done-modal-subtitle" class="text-[10px] text-gray-500 dark:text-gray-400">Order Delivery Safeguard</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeConfirmDoneModal && window.closeConfirmDoneModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+
+        <!-- BODY / DETAILS -->
+        <div class="flex flex-col gap-3">
+            <!-- Customer Card -->
+            <div class="p-3 rounded-2xl bg-gray-50 dark:bg-darkBg/60 border border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center text-xs font-bold shrink-0">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                    <div class="flex flex-col min-w-0">
+                        <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Customer</span>
+                        <span id="confirm-done-cust-name" class="text-xs font-black text-gray-900 dark:text-white truncate">Customer Name</span>
+                    </div>
+                </div>
+                <div id="confirm-done-status-badge" class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0">
+                    Catering
+                </div>
+            </div>
+
+            <!-- Description Message -->
+            <div id="confirm-done-message-box" class="p-3 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-500/20 text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
+                Sigurado ka bang tapos na ang delivery? Ima-mark ito bilang <strong>Done</strong> sa catering roster, ire-record ang service fees, at ililipat ang chat sa Done folder.
+            </div>
+
+            <!-- Receipt Notice / Warning -->
+            <div id="confirm-done-receipt-notice" class="hidden p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/50 text-[11px] text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                <i class="fa-solid fa-receipt text-amber-600 shrink-0"></i>
+                <span id="confirm-done-receipt-text">Siguraduhing may resibo bago i-confirm.</span>
+            </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="flex items-center gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
+            <button type="button" onclick="window.closeConfirmDoneModal && window.closeConfirmDoneModal()" class="flex-1 py-2.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-bold text-xs transition active:scale-95 cursor-pointer text-center">
+                Cancel
+            </button>
+            <button type="button" id="confirm-done-proceed-btn" onclick="window.confirmAndExecuteDone && window.confirmAndExecuteDone()" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-xs transition active:scale-95 shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-check"></i> Yes, Mark Done
             </button>
         </div>
     </div>
@@ -3780,7 +4135,9 @@
                 <i class="fa-solid fa-user-slash text-red-400 text-lg"></i>
                 <h3 class="font-bold text-sm text-white">Ban / Block User Management</h3>
             </div>
-            <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="text-gray-400 hover:text-white text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="flex flex-col gap-2">
@@ -3797,7 +4154,7 @@
         <div class="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-2">Blocked Users List</div>
         <div id="blocked-users-list" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 min-h-[120px]"></div>
 
-        <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
+        <button onclick="window.closeAdminBlockModal && window.closeAdminBlockModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
             Close
         </button>
     </div>
@@ -3816,7 +4173,9 @@
                     <p id="rider-dayoff-subtitle" class="text-[9px] text-teal-400 font-mono">Pumili ng iyong lingguhang araw ng pahinga</p>
                 </div>
             </div>
-            <button onclick="window.closeRiderDayOffModal && window.closeRiderDayOffModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeRiderDayOffModal && window.closeRiderDayOffModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="flex flex-col gap-2.5 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
@@ -3836,7 +4195,7 @@
             </div>
         </div>
 
-        <button onclick="window.closeRiderDayOffModal && window.closeRiderDayOffModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 shrink-0 cursor-pointer">
+        <button onclick="window.closeRiderDayOffModal && window.closeRiderDayOffModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 shrink-0 cursor-pointer">
             Close
         </button>
     </div>
@@ -3855,7 +4214,9 @@
                     <p class="text-[9px] text-teal-400 font-mono">Set Daily Caps, Limits & Move Day-Offs</p>
                 </div>
             </div>
-            <button onclick="window.closeAdminDayOffSettingsModal && window.closeAdminDayOffSettingsModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeAdminDayOffSettingsModal && window.closeAdminDayOffSettingsModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="flex flex-col gap-3 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
@@ -3930,7 +4291,7 @@
         </div>
 
         <div class="flex gap-2 pt-2 border-t border-gray-800 shrink-0">
-            <button onclick="window.closeAdminDayOffSettingsModal && window.closeAdminDayOffSettingsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.closeAdminDayOffSettingsModal && window.closeAdminDayOffSettingsModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 transition active:scale-95 cursor-pointer">Cancel</button>
             <button onclick="window.saveAdminDayOffSettings && window.saveAdminDayOffSettings()" class="flex-1 bg-teal-600 hover:bg-teal-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Day-Off Settings</button>
         </div>
     </div>
@@ -3949,7 +4310,9 @@
                     <p class="text-[9px] text-rose-400 font-mono">Dynamic or Fixed Limits per Rider</p>
                 </div>
             </div>
-            <button onclick="window.closeAdminBookingLimitsModal && window.closeAdminBookingLimitsModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeAdminBookingLimitsModal && window.closeAdminBookingLimitsModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="flex flex-col gap-3 text-xs">
@@ -3998,7 +4361,7 @@
         </div>
 
         <div class="flex gap-2 mt-1 shrink-0">
-            <button onclick="window.closeAdminBookingLimitsModal && window.closeAdminBookingLimitsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.closeAdminBookingLimitsModal && window.closeAdminBookingLimitsModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 transition active:scale-95 cursor-pointer">Cancel</button>
             <button onclick="window.saveAdminBookingLimitsSettings && window.saveAdminBookingLimitsSettings()" class="flex-1 bg-rose-600 hover:bg-rose-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Limit</button>
         </div>
     </div>
@@ -4017,7 +4380,9 @@
                     <p class="text-[9px] text-purple-400 font-mono">Shift Gate Restrictions & Early Passes</p>
                 </div>
             </div>
-            <button onclick="window.closeAdminTimeInScheduleModal && window.closeAdminTimeInScheduleModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeAdminTimeInScheduleModal && window.closeAdminTimeInScheduleModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="flex flex-col gap-3 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
@@ -4053,7 +4418,7 @@
         </div>
 
         <div class="flex gap-2 pt-2 border-t border-gray-800 shrink-0">
-            <button onclick="window.closeAdminTimeInScheduleModal && window.closeAdminTimeInScheduleModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.closeAdminTimeInScheduleModal && window.closeAdminTimeInScheduleModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 transition active:scale-95 cursor-pointer">Cancel</button>
             <button onclick="window.saveAdminTimeInScheduleSettings && window.saveAdminTimeInScheduleSettings()" class="flex-1 bg-purple-600 hover:bg-purple-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Schedule</button>
         </div>
     </div>
@@ -4072,7 +4437,9 @@
                     <p class="text-[9px] text-amber-400 font-mono">Set Percentage & Promo Rules</p>
                 </div>
             </div>
-            <button onclick="window.closeAdminCommissionSettingsModal && window.closeAdminCommissionSettingsModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeAdminCommissionSettingsModal && window.closeAdminCommissionSettingsModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="flex flex-col gap-3 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
@@ -4155,7 +4522,7 @@
         </div>
 
         <div class="flex gap-2 pt-2 border-t border-gray-800 shrink-0">
-            <button onclick="window.closeAdminCommissionSettingsModal && window.closeAdminCommissionSettingsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.closeAdminCommissionSettingsModal && window.closeAdminCommissionSettingsModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 transition active:scale-95 cursor-pointer">Cancel</button>
             <button onclick="window.saveAdminCommissionSettings && window.saveAdminCommissionSettings()" class="flex-1 bg-amber-600 hover:bg-amber-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Settings</button>
         </div>
     </div>
@@ -4174,7 +4541,9 @@
                     <p class="text-[9px] text-purple-400 font-mono">Automated Daily Shift Termination</p>
                 </div>
             </div>
-            <button onclick="window.closeAdminAutoEndShiftModal && window.closeAdminAutoEndShiftModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeAdminAutoEndShiftModal && window.closeAdminAutoEndShiftModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="flex flex-col gap-3 text-xs">
@@ -4200,7 +4569,7 @@
         </div>
 
         <div class="flex gap-2 mt-1">
-            <button onclick="window.closeAdminAutoEndShiftModal && window.closeAdminAutoEndShiftModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.closeAdminAutoEndShiftModal && window.closeAdminAutoEndShiftModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 transition active:scale-95 cursor-pointer">Cancel</button>
             <button onclick="window.saveAdminAutoEndShiftSettings && window.saveAdminAutoEndShiftSettings()" class="flex-1 bg-purple-600 hover:bg-purple-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Settings</button>
         </div>
     </div>
@@ -4219,7 +4588,9 @@
                     <p class="text-[9px] text-amber-400 font-mono">Configure Lookup Costs & Rewards</p>
                 </div>
             </div>
-            <button onclick="window.closeAdminDirectoryCreditsModal && window.closeAdminDirectoryCreditsModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeAdminDirectoryCreditsModal && window.closeAdminDirectoryCreditsModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="flex flex-col gap-3 text-xs">
@@ -4287,7 +4658,7 @@
         </div>
 
         <div class="flex gap-2 mt-1 shrink-0">
-            <button onclick="window.closeAdminDirectoryCreditsModal && window.closeAdminDirectoryCreditsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.closeAdminDirectoryCreditsModal && window.closeAdminDirectoryCreditsModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 transition active:scale-95 cursor-pointer">Cancel</button>
             <button onclick="window.saveAdminDirectoryCreditsSettings && window.saveAdminDirectoryCreditsSettings()" class="flex-1 bg-amber-600 hover:bg-amber-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Settings</button>
         </div>
     </div>
@@ -4306,7 +4677,9 @@
                     <p class="text-[9px] text-red-400 font-mono">Shift Thresholds, Daily Targets & 1-Day Passes</p>
                 </div>
             </div>
-            <button onclick="window.closeAdminEarlyShiftModal && window.closeAdminEarlyShiftModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeAdminEarlyShiftModal && window.closeAdminEarlyShiftModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="flex flex-col gap-3 text-xs">
@@ -4395,7 +4768,7 @@
         </div>
 
         <div class="flex gap-2 mt-1 shrink-0">
-            <button onclick="window.closeAdminEarlyShiftModal && window.closeAdminEarlyShiftModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.closeAdminEarlyShiftModal && window.closeAdminEarlyShiftModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 transition active:scale-95 cursor-pointer">Cancel</button>
             <button onclick="window.saveAdminEarlyShiftSettings && window.saveAdminEarlyShiftSettings()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Penalty Rules</button>
         </div>
     </div>
@@ -4404,26 +4777,28 @@
 <!-- 10. ADMIN MANAGE RIDERS MODAL -->
 <div id="admin-manage-riders-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-blue-500/60 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3 max-h-[85vh] overflow-hidden">
-        <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2">
             <div class="flex items-center gap-2">
-                <i class="fa-solid fa-users-gear text-blue-400 text-lg"></i>
-                <h3 class="font-bold text-sm text-white">Rider Accounts & Permissions</h3>
+                <i class="fa-solid fa-users-gear text-blue-500 dark:text-blue-400 text-lg"></i>
+                <h3 class="font-bold text-sm text-gray-900 dark:text-white">Rider Accounts & Permissions</h3>
             </div>
-            <button onclick="window.closeAdminManageRidersModal && window.closeAdminManageRidersModal()" class="text-gray-400 hover:text-white text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeAdminManageRidersModal && window.closeAdminManageRidersModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
-        <div class="flex justify-between items-center bg-darkBg p-2.5 rounded-2xl border border-gray-800">
-            <span class="text-xs text-gray-300 font-bold">Rider Accounts List</span>
+        <div class="flex justify-between items-center bg-gray-50 dark:bg-darkBg p-2.5 rounded-2xl border border-gray-200 dark:border-gray-800">
+            <span class="text-xs text-gray-900 dark:text-gray-300 font-bold">Rider Accounts List</span>
             <button onclick="window.openAddRiderModal && window.openAddRiderModal()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs transition active:scale-95 shadow flex items-center gap-1 cursor-pointer">
                 <i class="fa-solid fa-user-plus"></i> + Add Rider
             </button>
         </div>
 
         <div id="admin-riders-list-container" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 min-h-[160px]">
-            <div class="text-center text-gray-500 italic py-8 text-xs">Loading rider accounts...</div>
+            <div class="text-center text-gray-400 dark:text-gray-500 italic py-8 text-xs">Loading rider accounts...</div>
         </div>
 
-        <button onclick="window.closeAdminManageRidersModal && window.closeAdminManageRidersModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
+        <button onclick="window.closeAdminManageRidersModal && window.closeAdminManageRidersModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
             Close
         </button>
     </div>
@@ -4442,7 +4817,9 @@
                     <p id="rider-app-access-target-subtitle" class="text-[9px] text-purple-400 font-mono">Select Authorized App Sections</p>
                 </div>
             </div>
-            <button onclick="window.closeRiderAppAccessModal && window.closeRiderAppAccessModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeRiderAppAccessModal && window.closeRiderAppAccessModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="flex items-center justify-between gap-2 px-1">
@@ -4459,7 +4836,7 @@
         </div>
 
         <div class="pt-2 border-t border-gray-800">
-            <button type="button" onclick="window.closeRiderAppAccessModal && window.closeRiderAppAccessModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
+            <button type="button" onclick="window.closeRiderAppAccessModal && window.closeRiderAppAccessModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
                 Done
             </button>
         </div>
@@ -4469,39 +4846,59 @@
 <!-- 12. ADMIN ADD / EDIT RIDER MODAL -->
 <div id="admin-edit-rider-modal" class="hidden fixed inset-0 bg-black/90 backdrop-blur-md z-[999999] flex items-center justify-center p-4">
     <div class="bg-cardBg border border-blue-500/60 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3 relative animate-in fade-in zoom-in duration-200">
-        <div class="flex justify-between items-center border-b border-gray-800 pb-2">
-            <h3 id="admin-edit-rider-title" class="font-bold text-xs text-white">Add New Rider Account</h3>
-            <button onclick="window.closeAdminEditRiderModal && window.closeAdminEditRiderModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2">
+            <h3 id="admin-edit-rider-title" class="font-bold text-xs text-gray-900 dark:text-white">Add New Rider Account</h3>
+            <button type="button" onclick="window.closeAdminEditRiderModal && window.closeAdminEditRiderModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="flex flex-col gap-2.5 text-xs">
             <div>
-                <label class="text-[10px] text-gray-400 font-bold uppercase">Rider Login ID *</label>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Rider Login ID *</label>
                 <div class="flex gap-2 mt-1">
-                    <input type="text" id="edit-rider-id-input" autocomplete="off" placeholder="e.g. 1001 or Telegram ID" class="flex-1 bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold font-mono">
-                    <button type="button" onclick="window.generateRandomRiderId && window.generateRandomRiderId()" class="bg-emerald-600/30 hover:bg-emerald-600 border border-emerald-500/50 text-emerald-300 hover:text-white px-3 py-2 rounded-xl text-xs font-bold transition active:scale-95 flex items-center gap-1.5 shrink-0 cursor-pointer" title="Generate Random ID">
+                    <input type="text" id="edit-rider-id-input" autocomplete="off" placeholder="e.g. 1001 or Telegram ID" class="flex-1 bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold font-mono">
+                    <button type="button" onclick="window.generateRandomRiderId && window.generateRandomRiderId()" class="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-700 hover:text-white dark:text-emerald-300 border border-emerald-500/40 px-3 py-2 rounded-xl text-xs font-bold transition active:scale-95 flex items-center gap-1.5 shrink-0 cursor-pointer" title="Generate Random ID">
                         <i class="fa-solid fa-dice"></i> Generate
                     </button>
                 </div>
             </div>
 
             <div>
-                <label class="text-[10px] text-gray-400 font-bold uppercase">Rider Full Name *</label>
-                <input type="text" id="edit-rider-name-input" autocomplete="off" placeholder="e.g. Juan Dela Cruz" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-700 outline-none text-white font-bold mt-1">
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Rider Full Name *</label>
+                <input type="text" id="edit-rider-name-input" autocomplete="off" placeholder="e.g. Juan Dela Cruz" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold mt-1">
             </div>
 
             <div>
-                <label class="text-[10px] text-gray-400 font-bold uppercase">Account Type (Permissions) *</label>
-                <select id="edit-rider-usertype-select" class="w-full bg-inputBg text-xs font-bold text-amber-300 rounded-xl p-2.5 border border-gray-700 outline-none mt-1">
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Account Type (Permissions) *</label>
+                <select id="edit-rider-usertype-select" class="w-full bg-inputBg text-xs font-bold text-amber-600 dark:text-amber-300 rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none mt-1">
                     <option value="rider">Rider (Standard Member)</option>
                     <option value="tl">TL (Team Lead)</option>
                     <option value="admin">Admin (Full Access)</option>
                 </select>
             </div>
+
+            <!-- PASSWORD SECURITY & RESET (FORGOT PASSWORD) SECTION -->
+            <div id="edit-rider-password-section" class="bg-gray-50 dark:bg-darkBg/60 p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex flex-col gap-2 mt-1">
+                <div class="flex items-center justify-between">
+                    <span class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-key text-amber-500"></i> Account Password
+                    </span>
+                    <span id="edit-rider-pass-status-badge" class="text-[9.5px] font-bold px-2 py-0.5 rounded-lg border bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-300 dark:border-gray-700">
+                        Checking...
+                    </span>
+                </div>
+                <p class="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">
+                    If this rider forgot their password, click below to remove/clear it so they can log in without password and create a new one.
+                </p>
+                <button type="button" id="btn-remove-rider-password" onclick="window.removeRiderAccountPassword && window.removeRiderAccountPassword()" class="w-full py-2 px-3 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 text-amber-800 dark:text-amber-400 border border-amber-300 dark:border-amber-500/40 transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-unlock-keyhole"></i> Remove Password (Forgot Password)
+                </button>
+            </div>
         </div>
 
         <div class="flex gap-2 mt-2">
-            <button onclick="window.closeAdminEditRiderModal && window.closeAdminEditRiderModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+            <button onclick="window.closeAdminEditRiderModal && window.closeAdminEditRiderModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 transition active:scale-95 cursor-pointer">Cancel</button>
             <button onclick="window.submitSaveRiderAccount && window.submitSaveRiderAccount()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Account</button>
         </div>
     </div>
@@ -4518,7 +4915,9 @@
                 <button onclick="window.refreshFindRidersMap && window.refreshFindRidersMap()" class="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/50 px-2.5 py-1 rounded-lg text-xs font-bold transition active:scale-95 flex items-center gap-1.5 cursor-pointer" title="Refresh Rider Positions">
                     <i id="find-riders-refresh-icon" class="fa-solid fa-rotate"></i> Refresh
                 </button>
-                <button onclick="window.closeFindRidersModal && window.closeFindRidersModal()" class="text-gray-400 hover:text-white text-sm ml-1 cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+                <button type="button" onclick="window.closeFindRidersModal && window.closeFindRidersModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer ml-1">
+                    <i class="fa-solid fa-xmark text-xs"></i>
+                </button>
             </div>
         </div>
         
@@ -4529,7 +4928,7 @@
         <div id="find-riders-status-summary" class="text-xs text-gray-300 bg-darkBg p-2.5 rounded-xl border border-gray-800 flex justify-around text-center">
         </div>
 
-        <button onclick="window.closeFindRidersModal && window.closeFindRidersModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
+        <button onclick="window.closeFindRidersModal && window.closeFindRidersModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
             Close
         </button>
     </div>
@@ -4569,7 +4968,9 @@
                     <p id="swap-modal-source-label" class="text-[10px] text-purple-300 font-mono"></p>
                 </div>
             </div>
-            <button onclick="window.closeSwapCustomerModal && window.closeSwapCustomerModal()" class="text-gray-400 hover:text-white text-base cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeSwapCustomerModal && window.closeSwapCustomerModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div id="swap-riders-accordion-list" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 min-h-0"></div>
@@ -4593,8 +4994,8 @@
                     <p class="text-[9px] text-gray-500 dark:text-gray-400 font-mono">Lokalex Roster Profile</p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeRiderInfoModal && window.closeRiderInfoModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-sm transition cursor-pointer">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeRiderInfoModal && window.closeRiderInfoModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -4680,7 +5081,7 @@
             </div>
         </div>
 
-        <button type="button" onclick="window.closeRiderInfoModal && window.closeRiderInfoModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
+        <button type="button" onclick="window.closeRiderInfoModal && window.closeRiderInfoModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
             Close
         </button>
     </div>
@@ -4699,7 +5100,9 @@
                     <p id="adjust-credits-rider-subtitle" class="text-[9px] text-amber-400 font-mono">Manage Rider Balance</p>
                 </div>
             </div>
-            <button onclick="window.closeAdjustRiderCreditsModal && window.closeAdjustRiderCreditsModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeAdjustRiderCreditsModal && window.closeAdjustRiderCreditsModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="bg-darkBg p-3 rounded-2xl border border-amber-500/30 flex items-center justify-between text-xs">
@@ -4743,7 +5146,7 @@
         </p>
 
         <div class="pt-2 border-t border-gray-800">
-            <button type="button" onclick="window.closeAdjustRiderCreditsModal && window.closeAdjustRiderCreditsModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
+            <button type="button" onclick="window.closeAdjustRiderCreditsModal && window.closeAdjustRiderCreditsModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
                 Done
             </button>
         </div>
@@ -4764,8 +5167,8 @@
                     <p class="text-[9.5px] text-blue-500 dark:text-blue-400 font-mono">Live Chats API Hub (Hidden links from riders)</p>
                 </div>
             </div>
-            <button onclick="window.closeAdminFbApiModal && window.closeAdminFbApiModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white text-base cursor-pointer p-1">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeAdminFbApiModal && window.closeAdminFbApiModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -4868,8 +5271,8 @@
                     <p class="text-[9.5px] text-rose-500 dark:text-rose-400 font-mono font-medium">Admin Auto-Responder Configuration</p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeFullBookingModal && window.closeFullBookingModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm cursor-pointer p-1">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeFullBookingModal && window.closeFullBookingModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -5082,8 +5485,8 @@
                     <p id="sukli-cart-label" class="text-[9px] text-gray-500 dark:text-gray-400 font-bold">Cart 1</p>
                 </div>
             </div>
-            <button onclick="window.closeSukliCalculatorModal && window.closeSukliCalculatorModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeSukliCalculatorModal && window.closeSukliCalculatorModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -5133,8 +5536,8 @@
                 </div>
                 <h3 class="font-bold text-sm text-gray-900 dark:text-white">Edit Account Details</h3>
             </div>
-            <button onclick="window.closeEditCustomerProfileModal && window.closeEditCustomerProfileModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeEditCustomerProfileModal && window.closeEditCustomerProfileModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -5221,8 +5624,8 @@
                     <span id="cust-modal-thread-channel" class="text-[10px] text-gray-500 dark:text-gray-400">Live Chat Details</span>
                 </div>
             </div>
-            <button onclick="window.closeCustomerDetailsModal && window.closeCustomerDetailsModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm p-1 rounded-lg">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeCustomerDetailsModal && window.closeCustomerDetailsModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -5259,8 +5662,8 @@
                     <span class="text-[11px] font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
                         <i class="fa-solid fa-magnifying-glass text-blue-500"></i> Link to Directory Customer
                     </span>
-                    <button type="button" onclick="window.toggleDirectoryLinkPicker(false)" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs p-1">
-                        <i class="fa-solid fa-xmark"></i>
+                    <button type="button" onclick="window.toggleDirectoryLinkPicker(false)" class="w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                        <i class="fa-solid fa-xmark text-[11px]"></i>
                     </button>
                 </div>
                 <div class="relative">
@@ -5270,6 +5673,11 @@
                         <i class="fa-solid fa-circle-xmark"></i>
                     </button>
                 </div>
+
+                <!-- DIRECT PROFILE CREATION BUTTON (NO TYPING REQUIRED) -->
+                <button type="button" onclick="window.openNewDirectoryCustomerFromChat && window.openNewDirectoryCustomerFromChat()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 text-xs shadow-sm cursor-pointer shrink-0">
+                    <i class="fa-solid fa-user-plus text-xs"></i> + Create Customer Directory Profile
+                </button>
 
                 <!-- Live Search Results Header & List -->
                 <div class="flex items-center justify-between px-0.5 text-[10px] text-gray-500 dark:text-gray-400 font-medium">
@@ -5556,7 +5964,9 @@
             <h3 class="font-bold text-sm text-purple-600 dark:text-purple-400 flex items-center gap-2">
                 <i class="fa-solid fa-calendar-check"></i> Scheduled Delivery Reminders
             </h3>
-            <button onclick="window.closeAdvancedOrdersModal && window.closeAdvancedOrdersModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeAdvancedOrdersModal && window.closeAdvancedOrdersModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div class="flex bg-gray-100 dark:bg-inputBg p-1 rounded-xl text-xs font-bold border border-gray-200 dark:border-gray-700">
@@ -5636,7 +6046,9 @@
                 <i class="fa-solid fa-calculator text-emerald-600 dark:text-emerald-400 text-sm"></i>
                 <h3 class="font-bold text-xs text-gray-900 dark:text-white">Map Calculation Board</h3>
             </div>
-            <button onclick="window.closeMapCalcBoardModal && window.closeMapCalcBoardModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeMapCalcBoardModal && window.closeMapCalcBoardModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div id="mapcalc-list-container" class="flex-1 overflow-y-auto flex flex-col gap-2 min-h-[200px] text-xs">
@@ -5719,8 +6131,8 @@
 <!-- FORGOT PASSWORD MODAL -->
 <div id="forgot-password-modal" class="hidden fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
     <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl relative flex flex-col gap-4 text-center animate-in fade-in zoom-in duration-200 text-gray-900 dark:text-white">
-        <button onclick="window.closeForgotPasswordModal && window.closeForgotPasswordModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-700 dark:hover:text-white transition w-8 h-8 rounded-full bg-gray-100 dark:bg-darkBg border border-gray-300 dark:border-gray-800 flex items-center justify-center">
-            <i class="fa-solid fa-xmark text-sm"></i>
+        <button type="button" onclick="window.closeForgotPasswordModal && window.closeForgotPasswordModal()" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+            <i class="fa-solid fa-xmark text-xs"></i>
         </button>
 
         <div class="flex flex-col items-center mt-2">
@@ -5867,8 +6279,8 @@
                     <p class="text-[10px] text-gray-400">Create & Manage Merchant Store Accounts</p>
                 </div>
             </div>
-            <button onclick="closeAdminStoreAccountModal()" class="text-gray-400 hover:text-white p-1 text-sm transition">
-                <i class="fa-solid fa-xmark"></i>
+            <button onclick="closeAdminStoreAccountModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -5948,8 +6360,8 @@
                     <p class="text-[10px] text-gray-500 dark:text-gray-400">Configure item details, photos, sizes, and add-ons</p>
                 </div>
             </div>
-            <button onclick="window.closeItemEditorModal && window.closeItemEditorModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                <i class="fa-solid fa-xmark"></i>
+            <button onclick="window.closeItemEditorModal && window.closeItemEditorModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -6111,8 +6523,8 @@
                     <p class="text-[10px] text-gray-500 dark:text-gray-400">Edit your photo, username, phone, and password</p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeAvatarPickerModal && window.closeAvatarPickerModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white p-1 text-sm transition">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeAvatarPickerModal && window.closeAvatarPickerModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -6211,8 +6623,8 @@
                     <p class="text-[10px] text-gray-500 dark:text-gray-400">Verify mobile number & set password</p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeRiderPasswordSetupModal && window.closeRiderPasswordSetupModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white p-1 text-sm transition">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeRiderPasswordSetupModal && window.closeRiderPasswordSetupModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -6319,8 +6731,8 @@
                     <p id="prof-modal-subtitle" class="text-[10px] text-gray-500 dark:text-gray-400">Manage credentials, contact & map pin</p>
                 </div>
             </div>
-            <button type="button" onclick="window.closeProfileSettingsModal && window.closeProfileSettingsModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
-                <i class="fa-solid fa-xmark"></i>
+            <button type="button" onclick="window.closeProfileSettingsModal && window.closeProfileSettingsModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
             </button>
         </div>
 
@@ -6445,6 +6857,19 @@
                 </div>
             </div>
 
+            <!-- OVER-THE-AIR (OTA) LIVE UPDATE CONTROLS -->
+            <div class="pt-2 border-t border-gray-200 dark:border-gray-800">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Software Updates</label>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Live Over-The-Air GitHub Updates</p>
+                    </div>
+                    <button type="button" onclick="window.checkForOtaUpdate && window.checkForOtaUpdate(true)" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow-xs">
+                        <i class="fa-solid fa-arrows-rotate"></i> Check for Updates
+                    </button>
+                </div>
+            </div>
+
             <!-- ACTION BUTTONS -->
             <div class="flex gap-2 pt-2 border-t border-gray-200 dark:border-gray-800">
                 <button type="button" onclick="window.closeProfileSettingsModal && window.closeProfileSettingsModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 py-3 rounded-xl text-xs font-bold transition active:scale-95">
@@ -6460,6 +6885,14 @@
                 <button type="button" id="prof-logout-btn" onclick="window.executeUniversalLogout && window.executeUniversalLogout()" class="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 dark:bg-red-950/30 dark:hover:bg-red-900/40 dark:text-red-400 dark:border-red-800/50 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-2 shadow-xs">
                     <i class="fa-solid fa-arrow-right-from-bracket"></i> Log Out of Account
                 </button>
+                <div class="mt-2 text-center">
+                    <button type="button" onclick="window.checkForOtaUpdate && window.checkForOtaUpdate(true)" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition hover:bg-gray-100 dark:hover:bg-gray-800/60 cursor-pointer" title="Tap to check for updates">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>Lokalex Hub</span>
+                        <span class="app-version-tracker font-mono font-bold text-gray-600 dark:text-gray-300">v1.0.4</span>
+                        <span class="text-[9px] px-1.5 py-0.2 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 rounded-md font-mono font-semibold">OTA Live</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>

@@ -582,7 +582,7 @@ export async function exportAndSendEditedImage() {
     isDrawingOnCanvas = false;
     renderEditorCanvas();
 
-    const dataUrl = canvas.toDataURL('image/jpeg', isHdMode ? 0.85 : 0.45);
+    const dataUrl = canvas.toDataURL('image/jpeg', isHdMode ? 0.72 : 0.45);
     const targetType = editorTargetType || 'customer';
     closeImageEditorModal();
     showToast("⏳ Uploading photo...");
@@ -594,13 +594,15 @@ export async function exportAndSendEditedImage() {
         console.warn("Storage upload fallback:", e);
     }
 
-    if (targetType === 'customer') {
-        if (window.sendCustomerToRiderChat && typeof window.sendCustomerToRiderChat === 'function') {
-            window.sendCustomerToRiderChat("", finalImageUrl);
-        }
-    } else if (targetType === 'rider') {
+    const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
+
+    if (activeCustId || targetType === 'rider') {
         if (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function') {
-            window.sendRiderToCustomerChat("", finalImageUrl);
+            await window.sendRiderToCustomerChat("", finalImageUrl);
+        }
+    } else if (targetType === 'customer') {
+        if (window.sendCustomerToRiderChat && typeof window.sendCustomerToRiderChat === 'function') {
+            await window.sendCustomerToRiderChat("", finalImageUrl);
         }
     } else if (targetType === 'team') {
         if (db) {

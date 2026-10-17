@@ -402,6 +402,38 @@ export function goBack() {
 }
 
 window.addEventListener('popstate', function(event) {
+    // Check open overlay modals first in order of topmost z-index
+    const modals = [
+        { id: 'image-viewer-modal', closeFn: window.closeImageViewerModal },
+        { id: 'image-editor-modal', closeFn: window.closeImageEditorModal },
+        { id: 'pod-capture-modal', closeFn: () => {
+            const el = document.getElementById('pod-capture-modal');
+            if (el) el.classList.add('hidden');
+        }},
+        { id: 'customer-details-modal', closeFn: () => {
+            const el = document.getElementById('customer-details-modal');
+            if (el) el.classList.add('hidden');
+        }},
+        { id: 'chat-sound-settings-modal', closeFn: window.closeChatSoundSettingsModal },
+        { id: 'quick-replies-edit-modal', closeFn: window.closeQuickReplyEditModal },
+        { id: 'rider-sources-filter-modal', closeFn: window.closeRiderChatSourcesModal },
+        { id: 'admin-fb-api-modal', closeFn: window.closeAdminFbApiModal },
+        { id: 'slide-delete-confirm-modal', closeFn: window.closeSlideDeleteModal },
+        { id: 'rider-chat-modal', closeFn: window.closeRiderChatModal }
+    ];
+
+    for (const m of modals) {
+        const el = document.getElementById(m.id);
+        if (el && !el.classList.contains('hidden')) {
+            if (typeof m.closeFn === 'function') {
+                m.closeFn();
+            } else {
+                el.classList.add('hidden');
+            }
+            return;
+        }
+    }
+
     const currentView = document.querySelector('main > section:not(.hidden)')?.id;
 
     if (currentView === 'view-home' || currentView === 'view-login' || currentView === 'view-customer-home' || currentView === 'view-store-hub' || currentView === 'view-customer-menus') {

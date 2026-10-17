@@ -5,10 +5,10 @@ import { API_URL } from '../../config/constants.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
 import { escapeHtml, getLocalTodayStr } from '../../utils/helpers.js';
-import { isAdmin } from '../roster/rosterUtils.js';
+import { isAdmin, hasTlPermission } from '../roster/rosterUtils.js';
 
 export function openAdminStoreAccountModal() {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageStoreAccounts')) return showToast("⚠️ Unauthorized: Admin or authorized TL access required.");
 
     const modal = document.getElementById('admin-store-account-modal');
     if (modal) {
@@ -57,7 +57,7 @@ export function generateStoreCredentials() {
 }
 
 export async function submitCreateStoreAccount() {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageStoreAccounts')) return showToast("⚠️ Unauthorized: Admin or authorized TL access required.");
 
     const nameEl = document.getElementById('store-acc-name') || document.getElementById('store-name');
     const ownerEl = document.getElementById('store-acc-owner') || document.getElementById('store-owner');
@@ -251,7 +251,7 @@ export function renderAdminStoreAccountsList() {
 }
 
 export function promptDeleteStoreAccount(accountId, storeId, storeName) {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageStoreAccounts')) return showToast("⚠️ Unauthorized: Admin or authorized TL access required.");
 
     openSlideDeleteModal(
         `Delete Store Account?`,
@@ -263,7 +263,7 @@ export function promptDeleteStoreAccount(accountId, storeId, storeName) {
 }
 
 export async function executeDeleteStoreAccount(accountId, storeId, storeName) {
-    if (!isAdmin() || !db) return;
+    if ((!isAdmin() && !hasTlPermission('canManageStoreAccounts')) || !db) return;
 
     try {
         if (!accountId || accountId === 'undefined' || accountId === 'null') {

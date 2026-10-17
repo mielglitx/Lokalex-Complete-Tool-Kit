@@ -4,7 +4,9 @@ import { appState, globalState } from '../../store/state.js';
 import { showToast } from '../../ui/notifications.js';
 import { escapeHtml, copyText } from '../../utils/helpers.js';
 
-export let isHdMode = false;
+export let isHdMode = typeof localStorage !== 'undefined' 
+    ? localStorage.getItem('lokalex_hd_mode') !== 'false' 
+    : true;
 
 // ============================================================================
 // 1. BODY SCROLL LOCK HELPER
@@ -25,38 +27,46 @@ export function toggleBodyScroll(lock) {
 // ============================================================================
 // 1.5. TIMESTAMP & DATE FORMATTING HELPERS
 // ============================================================================
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 export function formatChatDate(timestamp) {
     if (!timestamp) return "";
     const date = new Date(timestamp);
-    if (isNaN(date.getTime())) return "";
+    const timeVal = date.getTime();
+    if (isNaN(timeVal)) return "";
 
-    const now = new Date();
-    const isThisYear = date.getFullYear() === now.getFullYear();
+    const nowYear = new Date().getFullYear();
+    const dYear = date.getFullYear();
+    const month = SHORT_MONTHS[date.getMonth()];
+    const day = date.getDate();
 
-    return date.toLocaleDateString('en-US', isThisYear 
-        ? { month: 'short', day: 'numeric' } 
-        : { month: 'short', day: 'numeric', year: 'numeric' }
-    );
+    return dYear === nowYear ? `${month} ${day}` : `${month} ${day}, ${dYear}`;
 }
 
 export function formatChatDateTime(timestamp) {
     if (!timestamp) return "";
-    const date = new Date(timestamp);
-    if (isNaN(date.getTime())) return "";
-
-    const dateStr = formatChatDate(timestamp);
-    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
+    const { dateStr, timeStr } = formatChatDateParts(timestamp);
     return dateStr ? `${dateStr}, ${timeStr}` : timeStr;
 }
 
 export function formatChatDateParts(timestamp) {
     if (!timestamp) return { dateStr: "", timeStr: "" };
     const date = new Date(timestamp);
-    if (isNaN(date.getTime())) return { dateStr: "", timeStr: "" };
+    const timeVal = date.getTime();
+    if (isNaN(timeVal)) return { dateStr: "", timeStr: "" };
 
-    const dateStr = formatChatDate(timestamp);
-    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const nowYear = new Date().getFullYear();
+    const dYear = date.getFullYear();
+    const month = SHORT_MONTHS[date.getMonth()];
+    const day = date.getDate();
+    const dateStr = dYear === nowYear ? `${month} ${day}` : `${month} ${day}, ${dYear}`;
+
+    let hours = date.getHours();
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12 || 12;
+    const minutes = date.getMinutes();
+    const minsStr = minutes < 10 ? `0${minutes}` : `${minutes}`;
+    const timeStr = `${hours}:${minsStr} ${ampm}`;
 
     return { dateStr, timeStr };
 }
@@ -109,24 +119,6 @@ export function populateCateringCustomerDropdown(targetSelectIdOrMeta = null) {
                 optionsHtml += '</optgroup>';
             }
         }
-
-        // Also add customer directory records if available
-        try {
-            if (globalState && Array.isArray(globalState.records)) {
-                const dirCusts = globalState.records.filter(r => (r.type || 'customers') === 'customers');
-                const unaddedDirCusts = dirCusts.filter(r => r.name && !seenNames.has(r.name.trim().toLowerCase()));
-                if (unaddedDirCusts.length > 0) {
-                    optionsHtml += '<optgroup label="--- Customer Directory ---">';
-                    unaddedDirCusts.forEach(r => {
-                        const dName = r.name.trim();
-                        seenNames.add(dName.toLowerCase());
-                        const brgy = r.barangay ? ` (${r.barangay})` : '';
-                        optionsHtml += `<option value="${escapeHtml(dName)}" data-cust-id="dir_${escapeHtml(r.compositeKey || dName)}">${escapeHtml(dName)}${escapeHtml(brgy)}</option>`;
-                    });
-                    optionsHtml += '</optgroup>';
-                }
-            }
-        } catch(e) {}
 
         selectElements.forEach(el => {
             const currentVal = el.value;
@@ -233,6 +225,9 @@ export function syncChatHdButtonUI() {
 
 export function toggleHdMode() {
     isHdMode = !isHdMode;
+    try {
+        localStorage.setItem('lokalex_hd_mode', isHdMode ? 'true' : 'false');
+    } catch (_) {}
 
     const editorHdBtn = document.getElementById('editor-hd-toggle-btn');
     const editorHdIcon = document.getElementById('editor-hd-icon');
@@ -261,7 +256,8 @@ export function compressAndResizeImage(file, isHd, callback) {
             const canvas = document.createElement('canvas');
             let width = img.width;
             let height = img.height;
-            const maxDim = isHd ? 1920 : 600;
+            // 1200 maxDim provides crisp HD while drastically reducing encoding latency & upload failure
+            const maxDim = isHd ? 1200 : 720;
 
             if (width > maxDim || height > maxDim) {
                 if (width > height) {
@@ -279,7 +275,7 @@ export function compressAndResizeImage(file, isHd, callback) {
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
 
-            const quality = isHd ? 0.85 : 0.45;
+            const quality = isHd ? 0.70 : 0.45;
             callback(canvas.toDataURL('image/jpeg', quality));
         };
         img.src = e.target.result;
@@ -338,7 +334,8 @@ export async function handleChatImageUpload(inputEl) {
                 });
 
                 if (base64Img) {
-                    if (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function') {
+                    const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
+                    if (activeCustId || (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function')) {
                         await window.sendRiderToCustomerChat("", base64Img);
                     } else if (window.sendCustomerToRiderChat && typeof window.sendCustomerToRiderChat === 'function') {
                         await window.sendCustomerToRiderChat("", base64Img);
@@ -355,7 +352,8 @@ export async function handleChatImageUpload(inputEl) {
             });
 
             if (base64Img) {
-                if (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function') {
+                const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
+                if (activeCustId || (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function')) {
                     await window.sendRiderToCustomerChat("", base64Img);
                 } else if (window.sendCustomerToRiderChat && typeof window.sendCustomerToRiderChat === 'function') {
                     await window.sendCustomerToRiderChat("", base64Img);
@@ -423,7 +421,7 @@ export function openMessageActionPopover(event, msgId, chatContext, rawEncodedTe
             ${emojiRowHtml}
         </div>
         <div class="flex flex-col gap-0.5">
-            <button type="button" onclick="event.stopPropagation(); window.handlePopoverReply('${msgId}', '${escapeHtml(decodedSender)}', '${encodeURIComponent(decodedText)}', '${chatContext}')" class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold flex items-center gap-2 transition active:scale-95">
+            <button type="button" onclick="event.stopPropagation(); window.handlePopoverReply('${msgId}', '${encodeURIComponent(decodedSender)}', '${encodeURIComponent(decodedText)}', '${chatContext}')" class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold flex items-center gap-2 transition active:scale-95">
                 <i class="fa-solid fa-reply text-xs w-4"></i> Reply
             </button>
             ${decodedText ? `
@@ -469,9 +467,16 @@ export function handlePopoverReaction(msgId, emoji, chatContext) {
     }
 }
 
-export function handlePopoverReply(msgId, senderName, encodedText, chatContext) {
+export function handlePopoverReply(msgId, encodedSender, encodedText, chatContext) {
     closeMessageActionPopover();
-    const text = decodeURIComponent(encodedText || '');
+    let senderName = decodeURIComponent(encodedSender || 'User');
+    if (senderName.includes('%')) {
+        try { senderName = decodeURIComponent(senderName); } catch (_) {}
+    }
+    let text = decodeURIComponent(encodedText || '');
+    if (text.includes('%')) {
+        try { text = decodeURIComponent(text); } catch (_) {}
+    }
 
     if (chatContext === 'rider-cust' && typeof window.setRiderReply === 'function') {
         window.setRiderReply(msgId, senderName, text);

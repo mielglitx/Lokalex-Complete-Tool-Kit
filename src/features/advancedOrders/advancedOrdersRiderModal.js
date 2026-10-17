@@ -91,7 +91,8 @@ export function promptRiderNameInModal({ title, subtitle, defaultValue, riderLis
 
     modal = document.createElement('div');
     modal.id = 'adv-order-prompt-modal';
-    modal.className = 'fixed inset-0 z-[99999] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4';
+    modal.className = 'fixed inset-0 z-[10000005] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4';
+    modal.style.cssText = 'z-index: 10000005 !important;';
 
     const safeRiders = Array.isArray(riderList) ? [...riderList] : [];
     if (defaultValue && !safeRiders.some(r => r.toLowerCase() === defaultValue.toLowerCase())) {
@@ -158,6 +159,9 @@ export function promptRiderNameInModal({ title, subtitle, defaultValue, riderLis
     if (cancelBtn) cancelBtn.onclick = closeModal;
     if (closeX) closeX.onclick = closeModal;
     if (confirmBtn) confirmBtn.onclick = handleConfirm;
+    modal.onclick = (e) => {
+        if (e.target === modal) closeModal();
+    };
 
     modal.classList.remove('hidden');
     if (selectEl) selectEl.focus();

@@ -88,8 +88,8 @@ try {
         const body = payload.notification?.body || payload.data?.body || 'New update available.';
         const options = {
             body: body,
-            icon: payload.notification?.icon || payload.data?.icon || 'Logo.jpg',
-            badge: 'Logo.jpg',
+            icon: payload.notification?.icon || payload.data?.icon || 'Logo.png',
+            badge: 'Logo.png',
             vibrate: [300, 100, 300, 100, 400],
             tag: payload.data?.tag || 'lokalex-alert',
             renotify: true,
@@ -135,8 +135,8 @@ self.addEventListener('message', (event) => {
         const title = event.data.title || 'Lokalex Alert';
         const options = {
             body: event.data.body || '',
-            icon: event.data.icon || 'Logo.jpg',
-            badge: 'Logo.jpg',
+            icon: event.data.icon || 'Logo.png',
+            badge: 'Logo.png',
             vibrate: [200, 100, 200],
             tag: event.data.tag || 'lokalex-local-alert',
             renotify: true,

@@ -384,11 +384,14 @@ export function setCheckoutPaymentMode(mode) {
     const codBtn = document.getElementById('pay-mode-cod');
     const gcashBtn = document.getElementById('pay-mode-gcash');
 
+    const activeCls = "px-2.5 py-1 rounded-lg font-bold text-[10px] bg-blue-600 text-white transition shadow-xs cursor-pointer";
+    const inactiveCls = "px-2.5 py-1 rounded-lg font-bold text-[10px] bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition cursor-pointer";
+
     if (mode === 'cod') {
-        if (codBtn) codBtn.className = "px-2.5 py-1 rounded-lg font-bold text-[10px] bg-blue-600 text-white transition shadow-xs";
-        if (gcashBtn) gcashBtn.className = "px-2.5 py-1 rounded-lg font-bold text-[10px] text-gray-500 dark:text-gray-400 hover:text-white transition";
+        if (codBtn) codBtn.className = activeCls;
+        if (gcashBtn) gcashBtn.className = inactiveCls;
     } else {
-        if (gcashBtn) gcashBtn.className = "px-2.5 py-1 rounded-lg font-bold text-[10px] bg-blue-600 text-white transition shadow-xs";
-        if (codBtn) codBtn.className = "px-2.5 py-1 rounded-lg font-bold text-[10px] text-gray-500 dark:text-gray-400 hover:text-white transition";
+        if (gcashBtn) gcashBtn.className = activeCls;
+        if (codBtn) codBtn.className = inactiveCls;
     }
 }

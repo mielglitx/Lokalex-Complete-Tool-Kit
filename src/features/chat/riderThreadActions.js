@@ -7,9 +7,11 @@ import { toggleBodyScroll, compressAndResizeImage } from './chatUtils.js';
 import { voidSingleCateringCustomer } from '../roster/rosterStatus.js';
 import { uploadImage } from '../../utils/imageUpload.js';
 import { escapeHtml, cleanCustomerForMatch } from '../../utils/helpers.js';
-import { isCustomerMatch, isAdmin, canManageRoster } from '../roster/rosterUtils.js';
+import { isCustomerMatch, isAdmin, canManageRoster, hasTlPermission, hasReceiptForActiveSession } from '../roster/rosterUtils.js';
+import { completeSingleCateringCustomer } from '../roster/actions/rosterCateringCompletion.js';
 import { loadDirectoryCache } from '../directory/directoryStorage.js';
 import { idbGet } from '../../utils/storageEngine.js';
+import { resolveFacebookCustomerName } from './facebookApiAdmin.js';
 
 let stagedPodImageBase64 = null;
 let currentDirectoryCustomersList = [];
@@ -140,21 +142,12 @@ export async function getDirectoryCustomersList() {
         }
     } catch(e) {}
 
-    // 4. Ingest from Firebase (directory/customers and root customers)
+    // 4. Ingest from Firebase (strictly directory/customers)
     if (db) {
         try {
-            const [dirSnap, custSnap] = await Promise.allSettled([
-                db.ref('directory/customers').once('value'),
-                db.ref('customers').once('value')
-            ]);
-            if (dirSnap.status === 'fulfilled' && dirSnap.value) {
-                const data = dirSnap.value.val() || {};
-                Object.entries(data).forEach(([k, item]) => {
-                    if (item) addCustomerToMap(item, k);
-                });
-            }
-            if (custSnap.status === 'fulfilled' && custSnap.value) {
-                const data = custSnap.value.val() || {};
+            const dirSnap = await db.ref('directory/customers').once('value');
+            if (dirSnap && dirSnap.val()) {
+                const data = dirSnap.val() || {};
                 Object.entries(data).forEach(([k, item]) => {
                     if (item) addCustomerToMap(item, k);
                 });
@@ -209,34 +202,43 @@ export function renderCustomerDetailsUI(custId, data = {}, meta = {}, dirRecord 
     }
 
     const chatHeaderName = document.getElementById('rider-chat-cust-name')?.innerText?.trim();
-    const fallbackName = meta.customerName || (chatHeaderName && chatHeaderName !== 'Customer' ? chatHeaderName : 'Customer');
+    const actualCustName = meta.originalCustomerName || meta.facebookName || 
+                           (chatHeaderName && !chatHeaderName.startsWith('FB Customer (') && chatHeaderName !== 'Customer' ? chatHeaderName : null) || 
+                           data.name || meta.customerName || 'Customer';
 
     // Resolve effective name, phone, address, map pin
-    let effectiveName = fallbackName;
-    let effectivePhone = data.phoneNumber || data.phone || data.contact || "";
-    let effectiveAddress = data.address || "";
-    let effectiveMapPin = data.mapPinLink || (data.lat && data.lng ? `https://www.google.com/maps/search/?api=1&query=${data.lat},${data.lng}` : "");
+    let effectiveName = actualCustName;
+    let effectivePhone = data.phoneNumber || data.phone || data.contact || meta.customerPhone || "";
+    let effectiveAddress = data.address || meta.customerAddress || "";
+    let effectiveMapPin = data.mapPinLink || meta.customerMapPin || (data.lat && data.lng ? `https://www.google.com/maps/search/?api=1&query=${data.lat},${data.lng}` : "");
     let isLinked = false;
     let isAutoMatched = false;
 
     if (dirRecord) {
         isLinked = true;
-        effectiveName = dirRecord.name || effectiveName;
         effectivePhone = dirRecord.contact || effectivePhone;
         effectiveAddress = dirRecord.address || effectiveAddress;
         effectiveMapPin = dirRecord.lat_lon_link || effectiveMapPin;
     } else if (autoMatchCandidate) {
         isAutoMatched = true;
-        effectiveName = autoMatchCandidate.name || effectiveName;
-        effectivePhone = autoMatchCandidate.contact || effectivePhone;
-        effectiveAddress = autoMatchCandidate.address || effectiveAddress;
-        effectiveMapPin = autoMatchCandidate.lat_lon_link || effectiveMapPin;
-    } else {
-        effectiveName = data.name || fallbackName;
+        // NOTE: Suggested match ONLY - never overwrite the customer's actual identity, phone, or address!
     }
 
     // Populate Fields
-    if (nameEl) nameEl.innerText = effectiveName || "Customer Name";
+    if (nameEl) {
+        if (dirRecord && dirRecord.name) {
+            nameEl.innerHTML = `
+                <div class="flex flex-col min-w-0">
+                    <span class="font-bold text-sm text-gray-900 dark:text-white truncate">${escapeHtml(actualCustName)}</span>
+                    <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 mt-0.5 truncate">
+                        <i class="fa-solid fa-link text-[9px]"></i> Directory: ${escapeHtml(dirRecord.name)}
+                    </span>
+                </div>
+            `;
+        } else {
+            nameEl.innerText = actualCustName || "Customer Name";
+        }
+    }
     
     // Phone
     const cleanPhoneDigits = String(effectivePhone || '').replace(/[^0-9+]/g, '');
@@ -313,15 +315,18 @@ export function renderCustomerDetailsUI(custId, data = {}, meta = {}, dirRecord 
         }
         if (bannerTitle) bannerTitle.innerText = "Suggested Match";
         if (bannerBadge) {
-            bannerBadge.innerText = "Auto-Match";
+            bannerBadge.innerText = "Suggested";
             bannerBadge.className = "text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-blue-600 text-white";
         }
         if (bannerSub) bannerSub.innerText = `Directory: ${autoMatchCandidate.name}`;
-        if (autoConfirmBtn) autoConfirmBtn.classList.remove('hidden');
+        if (autoConfirmBtn) {
+            autoConfirmBtn.classList.remove('hidden');
+            autoConfirmBtn.innerHTML = `<i class="fa-solid fa-link"></i> Link Profile`;
+        }
         if (linkBtnText) linkBtnText.innerText = "Change";
         if (unlinkBtn) unlinkBtn.classList.add('hidden');
         if (sourcePillEl) {
-            sourcePillEl.innerHTML = `<span class="text-[9px] bg-blue-500/20 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-full border border-blue-500/30 flex items-center gap-1"><i class="fa-solid fa-wand-magic-sparkles"></i> Match</span>`;
+            sourcePillEl.innerHTML = `<span class="text-[9px] bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold px-2 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1"><i class="fa-solid fa-wand-magic-sparkles"></i> Unlinked</span>`;
         }
     } else {
         if (bannerBox) {
@@ -383,7 +388,7 @@ export async function showCustomerDetails() {
     const dirList = await getDirectoryCustomersList();
 
     // 1. Check if explicitly linked
-    const linkedKey = custData.linkedDirectoryKey || meta.linkedDirectoryKey || custData.directoryCustomerId;
+    const linkedKey = custData.linkedDirectoryKey || meta.linkedDirectoryKey;
     const linkedName = custData.linkedDirectoryName || meta.linkedDirectoryName;
 
     let linkedRecord = null;
@@ -396,7 +401,7 @@ export async function showCustomerDetails() {
         // If not in local dirList but stored in custData, synthesize record
         if (!linkedRecord && (custData.phoneNumber || custData.address)) {
             linkedRecord = {
-                name: custData.name || linkedName || linkedKey,
+                name: linkedName || linkedKey || custData.name,
                 contact: custData.phoneNumber || "",
                 address: custData.address || "",
                 lat_lon_link: custData.mapPinLink || "",
@@ -406,21 +411,32 @@ export async function showCustomerDetails() {
         }
     }
 
-    // 2. If not linked, check auto-matching candidate
+    // If unlinked Facebook thread, ensure real customer name is resolved from Facebook Graph API/cache
+    if (!linkedRecord && custId.startsWith('fb_')) {
+        try {
+            const resolved = await resolveFacebookCustomerName(custId);
+            if (resolved && resolved.name && !resolved.name.startsWith('FB Customer (')) {
+                meta.facebookName = resolved.name;
+                meta.originalCustomerName = resolved.name;
+                meta.customerName = resolved.name;
+            }
+        } catch(e) {}
+    }
+
+    // 2. If not linked, check auto-matching candidate (STRICT EXACT MATCH ONLY)
     let autoMatchCandidate = null;
     if (!linkedRecord) {
         const chatHeaderName = document.getElementById('rider-chat-cust-name')?.innerText?.trim();
-        const candidateRaw = meta.customerName || custData.name || (chatHeaderName && chatHeaderName !== 'Customer' ? chatHeaderName : '');
+        const candidateRaw = meta.originalCustomerName || meta.facebookName || meta.customerName || custData.name || (chatHeaderName && chatHeaderName !== 'Customer' ? chatHeaderName : '');
         const cleanName = extractCleanSearchName(candidateRaw);
 
         if (cleanName && cleanName.length >= 2) {
             const cleanTarget = cleanCustomerForMatch(cleanName);
-            // Try exact clean match first
-            let candidate = dirList.find(r => cleanCustomerForMatch(r.name) === cleanTarget);
-            // Try fuzzy match
-            if (!candidate) {
-                candidate = dirList.find(r => isCustomerMatch(r.name, cleanName));
-            }
+            // Strict exact match only: NEVER use loose fuzzy matching to auto-match directory profiles
+            let candidate = dirList.find(r => {
+                const rClean = cleanCustomerForMatch(r.name);
+                return rClean && rClean === cleanTarget;
+            });
             if (candidate) {
                 autoMatchCandidate = candidate;
             }
@@ -573,13 +589,35 @@ export async function unlinkCurrentChatDirectory() {
     const custId = currentChatDetailsCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null);
     if (!custId) return;
 
+    let restoredName = null;
+    let meta = (window.getCurrentRiderChatMeta && window.getCurrentRiderChatMeta()) || {};
+    
+    // Check if we have original customer name or Facebook name stored
+    if (meta.originalCustomerName) {
+        restoredName = meta.originalCustomerName;
+    } else if (meta.facebookName) {
+        restoredName = meta.facebookName;
+    } else if (custId.startsWith('fb_')) {
+        try {
+            const resolved = await resolveFacebookCustomerName(custId, true);
+            if (resolved && resolved.name && !resolved.name.startsWith('FB Customer (')) {
+                restoredName = resolved.name;
+            }
+        } catch(e) {}
+    }
+
     const unlinkCustPayload = {
         linkedDirectoryKey: null,
-        linkedDirectoryName: null
+        linkedDirectoryName: null,
+        ...(restoredName ? { name: restoredName } : {})
     };
     const unlinkMetaPayload = {
         linkedDirectoryKey: null,
-        linkedDirectoryName: null
+        linkedDirectoryName: null,
+        customerPhone: null,
+        customerAddress: null,
+        customerMapPin: null,
+        ...(restoredName ? { customerName: restoredName } : {})
     };
 
     if (db) {
@@ -594,11 +632,19 @@ export async function unlinkCurrentChatDirectory() {
         }
     }
 
+    // Update active chat header name if currently viewing this thread
+    if (restoredName) {
+        const headerNameEl = document.getElementById('rider-chat-cust-name');
+        if (headerNameEl && window.getActiveRiderChatCustId && window.getActiveRiderChatCustId() === custId) {
+            headerNameEl.innerText = restoredName;
+        }
+    }
+
     currentActiveLinkedRecord = null;
     currentActiveDirectoryMatch = null;
     toggleDirectoryLinkPicker(false);
     await showCustomerDetails();
-    showToast("ℹ️ Unlinked from Customer Directory.");
+    showToast(restoredName ? `ℹ️ Unlinked! Restored original name: ${restoredName}` : "ℹ️ Unlinked from Customer Directory.");
 }
 
 export async function linkChatToDirectoryRecord(custId, dirRecord) {
@@ -611,9 +657,16 @@ export async function linkChatToDirectoryRecord(custId, dirRecord) {
     const mapPin = dirRecord.lat_lon_link || "";
     const barangay = dirRecord.barangay || "";
 
+    const currentMeta = (window.getCurrentRiderChatMeta && window.getCurrentRiderChatMeta()) || {};
+    const chatHeaderName = document.getElementById('rider-chat-cust-name')?.innerText?.trim();
+    const originalName = currentMeta.originalCustomerName || currentMeta.facebookName || 
+                         (chatHeaderName && !chatHeaderName.startsWith('FB Customer (') && chatHeaderName !== 'Customer' ? chatHeaderName : null) || 
+                         currentMeta.customerName || dirName;
+
     const customerUpdates = {
         linkedDirectoryKey: dirKey,
         linkedDirectoryName: dirName,
+        originalCustomerName: originalName,
         name: dirName,
         phoneNumber: phone,
         address: address,
@@ -625,12 +678,17 @@ export async function linkChatToDirectoryRecord(custId, dirRecord) {
 
     const chatMetaUpdates = {
         customerName: dirName,
+        originalCustomerName: originalName,
         linkedDirectoryKey: dirKey,
         linkedDirectoryName: dirName,
         customerPhone: phone,
         customerAddress: address,
         customerMapPin: mapPin
     };
+    if (custId.startsWith('fb_')) {
+        chatMetaUpdates.facebookName = originalName;
+        customerUpdates.facebookName = originalName;
+    }
 
     if (window.setActiveCustData) {
         window.setActiveCustData(customerUpdates);
@@ -700,8 +758,12 @@ function fallbackCopyPhoneText(text) {
 
 export function openNewDirectoryCustomerFromChat() {
     closeCustomerDetailsModal();
+    const custModalName = document.getElementById('cust-modal-name')?.innerText?.trim();
     const chatHeaderName = document.getElementById('rider-chat-cust-name')?.innerText?.trim();
-    const fallbackName = chatHeaderName && !chatHeaderName.startsWith('FB Customer') && chatHeaderName !== 'Customer' ? chatHeaderName : '';
+    const candidateRaw = (custModalName && custModalName !== 'Customer Name' && custModalName !== 'Customer') 
+        ? custModalName 
+        : (chatHeaderName && !chatHeaderName.startsWith('FB Customer') && chatHeaderName !== 'Customer' ? chatHeaderName : '');
+    const fallbackName = extractCleanSearchName(candidateRaw);
     
     if (window.closeRiderChatModal) {
         window.closeRiderChatModal();
@@ -1314,50 +1376,379 @@ export async function submitProofOfDelivery(withPhoto = true) {
     executeThreadDone();
 }
 
-export function markThreadDone() {
-    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
-                        (typeof canManageRoster === 'function' && canManageRoster()) ||
-                        (typeof window.isAdmin === 'function' && window.isAdmin()) ||
-                        (typeof window.canManageRoster === 'function' && window.canManageRoster()) ||
-                        Boolean(globalState.adminControlsEnabled);
+let pendingDoneData = null;
 
-    // If an admin or dispatcher is moving a thread to Done, execute directly without requiring motorcycle POD camera!
-    if (isUserAdmin) {
-        executeThreadDone();
+/**
+ * Robust matching to find if a customer is currently being catered by a rider on the roster.
+ */
+export function findCateringRiderForCustomer(custName, meta = {}) {
+    const rosterMembers = globalState.rosterMembers || [];
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+
+    // 1. Check current logged-in rider first
+    const myRecord = rosterMembers.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        return (myId && mId === myId) || (myName && mName === myName);
+    });
+
+    if (myRecord && myRecord.customerName) {
+        const custs = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+        if (custName) {
+            const match = custs.find(c => isCustomerMatch(c, custName) || c.toLowerCase() === custName.toLowerCase() || c.toLowerCase().includes(custName.toLowerCase()) || custName.toLowerCase().includes(c.toLowerCase()));
+            if (match) return { record: myRecord, matchingCustName: match };
+        }
+        if (custs.length === 1 && meta && (meta.cateredByRiderId === myId || (meta.cateredByRiderName && meta.cateredByRiderName.trim().toLowerCase() === myName))) {
+            return { record: myRecord, matchingCustName: custs[0] };
+        }
+    }
+
+    // 2. Check meta.cateredByRiderId or meta.cateredByRiderName
+    if (meta && (meta.cateredByRiderId || meta.cateredByRiderName || meta.cateredBy)) {
+        const cId = (meta.cateredByRiderId || "").toString().trim();
+        const cName = (meta.cateredByRiderName || meta.cateredBy || "").toString().trim().toLowerCase();
+        const found = rosterMembers.find(m => {
+            const mId = (m.telegramId || m.id || "").toString().trim();
+            const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+            return (cId && mId === cId) || (cName && mName === cName);
+        });
+        if (found && found.customerName) {
+            const custs = found.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+            if (custName) {
+                const match = custs.find(c => isCustomerMatch(c, custName) || c.toLowerCase() === custName.toLowerCase() || c.toLowerCase().includes(custName.toLowerCase()) || custName.toLowerCase().includes(c.toLowerCase()));
+                if (match) return { record: found, matchingCustName: match };
+            }
+            if (custs.length === 1) {
+                return { record: found, matchingCustName: custs[0] };
+            }
+        }
+    }
+
+    // 3. Scan all roster members for matching customer name
+    if (custName) {
+        for (const m of rosterMembers) {
+            if (m.customerName) {
+                const custs = m.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+                const match = custs.find(c => isCustomerMatch(c, custName) || c.toLowerCase() === custName.toLowerCase() || c.toLowerCase().includes(custName.toLowerCase()) || custName.toLowerCase().includes(c.toLowerCase()));
+                if (match) return { record: m, matchingCustName: match };
+            }
+        }
+    }
+
+    return { record: null, matchingCustName: "" };
+}
+
+/**
+ * Robust helper to resolve thread metadata and customer name across all sources.
+ */
+export function getThreadMetadataAndCustomerName(targetCustId = null, targetCustName = "") {
+    const custId = targetCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null);
+    if (!custId) return { custId: "", custName: "Customer", meta: {} };
+
+    let meta = {};
+    if (typeof window.getCachedCustomerThreadsMap === 'function') {
+        const threadMap = window.getCachedCustomerThreadsMap();
+        if (threadMap && threadMap.size > 0) {
+            if (threadMap.has(custId)) {
+                meta = { ...threadMap.get(custId) };
+            } else {
+                for (const t of threadMap.values()) {
+                    if (t.custId === custId || t.id === custId || (t.metadata && t.metadata.custId === custId)) {
+                        meta = { ...t };
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if (!targetCustId && typeof window.getCurrentRiderChatMeta === 'function') {
+        meta = { ...window.getCurrentRiderChatMeta(), ...meta };
+    }
+
+    let custName = (targetCustName || "").trim();
+
+    // 1. From active chat DOM header if chat modal is open
+    if (!custName && !targetCustId) {
+        custName = (document.getElementById('rider-chat-cust-name')?.innerText || '').trim();
+    }
+
+    // 2. From thread metadata
+    if (!custName || custName === 'Customer Name' || custName.toLowerCase() === 'customer' || custName.startsWith('FB Customer (')) {
+        custName = (meta.customerName || meta.name || "").trim();
+    }
+
+    // 3. From thread swipe DOM card in chat feed
+    if (!custName || custName === 'Customer Name' || custName.toLowerCase() === 'customer') {
+        const wrapper = document.querySelector(`.thread-swipe-wrapper[data-cust-id="${custId}"]`);
+        if (wrapper) {
+            custName = (wrapper.getAttribute('data-customer-name') || wrapper.dataset.customerName || "").trim();
+            if (!custName) {
+                const nameSpan = wrapper.querySelector('.truncate.font-black, span.font-black');
+                if (nameSpan) {
+                    custName = (nameSpan.innerText || nameSpan.textContent || '').trim();
+                }
+            }
+        }
+    }
+
+    // 4. From FB cache
+    if (!custName || custName === 'Customer Name' || custName.toLowerCase() === 'customer') {
+        if (typeof window.getResolvedFbName === 'function') {
+            const resolved = window.getResolvedFbName(custId);
+            if (resolved && resolved.name && resolved.name.toLowerCase() !== 'customer') {
+                custName = resolved.name.trim();
+            }
+        }
+    }
+
+    // 5. From roster catering records
+    if (!custName || custName === 'Customer Name' || custName.toLowerCase() === 'customer') {
+        const roster = globalState.rosterMembers || [];
+        for (const m of roster) {
+            if (m.forcedCaters && typeof m.forcedCaters === 'object') {
+                for (const [fcKey, fcVal] of Object.entries(m.forcedCaters)) {
+                    if (fcKey === custId) {
+                        const fName = (fcVal && typeof fcVal === 'object' && fcVal.customerName) ? fcVal.customerName : fcVal;
+                        if (fName && typeof fName === 'string' && fName.toLowerCase() !== 'customer') {
+                            custName = fName.trim();
+                            break;
+                        }
+                    }
+                }
+            }
+            if (custName && custName.toLowerCase() !== 'customer') break;
+            if (m.customerName) {
+                const custs = m.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+                const match = custs.find(c => isCustomerMatch(c, custId) || c.toLowerCase().includes(custId.toLowerCase()));
+                if (match) {
+                    custName = match;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!custName || custName === 'Customer Name' || custName.toLowerCase() === 'customer') {
+        custName = "Customer";
+    }
+
+    return { custId, custName, meta };
+}
+
+/**
+ * Opens the confirmation safeguard modal before marking a customer delivery as done/completed.
+ */
+export function openConfirmDoneModal(targetCustId = null, targetCustName = "") {
+    const { custId, custName: resolvedName, meta } = getThreadMetadataAndCustomerName(targetCustId, targetCustName);
+    if (!custId) return;
+
+    const { record: cateringRiderRecord, matchingCustName: matchingCustNameOnRoster } = findCateringRiderForCustomer(resolvedName, meta);
+
+    const finalDisplayName = (resolvedName && resolvedName !== 'Customer')
+        ? resolvedName
+        : (matchingCustNameOnRoster || meta.customerName || "Customer");
+
+    pendingDoneData = {
+        custId,
+        custName: finalDisplayName,
+        cateringRiderRecord,
+        matchingCustNameOnRoster: matchingCustNameOnRoster || finalDisplayName,
+        meta
+    };
+
+    const modal = document.getElementById('rider-chat-confirm-done-modal');
+    if (!modal) {
+        confirmAndExecuteDone();
         return;
     }
 
-    const meta = window.getCurrentRiderChatMeta ? window.getCurrentRiderChatMeta() : {};
-    const orderId = meta?.latestOrderId;
+    const titleEl = document.getElementById('confirm-done-modal-title');
+    const subtitleEl = document.getElementById('confirm-done-modal-subtitle');
+    const custNameEl = document.getElementById('confirm-done-cust-name');
+    const badgeEl = document.getElementById('confirm-done-status-badge');
+    const msgBoxEl = document.getElementById('confirm-done-message-box');
+    const receiptNoticeEl = document.getElementById('confirm-done-receipt-notice');
+    const receiptTextEl = document.getElementById('confirm-done-receipt-text');
 
-    if (orderId) {
-        openPodModal();
-    } else {
-        executeThreadDone();
+    if (custNameEl) {
+        custNameEl.textContent = finalDisplayName;
     }
+
+    if (cateringRiderRecord) {
+        const rName = cateringRiderRecord.riderName || cateringRiderRecord.name || "Rider";
+        if (titleEl) titleEl.textContent = "Confirm Delivery Completion";
+        if (subtitleEl) subtitleEl.textContent = `Active Catering • Rider: ${rName}`;
+        if (badgeEl) {
+            badgeEl.className = "px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0";
+            badgeEl.textContent = "Catering";
+        }
+        if (msgBoxEl) {
+            msgBoxEl.innerHTML = `Sigurado ka bang tapos na ang delivery para kay <strong>${escapeHtml(finalDisplayName)}</strong>?<br class="hidden sm:inline"> Ima-mark ito bilang <strong>Done</strong> sa catering roster, ire-record ang service fees, at ililipat ang chat sa Done folder.`;
+        }
+
+        // Receipt verification preview check
+        const cleanTarget = (matchingCustNameOnRoster || finalDisplayName).toLowerCase().trim();
+        const hasReceipt = (typeof hasReceiptForActiveSession === 'function' && hasReceiptForActiveSession(cleanTarget)) ||
+            (cateringRiderRecord?.customerFees && Boolean(cateringRiderRecord.customerFees[cleanTarget])) ||
+            (globalState.globalDailyReceipts || []).some(rc => isCustomerMatch(rc.customerName, cleanTarget));
+
+        if (receiptNoticeEl) {
+            if (!hasReceipt) {
+                receiptNoticeEl.classList.remove('hidden');
+                if (receiptTextEl) {
+                    receiptTextEl.innerHTML = `⚠️ <strong>Walang nahanap na resibo.</strong> Kung wala pang resibo, ire-redirect ka sa Cart para gumawa bago i-mark as Done.`;
+                }
+            } else {
+                receiptNoticeEl.classList.add('hidden');
+            }
+        }
+    } else {
+        if (titleEl) titleEl.textContent = "Move Chat to Done";
+        if (subtitleEl) subtitleEl.textContent = "Chat Management";
+        if (badgeEl) {
+            badgeEl.className = "px-2 py-0.5 rounded-lg text-[10px] font-bold bg-gray-500/15 text-gray-600 dark:text-gray-400 border border-gray-500/30 shrink-0";
+            badgeEl.textContent = (meta.folder || "Inbox").toUpperCase();
+        }
+        if (msgBoxEl) {
+            msgBoxEl.innerHTML = `Nais mo bang ilipat ang conversation ni <strong>${escapeHtml(finalDisplayName)}</strong> sa <strong>Done</strong> folder?`;
+        }
+        if (receiptNoticeEl) receiptNoticeEl.classList.add('hidden');
+    }
+
+    modal.classList.remove('hidden');
+    toggleBodyScroll(true);
 }
 
-export function executeThreadDone() {
-    const custId = window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null;
+export function closeConfirmDoneModal() {
+    const modal = document.getElementById('rider-chat-confirm-done-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        toggleBodyScroll(false);
+    }
+    pendingDoneData = null;
+}
+
+export async function confirmAndExecuteDone() {
+    if (!pendingDoneData) return;
+    const { custId, custName, cateringRiderRecord, matchingCustNameOnRoster, meta } = pendingDoneData;
+
+    closeConfirmDoneModal();
+
+    // 1. If customer is being catered on the roster, execute completeSingleCateringCustomer like the catering roster Done button
+    if (cateringRiderRecord && matchingCustNameOnRoster && typeof completeSingleCateringCustomer === 'function') {
+        const rId = cateringRiderRecord.telegramId || cateringRiderRecord.id;
+        const rName = cateringRiderRecord.riderName || cateringRiderRecord.name;
+
+        const success = await completeSingleCateringCustomer(rId, rName, matchingCustNameOnRoster);
+
+        // If completeSingleCateringCustomer halted (e.g. no receipt created yet), abort without moving chat to Done!
+        if (success === false) {
+            // completeSingleCateringCustomer already prompted toast and switched to cart
+            if (typeof window.closeRiderCustomerChatModal === 'function') {
+                window.closeRiderCustomerChatModal();
+            }
+            return;
+        }
+
+        if (meta?.latestOrderId && typeof updateOrderMilestone === 'function') {
+            updateOrderMilestone('delivered', meta.latestOrderId).catch(() => {});
+        }
+
+        if (typeof window.closeRiderCustomerChatModal === 'function') {
+            window.closeRiderCustomerChatModal();
+        }
+        showToast(`✅ Marked ${custName || matchingCustNameOnRoster} as Completed!`);
+        return;
+    }
+
+    // 2. Fallback for non-roster threads (e.g. general inbox inquiries being moved to Done)
+    await executeThreadDone(custId, custName);
+}
+
+export function markThreadDone(targetCustId = null, targetCustName = "") {
+    // Confirmation safeguard modal
+    openConfirmDoneModal(targetCustId, targetCustName);
+}
+
+export async function executeThreadDone(targetCustId = null, targetCustName = "") {
+    const { custId, custName: resolvedName, meta } = getThreadMetadataAndCustomerName(targetCustId, targetCustName);
     if (!custId) return;
 
+    let custName = (resolvedName && resolvedName !== 'Customer') ? resolvedName : "";
+
+    const { record: cateringRiderRecord, matchingCustName: matchingCustNameOnRoster } = findCateringRiderForCustomer(custName, meta);
+
+    // Trigger completeSingleCateringCustomer on the roster
+    if (cateringRiderRecord && matchingCustNameOnRoster && typeof completeSingleCateringCustomer === 'function') {
+        const rId = cateringRiderRecord.telegramId || cateringRiderRecord.id;
+        const rName = cateringRiderRecord.riderName || cateringRiderRecord.name;
+        const success = await completeSingleCateringCustomer(rId, rName, matchingCustNameOnRoster);
+        if (success === false) {
+            if (!targetCustId && window.closeRiderCustomerChatModal) window.closeRiderCustomerChatModal();
+            return;
+        }
+    }
+
+    const now = Date.now();
+    // 2. Move customer thread to Done folder in Firebase
     if (db) {
         const payload = {
             cateredByRiderId: null,
             cateredByRiderName: null,
             cateredBy: null,
             folder: 'done',
-            status: 'done',
+            status: 'completed',
+            completedAt: now,
             unreadForRider: false,
-            lastUpdated: Date.now()
+            lastUpdated: now
         };
         db.ref(`customerChats/${custId}/metadata`).update(payload).catch(() => {});
         db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
     }
 
+    // 3. Immediately synchronize in-memory thread and update feed
+    if (typeof window.getCachedCustomerThreadsMap === 'function') {
+        const threadMap = window.getCachedCustomerThreadsMap();
+        if (threadMap) {
+            if (threadMap.has(custId)) {
+                const t = threadMap.get(custId);
+                t.folder = 'done';
+                t.status = 'completed';
+                t.completedAt = now;
+                t.isUnread = false;
+                t.unreadForRider = false;
+                t.cateredByRiderId = null;
+                t.cateredByRiderName = null;
+                t.cateredBy = null;
+            }
+            if (custName) {
+                const cleanTarget = custName.trim().toLowerCase();
+                for (const t of threadMap.values()) {
+                    const tName = (t.customerName || t.name || "").trim().toLowerCase();
+                    if (tName === cleanTarget || isCustomerMatch(tName, cleanTarget)) {
+                        t.folder = 'done';
+                        t.status = 'completed';
+                        t.completedAt = now;
+                        t.isUnread = false;
+                        t.unreadForRider = false;
+                        t.cateredByRiderId = null;
+                        t.cateredByRiderName = null;
+                        t.cateredBy = null;
+                    }
+                }
+            }
+        }
+    }
+
+    if (typeof window.renderRiderCustomerChatFeed === 'function') {
+        window.renderRiderCustomerChatFeed();
+    }
+
     document.getElementById('rider-chat-cancel-btn')?.classList.add('hidden');
-    showToast("✅ Released lock & moved chat to Done!");
-    if (window.closeRiderCustomerChatModal) window.closeRiderCustomerChatModal();
+    showToast("✅ Moved chat to Done!");
+    if (!targetCustId && window.closeRiderCustomerChatModal) window.closeRiderCustomerChatModal();
 }
 
 export function markThreadFollowUp() {
@@ -1554,12 +1945,140 @@ export function highlightActiveMilestoneUI(activeStage) {
     });
 }
 
+export function clearAllInboxThreads() {
+    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
+                        (typeof canManageRoster === 'function' && canManageRoster()) ||
+                        (typeof window.isAdmin === 'function' && window.isAdmin()) ||
+                        (typeof hasTlPermission === 'function' && hasTlPermission('canClearInbox')) ||
+                        Boolean(globalState.adminControlsEnabled);
+    if (!isUserAdmin) {
+        showToast("⚠️ Admin or authorized TL access required to clear inbox.");
+        return;
+    }
+
+    const threadMap = (typeof window.getCachedCustomerThreadsMap === 'function') 
+        ? window.getCachedCustomerThreadsMap() 
+        : null;
+
+    const inboxThreads = [];
+    if (threadMap && threadMap.size > 0) {
+        for (const [tId, t] of threadMap.entries()) {
+            const folder = (t.folder || 'inbox').toLowerCase();
+            const isCompleted = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+            const isCatered = Boolean(t.cateredByRiderId || t.cateredByRiderName);
+            if (folder === 'inbox' && !isCompleted && !isCatered) {
+                inboxThreads.push({ id: tId, thread: t });
+            }
+        }
+    }
+
+    if (inboxThreads.length === 0) {
+        showToast("ℹ️ Walang chats sa Inbox na ililipat sa Done.");
+        return;
+    }
+
+    openSlideDeleteModal(
+        `Clear All Inbox Chats?`,
+        `Ililipat sa [Done] folder ang lahat ng ${inboxThreads.length} active chat(s) sa Inbox.\nSigurado ka ba?`,
+        async () => {
+            const now = Date.now();
+            const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString();
+            const myName = (appState.riderName || localStorage.getItem('riderName') || "Admin").toString();
+
+            const batchUpdates = {};
+            inboxThreads.forEach(({ id, thread }) => {
+                thread.folder = 'done';
+                thread.status = 'completed';
+                thread.completedAt = now;
+                thread.unreadForRider = false;
+                thread.isUnread = false;
+                thread.cateredByRiderId = null;
+                thread.cateredByRiderName = null;
+                thread.cateredBy = null;
+
+                const donePayload = {
+                    folder: 'done',
+                    status: 'completed',
+                    completedAt: now,
+                    completedByRiderId: myId,
+                    completedByRiderName: myName,
+                    cateredByRiderId: null,
+                    cateredByRiderName: null,
+                    cateredBy: null,
+                    unreadForRider: false,
+                    lastUpdated: now
+                };
+                batchUpdates[`customerChats/${id}/metadata`] = donePayload;
+                batchUpdates[`customerChatMeta/${id}`] = donePayload;
+            });
+
+            if (typeof window.renderRiderCustomerChatFeed === 'function') {
+                window.renderRiderCustomerChatFeed();
+            }
+
+            if (db) {
+                try {
+                    await db.ref().update(batchUpdates);
+                    showToast(`✅ Successfully moved ${inboxThreads.length} inbox chat(s) to Done!`);
+                } catch (e) {
+                    console.warn("Clear inbox batch update fallback:", e);
+                    for (const { id } of inboxThreads) {
+                        const p = batchUpdates[`customerChatMeta/${id}`];
+                        db.ref(`customerChats/${id}/metadata`).update(p).catch(() => {});
+                        db.ref(`customerChatMeta/${id}`).update(p).catch(() => {});
+                    }
+                    showToast(`✅ Moved ${inboxThreads.length} inbox chat(s) to Done.`);
+                }
+            } else {
+                showToast(`✅ Moved ${inboxThreads.length} inbox chat(s) to Done (offline).`);
+            }
+        }
+    );
+}
+
+export function goToCustomerCartFromChat() {
+    const custId = window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null;
+    let meta = (window.getCurrentRiderChatMeta ? window.getCurrentRiderChatMeta() : {}) || {};
+    if (typeof window.getCachedCustomerThreadsMap === 'function' && custId) {
+        const threadMap = window.getCachedCustomerThreadsMap();
+        if (threadMap && threadMap.has(custId)) meta = { ...threadMap.get(custId), ...meta };
+    }
+    let custName = (document.getElementById('rider-chat-cust-name')?.innerText || '').trim();
+    if (!custName || custName === 'Customer Name' || custName.toLowerCase() === 'customer' || custName.startsWith('FB Customer (')) {
+        custName = meta.customerName || meta.name || "";
+    }
+    const { record: cateringRiderRecord, matchingCustName } = findCateringRiderForCustomer(custName, meta);
+    const resolvedName = matchingCustName || custName;
+    if (!resolvedName) {
+        showToast("⚠️ Customer name not found.");
+        return;
+    }
+    if (typeof window.syncSmartCartsWithCateringCustomers === 'function') {
+        window.syncSmartCartsWithCateringCustomers();
+    }
+    let targetSlot = 1;
+    if (typeof window.getCartSlotForCustomer === 'function') {
+        targetSlot = window.getCartSlotForCustomer(resolvedName);
+    }
+    if (typeof window.switchCartTab === 'function') {
+        window.switchCartTab(targetSlot);
+    }
+    if (typeof window.closeRiderCustomerChatModal === 'function') {
+        window.closeRiderCustomerChatModal();
+    }
+    if (typeof window.switchView === 'function') {
+        window.switchView('view-cart');
+    }
+    showToast(`🛒 Opened Cart ${targetSlot} for ${resolvedName}`);
+}
+
 export const undoCustomerThread = markThreadUndone;
 export const followUpCustomerOrder = markThreadFollowUp;
 export const completeCatering = markThreadDone;
 export const cancelCatering = cancelCustomerThread;
 
 if (typeof window !== 'undefined') {
+    window.goToCustomerCartFromChat = goToCustomerCartFromChat;
     window.showCustomerDetails = showCustomerDetails;
     window.closeCustomerDetailsModal = closeCustomerDetailsModal;
     window.confirmDirectoryAutoMatch = confirmDirectoryAutoMatch;
@@ -1592,6 +2111,9 @@ if (typeof window !== 'undefined') {
     window.deleteQuickReply = deleteQuickReply;
     window.markThreadUndone = markThreadUndone;
     window.markThreadDone = markThreadDone;
+    window.openConfirmDoneModal = openConfirmDoneModal;
+    window.closeConfirmDoneModal = closeConfirmDoneModal;
+    window.confirmAndExecuteDone = confirmAndExecuteDone;
     window.executeThreadDone = executeThreadDone;
     window.markThreadFollowUp = markThreadFollowUp;
     window.cancelCustomerThread = cancelCustomerThread;
@@ -1608,5 +2130,6 @@ if (typeof window !== 'undefined') {
     window.updateOrderMilestone = updateOrderMilestone;
     window.highlightActiveMilestoneUI = highlightActiveMilestoneUI;
     window.caterCurrentChatCustomer = caterCurrentChatCustomer;
-    window.caterCustomer = caterCurrentChatCustomer;
+    window.openNewDirectoryCustomerFromChat = openNewDirectoryCustomerFromChat;
+    window.clearAllInboxThreads = clearAllInboxThreads;
 }

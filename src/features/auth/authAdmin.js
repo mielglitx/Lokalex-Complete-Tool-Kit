@@ -2,6 +2,7 @@
 import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { showToast } from '../../ui/notifications.js';
+import { isAdmin, hasTlPermission } from '../roster/rosterUtils.js';
 
 export function isUserBlocked(idOrName) {
     if (!idOrName || !globalState.blockedUsers) return false;
@@ -17,6 +18,10 @@ export function isUserBlocked(idOrName) {
 }
 
 export function openAdminBlockModal() {
+    if (!isAdmin() && !hasTlPermission('canManageBanList')) {
+        return showToast("⚠️ Unauthorized: Admin or authorized TL access required.");
+    }
+
     const modal = document.getElementById('admin-block-user-modal');
     const selectEl = document.getElementById('block-target-select');
 
@@ -66,6 +71,10 @@ export function closeAdminBlockModal() {
 }
 
 export function submitBlockUser() {
+    if (!isAdmin() && !hasTlPermission('canManageBanList')) {
+        return showToast("⚠️ Unauthorized: Admin or authorized TL access required.");
+    }
+
     const targetSelect = document.getElementById('block-target-select');
     const reasonInput = document.getElementById('block-reason-input');
 
@@ -100,6 +109,10 @@ export function submitBlockUser() {
 }
 
 export function unblockUser(cleanKey) {
+    if (!isAdmin() && !hasTlPermission('canManageBanList')) {
+        return showToast("⚠️ Unauthorized: Admin or authorized TL access required.");
+    }
+
     if (db) {
         db.ref(`blockedUsers/${cleanKey}`).remove();
     }

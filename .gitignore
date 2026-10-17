@@ -34,3 +34,6 @@ Thumbs.db
 *.swp
 *.bak
 
+# OTA release output
+ota-release/
+

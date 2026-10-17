@@ -1,5 +1,6 @@
 // src/features/cart/cartState.js
 import { appState, globalState, multiCarts, activeCartSlot, setActiveCartSlot } from '../../store/state.js';
+import { isCustomerMatch } from '../roster/rosterUtils.js';
 
 export function getMyCateringCustomers() {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
@@ -138,10 +139,106 @@ export function loadCartState() {
 export function getEffectiveCartClient(slotIdx) {
     const slotNum = slotIdx + 1;
     const cartObj = multiCarts[slotNum];
-    if (cartObj && cartObj.customerName) return cartObj.customerName;
+    if (cartObj && cartObj.customerName && cartObj.customerName !== "Sample") return cartObj.customerName;
 
     const myCustomers = getMyCateringCustomers();
     if (myCustomers[slotIdx]) return myCustomers[slotIdx];
 
     return "Sample";
+}
+
+/**
+ * Ensures that cart slots map 1:1 to active catering customers and eliminates duplicate names.
+ */
+export function syncSmartCartsWithCateringCustomers() {
+    const myCustomers = getMyCateringCustomers();
+    if (!myCustomers || myCustomers.length === 0) return;
+
+    // Set of customer names (lowercase) already claimed by a slot
+    const assignedLowerSet = new Set();
+
+    // Map each customer to a dedicated slot 1:1
+    for (let slot = 1; slot <= myCustomers.length; slot++) {
+        if (!multiCarts[slot]) {
+            multiCarts[slot] = { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "", receiptSummary: null };
+        }
+
+        const expectedCust = myCustomers[slot - 1];
+        const currentCust = (multiCarts[slot].customerName || "").trim();
+        const currentLower = currentCust.toLowerCase();
+
+        // Check if current slot's name is invalid, duplicated, or belongs to another slot
+        const isDuplicate = currentCust && assignedLowerSet.has(currentLower);
+        const isUnrecognized = currentCust && currentCust !== "Sample" && !multiCarts[slot].isManual && !myCustomers.some(c => c.toLowerCase() === currentLower || isCustomerMatch(c, currentCust));
+
+        if (!currentCust || currentCust === "Sample" || isDuplicate || isUnrecognized || (!multiCarts[slot].isManual && currentLower !== expectedCust.toLowerCase())) {
+            multiCarts[slot].customerName = expectedCust;
+            multiCarts[slot].isManual = false;
+        }
+
+        if (multiCarts[slot].customerName) {
+            assignedLowerSet.add(multiCarts[slot].customerName.toLowerCase());
+        }
+    }
+
+    // Clean up any remaining slots > myCustomers.length that might have duplicate catering names
+    for (const slotKey in multiCarts) {
+        const slot = Number(slotKey);
+        if (slot > myCustomers.length) {
+            const extraCart = multiCarts[slot];
+            if (extraCart && extraCart.customerName && !extraCart.isManual) {
+                const cLower = extraCart.customerName.trim().toLowerCase();
+                if (assignedLowerSet.has(cLower)) {
+                    extraCart.customerName = "Sample";
+                }
+            }
+        }
+    }
+
+    saveCartState();
+}
+
+/**
+ * Finds the specific cart slot (1-indexed) belonging to a customer name.
+ * If not yet assigned, intelligently binds it to an available slot.
+ */
+export function getCartSlotForCustomer(custName) {
+    if (!custName) return activeCartSlot || 1;
+    const cleanTarget = custName.trim().toLowerCase();
+    const myCustomers = getMyCateringCustomers();
+
+    // Ensure 1:1 sync first
+    syncSmartCartsWithCateringCustomers();
+
+    // 1. Check in myCustomers order on roster
+    const custIdx = myCustomers.findIndex(c => c.toLowerCase() === cleanTarget || isCustomerMatch(c, cleanTarget));
+    if (custIdx !== -1) {
+        const targetSlot = custIdx + 1;
+        if (!multiCarts[targetSlot]) {
+            multiCarts[targetSlot] = { items: [], selectedIds: new Set(), customerName: myCustomers[custIdx], isManual: false, txId: "", receiptSummary: null };
+        } else {
+            multiCarts[targetSlot].customerName = myCustomers[custIdx];
+            multiCarts[targetSlot].isManual = false;
+        }
+        saveCartState();
+        return targetSlot;
+    }
+
+    // 2. Direct match in multiCarts
+    for (const slotKey in multiCarts) {
+        const slot = Number(slotKey);
+        const cName = (multiCarts[slot]?.customerName || "").trim().toLowerCase();
+        if (cName && (cName === cleanTarget || isCustomerMatch(cName, cleanTarget))) {
+            return slot;
+        }
+    }
+
+    return activeCartSlot || 1;
+}
+
+if (typeof window !== 'undefined') {
+    window.syncSmartCartsWithCateringCustomers = syncSmartCartsWithCateringCustomers;
+    window.getCartSlotForCustomer = getCartSlotForCustomer;
+    window.saveCartState = saveCartState;
+    window.loadCartState = loadCartState;
 }

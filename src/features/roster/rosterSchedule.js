@@ -3,7 +3,7 @@ import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { getLocalTodayStr, isSameDate, escapeHtml } from '../../utils/helpers.js';
-import { isAdmin, saveRosterCache } from './rosterUtils.js';
+import { isAdmin, hasTlPermission, saveRosterCache } from './rosterUtils.js';
 
 export function sanitizeForFirebase(obj) {
     return JSON.parse(JSON.stringify(obj, (key, value) => {
@@ -26,7 +26,7 @@ export function getRiderStorageKey(riderId, riderName) {
 }
 
 export async function openAdminTimeInScheduleModal() {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageSchedules')) return showToast("⚠️ Unauthorized: Admin access required.");
 
     const modal = document.getElementById('admin-timein-schedule-modal');
     const masterToggle = document.getElementById('admin-schedule-master-enabled') || 
@@ -158,7 +158,7 @@ export function renderAdminTimeInScheduleList() {
 }
 
 export async function grantRiderEarlyPass(riderKey, riderName) {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageSchedules')) return showToast("⚠️ Unauthorized: Admin access required.");
 
     const storageKey = getRiderStorageKey(riderKey, riderName);
     const config = globalState.timeInSchedule || {};
@@ -202,7 +202,7 @@ export async function grantRiderEarlyPass(riderKey, riderName) {
 }
 
 export async function revokeRiderEarlyPass(riderKey, riderName) {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageSchedules')) return showToast("⚠️ Unauthorized: Admin access required.");
 
     const storageKey = getRiderStorageKey(riderKey, riderName);
     const config = globalState.timeInSchedule || {};
@@ -240,7 +240,7 @@ export async function revokeRiderEarlyPass(riderKey, riderName) {
 }
 
 export async function saveAdminTimeInScheduleSettings() {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageSchedules')) return showToast("⚠️ Unauthorized: Admin access required.");
 
     const masterToggle = document.getElementById('admin-schedule-master-enabled') || 
                          document.getElementById('admin-timein-schedule-master-enabled') ||

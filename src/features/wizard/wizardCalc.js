@@ -167,12 +167,17 @@ export function selectCateredClientName(cName) {
     if (manualToggle) manualToggle.checked = false;
     
     appState.selectedCateringClient = cName;
-    const activeCartIdx = globalState.activeCartIndex || 0;
-    const activeSlot = activeCartIdx + 1;
-    if (multiCarts && multiCarts[activeSlot]) {
-        multiCarts[activeSlot].customerName = cName;
+    if (typeof window.syncSmartCartsWithCateringCustomers === 'function') {
+        window.syncSmartCartsWithCateringCustomers();
     }
-    showToast(`Selected: ${cName}`);
+    let targetSlot = 1;
+    if (typeof window.getCartSlotForCustomer === 'function') {
+        targetSlot = window.getCartSlotForCustomer(cName);
+    }
+    if (typeof window.switchCartTab === 'function') {
+        window.switchCartTab(targetSlot);
+    }
+    showToast(`Selected: ${cName} (Cart ${targetSlot})`);
     setupWizardClientDetails();
 }
 
@@ -220,11 +225,11 @@ export function updateDiscountTypeUI() {
 
     if (btnAmount && btnPercent) {
         if (isPercent) {
-            btnPercent.className = "px-2 py-1 bg-red-600 text-white font-bold rounded-md text-[10px] shadow transition cursor-pointer";
-            btnAmount.className = "px-2 py-1 bg-gray-800 text-gray-400 font-bold rounded-md text-[10px] hover:text-white transition cursor-pointer";
+            btnPercent.className = "px-2.5 py-1 bg-red-600 text-white font-black rounded-md text-[10px] shadow transition cursor-pointer";
+            btnAmount.className = "px-2.5 py-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 font-black rounded-md text-[10px] transition cursor-pointer";
         } else {
-            btnAmount.className = "px-2 py-1 bg-red-600 text-white font-bold rounded-md text-[10px] shadow transition cursor-pointer";
-            btnPercent.className = "px-2 py-1 bg-gray-800 text-gray-400 font-bold rounded-md text-[10px] hover:text-white transition cursor-pointer";
+            btnAmount.className = "px-2.5 py-1 bg-red-600 text-white font-black rounded-md text-[10px] shadow transition cursor-pointer";
+            btnPercent.className = "px-2.5 py-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 font-black rounded-md text-[10px] transition cursor-pointer";
         }
     }
 

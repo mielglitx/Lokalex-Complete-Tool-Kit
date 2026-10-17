@@ -22,6 +22,7 @@ import { switchView } from '../../../ui/router.js';
 import { openSlideDeleteModal } from '../../../ui/modals.js';
 import { endLiveGpsSession } from '../../liveTracker.js';
 import { getLocalTodayStr } from '../../../utils/helpers.js';
+import { idbSet } from '../../../utils/storageEngine.js';
 import { 
     parseQueueTime, 
     hasReceiptForActiveSession, 
@@ -31,6 +32,7 @@ import {
     isCustomerMatch, 
     isSameDateStr, 
     saveRosterCache,
+    invalidateRosterGrossCache,
     isAdmin,
     canManageRoster,
     hasTlPermission,
@@ -103,7 +105,7 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     const resolvedTargetId = targetRecord ? (targetRecord.telegramId || targetRecord.id || cleanTargetId) : cleanTargetId;
     const resolvedTargetName = targetRecord ? (targetRecord.riderName || targetRecord.name || targetName) : targetName;
 
-    if (!resolvedTargetId && !targetRecord) return;
+    if (!resolvedTargetId && !targetRecord) return false;
 
     let remainingCusts = [];
     let remainingTimes = [];
@@ -114,7 +116,8 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         const times = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
 
         custs.forEach((c, idx) => {
-            if (c.toLowerCase().trim() !== custNameToComplete.toLowerCase().trim()) {
+            const isTargetCust = (c.toLowerCase().trim() === custNameToComplete.toLowerCase().trim()) || isCustomerMatch(c, custNameToComplete);
+            if (!isTargetCust) {
                 remainingCusts.push(c);
                 remainingTimes.push(times[idx] || times[0] || "");
             } else {
@@ -153,13 +156,20 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     if (!hasReceipt) {
         showToast(`⚠️ Paki-gawaan muna ng resibo si ${custNameToComplete} bago i-mark as Done!`);
         const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
-        if (resolvedTargetId === myId && multiCarts && activeCartSlot) {
-            multiCarts[activeCartSlot].customerName = custNameToComplete;
-            multiCarts[activeCartSlot].isManual = false;
-            if (window.saveCartState) window.saveCartState();
+        if (resolvedTargetId === myId) {
+            if (typeof window.syncSmartCartsWithCateringCustomers === 'function') {
+                window.syncSmartCartsWithCateringCustomers();
+            }
+            let targetSlot = activeCartSlot || 1;
+            if (typeof window.getCartSlotForCustomer === 'function') {
+                targetSlot = window.getCartSlotForCustomer(custNameToComplete);
+            }
+            if (typeof window.switchCartTab === 'function') {
+                window.switchCartTab(targetSlot);
+            }
             switchView('view-cart');
         }
-        return;
+        return false;
     }
 
     // 2. Extract Strict Rider Service Fees (Delivery + Handling + Market + Multi-Stop)
@@ -234,10 +244,11 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         if (db) {
             const markChatCompleted = (targetChatId) => {
                 if (!targetChatId) return;
+                const now = Date.now();
                 const doneUpdate = {
                     folder: 'done',
                     status: 'completed',
-                    completedAt: Date.now(),
+                    completedAt: now,
                     completedByRiderId: resolvedTargetId,
                     completedByRiderName: resolvedTargetName,
                     cateredByRiderId: null,
@@ -245,7 +256,8 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
                     cateredBy: null,
                     forcedBy: null,
                     isForcedCater: false,
-                    lastUpdated: Date.now()
+                    unreadForRider: false,
+                    lastUpdated: now
                 };
                 db.ref(`customerChats/${targetChatId}/metadata`).update(doneUpdate).catch(() => {});
                 db.ref(`customerChatMeta/${targetChatId}`).update(doneUpdate).catch(() => {});
@@ -253,6 +265,37 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
 
             if (cleanCustKey) {
                 markChatCompleted(cleanCustKey);
+            }
+
+            // Immediately synchronize in-memory live chat threads and move matching thread to Done folder
+            if (typeof window.getCachedCustomerThreadsMap === 'function') {
+                const threadMap = window.getCachedCustomerThreadsMap();
+                if (threadMap && threadMap.size > 0) {
+                    const targetLower = (custNameToComplete || "").trim().toLowerCase();
+                    const now = Date.now();
+                    for (const [tId, t] of threadMap.entries()) {
+                        const chatName = (t.customerName || t.name || "").trim().toLowerCase();
+                        const isCustomerNameMatch = chatName && (chatName === targetLower || isCustomerMatch(chatName, targetLower));
+                        const isCustIdMatch = cleanCustKey && (tId.toLowerCase().includes(cleanCustKey) || (t.custId && t.custId.toLowerCase().includes(cleanCustKey)));
+                        const isMatch = isCustomerNameMatch || isCustIdMatch;
+
+                        if (isMatch) {
+                            t.folder = 'done';
+                            t.status = 'completed';
+                            t.completedAt = now;
+                            t.isUnread = false;
+                            t.unreadForRider = false;
+                            t.cateredByRiderId = null;
+                            t.cateredByRiderName = null;
+                            t.cateredBy = null;
+                            markChatCompleted(tId);
+                        }
+                    }
+                }
+            }
+
+            if (typeof window.renderRiderCustomerChatFeed === 'function') {
+                window.renderRiderCustomerChatFeed();
             }
 
             db.ref('customerChatMeta').once('value', (snapshot) => {
@@ -394,6 +437,7 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     window.dispatchEvent(new CustomEvent('receiptsUpdated'));
     window.dispatchEvent(new CustomEvent('rosterUpdated'));
     updateRosterUI();
+    return true;
 }
 
 export async function voidSingleCateringCustomer(targetId, targetName, custNameToVoid) {
@@ -496,16 +540,33 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         keysToRemove.forEach(k => localStorage.removeItem(k));
     } catch(e) {}
 
-    // PURGE ANY CREATED RECEIPTS IN MEMORY
+    // 1. PURGE IN-MEMORY RECEIPTS
     if (globalState.globalDailyReceipts) {
         globalState.globalDailyReceipts = globalState.globalDailyReceipts.filter(r => {
-            const matchRider = isRiderMatch(resolvedTargetName, r.riderName);
-            const matchCust = isCustomerMatch(r.customerName, custNameToVoid) || (r.id && r.id.toLowerCase().includes(cleanCustKey));
+            const matchRider = isRiderMatch(resolvedTargetName, r.riderName) || (r.riderId && r.riderId.toString() === resolvedTargetId.toString());
+            const matchCust = isCustomerMatch(r.customerName, custNameToVoid) || (r.id && r.id.toLowerCase().includes(cleanCustKey)) || (r.customerName || '').toLowerCase().includes(cleanVoidCust);
             return !(matchRider && matchCust);
         });
     }
 
-    // Update Firebase chat folders, remove receipts, and clear fees
+    // 2. PURGE IN-MEMORY CATERED HISTORY (COMMISSION SOURCE)
+    if (globalState.globalCateredHistory) {
+        globalState.globalCateredHistory = globalState.globalCateredHistory.filter(h => {
+            const matchRider = isRiderMatch(resolvedTargetName, h.riderName) || (h.riderId && h.riderId.toString() === resolvedTargetId.toString()) || (h.telegramId && h.telegramId.toString() === resolvedTargetId.toString());
+            const matchCust = isCustomerMatch(h.customerName, custNameToVoid) || (h.id && h.id.toLowerCase().includes(cleanCustKey)) || (h.customerName || '').toLowerCase().includes(cleanVoidCust);
+            return !(matchRider && matchCust);
+        });
+    }
+
+    // 3. PERSIST PURGED ARRAYS TO LOCAL CACHE & INDEXEDDB
+    try {
+        idbSet('catered', 'lokalex_catered_idb_cache_v2', globalState.globalCateredHistory || []).catch(() => {});
+        idbSet('receipts', 'lokalex_receipts_idb_cache_v2', globalState.globalDailyReceipts || []).catch(() => {});
+    } catch(e) {}
+
+    invalidateRosterGrossCache();
+
+    // 4. Update Firebase chat folders, purge receipts & cateredHistory in RTDB
     if (db) {
         const voidPayload = {
             folder: 'done',
@@ -519,13 +580,13 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             lastUpdated: Date.now()
         };
 
-        // 1. Direct update to customerChats matching cleanCustKey
+        // Update customerChats matching cleanCustKey
         if (cleanCustKey) {
             db.ref(`customerChats/${cleanCustKey}/metadata`).update(voidPayload).catch(() => {});
             db.ref(`customerChatMeta/${cleanCustKey}`).update(voidPayload).catch(() => {});
         }
 
-        // 2. Query customerChats to cancel any chat referencing this customer
+        // Query customerChats to cancel any chat referencing this customer
         db.ref('customerChats')
             .orderByChild('metadata/customerName')
             .equalTo(custNameToVoid)
@@ -537,12 +598,12 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
                 });
             }).catch(() => {});
 
-        // 3. Purge matching receipts from Firebase receipts node so commissions don't retain voided fees
         const todayStr = getLocalTodayStr();
+        // Purge matching receipts from Firebase receipts node
         db.ref('receipts').orderByChild('date').equalTo(todayStr).once('value', (snap) => {
             const rcpts = snap.val() || {};
             Object.entries(rcpts).forEach(([rId, r]) => {
-                const matchRider = isRiderMatch(resolvedTargetName, r.riderName);
+                const matchRider = isRiderMatch(resolvedTargetName, r.riderName) || (r.riderId && r.riderId.toString() === resolvedTargetId.toString());
                 const matchCust = isCustomerMatch(r.customerName, custNameToVoid) || (rId && rId.toLowerCase().includes(cleanCustKey));
                 if (matchRider && matchCust) {
                     db.ref(`receipts/${rId}`).remove().catch(() => {});
@@ -550,21 +611,22 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             });
         }).catch(() => {});
 
-        // 4. Clean roster customer fees and forced cater records
-        if (resolvedTargetId) {
-            db.ref(`roster/${resolvedTargetId}`).update({
-                lastReceiptFees: null,
-                lastReceiptTotalFees: 0
+        // Purge matching entries from Firebase cateredHistory node
+        ['completedDate', 'date'].forEach(dateField => {
+            db.ref('cateredHistory').orderByChild(dateField).equalTo(todayStr).once('value', (snap) => {
+                const hist = snap.val() || {};
+                Object.entries(hist).forEach(([hId, h]) => {
+                    const matchRider = isRiderMatch(resolvedTargetName, h.riderName) || (h.riderId && h.riderId.toString() === resolvedTargetId.toString()) || (h.telegramId && h.telegramId.toString() === resolvedTargetId.toString());
+                    const matchCust = isCustomerMatch(h.customerName, custNameToVoid) || (hId && hId.toLowerCase().includes(cleanCustKey));
+                    if (matchRider && matchCust) {
+                        db.ref(`cateredHistory/${hId}`).remove().catch(() => {});
+                    }
+                });
             }).catch(() => {});
-
-            if (cleanCustKey) {
-                db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
-                db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
-                db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanVoidCust}`).remove().catch(() => {});
-            }
-        }
+        });
     }
 
+    // 5. ATOMIC STATUS MUTATION (Zero unbundled preliminary writes - completely prevents rubber banding)
     if (remainingCusts.length > 0) {
         await updateRosterStatusData(
             'Catering', 
@@ -577,9 +639,12 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             false,
             "",
             { 
-                forcedCaters: targetRecord ? targetRecord.forcedCaters : null,
-                forcedBy: targetRecord ? targetRecord.forcedBy : null,
-                isForcedCater: !!(targetRecord && targetRecord.isForcedCater)
+                forcedCaters: targetRecord?.forcedCaters || null,
+                forcedBy: targetRecord?.forcedBy || null,
+                isForcedCater: !!(targetRecord && targetRecord.isForcedCater),
+                customerFees: targetRecord?.customerFees || null,
+                lastReceiptFees: null,
+                lastReceiptTotalFees: 0
             }
         );
         showToast(`🚫 Na-void si [${custNameToVoid}]. ${remainingCusts.length} active customer(s) natitira kay ${resolvedTargetName}.`);
@@ -589,22 +654,13 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         const availableTimestamp = Date.now();
         const availableTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        if (db && resolvedTargetId) {
-            db.ref(`roster/${resolvedTargetId}/forcedCaters`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}/customerFees`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}`).update({
-                forcedBy: null,
-                isForcedCater: false,
-                availableTimestamp: availableTimestamp,
-                availableTimeStr: availableTimeStr,
-                queueTime: availableTimestamp
-            }).catch(() => {});
-        }
         if (targetRecord) {
             targetRecord.forcedCaters = null;
             targetRecord.forcedBy = null;
             targetRecord.isForcedCater = false;
             targetRecord.customerFees = null;
+            targetRecord.lastReceiptFees = null;
+            targetRecord.lastReceiptTotalFees = 0;
             targetRecord.availableTimestamp = availableTimestamp;
             targetRecord.availableTimeStr = availableTimeStr;
             targetRecord.queueTime = availableTimestamp;
@@ -620,7 +676,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             '', 
             topQueueTime, 
             resolvedTargetId, 
-            resolvedTargetName,
+            resolvedTargetName, 
             [],
             false,
             "",
@@ -628,6 +684,9 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
                 forcedCaters: null,
                 forcedBy: null,
                 isForcedCater: false,
+                customerFees: null,
+                lastReceiptFees: null,
+                lastReceiptTotalFees: 0,
                 availableTimestamp: availableTimestamp,
                 availableTimeStr: availableTimeStr
             }
@@ -641,6 +700,13 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
     window.dispatchEvent(new CustomEvent('receiptsUpdated'));
     window.dispatchEvent(new CustomEvent('rosterUpdated'));
     updateRosterUI();
+
+    if (typeof window.refreshCommissionView === 'function') {
+        window.refreshCommissionView();
+    }
+    if (typeof window.loadGlobalCateredList === 'function') {
+        window.loadGlobalCateredList();
+    }
 }
 
 export function adminVoidSpecificCustomer(targetId, targetName, custName) {

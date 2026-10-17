@@ -438,8 +438,30 @@ export function isCustomerMatch(cust1 = "", cust2 = "") {
     const c2 = cleanCustomerForMatch(cust2);
     if (!c1 || !c2) return false;
     if (c1 === c2) return true;
-    if (c1.length >= 4 && c2.includes(c1)) return true;
-    if (c2.length >= 4 && c1.includes(c2)) return true;
+
+    // Token-based matching to prevent loose substring collisions (e.g. "anne" inside "stephanie")
+    const words1 = s1.split(/[\s,._-]+/).filter(w => w.length >= 2);
+    const words2 = s2.split(/[\s,._-]+/).filter(w => w.length >= 2);
+    if (words1.length === 0 || words2.length === 0) return false;
+
+    // If one is a single word token (e.g. "sheila"), it must exactly match a whole word token in the other
+    if (words1.length === 1) {
+        return words2.some(w => w === words1[0]);
+    }
+    if (words2.length === 1) {
+        return words1.some(w => w === words2[0]);
+    }
+
+    // Both have multiple words: check if shorter is subset of longer
+    const [shorter, longer] = words1.length <= words2.length ? [words1, words2] : [words2, words1];
+    const allShorterMatch = shorter.every(sw => longer.includes(sw));
+    if (allShorterMatch) return true;
+
+    // If both have at least 2 tokens and share first name + last name
+    if (words1[0] === words2[0] && words1[words1.length - 1] === words2[words2.length - 1]) {
+        return true;
+    }
+
     return false;
 }
 
@@ -657,7 +679,7 @@ export function getRiderTodayGross(riderName, telegramId) {
     if (!tId && !rName) return 0;
 
     const now = Date.now();
-    if (!cachedDailyGrossMap || (now - lastGrossCacheTimestamp > 600)) {
+    if (!cachedDailyGrossMap || (now - lastGrossCacheTimestamp > 3500)) {
         cachedDailyGrossMap = buildDailyGrossIndex();
     }
 
@@ -682,6 +704,8 @@ export function getRiderTodayGross(riderName, telegramId) {
 }
 
 export function sortAvailableRiders(availableList) {
+    if (!availableList || availableList.length <= 1) return availableList || [];
+
     const settings = getQueueLineupSettings();
     const mode = settings.mode || 'lowest_gross';
     const cooldownMins = parseInt(settings.cooldownMinutes, 10) || 0;
@@ -694,6 +718,13 @@ export function sortAvailableRiders(availableList) {
             const timeB = b.availableTimestamp || parseQueueTime(b.queueTime) || 0;
             return timeA - timeB;
         });
+    }
+
+    // High performance optimization: Pre-compute gross once for all available riders
+    const grossCache = new Map();
+    for (let i = 0; i < availableList.length; i++) {
+        const item = availableList[i];
+        grossCache.set(item, getRiderTodayGross(item.riderName || item.name, item.telegramId));
     }
 
     return (availableList || []).slice().sort((a, b) => {
@@ -710,8 +741,8 @@ export function sortAvailableRiders(availableList) {
             return timeA - timeB;
         }
 
-        const grossA = getRiderTodayGross(a.riderName || a.name, a.telegramId);
-        const grossB = getRiderTodayGross(b.riderName || b.name, b.telegramId);
+        const grossA = grossCache.get(a) || 0;
+        const grossB = grossCache.get(b) || 0;
 
         if (grossA !== grossB) {
             return grossA - grossB;
@@ -744,14 +775,16 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
                     const chats = snap.val();
                     if (chats) {
                         Object.keys(chats).forEach(custId => {
+                            const now = Date.now();
                             const donePayload = {
                                 folder: 'done',
-                                status: 'done',
+                                status: 'completed',
+                                completedAt: now,
                                 cateredByRiderId: null,
                                 cateredByRiderName: null,
                                 cateredBy: null,
                                 unreadForRider: false,
-                                lastUpdated: Date.now()
+                                lastUpdated: now
                             };
                             db.ref(`customerChats/${custId}/metadata`).update(donePayload).catch(() => {});
                             db.ref(`customerChatMeta/${custId}`).update(donePayload).catch(() => {});
@@ -841,10 +874,10 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
         }
     }
 
-    if (db && tId) {
-        db.ref(`roster/${tId}/customerFees`).remove().catch(() => {});
-        db.ref(`roster/${tId}/lastReceiptTotalFees`).remove().catch(() => {});
-        db.ref(`roster/${tId}/lastReceiptFees`).remove().catch(() => {});
+    if (targetRecord) {
+        targetRecord.customerFees = null;
+        targetRecord.lastReceiptFees = null;
+        targetRecord.lastReceiptTotalFees = 0;
     }
 
     invalidateRosterGrossCache();

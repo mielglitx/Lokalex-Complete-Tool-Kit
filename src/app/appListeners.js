@@ -17,7 +17,7 @@
 
 import { appState, globalState } from '../store/state.js';
 import { db } from '../config/firebase.js';
-import { showToast } from '../ui/notifications.js';
+import { showToast, showNativeNotification } from '../ui/notifications.js';
 import * as storageEngine from '../utils/storageEngine.js';
 import * as authFeature from '../features/auth/index.js';
 import * as roster from '../features/roster/index.js';
@@ -167,11 +167,37 @@ export function initRealtimeFirebaseListeners() {
             window.dispatchEvent(new Event('chatUpdated'));
         });
 
+        let isInitialAdvLoad = true;
+        const knownAdvOrderKeys = new Set();
         db.ref('advancedOrders').limitToLast(40).on('value', (snapshot) => {
             const val = snapshot.val();
-            globalState.globalAdvancedOrders = val 
-                ? Object.entries(val).map(([id, item]) => ({ id, key: id, ...item })) 
-                : [];
+            const entries = val ? Object.entries(val) : [];
+            globalState.globalAdvancedOrders = entries.map(([id, item]) => ({ id, key: id, ...item }));
+
+            if (!isInitialAdvLoad && entries.length > 0) {
+                entries.forEach(([id, item]) => {
+                    if (!knownAdvOrderKeys.has(id)) {
+                        knownAdvOrderKeys.add(id);
+                        const status = (item.status || 'Pending').toLowerCase();
+                        if (status !== 'catered' && status !== 'cancelled') {
+                            const custName = item.custName || 'Customer';
+                            const time = item.timeToReceive || '';
+                            const date = item.dateToReceive || '';
+                            const sched = [date, time].filter(Boolean).join(' ') || 'Scheduled';
+                            showNativeNotification(
+                                `📅 Bagong Advance Booking!`,
+                                `${custName} • ${sched}${item.address ? ` • ${item.address}` : ''}`,
+                                `adv_new_${id}`,
+                                `adv_${id}`
+                            );
+                        }
+                    }
+                });
+            } else {
+                entries.forEach(([id]) => knownAdvOrderKeys.add(id));
+                isInitialAdvLoad = false;
+            }
+
             if (advancedOrders.checkScheduledDeliveryAlerts) advancedOrders.checkScheduledDeliveryAlerts();
             if (advancedOrders.renderAdvancedOrdersList) advancedOrders.renderAdvancedOrdersList();
         });

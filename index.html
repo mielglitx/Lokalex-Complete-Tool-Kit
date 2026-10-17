@@ -13,7 +13,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Lokalex Hub">
     <link rel="manifest" href="./manifest.json">
-    <link rel="apple-touch-icon" href="https://i.imgur.com/dbomHa2.png">
+    <link rel="icon" type="image/png" href="./Logo.png">
+    <link rel="apple-touch-icon" href="./Logo.png">
 
     <!-- CONTENT SECURITY POLICY ENABLING TESSERACT OCR WORKERS & NETWORK FETCHING -->
     <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' blob:; worker-src * blob: data: 'unsafe-inline' 'unsafe-eval'; child-src * blob: data:; connect-src * blob: data:; style-src * 'unsafe-inline'; font-src * data:; img-src * data: blob:;">
@@ -301,6 +302,78 @@
         html:not(.dark) .bg-darkBg\/60 {
             background-color: #EDF7F2 !important;
             border-color: #DDEEE6 !important;
+        }
+
+        /* High-contrast and accessible close / cancel buttons in light mode */
+        html:not(.dark) [id$="-modal"] button[class*="bg-gray-800"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):not([class*="bg-purple"]):not([class*="bg-amber"]):not([class*="bg-rose"]):not([class*="bg-orange"]):not([class*="bg-teal"]),
+        html:not(.dark) [id$="-modal"] button[class*="bg-gray-900"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):not([class*="bg-purple"]):not([class*="bg-amber"]):not([class*="bg-rose"]):not([class*="bg-orange"]):not([class*="bg-teal"]),
+        html:not(.dark) .bg-cardBg button[class*="bg-gray-800"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):not([class*="bg-purple"]):not([class*="bg-amber"]):not([class*="bg-rose"]):not([class*="bg-orange"]):not([class*="bg-teal"]),
+        html:not(.dark) .bg-cardBg button[class*="bg-gray-900"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):not([class*="bg-purple"]):not([class*="bg-amber"]):not([class*="bg-rose"]):not([class*="bg-orange"]):not([class*="bg-teal"]) {
+            background-color: #F1F5F9 !important;
+            color: #1E293B !important;
+            border: 1px solid #CBD5E1 !important;
+        }
+
+        html:not(.dark) [id$="-modal"] button[class*="bg-gray-800"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):hover,
+        html:not(.dark) [id$="-modal"] button[class*="bg-gray-900"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):hover,
+        html:not(.dark) .bg-cardBg button[class*="bg-gray-800"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):hover,
+        html:not(.dark) .bg-cardBg button[class*="bg-gray-900"]:not([class*="bg-emerald"]):not([class*="bg-blue"]):not([class*="bg-red"]):hover {
+            background-color: #E2E8F0 !important;
+            color: #0F172A !important;
+        }
+
+        /* Modal circular close (X) buttons in light mode */
+        html:not(.dark) [id$="-modal"] button.rounded-full,
+        html:not(.dark) button.rounded-full[onclick*="close"],
+        html:not(.dark) button.rounded-full[onclick*="toggleChatWindow"],
+        html:not(.dark) button[onclick*="close"]:has(i.fa-xmark),
+        html:not(.dark) button:has(i.fa-xmark) {
+            background-color: #F1F5F9 !important;
+            color: #334155 !important;
+            border-color: #CBD5E1 !important;
+        }
+        html:not(.dark) [id$="-modal"] button.rounded-full:hover,
+        html:not(.dark) button.rounded-full[onclick*="close"]:hover,
+        html:not(.dark) button:has(i.fa-xmark):hover {
+            background-color: #E2E8F0 !important;
+            color: #0F172A !important;
+        }
+        html:not(.dark) [id$="-modal"] button.rounded-full i,
+        html:not(.dark) button:has(i.fa-xmark) i,
+        html:not(.dark) i.fa-xmark {
+            color: #334155 !important;
+        }
+
+        /* Rider account card action buttons (Edit & Delete & Key) in light mode */
+        html:not(.dark) #admin-riders-list-container button.text-blue-400,
+        html:not(.dark) #admin-riders-list-container button[class*="text-blue"] {
+            background-color: #EFF6FF !important;
+            color: #2563EB !important;
+            border: 1px solid #BFDBFE !important;
+        }
+        html:not(.dark) #admin-riders-list-container button.text-red-400,
+        html:not(.dark) #admin-riders-list-container button[class*="text-red"] {
+            background-color: #FEF2F2 !important;
+            color: #DC2626 !important;
+            border: 1px solid #FECACA !important;
+        }
+        html:not(.dark) #admin-riders-list-container button.text-amber-400,
+        html:not(.dark) #admin-riders-list-container button[class*="text-amber"] {
+            background-color: #FFFBEB !important;
+            color: #D97706 !important;
+            border: 1px solid #FDE68A !important;
+        }
+        html:not(.dark) #admin-riders-list-container span.border-emerald-300,
+        html:not(.dark) #admin-riders-list-container span[class*="text-emerald"] {
+            background-color: #ECFDF5 !important;
+            color: #047857 !important;
+            border: 1px solid #A7F3D0 !important;
+        }
+        html:not(.dark) #admin-riders-list-container span.border-gray-700,
+        html:not(.dark) #admin-riders-list-container span[class*="text-gray"] {
+            background-color: #F1F5F9 !important;
+            color: #334155 !important;
+            border: 1px solid #CBD5E1 !important;
         }
 
         /* ========================================================================== */

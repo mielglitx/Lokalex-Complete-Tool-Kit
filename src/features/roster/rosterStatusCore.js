@@ -29,7 +29,7 @@ import {
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 
-export async function updateRosterStatus(status, targetId = null, targetName = null, precalculatedQueueTime = null) {
+export async function updateRosterStatus(status, targetId = null, targetName = null, precalculatedQueueTime = null, skipArchive = false) {
     const tId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
     const tName = targetName || appState.riderName || localStorage.getItem('riderName') || "Rider";
     const rosterMembers = globalState.rosterMembers || [];
@@ -44,7 +44,7 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     let recordLogin = false;
 
-    if (status !== 'Catering' && targetRecord) {
+    if (status !== 'Catering' && targetRecord && !skipArchive) {
         await archiveRiderCateringIfNeeded(targetRecord);
     }
 
@@ -93,6 +93,9 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
             forcedCaters: null,
             forcedBy: null,
             isForcedCater: false,
+            customerFees: null,
+            lastReceiptFees: null,
+            lastReceiptTotalFees: 0,
             breakTimestamp: null,
             breakStartTime: null,
             availableTimestamp: preservedAvailableTs,
@@ -107,6 +110,9 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
             forcedCaters: null,
             forcedBy: null,
             isForcedCater: false,
+            customerFees: null,
+            lastReceiptFees: null,
+            lastReceiptTotalFees: 0,
             breakTimestamp: null,
             breakStartTime: null,
             availableTimestamp: null,
@@ -166,6 +172,26 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         currentIsForcedCater = !!extraData.isForcedCater;
     } else if (!isResetStatus && existingRec?.isForcedCater) {
         currentIsForcedCater = !!existingRec.isForcedCater;
+    }
+
+    let currentCustomerFees = null;
+    if (extraData.customerFees !== undefined) {
+        currentCustomerFees = extraData.customerFees;
+    } else if (!isResetStatus && existingRec?.customerFees) {
+        currentCustomerFees = existingRec.customerFees;
+    }
+
+    let currentLastReceiptFees = null;
+    let currentLastReceiptTotalFees = 0;
+    if (extraData.lastReceiptFees !== undefined) {
+        currentLastReceiptFees = extraData.lastReceiptFees;
+    } else if (!isResetStatus && existingRec?.lastReceiptFees) {
+        currentLastReceiptFees = existingRec.lastReceiptFees;
+    }
+    if (extraData.lastReceiptTotalFees !== undefined) {
+        currentLastReceiptTotalFees = extraData.lastReceiptTotalFees;
+    } else if (!isResetStatus && existingRec?.lastReceiptTotalFees) {
+        currentLastReceiptTotalFees = existingRec.lastReceiptTotalFees;
     }
 
     let currentBreakTimestamp = null;
@@ -229,6 +255,9 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         forcedCaters: currentForcedCaters,
         forcedBy: currentForcedBy,
         isForcedCater: currentIsForcedCater,
+        customerFees: currentCustomerFees,
+        lastReceiptFees: currentLastReceiptFees,
+        lastReceiptTotalFees: currentLastReceiptTotalFees,
         breakTimestamp: currentBreakTimestamp,
         breakStartTime: currentBreakStartTime,
         totalBreakMinutes: currentTotalBreak

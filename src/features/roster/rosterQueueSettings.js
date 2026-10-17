@@ -18,7 +18,7 @@
 import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
-import { isAdmin } from './rosterUtils.js';
+import { isAdmin, hasTlPermission } from './rosterUtils.js';
 
 const QUEUE_SETTINGS_CACHE_KEY = 'lokalex_queue_lineup_settings';
 
@@ -117,8 +117,8 @@ function ensureQueueSettingsModal() {
 }
 
 export function openAdminQueueSettingsModal() {
-    if (!isAdmin()) {
-        return showToast("⚠️ Unauthorized: Only Admin accounts can configure lineup rules.");
+    if (!isAdmin() && !hasTlPermission('canManageQueueSettings')) {
+        return showToast("⚠️ Unauthorized: Only Admin or authorized TL can configure lineup rules.");
     }
 
     const modal = ensureQueueSettingsModal();
@@ -169,8 +169,8 @@ export function toggleQueueSettingsModeUI(selectedMode) {
 }
 
 export async function saveAdminQueueSettings() {
-    if (!isAdmin()) {
-        return showToast("⚠️ Unauthorized: Only Admin accounts can configure lineup rules.");
+    if (!isAdmin() && !hasTlPermission('canManageQueueSettings')) {
+        return showToast("⚠️ Unauthorized: Only Admin or authorized TL can configure lineup rules.");
     }
 
     const selectedRadio = document.querySelector('input[name="queue-lineup-mode"]:checked');

@@ -7,7 +7,8 @@ import {
     getMaxCartSlots,
     getCurrentCart, 
     saveCartState, 
-    getEffectiveCartClient 
+    getEffectiveCartClient,
+    syncSmartCartsWithCateringCustomers
 } from './cartState.js';
 
 export function switchCartTab(slot) {
@@ -30,6 +31,9 @@ export function renderCartTabs() {
     const container = document.getElementById('cart-tabs-header');
     if (!container) return;
 
+    // Guarantee 1:1 slot mapping with no duplicate customer names
+    syncSmartCartsWithCateringCustomers();
+
     const maxSlots = getMaxCartSlots();
 
     // If activeCartSlot was pointing beyond current maxSlots, reset to 1
@@ -48,23 +52,16 @@ export function renderCartTabs() {
         const count = cart.items ? cart.items.length : 0;
         const isLocked = globalState.cartLocked && globalState.cartLocked[slot - 1];
 
-        // Auto-assign matching customer for this slot if not manually set
-        const assignedCust = myCustomers[slot - 1];
-        if (assignedCust && !cart.isManual) {
-            if (!cart.customerName || cart.customerName === "Sample" || !myCustomers.includes(cart.customerName)) {
-                cart.customerName = assignedCust;
-            }
-        }
-
         let tabColor = isActive 
             ? "bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-950/50" 
             : "bg-inputBg text-gray-400 border-gray-800 hover:text-white";
 
         let lockBadge = isLocked ? `<i class="fa-solid fa-lock text-[10px] text-emerald-400 ml-1"></i>` : '';
+        const shortName = (cart.customerName && cart.customerName !== 'Sample') ? `: ${escapeHtml(cart.customerName.split(' ')[0])}` : '';
 
         html += `
-            <button onclick="switchCartTab(${slot})" class="flex-1 min-w-[70px] py-2 px-1 rounded-xl border flex flex-col items-center justify-center transition active:scale-95 text-xs font-bold ${tabColor}" title="Cart ${slot}${cart.customerName ? ` (${cart.customerName})` : ''}">
-                <span class="truncate max-w-full">Cart ${slot}${lockBadge}</span>
+            <button onclick="switchCartTab(${slot})" class="flex-1 min-w-[70px] py-2 px-1 rounded-xl border flex flex-col items-center justify-center transition active:scale-95 text-xs font-bold ${tabColor}" title="Cart ${slot}${cart.customerName ? ` (${escapeHtml(cart.customerName)})` : ''}">
+                <span class="truncate max-w-full">Cart ${slot}${shortName}${lockBadge}</span>
                 <span class="text-[9px] font-normal opacity-80 truncate max-w-full">${count} items</span>
             </button>`;
     }
@@ -82,6 +79,9 @@ export function renderCartCustomerSelector() {
     const container = document.getElementById('cart-customer-selector-container');
     if (!container) return;
 
+    // Sync smart carts first to ensure 1:1 slot mapping
+    syncSmartCartsWithCateringCustomers();
+
     if (!multiCarts[activeCartSlot]) {
         multiCarts[activeCartSlot] = { items: [], selectedIds: new Set(), customerName: "", isManual: false, txId: "", receiptSummary: null };
     }
@@ -93,7 +93,7 @@ export function renderCartCustomerSelector() {
     const assignedCustomerForSlot = myCustomers[slotIdx];
 
     if (assignedCustomerForSlot && !currentCartObj.isManual) {
-        if (!currentCartObj.customerName || currentCartObj.customerName === "Sample" || !myCustomers.includes(currentCartObj.customerName)) {
+        if (!currentCartObj.customerName || currentCartObj.customerName === "Sample" || currentCartObj.customerName !== assignedCustomerForSlot) {
             currentCartObj.customerName = assignedCustomerForSlot;
             saveCartState();
         }

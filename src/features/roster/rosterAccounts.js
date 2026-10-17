@@ -22,7 +22,7 @@ import { appState, globalState } from '../../store/state.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
 import { escapeHtml } from '../../utils/helpers.js';
-import { isAdmin, saveRosterCache } from './rosterUtils.js';
+import { isAdmin, hasTlPermission, saveRosterCache } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 import { updateRosterCreditsDisplay } from '../directory/directoryUi.js';
 import { getRiderStorageKey } from './rosterSchedule.js';
@@ -38,8 +38,21 @@ export const TL_PERMISSION_DEFINITIONS = [
     { key: 'canShiftQueue', label: 'Lineup Queue Shift', icon: 'fa-arrow-up-1-9', desc: 'Move riders up, down, top, or bottom' },
     { key: 'canVoidCustomer', label: 'Void Active Orders', icon: 'fa-ban', desc: 'Void ongoing customer assignments' },
     { key: 'canEndAllShifts', label: 'Force End All Shifts', icon: 'fa-power-off', desc: 'End shift for all roster riders at once' },
-    { key: 'canManageSchedules', label: 'Time-In & Early Pass', icon: 'fa-clock', desc: 'Grant 1-day early passes to riders' },
-    { key: 'canManageDayOff', label: 'Day-Off Management', icon: 'fa-umbrella-beach', desc: 'Reassign or modify rider day-off slots' }
+    { key: 'canManageSchedules', label: 'Time-In & Early Pass', icon: 'fa-clock', desc: 'Set time-in schedules & grant early passes' },
+    { key: 'canManageDayOff', label: 'Day-Off Management', icon: 'fa-umbrella-beach', desc: 'Reassign or modify rider day-off quotas & slots' },
+    { key: 'canManageQueueSettings', label: 'Lineup Queue Rules', icon: 'fa-arrow-down-short-wide', desc: 'Configure lineup rotation mode & cooldown buffer' },
+    { key: 'canManageBookingLimits', label: 'Active Bookings Limit', icon: 'fa-layer-group', desc: 'Set max active catering orders per rider' },
+    { key: 'canManageFullBooking', label: 'Full Booking Auto-Reply', icon: 'fa-comment-slash', desc: 'Toggle full booking auto-responder on or off' },
+    { key: 'canManageCommission', label: 'Commission Fee Settings', icon: 'fa-percent', desc: 'Configure daily commission fee rates & discounts' },
+    { key: 'canManageCredits', label: 'Directory Credit Settings', icon: 'fa-coins', desc: 'Manage directory search costs & starting balances' },
+    { key: 'canManageEarlyShift', label: 'Early Shift Out Penalty', icon: 'fa-user-clock', desc: 'Configure 8-hour duty rules & exit penalties' },
+    { key: 'canManageAutoEndShift', label: 'Auto End Shift Settings', icon: 'fa-clock-rotate-left', desc: 'Configure automated shift termination cutoff times' },
+    { key: 'canManageBanList', label: 'Ban / Block User Management', icon: 'fa-user-slash', desc: 'Ban, block or unblock riders and accounts' },
+    { key: 'canManageStoreAccounts', label: 'Store Hub & Accounts', icon: 'fa-shop', desc: 'Manage merchant stores, categories & food menus' },
+    { key: 'canManageFbApis', label: 'Facebook API Settings', icon: 'fa-brands fa-facebook-messenger', desc: 'Configure Messenger Webhook & Graph API tokens' },
+    { key: 'canManageBroadcast', label: 'Send to Many (Broadcast)', icon: 'fa-bullhorn', desc: 'Send mass broadcasts across customer channels' },
+    { key: 'canClearInbox', label: 'Clear Inbox to Done', icon: 'fa-broom', desc: 'Move all active Inbox threads to Done folder' },
+    { key: 'canManageRiderAccounts', label: 'Rider Accounts & Permissions', icon: 'fa-users-gear', desc: 'Add, edit, or manage rider logins & credentials' }
 ];
 
 export const APP_FEATURE_DEFINITIONS = [
@@ -57,8 +70,8 @@ export const APP_FEATURE_DEFINITIONS = [
 // ============================================================================
 
 export function openAdminDirectoryCreditsModal() {
-    if (!isAdmin()) {
-        return showToast("⚠️ Unauthorized: Only Admin accounts can manage credit settings.");
+    if (!isAdmin() && !hasTlPermission('canManageCredits')) {
+        return showToast("⚠️ Unauthorized: Only Admin or authorized TL accounts can manage credit settings.");
     }
 
     const modal = document.getElementById('admin-directory-credits-modal');
@@ -93,7 +106,7 @@ export function closeAdminDirectoryCreditsModal() {
 }
 
 export async function saveAdminDirectoryCreditsSettings() {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageCredits')) return showToast("⚠️ Unauthorized: Admin or authorized TL access required.");
 
     const enabledToggle = document.getElementById('admin-credits-enabled-toggle');
     const costInput = document.getElementById('admin-credits-cost-input');
@@ -236,8 +249,8 @@ export const promptAdjustRiderCredits = openAdjustRiderCreditsModal;
 // ============================================================================
 
 export function openAdminManageRidersModal() {
-    if (!isAdmin()) {
-        return showToast("⚠️ Unauthorized: Only Admin accounts can manage riders.");
+    if (!isAdmin() && !hasTlPermission('canManageRiderAccounts')) {
+        return showToast("⚠️ Unauthorized: Only Admin or authorized TL accounts can manage riders.");
     }
 
     const modal = document.getElementById('admin-manage-riders-modal');
@@ -348,9 +361,10 @@ export function renderAdminRidersList() {
 
         container.innerHTML = ridersList.map(r => {
             const currentType = r.userType || 'rider';
-            let typeBadgeClass = "text-gray-400 bg-gray-800 border-gray-700";
-            if (currentType === 'admin') typeBadgeClass = "text-amber-300 bg-amber-500/10 border-amber-500/30";
-            else if (currentType === 'tl') typeBadgeClass = "text-blue-300 bg-blue-500/10 border-blue-500/30";
+            let typeBadgeClass = "text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-500/20 border-emerald-300 dark:border-emerald-500/40 font-bold";
+            if (currentType === 'admin') typeBadgeClass = "text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-500/20 border-amber-300 dark:border-amber-500/40 font-bold";
+            else if (currentType === 'tl') typeBadgeClass = "text-blue-800 dark:text-blue-300 bg-blue-100 dark:bg-blue-500/20 border-blue-300 dark:border-blue-500/40 font-bold";
+            else if (currentType === 'rider') typeBadgeClass = "text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-500/20 border-emerald-300 dark:border-emerald-500/40 font-bold";
 
             let tlPermissionsBtn = "";
             if (currentType === 'tl' && isAdmin()) {
@@ -404,10 +418,13 @@ export function renderAdminRidersList() {
 
                     <div class="flex items-center gap-1 shrink-0">
                         ${creditsBadgeHtml}
-                        <button onclick="window.openEditRiderModal && window.openEditRiderModal('${r.id}')" class="bg-gray-800 hover:bg-gray-700 text-blue-400 w-7 h-7 rounded-lg text-xs transition active:scale-90 flex items-center justify-center cursor-pointer" title="Edit Rider Details">
+                        <button onclick="window.removeRiderAccountPassword && window.removeRiderAccountPassword('${r.id}', '${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-amber-600 dark:text-amber-400 border border-gray-300 dark:border-gray-700 w-7 h-7 rounded-lg text-xs transition active:scale-90 flex items-center justify-center cursor-pointer" title="Remove Password (Forgot Password)">
+                            <i class="fa-solid fa-key text-[11px]"></i>
+                        </button>
+                        <button onclick="window.openEditRiderModal && window.openEditRiderModal('${r.id}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-blue-600 dark:text-blue-400 border border-gray-300 dark:border-gray-700 w-7 h-7 rounded-lg text-xs transition active:scale-90 flex items-center justify-center cursor-pointer" title="Edit Rider Details">
                             <i class="fa-solid fa-pen text-[11px]"></i>
                         </button>
-                        <button onclick="window.promptDeleteRiderAccount && window.promptDeleteRiderAccount('${r.id}', '${escapeHtml(r.name)}')" class="bg-gray-800 hover:bg-gray-700 text-red-400 w-7 h-7 rounded-lg text-xs transition active:scale-90 flex items-center justify-center cursor-pointer" title="Delete Rider Account">
+                        <button onclick="window.promptDeleteRiderAccount && window.promptDeleteRiderAccount('${r.id}', '${escapeHtml(r.name)}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-red-600 dark:text-red-400 border border-gray-300 dark:border-gray-700 w-7 h-7 rounded-lg text-xs transition active:scale-90 flex items-center justify-center cursor-pointer" title="Delete Rider Account">
                             <i class="fa-solid fa-trash text-[11px]"></i>
                         </button>
                     </div>
@@ -416,7 +433,7 @@ export function renderAdminRidersList() {
                 <!-- BOTTOM ROW: ROLE SELECTOR, BADGE & PERMISSION BUTTONS -->
                 <div class="flex items-center justify-between gap-2 flex-wrap pt-0.5">
                     <div class="flex items-center gap-1.5">
-                        <select onchange="window.quickChangeRiderUserType && window.quickChangeRiderUserType('${r.id}', this.value)" class="bg-gray-900 text-[10px] font-bold border border-gray-700 rounded-lg px-2 py-1 text-gray-200 cursor-pointer outline-none">
+                        <select onchange="window.quickChangeRiderUserType && window.quickChangeRiderUserType('${r.id}', this.value)" class="bg-white dark:bg-gray-900 text-[10px] font-bold border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1 text-gray-800 dark:text-gray-200 cursor-pointer outline-none">
                             <option value="rider" ${currentType === 'rider' ? 'selected' : ''}>Rider</option>
                             <option value="tl" ${currentType === 'tl' ? 'selected' : ''}>TL</option>
                             <option value="admin" ${currentType === 'admin' ? 'selected' : ''}>Admin</option>
@@ -446,28 +463,28 @@ function ensureTlPermissionsModal() {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'admin-tl-permissions-modal';
-        modal.className = 'hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-4';
+        modal.className = 'hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex items-center justify-center p-3 sm:p-4';
         modal.innerHTML = `
-            <div class="bg-cardBg border border-blue-500/50 p-5 rounded-3xl w-full max-w-sm shadow-2xl flex flex-col gap-3.5 max-h-[90vh] overflow-hidden relative animate-in fade-in zoom-in duration-200">
-                <div class="flex justify-between items-center border-b border-gray-800 pb-2.5">
+            <div class="bg-white dark:bg-cardBg border border-blue-500/50 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3.5 max-h-[92vh] overflow-hidden relative animate-in fade-in zoom-in duration-200">
+                <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5">
                     <div class="flex items-center gap-2">
-                        <div class="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center text-sm font-bold border border-blue-500/30">
+                        <div class="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold border border-blue-500/30">
                             <i class="fa-solid fa-user-shield"></i>
                         </div>
                         <div>
-                            <h3 class="font-bold text-xs text-white">TL Permissions Manager</h3>
-                            <p id="tl-permissions-target-subtitle" class="text-[9px] text-blue-400 font-mono">Select Active Powers</p>
+                            <h3 class="font-bold text-xs text-gray-900 dark:text-white">TL Permissions Manager</h3>
+                            <p id="tl-permissions-target-subtitle" class="text-[9px] text-blue-600 dark:text-blue-400 font-mono">Select Active Powers</p>
                         </div>
                     </div>
-                    <button onclick="window.closeTlPermissionsModal && window.closeTlPermissionsModal()" class="text-gray-400 hover:text-white text-sm cursor-pointer"><i class="fa-solid fa-xmark"></i></button>
+                    <button onclick="window.closeTlPermissionsModal && window.closeTlPermissionsModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer"><i class="fa-solid fa-xmark text-xs"></i></button>
                 </div>
 
                 <div class="flex items-center justify-between gap-2 px-1">
-                    <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Granular Privileges</span>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Granular Privileges</span>
                     <div class="flex items-center gap-2">
-                        <button type="button" onclick="window.toggleAllTlPermissions && window.toggleAllTlPermissions(true)" class="text-[9px] text-emerald-400 font-bold hover:underline cursor-pointer">Enable All</button>
-                        <span class="text-gray-600 text-[10px]">|</span>
-                        <button type="button" onclick="window.toggleAllTlPermissions && window.toggleAllTlPermissions(false)" class="text-[9px] text-red-400 font-bold hover:underline cursor-pointer">Revoke All</button>
+                        <button type="button" onclick="window.toggleAllTlPermissions && window.toggleAllTlPermissions(true)" class="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer">Enable All</button>
+                        <span class="text-gray-400 dark:text-gray-600 text-[10px]">|</span>
+                        <button type="button" onclick="window.toggleAllTlPermissions && window.toggleAllTlPermissions(false)" class="text-[9px] text-red-600 dark:text-red-400 font-bold hover:underline cursor-pointer">Revoke All</button>
                     </div>
                 </div>
 
@@ -475,8 +492,8 @@ function ensureTlPermissionsModal() {
                     <div class="text-center text-gray-500 italic py-6 text-xs">Loading permissions...</div>
                 </div>
 
-                <div class="pt-2 border-t border-gray-800">
-                    <button type="button" onclick="window.closeTlPermissionsModal && window.closeTlPermissionsModal()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
+                <div class="pt-2 border-t border-gray-200 dark:border-gray-800">
+                    <button type="button" onclick="window.closeTlPermissionsModal && window.closeTlPermissionsModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 font-bold py-2.5 rounded-xl text-xs transition active:scale-95 cursor-pointer">
                         Done
                     </button>
                 </div>
@@ -537,14 +554,14 @@ export async function renderTlPermissionsModalContent() {
         const isGranted = currentPerms[def.key] === true;
 
         return `
-        <label class="bg-black/40 border border-gray-800 hover:border-gray-700 p-2.5 rounded-2xl flex items-center justify-between gap-3 cursor-pointer select-none transition">
+        <label class="${isGranted ? 'bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/40' : 'bg-gray-50 dark:bg-black/40 border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700'} border p-2.5 rounded-2xl flex items-center justify-between gap-3 cursor-pointer select-none transition">
             <div class="flex items-center gap-2.5 min-w-0">
-                <div class="w-7 h-7 rounded-xl ${isGranted ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-gray-800 text-gray-500 border border-gray-700'} flex items-center justify-center text-xs shrink-0">
+                <div class="w-7 h-7 rounded-xl ${isGranted ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40' : 'bg-gray-200 dark:bg-gray-800 text-gray-500 border border-gray-300 dark:border-gray-700'} flex items-center justify-center text-xs shrink-0">
                     <i class="fa-solid ${def.icon}"></i>
                 </div>
                 <div class="flex flex-col min-w-0">
-                    <span class="font-bold text-xs ${isGranted ? 'text-white' : 'text-gray-400'} truncate">${escapeHtml(def.label)}</span>
-                    <span class="text-[9.5px] text-gray-500 leading-tight">${escapeHtml(def.desc)}</span>
+                    <span class="font-bold text-xs ${isGranted ? 'text-emerald-950 dark:text-white' : 'text-gray-700 dark:text-gray-400'} truncate">${escapeHtml(def.label)}</span>
+                    <span class="text-[9.5px] text-gray-500 dark:text-gray-400 leading-tight">${escapeHtml(def.desc)}</span>
                 </div>
             </div>
 
@@ -1053,6 +1070,7 @@ export function openAddRiderModal() {
     const idInput = document.getElementById('edit-rider-id-input');
     const nameInput = document.getElementById('edit-rider-name-input');
     const typeSelect = document.getElementById('edit-rider-usertype-select');
+    const passSection = document.getElementById('edit-rider-password-section');
 
     if (titleEl) titleEl.innerText = "Add New Rider Account";
     if (idInput) {
@@ -1061,6 +1079,7 @@ export function openAddRiderModal() {
     }
     if (nameInput) nameInput.value = "";
     if (typeSelect) typeSelect.value = "rider";
+    if (passSection) passSection.classList.add('hidden');
 
     if (modal) modal.classList.remove('hidden');
 }
@@ -1074,12 +1093,16 @@ export async function openEditRiderModal(riderId) {
     const idInput = document.getElementById('edit-rider-id-input');
     const nameInput = document.getElementById('edit-rider-name-input');
     const typeSelect = document.getElementById('edit-rider-usertype-select');
+    const passSection = document.getElementById('edit-rider-password-section');
+    const passBadge = document.getElementById('edit-rider-pass-status-badge');
+    const removePassBtn = document.getElementById('btn-remove-rider-password');
 
     if (titleEl) titleEl.innerText = `Edit Rider Account (${riderId})`;
     if (idInput) {
         idInput.value = riderId;
         idInput.disabled = true;
     }
+    if (passSection) passSection.classList.remove('hidden');
 
     try {
         let existingData = null;
@@ -1096,7 +1119,9 @@ export async function openEditRiderModal(riderId) {
                     userType: rMem.userType,
                     tlAdminPower: rMem.tlAdminPower,
                     tlPermissions: rMem.tlPermissions,
-                    allowedFeatures: rMem.allowedFeatures
+                    allowedFeatures: rMem.allowedFeatures,
+                    password: rMem.password,
+                    hasPassword: rMem.hasPassword
                 };
             }
         }
@@ -1104,9 +1129,87 @@ export async function openEditRiderModal(riderId) {
         if (nameInput) nameInput.value = existingData ? (existingData.riderName || existingData.name || "") : "";
         if (typeSelect) typeSelect.value = existingData ? (existingData.userType || existingData.type || "rider").toLowerCase() : "rider";
 
+        const hasPassword = Boolean(existingData && (existingData.password || existingData.hasPassword === true));
+        if (passBadge) {
+            if (hasPassword) {
+                passBadge.className = "text-[9.5px] font-bold px-2 py-0.5 rounded-lg border bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
+                passBadge.innerHTML = `<i class="fa-solid fa-lock text-[9px]"></i> Password is Set`;
+            } else {
+                passBadge.className = "text-[9.5px] font-bold px-2 py-0.5 rounded-lg border bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-700";
+                passBadge.innerHTML = `<i class="fa-solid fa-unlock text-[9px]"></i> No Password Set`;
+            }
+        }
+
+        if (removePassBtn) {
+            if (hasPassword) {
+                removePassBtn.disabled = false;
+                removePassBtn.classList.remove('opacity-50', 'pointer-events-none');
+                removePassBtn.innerHTML = `<i class="fa-solid fa-unlock-keyhole"></i> Remove Password (Forgot Password)`;
+            } else {
+                removePassBtn.disabled = true;
+                removePassBtn.classList.add('opacity-50', 'pointer-events-none');
+                removePassBtn.innerHTML = `<i class="fa-solid fa-check"></i> No Password Configured`;
+            }
+        }
+
         if (modal) modal.classList.remove('hidden');
     } catch(e) {
         showToast("⚠️ Failed to load rider details.");
+    }
+}
+
+export async function removeRiderAccountPassword(targetRiderId = null, targetRiderName = null) {
+    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+
+    const riderId = (targetRiderId || editingRiderTarget || "").toString().trim();
+    if (!riderId) return showToast("⚠️ No rider selected.");
+
+    const riderName = targetRiderName || document.getElementById('edit-rider-name-input')?.value.trim() || riderId;
+
+    const confirmed = window.confirm(`Remove password for ${riderName} (ID: ${riderId})?\n\nThis is used when a rider forgets their password. Once removed, the rider can log in using their Rider ID and will be prompted to set up a new password.`);
+    if (!confirmed) return;
+
+    try {
+        if (db) {
+            await db.ref(`riders/${riderId}`).update({
+                password: null,
+                hasPassword: false,
+                skipPasswordSetup: false,
+                passwordUpdatedAt: null
+            });
+            await db.ref(`roster/${riderId}`).update({
+                hasPassword: false
+            }).catch(() => {});
+        }
+
+        localStorage.removeItem(`lokalex_pass_${riderId}`);
+        localStorage.removeItem(`lokalex_skip_pass_${riderId}`);
+
+        const rMem = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === riderId);
+        if (rMem) {
+            rMem.hasPassword = false;
+            delete rMem.password;
+        }
+
+        const passBadge = document.getElementById('edit-rider-pass-status-badge');
+        const removePassBtn = document.getElementById('btn-remove-rider-password');
+        if (passBadge) {
+            passBadge.className = "text-[9.5px] font-bold px-2 py-0.5 rounded-lg border bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-700";
+            passBadge.innerHTML = `<i class="fa-solid fa-unlock text-[9px]"></i> Password Removed (Cleared)`;
+        }
+        if (removePassBtn) {
+            removePassBtn.disabled = true;
+            removePassBtn.classList.add('opacity-50', 'pointer-events-none');
+            removePassBtn.innerHTML = `<i class="fa-solid fa-check"></i> Password Cleared`;
+        }
+
+        showToast(`✅ Password removed for ${riderName}! Rider can now log in and set a new password.`);
+        showSideNotification("PASSWORD REMOVED", `Password cleared for ${riderName} (${riderId})`, "fa-unlock", "text-amber-400", "border-amber-500");
+
+        renderAdminRidersList();
+    } catch(e) {
+        console.error("removeRiderAccountPassword error:", e);
+        showToast("❌ Failed to remove rider password.");
     }
 }
 
@@ -1263,5 +1366,9 @@ if (typeof window !== 'undefined') {
     window.resetRiderCreditBalance = resetRiderCreditBalance;
     window.submitCustomCreditDelta = submitCustomCreditDelta;
     window.promptAdjustRiderCredits = openAdjustRiderCreditsModal;
+
+    // Password reset bindings
+    window.removeRiderAccountPassword = removeRiderAccountPassword;
+    window.promptRemoveRiderPassword = removeRiderAccountPassword;
 }
 // REMARKS: ROSTER_ACCOUNTS_DEDICATED_CREDIT_MODAL_AND_ADMIN_EXEMPTION_V1_COMPLETE

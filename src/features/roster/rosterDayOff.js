@@ -3,7 +3,7 @@ import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { getLocalTodayStr, escapeHtml } from '../../utils/helpers.js';
-import { isAdmin } from './rosterUtils.js';
+import { isAdmin, hasTlPermission } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 import { getRiderStorageKey, sanitizeForFirebase } from './rosterSchedule.js';
 
@@ -230,7 +230,7 @@ export async function selectRiderDayOff(dayIndex) {
 }
 
 export function openAdminDayOffSettingsModal() {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageDayOff')) return showToast("⚠️ Unauthorized: Admin access required.");
 
     const modal = document.getElementById('admin-dayoff-settings-modal');
     const masterToggle = document.getElementById('admin-dayoff-master-enabled');
@@ -304,7 +304,7 @@ export function renderAdminDayOffSettingsList() {
 }
 
 export async function adminReassignRiderDayOff(riderKey, riderName, newDayIndex) {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageDayOff')) return showToast("⚠️ Unauthorized: Admin access required.");
 
     const storageKey = getRiderStorageKey(riderKey, riderName);
     const dayVal = parseInt(newDayIndex);
@@ -357,7 +357,7 @@ export async function adminReassignRiderDayOff(riderKey, riderName, newDayIndex)
 }
 
 export async function saveAdminDayOffSettings() {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageDayOff')) return showToast("⚠️ Unauthorized: Admin access required.");
 
     const masterToggle = document.getElementById('admin-dayoff-master-enabled');
     const maxChangesInput = document.getElementById('admin-dayoff-max-changes');

@@ -200,3 +200,18 @@ export function logout() {
     localStorage.clear(); 
     location.reload(); 
 }
+
+export function showRiderForgotPassHelp() {
+    showSideNotification(
+        "RIDER FORGOT PASSWORD",
+        "Makipag-ugnayan sa Admin upang i-clear ang iyong password gamit ang Rider Accounts Manager. Pagkatapos ma-clear, makakapag-login ka agad at makakapag-set ng bagong password.",
+        "fa-key",
+        "text-amber-400",
+        "border-amber-500"
+    );
+    showToast("ℹ️ Humiling sa Admin na i-clear ang iyong password sa Rider Accounts Manager.");
+}
+
+if (typeof window !== 'undefined') {
+    window.showRiderForgotPassHelp = showRiderForgotPassHelp;
+}

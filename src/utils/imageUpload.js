@@ -90,6 +90,34 @@ export async function uploadImage(fileOrBlobOrDataUrl, storagePath, metadata = {
         }
     }
 
+    // 2. High-speed Public HTTPS CDN Uploader (Required for Facebook Messenger & Low-Bandwidth RTDB)
+    if (blob) {
+        try {
+            const formData = new FormData();
+            formData.append('reqtype', 'fileupload');
+            formData.append('time', '72h');
+            formData.append('fileToUpload', blob, 'image.jpg');
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+            const res = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
+                method: 'POST',
+                body: formData,
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            if (res.ok) {
+                const url = (await res.text()).trim();
+                if (url.startsWith('https://')) {
+                    return url;
+                }
+            }
+        } catch (e) {
+            console.warn('[ImageUpload] Public HTTPS CDN fallback upload failed/timed out:', e);
+        }
+    }
+
     // Fallback: Return the original string (or read blob to base64)
     if (typeof fileOrBlobOrDataUrl === 'string') {
         return fileOrBlobOrDataUrl;

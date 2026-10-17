@@ -1,5 +1,7 @@
 // src/ui/notifications.js
 import { escapeHtml } from '../utils/helpers.js';
+import { showNativeNotification, clearNativeNotification } from '../native/nativeBridge.js';
+import { startKeepAlive, stopKeepAlive } from '../utils/backgroundKeepAlive.js';
 
 let audioCtxInstance = null;
 let wakeLockInstance = null;
@@ -22,6 +24,7 @@ export function unlockAudioContext() {
 
 // Background audio pulse keeps mobile browsers from killing background JS execution
 export function startBackgroundAudioPulse() {
+    startKeepAlive();
     if (backgroundAudioInterval) return;
     unlockAudioContext();
 
@@ -41,6 +44,7 @@ export function startBackgroundAudioPulse() {
 }
 
 export function stopBackgroundAudioPulse() {
+    stopKeepAlive();
     if (backgroundAudioInterval) {
         clearInterval(backgroundAudioInterval);
         backgroundAudioInterval = null;
@@ -161,28 +165,13 @@ export function notifyUser(title, message, options = {}) {
     showToast(message);
     showSideNotification(title, message, options.icon || 'fa-bell', options.textColor || 'text-blue-400', options.borderColor || 'border-blue-500');
 
-    // If app is running in background or screen locked, dispatch native notification
-    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.controller.postMessage({
-                type: 'SHOW_NATIVE_NOTIFICATION',
-                title: title,
-                body: message,
-                icon: options.iconUrl || '/icons/icon-192x192.png',
-                tag: options.tag || 'lokalex-smart-alert',
-                data: options.data || { url: '/' }
-            });
-        } else {
-            try {
-                new Notification(title, {
-                    body: message,
-                    icon: options.iconUrl || '/icons/icon-192x192.png',
-                    tag: options.tag || 'lokalex-smart-alert'
-                });
-            } catch(e) {}
-        }
+    // If app is running in background or screen locked, dispatch native notification bar alert
+    if (document.hidden) {
+        showNativeNotification(title, message, options.tag || 'lokalex-alert', options.custId || '');
     }
 }
+
+export { showNativeNotification, clearNativeNotification };
 
 // ============================================================================
 // SERVICE WORKER FOREGROUND BRIDGE

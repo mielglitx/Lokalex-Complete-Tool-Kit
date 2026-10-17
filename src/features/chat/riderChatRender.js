@@ -1,10 +1,154 @@
+
 // src/features/chat/riderChatRender.js
+import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { escapeHtml } from '../../utils/helpers.js';
 import { isRiderMatch } from '../roster/rosterUtils.js';
 import { formatChatDateTime } from './chatUtils.js';
+import { showToast } from '../../ui/notifications.js';
+import { openSlideDeleteModal } from '../../ui/modals.js';
 
 const MAPS_API_KEY = "AIzaSyBVAwn0UnyHJ926oHeK0k789ncADMzmX80";
+
+let activeChatSelectedPhone = null;
+
+export function formatChatTextWithPhoneLinks(rawText) {
+    if (!rawText) return '';
+    const safeText = escapeHtml(rawText);
+
+    // Matches numbers starting with +63, 09, or 9 (followed by digits, spaces, hyphens)
+    const phoneRegex = /(?:(?:\+63)|(?:\b09)|(?:\b9))[\d\s\-()]{5,20}\b/g;
+
+    return safeText.replace(phoneRegex, (match) => {
+        const digits = match.replace(/\D/g, '');
+        // Must contain more than 6 digits
+        if (digits.length <= 6) return match;
+
+        let normalized = digits;
+        if (match.trim().startsWith('+63')) {
+            normalized = '+' + digits;
+        } else if (match.trim().startsWith('9') && digits.length === 10) {
+            normalized = '0' + digits;
+        } else if (match.trim().startsWith('09')) {
+            normalized = digits;
+        }
+
+        return `<button type="button" onclick="event.stopPropagation(); window.handleChatPhoneClick && window.handleChatPhoneClick('${normalized}')" class="inline-flex items-center gap-1 font-bold underline text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 bg-blue-500/10 hover:bg-blue-500/20 px-1.5 py-0.5 rounded transition active:scale-95 cursor-pointer"><i class="fa-solid fa-phone text-[9px]"></i><span>${match}</span></button>`;
+    });
+}
+
+export function handleChatPhoneClick(phoneNumber) {
+    if (!phoneNumber) return;
+    activeChatSelectedPhone = phoneNumber;
+
+    const modal = document.getElementById('chat-phone-action-modal');
+    const numEl = document.getElementById('chat-phone-action-number');
+    if (numEl) numEl.innerText = phoneNumber;
+
+    if (modal) {
+        modal.classList.remove('hidden');
+    } else {
+        const choice = confirm(`Gusto mo bang tawagan o i-text si ${phoneNumber}?\n\nOK = Tawag\nCancel = Text`);
+        if (choice) {
+            window.location.href = `tel:${phoneNumber}`;
+        } else {
+            window.location.href = `sms:${phoneNumber}`;
+        }
+    }
+}
+
+export function closeChatPhoneModal() {
+    const modal = document.getElementById('chat-phone-action-modal');
+    if (modal) modal.classList.add('hidden');
+    activeChatSelectedPhone = null;
+}
+
+export function executeChatPhoneAction(actionType) {
+    const phone = activeChatSelectedPhone;
+    closeChatPhoneModal();
+    if (!phone) return;
+
+    if (actionType === 'call') {
+        window.location.href = `tel:${phone}`;
+    } else if (actionType === 'text') {
+        window.location.href = `sms:${phone}`;
+    } else if (actionType === 'save_details') {
+        saveChatPhoneToCustomerDetails(phone);
+    }
+}
+
+export function saveChatPhoneToCustomerDetails(phone) {
+    if (!phone) return;
+    const custId = window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null;
+    let meta = (window.getCurrentRiderChatMeta ? window.getCurrentRiderChatMeta() : {}) || {};
+    let custName = (document.getElementById('rider-chat-cust-name')?.innerText || '').trim();
+    if (!custName || custName === 'Customer Name' || custName.toLowerCase() === 'customer' || custName.startsWith('FB Customer (')) {
+        custName = meta.customerName || meta.name || 'Customer';
+    }
+
+    const slideModal = (typeof openSlideDeleteModal === 'function') ? openSlideDeleteModal : window.openSlideDeleteModal;
+    if (typeof slideModal === 'function') {
+        slideModal(
+            `I-save sa Customer Details?`,
+            `I-save ang number na [${phone}] para kay [${custName}]?\nI-drag pakanan para kumpirmahin.`,
+            async () => {
+                await commitChatPhoneToDetails(phone, custId, custName);
+            }
+        );
+    } else {
+        commitChatPhoneToDetails(phone, custId, custName);
+    }
+}
+
+async function commitChatPhoneToDetails(phone, custId, custName) {
+    const now = Date.now();
+    let meta = (window.getCurrentRiderChatMeta ? window.getCurrentRiderChatMeta() : {}) || {};
+    meta.customerPhone = phone;
+
+    if (window.setActiveCustData) {
+        const activeData = (window.getActiveCustData ? window.getActiveCustData() : {}) || {};
+        activeData.phoneNumber = phone;
+        window.setActiveCustData(activeData);
+    }
+
+    // Update customer details UI elements directly if loaded/open
+    const phoneEl = document.getElementById('cust-details-phone');
+    if (phoneEl) {
+        phoneEl.innerText = phone;
+        phoneEl.href = `tel:${phone.replace(/[^0-9+]/g, '')}`;
+        phoneEl.className = "font-bold text-sm text-blue-600 dark:text-blue-400 font-mono mt-0.5 block hover:underline truncate";
+    }
+    const phoneCallBtn = document.getElementById('cust-details-call-btn');
+    if (phoneCallBtn) {
+        phoneCallBtn.href = `tel:${phone.replace(/[^0-9+]/g, '')}`;
+        phoneCallBtn.classList.remove('hidden');
+    }
+    const phoneCopyBtn = document.getElementById('cust-details-copy-btn');
+    if (phoneCopyBtn) phoneCopyBtn.classList.remove('hidden');
+
+    if (db && custId) {
+        try {
+            const updates = {};
+            updates[`customers/${custId}/phoneNumber`] = phone;
+            updates[`customers/${custId}/updatedAt`] = now;
+            updates[`customerChats/${custId}/metadata/customerPhone`] = phone;
+            updates[`customerChats/${custId}/metadata/lastUpdated`] = now;
+            updates[`customerChatMeta/${custId}/customerPhone`] = phone;
+            updates[`customerChatMeta/${custId}/lastUpdated`] = now;
+
+            const linkedKey = meta.linkedDirectoryKey;
+            if (linkedKey) {
+                updates[`directory/customers/${linkedKey}/contact`] = phone;
+            }
+
+            await db.ref().update(updates);
+        } catch (e) {
+            console.warn("Failed to update customer phone in Firebase:", e);
+        }
+    }
+
+    showToast(`✅ Na-save ang contact number [${phone}] para kay ${custName}!`);
+}
 
 let longPressTimer = null;
 let startX = 0;
@@ -201,16 +345,39 @@ export function renderReactionsHtml(reactions, msgId) {
     return badges ? `<div class="flex flex-wrap gap-1 mt-1">${badges}</div>` : '';
 }
 
+export function scrollToBubble(msgId) {
+    if (!msgId) return;
+    const bubbleEl = document.getElementById(`msg-bubble-${msgId}`);
+    if (!bubbleEl) return;
+    bubbleEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    bubbleEl.classList.add('outline', 'outline-2', 'outline-amber-400', 'transition-all', 'duration-300');
+    setTimeout(() => {
+        bubbleEl.classList.remove('outline', 'outline-2', 'outline-amber-400');
+    }, 1600);
+}
+if (typeof window !== 'undefined') {
+    window.scrollToBubble = scrollToBubble;
+}
+
 export function renderReplyPreviewInsideMessage(replyTo) {
-    if (!replyTo || !replyTo.text) return '';
-    const clickHandler = replyTo.id ? `event.stopPropagation(); window.scrollToBubble('${replyTo.id}')` : '';
+    if (!replyTo) return '';
+    const textPreview = replyTo.text 
+        || replyTo.message?.text 
+        || (typeof replyTo.message === 'string' ? replyTo.message : null)
+        || (replyTo.imageUrl || replyTo.message?.imageUrl ? '📷 Photo' : (replyTo.locationCoords ? '📍 Location' : 'Quoted Message'));
+    if (!textPreview) return '';
+    const sender = (replyTo.sender && replyTo.sender !== 'Unknown')
+        ? replyTo.sender 
+        : (replyTo.message?.sender || replyTo.message?.senderName || 'Reply');
+    const bubbleId = replyTo.id || replyTo.key || replyTo.mid;
+    const clickHandler = bubbleId ? `event.stopPropagation(); window.scrollToBubble && window.scrollToBubble('${bubbleId}')` : '';
     return `
     <div ${clickHandler ? `onclick="${clickHandler}"` : ''} class="bg-black/10 dark:bg-black/40 border-l-2 border-amber-400 px-2 py-1 rounded-r-lg mb-1.5 text-[10px] opacity-90 truncate max-w-full cursor-pointer hover:opacity-100 transition">
         <div class="font-bold text-amber-600 dark:text-amber-300 truncate flex items-center gap-1">
             <i class="fa-solid fa-reply text-[8px]"></i>
-            <span>${escapeHtml(replyTo.sender || 'Reply')}</span>
+            <span>${escapeHtml(sender)}</span>
         </div>
-        <div class="text-gray-700 dark:text-gray-200 truncate">${escapeHtml(replyTo.text)}</div>
+        <div class="text-gray-700 dark:text-gray-200 truncate">${escapeHtml(textPreview)}</div>
     </div>`;
 }
 
@@ -308,98 +475,130 @@ function getMessageSenderAvatar(m, isRider, custAvatar) {
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(defaultRider)}&background=3B82F6&color=fff`;
 }
 
-export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, isInitialLoad = false, oldScrollHeight = 0, activeCustData = null) {
-    const msgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+export function buildSingleMessageHtml(m, activeCustData = null) {
+    const isRider = !!m.isRider || m.senderType === 'rider';
+    const alignClass = isRider 
+        ? "self-end bg-[#076B57] text-white rounded-tr-none shadow-xs" 
+        : "self-start bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-200 rounded-tl-none shadow-xs";
+    const timeStr = formatChatDateTime(m.timestamp);
 
     const riderName = appState.riderName || "Rider";
     const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
     const custAvatar = activeCustData?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff`;
 
-    const messagesHtml = msgs.map(m => {
-        const isRider = !!m.isRider || m.senderType === 'rider';
-        const alignClass = isRider 
-            ? "self-end bg-[#076B57] text-white rounded-tr-none shadow-xs" 
-            : "self-start bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-200 rounded-tl-none shadow-xs";
-        const timeStr = formatChatDateTime(m.timestamp);
+    const senderName = m.sender || (isRider ? (m.senderName || riderName) : custName);
+    const senderAvatar = getMessageSenderAvatar(m, isRider, custAvatar);
+    const statusIndicator = isRider ? renderRiderMessageStatusIndicator(m) : '';
+    const replyBlockHtml = renderReplyPreviewInsideMessage(m.replyTo);
+    const reactionsHtml = renderReactionsHtml(m.reactions, m.id);
 
-        const senderName = m.sender || (isRider ? (m.senderName || riderName) : custName);
-        const senderAvatar = getMessageSenderAvatar(m, isRider, custAvatar);
-        const statusIndicator = isRider ? renderRiderMessageStatusIndicator(m) : '';
-        const replyBlockHtml = renderReplyPreviewInsideMessage(m.replyTo);
-        const reactionsHtml = renderReactionsHtml(m.reactions, m.id);
+    const imgHtml = m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null);
+    const isResolvingFbImage = !imgHtml && m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]'));
+    const isLikeSticker = Boolean(m.isSticker || m.stickerType === 'like' || (imgHtml && (imgHtml.includes('369239') || imgHtml.includes('sticker') || imgHtml.includes('like'))));
+    
+    const imageMarkup = imgHtml 
+        ? (isLikeSticker 
+            ? `<div class="p-0.5 select-none flex items-center justify-start"><img src="${imgHtml}" alt="👍" class="w-10 h-10 object-contain hover:scale-110 active:scale-90 transition-transform cursor-pointer" onclick="event.stopPropagation()"></div>`
+            : `<img src="${imgHtml}" loading="lazy" decoding="async" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgHtml)}', 'rider')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">`)
+        : (isResolvingFbImage 
+            ? `<div class="flex items-center gap-2 py-2 px-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-600 dark:text-blue-400 text-xs mt-1 font-medium"><i class="fa-solid fa-spinner fa-spin"></i><span>Loading photo...</span></div>` 
+            : '');
+    
+    let locationHtml = "";
+    let lat = null;
+    let lng = null;
 
-        const imgHtml = m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null);
-        const isResolvingFbImage = !imgHtml && m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]'));
-        const imageMarkup = imgHtml 
-            ? `<img src="${imgHtml}" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgHtml)}', 'rider')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">` 
-            : (isResolvingFbImage 
-                ? `<div class="flex items-center gap-2 py-2 px-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-600 dark:text-blue-400 text-xs mt-1 font-medium"><i class="fa-solid fa-spinner fa-spin"></i><span>Loading photo...</span></div>` 
-                : '');
-        
-        let locationHtml = "";
-        let lat = null;
-        let lng = null;
-
-        if (m.locationCoords && m.locationCoords.lat && m.locationCoords.lng) {
-            lat = m.locationCoords.lat;
-            lng = m.locationCoords.lng;
-        } else if (m.type === 'location' && m.text) {
-            const match = m.text.match(/query=(-?\d+\.\d+),(-?\d+\.\d+)/);
-            if (match) {
-                lat = match[1];
-                lng = match[2];
-            }
+    if (m.locationCoords && m.locationCoords.lat && m.locationCoords.lng) {
+        lat = m.locationCoords.lat;
+        lng = m.locationCoords.lng;
+    } else if (m.type === 'location' && m.text) {
+        const match = m.text.match(/query=(-?\d+\.\d+),(-?\d+\.\d+)/);
+        if (match) {
+            lat = match[1];
+            lng = match[2];
         }
+    }
 
-        if (lat && lng) {
-            const mapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-            const staticMapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=400x200&maptype=roadmap&markers=color:red%7C${lat},${lng}&key=${MAPS_API_KEY}`;
+    if (lat && lng) {
+        const mapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+        const staticMapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=400x200&maptype=roadmap&markers=color:red%7C${lat},${lng}&key=${MAPS_API_KEY}`;
 
-            locationHtml = `
-            <div class="mt-1.5 flex flex-col gap-1 rounded-xl overflow-hidden border border-emerald-500/40 bg-gray-50 dark:bg-black/40 p-1">
-                <a href="${mapUrl}" target="_blank" onclick="event.stopPropagation()" class="block relative group overflow-hidden rounded-lg">
-                    <img src="${staticMapUrl}" alt="Map Location Preview" class="w-full h-32 object-cover rounded-lg group-hover:scale-105 transition-transform duration-200">
-                    <div class="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span class="bg-black/80 text-white text-[10px] font-bold px-2 py-1 rounded-md"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open in Maps</span>
-                    </div>
-                </a>
-                <a href="${mapUrl}" target="_blank" onclick="event.stopPropagation()" class="bg-emerald-600/20 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-bold px-2.5 py-1.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 active:scale-95 transition">
-                    <i class="fa-solid fa-map-location-dot text-red-400"></i> View Shared Location
-                </a>
-            </div>`;
-        }
-
-        const encodedText = encodeURIComponent(m.text || '').replace(/'/g, '%27');
-        const encodedSender = encodeURIComponent(senderName).replace(/'/g, '%27');
-
-        const isPlaceholderText = m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]') || m.text === '📷 Photo' || m.text === 'Facebook Message');
-        const showText = m.text && (!imgHtml || !isPlaceholderText) && !isResolvingFbImage && !locationHtml;
-
-        return `
-        <div id="msg-bubble-${m.id}" class="flex items-start gap-1.5 ${isRider ? 'flex-row-reverse' : 'flex-row'} my-0.5">
-            <img src="${senderAvatar}" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1 pointer-events-none">
-            <div 
-                onpointerdown="window.handleMsgPointerDown(event, '${m.id}', 'rider-cust', '${encodedText}', '${encodedSender}')"
-                onpointermove="window.handleMsgPointerMove(event)"
-                onpointerup="window.handleMsgPointerUp(event, '${m.id}')"
-                onpointercancel="window.handleMsgPointerUp(event, '${m.id}')"
-                oncontextmenu="window.handleMsgContextMenu(event, '${m.id}', 'rider-cust', '${encodedText}', '${encodedSender}')"
-                class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 text-xs ${alignClass} cursor-pointer transition active:scale-[0.98] select-none shadow-xs">
-                <div class="text-[9px] ${isRider ? 'text-emerald-100' : 'text-teal-700 dark:text-teal-400'} font-bold flex justify-between gap-3 pointer-events-none">
-                    <span>${escapeHtml(senderName)}</span>
-                    <div class="flex items-center gap-1 opacity-80 font-mono shrink-0">
-                        <span>${timeStr}</span>
-                        ${statusIndicator}
-                    </div>
+        locationHtml = `
+        <div class="mt-1.5 flex flex-col gap-1 rounded-xl overflow-hidden border border-emerald-500/40 bg-gray-50 dark:bg-black/40 p-1">
+            <a href="${mapUrl}" target="_blank" onclick="event.stopPropagation()" class="block relative group overflow-hidden rounded-lg">
+                <img src="${staticMapUrl}" loading="lazy" decoding="async" alt="Map Location Preview" class="w-full h-32 object-cover rounded-lg group-hover:scale-105 transition-transform duration-200">
+                <div class="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span class="bg-black/80 text-white text-[10px] font-bold px-2 py-1 rounded-md"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open in Maps</span>
                 </div>
-                ${replyBlockHtml}
-                ${showText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words pointer-events-none">${escapeHtml(m.text)}</div>` : ''}
-                ${imageMarkup}
-                ${locationHtml}
-                ${reactionsHtml}
-            </div>
+            </a>
+            <a href="${mapUrl}" target="_blank" onclick="event.stopPropagation()" class="bg-emerald-600/20 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-bold px-2.5 py-1.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 active:scale-95 transition">
+                <i class="fa-solid fa-map-location-dot text-red-400"></i> View Shared Location
+            </a>
         </div>`;
-    }).join('');
+    }
+
+    const encodedText = encodeURIComponent(m.text || '').replace(/'/g, '%27');
+    const encodedSender = encodeURIComponent(senderName).replace(/'/g, '%27');
+
+    const isPlaceholderText = m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]') || m.text === '📷 Photo' || m.text === 'Facebook Message');
+    const showText = m.text && (!imgHtml || !isPlaceholderText) && !isResolvingFbImage && !locationHtml && !(isLikeSticker && imgHtml);
+
+    return `
+    <div id="msg-bubble-${m.id}" class="flex items-start gap-1.5 ${isRider ? 'flex-row-reverse' : 'flex-row'} my-0.5">
+        <img src="${senderAvatar}" loading="lazy" decoding="async" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1 pointer-events-none">
+        <div 
+            onpointerdown="window.handleMsgPointerDown(event, '${m.id}', 'rider-cust', '${encodedText}', '${encodedSender}')"
+            onpointermove="window.handleMsgPointerMove(event)"
+            onpointerup="window.handleMsgPointerUp(event, '${m.id}')"
+            onpointercancel="window.handleMsgPointerUp(event, '${m.id}')"
+            oncontextmenu="window.handleMsgContextMenu(event, '${m.id}', 'rider-cust', '${encodedText}', '${encodedSender}')"
+            class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 text-xs ${alignClass} cursor-pointer transition active:scale-[0.98] select-none shadow-xs">
+            <div class="text-[9px] ${isRider ? 'text-emerald-100' : 'text-teal-700 dark:text-teal-400'} font-bold flex justify-between gap-3 pointer-events-none">
+                <span>${escapeHtml(senderName)}</span>
+                <div class="flex items-center gap-1 opacity-80 font-mono shrink-0">
+                    <span>${timeStr}</span>
+                    ${statusIndicator}
+                </div>
+            </div>
+            ${replyBlockHtml}
+            ${showText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${formatChatTextWithPhoneLinks(m.text)}</div>` : ''}
+            ${imageMarkup}
+            ${locationHtml}
+            ${reactionsHtml}
+        </div>
+    </div>`;
+}
+
+export function appendOrUpdateSingleRiderMessage(container, msg, activeCustData = null) {
+    if (!container || !msg || !msg.id) return;
+
+    // Remove loading skeleton or empty notice if present
+    const skeleton = document.getElementById('rider-chat-loading-skeleton');
+    if (skeleton) skeleton.remove();
+
+    const emptyNote = container.querySelector('.italic');
+    if (emptyNote && container.children.length === 1) emptyNote.remove();
+
+    const existingBubble = document.getElementById(`msg-bubble-${msg.id}`);
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = buildSingleMessageHtml(msg, activeCustData).trim();
+    const newBubble = tempDiv.firstElementChild;
+
+    if (existingBubble) {
+        existingBubble.replaceWith(newBubble);
+    } else {
+        container.appendChild(newBubble);
+    }
+}
+
+export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, isInitialLoad = false, oldScrollHeight = 0, activeCustData = null) {
+    const msgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => {
+        const tA = Number(a.timestamp) || 0;
+        const tB = Number(b.timestamp) || 0;
+        if (tA !== tB) return tA - tB;
+        return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+    const messagesHtml = msgs.map(m => buildSingleMessageHtml(m, activeCustData)).join('');
 
     let topHeader = '';
     if (hasMoreRiderMsgs && msgs.length >= 15) {
@@ -433,4 +632,8 @@ if (typeof window !== 'undefined') {
     window.handleMsgPointerMove = handleMsgPointerMove;
     window.handleMsgPointerUp = handleMsgPointerUp;
     window.handleMsgContextMenu = handleMsgContextMenu;
+    window.handleChatPhoneClick = handleChatPhoneClick;
+    window.closeChatPhoneModal = closeChatPhoneModal;
+    window.executeChatPhoneAction = executeChatPhoneAction;
+    window.saveChatPhoneToCustomerDetails = saveChatPhoneToCustomerDetails;
 }

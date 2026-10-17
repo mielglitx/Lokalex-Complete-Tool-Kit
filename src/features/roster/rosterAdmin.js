@@ -33,6 +33,13 @@ import {
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 import { getTopQueueTime, updateRosterStatus, updateRosterStatusData, voidSingleCateringCustomer, clockOutRider } from './rosterStatus.js';
+import { 
+    adminForceStatus as opsAdminForceStatus, 
+    adminVoidSpecificCustomer as opsAdminVoidSpecificCustomer, 
+    submitAdminForceCatering as opsSubmitAdminForceCatering,
+    promptVoidCustomer as opsPromptVoidCustomer,
+    executeVoidCateredCustomer as opsExecuteVoidCateredCustomer
+} from './rosterAdminOps.js';
 
 import {
     openAdminTimeInScheduleModal,
@@ -96,7 +103,7 @@ let pendingAdminTarget = null;
 // ============================================================================
 
 export function openAdminEarlyShiftModal() {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageEarlyShift')) return showToast("⚠️ Unauthorized: Admin or authorized TL access required.");
     const modal = document.getElementById('admin-early-shift-modal');
     if (!modal) return;
 
@@ -188,7 +195,7 @@ export function renderAdminEarlyShiftRidersList() {
 }
 
 export async function toggleRiderEarlyShiftExemption(riderId, riderName, grant) {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageEarlyShift')) return showToast("⚠️ Unauthorized: Admin or authorized TL access required.");
     if (!riderId) return;
 
     const todayStr = getLocalTodayStr();
@@ -219,7 +226,7 @@ export async function toggleRiderEarlyShiftExemption(riderId, riderName, grant) 
 }
 
 export async function saveAdminEarlyShiftSettings() {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageEarlyShift')) return showToast("⚠️ Unauthorized: Admin or authorized TL access required.");
 
     const enabledToggle = document.getElementById('admin-early-shift-enabled');
     const targetHoursInput = document.getElementById('admin-early-shift-target-hours');
@@ -305,27 +312,32 @@ export function toggleAdminControls(enabled) {
 
     globalState.adminControlsEnabled = !!enabled;
 
-    const adminButtonIds = [
-        'admin-store-hub-btn',
-        'admin-manage-riders-btn',
-        'admin-schedule-settings-btn',
-        'admin-dayoff-settings-btn',
-        'admin-queue-settings-btn',
-        'admin-booking-limits-btn',
-        'admin-commission-settings-btn',
-        'admin-credits-settings-btn',
-        'admin-early-shift-btn',
-        'admin-auto-endshift-btn',
-        'admin-block-btn',
-        'admin-find-riders-btn',
-        'admin-force-all-btn',
-        'admin-fb-settings-btn'
-    ];
+    const adminButtonPermissions = {
+        'admin-store-hub-btn': 'canManageStoreAccounts',
+        'admin-manage-riders-btn': 'canManageRiderAccounts',
+        'admin-schedule-settings-btn': 'canManageSchedules',
+        'admin-dayoff-settings-btn': 'canManageDayOff',
+        'admin-queue-settings-btn': 'canManageQueueSettings',
+        'admin-booking-limits-btn': 'canManageBookingLimits',
+        'admin-commission-settings-btn': 'canManageCommission',
+        'admin-credits-settings-btn': 'canManageCredits',
+        'admin-early-shift-btn': 'canManageEarlyShift',
+        'admin-auto-endshift-btn': 'canManageAutoEndShift',
+        'admin-block-btn': 'canManageBanList',
+        'admin-find-riders-btn': null,
+        'admin-force-all-btn': 'canEndAllShifts',
+        'admin-fb-settings-btn': 'canManageFbApis',
+        'admin-fb-settings-roster-btn': 'canManageFbApis',
+        'admin-clear-inbox-btn': 'canClearInbox',
+        'admin-send-many-btn': 'canManageBroadcast',
+        'admin-full-booking-btn': 'canManageFullBooking'
+    };
 
-    adminButtonIds.forEach(btnId => {
+    Object.entries(adminButtonPermissions).forEach(([btnId, permKey]) => {
         const btn = document.getElementById(btnId);
         if (btn) {
-            if (enabled) btn.classList.remove('hidden');
+            const hasPerm = !permKey || isAdmin() || hasTlPermission(permKey);
+            if (enabled && hasPerm) btn.classList.remove('hidden');
             else btn.classList.add('hidden');
         }
     });
@@ -376,349 +388,23 @@ export function openAdminCateringModal(id, name) {
 }
 
 export async function submitAdminForceCatering() {
-    if (!hasTlPermission('canForceCater')) {
-        return showToast("⚠️ Unauthorized: You do not have permission to Force Cater.");
-    }
-
-    const idInput = document.getElementById('admin-cater-target-rider-id');
-    const nameInputHidden = document.getElementById('admin-cater-target-rider-name');
-    const custInput = document.getElementById('admin-cater-cust-name') || document.getElementById('catering-customer-name');
-    const custSelect = document.getElementById('admin-cater-customer-select') || document.getElementById('catering-customer-select');
-    const penaltySelect = document.getElementById('admin-cater-penalty-select') || document.getElementById('catering-penalty-select');
-
-    let targetId = (idInput ? idInput.value.trim() : "") || (pendingAdminTarget ? pendingAdminTarget.id : "");
-    let targetName = (nameInputHidden ? nameInputHidden.value.trim() : "") || (pendingAdminTarget ? pendingAdminTarget.name : "");
-    const penaltyMins = penaltySelect ? parseInt(penaltySelect.value, 10) || 0 : 0;
-
-    if (!targetId) {
-        targetId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
-        targetName = appState.riderName || localStorage.getItem('riderName') || "Rider";
-    }
-
-    let custName = (custInput ? custInput.value.trim() : "") || (custSelect ? custSelect.value.trim() : "");
-
-    if (!targetId) return showToast("⚠️ Target rider missing!");
-    if (!custName) return showToast("⚠️ Please select or enter customer name!");
-
-    const adminName = appState.riderName || localStorage.getItem('riderName') || "Admin/TL";
-    const cleanCustKey = sanitizeFirebaseKey(custName);
-
-    const rosterMembers = globalState.rosterMembers || [];
-    let targetRecord = rosterMembers.find(m => 
-        (m.telegramId && m.telegramId.toString() === targetId.toString()) ||
-        (m.id && m.id.toString() === targetId.toString()) ||
-        (m.riderName && targetName && m.riderName.toLowerCase() === targetName.toLowerCase()) ||
-        (m.name && targetName && m.name.toLowerCase() === targetName.toLowerCase())
-    );
-
-    if (targetRecord) {
-        targetId = (targetRecord.telegramId || targetRecord.id || targetId).toString();
-        targetName = targetRecord.riderName || targetRecord.name || targetName;
-    } else {
-        targetRecord = {
-            telegramId: targetId,
-            id: targetId,
-            riderName: targetName,
-            name: targetName,
-            status: 'Catering',
-            forcedCaters: {}
-        };
-        rosterMembers.push(targetRecord);
-    }
-
-    const targetType = targetRecord ? targetRecord.userType : "";
-    if (!canForceCaterTarget(targetType, targetId)) {
-        return showToast("⚠️ TL cannot force cater an Admin or another TL.");
-    }
-
-    let existingCustomers = [];
-    let existingTimes = [];
-
-    if (targetRecord && targetRecord.status === 'Catering' && targetRecord.customerName) {
-        existingCustomers = targetRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-        existingTimes = targetRecord.startTime ? targetRecord.startTime.split(', ').map(t => t.trim()) : [];
-    }
-
-    const startTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    if (!existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase())) {
-        existingCustomers.push(custName);
-        existingTimes.push(startTime);
-    }
-
-    closeAdminCateringModal();
-    const modalGeneral = document.getElementById('catering-modal');
-    if (modalGeneral) modalGeneral.classList.add('hidden');
-
-    const isSelfForced = adminName.toLowerCase().trim() === targetName.toLowerCase().trim();
-
-    let forcedCatersMap = targetRecord.forcedCaters ? { ...targetRecord.forcedCaters } : {};
-    const forcedPayload = {
-        customerName: custName,
-        forcedBy: adminName,
-        isSelfForced: isSelfForced,
-        timestamp: Date.now()
-    };
-    forcedCatersMap[cleanCustKey] = forcedPayload;
-    targetRecord.forcedCaters = forcedCatersMap;
-    targetRecord.forcedBy = adminName;
-    targetRecord.isForcedCater = true;
-
-    if (db && targetId && cleanCustKey) {
-        await db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
-        await db.ref(`roster/${targetId}`).update({
-            forcedBy: adminName,
-            isForcedCater: true
-        }).catch(() => {});
-    }
-
-    if (db && custName) {
-        const cleanSearchName = custName.trim().toLowerCase();
-        db.ref('customerChatMeta').once('value', (snapshot) => {
-            const chats = snapshot.val() || {};
-            Object.keys(chats).forEach(custId => {
-                const meta = chats[custId]?.metadata || chats[custId] || {};
-                const chatCustName = (meta.customerName || meta.name || "").trim().toLowerCase();
-                const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
-                const fbName = (resolvedFb?.name || "").trim().toLowerCase();
-
-                if (chatCustName === cleanSearchName || fbName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName) || (fbName && isCustomerMatch(fbName, cleanSearchName))) {
-                    const updateObj = {
-                        folder: 'catering',
-                        cateredByRiderId: targetId,
-                        cateredByRiderName: targetName,
-                        cateredBy: targetName,
-                        forcedBy: adminName,
-                        isForcedCater: true,
-                        lastUpdated: Date.now()
-                    };
-                    db.ref(`customerChats/${custId}/metadata`).update(updateObj).catch(() => {});
-                    db.ref(`customerChatMeta/${custId}`).update(updateObj).catch(() => {});
-                }
-            });
-        }).catch(() => {});
-    }
-
-    await updateRosterStatusData(
-        'Catering', 
-        existingCustomers.join(', '), 
-        existingTimes.join(', '), 
-        targetRecord ? parseQueueTime(targetRecord.queueTime) : Date.now(),
-        targetId,
-        targetName,
-        [],
-        false,
-        "",
-        { 
-            forcedCaters: forcedCatersMap,
-            forcedBy: adminName,
-            isForcedCater: true
-        }
-    );
-
-    if (penaltyMins > 0 && db && targetId) {
-        await db.ref(`roster/${targetId}`).update({
-            pendingPenaltyMinutes: penaltyMins
-        });
-
-        if (targetRecord) {
-            targetRecord.pendingPenaltyMinutes = penaltyMins;
-        }
-    }
-
-    saveRosterCache();
-    updateRosterUI();
-
-    const notifyLabel = isSelfForced ? `${targetName} (Self)` : targetName;
-    showToast(`⚡ Force Catered ${custName} to ${notifyLabel}`);
-    showSideNotification("FORCE CATER", `Assigned ${custName} to ${notifyLabel}`, "fa-user-gear", "text-amber-400", "border-amber-500");
+    return opsSubmitAdminForceCatering();
 }
 
 export async function adminForceStatus(id, name, actionValue) {
-    if (actionValue === 'Catering') {
-        if (!hasTlPermission('canForceCater')) {
-            return showToast("⚠️ Unauthorized: You do not have permission to Force Cater.");
-        }
-        openAdminCateringModal(id, name);
-        return;
-    }
-
-    if (!hasTlPermission('canForceStatus')) {
-        return showToast("⚠️ Unauthorized: You do not have permission to Force Status.");
-    }
-
-    const rosterMembers = globalState.rosterMembers || [];
-    const targetRecord = rosterMembers.find(m => (m.telegramId || m.id || "").toString() === id.toString());
-    const targetType = targetRecord ? targetRecord.userType : "";
-
-    if (!canForceCaterTarget(targetType, id)) {
-        return showToast("⚠️ TL cannot modify status of an Admin or another TL.");
-    }
-
-    if (actionValue === 'VoidActive') {
-        if (!hasTlPermission('canVoidCustomer')) {
-            return showToast("⚠️ Unauthorized: You do not have permission to Void Active Orders.");
-        }
-        openSlideDeleteModal(`Void Order for ${name}?`, `Sigurado ka bang nais i-void ang active order ni ${name}? Malilipat sya sa #1 SPOT ng Available queue.`, async () => {
-            const topQueueTime = getTopQueueTime();
-            if (db) {
-                db.ref(`roster/${id}/forcedCaters`).remove().catch(() => {});
-            }
-            if (targetRecord) {
-                targetRecord.forcedCaters = null;
-            }
-            await updateRosterStatusData('Available', '', '', topQueueTime, id, name, [], false, "", { forcedCaters: null });
-            showToast(`🚫 Voided order for ${name}. Placed in Available queue!`);
-        });
-        return;
-    }
-
-    openSlideDeleteModal(`Force Status: ${actionValue}?`, `Force change status of ${name} to [${actionValue}]?`, async () => {
-        if (actionValue === 'Available') {
-            if (db) {
-                db.ref(`roster/${id}/forcedCaters`).remove().catch(() => {});
-            }
-            if (targetRecord) {
-                targetRecord.forcedCaters = null;
-            }
-            const currentRoster = globalState.rosterMembers || [];
-            const availableRiders = currentRoster.filter(m => m.status === 'Available' && (m.telegramId || "").toString() !== id.toString());
-            let maxTime = Date.now();
-            availableRiders.forEach(r => {
-                const t = parseQueueTime(r.queueTime);
-                if (t > maxTime) maxTime = t;
-            });
-            await updateRosterStatusData('Available', '', '', maxTime + 1000, id, name, [], false, "", { forcedCaters: null });
-        } else if (actionValue === 'End') {
-            if (db) {
-                db.ref(`roster/${id}/forcedCaters`).remove().catch(() => {});
-            }
-            if (targetRecord) {
-                targetRecord.forcedCaters = null;
-            }
-            await clockOutRider(id);
-            await updateRosterStatus('End', id, name);
-        } else {
-            await updateRosterStatus(actionValue, id, name);
-        }
-        showToast(`⚡ Force updated ${name} to ${actionValue}`);
-    });
+    return opsAdminForceStatus(id, name, actionValue);
 }
 
 export async function adminVoidSpecificCustomer(targetId, targetName, custNameToVoid) {
-    if (!hasTlPermission('canVoidCustomer')) {
-        return showToast("⚠️ Unauthorized: You do not have permission to Void Active Customers.");
-    }
-
-    if (!targetId || !custNameToVoid) return;
-
-    openSlideDeleteModal(`Void Customer: ${custNameToVoid}?`, `Sigurado ka bang nais i-void si ${custNameToVoid} para kay ${targetName}?`, async () => {
-        const cleanCustKey = sanitizeFirebaseKey(custNameToVoid);
-        if (db && cleanCustKey) {
-            db.ref(`roster/${targetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
-        }
-        const targetRecord = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === targetId.toString());
-        if (targetRecord && targetRecord.forcedCaters) {
-            delete targetRecord.forcedCaters[cleanCustKey];
-            if (Object.keys(targetRecord.forcedCaters).length === 0) {
-                targetRecord.forcedCaters = null;
-            }
-        }
-        await voidSingleCateringCustomer(targetId, targetName, custNameToVoid);
-    });
+    return opsAdminVoidSpecificCustomer(targetId, targetName, custNameToVoid);
 }
 
 export function promptVoidCustomer(riderName, customerName, completedDate = "", startTime = "", transactionId = "") {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
-
-    openSlideDeleteModal(
-        `Void Catered Record?`,
-        `Sigurado ka bang nais mong burahin ang record ni [${customerName}] na inihatid ni ${riderName}?`,
-        async () => {
-            await executeVoidCateredCustomer(riderName, customerName, completedDate, startTime, transactionId);
-        }
-    );
+    return opsPromptVoidCustomer(riderName, customerName, completedDate, startTime, transactionId);
 }
 
 export async function executeVoidCateredCustomer(riderName, customerName, completedDate = "", startTime = "", transactionId = "") {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
-
-    const cleanRider = (riderName || "").trim().toLowerCase();
-    const cleanCust = (customerName || "").trim().toLowerCase();
-    const cleanCustKey = sanitizeFirebaseKey(cleanCust);
-
-    try {
-        if (db) {
-            const deletePromises = [];
-
-            if (transactionId) {
-                deletePromises.push(db.ref(`cateredHistory/${transactionId}`).remove());
-                deletePromises.push(db.ref(`receipts/${transactionId}`).remove());
-            }
-
-            if (completedDate) {
-                const snap = await db.ref('cateredHistory').orderByChild('completedDate').equalTo(completedDate).once('value');
-                const data = snap.val() || {};
-                Object.entries(data).forEach(([key, v]) => {
-                    const rMatch = (v.riderName || "").trim().toLowerCase() === cleanRider;
-                    const cMatch = (v.customerName || "").trim().toLowerCase() === cleanCust;
-                    const sMatch = !startTime || (v.startTime || "").trim() === startTime.trim();
-                    if (rMatch && cMatch && sMatch) {
-                        deletePromises.push(db.ref(`cateredHistory/${key}`).remove());
-                    }
-                });
-
-                const rcptSnap = await db.ref('receipts').orderByChild('date').equalTo(completedDate).once('value');
-                const rcptData = rcptSnap.val() || {};
-                Object.entries(rcptData).forEach(([key, r]) => {
-                    const rMatch = (r.riderName || "").trim().toLowerCase() === cleanRider;
-                    const cMatch = (r.customerName || "").trim().toLowerCase() === cleanCust;
-                    if (rMatch && cMatch) {
-                        deletePromises.push(db.ref(`receipts/${key}`).remove());
-                    }
-                });
-            }
-
-            const targetRoster = (globalState.rosterMembers || []).find(m => (m.riderName || m.name || "").trim().toLowerCase() === cleanRider);
-            if (targetRoster && (targetRoster.telegramId || targetRoster.id) && cleanCustKey) {
-                const tId = targetRoster.telegramId || targetRoster.id;
-                deletePromises.push(db.ref(`roster/${tId}/customerFees/${cleanCustKey}`).remove());
-                deletePromises.push(db.ref(`roster/${tId}/forcedCaters/${cleanCustKey}`).remove());
-            }
-
-            await Promise.all(deletePromises);
-        }
-
-        if (globalState.globalCateredHistory) {
-            globalState.globalCateredHistory = globalState.globalCateredHistory.filter(h => {
-                const txMatch = transactionId && (h.transactionId === transactionId || h.id === transactionId);
-                const match = (h.riderName || "").trim().toLowerCase() === cleanRider &&
-                              (h.customerName || "").trim().toLowerCase() === cleanCust &&
-                              (!completedDate || isSameDate(h.completedDate || h.date, completedDate));
-                return !(txMatch || match);
-            });
-        }
-
-        if (globalState.globalDailyReceipts) {
-            globalState.globalDailyReceipts = globalState.globalDailyReceipts.filter(r => {
-                const txMatch = transactionId && (r.transactionId === transactionId || r.id === transactionId);
-                const match = (r.riderName || "").trim().toLowerCase() === cleanRider &&
-                              (r.customerName || "").trim().toLowerCase() === cleanCust &&
-                              (!completedDate || isSameDate(r.date || r.completedDate, completedDate));
-                return !(txMatch || match);
-            });
-        }
-
-        saveRosterCache();
-        if (typeof window.loadGlobalCateredList === 'function') window.loadGlobalCateredList();
-        if (typeof window.updateRosterUI === 'function') window.updateRosterUI();
-        if (typeof window.refreshCommissionView === 'function') window.refreshCommissionView();
-
-        showToast(`🗑️ Voided catered record for ${customerName}.`);
-    } catch(e) {
-        console.error("Void catered record error:", e);
-        showToast("❌ Failed to void catered customer record.");
-    }
+    return opsExecuteVoidCateredCustomer(riderName, customerName, completedDate, startTime, transactionId);
 }
 
 export function adminShiftRiderQueue(riderId, moveAction) {

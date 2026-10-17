@@ -1,0 +1,235 @@
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/annotation_processor_list/release/javaPreCompileRelease/annotationProcessors.json b/node_modules/@capgo/capacitor-updater/android/build/intermediates/annotation_processor_list/release/javaPreCompileRelease/annotationProcessors.json
+new file mode 100644
+index 0000000..9e26dfe
+--- /dev/null
++++ b/node_modules/@capgo/capacitor-updater/android/build/intermediates/annotation_processor_list/release/javaPreCompileRelease/annotationProcessors.json
+@@ -0,0 +1 @@
++{}
+\ No newline at end of file
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/compile_r_class_jar/release/generateReleaseRFile/R.jar b/node_modules/@capgo/capacitor-updater/android/build/intermediates/compile_r_class_jar/release/generateReleaseRFile/R.jar
+new file mode 100644
+index 0000000..99a0b31
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/compile_r_class_jar/release/generateReleaseRFile/R.jar differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/compile_symbol_list/release/generateReleaseRFile/R.txt b/node_modules/@capgo/capacitor-updater/android/build/intermediates/compile_symbol_list/release/generateReleaseRFile/R.txt
+new file mode 100644
+index 0000000..e69de29
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/incremental/mergeReleaseJniLibFolders/merger.xml b/node_modules/@capgo/capacitor-updater/android/build/intermediates/incremental/mergeReleaseJniLibFolders/merger.xml
+new file mode 100644
+index 0000000..11a1457
+--- /dev/null
++++ b/node_modules/@capgo/capacitor-updater/android/build/intermediates/incremental/mergeReleaseJniLibFolders/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet config="main" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="C:\Users\Amiel\Downloads\Original\Lokalex-Complete-Tool-Kit-main (1)\Lokalex-Complete-Tool-Kit-main\node_modules\@capgo\capacitor-updater\android\src\main\jniLibs"/></dataSet><dataSet config="release" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="C:\Users\Amiel\Downloads\Original\Lokalex-Complete-Tool-Kit-main (1)\Lokalex-Complete-Tool-Kit-main\node_modules\@capgo\capacitor-updater\android\src\release\jniLibs"/></dataSet></merger>
+\ No newline at end of file
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/incremental/release/packageReleaseResources/compile-file-map.properties b/node_modules/@capgo/capacitor-updater/android/build/intermediates/incremental/release/packageReleaseResources/compile-file-map.properties
+new file mode 100644
+index 0000000..f01e024
+--- /dev/null
++++ b/node_modules/@capgo/capacitor-updater/android/build/intermediates/incremental/release/packageReleaseResources/compile-file-map.properties
+@@ -0,0 +1 @@
++#Wed Oct 14 07:41:56 SGT 2026
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/incremental/release/packageReleaseResources/merger.xml b/node_modules/@capgo/capacitor-updater/android/build/intermediates/incremental/release/packageReleaseResources/merger.xml
+new file mode 100644
+index 0000000..b0952b9
+--- /dev/null
++++ b/node_modules/@capgo/capacitor-updater/android/build/intermediates/incremental/release/packageReleaseResources/merger.xml
+@@ -0,0 +1,2 @@
++<?xml version="1.0" encoding="utf-8"?>
++<merger version="3"><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="main$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="C:\Users\Amiel\Downloads\Original\Lokalex-Complete-Tool-Kit-main (1)\Lokalex-Complete-Tool-Kit-main\node_modules\@capgo\capacitor-updater\android\src\main\res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="main" generated-set="main$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="C:\Users\Amiel\Downloads\Original\Lokalex-Complete-Tool-Kit-main (1)\Lokalex-Complete-Tool-Kit-main\node_modules\@capgo\capacitor-updater\android\src\main\res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="release$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="C:\Users\Amiel\Downloads\Original\Lokalex-Complete-Tool-Kit-main (1)\Lokalex-Complete-Tool-Kit-main\node_modules\@capgo\capacitor-updater\android\src\release\res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="release" generated-set="release$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="C:\Users\Amiel\Downloads\Original\Lokalex-Complete-Tool-Kit-main (1)\Lokalex-Complete-Tool-Kit-main\node_modules\@capgo\capacitor-updater\android\src\release\res"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="generated$Generated" generated="true" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="C:\Users\Amiel\Downloads\Original\Lokalex-Complete-Tool-Kit-main (1)\Lokalex-Complete-Tool-Kit-main\node_modules\@capgo\capacitor-updater\android\build\generated\res\resValues\release"/></dataSet><dataSet aapt-namespace="http://schemas.android.com/apk/res-auto" config="generated" generated-set="generated$Generated" ignore_pattern="!.svn:!.git:!.ds_store:!*.scc:.*:&lt;dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"><source path="C:\Users\Amiel\Downloads\Original\Lokalex-Complete-Tool-Kit-main (1)\Lokalex-Complete-Tool-Kit-main\node_modules\@capgo\capacitor-updater\android\build\generated\res\resValues\release"/></dataSet><mergedItems/></merger>
+\ No newline at end of file
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/AndroidAppExitReporter.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/AndroidAppExitReporter.class
+new file mode 100644
+index 0000000..8000dbf
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/AndroidAppExitReporter.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/AppLifecycleObserver$AppLifecycleListener.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/AppLifecycleObserver$AppLifecycleListener.class
+new file mode 100644
+index 0000000..62bcf43
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/AppLifecycleObserver$AppLifecycleListener.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/AppLifecycleObserver.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/AppLifecycleObserver.class
+new file mode 100644
+index 0000000..a372e27
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/AppLifecycleObserver.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/BundleInfo.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/BundleInfo.class
+new file mode 100644
+index 0000000..35ca583
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/BundleInfo.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/BundleStatus.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/BundleStatus.class
+new file mode 100644
+index 0000000..faf1568
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/BundleStatus.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Callback.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Callback.class
+new file mode 100644
+index 0000000..7e8b4a0
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Callback.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$1.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$1.class
+new file mode 100644
+index 0000000..c87efbf
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$1.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$2.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$2.class
+new file mode 100644
+index 0000000..685b3c4
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$2.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$3.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$3.class
+new file mode 100644
+index 0000000..bccc89d
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$3.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$4.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$4.class
+new file mode 100644
+index 0000000..7708d0b
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$4.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$5.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$5.class
+new file mode 100644
+index 0000000..0c687c9
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$5.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$6.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$6.class
+new file mode 100644
+index 0000000..202d918
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$6.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$DeferredNotifyAppReadyCheck.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$DeferredNotifyAppReadyCheck.class
+new file mode 100644
+index 0000000..50ea6c9
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$DeferredNotifyAppReadyCheck.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$FireAndForgetPluginCall.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$FireAndForgetPluginCall.class
+new file mode 100644
+index 0000000..47234a9
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin$FireAndForgetPluginCall.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin.class
+new file mode 100644
+index 0000000..86955a5
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapacitorUpdaterPlugin.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$1.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$1.class
+new file mode 100644
+index 0000000..21c8244
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$1.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$2.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$2.class
+new file mode 100644
+index 0000000..2edabbf
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$2.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$3.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$3.class
+new file mode 100644
+index 0000000..34f060c
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$3.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$4.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$4.class
+new file mode 100644
+index 0000000..bc48223
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$4.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$5.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$5.class
+new file mode 100644
+index 0000000..cdc735a
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$5.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$6.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$6.class
+new file mode 100644
+index 0000000..afd1011
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$6.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$BackgroundRunnerWorkConfig.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$BackgroundRunnerWorkConfig.class
+new file mode 100644
+index 0000000..6625316
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$BackgroundRunnerWorkConfig.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$QueuedStatsEvent.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$QueuedStatsEvent.class
+new file mode 100644
+index 0000000..7b7efd9
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$QueuedStatsEvent.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$RemoteBlockResult.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$RemoteBlockResult.class
+new file mode 100644
+index 0000000..9c66e5e
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$RemoteBlockResult.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$ResetState.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$ResetState.class
+new file mode 100644
+index 0000000..99b41ce
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater$ResetState.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater.class
+new file mode 100644
+index 0000000..a1604dc
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/CapgoUpdater.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Logger$1.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Logger$1.class
+new file mode 100644
+index 0000000..ad6b008
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Logger$1.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Logger$LogLevel.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Logger$LogLevel.class
+new file mode 100644
+index 0000000..11b5e8e
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Logger$LogLevel.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Logger$Options.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Logger$Options.class
+new file mode 100644
+index 0000000..75a6663
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Logger$Options.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Logger.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Logger.class
+new file mode 100644
+index 0000000..01b9e46
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Logger.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Version$1.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Version$1.class
+new file mode 100644
+index 0000000..0566b18
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Version$1.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Version$ReleaseType.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Version$ReleaseType.class
+new file mode 100644
+index 0000000..f605d74
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Version$ReleaseType.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Version.class b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Version.class
+new file mode 100644
+index 0000000..dc80b0c
+Binary files /dev/null and b/node_modules/@capgo/capacitor-updater/android/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/ee/forgr/capacitor_updater/Version.class differ
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/local_only_symbol_list/release/parseReleaseLocalResources/R-def.txt b/node_modules/@capgo/capacitor-updater/android/build/intermediates/local_only_symbol_list/release/parseReleaseLocalResources/R-def.txt
+new file mode 100644
+index 0000000..78ac5b8
+--- /dev/null
++++ b/node_modules/@capgo/capacitor-updater/android/build/intermediates/local_only_symbol_list/release/parseReleaseLocalResources/R-def.txt
+@@ -0,0 +1,2 @@
++R_DEF: Internal format may change without notice
++local
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/nested_resources_validation_report/release/generateReleaseResources/nestedResourcesValidationReport.txt b/node_modules/@capgo/capacitor-updater/android/build/intermediates/nested_resources_validation_report/release/generateReleaseResources/nestedResourcesValidationReport.txt
+new file mode 100644
+index 0000000..08f4ebe
+--- /dev/null
++++ b/node_modules/@capgo/capacitor-updater/android/build/intermediates/nested_resources_validation_report/release/generateReleaseResources/nestedResourcesValidationReport.txt
+@@ -0,0 +1 @@
++0 Warning/Error
+\ No newline at end of file
+diff --git a/node_modules/@capgo/capacitor-updater/android/build/intermediates/symbol_list_with_package_name/release/generateReleaseRFile/package-aware-r.txt b/node_modules/@capgo/capacitor-updater/android/build/intermediates/symbol_list_with_package_name/release/generateReleaseRFile/package-aware-r.txt
+new file mode 100644
+index 0000000..4a48aeb
+--- /dev/null
++++ b/node_modules/@capgo/capacitor-updater/android/build/intermediates/symbol_list_with_package_name/release/generateReleaseRFile/package-aware-r.txt
+@@ -0,0 +1 @@
++ee.forgr.capacitor_updater
+diff --git a/node_modules/@capgo/capacitor-updater/android/src/main/java/ee/forgr/capacitor_updater/DelayUpdateUtils.java b/node_modules/@capgo/capacitor-updater/android/src/main/java/ee/forgr/capacitor_updater/DelayUpdateUtils.java
+index 52af38a..a955bcd 100644
+--- a/node_modules/@capgo/capacitor-updater/android/src/main/java/ee/forgr/capacitor_updater/DelayUpdateUtils.java
++++ b/node_modules/@capgo/capacitor-updater/android/src/main/java/ee/forgr/capacitor_updater/DelayUpdateUtils.java
+@@ -45,7 +45,7 @@ public class DelayUpdateUtils {
+             DelayUntilNext kind = condition.getKind();
+             String value = condition.getValue();
+             switch (kind) {
+-                case DelayUntilNext.background:
++                case background:
+                     if (source == CancelDelaySource.FOREGROUND) {
+                         long backgroundedAt = getBackgroundTimestamp();
+                         long now = System.currentTimeMillis();
+@@ -99,7 +99,7 @@ public class DelayUpdateUtils {
+                         );
+                     }
+                     break;
+-                case DelayUntilNext.kill:
++                case kill:
+                     if (source == CancelDelaySource.KILLED) {
+                         logger.info("Kill delay (value: " + value + ") condition removed at index " + index + " after app kill");
+                     } else {
+@@ -109,7 +109,7 @@ public class DelayUpdateUtils {
+                         );
+                     }
+                     break;
+-                case DelayUntilNext.date:
++                case date:
+                     if (!"".equals(value)) {
+                         Date date = parseDateCondition(value);
+                         if (date != null) {
+@@ -126,7 +126,7 @@ public class DelayUpdateUtils {
+                         logger.debug("Date delay (value: " + value + ") condition removed due to empty value at index " + index);
+                     }
+                     break;
+-                case DelayUntilNext.nativeVersion:
++                case nativeVersion:
+                     if (!"".equals(value)) {
+                         try {
+                             final Version versionLimit = new Version(value);

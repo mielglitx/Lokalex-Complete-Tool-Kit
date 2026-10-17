@@ -164,6 +164,7 @@ export function takeAdvancedOrder(orderId) {
 
             ord.status = "Catering";
             ord.cateredBy = finalName;
+            stopReminderAlarm();
 
             const targetKey = ord.id || ord.key;
             if (db && targetKey) {
@@ -202,6 +203,7 @@ export function markAdvancedOrderDone(orderId) {
 
             ord.status = "Catered";
             ord.cateredBy = finalName;
+            stopReminderAlarm();
 
             const targetKey = ord.id || ord.key;
             if (db && targetKey) {

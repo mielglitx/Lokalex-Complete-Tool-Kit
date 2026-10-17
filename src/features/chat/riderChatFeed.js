@@ -2,11 +2,11 @@
 import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { escapeHtml } from '../../utils/helpers.js';
-import { showToast } from '../../ui/notifications.js';
+import { showToast, showNativeNotification, clearNativeNotification } from '../../ui/notifications.js';
 import { populateCateringCustomerDropdown, formatChatDateParts } from './chatUtils.js';
 import { listenToGlobalStoreChats, renderStoreChatsInDashboard } from './riderStoreChat.js';
-import { openRiderCustomerChatModal, closeRiderCustomerChatModal } from './riderChat.js';
-import { isCustomerMatch, isRiderMatch } from '../roster/rosterUtils.js';
+import { openRiderCustomerChatModal, closeRiderCustomerChatModal, getActiveRiderChatCustId } from './riderChat.js';
+import { isCustomerMatch, isRiderMatch, isAdmin, canManageRoster, hasTlPermission } from '../roster/rosterUtils.js';
 import { 
     getActiveRiderFbChannel, 
     getPublicFbChannelName, 
@@ -21,7 +21,8 @@ import {
     initFullBookingListener, 
     sendFullBookingAutoReply, 
     fullBookingState,
-    updateFullBookingUI
+    updateFullBookingUI,
+    hasAvailableRiderOnRoster
 } from './fullBookingMode.js';
 import { playChatChime } from './chatSoundManager.js';
 
@@ -31,6 +32,42 @@ let isCustomerChatMetaListening = false;
 let rawCustomerChatMetaData = null;
 let isInitialCustomerChatMetaLoad = true;
 const lastKnownMessageStateMap = new Map();
+let currentFeedLimit = 35;
+let feedRenderRafId = null;
+let lastAutoResolveFbTime = 0;
+let riderChatSearchQuery = '';
+
+export function toggleRiderChatSearch() {
+    const input = document.getElementById('rider-chat-search-input');
+    if (input) {
+        input.focus();
+        input.select();
+    }
+}
+
+export function handleRiderChatSearchInput(val) {
+    riderChatSearchQuery = (val || '').trim();
+    currentFeedLimit = 50;
+    renderRiderCustomerChatFeed();
+}
+
+export function clearRiderChatSearch() {
+    riderChatSearchQuery = '';
+    const input = document.getElementById('rider-chat-search-input');
+    if (input) input.value = '';
+    renderRiderCustomerChatFeed();
+}
+
+export function expandRiderChatFeedLimit() {
+    currentFeedLimit += 35;
+    renderRiderCustomerChatFeed();
+}
+if (typeof window !== 'undefined') {
+    window.expandRiderChatFeedLimit = expandRiderChatFeedLimit;
+    window.toggleRiderChatSearch = toggleRiderChatSearch;
+    window.handleRiderChatSearchInput = handleRiderChatSearchInput;
+    window.clearRiderChatSearch = clearRiderChatSearch;
+}
 
 export function getCachedCustomerThreadsMap() {
     return cachedCustomerThreadsMap;
@@ -59,6 +96,12 @@ export function getActiveRiderChatFilter() {
 }
 
 export function setRiderChatFilter(filterMode) {
+    if (riderChatSearchQuery) {
+        riderChatSearchQuery = '';
+        const input = document.getElementById('rider-chat-search-input');
+        if (input) input.value = '';
+    }
+
     activeRiderChatFilter = filterMode;
 
     const tabs = [
@@ -81,6 +124,11 @@ export function setRiderChatFilter(filterMode) {
         }
     });
 
+    currentFeedLimit = 35;
+
+    const feed = document.getElementById('rider-cust-chats-feed');
+    if (feed) feed.scrollTop = 0;
+
     if (filterMode === 'stores') {
         renderStoreChatsInDashboard();
     } else {
@@ -90,18 +138,18 @@ export function setRiderChatFilter(filterMode) {
 }
 
 function getThreadDedupKey(key, meta) {
-    const rawPhone = meta.phoneNumber || meta.phone || meta.customerPhone || 
+    // 1. Facebook Messenger threads represent unique 1-on-1 conversations by Meta PSID.
+    // They must NEVER be collapsed into each other!
+    if (typeof key === 'string' && (key.startsWith('fb_') || key.startsWith('messenger_'))) {
+        return `fb_${key}`;
+    }
+
+    // 2. For non-FB web threads, dedup by verified phone number if available
+    const rawPhone = meta.phoneNumber || meta.phone || 
                      (typeof key === 'string' && (key.startsWith('+63') || key.startsWith('09') || key.startsWith('63')) ? key : '');
     const cleanPhone = String(rawPhone).replace(/\D/g, '');
     if (cleanPhone.length >= 10) {
         return `phone_${cleanPhone.slice(-10)}`;
-    }
-
-    const cleanName = (meta.customerName || meta.name || '').trim().toLowerCase();
-    const nameParts = cleanName.split(/\s+/).filter(Boolean);
-    // Only dedup by name if there are at least two distinct name parts to avoid collapsing unrelated single names
-    if (nameParts.length >= 2 && !cleanName.includes('customer') && !cleanName.includes('unknown')) {
-        return `name_${cleanName}`;
     }
 
     return `id_${key}`;
@@ -113,9 +161,9 @@ export function getLoggedInRiderInfo() {
     return { myId, myName };
 }
 
-export function isMyCustomerThread(t) {
+export function isMyCustomerThread(t, cachedAuth = null) {
     if (!t) return false;
-    const { myId, myName } = getLoggedInRiderInfo();
+    const { myId, myName } = cachedAuth || getLoggedInRiderInfo();
     if (!myId && !myName) return false;
 
     const rId = (t.cateredByRiderId || "").toString().trim();
@@ -130,7 +178,12 @@ export function isMyCustomerThread(t) {
         (myName && (m.riderName || m.name || "").trim().toLowerCase() === myName)
     );
     if (myRecord && myRecord.status === 'Catering') {
-        const custName = (t.customerName || '').toLowerCase().trim();
+        let custName = (t.customerName || '').toLowerCase().trim();
+        if (!custName || custName === 'customer' || custName === 'customer name') {
+            if (t.custId && t.custId.startsWith('cust_')) {
+                custName = t.custId.replace(/^cust_/, '').replace(/_/g, ' ').trim().toLowerCase();
+            }
+        }
         if (!custName || custName === 'customer' || custName === 'customer name') return false;
 
         if (myRecord.customerName && custName) {
@@ -156,7 +209,12 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
     const liveRoster = globalState.rosterMembers || [];
     if (!liveRoster || liveRoster.length === 0) return null;
 
-    const tCustName = (custName || meta?.customerName || meta?.name || '').toLowerCase().trim();
+    let tCustName = (custName || meta?.customerName || meta?.name || '').toLowerCase().trim();
+    if (!tCustName || tCustName === 'customer' || tCustName === 'customer name') {
+        if (custId && custId.startsWith('cust_')) {
+            tCustName = custId.replace(/^cust_/, '').replace(/_/g, ' ').trim().toLowerCase();
+        }
+    }
     if (!tCustName || tCustName === 'customer' || tCustName === 'customer name') return null;
 
     return liveRoster.find(m => {
@@ -185,11 +243,50 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
 }
 
 export function renderRiderCustomerChatFeed() {
+    if (feedRenderRafId) cancelAnimationFrame(feedRenderRafId);
+    feedRenderRafId = requestAnimationFrame(() => {
+        feedRenderRafId = null;
+        executeRenderRiderCustomerChatFeed();
+    });
+}
+
+function executeRenderRiderCustomerChatFeed() {
     if (activeRiderChatFilter === 'stores') return;
+
+    // Mobile Optimization: If rider is currently viewing/typing in a customer chat modal,
+    // do not rebuild the underlying feed DOM (prevents keyboard lag & frame drops).
+    const chatModal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
+    if (chatModal && !chatModal.classList.contains('hidden')) {
+        updateInboxUnreadBadge();
+        updateDoneUnreadBadge();
+        return;
+    }
 
     const feed = document.getElementById('rider-cust-chats-feed');
     const badge = document.getElementById('rider-cust-chats-badge');
     if (!feed) return;
+
+    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
+                        (typeof canManageRoster === 'function' && canManageRoster()) ||
+                        (typeof window.isAdmin === 'function' && window.isAdmin()) ||
+                        Boolean(globalState.adminControlsEnabled);
+
+    const canClear = isUserAdmin || (typeof hasTlPermission === 'function' && hasTlPermission('canClearInbox'));
+    const canBroadcast = isUserAdmin || (typeof hasTlPermission === 'function' && hasTlPermission('canManageBroadcast'));
+
+    const clearInboxBtn = document.getElementById('admin-clear-inbox-btn');
+    if (clearInboxBtn) {
+        if (canClear) clearInboxBtn.classList.remove('hidden');
+        else clearInboxBtn.classList.add('hidden');
+    }
+
+    const sendManyBtn = document.getElementById('admin-send-many-btn');
+    if (sendManyBtn) {
+        if (canBroadcast) sendManyBtn.classList.remove('hidden');
+        else sendManyBtn.classList.add('hidden');
+    }
+
+    window._currentlyOpenSwipeCard = null;
 
     // Immediately remove lingering store search elements if present
     const storeSearch = document.getElementById('rider-store-search-container');
@@ -205,46 +302,88 @@ export function renderRiderCustomerChatFeed() {
         return;
     }
 
-    // Dynamic Live Roster Catering Sync:
-    // If ANY rider in the live roster is currently Catering this customer,
-    // guarantee that the thread's folder is updated to 'catering' and attached to that rider!
-    // Auto-clean any ghost "Customer" entries from roster members' active customer list
-    (globalState.rosterMembers || []).forEach(m => {
-        if (m.customerName && typeof m.customerName === 'string') {
-            const rawCusts = m.customerName.split(/\s*,\s*/);
-            const filteredCusts = rawCusts.filter(c => {
-                const lc = c.trim().toLowerCase();
-                return lc && lc !== 'customer' && lc !== 'customer name' && lc !== 'undefined' && lc !== 'null';
-            });
-            if (filteredCusts.length !== rawCusts.length) {
-                const newCustName = filteredCusts.join(', ');
-                m.customerName = newCustName;
-                if (m.forcedCaters && typeof m.forcedCaters === 'object') {
-                    delete m.forcedCaters['customer'];
-                    delete m.forcedCaters['customer name'];
+    const loggedInAuth = getLoggedInRiderInfo();
+    const liveRoster = globalState.rosterMembers || [];
+    const cateringRoster = liveRoster.filter(m => m.status === 'Catering');
+
+    // High performance O(1) hash maps for instantaneous catering caterer lookups
+    const catererByCustId = new Map();
+    const catererByName = new Map();
+
+    cateringRoster.forEach(m => {
+        if (m.forcedCaters && typeof m.forcedCaters === 'object') {
+            for (const [fKey, fVal] of Object.entries(m.forcedCaters)) {
+                if (fKey && fKey !== 'customer') catererByCustId.set(fKey, m);
+                const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
+                const clean = (fName || '').toLowerCase().trim();
+                if (clean && clean !== 'customer' && clean !== 'customer name') {
+                    catererByName.set(clean, m);
                 }
-                const mId = (m.telegramId || m.id || "").toString().trim();
-                if (db && mId) {
-                    db.ref(`roster/${mId}/customerName`).set(newCustName).catch(() => {});
-                    db.ref(`roster/${mId}/forcedCaters/customer`).remove().catch(() => {});
-                }
-                if (typeof window.saveRosterCache === 'function') window.saveRosterCache();
             }
+        }
+        if (m.customerName && typeof m.customerName === 'string') {
+            const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c && c !== 'customer' && c !== 'customer name');
+            custs.forEach(c => catererByName.set(c, m));
         }
     });
 
-    const liveRoster = globalState.rosterMembers || [];
+    const getFastCaterer = (custName, custId) => {
+        if (custId && catererByCustId.has(custId)) return catererByCustId.get(custId);
+        const cleanName = (custName || '').toLowerCase().trim();
+        if (cleanName && catererByName.has(cleanName)) return catererByName.get(cleanName);
+        if (custId && custId.startsWith('cust_')) {
+            const extracted = custId.replace(/^cust_/, '').replace(/_/g, ' ').trim().toLowerCase();
+            if (extracted && catererByName.has(extracted)) return catererByName.get(extracted);
+        }
+        return null;
+    };
+
     allThreads.forEach(t => {
-        const isCompleted = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
-        if (isCompleted) {
+        const isDone = (t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || t.folder === 'done');
+        const completedAt = Number(t.completedAt) || 0;
+        const lastMsgTime = Number(t.lastUpdated) || Number(t.timestamp) || 0;
+        const isNewMessageAfterDone = isDone && completedAt > 0 && lastMsgTime > (completedAt + 3000) && t.unreadForRider === true && t.lastMessage && !t.lastMessage.startsWith('You:');
+
+        if (isDone && !isNewMessageAfterDone) {
             t.folder = 'done';
+            t.status = (t.status === 'cancelled') ? 'cancelled' : 'completed';
+            t.isUnread = false;
+            t.unreadForRider = false;
             t.cateredByRiderId = null;
             t.cateredByRiderName = null;
             t.cateredBy = null;
             return;
         }
 
-        const activeCaterer = getActiveRosterCaterer(t.customerName, t.custId, t);
+        if (isNewMessageAfterDone) {
+            t.status = 'active';
+            const activeCaterer = getFastCaterer(t.customerName, t.custId);
+            if (activeCaterer) {
+                t.folder = 'catering';
+                t.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+                t.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
+                t.cateredBy = t.cateredByRiderName;
+            } else {
+                t.folder = 'inbox';
+                t.cateredByRiderId = null;
+                t.cateredByRiderName = null;
+                t.cateredBy = null;
+            }
+            return;
+        }
+
+        const isCompleted = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+        if (isCompleted) {
+            t.folder = 'done';
+            t.isUnread = false;
+            t.unreadForRider = false;
+            t.cateredByRiderId = null;
+            t.cateredByRiderName = null;
+            t.cateredBy = null;
+            return;
+        }
+
+        const activeCaterer = getFastCaterer(t.customerName, t.custId);
 
         if (activeCaterer) {
             t.folder = 'catering';
@@ -252,7 +391,6 @@ export function renderRiderCustomerChatFeed() {
             t.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
             t.cateredBy = t.cateredByRiderName;
         } else if (liveRoster.length > 0) {
-            // Live roster is loaded and NO rider is currently catering this customer!
             const hadStaleCaterer = !!(t.cateredByRiderName || t.cateredByRiderId);
             const wasInCatering = (t.folder || '').toLowerCase() === 'catering';
 
@@ -263,24 +401,14 @@ export function renderRiderCustomerChatFeed() {
                 if (wasInCatering) {
                     t.folder = 'done';
                 }
-                // Auto-heal stale catering lock in Firebase
-                if (db && t.custId) {
-                    const healPayload = {
-                        cateredByRiderId: null,
-                        cateredByRiderName: null,
-                        cateredBy: null,
-                        folder: 'done',
-                        status: 'done',
-                        lastUpdated: Date.now()
-                    };
-                    db.ref(`customerChats/${t.custId}/metadata`).update(healPayload).catch(() => {});
-                    db.ref(`customerChatMeta/${t.custId}`).update(healPayload).catch(() => {});
-                }
             }
         }
     });
 
     const isAllSources = (typeof isAllSourcesSelected === 'function') ? isAllSourcesSelected() : true;
+    const isSearching = Boolean(riderChatSearchQuery && riderChatSearchQuery.trim().length > 0);
+    const searchQ = riderChatSearchQuery.trim().toLowerCase();
+    const searchDigits = searchQ.replace(/\D/g, '');
 
     let filteredThreads = allThreads.filter(t => {
         // 1. Filter by chosen chat sources (Multi-Source support)
@@ -298,17 +426,43 @@ export function renderRiderCustomerChatFeed() {
             }
         }
 
-        // 2. Filter by active tab folder
+        // Determine effective folder for this thread
         const isCurrentlyCatered = !!(t.cateredByRiderName || t.cateredByRiderId) && t.status !== 'completed' && t.status !== 'done' && t.status !== 'cancelled';
         if (isCurrentlyCatered) {
             t.folder = 'catering';
         }
         const folder = (t.folder || 'inbox').toLowerCase();
 
+        // IF SEARCHING: SEARCH ACROSS ALL FOLDERS!
+        if (isSearching) {
+            const name = (t.customerName || t.name || '').toLowerCase();
+            const msg = (t.lastMessage || '').toLowerCase();
+            const cid = (t.custId || '').toLowerCase();
+            const caterer = (t.cateredByRiderName || t.cateredBy || '').toLowerCase();
+            const phone = (t.phoneNumber || t.phone || t.contact || '').replace(/\D/g, '');
+
+            const matchName = name.includes(searchQ);
+            const matchMsg = msg.includes(searchQ);
+            const matchCid = cid.includes(searchQ);
+            const matchCaterer = caterer.includes(searchQ);
+            const matchPhone = searchDigits.length >= 3 && phone.includes(searchDigits);
+
+            return matchName || matchMsg || matchCid || matchCaterer || matchPhone;
+        }
+
+        // 2. Normal Mode: Filter by active tab folder
         if (activeRiderChatFilter === 'inbox') {
             // Catered customer threads MUST NEVER appear in Inbox!
             if (isCurrentlyCatered || folder === 'catering') return false;
-            return folder === 'inbox' && t.status !== 'completed' && t.status !== 'done' && t.status !== 'cancelled';
+            // Completed / Done / Cancelled threads MUST NEVER appear in Inbox!
+            if (folder === 'done' || t.status === 'completed' || t.status === 'done' || t.status === 'cancelled') return false;
+
+            // Exclude placeholder 'Customer' threads with outgoing-only messages
+            const cleanName = (t.customerName || '').toLowerCase().trim();
+            const isPlaceholder = !cleanName || cleanName === 'customer' || cleanName === 'customer name' || cleanName === 'unknown';
+            if (isPlaceholder && t.lastMessage && t.lastMessage.startsWith('You:')) return false;
+
+            return folder === 'inbox';
         }
         if (activeRiderChatFilter === 'catering') {
             if (isCurrentlyCatered) return true;
@@ -326,9 +480,9 @@ export function renderRiderCustomerChatFeed() {
 
     // In the Catering tab, pin the rider's own customers to the very top!
     filteredThreads.sort((a, b) => {
-        if (activeRiderChatFilter === 'catering') {
-            const aMine = isMyCustomerThread(a);
-            const bMine = isMyCustomerThread(b);
+        if (!isSearching && activeRiderChatFilter === 'catering') {
+            const aMine = isMyCustomerThread(a, loggedInAuth);
+            const bMine = isMyCustomerThread(b, loggedInAuth);
             if (aMine && !bMine) return -1;
             if (!aMine && bMine) return 1;
         }
@@ -336,12 +490,32 @@ export function renderRiderCustomerChatFeed() {
     });
 
     updateInboxUnreadBadge();
+    updateDoneUnreadBadge();
 
     if (badge) {
-        badge.innerText = `${filteredThreads.length} ${filteredThreads.length === 1 ? 'thread' : 'threads'}`;
+        if (isSearching) {
+            badge.innerText = `${filteredThreads.length} found`;
+        } else {
+            badge.innerText = `${filteredThreads.length} ${filteredThreads.length === 1 ? 'thread' : 'threads'}`;
+        }
     }
 
     if (filteredThreads.length === 0) {
+        if (isSearching) {
+            feed.innerHTML = `
+            <div class="flex flex-col items-center justify-center p-6 text-center gap-2">
+                <div class="w-10 h-10 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-500 flex items-center justify-center text-sm shadow-inner">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </div>
+                <div class="text-gray-700 dark:text-gray-200 text-xs font-bold">No customer threads found matching "${escapeHtml(riderChatSearchQuery)}" across all folders.</div>
+                <div class="text-gray-400 dark:text-gray-500 text-[10px]">Try searching by customer name, phone number digits, or message text.</div>
+                <button onclick="window.clearRiderChatSearch && window.clearRiderChatSearch()" class="mt-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold px-3 py-1 rounded-lg transition active:scale-95 shadow-xs cursor-pointer">
+                    Clear Search
+                </button>
+            </div>`;
+            return;
+        }
+
         if (typeof getActiveRiderSources === 'function' && !isAllSources) {
             const activeSources = getActiveRiderSources().filter(s => s !== 'all');
             if (activeSources.length === 0) {
@@ -360,9 +534,28 @@ export function renderRiderCustomerChatFeed() {
         return;
     }
 
+    let searchBannerHtml = "";
+    if (isSearching) {
+        searchBannerHtml = `
+        <div class="flex items-center justify-between px-3 py-2 mb-2 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 rounded-2xl text-[11px] shadow-xs">
+            <div class="flex items-center gap-1.5 font-bold text-blue-800 dark:text-blue-300 truncate">
+                <i class="fa-solid fa-magnifying-glass text-blue-500 shrink-0"></i>
+                <span class="truncate">Search in All Folders: <span class="font-black italic">"${escapeHtml(riderChatSearchQuery)}"</span></span>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <span class="bg-blue-600 text-white font-black text-[10px] px-2 py-0.5 rounded-full shadow-xs">
+                    ${filteredThreads.length} match${filteredThreads.length === 1 ? '' : 'es'}
+                </span>
+                <button type="button" onclick="window.clearRiderChatSearch && window.clearRiderChatSearch()" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 font-bold text-[10px] underline cursor-pointer">
+                    Clear
+                </button>
+            </div>
+        </div>`;
+    }
+
     let cateringBannerHtml = "";
-    if (activeRiderChatFilter === 'catering') {
-        const myCount = filteredThreads.filter(t => isMyCustomerThread(t)).length;
+    if (!isSearching && activeRiderChatFilter === 'catering') {
+        const myCount = filteredThreads.filter(t => isMyCustomerThread(t, loggedInAuth)).length;
         const otherCount = filteredThreads.length - myCount;
         cateringBannerHtml = `
         <div class="flex items-center justify-between px-3 py-2 mb-2 bg-gradient-to-r from-amber-50 to-emerald-50 dark:from-amber-950/20 dark:to-emerald-950/30 border border-amber-200 dark:border-emerald-900/40 rounded-2xl text-[11px] shadow-xs">
@@ -386,9 +579,22 @@ export function renderRiderCustomerChatFeed() {
         </div>`;
     }
 
-    const cardsHtml = filteredThreads.map(t => {
+    const displayThreads = filteredThreads.slice(0, currentFeedLimit);
+    let showMoreHtml = '';
+    if (filteredThreads.length > currentFeedLimit) {
+        const remaining = filteredThreads.length - currentFeedLimit;
+        showMoreHtml = `
+        <div class="flex justify-center my-3">
+            <button type="button" onclick="window.expandRiderChatFeedLimit && window.expandRiderChatFeedLimit()" class="px-4 py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 font-bold text-xs rounded-xl transition cursor-pointer border border-blue-200 dark:border-blue-800 shadow-2xs flex items-center gap-1.5 active:scale-95">
+                <i class="fa-solid fa-angles-down text-[10px]"></i>
+                <span>Show more threads (+${remaining})</span>
+            </button>
+        </div>`;
+    }
+
+    const cardsHtml = displayThreads.map(t => {
         const { dateStr, timeStr } = formatChatDateParts(t.lastUpdated);
-        const isMine = isMyCustomerThread(t);
+        const isMine = isMyCustomerThread(t, loggedInAuth);
         const isCateringTab = activeRiderChatFilter === 'catering';
         const isCurrentlyCatering = isMine && (isCateringTab || t.folder === 'catering' || (t.cateredByRiderName && t.status !== 'completed' && t.status !== 'done'));
         const isOtherRiderCatering = !isMine && (isCateringTab || t.folder === 'catering' || (t.cateredByRiderName && t.status !== 'completed' && t.status !== 'done'));
@@ -402,11 +608,25 @@ export function renderRiderCustomerChatFeed() {
         }
 
         let channelBadge = "";
-        if (t.channel === 'messenger') {
-            const channelName = t.apiName || (typeof getPublicFbChannelName === 'function' ? getPublicFbChannelName(t.apiId) : '') || 'FB';
+        if (t.channel === 'messenger' || isMessengerSource(t, t.custId)) {
+            const channelName = t.apiName || (typeof getPublicFbChannelName === 'function' ? getPublicFbChannelName(t.apiId) : '') || 'Camiling FB';
             channelBadge = `<span class="bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0" title="Source: ${escapeHtml(channelName)}"><i class="fa-brands fa-facebook-messenger text-blue-500"></i> ${escapeHtml(channelName)}</span>`;
         } else {
             channelBadge = `<span class="bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0" title="Source: Lokalex Web App"><i class="fa-solid fa-globe text-emerald-500"></i> Web</span>`;
+        }
+
+        let folderBadge = "";
+        if (isSearching) {
+            const f = (t.folder || 'inbox').toLowerCase();
+            if (isCurrentlyCatering || f === 'catering') {
+                folderBadge = `<span class="bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/50 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0"><i class="fa-solid fa-motorcycle text-[8px]"></i> Catering</span>`;
+            } else if (f === 'followup') {
+                folderBadge = `<span class="bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700/50 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0"><i class="fa-solid fa-bookmark text-[8px]"></i> Follow Up</span>`;
+            } else if (f === 'done' || t.status === 'completed' || t.status === 'done') {
+                folderBadge = `<span class="bg-gray-100 text-gray-800 border border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0"><i class="fa-solid fa-circle-check text-[8px]"></i> Done</span>`;
+            } else {
+                folderBadge = `<span class="bg-blue-100 text-blue-800 border border-blue-300 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700/50 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0"><i class="fa-solid fa-inbox text-[8px]"></i> Inbox</span>`;
+            }
         }
 
         const unreadDot = t.isUnread ? `<span class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>` : "";
@@ -417,7 +637,7 @@ export function renderRiderCustomerChatFeed() {
 
         if (isCurrentlyCatering) {
             // Radiant, unmistakable GOLD glowing border ONLY for MY CUSTOMER!
-            cardBorderClass = "catering-glow-gold bg-amber-50/80 dark:bg-amber-950/40";
+            cardBorderClass = "catering-glow-gold bg-[#FFFBEB] dark:bg-[#261608]";
             avatarBorderClass = "border-amber-400";
             nameClass = "font-black text-gray-900 dark:text-white text-xs";
         } else if (isOtherRiderCatering) {
@@ -426,7 +646,7 @@ export function renderRiderCustomerChatFeed() {
             avatarBorderClass = "border-gray-300 dark:border-gray-700";
             nameClass = "font-bold text-gray-800 dark:text-gray-200 text-xs";
         } else if (t.isUnread) {
-            cardBorderClass = "border-2 border-blue-500 dark:border-blue-400 bg-blue-50/50 dark:bg-blue-950/30 shadow-md ring-1 ring-blue-400/40";
+            cardBorderClass = "border-2 border-blue-500 dark:border-blue-400 bg-[#EFF6FF] dark:bg-[#0F172A] shadow-md ring-1 ring-blue-400/40";
             avatarBorderClass = "border-blue-500 ring-2 ring-blue-400/50";
             nameClass = "font-black text-blue-600 dark:text-blue-400 text-sm";
         }
@@ -439,47 +659,148 @@ export function renderRiderCustomerChatFeed() {
             ? 'text-amber-700 dark:text-amber-300 font-black'
             : (t.isUnread ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-gray-500 dark:text-gray-400 font-medium');
 
+        const isDoneView = activeRiderChatFilter === 'done';
+
         return `
-        <div onclick="window.openRiderCustomerChatModal('${t.custId}', '${escapeHtml(t.customerName)}', '${escapeHtml(t.avatarUrl)}')" class="${cardBorderClass} hover:bg-gray-50 dark:hover:bg-black/50 p-3 rounded-2xl flex items-center justify-between cursor-pointer transition active:scale-[0.99] shadow-xs">
-            <div class="flex items-center gap-3 min-w-0 flex-1">
-                <div class="relative shrink-0">
-                    <img src="${t.avatarUrl}" class="w-10 h-10 rounded-full object-cover border-2 ${avatarBorderClass}">
-                    ${t.isUnread ? '<div class="absolute -top-0.5 -right-0.5 w-3 h-3 bg-blue-500 rounded-full border-2 border-white dark:border-darkBg animate-ping"></div>' : ''}
-                </div>
-                <div class="min-w-0 flex-1">
-                    <!-- Row 1: Prominent Customer Name + Status Badge -->
-                    <div class="flex items-center gap-1.5 min-w-0">
-                        <span class="truncate ${nameClass} max-w-[130px] sm:max-w-[220px] font-black">${escapeHtml(t.customerName)}</span>
-                        ${statusBadge}
-                        ${unreadDot}
-                    </div>
-                    <!-- Row 2: Channel Badge + Last Message -->
-                    <div class="flex items-center gap-1.5 mt-1 min-w-0">
-                        ${channelBadge}
-                        <span class="${lastMsgClass} truncate flex-1 min-w-0">${escapeHtml(t.lastMessage)}</span>
-                    </div>
-                </div>
-            </div>
-            <div class="flex flex-col items-end shrink-0 ml-2 self-start mt-0.5">
-                ${dateStr ? `<span class="text-[9px] text-gray-500 dark:text-gray-400 font-bold tracking-tight whitespace-nowrap leading-none mb-0.5">${dateStr}</span>` : ''}
-                <span class="text-[10px] ${timeClass} font-mono leading-none">${timeStr}</span>
+        <div class="thread-swipe-wrapper shrink-0 w-full relative overflow-hidden rounded-2xl my-1 group select-none shadow-xs bg-gray-100 dark:bg-gray-800/60" 
+            data-cust-id="${escapeHtml(t.custId)}" 
+            data-customer-name="${escapeHtml(t.customerName)}" 
+            data-avatar-url="${escapeHtml(t.avatarUrl)}">
+            
+            <!-- Background Actions Left: Reveal on Slide Right (Cater, Unread, Done/Inbox) -->
+            <div id="thread-actions-left-${escapeHtml(t.custId)}" 
+                class="absolute inset-y-0 left-0 flex items-stretch justify-start z-0 opacity-0 pointer-events-none transition-opacity duration-150 overflow-hidden rounded-2xl">
                 <button type="button" 
-                    onclick="event.stopPropagation(); window.toggleCustomerChatUnread && window.toggleCustomerChatUnread('${t.custId}')" 
-                    class="mt-1 p-1 rounded-lg text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition active:scale-90 cursor-pointer flex items-center justify-center" 
-                    title="${t.isUnread ? 'Mark as read' : 'Mark as unread'}">
-                    <i class="fa-${t.isUnread ? 'solid text-blue-500' : 'regular text-gray-400 dark:text-gray-500'} fa-envelope text-[11px]"></i>
+                    onclick="event.stopPropagation(); window.handleThreadSwipeCater && window.handleThreadSwipeCater(this)" 
+                    class="w-[62px] bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-black flex flex-col items-center justify-center gap-1 transition active:scale-95 cursor-pointer shadow-sm select-none" 
+                    title="Cater Customer">
+                    <i class="fa-solid fa-motorcycle text-sm"></i>
+                    <span class="text-[9px] tracking-tight uppercase font-extrabold">Cater</span>
                 </button>
+                <button type="button" 
+                    onclick="event.stopPropagation(); window.handleThreadSwipeUnread && window.handleThreadSwipeUnread(this)" 
+                    class="w-[62px] bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white font-black flex flex-col items-center justify-center gap-1 transition active:scale-95 cursor-pointer shadow-sm select-none" 
+                    title="${t.isUnread ? 'Mark Read' : 'Mark Unread'}">
+                    <i class="fa-solid fa-${t.isUnread ? 'envelope-open' : 'envelope'} text-sm"></i>
+                    <span class="text-[9px] tracking-tight uppercase font-extrabold">${t.isUnread ? 'Read' : 'Unread'}</span>
+                </button>
+                <button type="button" 
+                    onclick="event.stopPropagation(); window.handleThreadSwipeDone && window.handleThreadSwipeDone(this)" 
+                    class="w-[62px] ${isDoneView ? 'bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700'} text-white font-black flex flex-col items-center justify-center gap-1 transition active:scale-95 cursor-pointer shadow-sm select-none" 
+                    title="${isDoneView ? 'Move to Inbox' : 'Move to Done'}">
+                    <i class="fa-solid fa-${isDoneView ? 'inbox' : 'check'} text-sm"></i>
+                    <span class="text-[9px] tracking-tight uppercase font-extrabold">${isDoneView ? 'Inbox' : 'Done'}</span>
+                </button>
+            </div>
+
+            <!-- Background Actions Right: Reveal on Slide Left (Cater, Unread, Done/Inbox) -->
+            <div id="thread-actions-right-${escapeHtml(t.custId)}" 
+                class="absolute inset-y-0 right-0 flex items-stretch justify-end z-0 opacity-0 pointer-events-none transition-opacity duration-150 overflow-hidden rounded-2xl">
+                <button type="button" 
+                    onclick="event.stopPropagation(); window.handleThreadSwipeCater && window.handleThreadSwipeCater(this)" 
+                    class="w-[62px] bg-teal-600 hover:bg-teal-500 active:bg-teal-700 text-white font-black flex flex-col items-center justify-center gap-1 transition active:scale-95 cursor-pointer shadow-sm select-none" 
+                    title="Cater Customer">
+                    <i class="fa-solid fa-motorcycle text-sm"></i>
+                    <span class="text-[9px] tracking-tight uppercase font-extrabold">Cater</span>
+                </button>
+                <button type="button" 
+                    onclick="event.stopPropagation(); window.handleThreadSwipeUnread && window.handleThreadSwipeUnread(this)" 
+                    class="w-[62px] bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white font-black flex flex-col items-center justify-center gap-1 transition active:scale-95 cursor-pointer shadow-sm select-none" 
+                    title="${t.isUnread ? 'Mark Read' : 'Mark Unread'}">
+                    <i class="fa-solid fa-${t.isUnread ? 'envelope-open' : 'envelope'} text-sm"></i>
+                    <span class="text-[9px] tracking-tight uppercase font-extrabold">${t.isUnread ? 'Read' : 'Unread'}</span>
+                </button>
+                <button type="button" 
+                    onclick="event.stopPropagation(); window.handleThreadSwipeDone && window.handleThreadSwipeDone(this)" 
+                    class="w-[62px] ${isDoneView ? 'bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700'} text-white font-black flex flex-col items-center justify-center gap-1 transition active:scale-95 cursor-pointer shadow-sm select-none" 
+                    title="${isDoneView ? 'Move to Inbox' : 'Move to Done'}">
+                    <i class="fa-solid fa-${isDoneView ? 'inbox' : 'check'} text-sm"></i>
+                    <span class="text-[9px] tracking-tight uppercase font-extrabold">${isDoneView ? 'Inbox' : 'Done'}</span>
+                </button>
+            </div>
+
+            <!-- Foreground Thread Card -->
+            <div id="thread-card-fg-${escapeHtml(t.custId)}" 
+                data-cust-id="${escapeHtml(t.custId)}"
+                data-customer-name="${escapeHtml(t.customerName)}"
+                data-avatar-url="${escapeHtml(t.avatarUrl)}"
+                style="touch-action: pan-y;"
+                onpointerdown="window.handleThreadPointerDown && window.handleThreadPointerDown(event, this)"
+                onpointermove="window.handleThreadPointerMove && window.handleThreadPointerMove(event, this)"
+                onpointerup="window.handleThreadPointerUp && window.handleThreadPointerUp(event, this)"
+                onpointercancel="window.handleThreadPointerCancel && window.handleThreadPointerCancel(event, this)"
+                onclick="window.handleThreadCardClick && window.handleThreadCardClick(event, this)" 
+                class="w-full relative z-10 ${cardBorderClass} hover:bg-gray-50 dark:hover:bg-slate-800 p-3 rounded-2xl flex items-center justify-between cursor-pointer transition-transform duration-200 ease-out select-none">
+                <div class="flex items-center gap-3 min-w-0 flex-1">
+                    <div class="relative shrink-0">
+                        <img src="${escapeHtml(t.avatarUrl)}" loading="lazy" decoding="async" class="w-10 h-10 rounded-full object-cover border-2 ${avatarBorderClass}">
+                        ${t.isUnread ? '<div class="absolute -top-0.5 -right-0.5 w-3 h-3 bg-blue-500 rounded-full border-2 border-white dark:border-darkBg animate-ping"></div>' : ''}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <!-- Row 1: Prominent Customer Name + Status Badge -->
+                        <div class="flex items-center gap-1.5 min-w-0">
+                            <span class="truncate ${nameClass} max-w-[130px] sm:max-w-[220px] font-black">${escapeHtml(t.customerName)}</span>
+                            ${statusBadge}
+                            ${unreadDot}
+                        </div>
+                        <!-- Row 2: Channel Badge + Folder Badge (if searching) + Last Message -->
+                        <div class="flex items-center gap-1.5 mt-1 min-w-0">
+                            ${channelBadge}
+                            ${folderBadge}
+                            <span class="${lastMsgClass} truncate flex-1 min-w-0">${escapeHtml(t.lastMessage)}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex flex-col items-end shrink-0 ml-2 self-center text-right">
+                    ${dateStr ? `<span class="text-[9px] text-gray-500 dark:text-gray-400 font-bold tracking-tight whitespace-nowrap leading-none mb-1">${dateStr}</span>` : ''}
+                    <span class="text-[10px] ${timeClass} font-mono leading-none">${timeStr}</span>
+                </div>
             </div>
         </div>`;
     }).join('');
 
-    feed.innerHTML = cateringBannerHtml + cardsHtml;
-
-    if (typeof populateCateringCustomerDropdown === 'function') {
-        populateCateringCustomerDropdown(rawCustomerChatMetaData);
-    }
+    feed.innerHTML = searchBannerHtml + cateringBannerHtml + cardsHtml + showMoreHtml;
 
     updateInboxUnreadBadge();
+    updateDoneUnreadBadge();
+}
+
+export function isMessengerSource(meta = {}, key = '') {
+    if (meta?.channel === 'messenger') return true;
+    if (key && (key.startsWith('fb_') || key.startsWith('messenger_'))) return true;
+    const apiId = meta?.apiId || meta?.channelId || meta?.fbApiId || '';
+    if (apiId && (apiId.startsWith('fb_') || apiId.includes('fb'))) return true;
+    const apiName = (meta?.apiName || meta?.channelName || '').toLowerCase();
+    if (apiName.includes('fb') || apiName.includes('facebook') || apiName.includes('messenger')) return true;
+    return false;
+}
+
+export function isThreadFromSelectedSource(meta, key) {
+    if (typeof isAllSourcesSelected === 'function' && isAllSourcesSelected()) return true;
+    const isMessenger = isMessengerSource(meta, key);
+    if (isMessenger) {
+        const threadFbId = meta.apiId || meta.channelId || meta.fbApiId;
+        if (threadFbId) {
+            return typeof isSourceSelected === 'function' ? isSourceSelected(threadFbId) : true;
+        } else {
+            return typeof isSourceSelected === 'function' ? (isSourceSelected('messenger') || hasAnyFbSourceSelected()) : true;
+        }
+    } else {
+        return typeof isSourceSelected === 'function' ? isSourceSelected('web') : true;
+    }
+}
+
+export function getSourceBadgeName(meta, key) {
+    const isMessenger = isMessengerSource(meta, key);
+    if (isMessenger) {
+        const threadFbId = meta.apiId || meta.channelId || meta.fbApiId;
+        if (threadFbId && typeof getPublicFbChannelName === 'function') {
+            const name = getPublicFbChannelName(threadFbId);
+            if (name) return name;
+        }
+        return meta.apiName || meta.channelName || 'Facebook';
+    }
+    return 'Web App';
 }
 
 function processCustomerChatMetaData(data, isFromCache = false) {
@@ -491,17 +812,20 @@ function processCustomerChatMetaData(data, isFromCache = false) {
         } catch (_) {}
     }
     const inboxBadge = document.getElementById('rider-inbox-unread-badge');
+    const doneBadge = document.getElementById('rider-done-unread-badge');
 
     if (Object.keys(data).length === 0) {
         cachedCustomerThreadsMap.clear();
         if (inboxBadge) inboxBadge.classList.add('hidden');
+        if (doneBadge) doneBadge.classList.add('hidden');
         if (activeRiderChatFilter !== 'stores') {
             renderRiderCustomerChatFeed();
         }
         return;
     }
 
-    // Acoustic notification chimes for incoming Inbox & Catering messages
+    // Acoustic notification chimes & Native Notification Bar alerts for incoming messages
+    const newlyArrivedThreadKeys = new Set();
     if (!isInitialCustomerChatMetaLoad && !isFromCache && data) {
         let shouldPlayInboxChime = false;
         let shouldPlayCateringChime = false;
@@ -529,16 +853,61 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                 // Check if from customer (not outgoing rider message)
                 const isFromCustomer = !curLastMsg.startsWith('You:') && meta.unreadForRider !== false;
                 if (isFromCustomer) {
+                    newlyArrivedThreadKeys.add(key);
+                    // Check if thread belongs to currently selected chat sources
+                    if (!isThreadFromSelectedSource(meta, key)) {
+                        return;
+                    }
+
                     const isCatered = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy || (meta.folder || '').toLowerCase() === 'catering');
+                    let isEligible = false;
+
                     if (isCatered) {
-                        const isAdmin = (appState.userType || localStorage.getItem('userType') || '').toLowerCase() === 'admin';
                         const isMine = isMyCustomerThread({ custId: key, ...meta });
-                        const isUnassigned = !meta.cateredByRiderName && !meta.cateredByRiderId;
-                        if (isAdmin || isMine || isUnassigned) {
+                        if (isMine) {
                             shouldPlayCateringChime = true;
+                            isEligible = true;
                         }
-                    } else if ((meta.folder || 'inbox').toLowerCase() === 'inbox') {
+                    } else if ((meta.folder || 'inbox').toLowerCase() === 'inbox' || (meta.folder || '').toLowerCase() === 'done') {
                         shouldPlayInboxChime = true;
+                        isEligible = true;
+                    }
+
+                    if (isEligible) {
+                        // Check if the chat modal for this customer is currently open and visible
+                        const activeId = (typeof getActiveRiderChatCustId === 'function' ? getActiveRiderChatCustId() : null) || (typeof window !== 'undefined' ? window.activeRiderChatCustId : null);
+                        const isChatOpenAndVisible = (activeId === key) && !document.hidden;
+
+                        if (!isChatOpenAndVisible) {
+                            let displayName = (meta.customerName || meta.name || "").trim();
+                            if (key.startsWith('fb_') && typeof getResolvedFbName === 'function') {
+                                const cached = getResolvedFbName(key);
+                                if (cached && cached.name && (!displayName || displayName.startsWith('FB Customer ('))) {
+                                    displayName = cached.name;
+                                }
+                            }
+                            if (!displayName || displayName.toLowerCase() === 'customer' || displayName.toLowerCase() === 'customer name' || displayName.toLowerCase() === 'unknown') {
+                                if (key.startsWith('cust_')) {
+                                    const raw = key.replace(/^cust_/, '').replace(/_/g, ' ').trim();
+                                    if (raw) {
+                                        displayName = raw.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+                                    }
+                                }
+                            }
+                            if (!displayName) displayName = "Customer";
+
+                            const sourceBadge = getSourceBadgeName(meta, key);
+                            const notifTitle = `${displayName} • ${sourceBadge}`;
+
+                            let notifBody = curLastMsg;
+                            if (notifBody.includes('[Facebook image]') || notifBody.includes('[Facebook attachment]')) {
+                                notifBody = "📷 Sent a photo";
+                            } else if (notifBody.includes('[Location]') || notifBody.includes('📍')) {
+                                notifBody = "📍 Sent a location pin";
+                            }
+
+                            showNativeNotification(notifTitle, notifBody, 'chat_' + key, key);
+                        }
                     }
                 }
             }
@@ -585,12 +954,25 @@ function processCustomerChatMetaData(data, isFromCache = false) {
         const hasValidLastMsg = rawLastMsg !== '' && rawLastMsg.toLowerCase() !== 'no messages yet';
 
         // FULL BOOKING MODE AUTO-REPLY HOOK:
-        // Immediately dispatches automated full booking reply to incoming messages in Inbox (excludes catering & followup)
-        if (!isFromCache && fullBookingState && fullBookingState.enabled && hasValidLastMsg) {
-            const threadFolder = (meta.folder || 'inbox').toLowerCase();
-            if (threadFolder === 'inbox' && !meta.cateredByRiderId && !meta.cateredByRiderName) {
-                if (!rawLastMsg.startsWith('You:')) {
-                    sendFullBookingAutoReply(key, meta);
+        // Dispatches automated full booking reply ONLY to genuine NEW incoming customer messages in Inbox
+        // AND ONLY when ALL riders are unavailable (if an available rider is on roster, skip auto-reply!)
+        if (!isInitialCustomerChatMetaLoad && !isFromCache && fullBookingState && fullBookingState.enabled && !hasAvailableRiderOnRoster() && hasValidLastMsg) {
+            if (newlyArrivedThreadKeys.has(key)) {
+                const threadFolder = (meta.folder || 'inbox').toLowerCase();
+                const isCatered = Boolean(
+                    meta.cateredByRiderId ||
+                    meta.cateredByRiderName ||
+                    meta.cateredBy ||
+                    threadFolder === 'catering' ||
+                    threadFolder === 'done' ||
+                    meta.status === 'completed' ||
+                    meta.status === 'done' ||
+                    meta.status === 'cancelled'
+                );
+                if (threadFolder === 'inbox' && !isCatered) {
+                    if (!rawLastMsg.startsWith('You:') && meta.unreadForRider !== false) {
+                        sendFullBookingAutoReply(key, meta);
+                    }
                 }
             }
         }
@@ -598,8 +980,47 @@ function processCustomerChatMetaData(data, isFromCache = false) {
         let displayName = (meta.customerName || meta.name || "").trim();
         if (key.startsWith('fb_')) {
             const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(key) : null;
-            if (cached && cached.name && (!displayName || displayName.startsWith('FB Customer ('))) {
+            if (cached && cached.name && (!displayName || displayName.startsWith('FB Customer (') || displayName === 'Customer')) {
                 displayName = cached.name;
+            } else if (!isFromCache && (!displayName || displayName.startsWith('FB Customer (') || displayName === 'Customer')) {
+                if (typeof resolveFacebookCustomerName === 'function') {
+                    resolveFacebookCustomerName(key).then(res => {
+                        if (res && res.name) renderRiderCustomerChatFeed();
+                    }).catch(() => {});
+                }
+            }
+        }
+
+        // Auto-extract customer name from key (e.g. cust_christian -> 'Christian')
+        const currentCleanName = displayName.toLowerCase();
+        if (!displayName || currentCleanName === 'customer' || currentCleanName === 'customer name' || currentCleanName === 'unknown') {
+            if (key.startsWith('cust_')) {
+                const rawExtracted = key.replace(/^cust_/, '').replace(/_/g, ' ').trim();
+                if (rawExtracted) {
+                    displayName = rawExtracted.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+                    if (db && key && !isFromCache) {
+                        db.ref(`customerChatMeta/${key}/customerName`).set(displayName).catch(() => {});
+                        db.ref(`customerChats/${key}/metadata/customerName`).set(displayName).catch(() => {});
+                    }
+                }
+            }
+            // Check live roster forcedCaters for a mapped name
+            if (!displayName || displayName.toLowerCase() === 'customer' || displayName.toLowerCase() === 'customer name') {
+                const liveRoster = globalState.rosterMembers || [];
+                for (const m of liveRoster) {
+                    if (m.forcedCaters && typeof m.forcedCaters === 'object') {
+                        for (const [fcKey, fcVal] of Object.entries(m.forcedCaters)) {
+                            if (fcKey === key) {
+                                const fcName = (fcVal && typeof fcVal === 'object' && fcVal.customerName) ? fcVal.customerName : fcVal;
+                                if (fcName && typeof fcName === 'string' && fcName.toLowerCase() !== 'customer') {
+                                    displayName = fcName.trim();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (displayName && displayName.toLowerCase() !== 'customer') break;
+                }
             }
         }
 
@@ -615,12 +1036,31 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             return;
         }
 
+        // If this is a non-FB thread (e.g. cust_... or name), check if a real fb_ thread exists for this customer
+        if (!key.startsWith('fb_') && !key.startsWith('messenger_')) {
+            const hasRealFbThread = Object.keys(data).some(otherKey => {
+                if (!otherKey.startsWith('fb_') && !otherKey.startsWith('messenger_')) return false;
+                const otherMeta = (data[otherKey]?.metadata || data[otherKey] || {});
+                const otherName = (otherMeta.customerName || otherMeta.name || '').trim();
+                return otherName && isCustomerMatch(otherName, displayName);
+            });
+            if (hasRealFbThread) {
+                // Real Facebook Messenger thread already exists! Suppress the duplicate orphaned card
+                return;
+            }
+        }
+
         if (!displayName) displayName = "Customer";
         let displayAvatar = meta.avatarUrl;
         if (key.startsWith('fb_')) {
             const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(key) : null;
             if (cached && cached.avatarUrl) displayAvatar = cached.avatarUrl;
         }
+
+        const isAlreadyDone = (meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled' || (meta.folder || '').toLowerCase() === 'done');
+        const completedAt = Number(meta.completedAt) || 0;
+        const lastMsgTime = Number(meta.lastUpdated) || Number(meta.timestamp) || 0;
+        const isNewMessageAfterDone = isAlreadyDone && completedAt > 0 && lastMsgTime > (completedAt + 3000) && meta.unreadForRider === true && rawLastMsg && !rawLastMsg.startsWith('You:');
 
         let isUnread = false;
         if (rawLastMsg && rawLastMsg.startsWith('You:')) {
@@ -630,33 +1070,65 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                 db.ref(`customerChats/${key}/metadata/unreadForRider`).set(false).catch(() => {});
                 db.ref(`customerChatMeta/${key}/unreadForRider`).set(false).catch(() => {});
             }
+        } else if (isAlreadyDone && !isNewMessageAfterDone) {
+            // Completed threads do not show unread badge for old messages
+            isUnread = false;
         } else if (meta.unreadForRider === true) {
             isUnread = true;
         } else if (meta.unreadForRider === false) {
             isUnread = false;
-        } else if (rawLastMsg && rawLastMsg.toLowerCase() !== 'no messages yet') {
+        } else if (!isAlreadyDone && rawLastMsg && rawLastMsg.toLowerCase() !== 'no messages yet') {
             isUnread = true;
         }
 
-        const isCompletedStatus = meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled';
+        let isCompletedStatus = isAlreadyDone && !isNewMessageAfterDone;
         let threadFolder = (meta.folder || 'inbox').toLowerCase();
-
-        // Validate catering against live roster
-        const activeCaterer = getActiveRosterCaterer(displayName, key, meta);
-
         if (isCompletedStatus) {
+            threadFolder = 'done';
+        }
+
+        // Validate catering against live roster only for active threads
+        const activeCaterer = isCompletedStatus ? null : getActiveRosterCaterer(displayName, key, meta);
+
+        if (isNewMessageAfterDone) {
+            // Customer sent a new message! Automatically reactivate thread back to Inbox (or Catering if catered)
+            meta.status = 'active';
+            threadFolder = activeCaterer ? 'catering' : 'inbox';
+            meta.cateredByRiderId = activeCaterer ? (activeCaterer.telegramId || activeCaterer.id || "").toString().trim() : null;
+            meta.cateredByRiderName = activeCaterer ? (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim() : null;
+            meta.cateredBy = meta.cateredByRiderName;
+            if (db && key && !isFromCache) {
+                const reactivatePayload = {
+                    folder: threadFolder,
+                    status: 'active',
+                    cateredByRiderId: meta.cateredByRiderId,
+                    cateredByRiderName: meta.cateredByRiderName,
+                    cateredBy: meta.cateredBy,
+                    completedAt: null,
+                    completedByRiderId: null,
+                    completedByRiderName: null,
+                    lastUpdated: meta.lastUpdated || Date.now()
+                };
+                db.ref(`customerChats/${key}/metadata`).update(reactivatePayload).catch(() => {});
+                db.ref(`customerChatMeta/${key}`).update(reactivatePayload).catch(() => {});
+            }
+        } else if (isCompletedStatus) {
             threadFolder = 'done';
             meta.cateredByRiderId = null;
             meta.cateredByRiderName = null;
             meta.cateredBy = null;
-            if (db && key && !isFromCache && (meta.folder !== 'done' || meta.cateredByRiderId || meta.cateredByRiderName)) {
+            if (db && key && !isFromCache && (meta.folder !== 'done' || meta.cateredByRiderId || meta.cateredByRiderName || meta.unreadForRider === true)) {
                 const donePayload = {
                     folder: 'done',
-                    status: meta.status || 'done',
+                    status: (meta.status === 'cancelled') ? 'cancelled' : 'completed',
                     cateredByRiderId: null,
                     cateredByRiderName: null,
-                    cateredBy: null
+                    cateredBy: null,
+                    unreadForRider: false
                 };
+                if (!completedAt) {
+                    donePayload.completedAt = Number(meta.lastUpdated) || Date.now();
+                }
                 db.ref(`customerChats/${key}/metadata`).update(donePayload).catch(() => {});
                 db.ref(`customerChatMeta/${key}`).update(donePayload).catch(() => {});
             }
@@ -709,53 +1181,57 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             avatarUrl: displayAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=0084FF&color=fff`,
             lastMessage: rawLastMsg || "No messages yet",
             lastUpdated: meta.lastUpdated || 0,
+            completedAt: meta.completedAt || (isCompletedStatus ? (Number(meta.lastUpdated) || Date.now()) : null),
             folder: threadFolder,
-            channel: meta.channel || (key.startsWith('fb_') || key.startsWith('messenger_') ? 'messenger' : 'web'),
-            apiId: meta.apiId || meta.channelId || meta.fbApiId || null,
-            apiName: meta.apiName || meta.channelName || null,
-            cateredByRiderId: meta.cateredByRiderId || null,
-            cateredByRiderName: meta.cateredByRiderName || meta.cateredBy || null,
-            status: meta.status || 'active',
+            channel: isMessengerSource(meta, key) ? 'messenger' : (meta.channel || 'web'),
+            apiId: meta.apiId || meta.channelId || meta.fbApiId || (isMessengerSource(meta, key) ? 'fb_api_1791648211091' : null),
+            apiName: meta.apiName || meta.channelName || (isMessengerSource(meta, key) ? 'Camiling FB' : null),
+            cateredByRiderId: isCompletedStatus ? null : (meta.cateredByRiderId || null),
+            cateredByRiderName: isCompletedStatus ? null : (meta.cateredByRiderName || meta.cateredBy || null),
+            status: meta.status || (isCompletedStatus ? 'completed' : 'active'),
             isUnread: isUnread,
+            unreadForRider: meta.unreadForRider === true && !isCompletedStatus,
             hasRealMessages: hasValidLastMsg
         };
 
-        // Cross-reference with live roster so newly incoming threads immediately transition to catering
-        const liveRoster = globalState.rosterMembers || [];
-        const activeCateringRider = liveRoster.find(m => {
-            if (m.status !== 'Catering') return false;
-            const tCustName = displayName.toLowerCase().trim();
-            if (!tCustName || tCustName === 'customer' || tCustName === 'customer name') return false;
-            if (m.customerName && tCustName) {
-                const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c !== 'customer' && c !== 'customer name');
-                if (custs.some(c => c === tCustName || isCustomerMatch(c, displayName))) return true;
-            }
-            if (m.forcedCaters && typeof m.forcedCaters === 'object') {
-                for (const [fKey, fVal] of Object.entries(m.forcedCaters)) {
-                    if (fKey === key && fKey !== 'customer') return true;
-                    const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
-                    const cleanFName = (fName || '').toLowerCase().trim();
-                    if (cleanFName !== 'customer' && cleanFName !== 'customer name' && tCustName && isCustomerMatch(fName, tCustName)) return true;
+        // Cross-reference with live roster so newly incoming threads immediately transition to catering (skip if completed)
+        if (!isCompletedStatus) {
+            const liveRoster = globalState.rosterMembers || [];
+            const activeCateringRider = liveRoster.find(m => {
+                if (m.status !== 'Catering') return false;
+                const tCustName = displayName.toLowerCase().trim();
+                if (!tCustName || tCustName === 'customer' || tCustName === 'customer name') return false;
+                if (m.customerName && tCustName) {
+                    const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c !== 'customer' && c !== 'customer name');
+                    if (custs.some(c => c === tCustName || isCustomerMatch(c, displayName))) return true;
                 }
-            }
-            return false;
-        });
-        if (activeCateringRider) {
-            threadObj.folder = 'catering';
-            threadObj.status = 'active';
-            threadObj.cateredByRiderId = (activeCateringRider.telegramId || activeCateringRider.id || "").toString().trim();
-            threadObj.cateredByRiderName = (activeCateringRider.riderName || activeCateringRider.name || "Rider").toString().trim();
-            if (meta.folder === 'done' && db && key && !isFromCache) {
-                const restorePayload = {
-                    folder: 'catering',
-                    status: 'active',
-                    cateredByRiderId: threadObj.cateredByRiderId,
-                    cateredByRiderName: threadObj.cateredByRiderName,
-                    cateredBy: threadObj.cateredByRiderName,
-                    lastUpdated: Date.now()
-                };
-                db.ref(`customerChats/${key}/metadata`).update(restorePayload).catch(() => {});
-                db.ref(`customerChatMeta/${key}`).update(restorePayload).catch(() => {});
+                if (m.forcedCaters && typeof m.forcedCaters === 'object') {
+                    for (const [fKey, fVal] of Object.entries(m.forcedCaters)) {
+                        if (fKey === key && fKey !== 'customer') return true;
+                        const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
+                        const cleanFName = (fName || '').toLowerCase().trim();
+                        if (cleanFName !== 'customer' && cleanFName !== 'customer name' && tCustName && isCustomerMatch(fName, tCustName)) return true;
+                    }
+                }
+                return false;
+            });
+            if (activeCateringRider) {
+                threadObj.folder = 'catering';
+                threadObj.status = 'active';
+                threadObj.cateredByRiderId = (activeCateringRider.telegramId || activeCateringRider.id || "").toString().trim();
+                threadObj.cateredByRiderName = (activeCateringRider.riderName || activeCateringRider.name || "Rider").toString().trim();
+                if (meta.folder === 'done' && db && key && !isFromCache) {
+                    const restorePayload = {
+                        folder: 'catering',
+                        status: 'active',
+                        cateredByRiderId: threadObj.cateredByRiderId,
+                        cateredByRiderName: threadObj.cateredByRiderName,
+                        cateredBy: threadObj.cateredByRiderName,
+                        lastUpdated: Date.now()
+                    };
+                    db.ref(`customerChats/${key}/metadata`).update(restorePayload).catch(() => {});
+                    db.ref(`customerChatMeta/${key}`).update(restorePayload).catch(() => {});
+                }
             }
         }
 
@@ -769,7 +1245,7 @@ function processCustomerChatMetaData(data, isFromCache = false) {
 
             if (currentScore > existingScore) {
                 threadObj.isUnread = threadObj.isUnread || existing.isUnread;
-                if (!threadObj.cateredByRiderName && existing.cateredByRiderName) {
+                if (!threadObj.cateredByRiderName && existing.cateredByRiderName && threadObj.folder !== 'done') {
                     threadObj.cateredByRiderName = existing.cateredByRiderName;
                     threadObj.cateredByRiderId = existing.cateredByRiderId;
                     if (existing.folder === 'catering') threadObj.folder = 'catering';
@@ -777,7 +1253,7 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                 threadsMap.set(dedupKey, threadObj);
             } else {
                 existing.isUnread = existing.isUnread || threadObj.isUnread;
-                if (!existing.cateredByRiderName && threadObj.cateredByRiderName) {
+                if (!existing.cateredByRiderName && threadObj.cateredByRiderName && existing.folder !== 'done') {
                     existing.cateredByRiderName = threadObj.cateredByRiderName;
                     existing.cateredByRiderId = threadObj.cateredByRiderId;
                     if (threadObj.folder === 'catering') existing.folder = 'catering';
@@ -792,12 +1268,17 @@ function processCustomerChatMetaData(data, isFromCache = false) {
 
     const allThreads = Array.from(threadsMap.values());
     
-    // Auto-resolve Facebook customer names in the background
+    // Auto-resolve Facebook customer names in the background (throttled to at most once per 5 minutes)
     if (!isFromCache && typeof autoResolvePendingFacebookThreads === 'function') {
-        autoResolvePendingFacebookThreads(allThreads);
+        const now = Date.now();
+        if (now - lastAutoResolveFbTime > 300000) {
+            lastAutoResolveFbTime = now;
+            autoResolvePendingFacebookThreads(allThreads);
+        }
     }
 
     updateInboxUnreadBadge();
+    updateDoneUnreadBadge();
 
     if (activeRiderChatFilter !== 'stores') {
         renderRiderCustomerChatFeed();
@@ -896,6 +1377,54 @@ export function updateInboxUnreadBadge() {
     }
 }
 
+export function updateDoneUnreadBadge() {
+    const doneBadge = document.getElementById('rider-done-unread-badge');
+    if (!doneBadge) return;
+
+    const isAllSources = (typeof isAllSourcesSelected === 'function') ? isAllSourcesSelected() : true;
+    const allThreads = Array.from(cachedCustomerThreadsMap.values());
+
+    const unreadDoneCount = allThreads.filter(t => {
+        // 1. Must be marked unread
+        if (!t.isUnread) return false;
+
+        // 2. Outgoing rider messages can NEVER be unread
+        if (t.lastMessage && t.lastMessage.startsWith('You:')) return false;
+
+        // 3. Must be in done folder or marked completed/done
+        const folder = (t.folder || '').toLowerCase();
+        const isDone = folder === 'done' || t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+        if (!isDone) return false;
+
+        // 4. Must match active chat sources filter
+        if (typeof isSourceSelected === 'function' && !isAllSources) {
+            if (t.channel === 'messenger') {
+                const threadFbId = t.apiId || t.channelId || t.fbApiId;
+                if (threadFbId) {
+                    if (!isSourceSelected(threadFbId)) return false;
+                } else {
+                    if (!isSourceSelected('messenger') && !hasAnyFbSourceSelected()) return false;
+                }
+            } else {
+                if (!isSourceSelected('web')) return false;
+            }
+        }
+
+        // 5. Exclude placeholder names without real messages
+        const name = (t.customerName || '').trim().toLowerCase();
+        if (!name || name === 'customer' || name === 'customer name' || name === 'unknown') return false;
+
+        return true;
+    }).length;
+
+    if (unreadDoneCount > 0) {
+        doneBadge.innerText = unreadDoneCount.toString();
+        doneBadge.classList.remove('hidden');
+    } else {
+        doneBadge.classList.add('hidden');
+    }
+}
+
 export function markCustomerChatAsUnread(targetCustId = null) {
     const custId = targetCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null);
     if (!custId) return;
@@ -915,6 +1444,7 @@ export function markCustomerChatAsUnread(targetCustId = null) {
     }
 
     updateInboxUnreadBadge();
+    updateDoneUnreadBadge();
     if (activeRiderChatFilter !== 'stores') {
         renderRiderCustomerChatFeed();
     }
@@ -950,6 +1480,7 @@ export function markCustomerChatAsRead(targetCustId = null) {
     }
 
     updateInboxUnreadBadge();
+    updateDoneUnreadBadge();
     if (activeRiderChatFilter !== 'stores') {
         renderRiderCustomerChatFeed();
     }
@@ -974,6 +1505,367 @@ export function toggleCustomerChatUnread(targetCustId) {
     }
 }
 
+// ============================================================================
+// SWIPE TO REVEAL ACTIONS (CATER, UNREAD, DONE / INBOX)
+// Supports sliding LEFT or RIGHT!
+// ============================================================================
+export function snapOpenSwipeCard(cardEl, direction = 'left') {
+    if (!cardEl) return;
+    const custId = cardEl.getAttribute('data-cust-id');
+    const rightTray = document.getElementById(`thread-actions-right-${custId}`);
+    const leftTray = document.getElementById(`thread-actions-left-${custId}`);
+
+    cardEl.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+    if (direction === 'left') {
+        cardEl.style.transform = 'translateX(-186px)';
+        cardEl._isOpen = 'left';
+        cardEl._currentX = -186;
+        if (rightTray) {
+            rightTray.style.opacity = '1';
+            rightTray.style.pointerEvents = 'auto';
+        }
+        if (leftTray) {
+            leftTray.style.opacity = '0';
+            leftTray.style.pointerEvents = 'none';
+        }
+    } else {
+        cardEl.style.transform = 'translateX(186px)';
+        cardEl._isOpen = 'right';
+        cardEl._currentX = 186;
+        if (leftTray) {
+            leftTray.style.opacity = '1';
+            leftTray.style.pointerEvents = 'auto';
+        }
+        if (rightTray) {
+            rightTray.style.opacity = '0';
+            rightTray.style.pointerEvents = 'none';
+        }
+    }
+    window._currentlyOpenSwipeCard = cardEl;
+}
+
+export function resetSwipeCard(cardEl) {
+    if (!cardEl) return;
+    const custId = cardEl.getAttribute('data-cust-id');
+    const rightTray = document.getElementById(`thread-actions-right-${custId}`);
+    const leftTray = document.getElementById(`thread-actions-left-${custId}`);
+
+    cardEl.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+    cardEl.style.transform = 'translateX(0px)';
+    cardEl._isOpen = false;
+    cardEl._currentX = 0;
+
+    if (rightTray) {
+        rightTray.style.opacity = '0';
+        rightTray.style.pointerEvents = 'none';
+    }
+    if (leftTray) {
+        leftTray.style.opacity = '0';
+        leftTray.style.pointerEvents = 'none';
+    }
+
+    if (window._currentlyOpenSwipeCard === cardEl) {
+        window._currentlyOpenSwipeCard = null;
+    }
+}
+
+export function handleThreadPointerDown(e, cardEl) {
+    if (!cardEl) return;
+    if (e.target && e.target.closest('button, a, input, select')) return;
+
+    cardEl._pointerId = e.pointerId;
+    cardEl._startX = e.clientX;
+    cardEl._startY = e.clientY;
+    cardEl._currentX = cardEl._isOpen === 'left' ? -186 : (cardEl._isOpen === 'right' ? 186 : 0);
+    cardEl._isSwiping = false;
+    cardEl._hasMoved = false;
+
+    if (window._currentlyOpenSwipeCard && window._currentlyOpenSwipeCard !== cardEl) {
+        resetSwipeCard(window._currentlyOpenSwipeCard);
+    }
+}
+
+export function handleThreadPointerMove(e, cardEl) {
+    if (!cardEl || cardEl._pointerId === undefined || cardEl._pointerId !== e.pointerId) return;
+    const deltaX = e.clientX - cardEl._startX;
+    const deltaY = e.clientY - cardEl._startY;
+
+    if (!cardEl._isSwiping) {
+        // Vertical scroll intent dominates; cancel swipe tracking
+        if (Math.abs(deltaY) > 8 && Math.abs(deltaY) >= Math.abs(deltaX)) {
+            try {
+                if (cardEl.hasPointerCapture && cardEl.hasPointerCapture(e.pointerId)) {
+                    cardEl.releasePointerCapture(e.pointerId);
+                }
+            } catch (err) {}
+            cardEl._pointerId = undefined;
+            return;
+        }
+
+        // Horizontal swipe intent dominates
+        if (Math.abs(deltaX) > 8 && Math.abs(deltaX) > Math.abs(deltaY)) {
+            cardEl._isSwiping = true;
+            try {
+                cardEl.setPointerCapture(e.pointerId);
+            } catch (err) {}
+        }
+    }
+
+    if (cardEl._isSwiping) {
+        if (e.cancelable) {
+            e.preventDefault();
+        }
+        cardEl._hasMoved = true;
+        let newX = (cardEl._currentX || 0) + deltaX;
+        if (newX > 210) newX = 210;
+        if (newX < -210) newX = -210;
+
+        cardEl.style.transition = 'none';
+        cardEl.style.transform = `translateX(${newX}px)`;
+
+        const custId = cardEl.getAttribute('data-cust-id');
+        const rightTray = document.getElementById(`thread-actions-right-${custId}`);
+        const leftTray = document.getElementById(`thread-actions-left-${custId}`);
+
+        if (newX < 0) {
+            if (rightTray) {
+                rightTray.style.opacity = Math.min(1, Math.abs(newX) / 60).toString();
+                rightTray.style.pointerEvents = 'auto';
+            }
+            if (leftTray) {
+                leftTray.style.opacity = '0';
+                leftTray.style.pointerEvents = 'none';
+            }
+        } else if (newX > 0) {
+            if (leftTray) {
+                leftTray.style.opacity = Math.min(1, Math.abs(newX) / 60).toString();
+                leftTray.style.pointerEvents = 'auto';
+            }
+            if (rightTray) {
+                rightTray.style.opacity = '0';
+                rightTray.style.pointerEvents = 'none';
+            }
+        } else {
+            if (rightTray) {
+                rightTray.style.opacity = '0';
+                rightTray.style.pointerEvents = 'none';
+            }
+            if (leftTray) {
+                leftTray.style.opacity = '0';
+                leftTray.style.pointerEvents = 'none';
+            }
+        }
+    }
+}
+
+export function handleThreadPointerUp(e, cardEl) {
+    if (!cardEl) return;
+    if (cardEl._pointerId !== undefined && e.pointerId === cardEl._pointerId) {
+        try {
+            if (cardEl.hasPointerCapture && cardEl.hasPointerCapture(e.pointerId)) {
+                cardEl.releasePointerCapture(e.pointerId);
+            }
+        } catch (err) {}
+        cardEl._pointerId = undefined;
+    }
+
+    if (!cardEl._isSwiping) {
+        return;
+    }
+
+    cardEl._justSwiped = true;
+    setTimeout(() => {
+        cardEl._justSwiped = false;
+    }, 250);
+
+    const deltaX = e.clientX - cardEl._startX;
+
+    if (cardEl._isOpen === 'left') {
+        if (deltaX > 45) {
+            resetSwipeCard(cardEl);
+        } else {
+            snapOpenSwipeCard(cardEl, 'left');
+        }
+    } else if (cardEl._isOpen === 'right') {
+        if (deltaX < -45) {
+            resetSwipeCard(cardEl);
+        } else {
+            snapOpenSwipeCard(cardEl, 'right');
+        }
+    } else {
+        if (deltaX < -45) {
+            snapOpenSwipeCard(cardEl, 'left');
+        } else if (deltaX > 45) {
+            snapOpenSwipeCard(cardEl, 'right');
+        } else {
+            resetSwipeCard(cardEl);
+        }
+    }
+}
+
+export function handleThreadPointerCancel(e, cardEl) {
+    if (!cardEl) return;
+    if (cardEl._pointerId !== undefined) {
+        try {
+            if (cardEl.hasPointerCapture && cardEl.hasPointerCapture(e.pointerId)) {
+                cardEl.releasePointerCapture(e.pointerId);
+            }
+        } catch (err) {}
+        cardEl._pointerId = undefined;
+    }
+    if (cardEl._isSwiping) {
+        resetSwipeCard(cardEl);
+    }
+}
+
+export function handleThreadTouchStart(e, cardEl) {
+    if (!cardEl || !e.touches || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    handleThreadPointerDown({
+        pointerId: 1,
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        target: e.target
+    }, cardEl);
+}
+
+export function handleThreadTouchMove(e, cardEl) {
+    if (!cardEl || !e.touches || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    handleThreadPointerMove({
+        pointerId: 1,
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        cancelable: e.cancelable,
+        preventDefault: () => { if (e.cancelable) e.preventDefault(); }
+    }, cardEl);
+}
+
+export function handleThreadTouchEnd(e, cardEl) {
+    if (!cardEl) return;
+    const touch = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : { clientX: cardEl._startX || 0 };
+    handleThreadPointerUp({
+        pointerId: 1,
+        clientX: touch.clientX
+    }, cardEl);
+}
+
+export function handleThreadCardClick(event, cardElOrCustId, custName, avatarUrl) {
+    let target = event?.currentTarget;
+    let effectiveCustId = custName ? cardElOrCustId : null;
+    let effectiveName = custName;
+    let effectiveAvatar = avatarUrl;
+
+    if (cardElOrCustId && typeof cardElOrCustId === 'object' && cardElOrCustId.getAttribute) {
+        target = cardElOrCustId;
+    }
+
+    if (target) {
+        if (target._justSwiped) {
+            return;
+        }
+        if (target._isOpen) {
+            resetSwipeCard(target);
+            return;
+        }
+        effectiveCustId = target.getAttribute('data-cust-id') || target.dataset.custId || effectiveCustId;
+        effectiveName = target.getAttribute('data-customer-name') || target.dataset.customerName || effectiveName;
+        effectiveAvatar = target.getAttribute('data-avatar-url') || target.dataset.avatarUrl || effectiveAvatar;
+    }
+
+    if (window.openRiderCustomerChatModal && effectiveCustId) {
+        window.openRiderCustomerChatModal(effectiveCustId, effectiveName, effectiveAvatar);
+    }
+}
+
+export function handleThreadSwipeCater(btnOrCustId, optionalName) {
+    let custId = btnOrCustId;
+    let custName = optionalName;
+    if (btnOrCustId && typeof btnOrCustId === 'object' && btnOrCustId.closest) {
+        const wrapper = btnOrCustId.closest('.thread-swipe-wrapper');
+        custId = wrapper?.getAttribute('data-cust-id') || wrapper?.dataset.custId;
+        custName = wrapper?.getAttribute('data-customer-name') || wrapper?.dataset.customerName;
+    }
+    const fg = document.getElementById(`thread-card-fg-${custId}`);
+    if (fg) resetSwipeCard(fg);
+    if (window.confirmCateringStatus && custId) {
+        window.confirmCateringStatus(custName || 'Customer', custId);
+    }
+}
+
+export function handleThreadSwipeUnread(btnOrCustId) {
+    let custId = btnOrCustId;
+    if (btnOrCustId && typeof btnOrCustId === 'object' && btnOrCustId.closest) {
+        const wrapper = btnOrCustId.closest('.thread-swipe-wrapper');
+        custId = wrapper?.getAttribute('data-cust-id') || wrapper?.dataset.custId;
+    }
+    const fg = document.getElementById(`thread-card-fg-${custId}`);
+    if (fg) resetSwipeCard(fg);
+    if (custId) {
+        toggleCustomerChatUnread(custId);
+    }
+}
+
+export function reopenThreadToInbox(custId) {
+    if (!custId) return;
+    if (db) {
+        const payload = {
+            folder: 'inbox',
+            status: 'open',
+            lastUpdated: (typeof firebase !== 'undefined' && firebase.database) ? firebase.database.ServerValue.TIMESTAMP : Date.now()
+        };
+        db.ref(`customerChats/${custId}/metadata`).update(payload).catch(() => {});
+        db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
+    }
+    for (const thread of cachedCustomerThreadsMap.values()) {
+        if (thread.custId === custId) {
+            thread.folder = 'inbox';
+            break;
+        }
+    }
+    updateInboxUnreadBadge();
+    updateDoneUnreadBadge();
+    renderRiderCustomerChatFeed();
+    showToast("📥 Chat moved back to Inbox");
+}
+
+export function handleThreadSwipeDone(btnOrCustId) {
+    let custId = btnOrCustId;
+    let customerName = "";
+    if (btnOrCustId && typeof btnOrCustId === 'object' && btnOrCustId.closest) {
+        const wrapper = btnOrCustId.closest('.thread-swipe-wrapper');
+        custId = wrapper?.getAttribute('data-cust-id') || wrapper?.dataset.custId;
+        customerName = wrapper?.getAttribute('data-customer-name') || wrapper?.dataset.customerName || "";
+        if (!customerName && wrapper) {
+            const nameEl = wrapper.querySelector('.font-black');
+            if (nameEl) customerName = (nameEl.innerText || nameEl.textContent || '').trim();
+        }
+    }
+    const fg = document.getElementById(`thread-card-fg-${custId}`);
+    if (fg) resetSwipeCard(fg);
+    if (!custId) return;
+
+    if (activeRiderChatFilter === 'done') {
+        reopenThreadToInbox(custId);
+    } else {
+        if (window.markThreadDone) {
+            window.markThreadDone(custId, customerName);
+        }
+    }
+}
+
+// Global outside-click listener to close any open swipe card
+if (typeof document !== 'undefined') {
+    document.addEventListener('pointerdown', (e) => {
+        if (window._currentlyOpenSwipeCard) {
+            const wrapper = window._currentlyOpenSwipeCard.closest('.thread-swipe-wrapper');
+            if (wrapper && !wrapper.contains(e.target)) {
+                resetSwipeCard(window._currentlyOpenSwipeCard);
+            }
+        }
+    }, { passive: true });
+}
+
 if (typeof window !== 'undefined') {
     window.getCachedCustomerThreadsMap = getCachedCustomerThreadsMap;
     window.getActiveInboxCustomerThreads = getActiveInboxCustomerThreads;
@@ -983,6 +1875,25 @@ if (typeof window !== 'undefined') {
     window.markCustomerChatAsRead = markCustomerChatAsRead;
     window.toggleCustomerChatUnread = toggleCustomerChatUnread;
     window.updateInboxUnreadBadge = updateInboxUnreadBadge;
+    window.updateDoneUnreadBadge = updateDoneUnreadBadge;
+    window.isThreadFromSelectedSource = isThreadFromSelectedSource;
+    window.getSourceBadgeName = getSourceBadgeName;
+
+    window.snapOpenSwipeCard = snapOpenSwipeCard;
+    window.resetSwipeCard = resetSwipeCard;
+    window.handleThreadPointerDown = handleThreadPointerDown;
+    window.handleThreadPointerMove = handleThreadPointerMove;
+    window.handleThreadPointerUp = handleThreadPointerUp;
+    window.handleThreadPointerCancel = handleThreadPointerCancel;
+    window.handleThreadTouchStart = handleThreadTouchStart;
+    window.handleThreadTouchMove = handleThreadTouchMove;
+    window.handleThreadTouchEnd = handleThreadTouchEnd;
+    window.handleThreadCardClick = handleThreadCardClick;
+    window.handleThreadSwipeCater = handleThreadSwipeCater;
+    window.handleThreadSwipeUnread = handleThreadSwipeUnread;
+    window.handleThreadSwipeDone = handleThreadSwipeDone;
+    window.reopenThreadToInbox = reopenThreadToInbox;
+
     window.addEventListener('rosterUpdated', () => {
         if (activeRiderChatFilter !== 'stores') {
             renderRiderCustomerChatFeed();

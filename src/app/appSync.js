@@ -118,15 +118,13 @@ export function initSyncWatchdog() {
         updateNetworkStatus(false);
     });
 
-    // Gentle visibility handler: Do NOT drop & reconnect Firebase or trigger background sync loops
+    // Gentle visibility & lifecycle handler: Do NOT drop Firebase or trigger heavy background loops
     function handleAppVisibilityChange() {
-        if (document.visibilityState === 'visible') {
-            updateNetworkStatus(navigator.onLine);
-            if (db && navigator.onLine) {
-                try {
-                    db.goOnline();
-                } catch (_) {}
-            }
+        updateNetworkStatus(navigator.onLine);
+        if (db && navigator.onLine) {
+            try {
+                db.goOnline();
+            } catch (_) {}
         }
     }
 
@@ -134,14 +132,26 @@ export function initSyncWatchdog() {
     window.addEventListener('pageshow', handleAppVisibilityChange);
     window.addEventListener('focus', handleAppVisibilityChange);
     window.addEventListener('resume', handleAppVisibilityChange);
+    window.addEventListener('appResumedFromBackground', handleAppVisibilityChange);
+    window.addEventListener('appPausedToBackground', handleAppVisibilityChange);
 
-    // Deep sleep drift watchdog: Only act if device was suspended for over 2 minutes
+    // Continuous worker heartbeat tick
+    window.addEventListener('lokalexHeartbeatTick', () => {
+        lastHeartbeatTime = Date.now();
+        if (db && navigator.onLine) {
+            try {
+                db.goOnline();
+            } catch (_) {}
+        }
+    });
+
+    // Deep sleep drift watchdog: Reconnect immediately if time drifted/jumped while out of focus
     setInterval(() => {
         const now = Date.now();
         const drift = now - lastHeartbeatTime;
         lastHeartbeatTime = now;
 
-        if (drift > 120000 && document.visibilityState === 'visible' && navigator.onLine) {
+        if (drift > 20000 && navigator.onLine) {
             if (db) {
                 try {
                     db.goOnline();

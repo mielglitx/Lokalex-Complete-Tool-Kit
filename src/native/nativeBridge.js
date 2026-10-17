@@ -1,8 +1,9 @@
-// src/native/nativeBridge.js
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { StatusBar, Style } from '@capacitor/status-bar';
+import { initOtaUpdater } from '../utils/otaUpdater.js';
+import { startKeepAlive } from '../utils/backgroundKeepAlive.js';
 
 /**
  * ============================================================================
@@ -30,6 +31,12 @@ export async function initNativeBridge() {
         return;
     }
 
+    // Initialize Over-The-Air (OTA) Live Updater
+    initOtaUpdater().catch(() => {});
+
+    // Initialize Web & Native Keep-Alive
+    startKeepAlive();
+
     try {
         // 1. Configure Status Bar (Do NOT overlay webview, prevent status bar from blocking top content)
         await StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
@@ -42,22 +49,24 @@ export async function initNativeBridge() {
     // 2. Hardware Android Back Button Handler
     try {
         App.addListener('backButton', ({ canGoBack }) => {
-            // Check open modals in order of z-index priority
+            // Check open modals in order of z-index priority (topmost child overlays first)
             const modals = [
-                { id: 'chat-sound-settings-modal', closeFn: window.closeChatSoundSettingsModal },
-                { id: 'quick-replies-edit-modal', closeFn: window.closeQuickReplyEditModal },
-                { id: 'rider-chat-modal', closeFn: window.closeRiderChatModal },
-                { id: 'customer-details-modal', closeFn: () => {
-                    const el = document.getElementById('customer-details-modal');
-                    if (el) el.classList.add('hidden');
-                }},
+                { id: 'image-viewer-modal', closeFn: window.closeImageViewerModal },
+                { id: 'image-editor-modal', closeFn: window.closeImageEditorModal },
                 { id: 'pod-capture-modal', closeFn: () => {
                     const el = document.getElementById('pod-capture-modal');
                     if (el) el.classList.add('hidden');
                 }},
+                { id: 'customer-details-modal', closeFn: () => {
+                    const el = document.getElementById('customer-details-modal');
+                    if (el) el.classList.add('hidden');
+                }},
+                { id: 'chat-sound-settings-modal', closeFn: window.closeChatSoundSettingsModal },
+                { id: 'quick-replies-edit-modal', closeFn: window.closeQuickReplyEditModal },
                 { id: 'rider-sources-filter-modal', closeFn: window.closeRiderChatSourcesModal },
                 { id: 'admin-fb-api-modal', closeFn: window.closeAdminFbApiModal },
-                { id: 'slide-delete-confirm-modal', closeFn: window.closeSlideDeleteModal }
+                { id: 'slide-delete-confirm-modal', closeFn: window.closeSlideDeleteModal },
+                { id: 'rider-chat-modal', closeFn: window.closeRiderChatModal }
             ];
 
             for (const m of modals) {
@@ -85,13 +94,23 @@ export async function initNativeBridge() {
 
     // 3. Lifecycle state listener (Background / Foreground transition)
     try {
+        if (window.NativePermissionsBridge && typeof window.NativePermissionsBridge.startKeepAlive === 'function') {
+            window.NativePermissionsBridge.startKeepAlive();
+        }
+
         App.addListener('appStateChange', (state) => {
             if (state.isActive) {
                 // Rider returned to the app (from Google Maps / Waze / Screen Unlock)
                 window.dispatchEvent(new Event('appResumedFromBackground'));
+                if (typeof window.db !== 'undefined' && window.db && typeof window.db.goOnline === 'function') {
+                    try { window.db.goOnline(); } catch (_) {}
+                }
             } else {
                 // Rider switched apps or locked screen
                 window.dispatchEvent(new Event('appPausedToBackground'));
+                if (window.NativePermissionsBridge && typeof window.NativePermissionsBridge.startKeepAlive === 'function') {
+                    window.NativePermissionsBridge.startKeepAlive();
+                }
             }
         });
     } catch (e) {
@@ -164,11 +183,130 @@ export function openNativeAppSettings() {
     return false;
 }
 
+export function requestBatteryOptimizationExemption() {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.requestIgnoreBatteryOptimizations === 'function') {
+        window.NativePermissionsBridge.requestIgnoreBatteryOptimizations();
+        return true;
+    }
+    return false;
+}
+
+export function isBatteryOptimizationIgnored() {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.isIgnoringBatteryOptimizations === 'function') {
+        return window.NativePermissionsBridge.isIgnoringBatteryOptimizations();
+    }
+    return true;
+}
+
+/**
+ * Post notification directly into the Android notification bar / system tray
+ */
+export function showNativeNotification(title, message, tag = '', custId = '') {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge) {
+        if (typeof window.NativePermissionsBridge.showNotificationWithCustId === 'function') {
+            try {
+                window.NativePermissionsBridge.showNotificationWithCustId(title, message, tag, custId);
+                return true;
+            } catch (e) {
+                console.warn("Native notification with custId error:", e);
+            }
+        } else if (typeof window.NativePermissionsBridge.showNotification === 'function') {
+            try {
+                window.NativePermissionsBridge.showNotification(title, message, tag);
+                return true;
+            } catch (e) {
+                console.warn("Native notification error:", e);
+            }
+        }
+    }
+
+    // Web / PWA / Service Worker fallback
+    if (typeof window !== 'undefined') {
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            try {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'SHOW_NATIVE_NOTIFICATION',
+                    title: title,
+                    body: message,
+                    tag: tag || 'lokalex-msg'
+                });
+                return true;
+            } catch (_) {}
+        }
+        if ('Notification' in window && Notification.permission === 'granted') {
+            try {
+                new Notification(title, {
+                    body: message,
+                    tag: tag || 'lokalex-msg',
+                    icon: '/Logo.png'
+                });
+                return true;
+            } catch (_) {}
+        }
+    }
+    return false;
+}
+
+/**
+ * Dismiss a notification from the Android notification bar
+ */
+export function clearNativeNotification(tag = '') {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.clearNotification === 'function') {
+        try {
+            window.NativePermissionsBridge.clearNotification(tag);
+            return true;
+        } catch (_) {}
+    }
+    return false;
+}
+
+// Global click handler invoked when user taps notification from notification bar
 if (typeof window !== 'undefined') {
+    window.handleNativeNotificationClick = function(targetId) {
+        if (!targetId) return;
+
+        // Route to Advanced Orders Hub if targetId is an advance order
+        if (targetId.startsWith('adv_') || targetId === 'advance_orders') {
+            if (typeof window.openAdvancedOrdersModal === 'function') {
+                window.openAdvancedOrdersModal();
+            } else {
+                let retries = 0;
+                const retryInterval = setInterval(() => {
+                    retries++;
+                    if (typeof window.openAdvancedOrdersModal === 'function') {
+                        clearInterval(retryInterval);
+                        window.openAdvancedOrdersModal();
+                    } else if (retries > 25) {
+                        clearInterval(retryInterval);
+                    }
+                }, 150);
+            }
+            return;
+        }
+
+        // Otherwise route to customer chat
+        if (typeof window.openRiderCustomerChatModal === 'function') {
+            window.openRiderCustomerChatModal(targetId);
+        } else {
+            let retries = 0;
+            const retryInterval = setInterval(() => {
+                retries++;
+                if (typeof window.openRiderCustomerChatModal === 'function') {
+                    clearInterval(retryInterval);
+                    window.openRiderCustomerChatModal(targetId);
+                } else if (retries > 25) {
+                    clearInterval(retryInterval);
+                }
+            }, 150);
+        }
+    };
+
     window.isNativePlatform = isNativePlatform;
     window.triggerNativeHaptic = triggerNativeHaptic;
     window.requestNativePermissions = requestNativePermissions;
     window.areNativePermissionsGranted = areNativePermissionsGranted;
     window.openNativeAppSettings = openNativeAppSettings;
+    window.showNativeNotification = showNativeNotification;
+    window.clearNativeNotification = clearNativeNotification;
 }
 

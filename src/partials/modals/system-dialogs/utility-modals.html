@@ -8,7 +8,9 @@
                 <i class="fa-solid fa-calculator text-emerald-600 dark:text-emerald-400 text-sm"></i>
                 <h3 class="font-bold text-xs text-gray-900 dark:text-white">Map Calculation Board</h3>
             </div>
-            <button onclick="window.closeMapCalcBoardModal && window.closeMapCalcBoardModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white text-sm"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" onclick="window.closeMapCalcBoardModal && window.closeMapCalcBoardModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
         </div>
 
         <div id="mapcalc-list-container" class="flex-1 overflow-y-auto flex flex-col gap-2 min-h-[200px] text-xs">
@@ -91,8 +93,8 @@
 <!-- FORGOT PASSWORD MODAL -->
 <div id="forgot-password-modal" class="hidden fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
     <div class="bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl relative flex flex-col gap-4 text-center animate-in fade-in zoom-in duration-200 text-gray-900 dark:text-white">
-        <button onclick="window.closeForgotPasswordModal && window.closeForgotPasswordModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-700 dark:hover:text-white transition w-8 h-8 rounded-full bg-gray-100 dark:bg-darkBg border border-gray-300 dark:border-gray-800 flex items-center justify-center">
-            <i class="fa-solid fa-xmark text-sm"></i>
+        <button type="button" onclick="window.closeForgotPasswordModal && window.closeForgotPasswordModal()" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+            <i class="fa-solid fa-xmark text-xs"></i>
         </button>
 
         <div class="flex flex-col items-center mt-2">

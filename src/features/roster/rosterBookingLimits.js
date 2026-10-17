@@ -2,11 +2,11 @@
 import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
-import { isAdmin } from './rosterUtils.js';
+import { isAdmin, hasTlPermission } from './rosterUtils.js';
 import { sanitizeForFirebase } from './rosterSchedule.js';
 
 export function openAdminBookingLimitsModal() {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageBookingLimits')) return showToast("⚠️ Unauthorized: Admin access required.");
 
     const modal = document.getElementById('admin-booking-limits-modal');
     const autoToggle = document.getElementById('admin-booking-limits-auto-toggle');
@@ -48,7 +48,7 @@ export function toggleBookingLimitsModeUI(isAuto) {
 }
 
 export async function saveAdminBookingLimitsSettings() {
-    if (!isAdmin()) return showToast("⚠️ Unauthorized: Admin access required.");
+    if (!isAdmin() && !hasTlPermission('canManageBookingLimits')) return showToast("⚠️ Unauthorized: Admin access required.");
 
     const autoToggle = document.getElementById('admin-booking-limits-auto-toggle');
     const input = document.getElementById('admin-max-active-bookings');

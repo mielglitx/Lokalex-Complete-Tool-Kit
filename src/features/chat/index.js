@@ -70,6 +70,7 @@ import * as teamComms from './teamComms.js';
 import * as facebookApiAdmin from './facebookApiAdmin.js';
 import * as fullBookingMode from './fullBookingMode.js';
 import * as chatSoundManager from './chatSoundManager.js';
+import * as adminBroadcast from './adminBroadcast.js';
 import { globalState, appState } from '../../store/state.js';
 import { escapeHtml, formatTitleCase } from '../../utils/helpers.js';
 import { showToast } from '../../ui/notifications.js';
@@ -88,6 +89,7 @@ export * from './teamComms.js';
 export * from './facebookApiAdmin.js';
 export * from './fullBookingMode.js';
 export * from './chatSoundManager.js';
+export * from './adminBroadcast.js';
 
 // Bind all chat functions to global window object with max booking limit safety
 if (typeof window !== 'undefined') {
@@ -104,7 +106,8 @@ if (typeof window !== 'undefined') {
         teamComms,
         facebookApiAdmin,
         fullBookingMode,
-        chatSoundManager
+        chatSoundManager,
+        adminBroadcast
     ];
     modules.forEach(mod => {
         if (mod) {

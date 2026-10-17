@@ -27,6 +27,7 @@ import {
     loadRosterCache, 
     canManageRoster, 
     isAdmin, 
+    hasTlPermission,
     getElapsedCateringTime, 
     getElapsedBreakTime, 
     checkFirstInLineAlarm, 
@@ -251,49 +252,49 @@ export function updateRosterUI() {
 
     const storeHubBtn = document.getElementById('admin-store-hub-btn');
     if (storeHubBtn) {
-        if (showControls && isAdmin()) storeHubBtn.classList.remove('hidden');
+        if (showControls && (isAdmin() || hasTlPermission('canManageStoreAccounts'))) storeHubBtn.classList.remove('hidden');
         else storeHubBtn.classList.add('hidden');
     }
 
     const manageRidersBtn = document.getElementById('admin-manage-riders-btn');
     if (manageRidersBtn) {
-        if (showControls && isAdmin()) manageRidersBtn.classList.remove('hidden');
+        if (showControls && (isAdmin() || hasTlPermission('canManageRiderAccounts'))) manageRidersBtn.classList.remove('hidden');
         else manageRidersBtn.classList.add('hidden');
     }
 
     const scheduleSettingsBtn = document.getElementById('admin-schedule-settings-btn');
     if (scheduleSettingsBtn) {
-        if (showControls && isAdmin()) scheduleSettingsBtn.classList.remove('hidden');
+        if (showControls && (isAdmin() || hasTlPermission('canManageSchedules'))) scheduleSettingsBtn.classList.remove('hidden');
         else scheduleSettingsBtn.classList.add('hidden');
     }
 
     const dayOffSettingsBtn = document.getElementById('admin-dayoff-settings-btn');
     if (dayOffSettingsBtn) {
-        if (showControls && isAdmin()) dayOffSettingsBtn.classList.remove('hidden');
+        if (showControls && (isAdmin() || hasTlPermission('canManageDayOff'))) dayOffSettingsBtn.classList.remove('hidden');
         else dayOffSettingsBtn.classList.add('hidden');
     }
 
     const bookingLimitsBtn = document.getElementById('admin-booking-limits-btn');
     if (bookingLimitsBtn) {
-        if (showControls && isAdmin()) bookingLimitsBtn.classList.remove('hidden');
+        if (showControls && (isAdmin() || hasTlPermission('canManageBookingLimits'))) bookingLimitsBtn.classList.remove('hidden');
         else bookingLimitsBtn.classList.add('hidden');
     }
 
     const commissionSettingsBtn = document.getElementById('admin-commission-settings-btn');
     if (commissionSettingsBtn) {
-        if (showControls && isAdmin()) commissionSettingsBtn.classList.remove('hidden');
+        if (showControls && (isAdmin() || hasTlPermission('canManageCommission'))) commissionSettingsBtn.classList.remove('hidden');
         else commissionSettingsBtn.classList.add('hidden');
     }
 
     const autoEndShiftBtn = document.getElementById('admin-auto-endshift-btn');
     if (autoEndShiftBtn) {
-        if (showControls && isAdmin()) autoEndShiftBtn.classList.remove('hidden');
+        if (showControls && (isAdmin() || hasTlPermission('canManageAutoEndShift'))) autoEndShiftBtn.classList.remove('hidden');
         else autoEndShiftBtn.classList.add('hidden');
     }
 
     const blockBtn = document.getElementById('admin-block-btn');
     if (blockBtn) {
-        if (showControls && isAdmin()) blockBtn.classList.remove('hidden');
+        if (showControls && (isAdmin() || hasTlPermission('canManageBanList'))) blockBtn.classList.remove('hidden');
         else blockBtn.classList.add('hidden');
     }
 
@@ -305,26 +306,56 @@ export function updateRosterUI() {
 
     const forceAllBtn = document.getElementById('admin-force-all-btn');
     if (forceAllBtn) {
-        if (showControls) forceAllBtn.classList.remove('hidden');
+        if (showControls && (isAdmin() || hasTlPermission('canEndAllShifts'))) forceAllBtn.classList.remove('hidden');
         else forceAllBtn.classList.add('hidden');
     }
 
     const queueSettingsBtn = document.getElementById('admin-queue-settings-btn');
     if (queueSettingsBtn) {
-        if (showControls && isAdmin()) queueSettingsBtn.classList.remove('hidden');
+        if (showControls && (isAdmin() || hasTlPermission('canManageQueueSettings'))) queueSettingsBtn.classList.remove('hidden');
         else queueSettingsBtn.classList.add('hidden');
     }
 
     const fbSettingsBtn = document.getElementById('admin-fb-settings-btn');
     if (fbSettingsBtn) {
-        if (showControls || isAdmin()) fbSettingsBtn.classList.remove('hidden');
+        if ((showControls || isAdmin()) && (isAdmin() || hasTlPermission('canManageFbApis'))) fbSettingsBtn.classList.remove('hidden');
         else fbSettingsBtn.classList.add('hidden');
     }
 
     const fbSettingsRosterBtn = document.getElementById('admin-fb-settings-roster-btn');
     if (fbSettingsRosterBtn) {
-        if (showControls && isAdmin()) fbSettingsRosterBtn.classList.remove('hidden');
+        if (showControls && (isAdmin() || hasTlPermission('canManageFbApis'))) fbSettingsRosterBtn.classList.remove('hidden');
         else fbSettingsRosterBtn.classList.add('hidden');
+    }
+
+    const clearInboxBtn = document.getElementById('admin-clear-inbox-btn');
+    if (clearInboxBtn) {
+        if ((showControls || isAdmin()) && (isAdmin() || hasTlPermission('canClearInbox'))) clearInboxBtn.classList.remove('hidden');
+        else clearInboxBtn.classList.add('hidden');
+    }
+
+    const sendManyBtn = document.getElementById('admin-send-many-btn');
+    if (sendManyBtn) {
+        if ((showControls || isAdmin()) && (isAdmin() || hasTlPermission('canManageBroadcast'))) sendManyBtn.classList.remove('hidden');
+        else sendManyBtn.classList.add('hidden');
+    }
+
+    const creditsSettingsBtn = document.getElementById('admin-credits-settings-btn');
+    if (creditsSettingsBtn) {
+        if (showControls && (isAdmin() || hasTlPermission('canManageCredits'))) creditsSettingsBtn.classList.remove('hidden');
+        else creditsSettingsBtn.classList.add('hidden');
+    }
+
+    const earlyShiftBtn = document.getElementById('admin-early-shift-btn');
+    if (earlyShiftBtn) {
+        if (showControls && (isAdmin() || hasTlPermission('canManageEarlyShift'))) earlyShiftBtn.classList.remove('hidden');
+        else earlyShiftBtn.classList.add('hidden');
+    }
+
+    const fullBookingBtn = document.getElementById('admin-full-booking-btn');
+    if (fullBookingBtn) {
+        if (showControls && (isAdmin() || hasTlPermission('canManageFullBooking'))) fullBookingBtn.classList.remove('hidden');
+        else fullBookingBtn.classList.add('hidden');
     }
 
     const myRecord = rosterMembers.find(m => {

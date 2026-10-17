@@ -3,7 +3,7 @@ import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { escapeHtml } from '../../utils/helpers.js';
-import { isAdmin as checkIsAdmin } from '../roster/rosterUtils.js';
+import { isAdmin as checkIsAdmin, hasTlPermission } from '../roster/rosterUtils.js';
 import { 
     defaultCommissionRate, 
     customRiderRates, 
@@ -17,8 +17,8 @@ import {
 import { refreshCommissionView } from './commissionUI.js';
 
 export function openAdminCommissionSettingsModal() {
-    if (!checkIsAdmin()) {
-        return showToast("⚠️ Unauthorized: Only Admin can adjust commission settings.");
+    if (!checkIsAdmin() && !hasTlPermission('canManageCommission')) {
+        return showToast("⚠️ Unauthorized: Only Admin or authorized TL can adjust commission settings.");
     }
 
     const modal = document.getElementById('admin-commission-settings-modal');
@@ -192,8 +192,8 @@ export function removeSpecialPromoDate(dateKey) {
 }
 
 export async function saveAdminCommissionSettings() {
-    if (!checkIsAdmin()) {
-        return showToast("⚠️ Unauthorized: Only Admin can adjust commission settings.");
+    if (!checkIsAdmin() && !hasTlPermission('canManageCommission')) {
+        return showToast("⚠️ Unauthorized: Only Admin or authorized TL can adjust commission settings.");
     }
 
     const defaultInput = document.getElementById('admin-default-commission-rate');

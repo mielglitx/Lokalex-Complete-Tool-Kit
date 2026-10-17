@@ -263,10 +263,15 @@ export async function triggerStatusWithSlide(targetStatus) {
             if (missingReceiptCust) {
                 showToast(`⚠️ Paki-gawaan muna ng resibo si ${missingReceiptCust.name} (o i-void kung cancel) bago mag-Available!`);
                 
-                if (multiCarts && activeCartSlot) {
-                    multiCarts[activeCartSlot].customerName = missingReceiptCust.name;
-                    multiCarts[activeCartSlot].isManual = false;
-                    if (window.saveCartState) window.saveCartState();
+                if (typeof window.syncSmartCartsWithCateringCustomers === 'function') {
+                    window.syncSmartCartsWithCateringCustomers();
+                }
+                let targetSlot = activeCartSlot || 1;
+                if (typeof window.getCartSlotForCustomer === 'function') {
+                    targetSlot = window.getCartSlotForCustomer(missingReceiptCust.name);
+                }
+                if (typeof window.switchCartTab === 'function') {
+                    window.switchCartTab(targetSlot);
                 }
                 switchView('view-cart');
                 return;
@@ -305,15 +310,18 @@ export async function triggerStatusWithSlide(targetStatus) {
                     const rId = (meta.cateredByRiderId || '').toString();
                     const rName = (meta.cateredByRiderName || meta.cateredBy || '').trim().toLowerCase();
                     if ((rId === myId || rName === myName.toLowerCase()) && meta.folder === 'catering') {
+                        const now = Date.now();
                         const releasePayload = {
                             folder: 'done',
                             status: 'completed',
+                            completedAt: now,
                             cateredByRiderId: null,
                             cateredByRiderName: null,
                             cateredBy: null,
                             forcedBy: null,
                             isForcedCater: false,
-                            lastUpdated: Date.now()
+                            unreadForRider: false,
+                            lastUpdated: now
                         };
                         db.ref(`customerChats/${cId}/metadata`).update(releasePayload).catch(() => {});
                         db.ref(`customerChatMeta/${cId}`).update(releasePayload).catch(() => {});

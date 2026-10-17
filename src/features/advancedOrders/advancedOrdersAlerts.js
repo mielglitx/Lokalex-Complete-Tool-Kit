@@ -16,7 +16,7 @@
  */
 
 import { globalState } from '../../store/state.js';
-import { showToast, unlockAudioContext } from '../../ui/notifications.js';
+import { showToast, unlockAudioContext, showNativeNotification, clearNativeNotification } from '../../ui/notifications.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
 
 let alarmInterval = null;
@@ -65,8 +65,8 @@ export function parseScheduledDateTime(dateStr, timeStr) {
         day = now.getDate();
     }
 
-    // 2. Parse Time Components (12-hour AM/PM vs 24-hour)
-    const timeMatch = cleanTime.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+    // 2. Parse Time Components (12-hour AM/PM vs 24-hour, with optional seconds)
+    const timeMatch = cleanTime.match(/^(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*([AP]M))?$/i);
     if (!timeMatch) return null;
 
     let hours = parseInt(timeMatch[1], 10);
@@ -143,6 +143,7 @@ export function checkScheduledDeliveryAlerts() {
     if (orders.length === 0) {
         if (banner) banner.classList.add('hidden');
         if (badge) badge.classList.add('hidden');
+        stopReminderAlarm();
         return;
     }
 
@@ -155,7 +156,11 @@ export function checkScheduledDeliveryAlerts() {
 
     orders.forEach(ord => {
         const status = (ord.status || 'Pending').toLowerCase();
-        if (status === 'catered' || status === 'cancelled') return;
+        const hasRider = Boolean(ord.cateredBy && ord.cateredBy.trim() && ord.cateredBy.toLowerCase() !== 'unassigned');
+        const isBeingCatered = status === 'catering' || status === 'being catered' || hasRider;
+
+        // An advance order that is already being catered, catered, or cancelled MUST NOT trigger alarms
+        if (status === 'catered' || status === 'cancelled' || isBeingCatered) return;
 
         activePendingCount++;
         if (!ord.timeToReceive) return;
@@ -168,6 +173,10 @@ export function checkScheduledDeliveryAlerts() {
 
         // Target window: up to 30 mins before scheduled time and up to 30 mins overdue
         if (diffMins >= -30 && diffMins <= 30) {
+            const custName = ord.custName || 'Customer';
+            const timeStr = ord.timeToReceive || '';
+            const addrStr = ord.address ? ` • ${ord.address}` : '';
+
             if (diffMins <= 5) {
                 if (highestUrgencyLevel < 3) {
                     highestUrgencyOrder = ord;
@@ -177,6 +186,12 @@ export function checkScheduledDeliveryAlerts() {
                 if (!triggeredAlerts.has(`${orderKey}_5m`)) {
                     triggeredAlerts.add(`${orderKey}_5m`);
                     shouldPlayAlarm = true;
+                    showNativeNotification(
+                        `🚨 5 MINS WARNING: Advance Delivery Due!`,
+                        `${custName} — Due at ${timeStr}${addrStr}`,
+                        `adv_${orderKey}`,
+                        `adv_${orderKey}`
+                    );
                 }
             } else if (diffMins <= 15) {
                 if (highestUrgencyLevel < 2) {
@@ -187,6 +202,12 @@ export function checkScheduledDeliveryAlerts() {
                 if (!triggeredAlerts.has(`${orderKey}_15m`)) {
                     triggeredAlerts.add(`${orderKey}_15m`);
                     shouldPlayAlarm = true;
+                    showNativeNotification(
+                        `⚠️ 15 MINS REMINDER: Advance Delivery Upcoming`,
+                        `${custName} — Due at ${timeStr}${addrStr}`,
+                        `adv_${orderKey}`,
+                        `adv_${orderKey}`
+                    );
                 }
             } else if (diffMins <= 30) {
                 if (highestUrgencyLevel < 1) {
@@ -197,6 +218,12 @@ export function checkScheduledDeliveryAlerts() {
                 if (!triggeredAlerts.has(`${orderKey}_30m`)) {
                     triggeredAlerts.add(`${orderKey}_30m`);
                     shouldPlayAlarm = true;
+                    showNativeNotification(
+                        `🔔 30 MINS NOTICE: Scheduled Delivery Ahead`,
+                        `${custName} — Scheduled for ${timeStr}${addrStr}`,
+                        `adv_${orderKey}`,
+                        `adv_${orderKey}`
+                    );
                 }
             }
         }
@@ -256,7 +283,10 @@ export function checkScheduledDeliveryAlerts() {
             }
         } else {
             banner.classList.add('hidden');
+            stopReminderAlarm();
         }
+    } else if (!highestUrgencyOrder || highestUrgencyLevel === 0) {
+        stopReminderAlarm();
     }
 }
 

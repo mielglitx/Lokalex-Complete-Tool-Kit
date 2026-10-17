@@ -4,6 +4,7 @@ import { showToast } from '../../ui/notifications.js';
 import { getCurrentCart } from '../cart.js';
 import { getDailyRiderId } from './wizardCalc.js';
 import { getDevicePlatform } from '../../utils/helpers.js';
+import { saveImageToDevice } from '../../utils/imageSaver.js';
 
 export let currentReceiptCanvas = null;
 export let currentReceiptDataUrl = "";
@@ -583,7 +584,7 @@ export async function renderReceiptCanvas() {
     ctx.fillText("Lokalex Logistics • On-Demand Express Delivery", width / 2, y);
 
     currentReceiptCanvas = canvas;
-    currentReceiptDataUrl = canvas.toDataURL('image/png');
+    currentReceiptDataUrl = canvas.toDataURL('image/jpeg', 0.90);
 
     if (receiptImg) {
         receiptImg.src = currentReceiptDataUrl;
@@ -603,92 +604,17 @@ function triggerDirectAnchorDownload(url, fileName) {
 }
 
 export async function downloadReceiptImage() {
-    if (!currentReceiptDataUrl && !currentReceiptCanvas) {
+    const rawData = currentReceiptDataUrl || (currentReceiptCanvas ? currentReceiptCanvas.toDataURL('image/png') : null);
+    if (!rawData) {
         return showToast("⚠️ Image receipt not ready yet.");
     }
 
     const rawTxId = wizState.currentReceiptTransactionId || Date.now().toString(36);
     const shortRef = formatShortRef(rawTxId);
     const fileName = `Lokalex_Receipt_${shortRef}.png`;
-    const platform = getDevicePlatform();
 
-    if (platform === 'android' || platform === 'pc') {
-        if (currentReceiptCanvas && typeof currentReceiptCanvas.toBlob === 'function') {
-            currentReceiptCanvas.toBlob((blob) => {
-                if (!blob) {
-                    triggerDirectAnchorDownload(currentReceiptDataUrl, fileName);
-                    return;
-                }
-                const blobUrl = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = blobUrl;
-                a.download = fileName;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
-                showToast("💾 High Definition receipt saved to device!");
-            }, 'image/png');
-            return;
-        }
-
-        triggerDirectAnchorDownload(currentReceiptDataUrl, fileName);
-        return;
-    }
-
-    if (navigator.canShare && currentReceiptCanvas) {
-        try {
-            const blob = await new Promise(resolve => currentReceiptCanvas.toBlob(resolve, 'image/png'));
-            if (blob) {
-                const file = new File([blob], fileName, { type: 'image/png' });
-                if (navigator.canShare({ files: [file] })) {
-                    await navigator.share({
-                        files: [file],
-                        title: 'Lokalex Receipt',
-                        text: `Official Receipt #${shortRef}`
-                    });
-                    showToast("✅ Resibo naibahagi / nai-save!");
-                    return;
-                }
-            }
-        } catch (err) {
-            if (err.name === 'AbortError') return;
-            console.warn("Native Web Share failed, attempting fallback:", err);
-        }
-    }
-
-    if (window.openImageViewerModal && typeof window.openImageViewerModal === 'function') {
-        window.openImageViewerModal(currentReceiptDataUrl);
-        showToast("ℹ️ Pindutin nang matagal ang resibo at piliin ang 'Save to Photos'.");
-        return;
-    }
-
-    const newTab = window.open();
-    if (newTab) {
-        newTab.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>${fileName}</title>
-                <style>
-                    body { margin: 0; background-color: #0f172a; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; box-sizing: border-box; font-family: -apple-system, sans-serif; }
-                    img { max-width: 100%; height: auto; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
-                    p { color: #94a3b8; font-size: 13px; margin-top: 16px; text-align: center; }
-                    strong { color: #38bdf8; }
-                </style>
-            </head>
-            <body>
-                <img src="${currentReceiptDataUrl}" alt="Receipt">
-                <p>Pindutin nang matagal ang larawan at piliin ang <strong>Save to Photos</strong></p>
-            </body>
-            </html>
-        `);
-        showToast("ℹ️ Pindutin nang matagal ang resibo at piliin ang 'Save to Photos'.");
-        return;
-    }
-
-    triggerDirectAnchorDownload(currentReceiptDataUrl, fileName);
+    showToast("⏳ Sine-save ang resibo...");
+    await saveImageToDevice(rawData, fileName);
 }
 
 if (typeof window !== 'undefined') {
