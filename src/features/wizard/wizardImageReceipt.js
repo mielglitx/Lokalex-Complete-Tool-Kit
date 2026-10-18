@@ -317,7 +317,7 @@ export async function renderReceiptCanvas() {
 
     // QR & GCash section
     if (hasGcashDetails) {
-        estimatedHeight += (hasQrDrawn ? 285 : 70);
+        estimatedHeight += (hasQrDrawn ? 325 : 70);
     }
 
     // Footer
@@ -532,7 +532,7 @@ export async function renderReceiptCanvas() {
         ctx.fillStyle = "#111827";
         ctx.textAlign = "center";
         ctx.font = "800 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-        ctx.fillText("SCAN TO PAY VIA ePAYMENT", width / 2, y);
+        ctx.fillText("SCAN TO PAY VIA GCASH / ePAYMENT", width / 2, y);
         y += 17;
 
         ctx.font = "600 11.5px 'SF Mono', Consolas, 'Courier New', monospace";
@@ -542,6 +542,13 @@ export async function renderReceiptCanvas() {
         y += 16;
 
         if (hasQrDrawn) {
+            // Explicitly state that the QR Code is a GCash account
+            ctx.font = "800 11.5px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+            ctx.fillStyle = "#0284c7";
+            ctx.fillText("★ QR Code is a GCash Account ★", width / 2, y);
+            y += 16;
+            ctx.fillStyle = "#111827";
+
             const qrDisplaySize = 176;
             const qrX = Math.round((width - qrDisplaySize) / 2);
             const quietPadding = 10;
@@ -567,7 +574,12 @@ export async function renderReceiptCanvas() {
             ctx.drawImage(preloadedQrImage, qrX, y, qrDisplaySize, qrDisplaySize);
             ctx.restore();
 
-            y += qrDisplaySize + 22;
+            y += qrDisplaySize + 14;
+
+            ctx.font = "700 10.5px 'SF Mono', Consolas, 'Courier New', monospace";
+            ctx.fillStyle = "#0284c7";
+            ctx.fillText("Scan with GCash App to Pay", width / 2, y);
+            y += 16;
         } else {
             y += 10;
         }
