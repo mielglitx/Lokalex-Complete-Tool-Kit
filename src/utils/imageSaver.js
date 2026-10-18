@@ -37,9 +37,9 @@ export function blobToDataUrl(blob) {
  * 2. Mobile Web Share API (Save to Photos / Gallery)
  * 3. Desktop / Browser anchor download
  */
-export async function saveImageToDevice(imageSrc, filename = 'lokalex_image.png') {
+export async function saveImageToDevice(imageSrc, filename = 'lokalex_image.png', showNativeToast = true) {
     if (!imageSrc) {
-        showToast("⚠️ Walang litrato na mase-save.");
+        if (showNativeToast) showToast("⚠️ Walang litrato na mase-save.");
         return false;
     }
 
@@ -80,17 +80,17 @@ export async function saveImageToDevice(imageSrc, filename = 'lokalex_image.png'
             blob = dataUrlToBlob(imageSrc);
         }
 
-        // 1. Native Android Bridge (Direct to Gallery / Pictures)
+        // 1. Native Android Bridge (Direct to Gallery / Pictures with auto-overwrite)
         if (window.NativePermissionsBridge && typeof window.NativePermissionsBridge.saveImageToDevice === 'function') {
-            const ok = window.NativePermissionsBridge.saveImageToDevice(dataUrl, filename);
+            const ok = window.NativePermissionsBridge.saveImageToDevice(dataUrl, filename, showNativeToast);
             if (ok) {
-                showToast("💾 Litrato na-save sa Gallery / Pictures!");
+                if (showNativeToast) showToast("💾 Litrato na-save sa Gallery / Pictures!");
                 return true;
             }
         }
 
         // 2. Web Share API (Mobile browsers where user can tap 'Save Image' / 'Photos')
-        if (navigator.canShare && blob) {
+        if (navigator.canShare && blob && showNativeToast) {
             try {
                 const file = new File([blob], filename, { type: blob.type || 'image/png' });
                 if (navigator.canShare({ files: [file] })) {
@@ -117,11 +117,11 @@ export async function saveImageToDevice(imageSrc, filename = 'lokalex_image.png'
         a.click();
         document.body.removeChild(a);
         if (blob) setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
-        showToast("💾 Na-download ang litrato!");
+        if (showNativeToast) showToast("💾 Na-download ang litrato!");
         return true;
     } catch (err) {
         console.error("[ImageSaver] Error saving image:", err);
-        showToast("⚠️ Hindi mai-save ang litrato. Subukang i-screenshot.");
+        if (showNativeToast) showToast("⚠️ Hindi mai-save ang litrato. Subukang i-screenshot.");
         return false;
     }
 }

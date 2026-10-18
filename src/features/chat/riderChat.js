@@ -1045,6 +1045,100 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
 }
 
 /**
+ * Directly sends a menu photo to a specific customer thread (Firebase RTDB + Messenger)
+ */
+export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, captionText = "") {
+    if (!targetCustId || !imageUrl || !db) return false;
+    const riderName = appState.riderName || localStorage.getItem('riderName') || "Lokalex Rider";
+    const now = Date.now();
+    const myPhoto = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || null;
+
+    const isFb = String(targetCustId).startsWith('fb_');
+    const targetChannel = isFb ? 'messenger' : 'web';
+
+    let targetApiId = null;
+    let custName = null;
+    try {
+        const metaSnap = await db.ref(`customerChatMeta/${targetCustId}`).once('value');
+        if (metaSnap.exists()) {
+            const m = metaSnap.val();
+            targetApiId = m.apiId || m.channelId || null;
+            custName = m.customerName || m.name || null;
+        }
+    } catch(e) {}
+
+    const textPayload = captionText ? `📋 Menu: ${captionText}` : "📋 Restaurant Menu";
+
+    const newMsg = {
+        sender: riderName,
+        senderType: 'rider',
+        senderAvatar: myPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=3B82F6&color=fff`,
+        avatarUrl: myPhoto || null,
+        text: textPayload,
+        imageUrl: imageUrl,
+        type: 'image',
+        timestamp: now,
+        isRider: true,
+        status: 'sent',
+        channel: targetChannel,
+        apiId: targetApiId,
+        deliveredAt: null,
+        seenAt: null
+    };
+
+    let newMsgKey = null;
+    try {
+        const pushRef = await db.ref(`customerChats/${targetCustId}/messages`).push(sanitizeForFirebase(newMsg));
+        newMsgKey = pushRef ? pushRef.key : null;
+
+        const metaUpdate = sanitizeForFirebase({
+            lastMessage: `You: 📋 ${captionText || "Menu Photo"}`,
+            lastUpdated: now,
+            unreadForRider: false
+        });
+        if (custName) {
+            metaUpdate.customerName = custName;
+        }
+
+        await Promise.all([
+            db.ref(`customerChats/${targetCustId}/metadata`).update(metaUpdate),
+            db.ref(`customerChatMeta/${targetCustId}`).update(metaUpdate)
+        ]).catch(() => {});
+
+        // If this chat is currently open, dynamically render it immediately
+        if (activeRiderChatCustId === targetCustId && newMsgKey) {
+            const fullMsg = { id: newMsgKey, ...newMsg };
+            loadedRiderMsgsMap.set(newMsgKey, fullMsg);
+            const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+            riderChatMemoryCache.set(targetCustId, sortedMsgs);
+            idbSet('chats', targetCustId, sortedMsgs).catch(() => {});
+            const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
+            if (container) {
+                appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
+                requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+            }
+        }
+
+        // Forward to Messenger if thread is from Facebook
+        if (isFb) {
+            await forwardRiderReplyToMessenger({
+                custId: targetCustId,
+                apiId: targetApiId,
+                text: textPayload,
+                imageUrl: imageUrl,
+                riderName: riderName,
+                newMsgKey: newMsgKey
+            }).catch(err => console.warn("forwardRiderReplyToMessenger menu error:", err));
+        }
+
+        return true;
+    } catch(err) {
+        console.error("sendDirectMenuPhotoToCustomer failed:", err);
+        return false;
+    }
+}
+
+/**
  * Forwards outbound rider chat message directly to Facebook Messenger via the webhook bridge
  */
 export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, locationCoords, riderName, replyToMid, replyToText, newMsgKey }) {
@@ -1406,6 +1500,8 @@ if (typeof window !== 'undefined') {
     window.setRiderReply = setRiderReply;
     window.cancelRiderReply = cancelRiderReply;
     window.toggleRiderMessageReaction = toggleRiderMessageReaction;
+    window.forwardRiderReplyToMessenger = forwardRiderReplyToMessenger;
+    window.sendDirectMenuPhotoToCustomer = sendDirectMenuPhotoToCustomer;
 
     window.getActiveRiderChatFilter = getActiveRiderChatFilter;
     window.setRiderChatFilter = setRiderChatFilter;

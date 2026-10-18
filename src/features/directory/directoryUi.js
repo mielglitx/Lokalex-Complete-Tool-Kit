@@ -40,12 +40,16 @@ import { idbGet, idbSet } from '../../utils/storageEngine.js';
 import { loadDirectoryCache } from './directoryStorage.js';
 import { checkAdminAccess } from './directoryPermissions.js';
 import { uploadImage } from '../../utils/imageUpload.js';
+import { saveImageToDevice } from '../../utils/imageSaver.js';
 
 let lastJumpLetter = "";
 let creditsListenerActive = false;
 let hasAttemptedGpsAutoSelect = false;
 let pendingMapUnlock = null;
 let activeGalleryStore = null;
+let currentGalleryPages = [];
+let selectedMenuPageIndices = new Set();
+let menuRecipientPickerPendingPages = null;
 
 // Synchronously hydrate menu metadata immediately at module load time to guarantee 0ms instant display
 let storeMenuMetadataMap = (() => {
@@ -866,7 +870,10 @@ function getOrCreateMenuGalleryModal() {
                     </div>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
-                    <button type="button" id="btn-download-all-menu" onclick="window.downloadCompleteMenuToPhone && window.downloadCompleteMenuToPhone()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] px-2.5 py-1.5 rounded-xl transition active:scale-95 shadow-xs flex items-center gap-1.5 cursor-pointer">
+                    <button type="button" id="btn-send-all-menu" onclick="window.sendAllMenuPagesToCustomer && window.sendAllMenuPagesToCustomer()" class="hidden bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] px-2.5 py-1.5 rounded-xl transition active:scale-95 shadow-xs flex items-center gap-1.5 cursor-pointer" title="Send all menu pages to customer">
+                        <i class="fa-solid fa-paper-plane"></i> <span class="hidden sm:inline">Send All</span>
+                    </button>
+                    <button type="button" id="btn-download-all-menu" onclick="window.downloadCompleteMenuToPhone && window.downloadCompleteMenuToPhone()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] px-2.5 py-1.5 rounded-xl transition active:scale-95 shadow-xs flex items-center gap-1.5 cursor-pointer" title="Save all menu pages one by one (auto overwrite)">
                         <i class="fa-solid fa-cloud-arrow-down"></i> <span class="hidden sm:inline">Save All</span>
                     </button>
                     <button type="button" onclick="window.closeStoreMenuGalleryModal && window.closeStoreMenuGalleryModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 text-base cursor-pointer">
@@ -896,6 +903,25 @@ function getOrCreateMenuGalleryModal() {
             <!-- Body: Compact 2-Column Mobile Grid -->
             <div id="gallery-images-container" class="flex-1 overflow-y-auto p-2.5 sm:p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                 <div class="col-span-full text-center text-gray-500 italic py-16 text-xs">Loading menu photos...</div>
+            </div>
+
+            <!-- Sticky Multi-Selection Action Bar (Shown when 1 or more pages checked) -->
+            <div id="gallery-selection-bar" class="hidden px-4 py-2.5 bg-blue-50/95 dark:bg-blue-950/85 border-t border-blue-200 dark:border-blue-800/80 flex items-center justify-between gap-2 z-20 shadow-lg">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span id="gallery-selected-count-badge" class="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shrink-0">0 selected</span>
+                    <span class="text-[10px] text-blue-900 dark:text-blue-200 font-medium truncate">Choiced menu pages</span>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onclick="window.toggleSelectAllMenuPages && window.toggleSelectAllMenuPages()" id="btn-gallery-toggle-all" class="bg-white hover:bg-gray-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-300 text-[10px] font-bold px-2 py-1 rounded-lg border border-gray-200 dark:border-zinc-700 transition active:scale-95 cursor-pointer">
+                        Select All
+                    </button>
+                    <button type="button" onclick="window.clearMenuPageSelections && window.clearMenuPageSelections()" class="bg-gray-200 hover:bg-gray-300 dark:bg-zinc-700 text-gray-700 dark:text-gray-300 text-[10px] font-bold px-2 py-1 rounded-lg transition active:scale-95 cursor-pointer">
+                        Clear
+                    </button>
+                    <button type="button" onclick="window.sendSelectedMenuPagesToCustomer && window.sendSelectedMenuPagesToCustomer()" class="bg-blue-600 hover:bg-blue-500 text-white font-black text-xs px-3 py-1.5 rounded-xl transition active:scale-95 shadow-xs flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-paper-plane text-[10px]"></i> Send Selected
+                    </button>
+                </div>
             </div>
 
             <!-- Lightbox / Preview Layer -->
@@ -1397,21 +1423,30 @@ export async function openStoreMenuGalleryModal(storeName, compositeKey) {
 
 export function closeStoreMenuGalleryModal() {
     closeMenuCameraScanner();
+    clearMenuPageSelections();
     const modal = document.getElementById('store-menu-gallery-modal');
     if (modal) modal.classList.add('hidden');
     if (db && activeGalleryStore) {
         db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}`).off();
     }
     activeGalleryStore = null;
+    currentGalleryPages = [];
 }
 
 function renderMenuPages(pages = [], storeName = "Store") {
+    currentGalleryPages = pages || [];
+    selectedMenuPageIndices.clear();
+
     const container = document.getElementById('gallery-images-container');
     const dlBtn = document.getElementById('btn-download-all-menu');
+    const sendAllBtn = document.getElementById('btn-send-all-menu');
+    updateMenuSelectionBar();
+
     if (!container) return;
 
     if (pages.length === 0) {
         if (dlBtn) dlBtn.classList.add('hidden');
+        if (sendAllBtn) sendAllBtn.classList.add('hidden');
         container.innerHTML = `
         <div class="col-span-full text-center text-gray-500 dark:text-gray-400 italic py-12 text-xs flex flex-col items-center gap-2">
             <i class="fa-solid fa-camera-retro text-2xl text-amber-500/60"></i>
@@ -1425,6 +1460,7 @@ function renderMenuPages(pages = [], storeName = "Store") {
     }
 
     if (dlBtn) dlBtn.classList.remove('hidden');
+    if (sendAllBtn) sendAllBtn.classList.remove('hidden');
 
     container.innerHTML = pages.map((page, idx) => {
         const pageNum = idx + 1;
@@ -1434,12 +1470,18 @@ function renderMenuPages(pages = [], storeName = "Store") {
         const safeUrl = page.imageUrl || "";
 
         return `
-        <div class="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-gray-800/80 rounded-xl p-1.5 flex flex-col gap-1.5 shadow-2xs group">
+        <div class="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-gray-800/80 rounded-xl p-1.5 flex flex-col gap-1.5 shadow-2xs group relative">
             <div class="relative w-full aspect-[4/3] bg-black/60 rounded-lg overflow-hidden cursor-pointer" onclick="window.openGalleryLightbox && window.openGalleryLightbox('${safeUrl}', '${escapeHtml(caption)}')">
                 <img src="${safeUrl}" alt="${escapeHtml(caption)}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
                 <span class="absolute top-1.5 left-1.5 bg-black/75 backdrop-blur-xs text-amber-400 font-mono font-black text-[9px] px-1.5 py-0.5 rounded-md border border-amber-500/30">
                     P${pageNum}
                 </span>
+
+                <!-- Choice Checkbox for selective sending -->
+                <div class="absolute top-1.5 right-1.5 z-10" onclick="event.stopPropagation()">
+                    <input type="checkbox" id="gallery-chk-${idx}" class="gallery-page-checkbox w-4 h-4 rounded text-blue-600 bg-white/95 border-gray-400 focus:ring-0 cursor-pointer shadow-md" onchange="window.handleMenuPageCheckToggle && window.handleMenuPageCheckToggle(${idx})">
+                </div>
+
                 <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-bold gap-1 pointer-events-none">
                     <i class="fa-solid fa-magnifying-glass-plus text-[10px]"></i> View
                 </div>
@@ -1451,6 +1493,9 @@ function renderMenuPages(pages = [], storeName = "Store") {
                     <span class="text-[8.5px] text-gray-500 dark:text-gray-400 truncate leading-tight">${escapeHtml(uploader)}${uploadedAt}</span>
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
+                    <button type="button" onclick="event.stopPropagation(); window.sendSingleMenuPageToCustomer && window.sendSingleMenuPageToCustomer('${safeUrl}', '${escapeHtml(caption)}')" class="p-1 rounded-md bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 transition active:scale-95 cursor-pointer" title="Send this page to customer">
+                        <i class="fa-solid fa-paper-plane text-[9px]"></i>
+                    </button>
                     <a href="${safeUrl}" download="${storeName}_Menu_Page_${pageNum}.jpg" class="p-1 rounded-md bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:text-emerald-500 transition active:scale-95" title="Save this page">
                         <i class="fa-solid fa-download text-[9px]"></i>
                     </a>
@@ -1555,7 +1600,7 @@ export async function handleMenuPhotoUpload(e) {
 export async function downloadCompleteMenuToPhone() {
     if (!activeGalleryStore || !db) return;
 
-    showToast("📥 Preparing complete menu for download...");
+    showToast("📥 Starting sequential menu download...");
 
     try {
         const snap = await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages`).once('value');
@@ -1568,44 +1613,480 @@ export async function downloadCompleteMenuToPhone() {
 
         pages.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
 
-        const filesToShare = [];
+        showToast(`📥 Saving ${pages.length} menu pictures one by one (auto-overwrite)...`);
+
         for (let i = 0; i < pages.length; i++) {
             const p = pages[i];
-            const res = await fetch(p.imageUrl);
-            const blob = await res.blob();
-            const ext = blob.type.includes('webp') ? 'webp' : 'jpg';
-            const file = new File([blob], `${activeGalleryStore.name}_Menu_Page_${i + 1}.${ext}`, { type: blob.type });
-            filesToShare.push(file);
+            const pageNum = i + 1;
+            const filename = `${activeGalleryStore.name}_Menu_Page_${pageNum}.jpg`;
+            showToast(`💾 Saving page ${pageNum} of ${pages.length}...`);
+            // Sequential save: one by one, auto-overwrite, suppress individual native toasts
+            await saveImageToDevice(p.imageUrl, filename, false);
+            // Brief sequential delay
+            await new Promise(r => setTimeout(r, 400));
         }
 
-        if (navigator.canShare && navigator.canShare({ files: filesToShare })) {
-            await navigator.share({
-                title: `${activeGalleryStore.name} Complete Menu`,
-                text: `Complete menu for ${activeGalleryStore.name} (${pages.length} pages)`,
-                files: filesToShare
-            });
-            showToast("🎉 Na-share / na-save sa gallery!");
-            return;
-        }
-
-        pages.forEach((p, idx) => {
-            setTimeout(() => {
-                const a = document.createElement('a');
-                a.href = p.imageUrl;
-                a.download = `${activeGalleryStore.name}_Menu_Page_${idx + 1}.jpg`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-            }, idx * 350);
-        });
-
-        showToast(`✅ Na-download ang ${pages.length} pahina ng menu!`);
+        showToast(`✅ Successfully saved ${pages.length} menu picture(s) (auto-overwritten)!`);
     } catch(err) {
-        if (err.name !== 'AbortError') {
-            console.error("Download error:", err);
-            showToast("⚠️ Hindi na-download ang kumpletong menu.");
+        console.error("Download error:", err);
+        showToast("⚠️ Hindi na-download ang kumpletong menu: " + (err.message || "Error"));
+    }
+}
+
+// ============================================================================
+// STORE MENU SELECTION & DIRECT CUSTOMER DISPATCH ENGINE
+// ============================================================================
+
+export function handleMenuPageCheckToggle(idx) {
+    const chk = document.getElementById(`gallery-chk-${idx}`);
+    if (!chk) return;
+    if (chk.checked) {
+        selectedMenuPageIndices.add(idx);
+    } else {
+        selectedMenuPageIndices.delete(idx);
+    }
+    updateMenuSelectionBar();
+}
+
+export function updateMenuSelectionBar() {
+    const bar = document.getElementById('gallery-selection-bar');
+    const badge = document.getElementById('gallery-selected-count-badge');
+    const toggleBtn = document.getElementById('btn-gallery-toggle-all');
+    if (!bar) return;
+
+    const count = selectedMenuPageIndices.size;
+    if (count > 0) {
+        bar.classList.remove('hidden');
+        if (badge) badge.innerText = `${count} selected`;
+    } else {
+        bar.classList.add('hidden');
+    }
+
+    if (toggleBtn) {
+        if (currentGalleryPages.length > 0 && count === currentGalleryPages.length) {
+            toggleBtn.innerText = "Deselect All";
+        } else {
+            toggleBtn.innerText = "Select All";
         }
     }
+}
+
+export function toggleSelectAllMenuPages() {
+    if (selectedMenuPageIndices.size === currentGalleryPages.length) {
+        clearMenuPageSelections();
+    } else {
+        selectedMenuPageIndices.clear();
+        currentGalleryPages.forEach((_, idx) => {
+            selectedMenuPageIndices.add(idx);
+            const chk = document.getElementById(`gallery-chk-${idx}`);
+            if (chk) chk.checked = true;
+        });
+        updateMenuSelectionBar();
+    }
+}
+
+export function clearMenuPageSelections() {
+    selectedMenuPageIndices.clear();
+    const checkboxes = document.querySelectorAll('.gallery-page-checkbox');
+    checkboxes.forEach(c => c.checked = false);
+    updateMenuSelectionBar();
+}
+
+export function sendSingleMenuPageToCustomer(imageUrl, caption) {
+    dispatchMenuPagesToSend([{ imageUrl, caption: caption || "Menu Page" }]);
+}
+
+export function sendSelectedMenuPagesToCustomer() {
+    if (selectedMenuPageIndices.size === 0) {
+        showToast("⚠️ Paki-pili muna ang mga menu pages na nais ipadala.");
+        return;
+    }
+    const pages = Array.from(selectedMenuPageIndices).sort((a, b) => a - b).map(idx => {
+        const p = currentGalleryPages[idx];
+        return {
+            imageUrl: p.imageUrl,
+            caption: p.caption || `Page ${idx + 1}`
+        };
+    });
+    dispatchMenuPagesToSend(pages);
+}
+
+export function sendAllMenuPagesToCustomer() {
+    if (!currentGalleryPages || currentGalleryPages.length === 0) {
+        showToast("⚠️ Walang naka-save na litrato para sa store na ito.");
+        return;
+    }
+    const pages = currentGalleryPages.map((p, idx) => ({
+        imageUrl: p.imageUrl,
+        caption: p.caption || `Page ${idx + 1}`
+    }));
+    dispatchMenuPagesToSend(pages);
+}
+
+export function dispatchMenuPagesToSend(pagesToSend) {
+    if (!pagesToSend || pagesToSend.length === 0) return;
+
+    // Check if rider is currently chatting inside rider-chat-modal
+    const chatModal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
+    const isChatOpen = chatModal && !chatModal.classList.contains('hidden');
+    const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') 
+        ? window.getActiveRiderChatCustId() 
+        : window.activeRiderChatCustId;
+
+    if (isChatOpen && activeCustId) {
+        const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
+        if (confirm(`Ipadala ang ${pagesToSend.length} menu picture(s) kay ${custName}?`)) {
+            executeSendMenuPages(activeCustId, pagesToSend, custName);
+        }
+        return;
+    }
+
+    // Otherwise open customer picker modal
+    openMenuCustomerRecipientPicker(pagesToSend);
+}
+
+export async function executeSendMenuPages(targetCustId, pages, custDisplayName = "Customer") {
+    if (!targetCustId || !pages || pages.length === 0) return;
+
+    closeMenuCustomerRecipientPicker();
+    showToast(`📤 Sending ${pages.length} menu photo(s) to ${custDisplayName}...`);
+
+    let sent = 0;
+    for (let i = 0; i < pages.length; i++) {
+        const p = pages[i];
+        const caption = p.caption || `Page ${i + 1}`;
+        const ok = (typeof window.sendDirectMenuPhotoToCustomer === 'function')
+            ? await window.sendDirectMenuPhotoToCustomer(targetCustId, p.imageUrl, caption)
+            : false;
+        if (ok) sent++;
+        if (i < pages.length - 1) {
+            await new Promise(r => setTimeout(r, 450));
+        }
+    }
+
+    showToast(`✅ Naipadala ang ${sent} menu photo(s) kay ${custDisplayName}!`);
+    clearMenuPageSelections();
+}
+
+// ============================================================================
+// CUSTOMER RECIPIENT PICKER MODAL
+// ============================================================================
+
+function getOrCreateMenuCustomerRecipientPickerModal() {
+    let modal = document.getElementById('menu-recipient-picker-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'menu-recipient-picker-modal';
+        modal.className = 'fixed inset-0 z-[75] flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 hidden';
+        modal.innerHTML = `
+        <div class="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-3xl max-w-sm w-full max-h-[85vh] shadow-2xl flex flex-col overflow-hidden animate-scaleUp">
+            <!-- Header -->
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800/80 bg-gray-50/70 dark:bg-black/30">
+                <div class="flex items-center gap-2 min-w-0">
+                    <div class="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold shrink-0">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h3 class="font-black text-xs sm:text-sm text-gray-900 dark:text-white truncate">Send Menu to Customer</h3>
+                        <p id="menu-recipient-modal-sub" class="text-[10px] text-gray-500 dark:text-gray-400 truncate">Select customer recipient</p>
+                    </div>
+                </div>
+                <button type="button" onclick="window.closeMenuCustomerRecipientPicker && window.closeMenuCustomerRecipientPicker()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 text-sm cursor-pointer">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Search Input -->
+            <div class="p-2.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/40 dark:bg-black/10">
+                <div class="relative flex items-center">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 text-gray-400 text-xs"></i>
+                    <input type="text" id="menu-recipient-search-input" placeholder="Search customer name..." oninput="window.filterMenuCustomerRecipients && window.filterMenuCustomerRecipients()" class="w-full bg-white dark:bg-black/40 border border-gray-200 dark:border-gray-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-gray-900 dark:text-white outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <!-- Recipient List Body -->
+            <div id="menu-recipient-list" class="flex-1 overflow-y-auto p-2.5 flex flex-col gap-1.5 max-h-[58vh]">
+                <div class="text-center text-gray-400 text-xs py-8 italic">Loading customer list...</div>
+            </div>
+        </div>`;
+        document.body.appendChild(modal);
+    }
+    return modal;
+}
+
+export function openMenuCustomerRecipientPicker(pagesToSend) {
+    menuRecipientPickerPendingPages = pagesToSend || [];
+    const modal = getOrCreateMenuCustomerRecipientPickerModal();
+
+    const sub = document.getElementById('menu-recipient-modal-sub');
+    const storeName = activeGalleryStore?.name || "Store";
+    if (sub) {
+        sub.innerText = `Sending ${menuRecipientPickerPendingPages.length} page(s) from ${storeName}`;
+    }
+
+    const searchInput = document.getElementById('menu-recipient-search-input');
+    if (searchInput) searchInput.value = "";
+
+    modal.classList.remove('hidden');
+    renderMenuCustomerRecipients("");
+}
+
+export function closeMenuCustomerRecipientPicker() {
+    const modal = document.getElementById('menu-recipient-picker-modal');
+    if (modal) modal.classList.add('hidden');
+    menuRecipientPickerPendingPages = null;
+}
+
+export function filterMenuCustomerRecipients() {
+    const query = document.getElementById('menu-recipient-search-input')?.value || "";
+    renderMenuCustomerRecipients(query);
+}
+
+export async function renderMenuCustomerRecipients(searchQuery = "") {
+    const container = document.getElementById('menu-recipient-list');
+    if (!container) return;
+
+    let threads = [];
+    if (typeof window.getCachedCustomerThreadsMap === 'function') {
+        const map = window.getCachedCustomerThreadsMap();
+        if (map && map.size > 0) {
+            threads = Array.from(map.values());
+        }
+    }
+
+    if (threads.length === 0 && db) {
+        try {
+            const snap = await db.ref('customerChatMeta').limitToLast(40).once('value');
+            if (snap.exists()) {
+                const val = snap.val();
+                threads = Object.entries(val).map(([id, data]) => ({ id, ...data }));
+            }
+        } catch(e) {}
+    }
+
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+    const myCateringCusts = (typeof window.getMyCateringCustomers === 'function') ? window.getMyCateringCustomers() : [];
+
+    const isMatchMyCatering = (t) => {
+        const cId = (t.cateredByRiderId || "").toString().trim();
+        const cName = (t.cateredByRiderName || t.cateredBy || "").toString().trim().toLowerCase();
+        const name = (t.customerName || t.name || "").trim().toLowerCase();
+        return (cId && cId === myId) || (cName && cName === myName) || myCateringCusts.some(c => c.toLowerCase() === name);
+    };
+
+    // Sort: Catering customer first, then by lastUpdated
+    threads.sort((a, b) => {
+        const catA = isMatchMyCatering(a) ? 1 : 0;
+        const catB = isMatchMyCatering(b) ? 1 : 0;
+        if (catA !== catB) return catB - catA;
+        return (Number(b.lastUpdated) || 0) - (Number(a.lastUpdated) || 0);
+    });
+
+    const q = (searchQuery || "").trim().toLowerCase();
+    const filtered = threads.filter(t => {
+        const name = (t.customerName || t.name || t.id || "").toLowerCase();
+        if (name === 'unknown' || name === 'customer') return false;
+        return !q || name.includes(q);
+    });
+
+    if (filtered.length === 0) {
+        container.innerHTML = `<div class="text-center text-gray-400 text-xs py-8 italic">Walang nahanap na active customer thread.</div>`;
+        return;
+    }
+
+    container.innerHTML = filtered.map(t => {
+        const name = t.customerName || t.name || "Customer";
+        const isCatering = isMatchMyCatering(t);
+        const isFb = String(t.id).startsWith('fb_');
+
+        return `
+        <div onclick="window.handleSelectMenuCustomerRecipient && window.handleSelectMenuCustomerRecipient('${t.id}', '${escapeHtml(name)}')" class="p-2.5 rounded-2xl border ${isCatering ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700/60 ring-1 ring-emerald-500/20' : 'bg-gray-50 hover:bg-gray-100 dark:bg-zinc-800/60 dark:hover:bg-zinc-800 border-gray-200 dark:border-zinc-700/60'} flex items-center justify-between gap-2 cursor-pointer transition active:scale-[0.98]">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-8 h-8 rounded-full ${isCatering ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white'} flex items-center justify-center font-bold text-xs shrink-0">
+                    ${escapeHtml(name.charAt(0).toUpperCase())}
+                </div>
+                <div class="min-w-0">
+                    <div class="font-bold text-xs text-gray-900 dark:text-white truncate flex items-center gap-1.5">
+                        <span class="truncate">${escapeHtml(name)}</span>
+                        ${isFb ? '<i class="fa-brands fa-facebook-messenger text-blue-500 text-[10px]"></i>' : ''}
+                    </div>
+                    <div class="text-[9.5px] text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5">
+                        ${isCatering 
+                            ? '<span class="text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8.5px]"></i> Your Active Catering</span>' 
+                            : (t.cateredBy ? `<span>Catered by ${escapeHtml(t.cateredBy)}</span>` : '<span>Inbox Chat</span>')}
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="shrink-0 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 cursor-pointer">
+                <i class="fa-solid fa-paper-plane text-[9px]"></i> Send
+            </button>
+        </div>`;
+    }).join('');
+}
+
+export function handleSelectMenuCustomerRecipient(custId, custName) {
+    if (!menuRecipientPickerPendingPages || menuRecipientPickerPendingPages.length === 0) {
+        closeMenuCustomerRecipientPicker();
+        return;
+    }
+    executeSendMenuPages(custId, menuRecipientPickerPendingPages, custName);
+}
+
+// ============================================================================
+// CHAT MODAL STORE MENU PICKER (Browse Menus Directly From Chat)
+// ============================================================================
+
+function getOrCreateChatStoreMenuPickerModal() {
+    let modal = document.getElementById('chat-store-menu-picker-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'chat-store-menu-picker-modal';
+        modal.className = 'fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 hidden';
+        modal.innerHTML = `
+        <div class="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-3xl max-w-sm sm:max-w-md w-full max-h-[85vh] shadow-2xl flex flex-col overflow-hidden animate-scaleUp">
+            <!-- Header -->
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800/80 bg-gray-50/70 dark:bg-black/30">
+                <div class="flex items-center gap-2 min-w-0">
+                    <div class="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center text-sm font-bold shrink-0">
+                        <i class="fa-solid fa-book-open"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h3 class="font-black text-xs sm:text-sm text-gray-900 dark:text-white truncate">Restaurant Menu Directory</h3>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400 truncate">Pick store to browse & send photos</p>
+                    </div>
+                </div>
+                <button type="button" onclick="window.closeStoreMenuPickerFromChat && window.closeStoreMenuPickerFromChat()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 text-sm cursor-pointer">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Search Bar -->
+            <div class="p-2.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/40 dark:bg-black/10">
+                <div class="relative flex items-center">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 text-gray-400 text-xs"></i>
+                    <input type="text" id="chat-store-picker-search" placeholder="Search restaurant / store name..." oninput="window.filterChatStoreMenuPicker && window.filterChatStoreMenuPicker()" class="w-full bg-white dark:bg-black/40 border border-gray-200 dark:border-gray-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-gray-900 dark:text-white outline-none focus:border-orange-500">
+                </div>
+            </div>
+
+            <!-- Stores List Body -->
+            <div id="chat-store-picker-list" class="flex-1 overflow-y-auto p-2.5 flex flex-col gap-1.5 max-h-[58vh]">
+                <div class="text-center text-gray-400 text-xs py-8 italic">Loading store menus...</div>
+            </div>
+        </div>`;
+        document.body.appendChild(modal);
+    }
+    return modal;
+}
+
+export function openStoreMenuPickerFromChat() {
+    const modal = getOrCreateChatStoreMenuPickerModal();
+    const searchInput = document.getElementById('chat-store-picker-search');
+    if (searchInput) searchInput.value = "";
+    modal.classList.remove('hidden');
+    renderChatStoreMenuPicker("");
+}
+
+export function closeStoreMenuPickerFromChat() {
+    const modal = document.getElementById('chat-store-menu-picker-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export function filterChatStoreMenuPicker() {
+    const query = document.getElementById('chat-store-picker-search')?.value || "";
+    renderChatStoreMenuPicker(query);
+}
+
+export async function renderChatStoreMenuPicker(searchQuery = "") {
+    const container = document.getElementById('chat-store-picker-list');
+    if (!container) return;
+
+    let storeList = [];
+    try {
+        const cached = await idbGet('directory', 'stores');
+        if (cached && Array.isArray(cached)) storeList = cached;
+    } catch(e) {}
+
+    if (storeList.length === 0 && globalState.directoryCache && globalState.directoryCache.stores) {
+        storeList = globalState.directoryCache.stores;
+    }
+
+    const knownKeys = new Set(storeList.map(s => (s.compositeKey || s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '')));
+    Object.entries(storeMenuMetadataMap).forEach(([key, meta]) => {
+        if (!knownKeys.has(key) && meta.storeName) {
+            storeList.push({
+                name: meta.storeName,
+                compositeKey: key
+            });
+            knownKeys.add(key);
+        }
+    });
+
+    const q = (searchQuery || "").trim().toLowerCase();
+    const storesWithMenu = [];
+    const storesWithoutMenu = [];
+
+    storeList.forEach(s => {
+        const name = (s.name || "").trim();
+        if (!name) return;
+        if (q && !name.toLowerCase().includes(q)) return;
+
+        const keyByComposite = (s.compositeKey || "").toLowerCase().replace(/[^a-z0-9]/g, '');
+        const keyByName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const meta = (keyByComposite && storeMenuMetadataMap[keyByComposite])
+            || (keyByName && storeMenuMetadataMap[keyByName])
+            || null;
+
+        const pageCount = meta?.pageCount || 0;
+        const entry = { ...s, name, pageCount, updatedAt: meta?.updatedAt };
+
+        if (pageCount > 0) {
+            storesWithMenu.push(entry);
+        } else {
+            storesWithoutMenu.push(entry);
+        }
+    });
+
+    storesWithMenu.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' }));
+    storesWithoutMenu.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' }));
+
+    const combined = [...storesWithMenu, ...storesWithoutMenu];
+
+    if (combined.length === 0) {
+        container.innerHTML = `<div class="text-center text-gray-400 text-xs py-8 italic">Walang nahanap na store.</div>`;
+        return;
+    }
+
+    container.innerHTML = combined.map(s => {
+        const safeName = escapeHtml(s.name);
+        const safeCompositeKey = escapeHtml(s.compositeKey || s.name);
+        const hasMenu = s.pageCount > 0;
+
+        return `
+        <div onclick="window.handleSelectStoreFromChatPicker && window.handleSelectStoreFromChatPicker('${safeName}', '${safeCompositeKey}')" class="p-2.5 rounded-2xl border ${hasMenu ? 'bg-orange-50/60 dark:bg-orange-950/20 border-orange-200 dark:border-orange-500/30' : 'bg-gray-50 hover:bg-gray-100 dark:bg-zinc-800/60 dark:hover:bg-zinc-800 border-gray-200 dark:border-zinc-700/60'} flex items-center justify-between gap-2 cursor-pointer transition active:scale-[0.98]">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-8 h-8 rounded-xl ${hasMenu ? 'bg-orange-500 text-white' : 'bg-gray-200 dark:bg-zinc-700 text-gray-500 dark:text-gray-300'} flex items-center justify-center font-bold text-xs shrink-0">
+                    <i class="fa-solid fa-store"></i>
+                </div>
+                <div class="min-w-0">
+                    <div class="font-bold text-xs text-gray-900 dark:text-white truncate">${safeName}</div>
+                    <div class="text-[9.5px] mt-0.5">
+                        ${hasMenu 
+                            ? `<span class="text-emerald-600 dark:text-emerald-400 font-bold"><i class="fa-solid fa-camera"></i> ${s.pageCount} ${s.pageCount === 1 ? 'Page' : 'Pages'}</span>` 
+                            : `<span class="text-gray-400">No photos yet</span>`}
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="shrink-0 ${hasMenu ? 'bg-orange-600 hover:bg-orange-500 text-white' : 'bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300'} text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 cursor-pointer">
+                <i class="fa-solid fa-book-open text-[9px]"></i> View & Send
+            </button>
+        </div>`;
+    }).join('');
+}
+
+export function handleSelectStoreFromChatPicker(storeName, compositeKey) {
+    closeStoreMenuPickerFromChat();
+    openStoreMenuGalleryModal(storeName, compositeKey);
 }
 
 export async function deleteMenuGalleryPage(pageId) {
@@ -2250,6 +2731,25 @@ if (typeof window !== 'undefined') {
     window.confirmAndUploadMenuSnapshot = confirmAndUploadMenuSnapshot;
     window.openGalleryLightbox = openGalleryLightbox;
     window.closeGalleryLightbox = closeGalleryLightbox;
+
+    // Menu Selection, Customer Dispatch & Chat Picker exports
+    window.handleMenuPageCheckToggle = handleMenuPageCheckToggle;
+    window.updateMenuSelectionBar = updateMenuSelectionBar;
+    window.toggleSelectAllMenuPages = toggleSelectAllMenuPages;
+    window.clearMenuPageSelections = clearMenuPageSelections;
+    window.sendSingleMenuPageToCustomer = sendSingleMenuPageToCustomer;
+    window.sendSelectedMenuPagesToCustomer = sendSelectedMenuPagesToCustomer;
+    window.sendAllMenuPagesToCustomer = sendAllMenuPagesToCustomer;
+    window.dispatchMenuPagesToSend = dispatchMenuPagesToSend;
+    window.executeSendMenuPages = executeSendMenuPages;
+    window.openMenuCustomerRecipientPicker = openMenuCustomerRecipientPicker;
+    window.closeMenuCustomerRecipientPicker = closeMenuCustomerRecipientPicker;
+    window.filterMenuCustomerRecipients = filterMenuCustomerRecipients;
+    window.handleSelectMenuCustomerRecipient = handleSelectMenuCustomerRecipient;
+    window.openStoreMenuPickerFromChat = openStoreMenuPickerFromChat;
+    window.closeStoreMenuPickerFromChat = closeStoreMenuPickerFromChat;
+    window.filterChatStoreMenuPicker = filterChatStoreMenuPicker;
+    window.handleSelectStoreFromChatPicker = handleSelectStoreFromChatPicker;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {

@@ -72,6 +72,11 @@ public class MainActivity extends BridgeActivity {
 
                 @JavascriptInterface
                 public boolean saveImageToDevice(String base64Data, String filename) {
+                    return saveImageToDevice(base64Data, filename, true);
+                }
+
+                @JavascriptInterface
+                public boolean saveImageToDevice(String base64Data, String filename, boolean showToast) {
                     if (base64Data == null || base64Data.trim().isEmpty()) return false;
                     try {
                         String cleanBase64 = base64Data.trim();
@@ -91,10 +96,18 @@ public class MainActivity extends BridgeActivity {
                         }
 
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            String targetPath = Environment.DIRECTORY_PICTURES + "/Lokalex";
+                            // Auto-overwrite existing image by deleting any prior entry with matching name in Lokalex folder
+                            try {
+                                String selection = MediaStore.Images.Media.DISPLAY_NAME + "=?";
+                                String[] selectionArgs = new String[]{ safeName };
+                                getContentResolver().delete(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, selection, selectionArgs);
+                            } catch (Exception ignored) {}
+
                             ContentValues values = new ContentValues();
                             values.put(MediaStore.Images.Media.DISPLAY_NAME, safeName);
                             values.put(MediaStore.Images.Media.MIME_TYPE, mimeType);
-                            values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Lokalex");
+                            values.put(MediaStore.Images.Media.RELATIVE_PATH, targetPath);
                             values.put(MediaStore.Images.Media.IS_PENDING, 1);
 
                             Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
@@ -113,22 +126,29 @@ public class MainActivity extends BridgeActivity {
                             File picturesDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Lokalex");
                             if (!picturesDir.exists()) picturesDir.mkdirs();
                             File imageFile = new File(picturesDir, safeName);
-                            try (FileOutputStream fos = new FileOutputStream(imageFile)) {
+                            if (imageFile.exists()) {
+                                imageFile.delete();
+                            }
+                            try (FileOutputStream fos = new FileOutputStream(imageFile, false)) {
                                 fos.write(imageBytes);
                                 fos.flush();
                             }
                             MediaScannerConnection.scanFile(MainActivity.this, new String[]{imageFile.getAbsolutePath()}, new String[]{mimeType}, null);
                         }
 
-                        new Handler(Looper.getMainLooper()).post(() -> {
-                            Toast.makeText(MainActivity.this, "💾 Litrato na-save sa Gallery / Pictures!", Toast.LENGTH_SHORT).show();
-                        });
+                        if (showToast) {
+                            new Handler(Looper.getMainLooper()).post(() -> {
+                                Toast.makeText(MainActivity.this, "💾 Litrato na-save sa Gallery / Pictures!", Toast.LENGTH_SHORT).show();
+                            });
+                        }
                         return true;
                     } catch (Exception e) {
                         e.printStackTrace();
-                        new Handler(Looper.getMainLooper()).post(() -> {
-                            Toast.makeText(MainActivity.this, "⚠️ Failed to save image: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                        });
+                        if (showToast) {
+                            new Handler(Looper.getMainLooper()).post(() -> {
+                                Toast.makeText(MainActivity.this, "⚠️ Failed to save image: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                            });
+                        }
                         return false;
                     }
                 }
