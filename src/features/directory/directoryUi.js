@@ -1763,7 +1763,13 @@ export async function executeSendMenuPages(targetCustId, pages, custDisplayName 
     for (let i = 0; i < total; i++) {
         const p = pages[i];
         const pageNum = i + 1;
-        const caption = p.caption || `Page ${pageNum}`;
+        const isLastPage = (i === total - 1);
+        let caption = p.caption || `Page ${pageNum} of ${total}`;
+        if (isLastPage) {
+            caption = p.caption 
+                ? `${p.caption} • (Last page of the menu)` 
+                : (total > 1 ? `Page ${pageNum} of ${total} • (Last page of the menu)` : `Menu • (Last page of the menu)`);
+        }
         showToast(`📤 Sending picture ${pageNum} of ${total} to ${custDisplayName}...`);
 
         let ok = false;

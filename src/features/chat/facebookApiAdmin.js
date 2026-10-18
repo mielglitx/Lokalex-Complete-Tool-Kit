@@ -1216,9 +1216,133 @@ export async function syncAllFacebookCustomerNames() {
         } else {
             showToast("ℹ️ Lahat ng Facebook customer names ay up-to-date na.");
         }
+
+        // Also sync folder status (inbox vs done vs spam)
+        await syncFacebookPageFolderStatus(false);
     } catch (err) {
         console.error("syncAllFacebookCustomerNames error:", err);
         showToast("⚠️ Bigo mag-sync ng FB names: " + (err.message || err));
+    }
+}
+
+/**
+ * Syncs chat thread folders between Facebook Page and Lokalex Live Chats Feed:
+ * - Facebook Page 'inbox' -> Lokalex folder 'inbox' (status 'active')
+ * - Facebook Page 'page_done' -> Lokalex folder 'done' (status 'completed')
+ * - Facebook Page 'other' / Spam -> Lokalex folder 'spam' (status 'spam')
+ */
+export async function syncFacebookPageFolderStatus(showFeedback = false) {
+    if (!db) return;
+    try {
+        const apiSnap = await db.ref('adminSettings/facebookApis').once('value');
+        const apis = apiSnap.val() || {};
+        const apiList = Object.values(apis).filter(a => a && a.pageAccessToken);
+        if (apiList.length === 0) return;
+
+        const metaSnap = await db.ref('customerChatMeta').once('value');
+        const allMeta = metaSnap.val() || {};
+
+        let updatedFoldersCount = 0;
+        const foldersToQuery = ['inbox', 'page_done', 'other'];
+
+        for (const api of apiList) {
+            const pageId = api.pageId || "1098954353295816";
+            const token = api.pageAccessToken.trim();
+
+            for (const fbFolderParam of foldersToQuery) {
+                try {
+                    const convResp = await fetch(
+                        `https://graph.facebook.com/v19.0/${pageId}/conversations?folder=${fbFolderParam}&fields=participants,senders,folder,tags,updated_time,unread_count&limit=100&access_token=${token}`
+                    );
+                    if (!convResp.ok) continue;
+                    const convData = await convResp.json();
+                    if (!Array.isArray(convData.data)) continue;
+
+                    for (const c of convData.data) {
+                        const people = [
+                            ...(c.participants?.data || []),
+                            ...(c.senders?.data || [])
+                        ];
+                        const custPerson = people.find(p => p.id && String(p.id) !== String(pageId));
+                        if (!custPerson || !custPerson.id) continue;
+
+                        const psid = String(custPerson.id).trim();
+                        const custId = `fb_${psid}`;
+                        const existingMeta = allMeta[custId] || allMeta[custId]?.metadata;
+
+                        if (!existingMeta) continue;
+
+                        // Check if actively catered by a rider on roster
+                        const isCatered = Boolean(
+                            existingMeta.cateredByRiderId ||
+                            existingMeta.cateredByRiderName ||
+                            existingMeta.cateredBy ||
+                            (existingMeta.folder && existingMeta.folder.toLowerCase() === 'catering')
+                        );
+                        if (isCatered) continue; // Never override active roster catering
+
+                        let targetFolder = 'inbox';
+                        let targetStatus = 'active';
+
+                        const tagsList = (c.tags?.data || []).map(t => (t.name || '').toLowerCase());
+
+                        if (fbFolderParam === 'page_done' || c.folder === 'page_done' || tagsList.includes('page_done') || tagsList.includes('done')) {
+                            targetFolder = 'done';
+                            targetStatus = 'completed';
+                        } else if (fbFolderParam === 'other' || c.folder === 'other' || tagsList.includes('spam') || tagsList.includes('other')) {
+                            targetFolder = 'spam';
+                            targetStatus = 'spam';
+                        } else {
+                            targetFolder = 'inbox';
+                            targetStatus = 'active';
+                        }
+
+                        const currentFolder = (existingMeta.folder || 'inbox').toLowerCase();
+                        const currentStatus = (existingMeta.status || 'active').toLowerCase();
+
+                        if (currentFolder !== targetFolder || currentStatus !== targetStatus) {
+                            const now = Date.now();
+                            const updatePayload = {
+                                folder: targetFolder,
+                                status: targetStatus,
+                                fbFolder: fbFolderParam,
+                                lastUpdated: existingMeta.lastUpdated || now
+                            };
+                            if (targetFolder === 'done') {
+                                updatePayload.completedAt = existingMeta.completedAt || now;
+                                updatePayload.unreadForRider = false;
+                            }
+
+                            await Promise.all([
+                                db.ref(`customerChatMeta/${custId}`).update(updatePayload),
+                                db.ref(`customerChats/${custId}/metadata`).update(updatePayload)
+                            ]).catch(() => {});
+
+                            existingMeta.folder = targetFolder;
+                            existingMeta.status = targetStatus;
+                            updatedFoldersCount++;
+                        }
+                    }
+                } catch (folderFetchErr) {
+                    console.warn(`[FB Sync] Error fetching FB folder ${fbFolderParam}:`, folderFetchErr);
+                }
+            }
+        }
+
+        if (updatedFoldersCount > 0) {
+            console.log(`[FB Sync] Synchronized ${updatedFoldersCount} Facebook thread(s) with Page folders.`);
+            if (showFeedback) {
+                showToast(`✅ Na-sync ang ${updatedFoldersCount} Facebook chat(s) sa Page folders!`);
+            }
+            if (typeof window.renderRiderCustomerChatFeed === 'function') {
+                window.renderRiderCustomerChatFeed();
+            }
+        } else if (showFeedback) {
+            showToast("ℹ️ Lahat ng Facebook chat folders ay tugma na sa Page.");
+        }
+    } catch (err) {
+        console.error("syncFacebookPageFolderStatus error:", err);
+        if (showFeedback) showToast("⚠️ Error syncing Facebook Page folders.");
     }
 }
 
@@ -1389,6 +1513,7 @@ if (typeof window !== 'undefined') {
     window.toggleAdminFbApiStatus = toggleAdminFbApiStatus;
     window.toggleAdminFbLinkVisibility = toggleAdminFbLinkVisibility;
     window.syncAllFacebookCustomerNames = syncAllFacebookCustomerNames;
+    window.syncFacebookPageFolderStatus = syncFacebookPageFolderStatus;
     window.resolveFacebookCustomerName = resolveFacebookCustomerName;
     window.autoResolvePendingFacebookThreads = autoResolvePendingFacebookThreads;
     window.getResolvedFbName = getResolvedFbName;

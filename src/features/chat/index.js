@@ -156,7 +156,7 @@ export function renderFilteredCustomerChats(targetFolder = 'inbox') {
     globalState.activeChatFilter = targetFolder;
 
     // Highlight active filter tab in UI
-    const filterTabs = ['inbox', 'catering', 'followup', 'done', 'canceled'];
+    const filterTabs = ['inbox', 'catering', 'applicant', 'followup', 'done', 'canceled'];
     filterTabs.forEach(folder => {
         const tabBtn = document.getElementById(`chat-tab-${folder}`);
         if (tabBtn) {
@@ -200,7 +200,7 @@ export function renderFilteredCustomerChats(targetFolder = 'inbox') {
             return true;
         });
     } else {
-        // Standard folder filtering (inbox, followup, done, etc.)
+        // Standard folder filtering (inbox, applicant, done, etc.)
         filtered = allChats.filter(chat => {
             const meta = chat.metadata || chat;
             const isCatered = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy) && meta.status !== 'completed' && meta.status !== 'done' && meta.status !== 'cancelled';
@@ -208,7 +208,11 @@ export function renderFilteredCustomerChats(targetFolder = 'inbox') {
             
             if (targetFolder === 'inbox') {
                 if (isCatered || folder === 'catering') return false;
+                if (folder === 'applicant' || folder === 'followup' || meta.isApplicant) return false;
                 return folder === 'inbox';
+            }
+            if (targetFolder === 'applicant' || targetFolder === 'followup') {
+                return folder === 'applicant' || folder === 'followup' || meta.isApplicant === true;
             }
             if (targetFolder === 'done') {
                 if (folder === 'done' || meta.status === 'completed' || meta.status === 'done') return true;

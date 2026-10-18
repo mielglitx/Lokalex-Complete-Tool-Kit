@@ -1751,38 +1751,85 @@ export async function executeThreadDone(targetCustId = null, targetCustName = ""
     if (!targetCustId && window.closeRiderCustomerChatModal) window.closeRiderCustomerChatModal();
 }
 
-export function markThreadFollowUp() {
-    const custId = window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null;
-    if (!custId) return;
+/**
+ * Toggles a customer thread's Applicant status.
+ * When enabled: sets isApplicant: true, folder: 'applicant'
+ * When disabled: sets isApplicant: false, folder: 'inbox'
+ */
+export async function toggleThreadApplicant(targetCustId = null) {
+    const rawId = targetCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null);
+    if (!rawId) {
+        showToast("⚠️ Walang aktibong chat na napili.");
+        return;
+    }
 
-    const custName = document.getElementById('rider-chat-cust-name')?.innerText || "";
-    const activeCustData = window.getActiveCustData ? window.getActiveCustData() : null;
-    const phone = activeCustData?.phoneNumber || "";
-    const address = activeCustData?.address || "";
+    const custId = (rawId || "").replace(/^id_/, '').replace(/^fb_fb_/, 'fb_');
+    const threadMap = (typeof window.getCachedCustomerThreadsMap === 'function') 
+        ? window.getCachedCustomerThreadsMap() 
+        : null;
+
+    let currentMeta = (window.getCurrentRiderChatMeta ? window.getCurrentRiderChatMeta() : {}) || {};
+    let currentThread = null;
+
+    if (threadMap) {
+        if (threadMap.has(custId)) currentThread = threadMap.get(custId);
+        else if (threadMap.has(`fb_${custId}`)) currentThread = threadMap.get(`fb_${custId}`);
+        else if (threadMap.has(rawId)) currentThread = threadMap.get(rawId);
+    }
+
+    const currentlyApplicant = Boolean(
+        (currentThread && (currentThread.isApplicant || currentThread.folder === 'applicant' || currentThread.folder === 'followup')) ||
+        (currentMeta && (currentMeta.isApplicant || currentMeta.folder === 'applicant' || currentMeta.folder === 'followup'))
+    );
+
+    const newApplicantState = !currentlyApplicant;
+    const newFolder = newApplicantState ? 'applicant' : 'inbox';
+    const now = Date.now();
+
+    const payload = {
+        isApplicant: newApplicantState,
+        folder: newFolder,
+        lastUpdated: now
+    };
+
+    if (currentThread) {
+        currentThread.isApplicant = newApplicantState;
+        currentThread.folder = newFolder;
+        currentThread.lastUpdated = now;
+    }
+
+    if (currentMeta && (window.getActiveRiderChatCustId && window.getActiveRiderChatCustId() === custId)) {
+        currentMeta.isApplicant = newApplicantState;
+        currentMeta.folder = newFolder;
+        currentMeta.lastUpdated = now;
+    }
+
+    if (typeof window.syncApplicantUI === 'function') {
+        window.syncApplicantUI(payload);
+    }
 
     if (db) {
-        const payload = { folder: 'followup', lastUpdated: Date.now() };
-        db.ref(`customerChats/${custId}/metadata`).update(payload).catch(() => {});
-        db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
+        try {
+            await db.ref(`customerChats/${custId}/metadata`).update(payload);
+            await db.ref(`customerChatMeta/${custId}`).update(payload);
+        } catch (e) {
+            console.warn("Failed to update applicant status in RTDB:", e);
+        }
     }
 
-    const advModal = document.getElementById('adv-orders-modal');
-    if (advModal) {
-        advModal.classList.remove('hidden');
-        toggleBodyScroll(true);
-
-        if (window.switchAdvTab) window.switchAdvTab('add');
-
-        const nameInput = document.getElementById('adv-cust-name');
-        const contactInput = document.getElementById('adv-contact');
-        const addrInput = document.getElementById('adv-address');
-
-        if (nameInput) nameInput.value = custName;
-        if (contactInput) contactInput.value = phone;
-        if (addrInput) addrInput.value = address;
+    if (typeof window.renderRiderCustomerChatFeed === 'function') {
+        window.renderRiderCustomerChatFeed();
     }
 
-    showToast("📌 Moved chat to Follow Up & loaded Advance Order form!");
+    if (newApplicantState) {
+        showToast("👔 Thread marked as Applicant!");
+    } else {
+        showToast("↩️ Applicant tag removed & returned to Inbox.");
+    }
+}
+
+export function markThreadFollowUp() {
+    return toggleThreadApplicant();
 }
 
 // VOID SPECIFIC CUSTOMER WITHOUT CANCELING OTHER ACTIVE BOOKINGS
@@ -1949,6 +1996,7 @@ export function clearAllInboxThreads() {
     const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
                         (typeof canManageRoster === 'function' && canManageRoster()) ||
                         (typeof window.isAdmin === 'function' && window.isAdmin()) ||
+                        (typeof isTL === 'function' && isTL()) ||
                         (typeof hasTlPermission === 'function' && hasTlPermission('canClearInbox')) ||
                         Boolean(globalState.adminControlsEnabled);
     if (!isUserAdmin) {
@@ -1961,13 +2009,19 @@ export function clearAllInboxThreads() {
         : null;
 
     const inboxThreads = [];
+    const processedKeys = new Set();
+
     if (threadMap && threadMap.size > 0) {
         for (const [tId, t] of threadMap.entries()) {
             const folder = (t.folder || 'inbox').toLowerCase();
             const isCompleted = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
-            const isCatered = Boolean(t.cateredByRiderId || t.cateredByRiderName);
+            const isCatered = Boolean(t.cateredByRiderId || t.cateredByRiderName || t.cateredBy || folder === 'catering');
             if (folder === 'inbox' && !isCompleted && !isCatered) {
-                inboxThreads.push({ id: tId, thread: t });
+                const realKey = (t.custId || t.id || tId || "").toString().replace(/^id_/, '').replace(/^fb_fb_/, 'fb_');
+                if (realKey && !processedKeys.has(realKey)) {
+                    processedKeys.add(realKey);
+                    inboxThreads.push({ id: realKey, thread: t });
+                }
             }
         }
     }
@@ -2012,6 +2066,36 @@ export function clearAllInboxThreads() {
                 batchUpdates[`customerChatMeta/${id}`] = donePayload;
             });
 
+            // Also scan customerChatMeta snapshot directly in Firebase to catch any stray inbox items
+            if (db) {
+                try {
+                    const snap = await db.ref('customerChatMeta').once('value');
+                    const allMeta = snap.val() || {};
+                    Object.entries(allMeta).forEach(([k, item]) => {
+                        const m = item.metadata || item;
+                        const f = (m.folder || 'inbox').toLowerCase();
+                        const isC = Boolean(m.cateredByRiderId || m.cateredByRiderName || m.cateredBy || f === 'catering');
+                        const isFin = m.status === 'completed' || m.status === 'done' || m.status === 'cancelled';
+                        if (f === 'inbox' && !isC && !isFin) {
+                            const donePayload = {
+                                folder: 'done',
+                                status: 'completed',
+                                completedAt: now,
+                                completedByRiderId: myId,
+                                completedByRiderName: myName,
+                                cateredByRiderId: null,
+                                cateredByRiderName: null,
+                                cateredBy: null,
+                                unreadForRider: false,
+                                lastUpdated: now
+                            };
+                            batchUpdates[`customerChats/${k}/metadata`] = donePayload;
+                            batchUpdates[`customerChatMeta/${k}`] = donePayload;
+                        }
+                    });
+                } catch (_) {}
+            }
+
             if (typeof window.renderRiderCustomerChatFeed === 'function') {
                 window.renderRiderCustomerChatFeed();
             }
@@ -2019,18 +2103,20 @@ export function clearAllInboxThreads() {
             if (db) {
                 try {
                     await db.ref().update(batchUpdates);
-                    showToast(`✅ Successfully moved ${inboxThreads.length} inbox chat(s) to Done!`);
+                    showToast(`✅ Successfully moved inbox chat(s) to Done!`);
                 } catch (e) {
                     console.warn("Clear inbox batch update fallback:", e);
-                    for (const { id } of inboxThreads) {
-                        const p = batchUpdates[`customerChatMeta/${id}`];
-                        db.ref(`customerChats/${id}/metadata`).update(p).catch(() => {});
-                        db.ref(`customerChatMeta/${id}`).update(p).catch(() => {});
+                    for (const fullPath of Object.keys(batchUpdates)) {
+                        db.ref(fullPath).update(batchUpdates[fullPath]).catch(() => {});
                     }
-                    showToast(`✅ Moved ${inboxThreads.length} inbox chat(s) to Done.`);
+                    showToast(`✅ Moved inbox chat(s) to Done.`);
                 }
             } else {
-                showToast(`✅ Moved ${inboxThreads.length} inbox chat(s) to Done (offline).`);
+                showToast(`✅ Moved inbox chat(s) to Done (offline).`);
+            }
+
+            if (typeof window.renderRiderCustomerChatFeed === 'function') {
+                setTimeout(() => window.renderRiderCustomerChatFeed(), 150);
             }
         }
     );
@@ -2116,6 +2202,8 @@ if (typeof window !== 'undefined') {
     window.confirmAndExecuteDone = confirmAndExecuteDone;
     window.executeThreadDone = executeThreadDone;
     window.markThreadFollowUp = markThreadFollowUp;
+    window.toggleThreadApplicant = toggleThreadApplicant;
+    window.markThreadApplicant = toggleThreadApplicant;
     window.cancelCustomerThread = cancelCustomerThread;
     window.undoCustomerThread = undoCustomerThread;
     window.followUpCustomerOrder = followUpCustomerOrder;

@@ -178,6 +178,16 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         if (typeof activeRiderChatMetaListener.off === 'function') activeRiderChatMetaListener.off();
         activeRiderChatMetaListener = null;
     }
+    if (custId && typeof window.getCachedCustomerThreadsMap === 'function') {
+        const map = window.getCachedCustomerThreadsMap();
+        if (map && map.has(custId)) {
+            syncApplicantUI(map.get(custId));
+        } else {
+            syncApplicantUI(null);
+        }
+    } else {
+        syncApplicantUI(null);
+    }
 
     if (db && custId) {
         db.ref(`customers/${custId}`).once('value', (snap) => {
@@ -198,9 +208,36 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
             evaluateRiderChatLockPermissions();
             bindRiderToActiveStoreOrders(currentRiderChatMeta);
             syncMilestoneBarUI(currentRiderChatMeta);
+            syncApplicantUI(currentRiderChatMeta);
         });
 
         listenToRiderChatMessages(custId);
+    }
+}
+
+export function syncApplicantUI(meta) {
+    const applicantPill = document.getElementById('rider-chat-applicant-pill');
+    const applicantBtn = document.getElementById('rider-chat-applicant-btn');
+    const isApplicant = Boolean(meta?.isApplicant || meta?.folder === 'applicant' || meta?.folder === 'followup');
+
+    if (applicantPill) {
+        if (isApplicant) {
+            applicantPill.classList.remove('hidden');
+        } else {
+            applicantPill.classList.add('hidden');
+        }
+    }
+
+    if (applicantBtn) {
+        if (isApplicant) {
+            applicantBtn.className = "flex-1 min-w-[90px] bg-purple-700 hover:bg-purple-600 text-white border border-purple-400 py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md ring-2 ring-purple-400/50";
+            applicantBtn.innerHTML = `<i class="fa-solid fa-user-tie"></i> Applicant ✓`;
+            applicantBtn.title = "Marked as Applicant (Click to remove tag)";
+        } else {
+            applicantBtn.className = "flex-1 min-w-[90px] bg-purple-600 hover:bg-purple-500 text-white border border-purple-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm";
+            applicantBtn.innerHTML = `<i class="fa-solid fa-user-tie"></i> Applicant`;
+            applicantBtn.title = "Mark as Applicant";
+        }
     }
 }
 
@@ -1554,6 +1591,21 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
             }
             console.warn("Facebook send reply error:", errMsg);
             showToast(`⚠️ Messenger delivery issue: ${errMsg}`);
+
+            if (newMsgKey && custId && db) {
+                db.ref(`customerChats/${custId}/messages/${newMsgKey}`).update({
+                    status: 'failed',
+                    failed: true,
+                    failedReason: errMsg
+                }).catch(() => {});
+            }
+            if (newMsgKey && loadedRiderMsgsMap.has(newMsgKey)) {
+                const targetMsg = loadedRiderMsgsMap.get(newMsgKey);
+                targetMsg.status = 'failed';
+                targetMsg.failed = true;
+                const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
+                if (container) appendOrUpdateSingleRiderMessage(container, targetMsg, activeCustData);
+            }
         } else {
             const respData = await resp.json().catch(() => ({}));
             if (respData?.message_id || respData?.mid) {
@@ -1564,6 +1616,56 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
         }
     } catch (err) {
         console.error("Failed to forward rider reply to Messenger:", err);
+        showToast("⚠️ Delivery failed. Check internet connection.");
+        if (newMsgKey && custId && db) {
+            db.ref(`customerChats/${custId}/messages/${newMsgKey}`).update({
+                status: 'failed',
+                failed: true,
+                failedReason: (err?.message || 'Network error')
+            }).catch(() => {});
+        }
+        if (newMsgKey && loadedRiderMsgsMap.has(newMsgKey)) {
+            const targetMsg = loadedRiderMsgsMap.get(newMsgKey);
+            targetMsg.status = 'failed';
+            targetMsg.failed = true;
+            const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
+            if (container) appendOrUpdateSingleRiderMessage(container, targetMsg, activeCustData);
+        }
+    }
+}
+
+export async function retryRiderChatMessage(msgId) {
+    if (!msgId || !loadedRiderMsgsMap.has(msgId)) return;
+    const msg = loadedRiderMsgsMap.get(msgId);
+    msg.status = 'sent';
+    msg.failed = false;
+    const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
+    if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
+
+    if (msg.channel === 'messenger' || String(activeRiderChatCustId).startsWith('fb_')) {
+        await forwardRiderReplyToMessenger({
+            custId: activeRiderChatCustId,
+            apiId: msg.apiId,
+            text: msg.text,
+            imageUrl: msg.imageUrl,
+            locationCoords: msg.locationCoords,
+            riderName: msg.sender || appState.riderName,
+            newMsgKey: msgId
+        });
+    } else if (db && activeRiderChatCustId) {
+        try {
+            await db.ref(`customerChats/${activeRiderChatCustId}/messages/${msgId}`).update({
+                status: 'sent',
+                failed: null
+            });
+            msg.status = 'sent';
+            msg.failed = false;
+            if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
+        } catch (_) {
+            msg.status = 'failed';
+            msg.failed = true;
+            if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
+        }
     }
 }
 
@@ -1622,6 +1724,7 @@ if (typeof window !== 'undefined') {
     window.toggleRiderMessageReaction = toggleRiderMessageReaction;
     window.forwardRiderReplyToMessenger = forwardRiderReplyToMessenger;
     window.sendDirectMenuPhotoToCustomer = sendDirectMenuPhotoToCustomer;
+    window.retryRiderChatMessage = retryRiderChatMessage;
 
     window.getActiveRiderChatFilter = getActiveRiderChatFilter;
     window.setRiderChatFilter = setRiderChatFilter;
@@ -1631,6 +1734,7 @@ if (typeof window !== 'undefined') {
     window.syncIncomingMessageFromMeta = syncIncomingMessageFromMeta;
     window.loadOlderRiderMessages = loadOlderRiderMessages;
     window.triggerLoadOlderRiderMessages = () => loadOlderRiderMessages(null, activeRiderChatCustId);
+    window.syncApplicantUI = syncApplicantUI;
 
     listenToGlobalStoreChats();
 

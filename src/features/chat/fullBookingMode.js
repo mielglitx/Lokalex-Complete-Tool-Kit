@@ -370,9 +370,10 @@ export async function sendFullBookingAutoReply(custId, meta = {}) {
     );
     if (isCatered) return false;
 
-    // Must be in inbox
+    // Must be in genuine inbox and NEVER in spam, other, or done
     const folder = (meta.folder || 'inbox').toLowerCase();
-    if (folder !== 'inbox') return false;
+    const isSpam = folder === 'spam' || folder === 'other' || meta.status === 'spam' || meta.fbFolder === 'spam' || meta.fbFolder === 'other';
+    if (isSpam || folder !== 'inbox') return false;
 
     // 2. Last message must be from customer (never reply to outgoing rider or system messages)
     const rawLastMsg = (meta.lastMessage || '').trim();
@@ -471,7 +472,8 @@ export async function sendFullBookingAutoReply(custId, meta = {}) {
         if (liveIsCatered) return false;
 
         const liveFolder = (liveMeta.folder || 'inbox').toLowerCase();
-        if (liveFolder !== 'inbox') return false;
+        const liveIsSpam = liveFolder === 'spam' || liveFolder === 'other' || liveMeta.status === 'spam' || liveMeta.fbFolder === 'spam' || liveMeta.fbFolder === 'other';
+        if (liveIsSpam || liveFolder !== 'inbox') return false;
 
         const liveLastMsg = (liveMeta.lastMessage || '').trim();
         if (!liveLastMsg || liveLastMsg.startsWith('You:') || liveLastMsg.toLowerCase() === 'no messages yet') {
@@ -546,13 +548,13 @@ export async function scanAndAutoReplyWaitingInboxCustomers() {
         const now = Date.now();
 
         for (const [id, item] of entries) {
-            const meta = item.metadata || item;
             const folder = (meta.folder || 'inbox').toLowerCase();
+            const isSpam = folder === 'spam' || folder === 'other' || meta.status === 'spam' || meta.fbFolder === 'spam' || meta.fbFolder === 'other';
             const isCatered = Boolean(meta.cateredByRiderId || meta.cateredByRiderName || meta.cateredBy);
             const msgTime = Number(meta.lastUpdated) || 0;
 
-            // Only consider recent, un-catered messages received within the last 2 minutes
-            if (folder === 'inbox' && !isCatered && msgTime && (now - msgTime < 2 * 60 * 1000)) {
+            // Only consider recent, un-catered genuine inbox messages received within the last 2 minutes
+            if (folder === 'inbox' && !isCatered && !isSpam && msgTime && (now - msgTime < 2 * 60 * 1000)) {
                 const lastMsg = (meta.lastMessage || '').trim();
                 if (lastMsg && !lastMsg.startsWith('You:') && lastMsg.toLowerCase() !== 'no messages yet') {
                     await sendFullBookingAutoReply(id, meta);

@@ -306,7 +306,10 @@ export function renderRiderMessageStatusIndicator(msg) {
     let iconHtml = '<i class="fa-regular fa-clock text-blue-200" title="Sending..."></i>';
     let titleAttr = `Sent ${sentTime}`;
 
-    if (msg.status === 'sent') {
+    if (msg.status === 'failed' || msg.failed) {
+        iconHtml = '<i class="fa-solid fa-circle-exclamation text-rose-300 animate-pulse" title="Sending failed"></i>';
+        titleAttr = `Sending failed`;
+    } else if (msg.status === 'sent') {
         iconHtml = '<i class="fa-solid fa-check text-blue-200" title="Sent"></i>';
     } else if (msg.status === 'delivered') {
         iconHtml = '<i class="fa-solid fa-check-double text-blue-200" title="Delivered"></i>';
@@ -477,9 +480,11 @@ function getMessageSenderAvatar(m, isRider, custAvatar) {
 
 export function buildSingleMessageHtml(m, activeCustData = null) {
     const isRider = !!m.isRider || m.senderType === 'rider';
+    const isFailed = Boolean(m.status === 'failed' || m.failed === true || m.error);
+    const dimClass = isFailed ? "opacity-60 saturate-50 border border-rose-500/70 ring-1 ring-rose-500/30" : "shadow-xs";
     const alignClass = isRider 
-        ? "self-end bg-[#076B57] text-white rounded-tr-none shadow-xs" 
-        : "self-start bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-200 rounded-tl-none shadow-xs";
+        ? `self-end bg-[#076B57] text-white rounded-tr-none ${dimClass}` 
+        : `self-start bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-200 rounded-tl-none ${dimClass}`;
     const timeStr = formatChatDateTime(m.timestamp);
 
     const riderName = appState.riderName || "Rider";
@@ -545,29 +550,39 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
 
     const msgTs = getMessageTimestamp(m);
 
+    const failedTagHtml = isFailed ? `
+        <div class="flex items-center gap-1 text-[9.5px] font-black text-rose-500 dark:text-rose-400 mt-0.5 ${isRider ? 'justify-end mr-8' : 'justify-start ml-8'} select-none">
+            <i class="fa-solid fa-circle-exclamation text-[9px] text-rose-500"></i>
+            <span>Sending failed</span>
+            ${isRider && m.id ? `<button type="button" onclick="event.stopPropagation(); window.retryRiderChatMessage && window.retryRiderChatMessage('${m.id}')" class="underline hover:text-rose-700 dark:hover:text-rose-300 ml-1.5 font-bold cursor-pointer">Retry</button>` : ''}
+        </div>` : '';
+
     return `
-    <div id="msg-bubble-${m.id}" data-timestamp="${msgTs}" class="flex items-start gap-1.5 ${isRider ? 'flex-row-reverse' : 'flex-row'} my-0.5">
-        <img src="${senderAvatar}" loading="lazy" decoding="async" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1 pointer-events-none">
-        <div 
-            onpointerdown="window.handleMsgPointerDown(event, '${m.id}', 'rider-cust', '${encodedText}', '${encodedSender}')"
-            onpointermove="window.handleMsgPointerMove(event)"
-            onpointerup="window.handleMsgPointerUp(event, '${m.id}')"
-            onpointercancel="window.handleMsgPointerUp(event, '${m.id}')"
-            oncontextmenu="window.handleMsgContextMenu(event, '${m.id}', 'rider-cust', '${encodedText}', '${encodedSender}')"
-            class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 text-xs ${alignClass} cursor-pointer transition active:scale-[0.98] select-none shadow-xs">
-            <div class="text-[9px] ${isRider ? 'text-emerald-100' : 'text-teal-700 dark:text-teal-400'} font-bold flex justify-between gap-3 pointer-events-none">
-                <span>${escapeHtml(senderName)}</span>
-                <div class="flex items-center gap-1 opacity-80 font-mono shrink-0">
-                    <span>${timeStr}</span>
-                    ${statusIndicator}
+    <div id="msg-bubble-${m.id}" data-timestamp="${msgTs}" class="flex flex-col ${isRider ? 'items-end' : 'items-start'} my-0.5 w-full">
+        <div class="flex items-start gap-1.5 ${isRider ? 'flex-row-reverse' : 'flex-row'} max-w-full">
+            <img src="${senderAvatar}" loading="lazy" decoding="async" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1 pointer-events-none">
+            <div 
+                onpointerdown="window.handleMsgPointerDown(event, '${m.id}', 'rider-cust', '${encodedText}', '${encodedSender}')"
+                onpointermove="window.handleMsgPointerMove(event)"
+                onpointerup="window.handleMsgPointerUp(event, '${m.id}')"
+                onpointercancel="window.handleMsgPointerUp(event, '${m.id}')"
+                oncontextmenu="window.handleMsgContextMenu(event, '${m.id}', 'rider-cust', '${encodedText}', '${encodedSender}')"
+                class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 text-xs ${alignClass} cursor-pointer transition active:scale-[0.98] select-none">
+                <div class="text-[9px] ${isRider ? 'text-emerald-100' : 'text-teal-700 dark:text-teal-400'} font-bold flex justify-between gap-3 pointer-events-none">
+                    <span>${escapeHtml(senderName)}</span>
+                    <div class="flex items-center gap-1 opacity-80 font-mono shrink-0">
+                        <span>${timeStr}</span>
+                        ${statusIndicator}
+                    </div>
                 </div>
+                ${replyBlockHtml}
+                ${showText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${formatChatTextWithPhoneLinks(m.text)}</div>` : ''}
+                ${imageMarkup}
+                ${locationHtml}
+                ${reactionsHtml}
             </div>
-            ${replyBlockHtml}
-            ${showText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${formatChatTextWithPhoneLinks(m.text)}</div>` : ''}
-            ${imageMarkup}
-            ${locationHtml}
-            ${reactionsHtml}
         </div>
+        ${failedTagHtml}
     </div>`;
 }
 
