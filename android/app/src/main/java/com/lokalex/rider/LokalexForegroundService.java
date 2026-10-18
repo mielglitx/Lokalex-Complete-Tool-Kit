@@ -14,11 +14,15 @@ import android.os.PowerManager;
 import androidx.core.app.NotificationCompat;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class LokalexForegroundService extends Service {
     private static final String CHANNEL_ID = "lokalex_keepalive_channel";
     private static final int NOTIFICATION_ID = 8831;
     private PowerManager.WakeLock wakeLock = null;
+    private ScheduledExecutorService scheduler = null;
 
     @Override
     public void onCreate() {
@@ -31,6 +35,18 @@ public class LokalexForegroundService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         acquireWakeLock();
         Notification notification = buildNotification();
+
+        if (scheduler == null || scheduler.isShutdown()) {
+            scheduler = Executors.newSingleThreadScheduledExecutor();
+            scheduler.scheduleAtFixedRate(() -> {
+                try {
+                    MainActivity activity = MainActivity.getInstance();
+                    if (activity != null) {
+                        activity.pulseWebViewKeepAlive();
+                    }
+                } catch (Exception ignored) {}
+            }, 3, 15, TimeUnit.SECONDS);
+        }
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { // Android 10+ (API 29+)
@@ -137,6 +153,10 @@ public class LokalexForegroundService extends Service {
 
     @Override
     public void onDestroy() {
+        if (scheduler != null && !scheduler.isShutdown()) {
+            scheduler.shutdownNow();
+            scheduler = null;
+        }
         releaseWakeLock();
         super.onDestroy();
     }

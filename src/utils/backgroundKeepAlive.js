@@ -1,10 +1,34 @@
 // src/utils/backgroundKeepAlive.js
 import { isNativePlatform } from '../native/nativeBridge.js';
+import { db, primaryDb } from '../config/firebase.js';
 
 let silentAudioEl = null;
 let heartbeatWorker = null;
 let keepAliveActive = false;
 let userInteractionBound = false;
+
+/**
+ * Universal keep-alive pulse: wakes Firebase Realtime Database WebSockets
+ * and dispatches background heartbeat ticks across both web and native layers
+ */
+export function keepAlivePulse() {
+    if (db && typeof db.goOnline === 'function' && navigator.onLine) {
+        try { db.goOnline(); } catch (_) {}
+    }
+    if (primaryDb && typeof primaryDb.goOnline === 'function' && navigator.onLine) {
+        try { primaryDb.goOnline(); } catch (_) {}
+    }
+    if (silentAudioEl && silentAudioEl.paused) {
+        silentAudioEl.play().catch(() => {});
+    }
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('lokalexHeartbeatTick'));
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.keepAlivePulse = keepAlivePulse;
+}
 
 // Minimal inaudible 1-second silent 8kHz 8-bit mono WAV as data URI
 const SILENT_WAV_DATA_URI = 'data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YRAAAAAAAAAAAAAAAAAAAAAA';
@@ -81,12 +105,7 @@ function initHeartbeatWorker() {
         heartbeatWorker = new Worker(url);
 
         heartbeatWorker.onmessage = function() {
-            // Check Firebase connection
-            if (typeof window !== 'undefined' && window.db && typeof window.db.goOnline === 'function' && navigator.onLine) {
-                try {
-                    window.db.goOnline();
-                } catch (_) {}
-            }
+            keepAlivePulse();
 
             // Ensure Android Native Foreground Service is active
             if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.startKeepAlive === 'function') {
@@ -94,9 +113,6 @@ function initHeartbeatWorker() {
                     window.NativePermissionsBridge.startKeepAlive();
                 } catch (_) {}
             }
-
-            // Dispatch global event for features (e.g. tracker, orders)
-            window.dispatchEvent(new CustomEvent('lokalexHeartbeatTick'));
         };
 
         heartbeatWorker.postMessage('start');
@@ -171,13 +187,12 @@ if (typeof window !== 'undefined') {
     // When app resumes or pauses, ensure keep-alive remains continuous
     window.addEventListener('appResumedFromBackground', () => {
         playSilentAudio();
-        if (typeof window.db !== 'undefined' && window.db && typeof window.db.goOnline === 'function' && navigator.onLine) {
-            try { window.db.goOnline(); } catch (_) {}
-        }
+        keepAlivePulse();
     });
 
     window.addEventListener('appPausedToBackground', () => {
         playSilentAudio();
+        keepAlivePulse();
         if (heartbeatWorker) {
             heartbeatWorker.postMessage('start');
         }

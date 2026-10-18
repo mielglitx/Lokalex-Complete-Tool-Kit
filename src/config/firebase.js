@@ -466,6 +466,11 @@ export const db = fb ? {
     }
 } : null;
 
+if (typeof window !== 'undefined') {
+    window.db = db;
+    window.primaryDb = primaryDb;
+}
+
 export default fb;
 
 // REMARKS: FIREBASE_CONFIG_STORAGE_EXPORT_V3_COMPLETE

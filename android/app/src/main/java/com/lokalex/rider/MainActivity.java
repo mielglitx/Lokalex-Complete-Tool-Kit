@@ -40,10 +40,16 @@ import android.graphics.BitmapFactory;
 public class MainActivity extends BridgeActivity {
     private static final int PERMISSION_REQ_CODE = 9922;
     public static final String MESSAGES_CHANNEL_ID = "lokalex_messages_channel";
+    private static MainActivity instance = null;
+
+    public static MainActivity getInstance() {
+        return instance;
+    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        instance = this;
 
         // Reserve space for native status bar so web content is not blocked by clock/icons
         try {
@@ -488,5 +494,27 @@ public class MainActivity extends BridgeActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         handleNotificationIntent(intent);
+    }
+
+    public void pulseWebViewKeepAlive() {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                if (getBridge() != null && getBridge().getWebView() != null) {
+                    getBridge().getWebView().resumeTimers();
+                    getBridge().getWebView().evaluateJavascript(
+                            "if (typeof window.keepAlivePulse === 'function') { window.keepAlivePulse(); }",
+                            null
+                    );
+                }
+            } catch (Exception ignored) {}
+        });
+    }
+
+    @Override
+    public void onDestroy() {
+        if (instance == this) {
+            instance = null;
+        }
+        super.onDestroy();
     }
 }

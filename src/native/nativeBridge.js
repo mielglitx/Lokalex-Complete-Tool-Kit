@@ -3,7 +3,7 @@ import { App } from '@capacitor/app';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { initOtaUpdater } from '../utils/otaUpdater.js';
-import { startKeepAlive } from '../utils/backgroundKeepAlive.js';
+import { startKeepAlive, keepAlivePulse } from '../utils/backgroundKeepAlive.js';
 
 /**
  * ============================================================================
@@ -102,12 +102,11 @@ export async function initNativeBridge() {
             if (state.isActive) {
                 // Rider returned to the app (from Google Maps / Waze / Screen Unlock)
                 window.dispatchEvent(new Event('appResumedFromBackground'));
-                if (typeof window.db !== 'undefined' && window.db && typeof window.db.goOnline === 'function') {
-                    try { window.db.goOnline(); } catch (_) {}
-                }
+                keepAlivePulse();
             } else {
                 // Rider switched apps or locked screen
                 window.dispatchEvent(new Event('appPausedToBackground'));
+                keepAlivePulse();
                 if (window.NativePermissionsBridge && typeof window.NativePermissionsBridge.startKeepAlive === 'function') {
                     window.NativePermissionsBridge.startKeepAlive();
                 }

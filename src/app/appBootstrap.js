@@ -48,8 +48,12 @@ import { registerServiceWorker, initFCMNotifications } from './appPush.js';
 import { updateNetworkStatus, initBatteryMonitor } from './appMonitors.js';
 import { runBackgroundPersistenceSync } from './appSync.js';
 import { initRealtimeFirebaseListeners } from './appListeners.js';
+import { db, primaryDb } from '../config/firebase.js';
 
 export function initGlobalWindowBridge() {
+    window.db = db;
+    window.primaryDb = primaryDb;
+
     const allModules = [
         authFeature, cart, chat, roster, directory, commission, 
         advancedOrders, maps, wizard, liveTracker, storeHub, 
