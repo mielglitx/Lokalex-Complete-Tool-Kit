@@ -1281,6 +1281,13 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
                         );
                         if (isCatered) continue; // Never override active roster catering
 
+                        // Check if tagged as applicant in Lokalex (Applicant folder/tag must NEVER be overridden by Facebook sync)
+                        const isApplicant = Boolean(
+                            existingMeta.isApplicant === true ||
+                            (existingMeta.folder && (existingMeta.folder.toLowerCase() === 'applicant' || existingMeta.folder.toLowerCase() === 'followup'))
+                        );
+                        if (isApplicant) continue;
+
                         let targetFolder = 'inbox';
                         let targetStatus = 'active';
 
@@ -1297,6 +1304,28 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
                             targetStatus = 'active';
                         }
 
+                        // Check if already completed/done in Lokalex (e.g. from Clear Inbox or rider order completion)
+                        const isAlreadyDone = Boolean(
+                            existingMeta.status === 'completed' ||
+                            existingMeta.status === 'done' ||
+                            existingMeta.status === 'cancelled' ||
+                            (existingMeta.folder && existingMeta.folder.toLowerCase() === 'done')
+                        );
+
+                        if (isAlreadyDone) {
+                            const completedAt = Number(existingMeta.completedAt) || 0;
+                            const fbUpdatedTime = c.updated_time ? new Date(c.updated_time).getTime() : 0;
+                            const unreadCount = Number(c.unread_count) || 0;
+
+                            // Only reactivate from Done back to Inbox if Facebook received a genuine NEW incoming message
+                            // strictly after the completion timestamp!
+                            const hasNewCustomerMsg = completedAt > 0 && fbUpdatedTime > (completedAt + 5000) && unreadCount > 0;
+                            if (!hasNewCustomerMsg && (fbFolderParam === 'inbox' || targetFolder === 'inbox')) {
+                                // Keep it in done! Do not resurrect to inbox just because Facebook Page didn't mark it done
+                                continue;
+                            }
+                        }
+
                         const currentFolder = (existingMeta.folder || 'inbox').toLowerCase();
                         const currentStatus = (existingMeta.status || 'active').toLowerCase();
 
@@ -1311,6 +1340,9 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
                             if (targetFolder === 'done') {
                                 updatePayload.completedAt = existingMeta.completedAt || now;
                                 updatePayload.unreadForRider = false;
+                            } else if (targetFolder === 'inbox' && isAlreadyDone) {
+                                updatePayload.completedAt = null;
+                                updatePayload.unreadForRider = true;
                             }
 
                             await Promise.all([

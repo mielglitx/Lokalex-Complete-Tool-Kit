@@ -351,6 +351,29 @@ function executeRenderRiderCustomerChatFeed() {
     };
 
     allThreads.forEach(t => {
+        // High priority 1: If a rider is actively catering this customer on the live roster, prioritize catering!
+        const liveActiveCaterer = getFastCaterer(t.customerName, t.custId);
+        if (liveActiveCaterer) {
+            t.folder = 'catering';
+            t.status = 'active';
+            t.cateredByRiderId = (liveActiveCaterer.telegramId || liveActiveCaterer.id || "").toString().trim();
+            t.cateredByRiderName = (liveActiveCaterer.riderName || liveActiveCaterer.name || "Rider").toString().trim();
+            t.cateredBy = t.cateredByRiderName;
+            return;
+        }
+
+        // High priority 2: Applicant thread status takes absolute precedence over done and inbox
+        const isApplicant = Boolean(t.isApplicant === true || t.folder === 'applicant' || t.folder === 'followup');
+        if (isApplicant) {
+            t.folder = 'applicant';
+            t.isApplicant = true;
+            t.status = 'active';
+            t.cateredByRiderId = null;
+            t.cateredByRiderName = null;
+            t.cateredBy = null;
+            return;
+        }
+
         const isDone = (t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || t.folder === 'done');
         const completedAt = Number(t.completedAt) || 0;
         const lastMsgTime = Number(t.lastUpdated) || Number(t.timestamp) || 0;
@@ -364,17 +387,6 @@ function executeRenderRiderCustomerChatFeed() {
             t.cateredByRiderId = null;
             t.cateredByRiderName = null;
             t.cateredBy = null;
-            return;
-        }
-
-        // High priority: If a rider is actively catering this customer on the live roster, prioritize catering!
-        const liveActiveCaterer = getFastCaterer(t.customerName, t.custId);
-        if (liveActiveCaterer) {
-            t.folder = 'catering';
-            t.status = 'active';
-            t.cateredByRiderId = (liveActiveCaterer.telegramId || liveActiveCaterer.id || "").toString().trim();
-            t.cateredByRiderName = (liveActiveCaterer.riderName || liveActiveCaterer.name || "Rider").toString().trim();
-            t.cateredBy = t.cateredByRiderName;
             return;
         }
 
@@ -1115,6 +1127,7 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             if (cached && cached.avatarUrl) displayAvatar = cached.avatarUrl;
         }
 
+        const isApplicant = Boolean(meta.isApplicant === true || (meta.folder || '').toLowerCase() === 'applicant' || (meta.folder || '').toLowerCase() === 'followup');
         const isAlreadyDone = (meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled' || (meta.folder || '').toLowerCase() === 'done');
         const completedAt = Number(meta.completedAt) || 0;
         const lastMsgTime = Number(meta.lastUpdated) || Number(meta.timestamp) || 0;
@@ -1128,7 +1141,7 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                 db.ref(`customerChats/${key}/metadata/unreadForRider`).set(false).catch(() => {});
                 db.ref(`customerChatMeta/${key}/unreadForRider`).set(false).catch(() => {});
             }
-        } else if (isAlreadyDone && !isNewMessageAfterDone) {
+        } else if (isAlreadyDone && !isNewMessageAfterDone && !isApplicant) {
             // Completed threads do not show unread badge for old messages
             isUnread = false;
         } else if (meta.unreadForRider === true) {
@@ -1139,9 +1152,11 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             isUnread = true;
         }
 
-        let isCompletedStatus = isAlreadyDone && !isNewMessageAfterDone;
+        let isCompletedStatus = isAlreadyDone && !isNewMessageAfterDone && !isApplicant;
         let threadFolder = (meta.folder || 'inbox').toLowerCase();
-        if (isCompletedStatus) {
+        if (isApplicant) {
+            threadFolder = 'applicant';
+        } else if (isCompletedStatus) {
             threadFolder = 'done';
         }
 
@@ -1171,7 +1186,7 @@ function processCustomerChatMetaData(data, isFromCache = false) {
         } else if (isNewMessageAfterDone) {
             // Customer sent a new message! Automatically reactivate thread back to Inbox (or Catering if catered)
             meta.status = 'active';
-            threadFolder = activeCaterer ? 'catering' : 'inbox';
+            threadFolder = activeCaterer ? 'catering' : (isApplicant ? 'applicant' : 'inbox');
             meta.cateredByRiderId = activeCaterer ? (activeCaterer.telegramId || activeCaterer.id || "").toString().trim() : null;
             meta.cateredByRiderName = activeCaterer ? (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim() : null;
             meta.cateredBy = meta.cateredByRiderName;
@@ -1220,14 +1235,14 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                 meta.cateredByRiderName = null;
                 meta.cateredBy = null;
                 if (wasInCatering) {
-                    threadFolder = 'inbox'; // RESET TO INBOX, NEVER TO DONE!
+                    threadFolder = isApplicant ? 'applicant' : 'inbox'; // RESET TO INBOX / APPLICANT, NEVER TO DONE!
                 }
                 if (db && key && !isFromCache) {
                     const healPayload = {
                         cateredByRiderId: null,
                         cateredByRiderName: null,
                         cateredBy: null,
-                        folder: 'inbox',
+                        folder: threadFolder,
                         status: 'active',
                         lastUpdated: Date.now()
                     };
@@ -1244,13 +1259,14 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             lastMessage: rawLastMsg || "No messages yet",
             lastUpdated: meta.lastUpdated || 0,
             completedAt: meta.completedAt || (isCompletedStatus ? (Number(meta.lastUpdated) || Date.now()) : null),
-            folder: threadFolder,
+            folder: isApplicant ? 'applicant' : threadFolder,
+            isApplicant: isApplicant,
             channel: isMessengerSource(meta, key) ? 'messenger' : (meta.channel || 'web'),
             apiId: meta.apiId || meta.channelId || meta.fbApiId || (isMessengerSource(meta, key) ? 'fb_api_1791648211091' : null),
             apiName: meta.apiName || meta.channelName || (isMessengerSource(meta, key) ? 'Camiling FB' : null),
             cateredByRiderId: isCompletedStatus ? null : (meta.cateredByRiderId || null),
             cateredByRiderName: isCompletedStatus ? null : (meta.cateredByRiderName || meta.cateredBy || null),
-            status: meta.status || (isCompletedStatus ? 'completed' : 'active'),
+            status: isApplicant ? 'active' : (meta.status || (isCompletedStatus ? 'completed' : 'active')),
             isUnread: isUnread,
             unreadForRider: meta.unreadForRider === true && !isCompletedStatus,
             hasRealMessages: hasValidLastMsg
@@ -1295,6 +1311,10 @@ function processCustomerChatMetaData(data, isFromCache = false) {
 
             if (currentScore > existingScore) {
                 threadObj.isUnread = threadObj.isUnread || existing.isUnread;
+                threadObj.isApplicant = threadObj.isApplicant || existing.isApplicant;
+                if (threadObj.isApplicant && threadObj.folder !== 'catering') {
+                    threadObj.folder = 'applicant';
+                }
                 if (!threadObj.cateredByRiderName && existing.cateredByRiderName && threadObj.folder !== 'done') {
                     threadObj.cateredByRiderName = existing.cateredByRiderName;
                     threadObj.cateredByRiderId = existing.cateredByRiderId;
@@ -1303,6 +1323,10 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                 threadsMap.set(dedupKey, threadObj);
             } else {
                 existing.isUnread = existing.isUnread || threadObj.isUnread;
+                existing.isApplicant = existing.isApplicant || threadObj.isApplicant;
+                if (existing.isApplicant && existing.folder !== 'catering') {
+                    existing.folder = 'applicant';
+                }
                 if (!existing.cateredByRiderName && threadObj.cateredByRiderName && existing.folder !== 'done') {
                     existing.cateredByRiderName = threadObj.cateredByRiderName;
                     existing.cateredByRiderId = threadObj.cateredByRiderId;

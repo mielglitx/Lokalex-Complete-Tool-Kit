@@ -221,8 +221,9 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
     }
     if (custId && typeof window.getCachedCustomerThreadsMap === 'function') {
         const map = window.getCachedCustomerThreadsMap();
-        if (map && map.has(custId)) {
-            syncApplicantUI(map.get(custId));
+        const thread = map ? (map.get(custId) || map.get(`fb_${custId}`) || (custId.startsWith('fb_') ? map.get(custId.replace(/^fb_/, '')) : null)) : null;
+        if (thread) {
+            syncApplicantUI(thread);
         } else {
             syncApplicantUI(null);
         }
@@ -238,6 +239,14 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         activeRiderChatMetaListener = db.ref(`customerChats/${custId}/metadata`);
         activeRiderChatMetaListener.on('value', (snapshot) => {
             currentRiderChatMeta = snapshot.val() || {};
+            if (!currentRiderChatMeta.isApplicant && typeof window.getCachedCustomerThreadsMap === 'function') {
+                const map = window.getCachedCustomerThreadsMap();
+                const thread = map ? (map.get(custId) || map.get(`fb_${custId}`) || (custId.startsWith('fb_') ? map.get(custId.replace(/^fb_/, '')) : null)) : null;
+                if (thread?.isApplicant) {
+                    currentRiderChatMeta.isApplicant = true;
+                    currentRiderChatMeta.folder = 'applicant';
+                }
+            }
             if (currentRiderChatMeta?.customerName && nameEl) {
                 if (!nameEl.innerText || nameEl.innerText === 'Customer' || nameEl.innerText.startsWith('FB Customer (')) {
                     nameEl.innerText = currentRiderChatMeta.customerName;

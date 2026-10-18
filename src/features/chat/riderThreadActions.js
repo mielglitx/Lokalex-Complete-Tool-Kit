@@ -1789,18 +1789,21 @@ export async function toggleThreadApplicant(targetCustId = null) {
     const payload = {
         isApplicant: newApplicantState,
         folder: newFolder,
+        status: newApplicantState ? 'active' : (currentThread?.status || currentMeta?.status || 'active'),
         lastUpdated: now
     };
 
     if (currentThread) {
         currentThread.isApplicant = newApplicantState;
         currentThread.folder = newFolder;
+        currentThread.status = newApplicantState ? 'active' : (currentThread.status || 'active');
         currentThread.lastUpdated = now;
     }
 
     if (currentMeta && (window.getActiveRiderChatCustId && window.getActiveRiderChatCustId() === custId)) {
         currentMeta.isApplicant = newApplicantState;
         currentMeta.folder = newFolder;
+        currentMeta.status = newApplicantState ? 'active' : (currentMeta.status || 'active');
         currentMeta.lastUpdated = now;
     }
 
@@ -1810,8 +1813,17 @@ export async function toggleThreadApplicant(targetCustId = null) {
 
     if (db) {
         try {
-            await db.ref(`customerChats/${custId}/metadata`).update(payload);
-            await db.ref(`customerChatMeta/${custId}`).update(payload);
+            await Promise.all([
+                db.ref(`customerChats/${custId}/metadata`).update(payload),
+                db.ref(`customerChatMeta/${custId}`).update(payload)
+            ]);
+            if (custId.startsWith('fb_')) {
+                const plain = custId.replace(/^fb_/, '');
+                await Promise.all([
+                    db.ref(`customerChats/${plain}/metadata`).update(payload).catch(() => {}),
+                    db.ref(`customerChatMeta/${plain}`).update(payload).catch(() => {})
+                ]);
+            }
         } catch (e) {
             console.warn("Failed to update applicant status in RTDB:", e);
         }
@@ -2016,7 +2028,8 @@ export function clearAllInboxThreads() {
             const folder = (t.folder || 'inbox').toLowerCase();
             const isCompleted = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
             const isCatered = Boolean(t.cateredByRiderId || t.cateredByRiderName || t.cateredBy || folder === 'catering');
-            if (folder === 'inbox' && !isCompleted && !isCatered) {
+            const isApplicant = Boolean(t.isApplicant === true || folder === 'applicant' || folder === 'followup');
+            if (folder === 'inbox' && !isCompleted && !isCatered && !isApplicant) {
                 const realKey = (t.custId || t.id || tId || "").toString().replace(/^id_/, '').replace(/^fb_fb_/, 'fb_');
                 if (realKey && !processedKeys.has(realKey)) {
                     processedKeys.add(realKey);
@@ -2050,6 +2063,7 @@ export function clearAllInboxThreads() {
                 thread.cateredByRiderName = null;
                 thread.cateredBy = null;
 
+                const origLastUpdated = Number(thread.lastUpdated) || Number(thread.timestamp) || (now - 1000);
                 const donePayload = {
                     folder: 'done',
                     status: 'completed',
@@ -2060,7 +2074,7 @@ export function clearAllInboxThreads() {
                     cateredByRiderName: null,
                     cateredBy: null,
                     unreadForRider: false,
-                    lastUpdated: now
+                    lastUpdated: origLastUpdated
                 };
                 batchUpdates[`customerChats/${id}/metadata`] = donePayload;
                 batchUpdates[`customerChatMeta/${id}`] = donePayload;
@@ -2076,7 +2090,9 @@ export function clearAllInboxThreads() {
                         const f = (m.folder || 'inbox').toLowerCase();
                         const isC = Boolean(m.cateredByRiderId || m.cateredByRiderName || m.cateredBy || f === 'catering');
                         const isFin = m.status === 'completed' || m.status === 'done' || m.status === 'cancelled';
-                        if (f === 'inbox' && !isC && !isFin) {
+                        const isApp = Boolean(m.isApplicant === true || f === 'applicant' || f === 'followup');
+                        if (f === 'inbox' && !isC && !isFin && !isApp) {
+                            const origLastUpdated = Number(m.lastUpdated) || Number(m.timestamp) || (now - 1000);
                             const donePayload = {
                                 folder: 'done',
                                 status: 'completed',
@@ -2087,7 +2103,7 @@ export function clearAllInboxThreads() {
                                 cateredByRiderName: null,
                                 cateredBy: null,
                                 unreadForRider: false,
-                                lastUpdated: now
+                                lastUpdated: origLastUpdated
                             };
                             batchUpdates[`customerChats/${k}/metadata`] = donePayload;
                             batchUpdates[`customerChatMeta/${k}`] = donePayload;
@@ -2111,6 +2127,30 @@ export function clearAllInboxThreads() {
                     }
                     showToast(`✅ Moved inbox chat(s) to Done.`);
                 }
+
+                // Best effort: send mark_seen to Facebook for FB messenger threads so Facebook's unread_count is reset to 0
+                db.ref('adminSettings/facebookApis').once('value').then(apiSnap => {
+                    const apis = apiSnap.val() || {};
+                    const apiList = Object.values(apis).filter(a => a && a.pageAccessToken);
+                    if (apiList.length === 0) return;
+                    inboxThreads.forEach(({ id }) => {
+                        if (id && id.startsWith('fb_')) {
+                            const psid = id.replace(/^fb_/, '');
+                            for (const api of apiList) {
+                                const token = (api.pageAccessToken || '').trim();
+                                if (!token) continue;
+                                fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        recipient: { id: psid },
+                                        sender_action: 'mark_seen'
+                                    })
+                                }).catch(() => {});
+                            }
+                        }
+                    });
+                }).catch(() => {});
             } else {
                 showToast(`✅ Moved inbox chat(s) to Done (offline).`);
             }
