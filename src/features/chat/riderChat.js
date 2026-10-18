@@ -1847,15 +1847,15 @@ export async function promptRenameCustomerChat() {
     const cateredRiderId = (currentRiderChatMeta?.cateredByRiderId || "").toString().trim();
     const cateredRiderName = (currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredBy || "").toString().trim().toLowerCase();
 
-    // Find the catering rider (first check myself, then meta.cateredByRiderId, then scan roster)
+    // Find the catering rider (first check forcedCaters / meta, then roster match)
     const cateringRider = liveRoster.find(m => {
         const mId = (m.telegramId || m.id || "").toString().trim();
         const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        if (m.forcedCaters && typeof m.forcedCaters === 'object' && m.forcedCaters[activeRiderChatCustId]) return true;
         if (cateredRiderId && mId === cateredRiderId) return true;
         if (cateredRiderName && mName === cateredRiderName) return true;
-        if (myId && mId === myId && m.status === 'Catering') return true;
         if (m.customerName) {
-            const custs = m.customerName.split(', ').map(c => c.trim().toLowerCase());
+            const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase());
             if (custs.includes(currentName.toLowerCase()) || (typeof isCustomerMatch === 'function' && custs.some(c => isCustomerMatch(c, currentName)))) return true;
         }
         return false;
@@ -1863,7 +1863,7 @@ export async function promptRenameCustomerChat() {
 
     if (cateringRider) {
         const targetRiderId = cateringRider.telegramId || cateringRider.id || myId;
-        let existingCusts = (cateringRider.customerName || "").split(', ').map(c => c.trim()).filter(Boolean);
+        let existingCusts = (cateringRider.customerName || "").split(/\s*,\s*/).map(c => c.trim()).filter(Boolean);
         let replaced = false;
         existingCusts = existingCusts.map(c => {
             if (c.toLowerCase() === currentName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(c, currentName))) {
@@ -1885,6 +1885,9 @@ export async function promptRenameCustomerChat() {
         cateringRider.customerName = newRosterCustString;
         if (targetRiderId) {
             batchUpdates[`roster/${targetRiderId}/customerName`] = newRosterCustString;
+            if (cateringRider.id && cateringRider.id !== targetRiderId) {
+                batchUpdates[`roster/${cateringRider.id}/customerName`] = newRosterCustString;
+            }
 
             // Migrate customerFees if keyed by old customer name
             if (cateringRider.customerFees) {
@@ -1894,6 +1897,11 @@ export async function promptRenameCustomerChat() {
                     const feeVal = cateringRider.customerFees[oldCleanKey];
                     cateringRider.customerFees[newCleanKey] = feeVal;
                     batchUpdates[`roster/${targetRiderId}/customerFees/${newCleanKey}`] = feeVal;
+                    batchUpdates[`roster/${targetRiderId}/customerFees/${oldCleanKey}`] = null;
+                    if (cateringRider.id && cateringRider.id !== targetRiderId) {
+                        batchUpdates[`roster/${cateringRider.id}/customerFees/${newCleanKey}`] = feeVal;
+                        batchUpdates[`roster/${cateringRider.id}/customerFees/${oldCleanKey}`] = null;
+                    }
                     delete cateringRider.customerFees[oldCleanKey];
                 }
             }
@@ -1901,8 +1909,11 @@ export async function promptRenameCustomerChat() {
             // Update forcedCaters if present
             if (cateringRider.forcedCaters && typeof cateringRider.forcedCaters === 'object') {
                 for (const [fcKey, fcVal] of Object.entries(cateringRider.forcedCaters)) {
-                    if (fcKey === activeRiderChatCustId || (fcVal && fcVal.customerName && isCustomerMatch(fcVal.customerName, currentName))) {
+                    if (fcKey === activeRiderChatCustId || (fcVal && fcVal.customerName && (fcVal.customerName.toLowerCase() === currentName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(fcVal.customerName, currentName))))) {
                         batchUpdates[`roster/${targetRiderId}/forcedCaters/${fcKey}/customerName`] = cleanName;
+                        if (cateringRider.id && cateringRider.id !== targetRiderId) {
+                            batchUpdates[`roster/${cateringRider.id}/forcedCaters/${fcKey}/customerName`] = cleanName;
+                        }
                     }
                 }
             }

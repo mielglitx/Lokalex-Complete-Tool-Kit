@@ -10,6 +10,7 @@ import {
     loadRosterCache,
     parseQueueTime, 
     isAdmin, 
+    isTL,
     canManageRoster,
     hasTlPermission,
     canForceCaterTarget,
@@ -400,7 +401,13 @@ export async function adminVoidSpecificCustomer(targetId, targetName, custNameTo
 }
 
 export function openEditCateringCustomerModal(riderId, riderName, currentCustomerName) {
-    if (!canManageRoster() && !hasTlPermission('canForceCater') && !isAdmin()) {
+    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
+                        (typeof canManageRoster === 'function' && canManageRoster()) ||
+                        (typeof window.isAdmin === 'function' && window.isAdmin()) ||
+                        (typeof isTL === 'function' && isTL()) ||
+                        (typeof hasTlPermission === 'function' && hasTlPermission('canForceCater')) ||
+                        Boolean(globalState.adminControlsEnabled);
+    if (!isUserAdmin) {
         return showToast("⚠️ Unauthorized: Only Admin or authorized TL can edit customer names.");
     }
 
@@ -436,7 +443,13 @@ export function closeEditCateringCustomerModal() {
 }
 
 export async function submitEditCateringCustomerName() {
-    if (!canManageRoster() && !hasTlPermission('canForceCater') && !isAdmin()) {
+    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
+                        (typeof canManageRoster === 'function' && canManageRoster()) ||
+                        (typeof window.isAdmin === 'function' && window.isAdmin()) ||
+                        (typeof isTL === 'function' && isTL()) ||
+                        (typeof hasTlPermission === 'function' && hasTlPermission('canForceCater')) ||
+                        Boolean(globalState.adminControlsEnabled);
+    if (!isUserAdmin) {
         return showToast("⚠️ Unauthorized: Admin or TL permission required.");
     }
 
@@ -458,94 +471,213 @@ export async function submitEditCateringCustomerName() {
 }
 
 export async function executeEditCateringCustomerName(riderId, riderName, oldName, newName) {
-    const cleanId = (riderId || "").toString().trim();
-    const cleanName = (riderName || "").trim();
+    const cleanId = (riderId || "").toString().trim().toLowerCase();
+    const cleanName = (riderName || "").trim().toLowerCase();
 
     const roster = globalState.rosterMembers || [];
     const targetRecord = roster.find(m => {
-        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mId = (m.telegramId || m.id || "").toString().trim().toLowerCase();
         const mName = (m.riderName || m.name || "").trim().toLowerCase();
-        return (cleanId && mId === cleanId) || (cleanName && mName === cleanName.toLowerCase());
+        return (cleanId && mId === cleanId) || (cleanName && mName === cleanName);
     });
 
-    if (!targetRecord || targetRecord.status !== 'Catering') {
+    if (!targetRecord || (targetRecord.status || '').toLowerCase() !== 'catering') {
         closeEditCateringCustomerModal();
         return showToast("⚠️ Hindi na aktibong nag-ke-cater ang rider na ito.");
     }
 
-    const currentCusts = (targetRecord.customerName || "").split(', ').map(c => c.trim()).filter(Boolean);
-    const matchIdx = currentCusts.findIndex(c => c.toLowerCase() === oldName.toLowerCase());
+    let currentCusts = (targetRecord.customerName || "").split(/\s*,\s*/).map(c => c.trim()).filter(Boolean);
+    let matchIdx = currentCusts.findIndex(c => c.toLowerCase() === oldName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(c, oldName)));
 
     if (matchIdx !== -1) {
         currentCusts[matchIdx] = newName;
+    } else if (currentCusts.length <= 1) {
+        currentCusts = [newName];
     } else {
         currentCusts.push(newName);
     }
 
     const updatedCustomerNames = currentCusts.join(', ');
-    const resolvedTargetId = (targetRecord.telegramId || targetRecord.id || cleanId).toString().trim();
-    const resolvedTargetName = targetRecord.riderName || targetRecord.name || cleanName;
-
-    const cleanOldKey = sanitizeFirebaseKey(oldName);
-    const cleanNewKey = sanitizeFirebaseKey(newName);
+    const resolvedTargetId = (targetRecord.telegramId || targetRecord.id || riderId || cleanId).toString().trim();
+    const resolvedTargetName = targetRecord.riderName || targetRecord.name || riderName || cleanName;
 
     const atomicUpdates = {};
     atomicUpdates[`roster/${resolvedTargetId}/customerName`] = updatedCustomerNames;
     atomicUpdates[`roster/${resolvedTargetId}/lastUpdated`] = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // Migrate in-memory & cloud fees and forced caters
-    if (cleanOldKey && cleanNewKey && cleanOldKey !== cleanNewKey) {
-        if (targetRecord.customerFees && targetRecord.customerFees[cleanOldKey]) {
-            const feeVal = targetRecord.customerFees[cleanOldKey];
-            feeVal.customerName = newName;
-            targetRecord.customerFees[cleanNewKey] = feeVal;
-            delete targetRecord.customerFees[cleanOldKey];
-            atomicUpdates[`roster/${resolvedTargetId}/customerFees/${cleanNewKey}`] = feeVal;
-            atomicUpdates[`roster/${resolvedTargetId}/customerFees/${cleanOldKey}`] = null;
-        }
+    if (targetRecord.telegramId && targetRecord.id && String(targetRecord.telegramId) !== String(targetRecord.id)) {
+        atomicUpdates[`roster/${targetRecord.id}/customerName`] = updatedCustomerNames;
+        atomicUpdates[`roster/${targetRecord.id}/lastUpdated`] = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
 
-        if (targetRecord.forcedCaters && (targetRecord.forcedCaters[cleanOldKey] || targetRecord.forcedCaters[oldName])) {
-            const fcVal = targetRecord.forcedCaters[cleanOldKey] || targetRecord.forcedCaters[oldName];
-            fcVal.customerName = newName;
-            targetRecord.forcedCaters[cleanNewKey] = fcVal;
-            delete targetRecord.forcedCaters[cleanOldKey];
-            delete targetRecord.forcedCaters[oldName];
-            atomicUpdates[`roster/${resolvedTargetId}/forcedCaters/${cleanNewKey}`] = fcVal;
-            atomicUpdates[`roster/${resolvedTargetId}/forcedCaters/${cleanOldKey}`] = null;
+    const matchingCustIds = new Set();
+
+    // 1. Migrate forcedCaters & collect exact matching custIds
+    if (targetRecord.forcedCaters && typeof targetRecord.forcedCaters === 'object') {
+        for (const [fcKey, fcVal] of Object.entries(targetRecord.forcedCaters)) {
+            const fcName = (fcVal && typeof fcVal === 'object' && fcVal.customerName) ? fcVal.customerName : (typeof fcVal === 'string' ? fcVal : fcKey);
+            if (fcName.toLowerCase() === oldName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(fcName, oldName))) {
+                matchingCustIds.add(fcKey);
+                if (typeof fcVal === 'object' && fcVal !== null) {
+                    fcVal.customerName = newName;
+                    atomicUpdates[`roster/${resolvedTargetId}/forcedCaters/${fcKey}/customerName`] = newName;
+                } else {
+                    atomicUpdates[`roster/${resolvedTargetId}/forcedCaters/${fcKey}`] = newName;
+                }
+            }
         }
     }
 
-    // Sync active customer chat and metadata
+    // 2. Migrate customerFees
+    if (targetRecord.customerFees && typeof targetRecord.customerFees === 'object') {
+        for (const [feeKey, feeVal] of Object.entries(targetRecord.customerFees)) {
+            const fName = (feeVal && typeof feeVal === 'object' && feeVal.customerName) ? feeVal.customerName : feeKey;
+            if (fName.toLowerCase() === oldName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(fName, oldName))) {
+                if (typeof feeVal === 'object' && feeVal !== null) {
+                    feeVal.customerName = newName;
+                    atomicUpdates[`roster/${resolvedTargetId}/customerFees/${feeKey}/customerName`] = newName;
+                }
+                const cleanOldFeeKey = sanitizeFirebaseKey(oldName);
+                const cleanNewFeeKey = sanitizeFirebaseKey(newName);
+                if (cleanOldFeeKey && cleanNewFeeKey && cleanOldFeeKey !== cleanNewFeeKey && targetRecord.customerFees[cleanOldFeeKey]) {
+                    const movedFee = targetRecord.customerFees[cleanOldFeeKey];
+                    targetRecord.customerFees[cleanNewFeeKey] = movedFee;
+                    delete targetRecord.customerFees[cleanOldFeeKey];
+                    atomicUpdates[`roster/${resolvedTargetId}/customerFees/${cleanNewFeeKey}`] = movedFee;
+                    atomicUpdates[`roster/${resolvedTargetId}/customerFees/${cleanOldFeeKey}`] = null;
+                }
+            }
+        }
+    }
+
+    // 3. Scan cachedCustomerThreadsMap in memory for matching thread(s)
+    if (typeof window.getCachedCustomerThreadsMap === 'function') {
+        const threadMap = window.getCachedCustomerThreadsMap();
+        if (threadMap && threadMap.size > 0) {
+            for (const [tId, t] of threadMap.entries()) {
+                const tName = (t.customerName || t.name || "").trim().toLowerCase();
+                if (tName === oldName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(tName, oldName))) {
+                    const realKey = (t.custId || t.id || tId || "").toString().replace(/^id_/, '').replace(/^fb_fb_/, 'fb_');
+                    if (realKey) matchingCustIds.add(realKey);
+                }
+            }
+        }
+    }
+
+    // 4. Scan lightweight customerChatMeta snapshot directly in Firebase (NO heavy customerChats tree download!)
     if (db) {
         try {
-            const chatsSnap = await db.ref('customerChats').once('value');
-            if (chatsSnap.exists()) {
-                const allChats = chatsSnap.val() || {};
-                Object.keys(allChats).forEach(custId => {
-                    const meta = allChats[custId]?.metadata || allChats[custId] || {};
-                    const chatCustName = (meta.customerName || meta.name || "").trim().toLowerCase();
-                    if (chatCustName === oldName.toLowerCase()) {
-                        atomicUpdates[`customerChats/${custId}/metadata/customerName`] = newName;
-                        atomicUpdates[`customerChats/${custId}/metadata/name`] = newName;
-                        atomicUpdates[`customerChats/${custId}/metadata/lastUpdated`] = Date.now();
-                        atomicUpdates[`customerChatMeta/${custId}/customerName`] = newName;
-                        atomicUpdates[`customerChatMeta/${custId}/name`] = newName;
-                        atomicUpdates[`customerChatMeta/${custId}/lastUpdated`] = Date.now();
-                        atomicUpdates[`customers/${custId}/name`] = newName;
+            const metaSnap = await db.ref('customerChatMeta').once('value');
+            if (metaSnap.exists()) {
+                const allMeta = metaSnap.val() || {};
+                Object.keys(allMeta).forEach(custId => {
+                    const m = allMeta[custId]?.metadata || allMeta[custId] || {};
+                    const chatCustName = (m.customerName || m.name || "").trim().toLowerCase();
+                    if (chatCustName === oldName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(chatCustName, oldName))) {
+                        matchingCustIds.add(custId);
                     }
                 });
             }
         } catch(e) {
-            console.warn('[executeEditCateringCustomerName] chat sync warning:', e);
+            console.warn('[executeEditCateringCustomerName] chat meta sync warning:', e);
         }
     }
 
+    // 5. Update metadata, avatar, and local cache for all matching customer IDs
+    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(newName)}&background=0084FF&color=fff`;
+    matchingCustIds.forEach(custId => {
+        atomicUpdates[`customerChats/${custId}/metadata/customerName`] = newName;
+        atomicUpdates[`customerChats/${custId}/metadata/name`] = newName;
+        atomicUpdates[`customerChats/${custId}/metadata/avatarUrl`] = avatar;
+        atomicUpdates[`customerChats/${custId}/metadata/lastUpdated`] = Date.now();
+        atomicUpdates[`customerChatMeta/${custId}/customerName`] = newName;
+        atomicUpdates[`customerChatMeta/${custId}/name`] = newName;
+        atomicUpdates[`customerChatMeta/${custId}/avatarUrl`] = avatar;
+        atomicUpdates[`customerChatMeta/${custId}/lastUpdated`] = Date.now();
+        atomicUpdates[`customers/${custId}/name`] = newName;
+        atomicUpdates[`customers/${custId}/customerName`] = newName;
+
+        // If Facebook thread, update local FB name cache so it doesn't get reverted!
+        if (custId.startsWith('fb_')) {
+            try {
+                const rawCache = localStorage.getItem('fb_name_cache_v2');
+                const cache = rawCache ? JSON.parse(rawCache) : {};
+                cache[custId] = { name: newName, avatarUrl: avatar, timestamp: Date.now() };
+                localStorage.setItem('fb_name_cache_v2', JSON.stringify(cache));
+            } catch (_) {}
+        }
+
+        // Update in-memory thread map
+        if (typeof window.getCachedCustomerThreadsMap === 'function') {
+            const threadMap = window.getCachedCustomerThreadsMap();
+            if (threadMap && threadMap.has(custId)) {
+                const t = threadMap.get(custId);
+                t.customerName = newName;
+                t.name = newName;
+                t.avatarUrl = avatar;
+            }
+        }
+
+        // If chat modal for this customer is open, update UI immediately
+        const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
+        if (activeCustId === custId) {
+            const nameEl = document.getElementById('rider-chat-cust-name');
+            if (nameEl) nameEl.innerText = newName;
+            const avatarEl = document.getElementById('rider-chat-avatar') || document.getElementById('rider-chat-cust-avatar');
+            if (avatarEl) {
+                if (avatarEl.tagName === 'IMG') avatarEl.src = avatar;
+                else avatarEl.innerHTML = `<img src="${avatar}" class="w-full h-full rounded-full object-cover">`;
+            }
+            if (typeof window.getCurrentRiderChatMeta === 'function') {
+                const meta = window.getCurrentRiderChatMeta();
+                if (meta) {
+                    meta.customerName = newName;
+                    meta.avatarUrl = avatar;
+                }
+            }
+        }
+    });
+
+    // 6. Update active orders matching old customer name
+    if (db) {
+        try {
+            const ordersSnap = await db.ref('orders').orderByChild('status').equalTo('placed').once('value');
+            if (ordersSnap.exists()) {
+                const orders = ordersSnap.val() || {};
+                Object.keys(orders).forEach(orderId => {
+                    const ord = orders[orderId];
+                    if (ord && ord.customerName && (ord.customerName.toLowerCase() === oldName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(ord.customerName, oldName)))) {
+                        atomicUpdates[`orders/${orderId}/customerName`] = newName;
+                    }
+                });
+            }
+        } catch (_) {}
+    }
+
+    // 7. Update Cart slot customer name if present in localStorage
+    try {
+        for (let i = 1; i <= 5; i++) {
+            const slotKey = `cart_customer_slot_${i}`;
+            const val = localStorage.getItem(slotKey);
+            if (val && (val.toLowerCase() === oldName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(val, oldName)))) {
+                localStorage.setItem(slotKey, newName);
+            }
+        }
+        const generalCust = localStorage.getItem('cart_customer_name');
+        if (generalCust && (generalCust.toLowerCase() === oldName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(generalCust, oldName)))) {
+            localStorage.setItem('cart_customer_name', newName);
+        }
+    } catch (_) {}
+
+    // 8. Execute batch updates to Firebase RTDB
     if (db && Object.keys(atomicUpdates).length > 0) {
         try {
             await db.ref().update(atomicUpdates);
         } catch(err) {
             console.error('[executeEditCateringCustomerName] update error:', err);
-            return showToast("❌ Nabigo ang pag-update sa database: " + (err.message || "Error"));
+            for (const [path, val] of Object.entries(atomicUpdates)) {
+                db.ref(path).set(val).catch(() => {});
+            }
         }
     }
 
@@ -563,6 +695,13 @@ export async function executeEditCateringCustomerName(riderId, riderName, oldNam
     saveRosterCache();
     window.dispatchEvent(new CustomEvent('rosterUpdated'));
     updateRosterUI();
+
+    if (typeof window.renderRiderCustomerChatFeed === 'function') {
+        window.renderRiderCustomerChatFeed();
+    }
+    if (typeof window.evaluateRiderChatLockPermissions === 'function') {
+        window.evaluateRiderChatLockPermissions();
+    }
 
     closeEditCateringCustomerModal();
     showToast(`✅ Na-update ang customer name ni ${resolvedTargetName} sa [${newName}]!`);
