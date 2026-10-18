@@ -41,6 +41,7 @@ import { loadDirectoryCache } from './directoryStorage.js';
 import { checkAdminAccess } from './directoryPermissions.js';
 import { uploadImage } from '../../utils/imageUpload.js';
 import { saveImageToDevice } from '../../utils/imageSaver.js';
+import { sendDirectMenuPhotoToCustomer } from '../chat/riderChat.js';
 
 let lastJumpLetter = "";
 let creditsListenerActive = false;
@@ -1767,8 +1768,11 @@ export async function executeSendMenuPages(targetCustId, pages, custDisplayName 
 
         let ok = false;
         try {
-            if (typeof window.sendDirectMenuPhotoToCustomer === 'function') {
-                ok = await window.sendDirectMenuPhotoToCustomer(cleanCustId, p.imageUrl, caption);
+            const sendFn = (typeof sendDirectMenuPhotoToCustomer === 'function') 
+                ? sendDirectMenuPhotoToCustomer 
+                : window.sendDirectMenuPhotoToCustomer;
+            if (typeof sendFn === 'function') {
+                ok = await sendFn(cleanCustId, p.imageUrl, caption);
             }
         } catch (sendErr) {
             console.error(`[MenuSend] Error sending page ${pageNum}:`, sendErr);

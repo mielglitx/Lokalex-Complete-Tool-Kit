@@ -1039,8 +1039,11 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
     let newMsgKey = null;
     if (db) {
         try {
-            const pushRef = await db.ref(`customerChats/${activeRiderChatCustId}/messages`).push(sanitizeForFirebase(newMsg));
+            const pushRef = db.ref(`customerChats/${activeRiderChatCustId}/messages`).push();
             newMsgKey = pushRef ? pushRef.key : null;
+            if (pushRef) {
+                await pushRef.set(sanitizeForFirebase(newMsg));
+            }
             if (newMsgKey) {
                 const fullNewMsg = { id: newMsgKey, ...newMsg };
                 loadedRiderMsgsMap.set(newMsgKey, fullNewMsg);
@@ -1183,8 +1186,11 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
 
     let newMsgKey = null;
     try {
-        const pushRef = await db.ref(`customerChats/${cleanCustId}/messages`).push(sanitizeForFirebase(newMsg));
+        const pushRef = db.ref(`customerChats/${cleanCustId}/messages`).push();
         newMsgKey = pushRef ? pushRef.key : null;
+        if (pushRef) {
+            await pushRef.set(sanitizeForFirebase(newMsg));
+        }
 
         const metaUpdate = sanitizeForFirebase({
             lastMessage: `You: 📋 ${captionText || "Menu Photo"}`,
@@ -1200,13 +1206,31 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
             db.ref(`customerChatMeta/${cleanCustId}`).update(metaUpdate)
         ]).catch(() => {});
 
-        // If this chat is currently open, dynamically render it immediately
-        if (activeRiderChatCustId === cleanCustId && newMsgKey) {
-            const fullMsg = { id: newMsgKey, ...newMsg };
-            loadedRiderMsgsMap.set(newMsgKey, fullMsg);
-            const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-            riderChatMemoryCache.set(cleanCustId, sortedMsgs);
-            idbSet('chats', cleanCustId, sortedMsgs).catch(() => {});
+        const fullMsg = { id: newMsgKey || `MENU_${now}`, ...newMsg };
+
+        // 1. ALWAYS update riderChatMemoryCache and IndexedDB for this customer,
+        // whether the chat modal is currently open or not!
+        let memCached = riderChatMemoryCache.get(cleanCustId);
+        if (!Array.isArray(memCached) || memCached.length === 0) {
+            try {
+                const idbCached = await idbGet('chats', cleanCustId);
+                if (Array.isArray(idbCached)) memCached = idbCached;
+            } catch (_) {}
+        }
+        if (!Array.isArray(memCached)) memCached = [];
+        const existingIdx = memCached.findIndex(m => m.id === fullMsg.id);
+        if (existingIdx >= 0) {
+            memCached[existingIdx] = fullMsg;
+        } else {
+            memCached.push(fullMsg);
+        }
+        memCached.sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+        riderChatMemoryCache.set(cleanCustId, memCached);
+        idbSet('chats', cleanCustId, memCached).catch(() => {});
+
+        // 2. If this chat is currently open, dynamically render it immediately
+        if (activeRiderChatCustId === cleanCustId) {
+            loadedRiderMsgsMap.set(fullMsg.id, fullMsg);
             const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
             if (container) {
                 appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
