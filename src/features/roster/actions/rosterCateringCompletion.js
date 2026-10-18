@@ -47,7 +47,7 @@ import { getTopQueueTime } from './rosterAlarms.js';
 /**
  * Deeply resets a cart slot across all memory arrays and unlocks barrier states.
  */
-function purgeCartSlotForCustomer(customerName) {
+export function purgeCartSlotForCustomer(customerName) {
     if (!customerName || !multiCarts) return;
     const cleanTarget = customerName.trim().toLowerCase();
 
@@ -508,6 +508,20 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         delete targetRecord.customerFees[cleanCustKey];
     }
 
+    // Explicitly delete forcedCaters and customerFees from Firebase RTDB
+    if (db && resolvedTargetId) {
+        if (cleanCustKey) {
+            db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
+            db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
+            db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanVoidCust}`).remove().catch(() => {});
+        }
+        if (remainingCusts.length === 0) {
+            db.ref(`roster/${resolvedTargetId}/forcedCaters`).remove().catch(() => {});
+            db.ref(`roster/${resolvedTargetId}/customerFees`).remove().catch(() => {});
+            db.ref(`roster/${resolvedTargetId}/availableLocation`).remove().catch(() => {});
+        }
+    }
+
     // Reset lastReceiptFees if they were set for the voided customer
     if (targetRecord && targetRecord.lastReceiptFees) {
         targetRecord.lastReceiptFees = null;
@@ -568,35 +582,79 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
 
     // 4. Update Firebase chat folders, purge receipts & cateredHistory in RTDB
     if (db) {
+        const now = Date.now();
         const voidPayload = {
             folder: 'done',
             status: 'cancelled',
+            completedAt: now,
             cateredByRiderId: null,
             cateredByRiderName: null,
             cateredBy: null,
             forcedBy: null,
             isForcedCater: false,
             unreadForRider: false,
-            lastUpdated: Date.now()
+            lastUpdated: now
+        };
+
+        const markChatVoided = (targetChatId) => {
+            if (!targetChatId) return;
+            db.ref(`customerChats/${targetChatId}/metadata`).update(voidPayload).catch(() => {});
+            db.ref(`customerChatMeta/${targetChatId}`).update(voidPayload).catch(() => {});
         };
 
         // Update customerChats matching cleanCustKey
         if (cleanCustKey) {
-            db.ref(`customerChats/${cleanCustKey}/metadata`).update(voidPayload).catch(() => {});
-            db.ref(`customerChatMeta/${cleanCustKey}`).update(voidPayload).catch(() => {});
+            markChatVoided(cleanCustKey);
         }
 
-        // Query customerChats to cancel any chat referencing this customer
-        db.ref('customerChats')
-            .orderByChild('metadata/customerName')
-            .equalTo(custNameToVoid)
-            .once('value', (snapshot) => {
-                const chats = snapshot.val() || {};
-                Object.keys(chats).forEach(custId => {
-                    db.ref(`customerChats/${custId}/metadata`).update(voidPayload).catch(() => {});
-                    db.ref(`customerChatMeta/${custId}`).update(voidPayload).catch(() => {});
-                });
-            }).catch(() => {});
+        // Immediately synchronize in-memory live chat threads and move matching thread to Done/Cancelled
+        if (typeof window.getCachedCustomerThreadsMap === 'function') {
+            const threadMap = window.getCachedCustomerThreadsMap();
+            if (threadMap && threadMap.size > 0) {
+                const targetLower = (custNameToVoid || "").trim().toLowerCase();
+                for (const [tId, t] of threadMap.entries()) {
+                    const chatName = (t.customerName || t.name || "").trim().toLowerCase();
+                    const isCustomerNameMatch = chatName && (chatName === targetLower || isCustomerMatch(chatName, targetLower));
+                    const isCustIdMatch = cleanCustKey && (tId.toLowerCase().includes(cleanCustKey) || (t.custId && t.custId.toLowerCase().includes(cleanCustKey)));
+                    const isRiderMatch = (t.cateredByRiderId && t.cateredByRiderId.toString() === resolvedTargetId.toString()) ||
+                                         (t.cateredByRiderName && t.cateredByRiderName.trim().toLowerCase() === resolvedTargetName.trim().toLowerCase());
+
+                    if (isCustomerNameMatch || (isRiderMatch && isCustIdMatch)) {
+                        t.folder = 'done';
+                        t.status = 'cancelled';
+                        t.completedAt = now;
+                        t.isUnread = false;
+                        t.unreadForRider = false;
+                        t.cateredByRiderId = null;
+                        t.cateredByRiderName = null;
+                        t.cateredBy = null;
+                        markChatVoided(tId);
+                    }
+                }
+            }
+        }
+
+        if (typeof window.renderRiderCustomerChatFeed === 'function') {
+            window.renderRiderCustomerChatFeed();
+        }
+
+        // Scan customerChatMeta to cancel any active chat referencing this customer or rider assignment
+        db.ref('customerChatMeta').once('value', (snapshot) => {
+            const chats = snapshot.val() || {};
+            const targetLower = (custNameToVoid || "").trim().toLowerCase();
+            Object.keys(chats).forEach(custId => {
+                const meta = chats[custId]?.metadata || chats[custId] || {};
+                const chatCustName = (meta.customerName || meta.name || "").trim().toLowerCase();
+                const isRiderMatch = (meta.cateredByRiderId && meta.cateredByRiderId.toString() === resolvedTargetId.toString()) ||
+                                     (meta.cateredByRiderName && meta.cateredByRiderName.trim().toLowerCase() === resolvedTargetName.trim().toLowerCase());
+
+                if (chatCustName && (chatCustName === targetLower || isCustomerMatch(chatCustName, targetLower))) {
+                    markChatVoided(custId);
+                } else if (isRiderMatch && (cleanCustKey && custId.includes(cleanCustKey))) {
+                    markChatVoided(custId);
+                }
+            });
+        }).catch(() => {});
 
         const todayStr = getLocalTodayStr();
         // Purge matching receipts from Firebase receipts node
@@ -627,6 +685,9 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
     }
 
     // 5. ATOMIC STATUS MUTATION (Zero unbundled preliminary writes - completely prevents rubber banding)
+    const nowTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const voidTimestamp = Date.now();
+
     if (remainingCusts.length > 0) {
         await updateRosterStatusData(
             'Catering', 
@@ -644,7 +705,9 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
                 isForcedCater: !!(targetRecord && targetRecord.isForcedCater),
                 customerFees: targetRecord?.customerFees || null,
                 lastReceiptFees: null,
-                lastReceiptTotalFees: 0
+                lastReceiptTotalFees: 0,
+                lastVoidedAt: voidTimestamp,
+                lastVoidedCust: custNameToVoid
             }
         );
         showToast(`🚫 Na-void si [${custNameToVoid}]. ${remainingCusts.length} active customer(s) natitira kay ${resolvedTargetName}.`);
@@ -652,7 +715,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
     } else {
         const topQueueTime = getTopQueueTime();
         const availableTimestamp = Date.now();
-        const availableTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const availableTimeStr = nowTimeStr;
 
         if (targetRecord) {
             targetRecord.forcedCaters = null;
@@ -664,6 +727,8 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             targetRecord.availableTimestamp = availableTimestamp;
             targetRecord.availableTimeStr = availableTimeStr;
             targetRecord.queueTime = availableTimestamp;
+            targetRecord.lastVoidedAt = voidTimestamp;
+            targetRecord.lastVoidedCust = custNameToVoid;
         }
 
         if (resolvedTargetId === myId) {
@@ -688,7 +753,9 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
                 lastReceiptFees: null,
                 lastReceiptTotalFees: 0,
                 availableTimestamp: availableTimestamp,
-                availableTimeStr: availableTimeStr
+                availableTimeStr: availableTimeStr,
+                lastVoidedAt: voidTimestamp,
+                lastVoidedCust: custNameToVoid
             }
         );
         showToast(`🚫 Na-void si [${custNameToVoid}]. Inilipat si [${resolvedTargetName}] sa Available queue!`);

@@ -25,6 +25,7 @@ import * as chat from '../features/chat/index.js';
 import * as commission from '../features/commission/index.js';
 import * as advancedOrders from '../features/advancedOrders.js';
 import * as maps from '../features/maps.js';
+import { endLiveGpsSession } from '../features/liveTracker.js';
 import { updateNetworkStatus } from './appMonitors.js';
 
 export function initRealtimeFirebaseListeners() {
@@ -120,6 +121,8 @@ export function initRealtimeFirebaseListeners() {
             if (chat && chat.updateFullBookingUI) chat.updateFullBookingUI();
         });
 
+        let previousMyRosterRec = null;
+
         db.ref('roster').on('value', (snapshot) => {
             const val = snapshot.val();
             if (val) {
@@ -131,6 +134,60 @@ export function initRealtimeFirebaseListeners() {
                 storageEngine.idbSet('roster', 'active_roster', val).catch(() => {});
             } else {
                 globalState.rosterMembers = [];
+            }
+
+            // Real-time synchronization for active rider: purge voided customers or ended catering sessions
+            const myId = (appState.telegramId || "").toString().trim();
+            const myName = (appState.riderName || "").toLowerCase().trim();
+            if (myId && val) {
+                const currentMyEntry = Object.entries(val).find(([k, item]) => {
+                    const rId = (item.telegramId || item.id || k).toString().trim();
+                    const rName = (item.riderName || item.name || "").toLowerCase().trim();
+                    return (rId && rId === myId) || (myName && rName === myName);
+                });
+                const currentMyRec = currentMyEntry ? currentMyEntry[1] : null;
+
+                if (currentMyRec) {
+                    if (previousMyRosterRec) {
+                        const prevCusts = (previousMyRosterRec.customerName || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+                        const currCusts = (currentMyRec.customerName || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+                        const removedCusts = prevCusts.filter(c => !currCusts.some(cc => cc === c));
+
+                        if (currentMyRec.lastVoidedAt && currentMyRec.lastVoidedAt !== previousMyRosterRec.lastVoidedAt && currentMyRec.lastVoidedCust) {
+                            const voidedLower = currentMyRec.lastVoidedCust.toLowerCase().trim();
+                            if (!removedCusts.includes(voidedLower)) {
+                                removedCusts.push(voidedLower);
+                            }
+                        }
+
+                        if (removedCusts.length > 0) {
+                            removedCusts.forEach(cust => {
+                                if (roster && typeof roster.purgeCartSlotForCustomer === 'function') {
+                                    roster.purgeCartSlotForCustomer(cust);
+                                }
+                            });
+                            showToast(`🚫 Na-void ang order: [${removedCusts.join(', ')}]. Na-update ang iyong cart.`);
+                        }
+
+                        // If transitioned from Catering to Available or other non-catering status
+                        if (previousMyRosterRec.status === 'Catering' && currentMyRec.status !== 'Catering') {
+                            try { endLiveGpsSession(); } catch (_) {}
+                            if (roster && typeof roster.purgeCartSlotForCustomer === 'function') {
+                                prevCusts.forEach(c => roster.purgeCartSlotForCustomer(c));
+                            }
+                            if (appState.selectedCateringClient) {
+                                appState.selectedCateringClient = null;
+                            }
+                        }
+                    }
+                    previousMyRosterRec = { ...currentMyRec };
+                } else if (previousMyRosterRec) {
+                    if (previousMyRosterRec.status === 'Catering') {
+                        try { endLiveGpsSession(); } catch (_) {}
+                    }
+                    previousMyRosterRec = null;
+                }
             }
 
             if (roster && roster.saveRosterCache) roster.saveRosterCache();

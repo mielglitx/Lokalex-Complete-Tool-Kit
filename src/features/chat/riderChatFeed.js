@@ -206,6 +206,10 @@ export function isMyCustomerThread(t, cachedAuth = null) {
 }
 
 export function getActiveRosterCaterer(custName, custId, meta = {}) {
+    if (meta?.status === 'cancelled' || meta?.status === 'completed' || meta?.folder === 'done') {
+        return null;
+    }
+
     const liveRoster = globalState.rosterMembers || [];
     if (!liveRoster || liveRoster.length === 0) return null;
 
@@ -346,17 +350,6 @@ function executeRenderRiderCustomerChatFeed() {
     };
 
     allThreads.forEach(t => {
-        // High priority: If a rider is actively catering this customer on the live roster, ALWAYS prioritize catering!
-        const liveActiveCaterer = getFastCaterer(t.customerName, t.custId);
-        if (liveActiveCaterer) {
-            t.folder = 'catering';
-            t.status = 'active';
-            t.cateredByRiderId = (liveActiveCaterer.telegramId || liveActiveCaterer.id || "").toString().trim();
-            t.cateredByRiderName = (liveActiveCaterer.riderName || liveActiveCaterer.name || "Rider").toString().trim();
-            t.cateredBy = t.cateredByRiderName;
-            return;
-        }
-
         const isDone = (t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || t.folder === 'done');
         const completedAt = Number(t.completedAt) || 0;
         const lastMsgTime = Number(t.lastUpdated) || Number(t.timestamp) || 0;
@@ -370,6 +363,17 @@ function executeRenderRiderCustomerChatFeed() {
             t.cateredByRiderId = null;
             t.cateredByRiderName = null;
             t.cateredBy = null;
+            return;
+        }
+
+        // High priority: If a rider is actively catering this customer on the live roster, prioritize catering!
+        const liveActiveCaterer = getFastCaterer(t.customerName, t.custId);
+        if (liveActiveCaterer) {
+            t.folder = 'catering';
+            t.status = 'active';
+            t.cateredByRiderId = (liveActiveCaterer.telegramId || liveActiveCaterer.id || "").toString().trim();
+            t.cateredByRiderName = (liveActiveCaterer.riderName || liveActiveCaterer.name || "Rider").toString().trim();
+            t.cateredBy = t.cateredByRiderName;
             return;
         }
 
@@ -1115,10 +1119,11 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             threadFolder = 'done';
         }
 
-        // Validate catering against live roster: ACTIVE ROSTER CATERING ALWAYS TAKES PRECEDENCE!
-        const activeCaterer = getActiveRosterCaterer(displayName, key, meta);
+        // Validate catering against live roster: ACTIVE ROSTER CATERING ALWAYS TAKES PRECEDENCE FOR ACTIVE THREADS!
+        const isExplicitlyDoneOrCancelled = isCompletedStatus || meta.status === 'cancelled' || meta.status === 'completed' || meta.folder === 'done';
+        const activeCaterer = (!isExplicitlyDoneOrCancelled) ? getActiveRosterCaterer(displayName, key, meta) : null;
 
-        if (activeCaterer) {
+        if (activeCaterer && !isExplicitlyDoneOrCancelled) {
             isCompletedStatus = false;
             threadFolder = 'catering';
             meta.status = 'active';
@@ -1225,8 +1230,8 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             hasRealMessages: hasValidLastMsg
         };
 
-        // Cross-reference with live roster so newly incoming threads immediately transition to catering (skip if completed)
-        if (!isCompletedStatus) {
+        // Cross-reference with live roster so newly incoming threads immediately transition to catering (skip if completed or cancelled)
+        if (!isCompletedStatus && !isExplicitlyDoneOrCancelled) {
             const liveRoster = globalState.rosterMembers || [];
             const activeCateringRider = liveRoster.find(m => {
                 if (m.status !== 'Catering') return false;
@@ -1251,18 +1256,6 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                 threadObj.status = 'active';
                 threadObj.cateredByRiderId = (activeCateringRider.telegramId || activeCateringRider.id || "").toString().trim();
                 threadObj.cateredByRiderName = (activeCateringRider.riderName || activeCateringRider.name || "Rider").toString().trim();
-                if (meta.folder === 'done' && db && key && !isFromCache) {
-                    const restorePayload = {
-                        folder: 'catering',
-                        status: 'active',
-                        cateredByRiderId: threadObj.cateredByRiderId,
-                        cateredByRiderName: threadObj.cateredByRiderName,
-                        cateredBy: threadObj.cateredByRiderName,
-                        lastUpdated: Date.now()
-                    };
-                    db.ref(`customerChats/${key}/metadata`).update(restorePayload).catch(() => {});
-                    db.ref(`customerChatMeta/${key}`).update(restorePayload).catch(() => {});
-                }
             }
         }
 
