@@ -359,8 +359,8 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         </div>`;
     }
 
-    // Direct REST fast-fetch fallback (useful on mobile networks before WebSocket establishes)
-    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChats/${encodeURIComponent(custId)}/messages.json?t=${Date.now()}`;
+    // Direct REST fast-fetch fallback with limit (useful on mobile networks before WebSocket establishes)
+    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChats/${encodeURIComponent(custId)}/messages.json?orderBy="$key"&limitToLast=40&t=${Date.now()}`;
     fetch(directRestUrl, { cache: 'no-store' })
         .then(res => res.json())
         .then(data => {
@@ -381,88 +381,65 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         })
         .catch(() => {});
 
-    // Realtime Firebase connection - Single source of truth guaranteeing 100% synchronization
-    activeRiderChatListener = db.ref(`customerChats/${custId}/messages`);
-    activeRiderChatListener.on('value', (snapshot) => {
-        if (activeRiderChatCustId !== custId) return;
+    // Realtime Firebase connection using granular child_added and child_changed for ZERO DELAY
+    const messagesQuery = db.ref(`customerChats/${custId}/messages`).limitToLast(40);
 
+    // Initial check for empty chat thread
+    messagesQuery.once('value', (snapshot) => {
+        if (activeRiderChatCustId !== custId) return;
         const data = snapshot.val();
         if (!data || Object.keys(data).length === 0) {
-            loadedRiderMsgsMap.clear();
-            riderChatMemoryCache.set(custId, []);
-            idbSet('chats', custId, []).catch(() => {});
-            container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
-            return;
+            if (loadedRiderMsgsMap.size === 0) {
+                container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
+            }
+        } else {
+            hasMoreRiderMsgs = Object.keys(data).length >= 40;
         }
+    });
 
-        const entries = Object.entries(data);
-        const wasInitial = !isInitialScrollDone;
-        const newlyAddedMsgs = [];
-        let hasNewIncomingCustomerMsg = false;
-        let newestCustomerMsg = null;
-        const now = Date.now();
-        const seenUpdates = {};
+    // 1. Lightning-fast child_added: streams each incoming/sent message individually in milliseconds (<50ms)
+    activeRiderChatChildListener = messagesQuery;
+    activeRiderChatChildListener.on('child_added', (childSnap) => {
+        if (activeRiderChatCustId !== custId) return;
+        const key = childSnap.key;
+        const msg = childSnap.val();
+        if (!key || !msg) return;
 
-        entries.forEach(([key, msg]) => {
-            const isNew = !loadedRiderMsgsMap.has(key);
-            const prevMsg = loadedRiderMsgsMap.get(key);
-            const reactionsChanged = JSON.stringify(prevMsg?.reactions || {}) !== JSON.stringify(msg.reactions || {});
-            const statusChanged = prevMsg?.status !== msg.status;
+        const isNew = !loadedRiderMsgsMap.has(key);
+        const fullMsg = { id: key, ...msg };
+        loadedRiderMsgsMap.set(key, fullMsg);
 
-            const fullMsg = { id: key, ...msg };
-            loadedRiderMsgsMap.set(key, fullMsg);
-
-            const isFromCustomer = !msg.isRider && msg.senderType !== 'rider';
-
-            if (isNew) {
-                newlyAddedMsgs.push(fullMsg);
-                if (!wasInitial && isFromCustomer) {
-                    hasNewIncomingCustomerMsg = true;
-                    newestCustomerMsg = fullMsg;
-                }
-            }
-
-            // Batch mark incoming customer messages as seen
-            if (isFromCustomer && msg.status !== 'seen') {
-                msg.status = 'seen';
-                seenUpdates[`customerChats/${custId}/messages/${key}/status`] = 'seen';
-                seenUpdates[`customerChats/${custId}/messages/${key}/seenAt`] = now;
-            }
-
-            // Re-render message bubble in-place if reactions or delivery status changed
-            if (!isNew && (reactionsChanged || statusChanged)) {
-                appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
-            }
-        });
-
-        if (Object.keys(seenUpdates).length > 0 && db) {
-            db.ref().update(seenUpdates).catch(() => {});
-        }
-
+        // Keep local memory and IndexedDB in sync
         const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
         if (sortedMsgs.length > 0) {
             oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
             oldestRiderMsgKey = sortedMsgs[0].id || null;
         }
-
-        // Keep local cache fresh
         riderChatMemoryCache.set(custId, sortedMsgs);
         idbSet('chats', custId, sortedMsgs).catch(() => {});
 
-        const isNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 120;
-        const existingBubbleCount = container.querySelectorAll('[id^="msg-bubble-"]').length;
+        const isFromCustomer = !msg.isRider && msg.senderType !== 'rider';
 
-        if (wasInitial || existingBubbleCount === 0 || newlyAddedMsgs.length > 3) {
-            renderRiderMessages(container, loadedRiderMsgsMap, false, true, 0, activeCustData);
+        // Auto-mark seen for incoming customer messages
+        if (isFromCustomer && msg.status !== 'seen' && db) {
+            msg.status = 'seen';
+            const now = Date.now();
+            const seenUpdates = {};
+            seenUpdates[`customerChats/${custId}/messages/${key}/status`] = 'seen';
+            seenUpdates[`customerChats/${custId}/messages/${key}/seenAt`] = now;
+            db.ref().update(seenUpdates).catch(() => {});
+        }
+
+        const isNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 140;
+
+        if (!isInitialScrollDone) {
+            renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
             isInitialScrollDone = true;
             autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
-        } else if (newlyAddedMsgs.length > 0) {
-            newlyAddedMsgs.sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-            newlyAddedMsgs.forEach(m => {
-                appendOrUpdateSingleRiderMessage(container, m, activeCustData);
-            });
+        } else {
+            appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
 
-            if (hasNewIncomingCustomerMsg) {
+            if (isNew && isFromCustomer) {
                 const isCatered = !!(currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredByRiderId || currentRiderChatMeta?.cateredBy || (currentRiderChatMeta?.folder || '').toLowerCase() === 'catering');
                 const isMine = isMyCustomerThread({ custId, ...(currentRiderChatMeta || {}) });
                 if (isCatered) {
@@ -470,19 +447,70 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 } else {
                     playChatChime('inbox');
                 }
-            }
 
-            if (isNearBottom) {
+                if (isNearBottom) {
+                    requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+                } else {
+                    const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
+                    const preview = fullMsg.text || (fullMsg.imageUrl ? "📷 Photo" : "📍 Location");
+                    showRiderInChatToast(container, fullMsg.sender || custName, preview);
+                }
+            } else if (isNearBottom) {
                 requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
-            } else if (newestCustomerMsg) {
-                const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
-                const preview = newestCustomerMsg.text || (newestCustomerMsg.imageUrl ? "📷 Photo" : "📍 Location");
-                showRiderInChatToast(container, newestCustomerMsg.sender || custName, preview);
             }
         }
-    }, (error) => {
-        console.error("Firebase chat listener error:", error);
     });
+
+    // 2. Immediate child_changed for reactions, status, or edited text
+    activeRiderChatChangedListener = messagesQuery;
+    activeRiderChatChangedListener.on('child_changed', (childSnap) => {
+        if (activeRiderChatCustId !== custId) return;
+        const key = childSnap.key;
+        const msg = childSnap.val();
+        if (!key || !msg) return;
+
+        const fullMsg = { id: key, ...msg };
+        loadedRiderMsgsMap.set(key, fullMsg);
+
+        // Update RAM and IndexedDB
+        const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+        riderChatMemoryCache.set(custId, sortedMsgs);
+        idbSet('chats', custId, sortedMsgs).catch(() => {});
+
+        appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
+    });
+}
+
+/**
+ * Instant Bridge: When customerChatMeta receives an update for the currently active thread,
+ * immediately synchronizes the new message to eliminate any delay between feed and open thread.
+ */
+export function syncIncomingMessageFromMeta(custId, meta) {
+    if (!custId || activeRiderChatCustId !== custId || !db) return;
+    const container = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
+    if (!container) return;
+
+    const lastMsgTime = Number(meta.lastUpdated) || Number(meta.timestamp) || 0;
+    const msgs = Array.from(loadedRiderMsgsMap.values());
+    const newestLoadedTime = msgs.length > 0 ? Math.max(...msgs.map(m => getMessageTimestamp(m))) : 0;
+
+    // If metadata indicates a newer message than what we currently have in memory:
+    if (lastMsgTime > 0 && lastMsgTime > newestLoadedTime) {
+        db.ref(`customerChats/${custId}/messages`).limitToLast(2).once('value', (snap) => {
+            if (activeRiderChatCustId !== custId) return;
+            const data = snap.val();
+            if (data && typeof data === 'object') {
+                Object.entries(data).forEach(([key, msg]) => {
+                    if (!loadedRiderMsgsMap.has(key)) {
+                        const fullMsg = { id: key, ...msg };
+                        loadedRiderMsgsMap.set(key, fullMsg);
+                        appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
+                        requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+                    }
+                });
+            }
+        });
+    }
 }
 
 function setupRiderScrollPagination(container, custId) {
@@ -1384,6 +1412,7 @@ if (typeof window !== 'undefined') {
     window.listenToAllCustomerChatsForRider = listenToAllCustomerChatsForRider;
     window.listenToRiderChatMessages = listenToRiderChatMessages;
     window.reloadRiderChatFromFirebase = reloadRiderChatFromFirebase;
+    window.syncIncomingMessageFromMeta = syncIncomingMessageFromMeta;
     window.loadOlderRiderMessages = loadOlderRiderMessages;
     window.triggerLoadOlderRiderMessages = () => loadOlderRiderMessages(null, activeRiderChatCustId);
 

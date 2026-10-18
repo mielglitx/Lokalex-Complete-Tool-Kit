@@ -52,10 +52,15 @@ const fileBuffer = fs.readFileSync(zipPath);
 const checksum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 console.log(`🔑 SHA-256 Checksum: ${checksum}`);
 
+// Create versioned zip to completely bypass any Fastly/CDN edge caching of the zip file
+const versionedZipPath = path.join(outDir, `dist-v${targetVersion}.zip`);
+fs.copyFileSync(zipPath, versionedZipPath);
+
 // 4. Generate version.json
 const manifest = {
     version: targetVersion,
-    url: "https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist.zip",
+    url: `https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist-v${targetVersion}.zip`,
+    fallbackUrl: "https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist.zip",
     checksum: checksum,
     updatedAt: new Date().toISOString(),
     notes: process.argv[3] || "Bug fixes, performance improvements, and Messenger integration enhancements"
@@ -68,13 +73,13 @@ const zipStats = fs.statSync(zipPath);
 console.log(`\n✅ OTA Package successfully created!`);
 console.log(`📁 Files in ota-release/:`);
 console.log(`   - dist.zip (${(zipStats.size / 1024 / 1024).toFixed(2)} MB)`);
+console.log(`   - dist-v${targetVersion}.zip`);
 console.log(`   - version.json (v${targetVersion})`);
 console.log(`   - checksum: ${checksum}`);
 console.log(`\n🚀 NEXT STEP:`);
-console.log(`Push both files to https://github.com/mielglitx/LokalexOTAUpdate:`);
+console.log(`Push files to https://github.com/mielglitx/LokalexOTAUpdate:`);
 console.log(`   cd ota-release`);
-console.log(`   git init (or clone https://github.com/mielglitx/LokalexOTAUpdate)`);
-console.log(`   git add dist.zip version.json`);
+console.log(`   git add dist.zip dist-v${targetVersion}.zip version.json`);
 console.log(`   git commit -m "Release v${targetVersion}"`);
 console.log(`   git push origin main`);
 

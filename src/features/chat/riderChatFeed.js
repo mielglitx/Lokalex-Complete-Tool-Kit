@@ -1283,6 +1283,15 @@ function processCustomerChatMetaData(data, isFromCache = false) {
     if (activeRiderChatFilter !== 'stores') {
         renderRiderCustomerChatFeed();
     }
+
+    // Instant thread sync bridge: If a customer thread is currently open and received a new message, sync it now!
+    if (!isFromCache && typeof window !== 'undefined' && window.activeRiderChatCustId && typeof window.syncIncomingMessageFromMeta === 'function') {
+        const activeCustId = window.activeRiderChatCustId;
+        const matchingThread = allThreads.find(t => t.custId === activeCustId || t.id === activeCustId || isCustomerMatch(t.custId, activeCustId));
+        if (matchingThread) {
+            window.syncIncomingMessageFromMeta(activeCustId, matchingThread);
+        }
+    }
 }
 
 export function listenToAllCustomerChatsForRider() {
