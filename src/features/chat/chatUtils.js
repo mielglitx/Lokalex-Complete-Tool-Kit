@@ -71,6 +71,27 @@ export function formatChatDateParts(timestamp) {
     return { dateStr, timeStr };
 }
 
+export function getMessageTimestamp(msg) {
+    if (!msg) return 0;
+    if (msg.timestamp && typeof msg.timestamp === 'number') return msg.timestamp;
+    if (msg.timestamp && !isNaN(Number(msg.timestamp))) return Number(msg.timestamp);
+    if (msg.time && !isNaN(Number(msg.time))) return Number(msg.time);
+    if (msg.createdAt && !isNaN(Number(msg.createdAt))) return Number(msg.createdAt);
+    if (msg.created_time && !isNaN(Number(msg.created_time))) return Number(msg.created_time);
+    if (msg.id && typeof msg.id === 'string' && msg.id.startsWith('-')) {
+        try {
+            const PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
+            let time = 0;
+            for (let i = 1; i < 9; i++) {
+                const c = msg.id.charAt(i);
+                time = time * 64 + PUSH_CHARS.indexOf(c);
+            }
+            if (time > 0) return time;
+        } catch (_) {}
+    }
+    return 0;
+}
+
 // ============================================================================
 // 2. CATERING DROPDOWN POPULATOR (ACTIVE INBOX CHATS + DIRECTORY)
 // ============================================================================

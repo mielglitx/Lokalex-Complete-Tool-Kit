@@ -2,7 +2,7 @@
 import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { escapeHtml } from '../../utils/helpers.js';
-import { toggleBodyScroll } from './chatUtils.js';
+import { toggleBodyScroll, getMessageTimestamp } from './chatUtils.js';
 import { openMapPicker } from '../maps.js';
 import { showToast, showNativeNotification, clearNativeNotification } from '../../ui/notifications.js';
 import { uploadImage, dataUrlToBlob } from '../../utils/imageUpload.js';
@@ -41,6 +41,7 @@ let activeRiderChatChangedListener = null;
 let activeRiderChatMetaListener = null;
 let currentRiderChatMeta = null;
 let activeCustData = null;
+let openSessionTime = 0;
 
 let activeRiderReplyTarget = null;
 const RIDER_CHAT_BATCH_SIZE = 10; // Initial partial load: only 10 messages for lightning fast loading
@@ -54,22 +55,6 @@ let lastPaginationRequestTime = 0;
 let loadedRiderMsgsMap = new Map();
 const riderChatMemoryCache = new Map(); // Fast RAM cache: custId -> Array of messages
 
-function getMessageTimestamp(msg) {
-    if (msg.timestamp && typeof msg.timestamp === 'number') return msg.timestamp;
-    if (msg.timestamp && !isNaN(Number(msg.timestamp))) return Number(msg.timestamp);
-    if (msg.id && typeof msg.id === 'string' && msg.id.startsWith('-')) {
-        try {
-            const PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
-            let time = 0;
-            for (let i = 1; i < 9; i++) {
-                const c = msg.id.charAt(i);
-                time = time * 64 + PUSH_CHARS.indexOf(c);
-            }
-            if (time > 0) return time;
-        } catch (_) {}
-    }
-    return 0;
-}
 
 function sanitizeForFirebase(obj) {
     return JSON.parse(JSON.stringify(obj, (key, value) => {
@@ -92,6 +77,7 @@ export function openRiderChatModal(custId, custName) {
 
 export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
     activeRiderChatCustId = custId;
+    openSessionTime = Date.now();
     if (typeof window !== 'undefined') {
         window.activeRiderChatCustId = custId;
     }
@@ -337,7 +323,8 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
     const hasLocalRecord = Array.isArray(localMessages) && localMessages.length > 0;
 
     if (hasLocalRecord) {
-        // Fast initial render: only load the last 10 messages for lightning-fast UI presentation
+        // Fast initial render: strictly sort by timestamp first, then load the last 10 messages
+        localMessages.sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
         const initialChunk = localMessages.slice(-RIDER_CHAT_BATCH_SIZE);
         initialChunk.forEach(m => loadedRiderMsgsMap.set(m.id, m));
         hasMoreRiderMsgs = localMessages.length > initialChunk.length;
@@ -366,35 +353,42 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         </div>`;
     }
 
-    // Direct REST fast-fetch fallback with 10-message limit (useful on mobile networks before WebSocket establishes)
-    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChats/${encodeURIComponent(custId)}/messages.json?orderBy="$key"&limitToLast=10&t=${Date.now()}`;
+    // Direct REST fast-fetch fallback (useful on mobile networks before WebSocket establishes)
+    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChats/${encodeURIComponent(custId)}/messages.json?t=${Date.now()}`;
     fetch(directRestUrl, { cache: 'no-store' })
         .then(res => res.json())
         .then(data => {
             if (activeRiderChatCustId !== custId) return;
             if (data && typeof data === 'object') {
                 const entries = Object.entries(data);
-                if (entries.length > 0 && (!hasLocalRecord || loadedRiderMsgsMap.size < entries.length)) {
-                    entries.forEach(([key, msg]) => {
-                        loadedRiderMsgsMap.set(key, { id: key, ...msg });
-                    });
-                    const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-                    if (sortedMsgs.length > 0) {
-                        oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
-                        oldestRiderMsgKey = sortedMsgs[0].id || null;
+                if (entries.length > 0) {
+                    const allMsgs = entries
+                        .map(([key, msg]) => ({ id: key, ...msg }))
+                        .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+
+                    riderChatMemoryCache.set(custId, allMsgs);
+                    idbSet('chats', custId, allMsgs).catch(() => {});
+
+                    if (!hasLocalRecord || loadedRiderMsgsMap.size <= RIDER_CHAT_BATCH_SIZE) {
+                        const displayChunk = allMsgs.slice(-RIDER_CHAT_BATCH_SIZE);
+                        loadedRiderMsgsMap.clear();
+                        displayChunk.forEach(m => loadedRiderMsgsMap.set(m.id, m));
+                        hasMoreRiderMsgs = allMsgs.length > displayChunk.length;
+                        if (displayChunk.length > 0) {
+                            oldestRiderMsgTimestamp = getMessageTimestamp(displayChunk[0]);
+                            oldestRiderMsgKey = displayChunk[0].id || null;
+                        }
+                        renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, !isInitialScrollDone, 0, activeCustData);
+                        isInitialScrollDone = true;
+                        autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
                     }
-                    hasMoreRiderMsgs = entries.length >= 10;
-                    riderChatMemoryCache.set(custId, sortedMsgs);
-                    idbSet('chats', custId, sortedMsgs).catch(() => {});
-                    renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, !isInitialScrollDone, 0, activeCustData);
-                    isInitialScrollDone = true;
                 }
             }
         })
         .catch(() => {});
 
-    // Realtime Firebase connection using granular child_added and child_changed for ZERO DELAY (only last 10 messages)
-    const messagesQuery = db.ref(`customerChats/${custId}/messages`).limitToLast(10);
+    // Realtime Firebase connection
+    const messagesQuery = db.ref(`customerChats/${custId}/messages`);
 
     // Initial check for empty chat thread
     messagesQuery.once('value', (snapshot) => {
@@ -404,8 +398,15 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
             if (loadedRiderMsgsMap.size === 0) {
                 container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
             }
+            hasMoreRiderMsgs = false;
         } else {
-            hasMoreRiderMsgs = Object.keys(data).length >= 10;
+            const allMsgs = Object.entries(data)
+                .map(([key, msg]) => ({ id: key, ...msg }))
+                .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+
+            riderChatMemoryCache.set(custId, allMsgs);
+            idbSet('chats', custId, allMsgs).catch(() => {});
+            hasMoreRiderMsgs = allMsgs.length > loadedRiderMsgsMap.size;
         }
     });
 
@@ -417,18 +418,42 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         const msg = childSnap.val();
         if (!key || !msg) return;
 
-        const isNew = !loadedRiderMsgsMap.has(key);
         const fullMsg = { id: key, ...msg };
+        const msgTs = getMessageTimestamp(fullMsg);
+
+        // Keep master RAM cache & IndexedDB updated
+        let memCached = riderChatMemoryCache.get(custId) || [];
+        const existingIdx = memCached.findIndex(m => m.id === key);
+        if (existingIdx >= 0) {
+            memCached[existingIdx] = fullMsg;
+        } else {
+            memCached.push(fullMsg);
+        }
+        memCached.sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+        riderChatMemoryCache.set(custId, memCached);
+        idbSet('chats', custId, memCached).catch(() => {});
+
+        // If message is already rendered in the current DOM view:
+        if (loadedRiderMsgsMap.has(key)) {
+            loadedRiderMsgsMap.set(key, fullMsg);
+            appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
+            return;
+        }
+
+        // If initial 10-message slice is already rendered, check if this is an older historical message
+        if (isInitialScrollDone && oldestRiderMsgTimestamp && msgTs < oldestRiderMsgTimestamp && msgTs < (openSessionTime - 30000)) {
+            // Older message: leave in cache for scroll-up pagination, do not append to bottom of DOM
+            hasMoreRiderMsgs = true;
+            return;
+        }
+
+        const isNew = !loadedRiderMsgsMap.has(key);
         loadedRiderMsgsMap.set(key, fullMsg);
 
-        // Keep local memory and IndexedDB in sync
-        const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-        if (sortedMsgs.length > 0) {
-            oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
-            oldestRiderMsgKey = sortedMsgs[0].id || null;
+        if (oldestRiderMsgTimestamp === null || msgTs < oldestRiderMsgTimestamp) {
+            oldestRiderMsgTimestamp = msgTs;
+            oldestRiderMsgKey = key;
         }
-        riderChatMemoryCache.set(custId, sortedMsgs);
-        idbSet('chats', custId, sortedMsgs).catch(() => {});
 
         const isFromCustomer = !msg.isRider && msg.senderType !== 'rider';
 
@@ -482,14 +507,22 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         if (!key || !msg) return;
 
         const fullMsg = { id: key, ...msg };
-        loadedRiderMsgsMap.set(key, fullMsg);
 
-        // Update RAM and IndexedDB
-        const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-        riderChatMemoryCache.set(custId, sortedMsgs);
-        idbSet('chats', custId, sortedMsgs).catch(() => {});
+        let memCached = riderChatMemoryCache.get(custId) || [];
+        const existingIdx = memCached.findIndex(m => m.id === key);
+        if (existingIdx >= 0) {
+            memCached[existingIdx] = fullMsg;
+        } else {
+            memCached.push(fullMsg);
+        }
+        memCached.sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+        riderChatMemoryCache.set(custId, memCached);
+        idbSet('chats', custId, memCached).catch(() => {});
 
-        appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
+        if (loadedRiderMsgsMap.has(key)) {
+            loadedRiderMsgsMap.set(key, fullMsg);
+            appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
+        }
     });
 }
 
@@ -533,8 +566,7 @@ function setupRiderScrollPagination(container, custId) {
             container.scrollTop < 60 &&
             !isLoadingRiderHistory &&
             hasMoreRiderMsgs &&
-            oldestRiderMsgKey &&
-            (now - lastPaginationRequestTime > 500)
+            (now - lastPaginationRequestTime > 400)
         ) {
             lastPaginationRequestTime = now;
             loadOlderRiderMessages(container, custId);
@@ -552,83 +584,96 @@ export async function loadOlderRiderMessages(container, custId) {
         container = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
     }
     const targetCustId = custId || activeRiderChatCustId;
-    if (!container || !targetCustId || isLoadingRiderHistory || !hasMoreRiderMsgs || !oldestRiderMsgKey) return;
+    if (!container || !targetCustId || isLoadingRiderHistory || !hasMoreRiderMsgs) return;
 
     isLoadingRiderHistory = true;
     showRiderTopSpinner(container);
 
     const oldScrollHeight = container.scrollHeight;
 
-    // 1. Instant cache check: if we already have older messages in memory from IndexedDB, load the next 10 instantly
-    const memCached = riderChatMemoryCache.get(targetCustId) || [];
-    const unrenderedCached = memCached.filter(m => m && m.id && !loadedRiderMsgsMap.has(m.id));
-    if (unrenderedCached.length > 0) {
-        const nextBatch = unrenderedCached.slice(-RIDER_CHAT_OLDER_BATCH_SIZE);
-        nextBatch.forEach(m => loadedRiderMsgsMap.set(m.id, m));
-        const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-        if (sortedMsgs.length > 0) {
-            oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
-            oldestRiderMsgKey = sortedMsgs[0].id || null;
+    // 1. Instant cache check: if we already have older messages in memory from IndexedDB, load the previous 10 instantly
+    let memCached = riderChatMemoryCache.get(targetCustId);
+    if (!memCached || memCached.length === 0) {
+        try {
+            const idbCached = await idbGet('chats', targetCustId);
+            if (Array.isArray(idbCached) && idbCached.length > 0) {
+                memCached = idbCached;
+                riderChatMemoryCache.set(targetCustId, idbCached);
+            }
+        } catch (_) {}
+    }
+
+    if (Array.isArray(memCached) && memCached.length > 0) {
+        const unrenderedCached = memCached
+            .filter(m => m && m.id && !loadedRiderMsgsMap.has(m.id))
+            .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+
+        if (unrenderedCached.length > 0) {
+            const nextBatch = unrenderedCached.slice(-RIDER_CHAT_OLDER_BATCH_SIZE);
+            nextBatch.forEach(m => loadedRiderMsgsMap.set(m.id, m));
+            const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+            if (sortedMsgs.length > 0) {
+                oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
+                oldestRiderMsgKey = sortedMsgs[0].id || null;
+            }
+            hideRiderTopSpinner();
+            hasMoreRiderMsgs = unrenderedCached.length > nextBatch.length;
+            isLoadingRiderHistory = false;
+            renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, oldScrollHeight, activeCustData);
+            return;
         }
-        hideRiderTopSpinner();
-        hasMoreRiderMsgs = unrenderedCached.length > nextBatch.length || hasMoreRiderMsgs;
-        isLoadingRiderHistory = false;
-        renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, oldScrollHeight, activeCustData);
-        return;
     }
 
     try {
-        const snap = await db.ref(`customerChats/${targetCustId}/messages`)
-            .orderByKey()
-            .endAt(oldestRiderMsgKey)
-            .limitToLast(RIDER_CHAT_OLDER_BATCH_SIZE + 1)
-            .once('value');
-
+        const snap = await db.ref(`customerChats/${targetCustId}/messages`).once('value');
         const data = snap.val() || {};
         hideRiderTopSpinner();
 
-        // Omit the boundary key which is already loaded
-        if (data[oldestRiderMsgKey]) {
-            delete data[oldestRiderMsgKey];
-        }
+        const allMsgs = Object.entries(data)
+            .map(([key, msg]) => ({ id: key, ...msg }))
+            .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
 
-        const entries = Object.entries(data);
-        if (entries.length === 0) {
+        riderChatMemoryCache.set(targetCustId, allMsgs);
+        idbSet('chats', targetCustId, allMsgs).catch(() => {});
+
+        const unrendered = allMsgs
+            .filter(m => m && m.id && !loadedRiderMsgsMap.has(m.id))
+            .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+
+        if (unrendered.length === 0) {
             hasMoreRiderMsgs = false;
             isLoadingRiderHistory = false;
             renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, oldScrollHeight, activeCustData);
             return;
         }
 
-        if (entries.length < RIDER_CHAT_OLDER_BATCH_SIZE) {
-            hasMoreRiderMsgs = false;
-        }
+        const nextBatch = unrendered.slice(-RIDER_CHAT_OLDER_BATCH_SIZE);
+        nextBatch.forEach(m => loadedRiderMsgsMap.set(m.id, m));
 
-        entries.forEach(([key, msg]) => {
-            loadedRiderMsgsMap.set(key, { id: key, ...msg });
-
-            // Auto-resolve missing Facebook image attachment from Graph API
-            if (String(targetCustId).startsWith('fb_') && !msg.imageUrl && msg.text && (msg.text.includes('[Facebook image]') || msg.text.includes('[Facebook attachment]'))) {
-                resolveFacebookMessageAttachment(targetCustId, key, msg.mid || key).then(url => {
-                    if (url && activeRiderChatCustId === targetCustId) {
-                        const existing = loadedRiderMsgsMap.get(key);
-                        if (existing) {
-                            existing.imageUrl = url;
-                            existing.type = 'image';
-                            renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, 0, activeCustData);
+        // Auto-resolve missing Facebook image attachment from Graph API for newly loaded history
+        if (String(targetCustId).startsWith('fb_')) {
+            nextBatch.forEach(msg => {
+                if (!msg.imageUrl && msg.text && (msg.text.includes('[Facebook image]') || msg.text.includes('[Facebook attachment]'))) {
+                    resolveFacebookMessageAttachment(targetCustId, msg.id, msg.mid || msg.id).then(url => {
+                        if (url && activeRiderChatCustId === targetCustId) {
+                            const existing = loadedRiderMsgsMap.get(msg.id);
+                            if (existing) {
+                                existing.imageUrl = url;
+                                existing.type = 'image';
+                                renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, 0, activeCustData);
+                            }
                         }
-                    }
-                }).catch(() => {});
-            }
-        });
+                    }).catch(() => {});
+                }
+            });
+        }
 
         const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
         if (sortedMsgs.length > 0) {
             oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
             oldestRiderMsgKey = sortedMsgs[0].id || null;
-            riderChatMemoryCache.set(targetCustId, sortedMsgs);
-            idbSet('chats', targetCustId, sortedMsgs).catch(() => {});
         }
+        hasMoreRiderMsgs = unrendered.length > nextBatch.length;
 
         renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, oldScrollHeight, activeCustData);
     } catch (e) {

@@ -4,7 +4,7 @@ import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { escapeHtml } from '../../utils/helpers.js';
 import { isRiderMatch } from '../roster/rosterUtils.js';
-import { formatChatDateTime } from './chatUtils.js';
+import { formatChatDateTime, getMessageTimestamp } from './chatUtils.js';
 import { showToast } from '../../ui/notifications.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
 
@@ -543,8 +543,10 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const isPlaceholderText = m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]') || m.text === '📷 Photo' || m.text === 'Facebook Message');
     const showText = m.text && (!imgHtml || !isPlaceholderText) && !isResolvingFbImage && !locationHtml && !(isLikeSticker && imgHtml);
 
+    const msgTs = getMessageTimestamp(m);
+
     return `
-    <div id="msg-bubble-${m.id}" class="flex items-start gap-1.5 ${isRider ? 'flex-row-reverse' : 'flex-row'} my-0.5">
+    <div id="msg-bubble-${m.id}" data-timestamp="${msgTs}" class="flex items-start gap-1.5 ${isRider ? 'flex-row-reverse' : 'flex-row'} my-0.5">
         <img src="${senderAvatar}" loading="lazy" decoding="async" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1 pointer-events-none">
         <div 
             onpointerdown="window.handleMsgPointerDown(event, '${m.id}', 'rider-cust', '${encodedText}', '${encodedSender}')"
@@ -587,21 +589,28 @@ export function appendOrUpdateSingleRiderMessage(container, msg, activeCustData 
     if (existingBubble) {
         existingBubble.replaceWith(newBubble);
     } else {
-        container.appendChild(newBubble);
+        const newTs = getMessageTimestamp(msg);
+        const bubbles = Array.from(container.querySelectorAll('[data-timestamp]'));
+        const nextBubble = bubbles.find(b => (Number(b.dataset.timestamp) || 0) > newTs);
+        if (nextBubble) {
+            container.insertBefore(newBubble, nextBubble);
+        } else {
+            container.appendChild(newBubble);
+        }
     }
 }
 
 export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, isInitialLoad = false, oldScrollHeight = 0, activeCustData = null) {
     const msgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => {
-        const tA = Number(a.timestamp) || 0;
-        const tB = Number(b.timestamp) || 0;
+        const tA = getMessageTimestamp(a);
+        const tB = getMessageTimestamp(b);
         if (tA !== tB) return tA - tB;
         return String(a.id || '').localeCompare(String(b.id || ''));
     });
     const messagesHtml = msgs.map(m => buildSingleMessageHtml(m, activeCustData)).join('');
 
     let topHeader = '';
-    if (hasMoreRiderMsgs && msgs.length >= 15) {
+    if (hasMoreRiderMsgs) {
         topHeader = `
         <div class="flex justify-center my-1.5 shrink-0">
             <button type="button" onclick="window.triggerLoadOlderRiderMessages && window.triggerLoadOlderRiderMessages()" class="px-3 py-1 bg-white dark:bg-cardBg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-full text-[11px] font-semibold border border-gray-200 dark:border-gray-700 shadow-2xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer">
@@ -609,7 +618,7 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
                 <span>Load older messages</span>
             </button>
         </div>`;
-    } else if (!hasMoreRiderMsgs) {
+    } else {
         topHeader = `<div class="text-center text-gray-400 dark:text-gray-500 text-[10px] py-1.5 italic shrink-0">Beginning of message history</div>`;
     }
 
