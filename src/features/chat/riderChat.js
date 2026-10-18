@@ -7,7 +7,7 @@ import { openMapPicker } from '../maps.js';
 import { showToast, showNativeNotification, clearNativeNotification } from '../../ui/notifications.js';
 import { uploadImage, dataUrlToBlob } from '../../utils/imageUpload.js';
 import { highlightActiveMilestoneUI } from './riderThreadActions.js';
-import { isAdmin, canManageRoster } from '../roster/rosterUtils.js';
+import { isAdmin, canManageRoster, isCustomerMatch } from '../roster/rosterUtils.js';
 import { 
     showRiderInChatToast, 
     hideRiderInChatToast, 
@@ -54,7 +54,42 @@ let isInitialScrollDone = false;
 let lastPaginationRequestTime = 0;
 let loadedRiderMsgsMap = new Map();
 const riderChatMemoryCache = new Map(); // Fast RAM cache: custId -> Array of messages
+const threadDraftsMap = new Map(); // Thread-specific input drafts: custId -> text
 
+export function saveCurrentThreadDraft(targetCustId = null) {
+    const custId = targetCustId || activeRiderChatCustId;
+    if (!custId) return;
+    const input = document.getElementById('rider-chat-input') || document.getElementById('rider-cust-chat-input');
+    if (input) {
+        const val = input.value;
+        if (typeof val === 'string' && val.trim().length > 0) {
+            threadDraftsMap.set(custId, val);
+        } else {
+            threadDraftsMap.delete(custId);
+        }
+    }
+}
+
+export function restoreThreadDraft(targetCustId) {
+    const input = document.getElementById('rider-chat-input') || document.getElementById('rider-cust-chat-input');
+    if (input) {
+        const draft = (targetCustId && threadDraftsMap.get(targetCustId)) ? threadDraftsMap.get(targetCustId) : "";
+        input.value = draft;
+        input.style.height = 'auto';
+        if (draft) {
+            input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+        }
+    }
+}
+
+export function handleRiderChatInputDraft(val) {
+    if (!activeRiderChatCustId) return;
+    if (typeof val === 'string' && val.trim().length > 0) {
+        threadDraftsMap.set(activeRiderChatCustId, val);
+    } else {
+        threadDraftsMap.delete(activeRiderChatCustId);
+    }
+}
 
 function sanitizeForFirebase(obj) {
     return JSON.parse(JSON.stringify(obj, (key, value) => {
@@ -76,12 +111,18 @@ export function openRiderChatModal(custId, custName) {
 }
 
 export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
+    if (activeRiderChatCustId && activeRiderChatCustId !== custId) {
+        saveCurrentThreadDraft(activeRiderChatCustId);
+    }
+
     activeRiderChatCustId = custId;
     openSessionTime = Date.now();
     if (typeof window !== 'undefined') {
         window.activeRiderChatCustId = custId;
     }
     activeCustData = null;
+
+    restoreThreadDraft(custId);
 
     if (custId) {
         clearNativeNotification('chat_' + custId);
@@ -971,6 +1012,15 @@ export function closeRiderChatModal() {
 }
 
 export function closeRiderCustomerChatModal() {
+    if (activeRiderChatCustId) {
+        saveCurrentThreadDraft(activeRiderChatCustId);
+    }
+    const input = document.getElementById('rider-chat-input') || document.getElementById('rider-cust-chat-input');
+    if (input) {
+        input.value = "";
+        input.style.height = 'auto';
+    }
+
     const modal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
     if (modal) {
         modal.classList.add('hidden');
@@ -1010,34 +1060,83 @@ export function closeRiderCustomerChatModal() {
     }
 }
 
-export function sendRiderChatMessage(content = null, type = 'text') {
-    sendRiderToCustomerChat(content, type === 'image' ? content : null);
+export function sendRiderChatMessage(content = null, type = 'text', explicitCustId = null) {
+    sendRiderToCustomerChat(content, type === 'image' ? content : null, null, explicitCustId);
 }
 
-export async function sendRiderToCustomerChat(customText = "", customImageUrl = null, customLocationCoords = null) {
+export async function sendRiderToCustomerChat(customText = "", customImageUrl = null, customLocationCoords = null, explicitCustId = null) {
+    // Freeze target customer ID immediately so background operations never divert to another thread!
+    const targetCustId = explicitCustId || activeRiderChatCustId;
+    if (!targetCustId) return;
+
     const input1 = document.getElementById('rider-chat-input');
     const input2 = document.getElementById('rider-cust-chat-input');
     const val1 = input1 ? input1.value.trim() : "";
     const val2 = input2 ? input2.value.trim() : "";
-    const text = (typeof customText === 'string' && customText.trim()) ? customText.trim() : (val1 || val2);
+    const savedDraft = threadDraftsMap.get(targetCustId) || "";
+    const text = (typeof customText === 'string' && customText.trim()) ? customText.trim() : (val1 || val2 || savedDraft);
 
-    if ((!text && !customImageUrl && !customLocationCoords) || !activeRiderChatCustId) return;
+    if (!text && !customImageUrl && !customLocationCoords) return;
 
-    const riderName = appState.riderName || "Lokalex Rider";
+    // Clear inputs and remove draft for target thread immediately
+    if (!customText) {
+        if (targetCustId === activeRiderChatCustId) {
+            if (input1) {
+                input1.value = "";
+                input1.style.height = 'auto';
+            }
+            if (input2) {
+                input2.value = "";
+                input2.style.height = 'auto';
+            }
+        }
+    }
+    threadDraftsMap.delete(targetCustId);
+
+    // Freeze reply target snapshot
+    const replyTargetSnapshot = (targetCustId === activeRiderChatCustId && activeRiderReplyTarget)
+        ? { ...activeRiderReplyTarget }
+        : null;
+    if (targetCustId === activeRiderChatCustId) {
+        cancelRiderReply();
+    }
+
+    // Freeze metadata snapshot
+    let targetMeta = null;
+    if (targetCustId === activeRiderChatCustId && currentRiderChatMeta) {
+        targetMeta = { ...currentRiderChatMeta };
+    } else if (typeof window.getCachedCustomerThreadsMap === 'function') {
+        const tMap = window.getCachedCustomerThreadsMap();
+        if (tMap && tMap.has(targetCustId)) targetMeta = { ...tMap.get(targetCustId) };
+    }
+    if (!targetMeta && db) {
+        try {
+            const mSnap = await db.ref(`customerChatMeta/${targetCustId}`).once('value');
+            if (mSnap.exists()) targetMeta = mSnap.val();
+        } catch (_) {}
+    }
+
+    const targetCustDataSnapshot = (targetCustId === activeRiderChatCustId && activeCustData)
+        ? { ...activeCustData }
+        : null;
+
+    const riderName = appState.riderName || localStorage.getItem('riderName') || "Lokalex Rider";
     const now = Date.now();
 
+    // Isolated photo upload for target customer thread
     let finalImageUrl = customImageUrl;
     if (customImageUrl && customImageUrl.startsWith('data:')) {
         showToast("⏳ Uploading photo...");
         try {
-            finalImageUrl = await uploadImage(customImageUrl, `chats/${activeRiderChatCustId}/${now}.jpg`);
+            finalImageUrl = await uploadImage(customImageUrl, `chats/${targetCustId}/${now}.jpg`);
         } catch (e) {
             console.warn("Chat image upload fallback:", e);
         }
     }
 
-    const targetChannel = currentRiderChatMeta?.channel || (activeRiderChatCustId?.startsWith('fb_') ? 'messenger' : 'web');
-    const targetApiId = currentRiderChatMeta?.apiId || currentRiderChatMeta?.channelId || null;
+    const isFb = String(targetCustId).startsWith('fb_');
+    const targetChannel = targetMeta?.channel || (isFb ? 'messenger' : 'web');
+    const targetApiId = targetMeta?.apiId || targetMeta?.channelId || null;
     const myPhoto = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || null;
 
     const newMsg = {
@@ -1055,11 +1154,11 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
         seenAt: null
     };
 
-    if (activeRiderReplyTarget) {
-        const targetText = activeRiderReplyTarget.text || (activeRiderReplyTarget.imageUrl ? "📷 Photo" : (activeRiderReplyTarget.locationCoords ? "📍 Location" : "Message"));
+    if (replyTargetSnapshot) {
+        const targetText = replyTargetSnapshot.text || (replyTargetSnapshot.imageUrl ? "📷 Photo" : (replyTargetSnapshot.locationCoords ? "📍 Location" : "Message"));
         newMsg.replyTo = {
-            id: activeRiderReplyTarget.id,
-            sender: activeRiderReplyTarget.sender || "User",
+            id: replyTargetSnapshot.id,
+            sender: replyTargetSnapshot.sender || "User",
             text: String(targetText).substring(0, 120)
         };
     }
@@ -1076,24 +1175,33 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
     let newMsgKey = null;
     if (db) {
         try {
-            const pushRef = db.ref(`customerChats/${activeRiderChatCustId}/messages`).push();
+            const pushRef = db.ref(`customerChats/${targetCustId}/messages`).push();
             newMsgKey = pushRef ? pushRef.key : null;
             if (pushRef) {
                 await pushRef.set(sanitizeForFirebase(newMsg));
             }
             if (newMsgKey) {
                 const fullNewMsg = { id: newMsgKey, ...newMsg };
-                loadedRiderMsgsMap.set(newMsgKey, fullNewMsg);
-                const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-                riderChatMemoryCache.set(activeRiderChatCustId, sortedMsgs);
-                idbSet('chats', activeRiderChatCustId, sortedMsgs).catch(() => {});
-                const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
-                if (container) {
-                    appendOrUpdateSingleRiderMessage(container, fullNewMsg, activeCustData);
-                    requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+
+                // Always update persistent cache for this customer
+                let targetMemCached = riderChatMemoryCache.get(targetCustId);
+                if (!Array.isArray(targetMemCached)) targetMemCached = [];
+                targetMemCached.push(fullNewMsg);
+                targetMemCached.sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+                riderChatMemoryCache.set(targetCustId, targetMemCached);
+                idbSet('chats', targetCustId, targetMemCached).catch(() => {});
+
+                // Update active viewing container if rider is still in this thread
+                if (activeRiderChatCustId === targetCustId) {
+                    loadedRiderMsgsMap.set(newMsgKey, fullNewMsg);
+                    const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
+                    if (container) {
+                        appendOrUpdateSingleRiderMessage(container, fullNewMsg, activeCustData);
+                        requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+                    }
                 }
             }
-            const currentName = activeCustData?.name || activeCustData?.customerName || currentRiderChatMeta?.customerName;
+            const currentName = targetCustDataSnapshot?.name || targetCustDataSnapshot?.customerName || targetMeta?.customerName;
             const metaPayload = sanitizeForFirebase({
                 lastMessage: `You: ${text || (finalImageUrl ? "📷 Photo" : "📍 Location")}`,
                 lastUpdated: now,
@@ -1101,52 +1209,37 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
             });
             if (currentName) {
                 metaPayload.customerName = currentName;
-            } else if (activeRiderChatCustId && activeRiderChatCustId.startsWith('cust_')) {
-                const ext = activeRiderChatCustId.replace(/^cust_/, '').replace(/_/g, ' ').trim();
+            } else if (targetCustId.startsWith('cust_')) {
+                const ext = targetCustId.replace(/^cust_/, '').replace(/_/g, ' ').trim();
                 if (ext) metaPayload.customerName = ext.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
             }
             await Promise.all([
-                db.ref(`customerChats/${activeRiderChatCustId}/metadata`).update(metaPayload),
-                db.ref(`customerChatMeta/${activeRiderChatCustId}`).update(metaPayload)
+                db.ref(`customerChats/${targetCustId}/metadata`).update(metaPayload),
+                db.ref(`customerChatMeta/${targetCustId}`).update(metaPayload)
             ]).catch(() => {});
         } catch (dbErr) {
             console.warn("Failed pushing chat message to db:", dbErr);
         }
     }
 
-    const targetMsg = activeRiderReplyTarget?.id ? loadedRiderMsgsMap.get(activeRiderReplyTarget.id) : null;
-    let replyTargetMid = targetMsg?.metaMid || targetMsg?.mid || activeRiderReplyTarget?.metaMid || activeRiderReplyTarget?.mid || activeRiderReplyTarget?.id || null;
-    if (replyTargetMid && replyTargetMid.startsWith('mid__')) {
-        replyTargetMid = replyTargetMid.replace(/^mid__/, 'mid.$');
-    }
-    const replyTargetText = activeRiderReplyTarget?.text || targetMsg?.text || (activeRiderReplyTarget?.imageUrl ? "📷 Photo" : "");
+    const replyTargetMid = replyTargetSnapshot?.metaMid || replyTargetSnapshot?.mid || replyTargetSnapshot?.id || null;
+    const cleanReplyMid = (replyTargetMid && replyTargetMid.startsWith('mid__')) ? replyTargetMid.replace(/^mid__/, 'mid.$') : replyTargetMid;
+    const replyTargetText = replyTargetSnapshot?.text || (replyTargetSnapshot?.imageUrl ? "📷 Photo" : "");
 
     // Forward reply to Facebook Messenger customer if thread is from Facebook
-    if (targetChannel === 'messenger' || String(activeRiderChatCustId).startsWith('fb_')) {
+    if (targetChannel === 'messenger' || isFb) {
         forwardRiderReplyToMessenger({
-            custId: activeRiderChatCustId,
+            custId: targetCustId,
             apiId: targetApiId,
             text: text,
             imageUrl: finalImageUrl,
             locationCoords: customLocationCoords,
             riderName: riderName,
-            replyToMid: replyTargetMid,
+            replyToMid: cleanReplyMid,
             replyToText: replyTargetText,
             newMsgKey: newMsgKey
         }).catch(err => console.warn("forwardRiderReplyToMessenger error:", err));
     }
-
-    if (!customText) {
-        if (input1) {
-            input1.value = "";
-            input1.style.height = 'auto';
-        }
-        if (input2) {
-            input2.value = "";
-            input2.style.height = 'auto';
-        }
-    }
-    cancelRiderReply();
 
     hideRiderInChatToast();
 
@@ -1679,29 +1772,176 @@ export function sendRiderLocation() {
 
 export async function promptRenameCustomerChat() {
     if (!activeRiderChatCustId) return;
-    const currentName = document.getElementById('rider-chat-cust-name')?.innerText || "";
+    const nameEl = document.getElementById('rider-chat-cust-name');
+    let currentName = nameEl?.innerText?.trim() || "";
+    if (currentName === 'Customer Name' || currentName.startsWith('FB Customer (')) {
+        currentName = currentRiderChatMeta?.customerName || currentName;
+    }
+
     const newName = prompt("I-edit ang pangalan ng Customer:", currentName);
     if (!newName || !newName.trim() || newName.trim() === currentName.trim()) return;
 
     const cleanName = newName.trim();
     const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=0084FF&color=fff`;
 
-    if (db && activeRiderChatCustId) {
-        await Promise.all([
-            db.ref(`customerChatMeta/${activeRiderChatCustId}`).update({
-                customerName: cleanName,
-                avatarUrl: avatar
-            }),
-            db.ref(`customerChats/${activeRiderChatCustId}/metadata`).update({
-                customerName: cleanName,
-                avatarUrl: avatar
-            })
-        ]).catch(() => {});
-        
-        const nameEl = document.getElementById('rider-chat-cust-name');
-        if (nameEl) nameEl.innerText = cleanName;
-        showToast(`✅ Na-update ang pangalan: ${cleanName}`);
+    // 1. Update in-memory metadata & DOM immediately
+    if (currentRiderChatMeta) {
+        currentRiderChatMeta.customerName = cleanName;
+        currentRiderChatMeta.avatarUrl = avatar;
     }
+    if (nameEl) nameEl.innerText = cleanName;
+    const avatarEl = document.getElementById('rider-chat-avatar') || document.getElementById('rider-chat-cust-avatar');
+    if (avatarEl) {
+        if (avatarEl.tagName === 'IMG') avatarEl.src = avatar;
+        else avatarEl.innerHTML = `<img src="${avatar}" class="w-full h-full rounded-full object-cover">`;
+    }
+
+    // 2. If thread is cached, update in-memory thread map
+    if (typeof window.getCachedCustomerThreadsMap === 'function') {
+        const threadMap = window.getCachedCustomerThreadsMap();
+        if (threadMap) {
+            if (threadMap.has(activeRiderChatCustId)) {
+                const t = threadMap.get(activeRiderChatCustId);
+                t.customerName = cleanName;
+                t.name = cleanName;
+                t.avatarUrl = avatar;
+            }
+        }
+    }
+
+    // 3. If Facebook thread, update local FB name cache so it doesn't get reverted
+    if (activeRiderChatCustId.startsWith('fb_')) {
+        try {
+            const rawCache = localStorage.getItem('fb_name_cache_v2');
+            const cache = rawCache ? JSON.parse(rawCache) : {};
+            cache[activeRiderChatCustId] = { name: cleanName, avatarUrl: avatar, timestamp: Date.now() };
+            localStorage.setItem('fb_name_cache_v2', JSON.stringify(cache));
+        } catch (_) {}
+    }
+
+    // 4. Update customerChats metadata and customerChatMeta in Firebase RTDB
+    const batchUpdates = {};
+    batchUpdates[`customerChatMeta/${activeRiderChatCustId}/customerName`] = cleanName;
+    batchUpdates[`customerChatMeta/${activeRiderChatCustId}/avatarUrl`] = avatar;
+    batchUpdates[`customerChatMeta/${activeRiderChatCustId}/lastUpdated`] = Date.now();
+    batchUpdates[`customerChats/${activeRiderChatCustId}/metadata/customerName`] = cleanName;
+    batchUpdates[`customerChats/${activeRiderChatCustId}/metadata/avatarUrl`] = avatar;
+    batchUpdates[`customerChats/${activeRiderChatCustId}/metadata/lastUpdated`] = Date.now();
+    batchUpdates[`customers/${activeRiderChatCustId}/name`] = cleanName;
+    batchUpdates[`customers/${activeRiderChatCustId}/customerName`] = cleanName;
+
+    // 5. CRITICAL FIX FOR CATERED CUSTOMERS:
+    // Update the catering rider's customerName on the live roster so it doesn't get de-synced or locked out!
+    const liveRoster = globalState.rosterMembers || [];
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+    const cateredRiderId = (currentRiderChatMeta?.cateredByRiderId || "").toString().trim();
+    const cateredRiderName = (currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredBy || "").toString().trim().toLowerCase();
+
+    // Find the catering rider (first check myself, then meta.cateredByRiderId, then scan roster)
+    const cateringRider = liveRoster.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        if (cateredRiderId && mId === cateredRiderId) return true;
+        if (cateredRiderName && mName === cateredRiderName) return true;
+        if (myId && mId === myId && m.status === 'Catering') return true;
+        if (m.customerName) {
+            const custs = m.customerName.split(', ').map(c => c.trim().toLowerCase());
+            if (custs.includes(currentName.toLowerCase()) || (typeof isCustomerMatch === 'function' && custs.some(c => isCustomerMatch(c, currentName)))) return true;
+        }
+        return false;
+    });
+
+    if (cateringRider) {
+        const targetRiderId = cateringRider.telegramId || cateringRider.id || myId;
+        let existingCusts = (cateringRider.customerName || "").split(', ').map(c => c.trim()).filter(Boolean);
+        let replaced = false;
+        existingCusts = existingCusts.map(c => {
+            if (c.toLowerCase() === currentName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(c, currentName))) {
+                replaced = true;
+                return cleanName;
+            }
+            return c;
+        });
+
+        if (!replaced) {
+            if (existingCusts.length === 1 && (existingCusts[0].toLowerCase() === 'customer' || existingCusts[0].startsWith('FB Customer ('))) {
+                existingCusts = [cleanName];
+            } else if (!existingCusts.some(c => c.toLowerCase() === cleanName.toLowerCase())) {
+                existingCusts.push(cleanName);
+            }
+        }
+
+        const newRosterCustString = existingCusts.join(', ');
+        cateringRider.customerName = newRosterCustString;
+        if (targetRiderId) {
+            batchUpdates[`roster/${targetRiderId}/customerName`] = newRosterCustString;
+
+            // Migrate customerFees if keyed by old customer name
+            if (cateringRider.customerFees) {
+                const oldCleanKey = currentName.toLowerCase().trim();
+                const newCleanKey = cleanName.toLowerCase().trim();
+                if (cateringRider.customerFees[oldCleanKey]) {
+                    const feeVal = cateringRider.customerFees[oldCleanKey];
+                    cateringRider.customerFees[newCleanKey] = feeVal;
+                    batchUpdates[`roster/${targetRiderId}/customerFees/${newCleanKey}`] = feeVal;
+                    delete cateringRider.customerFees[oldCleanKey];
+                }
+            }
+
+            // Update forcedCaters if present
+            if (cateringRider.forcedCaters && typeof cateringRider.forcedCaters === 'object') {
+                for (const [fcKey, fcVal] of Object.entries(cateringRider.forcedCaters)) {
+                    if (fcKey === activeRiderChatCustId || (fcVal && fcVal.customerName && isCustomerMatch(fcVal.customerName, currentName))) {
+                        batchUpdates[`roster/${targetRiderId}/forcedCaters/${fcKey}/customerName`] = cleanName;
+                    }
+                }
+            }
+        }
+    }
+
+    // 6. Update active order customerName if linked
+    const orderId = currentRiderChatMeta?.latestOrderId;
+    if (orderId) {
+        batchUpdates[`orders/${cleanFirebasePathKey(orderId)}/customerName`] = cleanName;
+    }
+
+    // 7. Update Cart slot customer name if present in localStorage
+    try {
+        for (let i = 1; i <= 5; i++) {
+            const slotKey = `cart_customer_slot_${i}`;
+            const val = localStorage.getItem(slotKey);
+            if (val && (val.toLowerCase() === currentName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(val, currentName)))) {
+                localStorage.setItem(slotKey, cleanName);
+            }
+        }
+        const generalCust = localStorage.getItem('cart_customer_name');
+        if (generalCust && (generalCust.toLowerCase() === currentName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(generalCust, currentName)))) {
+            localStorage.setItem('cart_customer_name', cleanName);
+        }
+    } catch (_) {}
+
+    // 8. Execute batch updates to Firebase RTDB
+    if (db) {
+        try {
+            await db.ref().update(batchUpdates);
+        } catch (e) {
+            console.warn("Rename customer batch update error:", e);
+            for (const [path, val] of Object.entries(batchUpdates)) {
+                db.ref(path).set(val).catch(() => {});
+            }
+        }
+    }
+
+    // 9. Re-evaluate lock permissions and refresh UI
+    evaluateRiderChatLockPermissions();
+    if (typeof window.renderRiderCustomerChatFeed === 'function') {
+        window.renderRiderCustomerChatFeed();
+    }
+    if (typeof window.updateRosterUI === 'function') {
+        window.updateRosterUI();
+    }
+    showToast(`✅ Na-update ang pangalan: ${cleanName}`);
 }
 
 if (typeof window !== 'undefined') {
@@ -1735,6 +1975,9 @@ if (typeof window !== 'undefined') {
     window.loadOlderRiderMessages = loadOlderRiderMessages;
     window.triggerLoadOlderRiderMessages = () => loadOlderRiderMessages(null, activeRiderChatCustId);
     window.syncApplicantUI = syncApplicantUI;
+    window.saveCurrentThreadDraft = saveCurrentThreadDraft;
+    window.restoreThreadDraft = restoreThreadDraft;
+    window.handleRiderChatInputDraft = handleRiderChatInputDraft;
 
     listenToGlobalStoreChats();
 
@@ -1742,6 +1985,15 @@ if (typeof window !== 'undefined') {
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && activeRiderChatCustId) {
                 clearNativeNotification('chat_' + activeRiderChatCustId);
+            }
+        });
+
+        // Track user typing in real-time for active thread draft
+        document.addEventListener('input', (e) => {
+            if (e.target && (e.target.id === 'rider-chat-input' || e.target.id === 'rider-cust-chat-input')) {
+                if (activeRiderChatCustId) {
+                    handleRiderChatInputDraft(e.target.value);
+                }
             }
         });
     }

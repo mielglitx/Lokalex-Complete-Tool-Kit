@@ -18,6 +18,7 @@ let editorBaseImage = null;
 let editorDrawingCanvas = null;
 let editorDrawingCtx = null;
 let editorTargetType = 'customer';
+let editorTargetCustId = null;
 let isDrawingOnCanvas = false;
 let isDraggingText = false;
 let selectedTextIndex = -1;
@@ -227,6 +228,7 @@ export function commitCanvasInlineText() {
 export function openImageEditorModal(fileOrImg, targetType = 'customer') {
     if (!fileOrImg) return;
     editorTargetType = targetType;
+    editorTargetCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
 
     if (fileOrImg instanceof HTMLImageElement) {
         editorBaseImage = fileOrImg;
@@ -596,9 +598,9 @@ export async function exportAndSendEditedImage() {
 
     const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
 
-    if (activeCustId || targetType === 'rider') {
+    if (activeCustId || targetType === 'rider' || editorTargetCustId) {
         if (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function') {
-            await window.sendRiderToCustomerChat("", finalImageUrl);
+            await window.sendRiderToCustomerChat("", finalImageUrl, null, editorTargetCustId || activeCustId);
         }
     } else if (targetType === 'customer') {
         if (window.sendCustomerToRiderChat && typeof window.sendCustomerToRiderChat === 'function') {

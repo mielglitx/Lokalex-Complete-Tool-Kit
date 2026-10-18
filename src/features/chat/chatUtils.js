@@ -335,6 +335,7 @@ export function triggerImageCapture(sourceType) {
 export async function handleChatImageUpload(inputEl) {
     const files = Array.from(inputEl?.files || []);
     if (files.length === 0) return;
+    const targetCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
 
     const total = files.length;
     try {
@@ -355,9 +356,8 @@ export async function handleChatImageUpload(inputEl) {
                 });
 
                 if (base64Img) {
-                    const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
-                    if (activeCustId || (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function')) {
-                        await window.sendRiderToCustomerChat("", base64Img);
+                    if (targetCustId || (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function')) {
+                        await window.sendRiderToCustomerChat("", base64Img, null, targetCustId);
                     } else if (window.sendCustomerToRiderChat && typeof window.sendCustomerToRiderChat === 'function') {
                         await window.sendCustomerToRiderChat("", base64Img);
                     }
@@ -373,9 +373,8 @@ export async function handleChatImageUpload(inputEl) {
             });
 
             if (base64Img) {
-                const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
-                if (activeCustId || (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function')) {
-                    await window.sendRiderToCustomerChat("", base64Img);
+                if (targetCustId || (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function')) {
+                    await window.sendRiderToCustomerChat("", base64Img, null, targetCustId);
                 } else if (window.sendCustomerToRiderChat && typeof window.sendCustomerToRiderChat === 'function') {
                     await window.sendCustomerToRiderChat("", base64Img);
                 }

@@ -310,6 +310,7 @@ export function initMapSearchAutocomplete() {
 
 export async function openMapPicker(context = 'form') {
     mapState.mapPickerContext = context;
+    mapState.mapPickerTargetCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
 
     // Reset manual pin state for clean session calibration
     clearManualPin();
@@ -490,7 +491,7 @@ export function confirmGoogleMapPin() {
     } else if (mapState.mapPickerContext === 'rider-chat') {
         goBack();
         if (typeof sendRiderToCustomerChat === 'function') {
-            sendRiderToCustomerChat("Shared Rider Location", null, { lat: targetLat, lng: targetLng });
+            sendRiderToCustomerChat("Shared Rider Location", null, { lat: targetLat, lng: targetLng }, mapState.mapPickerTargetCustId);
         }
         showToast(`📍 ${captureLabel} location sent to chat!`);
     } else if (mapState.mapPickerContext === 'registration') {
