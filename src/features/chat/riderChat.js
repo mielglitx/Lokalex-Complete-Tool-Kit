@@ -1048,24 +1048,44 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
  * Directly sends a menu photo to a specific customer thread (Firebase RTDB + Messenger)
  */
 export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, captionText = "") {
-    if (!targetCustId || !imageUrl || !db) return false;
+    const cleanCustId = String(targetCustId || '').trim();
+    if (!cleanCustId || cleanCustId === 'undefined' || cleanCustId === 'null' || !imageUrl || !db) {
+        console.warn("[MenuSend] Aborted: Invalid targetCustId or imageUrl:", { targetCustId, imageUrl });
+        return false;
+    }
+
     const riderName = appState.riderName || localStorage.getItem('riderName') || "Lokalex Rider";
     const now = Date.now();
     const myPhoto = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || null;
 
-    const isFb = String(targetCustId).startsWith('fb_');
+    const isFb = cleanCustId.startsWith('fb_');
     const targetChannel = isFb ? 'messenger' : 'web';
 
     let targetApiId = null;
     let custName = null;
     try {
-        const metaSnap = await db.ref(`customerChatMeta/${targetCustId}`).once('value');
+        const metaSnap = await db.ref(`customerChatMeta/${cleanCustId}`).once('value');
         if (metaSnap.exists()) {
             const m = metaSnap.val();
             targetApiId = m.apiId || m.channelId || null;
             custName = m.customerName || m.name || null;
         }
     } catch(e) {}
+
+    if (!targetApiId) {
+        try {
+            const chatMetaSnap = await db.ref(`customerChats/${cleanCustId}/metadata`).once('value');
+            if (chatMetaSnap.exists()) {
+                const cm = chatMetaSnap.val();
+                targetApiId = cm.apiId || cm.channelId || null;
+                if (!custName) custName = cm.customerName || cm.name || null;
+            }
+        } catch(e) {}
+    }
+
+    if (!targetApiId && isFb) {
+        targetApiId = 'fb_api_1791648211091';
+    }
 
     const textPayload = captionText ? `📋 Menu: ${captionText}` : "📋 Restaurant Menu";
 
@@ -1088,7 +1108,7 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
 
     let newMsgKey = null;
     try {
-        const pushRef = await db.ref(`customerChats/${targetCustId}/messages`).push(sanitizeForFirebase(newMsg));
+        const pushRef = await db.ref(`customerChats/${cleanCustId}/messages`).push(sanitizeForFirebase(newMsg));
         newMsgKey = pushRef ? pushRef.key : null;
 
         const metaUpdate = sanitizeForFirebase({
@@ -1101,17 +1121,17 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
         }
 
         await Promise.all([
-            db.ref(`customerChats/${targetCustId}/metadata`).update(metaUpdate),
-            db.ref(`customerChatMeta/${targetCustId}`).update(metaUpdate)
+            db.ref(`customerChats/${cleanCustId}/metadata`).update(metaUpdate),
+            db.ref(`customerChatMeta/${cleanCustId}`).update(metaUpdate)
         ]).catch(() => {});
 
         // If this chat is currently open, dynamically render it immediately
-        if (activeRiderChatCustId === targetCustId && newMsgKey) {
+        if (activeRiderChatCustId === cleanCustId && newMsgKey) {
             const fullMsg = { id: newMsgKey, ...newMsg };
             loadedRiderMsgsMap.set(newMsgKey, fullMsg);
             const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-            riderChatMemoryCache.set(targetCustId, sortedMsgs);
-            idbSet('chats', targetCustId, sortedMsgs).catch(() => {});
+            riderChatMemoryCache.set(cleanCustId, sortedMsgs);
+            idbSet('chats', cleanCustId, sortedMsgs).catch(() => {});
             const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
             if (container) {
                 appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
@@ -1122,18 +1142,19 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
         // Forward to Messenger if thread is from Facebook
         if (isFb) {
             await forwardRiderReplyToMessenger({
-                custId: targetCustId,
+                custId: cleanCustId,
                 apiId: targetApiId,
                 text: textPayload,
                 imageUrl: imageUrl,
                 riderName: riderName,
-                newMsgKey: newMsgKey
-            }).catch(err => console.warn("forwardRiderReplyToMessenger menu error:", err));
+                newMsgKey: newMsgKey,
+                suppressToast: true
+            }).catch(err => console.warn("[MenuSend] forwardRiderReplyToMessenger error:", err));
         }
 
         return true;
     } catch(err) {
-        console.error("sendDirectMenuPhotoToCustomer failed:", err);
+        console.error("[MenuSend] sendDirectMenuPhotoToCustomer failed:", err);
         return false;
     }
 }
@@ -1141,7 +1162,7 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
 /**
  * Forwards outbound rider chat message directly to Facebook Messenger via the webhook bridge
  */
-export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, locationCoords, riderName, replyToMid, replyToText, newMsgKey }) {
+export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, locationCoords, riderName, replyToMid, replyToText, newMsgKey, suppressToast = false }) {
     try {
         const cleanPsid = String(custId || '').replace(/^fb_/, '');
         if (!cleanPsid) return;
@@ -1232,9 +1253,9 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                                     if (sendData?.message_id) recordFbMid(sendData.message_id);
                                     console.log("✅ Photo delivered directly to Facebook Messenger via attachment_id!");
                                     if (text && typeof text === 'string' && text.trim()) {
-                                        await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey });
+                                        await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey, suppressToast });
                                     }
-                                    showToast("✅ Litrato naipadala sa customer sa Messenger!");
+                                    if (!suppressToast) showToast("✅ Litrato naipadala sa customer sa Messenger!");
                                     return;
                                 } else {
                                     console.warn("Direct Facebook attachment send returned error:", sendData);
@@ -1291,9 +1312,9 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                         if (sendData?.message_id) recordFbMid(sendData.message_id);
                         console.log("✅ HTTPS Photo delivered directly to Facebook Messenger!");
                         if (text && typeof text === 'string' && text.trim()) {
-                            await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey });
+                            await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey, suppressToast });
                         }
-                        showToast("✅ Litrato naipadala sa customer sa Messenger!");
+                        if (!suppressToast) showToast("✅ Litrato naipadala sa customer sa Messenger!");
                         return;
                     }
                 } catch (e) {
@@ -1357,7 +1378,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                 if (sendResp.ok) {
                     if (sendData?.message_id) recordFbMid(sendData.message_id);
                     console.log("✅ Text reply delivered directly to Facebook Messenger!");
-                    showToast("✅ Delivered to customer Messenger!");
+                    if (!suppressToast) showToast("✅ Delivered to customer Messenger!");
                     return;
                 }
             } catch (err) {

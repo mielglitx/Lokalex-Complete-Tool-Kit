@@ -1733,10 +1733,12 @@ export function dispatchMenuPagesToSend(pagesToSend) {
         ? window.getActiveRiderChatCustId() 
         : window.activeRiderChatCustId;
 
-    if (isChatOpen && activeCustId) {
+    const validActiveCustId = (activeCustId && activeCustId !== 'undefined' && activeCustId !== 'null') ? String(activeCustId).trim() : null;
+
+    if (isChatOpen && validActiveCustId) {
         const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
         if (confirm(`Ipadala ang ${pagesToSend.length} menu picture(s) kay ${custName}?`)) {
-            executeSendMenuPages(activeCustId, pagesToSend, custName);
+            executeSendMenuPages(validActiveCustId, pagesToSend, custName);
         }
         return;
     }
@@ -1746,25 +1748,52 @@ export function dispatchMenuPagesToSend(pagesToSend) {
 }
 
 export async function executeSendMenuPages(targetCustId, pages, custDisplayName = "Customer") {
-    if (!targetCustId || !pages || pages.length === 0) return;
+    const cleanCustId = String(targetCustId || '').trim();
+    if (!cleanCustId || cleanCustId === 'undefined' || cleanCustId === 'null' || !pages || pages.length === 0) {
+        showToast("⚠️ Hindi mapili ang customer. Subukang muli.");
+        return;
+    }
 
     closeMenuCustomerRecipientPicker();
-    showToast(`📤 Sending ${pages.length} menu photo(s) to ${custDisplayName}...`);
+    const total = pages.length;
+    showToast(`📤 Sinisimulan ang pagpapadala ng ${total} menu picture(s) kay ${custDisplayName}...`);
 
     let sent = 0;
-    for (let i = 0; i < pages.length; i++) {
+    for (let i = 0; i < total; i++) {
         const p = pages[i];
-        const caption = p.caption || `Page ${i + 1}`;
-        const ok = (typeof window.sendDirectMenuPhotoToCustomer === 'function')
-            ? await window.sendDirectMenuPhotoToCustomer(targetCustId, p.imageUrl, caption)
-            : false;
-        if (ok) sent++;
-        if (i < pages.length - 1) {
-            await new Promise(r => setTimeout(r, 450));
+        const pageNum = i + 1;
+        const caption = p.caption || `Page ${pageNum}`;
+        showToast(`📤 Sending picture ${pageNum} of ${total} to ${custDisplayName}...`);
+
+        let ok = false;
+        try {
+            if (typeof window.sendDirectMenuPhotoToCustomer === 'function') {
+                ok = await window.sendDirectMenuPhotoToCustomer(cleanCustId, p.imageUrl, caption);
+            }
+        } catch (sendErr) {
+            console.error(`[MenuSend] Error sending page ${pageNum}:`, sendErr);
+        }
+
+        if (ok) {
+            sent++;
+        } else {
+            console.warn(`[MenuSend] Failed to send menu page ${pageNum} to ${cleanCustId}`);
+        }
+
+        // Pacing: Send pictures one at a time with steady 1000ms pause to ensure sequential order in RTDB and Messenger
+        if (i < total - 1) {
+            await new Promise(r => setTimeout(r, 1000));
         }
     }
 
-    showToast(`✅ Naipadala ang ${sent} menu photo(s) kay ${custDisplayName}!`);
+    if (sent === total) {
+        showToast(`✅ Matagumpay na naipadala ang ${total} picture(s) kay ${custDisplayName}!`);
+    } else if (sent > 0) {
+        showToast(`⚠️ Naipadala ang ${sent} sa ${total} menu picture(s) kay ${custDisplayName}.`);
+    } else {
+        showToast(`❌ Nabigo ang pagpapadala ng menu photos kay ${custDisplayName}.`);
+    }
+
     clearMenuPageSelections();
 }
 
@@ -1885,8 +1914,9 @@ export async function renderMenuCustomerRecipients(searchQuery = "") {
 
     const q = (searchQuery || "").trim().toLowerCase();
     const filtered = threads.filter(t => {
-        const name = (t.customerName || t.name || t.id || "").toLowerCase();
-        if (name === 'unknown' || name === 'customer') return false;
+        const targetId = (t.custId || t.id || "").toString().trim();
+        const name = (t.customerName || t.name || targetId).toLowerCase();
+        if (name === 'unknown' || name === 'customer' || !targetId || targetId === 'undefined') return false;
         return !q || name.includes(q);
     });
 
@@ -1896,12 +1926,13 @@ export async function renderMenuCustomerRecipients(searchQuery = "") {
     }
 
     container.innerHTML = filtered.map(t => {
+        const targetCustId = (t.custId || t.id || "").toString().trim();
         const name = t.customerName || t.name || "Customer";
         const isCatering = isMatchMyCatering(t);
-        const isFb = String(t.id).startsWith('fb_');
+        const isFb = targetCustId.startsWith('fb_');
 
         return `
-        <div onclick="window.handleSelectMenuCustomerRecipient && window.handleSelectMenuCustomerRecipient('${t.id}', '${escapeHtml(name)}')" class="p-2.5 rounded-2xl border ${isCatering ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700/60 ring-1 ring-emerald-500/20' : 'bg-gray-50 hover:bg-gray-100 dark:bg-zinc-800/60 dark:hover:bg-zinc-800 border-gray-200 dark:border-zinc-700/60'} flex items-center justify-between gap-2 cursor-pointer transition active:scale-[0.98]">
+        <div onclick="window.handleSelectMenuCustomerRecipient && window.handleSelectMenuCustomerRecipient('${targetCustId}', '${escapeHtml(name)}')" class="p-2.5 rounded-2xl border ${isCatering ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700/60 ring-1 ring-emerald-500/20' : 'bg-gray-50 hover:bg-gray-100 dark:bg-zinc-800/60 dark:hover:bg-zinc-800 border-gray-200 dark:border-zinc-700/60'} flex items-center justify-between gap-2 cursor-pointer transition active:scale-[0.98]">
             <div class="flex items-center gap-2.5 min-w-0">
                 <div class="w-8 h-8 rounded-full ${isCatering ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white'} flex items-center justify-center font-bold text-xs shrink-0">
                     ${escapeHtml(name.charAt(0).toUpperCase())}
@@ -1926,11 +1957,16 @@ export async function renderMenuCustomerRecipients(searchQuery = "") {
 }
 
 export function handleSelectMenuCustomerRecipient(custId, custName) {
+    const cleanId = String(custId || '').trim();
+    if (!cleanId || cleanId === 'undefined' || cleanId === 'null') {
+        showToast("⚠️ Invalid customer ID. Paki-pili muli ang customer.");
+        return;
+    }
     if (!menuRecipientPickerPendingPages || menuRecipientPickerPendingPages.length === 0) {
         closeMenuCustomerRecipientPicker();
         return;
     }
-    executeSendMenuPages(custId, menuRecipientPickerPendingPages, custName);
+    executeSendMenuPages(cleanId, menuRecipientPickerPendingPages, custName);
 }
 
 // ============================================================================
