@@ -1,7 +1,7 @@
 // src/features/chat/customerChat/custChatState.js
 
 export const MAPS_API_KEY = "AIzaSyBVAwn0UnyHJ926oHeK0k789ncADMzmX80";
-export const CUST_CHAT_BATCH_SIZE = 15;
+export const CUST_CHAT_BATCH_SIZE = 10;
 export const CUST_CHAT_OLDER_BATCH_SIZE = 10;
 
 export const custChatState = {

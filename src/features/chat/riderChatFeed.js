@@ -335,10 +335,28 @@ function executeRenderRiderCustomerChatFeed() {
             const extracted = custId.replace(/^cust_/, '').replace(/_/g, ' ').trim().toLowerCase();
             if (extracted && catererByName.has(extracted)) return catererByName.get(extracted);
         }
+        if (cleanName && cleanName !== 'customer' && cleanName !== 'customer name') {
+            for (const [cName, m] of catererByName.entries()) {
+                if (cName === cleanName || isCustomerMatch(cName, cleanName)) {
+                    return m;
+                }
+            }
+        }
         return null;
     };
 
     allThreads.forEach(t => {
+        // High priority: If a rider is actively catering this customer on the live roster, ALWAYS prioritize catering!
+        const liveActiveCaterer = getFastCaterer(t.customerName, t.custId);
+        if (liveActiveCaterer) {
+            t.folder = 'catering';
+            t.status = 'active';
+            t.cateredByRiderId = (liveActiveCaterer.telegramId || liveActiveCaterer.id || "").toString().trim();
+            t.cateredByRiderName = (liveActiveCaterer.riderName || liveActiveCaterer.name || "Rider").toString().trim();
+            t.cateredBy = t.cateredByRiderName;
+            return;
+        }
+
         const isDone = (t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || t.folder === 'done');
         const completedAt = Number(t.completedAt) || 0;
         const lastMsgTime = Number(t.lastUpdated) || Number(t.timestamp) || 0;
@@ -387,6 +405,7 @@ function executeRenderRiderCustomerChatFeed() {
 
         if (activeCaterer) {
             t.folder = 'catering';
+            t.status = 'active';
             t.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
             t.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
             t.cateredBy = t.cateredByRiderName;
@@ -399,7 +418,7 @@ function executeRenderRiderCustomerChatFeed() {
                 t.cateredByRiderName = null;
                 t.cateredBy = null;
                 if (wasInCatering) {
-                    t.folder = 'done';
+                    t.folder = 'inbox'; // Reset to inbox, NEVER to done!
                 }
             }
         }
@@ -427,9 +446,16 @@ function executeRenderRiderCustomerChatFeed() {
         }
 
         // Determine effective folder for this thread
-        const isCurrentlyCatered = !!(t.cateredByRiderName || t.cateredByRiderId) && t.status !== 'completed' && t.status !== 'done' && t.status !== 'cancelled';
+        const liveActiveCaterer = getFastCaterer(t.customerName, t.custId);
+        const isCurrentlyCatered = Boolean(liveActiveCaterer || t.cateredByRiderName || t.cateredByRiderId) && t.status !== 'completed' && t.status !== 'cancelled';
         if (isCurrentlyCatered) {
             t.folder = 'catering';
+            t.status = 'active';
+            if (liveActiveCaterer) {
+                t.cateredByRiderId = (liveActiveCaterer.telegramId || liveActiveCaterer.id || "").toString().trim();
+                t.cateredByRiderName = (liveActiveCaterer.riderName || liveActiveCaterer.name || "Rider").toString().trim();
+                t.cateredBy = t.cateredByRiderName;
+            }
         }
         const folder = (t.folder || 'inbox').toLowerCase();
 
@@ -473,6 +499,8 @@ function executeRenderRiderCustomerChatFeed() {
             return folder === 'followup';
         }
         if (activeRiderChatFilter === 'done') {
+            // Catered customer threads MUST NEVER appear in Done!
+            if (isCurrentlyCatered || folder === 'catering') return false;
             return folder === 'done' || t.status === 'completed' || t.status === 'done';
         }
         return true;
@@ -1087,10 +1115,29 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             threadFolder = 'done';
         }
 
-        // Validate catering against live roster only for active threads
-        const activeCaterer = isCompletedStatus ? null : getActiveRosterCaterer(displayName, key, meta);
+        // Validate catering against live roster: ACTIVE ROSTER CATERING ALWAYS TAKES PRECEDENCE!
+        const activeCaterer = getActiveRosterCaterer(displayName, key, meta);
 
-        if (isNewMessageAfterDone) {
+        if (activeCaterer) {
+            isCompletedStatus = false;
+            threadFolder = 'catering';
+            meta.status = 'active';
+            meta.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+            meta.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
+            meta.cateredBy = meta.cateredByRiderName;
+            if (meta.folder !== 'catering' && db && key && !isFromCache) {
+                const healPayload = {
+                    folder: 'catering',
+                    status: 'active',
+                    cateredByRiderId: meta.cateredByRiderId,
+                    cateredByRiderName: meta.cateredByRiderName,
+                    cateredBy: meta.cateredByRiderName,
+                    lastUpdated: meta.lastUpdated || Date.now()
+                };
+                db.ref(`customerChats/${key}/metadata`).update(healPayload).catch(() => {});
+                db.ref(`customerChatMeta/${key}`).update(healPayload).catch(() => {});
+            }
+        } else if (isNewMessageAfterDone) {
             // Customer sent a new message! Automatically reactivate thread back to Inbox (or Catering if catered)
             meta.status = 'active';
             threadFolder = activeCaterer ? 'catering' : 'inbox';
@@ -1132,22 +1179,6 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                 db.ref(`customerChats/${key}/metadata`).update(donePayload).catch(() => {});
                 db.ref(`customerChatMeta/${key}`).update(donePayload).catch(() => {});
             }
-        } else if (activeCaterer) {
-            threadFolder = 'catering';
-            meta.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
-            meta.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
-            meta.cateredBy = meta.cateredByRiderName;
-            if (meta.folder !== 'catering' && db && key && !isFromCache) {
-                const healPayload = {
-                    folder: 'catering',
-                    cateredByRiderId: meta.cateredByRiderId,
-                    cateredByRiderName: meta.cateredByRiderName,
-                    cateredBy: meta.cateredByRiderName,
-                    lastUpdated: meta.lastUpdated || Date.now()
-                };
-                db.ref(`customerChats/${key}/metadata`).update(healPayload).catch(() => {});
-                db.ref(`customerChatMeta/${key}`).update(healPayload).catch(() => {});
-            }
         } else if (globalState.rosterMembers && globalState.rosterMembers.length > 0) {
             // Roster is loaded and NO rider is actively catering this customer!
             const hadStaleCaterer = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy);
@@ -1158,15 +1189,15 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                 meta.cateredByRiderName = null;
                 meta.cateredBy = null;
                 if (wasInCatering) {
-                    threadFolder = 'done';
+                    threadFolder = 'inbox'; // RESET TO INBOX, NEVER TO DONE!
                 }
                 if (db && key && !isFromCache) {
                     const healPayload = {
                         cateredByRiderId: null,
                         cateredByRiderName: null,
                         cateredBy: null,
-                        folder: 'done',
-                        status: 'done',
+                        folder: 'inbox',
+                        status: 'active',
                         lastUpdated: Date.now()
                     };
                     db.ref(`customerChats/${key}/metadata`).update(healPayload).catch(() => {});

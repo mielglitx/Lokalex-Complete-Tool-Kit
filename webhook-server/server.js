@@ -788,21 +788,45 @@ app.post('/webhook', async (req, res) => {
             if (fbSettingsResp.ok) {
               const fbSettings = await fbSettingsResp.json();
               if (fbSettings && fbSettings.enabled && resolvedFolder === 'inbox' && !existingCateredRider && !existingCateredRiderId) {
-                const fiveMinutes = 5 * 60 * 1000;
-                let lastReplied = 0;
+                // Availability gate: If there is at least ONE available rider on roster, DO NOT auto-reply!
+                let hasAvailableRider = false;
                 try {
-                  const metaCheck = await fetch(`${FIREBASE_DB_URL}/customerChatMeta/${custId}/fullBookingRepliedAt.json`);
-                  if (metaCheck.ok) lastReplied = Number(await metaCheck.json()) || 0;
+                  const rosterResp = await fetch(`${FIREBASE_DB_URL}/roster.json`);
+                  if (rosterResp.ok) {
+                    const rosterData = await rosterResp.json();
+                    if (rosterData && typeof rosterData === 'object') {
+                      hasAvailableRider = Object.values(rosterData).some(m => {
+                        if (!m) return false;
+                        const st = (m.status || '').trim().toLowerCase();
+                        const isBreak = Boolean(m.isBreak || st === 'break');
+                        return st === 'available' && !isBreak;
+                      });
+                    }
+                  }
                 } catch (_) {}
 
-                const now = Date.now();
-                if (!lastReplied || (now - lastReplied >= fiveMinutes)) {
-                  // Pre-claim timestamp in Firebase to atomically lock against concurrent client dispatches
-                  await fetch(`${FIREBASE_DB_URL}/customerChatMeta/${custId}/fullBookingRepliedAt.json`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(now)
-                  }).catch(() => {});
+                if (!hasAvailableRider) {
+                  const twelveHours = 12 * 60 * 60 * 1000;
+                  const sessionStartTime = Number(fbSettings.updatedAt) || 0;
+                  let lastReplied = 0;
+                  try {
+                    const metaCheck = await fetch(`${FIREBASE_DB_URL}/customerChatMeta/${custId}/fullBookingRepliedAt.json`);
+                    if (metaCheck.ok) lastReplied = Number(await metaCheck.json()) || 0;
+                  } catch (_) {}
+
+                  const now = Date.now();
+                  const alreadyRepliedInSession = lastReplied && (
+                    (now - lastReplied < twelveHours) ||
+                    (sessionStartTime && lastReplied >= sessionStartTime)
+                  );
+
+                  if (!alreadyRepliedInSession) {
+                    // Pre-claim timestamp in Firebase to atomically lock against concurrent client dispatches
+                    await fetch(`${FIREBASE_DB_URL}/customerChatMeta/${custId}/fullBookingRepliedAt.json`, {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(now)
+                    }).catch(() => {});
 
                   const autoReplyText = String(fbSettings.message || "Paumanhin po, Full Booking na po kami sa ngayon. Mag-a-update po kami kapag available na ulit ang aming delivery service. Maraming salamat po sa pag-unawa! 🛵🙏").trim();
 

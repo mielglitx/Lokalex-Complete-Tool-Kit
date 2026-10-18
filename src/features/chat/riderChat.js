@@ -43,7 +43,7 @@ let currentRiderChatMeta = null;
 let activeCustData = null;
 
 let activeRiderReplyTarget = null;
-const RIDER_CHAT_BATCH_SIZE = 15; // Initial partial load: only 15 messages
+const RIDER_CHAT_BATCH_SIZE = 10; // Initial partial load: only 10 messages for lightning fast loading
 const RIDER_CHAT_OLDER_BATCH_SIZE = 10; // On-demand chunk size when scrolling up
 let oldestRiderMsgTimestamp = null;
 let oldestRiderMsgKey = null;
@@ -337,8 +337,15 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
     const hasLocalRecord = Array.isArray(localMessages) && localMessages.length > 0;
 
     if (hasLocalRecord) {
-        localMessages.forEach(m => loadedRiderMsgsMap.set(m.id, m));
-        renderRiderMessages(container, loadedRiderMsgsMap, false, true, 0, activeCustData);
+        // Fast initial render: only load the last 10 messages for lightning-fast UI presentation
+        const initialChunk = localMessages.slice(-RIDER_CHAT_BATCH_SIZE);
+        initialChunk.forEach(m => loadedRiderMsgsMap.set(m.id, m));
+        hasMoreRiderMsgs = localMessages.length > initialChunk.length;
+        if (initialChunk.length > 0) {
+            oldestRiderMsgTimestamp = getMessageTimestamp(initialChunk[0]);
+            oldestRiderMsgKey = initialChunk[0].id || null;
+        }
+        renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
         setTimeout(() => { isInitialScrollDone = true; }, 250);
         autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
     } else {
@@ -359,8 +366,8 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         </div>`;
     }
 
-    // Direct REST fast-fetch fallback with limit (useful on mobile networks before WebSocket establishes)
-    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChats/${encodeURIComponent(custId)}/messages.json?orderBy="$key"&limitToLast=40&t=${Date.now()}`;
+    // Direct REST fast-fetch fallback with 10-message limit (useful on mobile networks before WebSocket establishes)
+    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChats/${encodeURIComponent(custId)}/messages.json?orderBy="$key"&limitToLast=10&t=${Date.now()}`;
     fetch(directRestUrl, { cache: 'no-store' })
         .then(res => res.json())
         .then(data => {
@@ -372,17 +379,22 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                         loadedRiderMsgsMap.set(key, { id: key, ...msg });
                     });
                     const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+                    if (sortedMsgs.length > 0) {
+                        oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
+                        oldestRiderMsgKey = sortedMsgs[0].id || null;
+                    }
+                    hasMoreRiderMsgs = entries.length >= 10;
                     riderChatMemoryCache.set(custId, sortedMsgs);
                     idbSet('chats', custId, sortedMsgs).catch(() => {});
-                    renderRiderMessages(container, loadedRiderMsgsMap, false, !isInitialScrollDone, 0, activeCustData);
+                    renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, !isInitialScrollDone, 0, activeCustData);
                     isInitialScrollDone = true;
                 }
             }
         })
         .catch(() => {});
 
-    // Realtime Firebase connection using granular child_added and child_changed for ZERO DELAY
-    const messagesQuery = db.ref(`customerChats/${custId}/messages`).limitToLast(40);
+    // Realtime Firebase connection using granular child_added and child_changed for ZERO DELAY (only last 10 messages)
+    const messagesQuery = db.ref(`customerChats/${custId}/messages`).limitToLast(10);
 
     // Initial check for empty chat thread
     messagesQuery.once('value', (snapshot) => {
@@ -393,7 +405,7 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
             }
         } else {
-            hasMoreRiderMsgs = Object.keys(data).length >= 40;
+            hasMoreRiderMsgs = Object.keys(data).length >= 10;
         }
     });
 
@@ -546,6 +558,24 @@ export async function loadOlderRiderMessages(container, custId) {
     showRiderTopSpinner(container);
 
     const oldScrollHeight = container.scrollHeight;
+
+    // 1. Instant cache check: if we already have older messages in memory from IndexedDB, load the next 10 instantly
+    const memCached = riderChatMemoryCache.get(targetCustId) || [];
+    const unrenderedCached = memCached.filter(m => m && m.id && !loadedRiderMsgsMap.has(m.id));
+    if (unrenderedCached.length > 0) {
+        const nextBatch = unrenderedCached.slice(-RIDER_CHAT_OLDER_BATCH_SIZE);
+        nextBatch.forEach(m => loadedRiderMsgsMap.set(m.id, m));
+        const sortedMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+        if (sortedMsgs.length > 0) {
+            oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
+            oldestRiderMsgKey = sortedMsgs[0].id || null;
+        }
+        hideRiderTopSpinner();
+        hasMoreRiderMsgs = unrenderedCached.length > nextBatch.length || hasMoreRiderMsgs;
+        isLoadingRiderHistory = false;
+        renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, oldScrollHeight, activeCustData);
+        return;
+    }
 
     try {
         const snap = await db.ref(`customerChats/${targetCustId}/messages`)

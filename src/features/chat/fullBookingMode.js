@@ -381,34 +381,36 @@ export async function sendFullBookingAutoReply(custId, meta = {}) {
     }
 
     const now = Date.now();
-    const FIVE_MINUTES_MS = 5 * 60 * 1000;
+    const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
     const preLastReplied = Number(meta.fullBookingRepliedAt) || 0;
     const preLastUpdated = Number(meta.lastUpdated) || 0;
+    const sessionStartTime = Number(fullBookingState.updatedAt) || 0;
 
-    // 3. Strict 5-Minute Cooldown:
-    // If a fullbooking reply was sent in the last 5 minutes, DO NOT reply again!
-    if (preLastReplied && (now - preLastReplied < FIVE_MINUTES_MS)) {
+    // 3. Strict Single-Response Guarantee:
+    // Once a customer has received a Full Booking auto-reply during the current active full-booking session,
+    // NEVER send it again! (Prevents spamming the customer every 5 minutes while they wait).
+    if (preLastReplied) {
+        if (now - preLastReplied < TWELVE_HOURS_MS) {
+            return false;
+        }
+        if (sessionStartTime && preLastReplied >= sessionStartTime) {
+            return false;
+        }
+    }
+
+    // 4. Freshness check: Do not auto-reply to stale messages older than 5 minutes
+    if (preLastUpdated && (now - preLastUpdated > 5 * 60 * 1000)) {
         return false;
     }
 
-    // 4. If already replied in the past (> 5 mins ago), the customer must have sent a NEW message AFTER that reply
-    if (preLastReplied && preLastUpdated && preLastUpdated <= preLastReplied) {
-        return false;
-    }
-
-    // 5. Freshness check: Do not auto-reply to stale messages older than 5 minutes
-    if (preLastUpdated && (now - preLastUpdated > FIVE_MINUTES_MS)) {
-        return false;
-    }
-
-    // 6. Fast in-memory check to prevent duplicate firing across concurrent triggers in same client
+    // 5. Fast in-memory check to prevent duplicate firing across concurrent triggers in same client
     if (typeof window !== 'undefined') {
         if (!window._activeFullBookingReplies) window._activeFullBookingReplies = new Set();
         if (window._activeFullBookingReplies.has(custId)) return false;
         window._activeFullBookingReplies.add(custId);
     }
 
-    // 7. DISTRIBUTED ATOMIC TRANSACTION LOCK (Firebase Realtime Database)
+    // 6. DISTRIBUTED ATOMIC TRANSACTION LOCK (Firebase Realtime Database)
     // Ensures across multiple connected devices (riders/admins) that ONLY ONE client acquires the lock and dispatches the reply!
     const lockRef = db.ref(`customerChatMeta/${custId}/fullBookingRepliedAt`);
     let lockAcquired = false;
@@ -416,9 +418,9 @@ export async function sendFullBookingAutoReply(custId, meta = {}) {
         const txResult = await lockRef.transaction((currentVal) => {
             const lastReplied = Number(currentVal) || 0;
             const txNow = Date.now();
-            if (lastReplied && (txNow - lastReplied < FIVE_MINUTES_MS)) {
-                // Another device or server already replied within the 5-minute cooldown! Abort transaction.
-                return undefined;
+            if (lastReplied) {
+                if (txNow - lastReplied < TWELVE_HOURS_MS) return undefined;
+                if (sessionStartTime && lastReplied >= sessionStartTime) return undefined;
             }
             // Acquire lock by recording current timestamp
             return txNow;
