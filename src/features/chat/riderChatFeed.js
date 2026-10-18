@@ -109,7 +109,8 @@ export function setRiderChatFilter(filterMode) {
         { id: 'inbox', minW: 'min-w-[55px]' },
         { id: 'catering', minW: 'min-w-[55px]' },
         { id: 'stores', minW: 'min-w-[65px]' },
-        { id: 'applicant', minW: 'min-w-[65px]', alias: 'followup' },
+        { id: 'applicant', minW: 'min-w-[65px]' },
+        { id: 'followup', minW: 'min-w-[65px]' },
         { id: 'done', minW: 'min-w-[45px]' }
     ];
 
@@ -362,11 +363,20 @@ function executeRenderRiderCustomerChatFeed() {
             return;
         }
 
-        // High priority 2: Applicant thread status takes absolute precedence over done and inbox
-        const isApplicant = Boolean(t.isApplicant === true || t.folder === 'applicant' || t.folder === 'followup');
-        if (isApplicant) {
+        // High priority 2: Applicant & Follow-up thread statuses take absolute precedence over done and inbox
+        if (t.isApplicant === true || t.folder === 'applicant') {
             t.folder = 'applicant';
             t.isApplicant = true;
+            t.status = 'active';
+            t.cateredByRiderId = null;
+            t.cateredByRiderName = null;
+            t.cateredBy = null;
+            return;
+        }
+
+        if (t.folder === 'followup') {
+            t.folder = 'followup';
+            t.isApplicant = false;
             t.status = 'active';
             t.cateredByRiderId = null;
             t.cateredByRiderName = null;
@@ -515,9 +525,13 @@ function executeRenderRiderCustomerChatFeed() {
             if (isCurrentlyCatered) return true;
             return folder === 'catering' && t.status !== 'completed' && t.status !== 'done' && t.status !== 'cancelled';
         }
-        if (activeRiderChatFilter === 'applicant' || activeRiderChatFilter === 'followup') {
+        if (activeRiderChatFilter === 'applicant') {
             if (isCurrentlyCatered) return false;
-            return folder === 'applicant' || folder === 'followup' || t.isApplicant === true;
+            return folder === 'applicant' || t.isApplicant === true;
+        }
+        if (activeRiderChatFilter === 'followup') {
+            if (isCurrentlyCatered) return false;
+            return folder === 'followup' && !t.isApplicant;
         }
         if (activeRiderChatFilter === 'done') {
             // Catered customer threads MUST NEVER appear in Done!
@@ -657,8 +671,10 @@ function executeRenderRiderCustomerChatFeed() {
         }
 
         let applicantBadge = "";
-        if (t.isApplicant || t.folder === 'applicant' || t.folder === 'followup') {
+        if (t.isApplicant || t.folder === 'applicant') {
             applicantBadge = `<span class="bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700/50 text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0" title="Rider Applicant"><i class="fa-solid fa-user-tie text-purple-600 dark:text-purple-400"></i> APPLICANT</span>`;
+        } else if (t.folder === 'followup') {
+            applicantBadge = `<span class="bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/50 text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0" title="Customer Follow-Up"><i class="fa-solid fa-bookmark text-amber-600 dark:text-amber-400"></i> FOLLOW UP</span>`;
         }
 
         let channelBadge = "";
@@ -674,8 +690,10 @@ function executeRenderRiderCustomerChatFeed() {
             const f = (t.folder || 'inbox').toLowerCase();
             if (isCurrentlyCatering || f === 'catering') {
                 folderBadge = `<span class="bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/50 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0"><i class="fa-solid fa-motorcycle text-[8px]"></i> Catering</span>`;
-            } else if (f === 'applicant' || f === 'followup' || t.isApplicant) {
+            } else if (f === 'applicant' || t.isApplicant) {
                 folderBadge = `<span class="bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700/50 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0"><i class="fa-solid fa-user-tie text-[8px]"></i> Applicant</span>`;
+            } else if (f === 'followup') {
+                folderBadge = `<span class="bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/50 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0"><i class="fa-solid fa-bookmark text-[8px]"></i> Follow Up</span>`;
             } else if (f === 'done' || t.status === 'completed' || t.status === 'done') {
                 folderBadge = `<span class="bg-gray-100 text-gray-800 border border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0"><i class="fa-solid fa-circle-check text-[8px]"></i> Done</span>`;
             } else {
@@ -1127,7 +1145,8 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             if (cached && cached.avatarUrl) displayAvatar = cached.avatarUrl;
         }
 
-        const isApplicant = Boolean(meta.isApplicant === true || (meta.folder || '').toLowerCase() === 'applicant' || (meta.folder || '').toLowerCase() === 'followup');
+        const isApplicant = Boolean(meta.isApplicant === true || (meta.folder || '').toLowerCase() === 'applicant');
+        const isFollowUp = Boolean(!isApplicant && (meta.folder || '').toLowerCase() === 'followup');
         const isAlreadyDone = (meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled' || (meta.folder || '').toLowerCase() === 'done');
         const completedAt = Number(meta.completedAt) || 0;
         const lastMsgTime = Number(meta.lastUpdated) || Number(meta.timestamp) || 0;
@@ -1141,7 +1160,7 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                 db.ref(`customerChats/${key}/metadata/unreadForRider`).set(false).catch(() => {});
                 db.ref(`customerChatMeta/${key}/unreadForRider`).set(false).catch(() => {});
             }
-        } else if (isAlreadyDone && !isNewMessageAfterDone && !isApplicant) {
+        } else if (isAlreadyDone && !isNewMessageAfterDone && !isApplicant && !isFollowUp) {
             // Completed threads do not show unread badge for old messages
             isUnread = false;
         } else if (meta.unreadForRider === true) {
@@ -1152,10 +1171,12 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             isUnread = true;
         }
 
-        let isCompletedStatus = isAlreadyDone && !isNewMessageAfterDone && !isApplicant;
+        let isCompletedStatus = isAlreadyDone && !isNewMessageAfterDone && !isApplicant && !isFollowUp;
         let threadFolder = (meta.folder || 'inbox').toLowerCase();
         if (isApplicant) {
             threadFolder = 'applicant';
+        } else if (isFollowUp) {
+            threadFolder = 'followup';
         } else if (isCompletedStatus) {
             threadFolder = 'done';
         }
@@ -1235,7 +1256,7 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                 meta.cateredByRiderName = null;
                 meta.cateredBy = null;
                 if (wasInCatering) {
-                    threadFolder = isApplicant ? 'applicant' : 'inbox'; // RESET TO INBOX / APPLICANT, NEVER TO DONE!
+                    threadFolder = isApplicant ? 'applicant' : (isFollowUp ? 'followup' : 'inbox'); // RESET TO INBOX / APPLICANT / FOLLOWUP, NEVER TO DONE!
                 }
                 if (db && key && !isFromCache) {
                     const healPayload = {
@@ -1259,7 +1280,7 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             lastMessage: rawLastMsg || "No messages yet",
             lastUpdated: meta.lastUpdated || 0,
             completedAt: meta.completedAt || (isCompletedStatus ? (Number(meta.lastUpdated) || Date.now()) : null),
-            folder: isApplicant ? 'applicant' : threadFolder,
+            folder: isApplicant ? 'applicant' : (isFollowUp ? 'followup' : threadFolder),
             isApplicant: isApplicant,
             channel: isMessengerSource(meta, key) ? 'messenger' : (meta.channel || 'web'),
             apiId: meta.apiId || meta.channelId || meta.fbApiId || (isMessengerSource(meta, key) ? 'fb_api_1791648211091' : null),

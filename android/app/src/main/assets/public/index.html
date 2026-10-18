@@ -601,7 +601,7 @@
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-4rwNG78N.js"></script>
+  <script type="module" crossorigin src="./assets/index-FW-QKo4n.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
@@ -1608,6 +1608,7 @@
                     <span id="rider-store-unread-badge" class="hidden bg-orange-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full animate-pulse">0</span>
                 </button>
                 <button id="rider-chat-tab-applicant" onclick="window.setRiderChatFilter && window.setRiderChatFilter('applicant')" class="flex-1 min-w-[65px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition cursor-pointer">Applicant</button>
+                <button id="rider-chat-tab-followup" onclick="window.setRiderChatFilter && window.setRiderChatFilter('followup')" class="flex-1 min-w-[65px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition cursor-pointer">Follow Up</button>
                 <button id="rider-chat-tab-done" onclick="window.setRiderChatFilter && window.setRiderChatFilter('done')" class="flex-1 min-w-[45px] py-1 rounded-lg text-gray-600 dark:text-gray-400 font-bold text-[10px] hover:text-gray-900 dark:hover:text-white transition flex items-center justify-center gap-1 cursor-pointer">
                     <span>Done</span>
                     <span id="rider-done-unread-badge" class="hidden bg-red-600 text-white text-[8px] font-black px-1.5 py-0.2 rounded-full animate-pulse">0</span>
@@ -3320,6 +3321,7 @@
                     <div class="flex items-center gap-1 min-w-0">
                         <h3 id="rider-chat-cust-name" class="font-black text-sm text-gray-900 dark:text-white truncate min-w-0 flex-1">Customer Name</h3>
                         <span id="rider-chat-applicant-pill" class="hidden bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700/50 text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0" title="Rider Applicant"><i class="fa-solid fa-user-tie text-purple-600 dark:text-purple-400"></i> APPLICANT</span>
+                        <span id="rider-chat-followup-pill" class="hidden bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/50 text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0" title="Customer Follow-Up"><i class="fa-solid fa-bookmark text-amber-600 dark:text-amber-400"></i> FOLLOW UP</span>
                         <button type="button" onclick="window.promptRenameCustomerChat && window.promptRenameCustomerChat()" class="text-gray-400 hover:text-blue-500 p-1 text-xs active:scale-90 shrink-0" title="Edit Customer Name">
                             <i class="fa-solid fa-pen text-[10px]"></i>
                         </button>
@@ -3390,6 +3392,9 @@
             </button>
             <button id="rider-chat-applicant-btn" type="button" onclick="window.toggleThreadApplicant && window.toggleThreadApplicant()" class="flex-1 min-w-[90px] bg-purple-600 hover:bg-purple-500 text-white border border-purple-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm" title="Mark / Unmark as Applicant">
                 <i class="fa-solid fa-user-tie"></i> Applicant
+            </button>
+            <button id="rider-chat-followup-btn" type="button" onclick="window.markThreadFollowUp && window.markThreadFollowUp()" class="flex-1 min-w-[90px] bg-amber-600 hover:bg-amber-500 text-white border border-amber-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm" title="Move to Follow Up & open Advance Order">
+                <i class="fa-solid fa-bookmark"></i> Follow Up
             </button>
             <button onclick="window.completeCatering && window.completeCatering()" class="flex-1 min-w-[75px] bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm">
                 <i class="fa-solid fa-circle-check"></i> Done

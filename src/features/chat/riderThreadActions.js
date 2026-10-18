@@ -1778,8 +1778,8 @@ export async function toggleThreadApplicant(targetCustId = null) {
     }
 
     const currentlyApplicant = Boolean(
-        (currentThread && (currentThread.isApplicant || currentThread.folder === 'applicant' || currentThread.folder === 'followup')) ||
-        (currentMeta && (currentMeta.isApplicant || currentMeta.folder === 'applicant' || currentMeta.folder === 'followup'))
+        (currentThread && (currentThread.isApplicant || currentThread.folder === 'applicant')) ||
+        (currentMeta && (currentMeta.isApplicant || currentMeta.folder === 'applicant'))
     );
 
     const newApplicantState = !currentlyApplicant;
@@ -1840,8 +1840,103 @@ export async function toggleThreadApplicant(targetCustId = null) {
     }
 }
 
-export function markThreadFollowUp() {
-    return toggleThreadApplicant();
+export async function markThreadFollowUp() {
+    const custId = window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null;
+    if (!custId) return;
+
+    const rawId = custId.toString().replace(/^fb_/, '');
+    const threadMap = (typeof window.getCachedCustomerThreadsMap === 'function') ? window.getCachedCustomerThreadsMap() : null;
+    let currentMeta = (window.getCurrentRiderChatMeta ? window.getCurrentRiderChatMeta() : {}) || {};
+    let currentThread = null;
+
+    if (threadMap) {
+        if (threadMap.has(custId)) currentThread = threadMap.get(custId);
+        else if (threadMap.has(`fb_${custId}`)) currentThread = threadMap.get(`fb_${custId}`);
+        else if (threadMap.has(rawId)) currentThread = threadMap.get(rawId);
+    }
+
+    const currentlyFollowUp = Boolean(
+        (currentThread && currentThread.folder === 'followup') ||
+        (currentMeta && currentMeta.folder === 'followup')
+    );
+
+    const newFollowUpState = !currentlyFollowUp;
+    const newFolder = newFollowUpState ? 'followup' : 'inbox';
+    const now = Date.now();
+
+    const payload = {
+        folder: newFolder,
+        isApplicant: false,
+        status: newFollowUpState ? 'active' : (currentThread?.status || currentMeta?.status || 'active'),
+        lastUpdated: now
+    };
+
+    if (currentThread) {
+        currentThread.folder = newFolder;
+        currentThread.isApplicant = false;
+        currentThread.status = newFollowUpState ? 'active' : (currentThread.status || 'active');
+        currentThread.lastUpdated = now;
+    }
+
+    if (currentMeta && (window.getActiveRiderChatCustId && window.getActiveRiderChatCustId() === custId)) {
+        currentMeta.folder = newFolder;
+        currentMeta.isApplicant = false;
+        currentMeta.status = newFollowUpState ? 'active' : (currentMeta.status || 'active');
+        currentMeta.lastUpdated = now;
+    }
+
+    if (typeof window.syncApplicantUI === 'function') {
+        window.syncApplicantUI(payload);
+    }
+
+    if (db) {
+        try {
+            await Promise.all([
+                db.ref(`customerChats/${custId}/metadata`).update(payload),
+                db.ref(`customerChatMeta/${custId}`).update(payload)
+            ]);
+            if (custId.startsWith('fb_')) {
+                const plain = custId.replace(/^fb_/, '');
+                await Promise.all([
+                    db.ref(`customerChats/${plain}/metadata`).update(payload).catch(() => {}),
+                    db.ref(`customerChatMeta/${plain}`).update(payload).catch(() => {})
+                ]);
+            }
+        } catch (e) {
+            console.warn("Failed to update follow-up status in RTDB:", e);
+        }
+    }
+
+    if (newFollowUpState) {
+        const custName = document.getElementById('rider-chat-cust-name')?.innerText || currentMeta.customerName || "";
+        const activeCustData = window.getActiveCustData ? window.getActiveCustData() : null;
+        const phone = activeCustData?.phoneNumber || "";
+        const address = activeCustData?.address || "";
+
+        const advModal = document.getElementById('adv-orders-modal');
+        if (advModal) {
+            advModal.classList.remove('hidden');
+            if (typeof toggleBodyScroll === 'function') toggleBodyScroll(true);
+
+            if (window.switchAdvTab) window.switchAdvTab('add');
+
+            const nameInput = document.getElementById('adv-cust-name');
+            const contactInput = document.getElementById('adv-contact');
+            const addrInput = document.getElementById('adv-address');
+
+            if (nameInput) nameInput.value = custName;
+            if (contactInput) contactInput.value = phone;
+            if (addrInput) addrInput.value = address;
+        }
+
+        showToast("📌 Moved chat to Follow Up & loaded Advance Order form!");
+    } else {
+        showToast("↩️ Follow Up tag removed & returned to Inbox.");
+    }
+
+    if (typeof window.renderRiderCustomerChatFeed === 'function') {
+        window.renderRiderCustomerChatFeed();
+    }
 }
 
 // VOID SPECIFIC CUSTOMER WITHOUT CANCELING OTHER ACTIVE BOOKINGS

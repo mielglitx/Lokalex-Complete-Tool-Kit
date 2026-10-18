@@ -245,6 +245,8 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
                 if (thread?.isApplicant) {
                     currentRiderChatMeta.isApplicant = true;
                     currentRiderChatMeta.folder = 'applicant';
+                } else if (thread?.folder === 'followup' && currentRiderChatMeta.folder !== 'applicant') {
+                    currentRiderChatMeta.folder = 'followup';
                 }
             }
             if (currentRiderChatMeta?.customerName && nameEl) {
@@ -268,7 +270,11 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
 export function syncApplicantUI(meta) {
     const applicantPill = document.getElementById('rider-chat-applicant-pill');
     const applicantBtn = document.getElementById('rider-chat-applicant-btn');
-    const isApplicant = Boolean(meta?.isApplicant || meta?.folder === 'applicant' || meta?.folder === 'followup');
+    const followupPill = document.getElementById('rider-chat-followup-pill');
+    const followupBtn = document.getElementById('rider-chat-followup-btn');
+
+    const isApplicant = Boolean(meta?.isApplicant || meta?.folder === 'applicant');
+    const isFollowUp = Boolean(!isApplicant && meta?.folder === 'followup');
 
     if (applicantPill) {
         if (isApplicant) {
@@ -287,6 +293,26 @@ export function syncApplicantUI(meta) {
             applicantBtn.className = "flex-1 min-w-[90px] bg-purple-600 hover:bg-purple-500 text-white border border-purple-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm";
             applicantBtn.innerHTML = `<i class="fa-solid fa-user-tie"></i> Applicant`;
             applicantBtn.title = "Mark as Applicant";
+        }
+    }
+
+    if (followupPill) {
+        if (isFollowUp) {
+            followupPill.classList.remove('hidden');
+        } else {
+            followupPill.classList.add('hidden');
+        }
+    }
+
+    if (followupBtn) {
+        if (isFollowUp) {
+            followupBtn.className = "flex-1 min-w-[90px] bg-amber-700 hover:bg-amber-600 text-white border border-amber-400 py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md ring-2 ring-amber-400/50";
+            followupBtn.innerHTML = `<i class="fa-solid fa-bookmark"></i> Follow Up ✓`;
+            followupBtn.title = "Marked as Follow Up (Click to remove tag)";
+        } else {
+            followupBtn.className = "flex-1 min-w-[90px] bg-amber-600 hover:bg-amber-500 text-white border border-amber-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm";
+            followupBtn.innerHTML = `<i class="fa-solid fa-bookmark"></i> Follow Up`;
+            followupBtn.title = "Move to Follow Up & open Advance Order";
         }
     }
 }

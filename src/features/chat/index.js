@@ -211,8 +211,11 @@ export function renderFilteredCustomerChats(targetFolder = 'inbox') {
                 if (folder === 'applicant' || folder === 'followup' || meta.isApplicant) return false;
                 return folder === 'inbox';
             }
-            if (targetFolder === 'applicant' || targetFolder === 'followup') {
-                return folder === 'applicant' || folder === 'followup' || meta.isApplicant === true;
+            if (targetFolder === 'applicant') {
+                return folder === 'applicant' || meta.isApplicant === true;
+            }
+            if (targetFolder === 'followup') {
+                return folder === 'followup' && !meta.isApplicant;
             }
             if (targetFolder === 'done') {
                 if (folder === 'done' || meta.status === 'completed' || meta.status === 'done') return true;
