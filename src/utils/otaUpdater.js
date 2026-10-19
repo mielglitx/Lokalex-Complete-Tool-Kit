@@ -191,10 +191,24 @@ export async function checkForOtaUpdate(isManual = false) {
                     console.warn("[OTA] CapacitorUpdater.set error, attempting reload:", setErr);
                 }
 
-                // If native webview hasn't already reloaded itself, force reload
-                setTimeout(() => {
-                    window.location.reload();
-                }, 800);
+                if (isManual) {
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 800);
+                } else if (!document.hidden) {
+                    const chatOpen = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
+                    const isChatting = chatOpen && !chatOpen.classList.contains('hidden');
+                    if (!isChatting) {
+                        showToast(`✨ Handa na ang v${remoteVersion}. Inilalapat ang update...`);
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1200);
+                    } else {
+                        showToast(`✨ Handa na ang v${remoteVersion}. Ilalapat sa susunod na pagbukas.`);
+                    }
+                } else {
+                    console.log(`[OTA] v${remoteVersion} staged. App is minimized in background, will apply on next restart.`);
+                }
             } else {
                 throw new Error("No bundle ID returned from updater");
             }

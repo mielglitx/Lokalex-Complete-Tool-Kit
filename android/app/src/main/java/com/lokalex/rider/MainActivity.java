@@ -234,9 +234,8 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    public void onPause() {
-        super.onPause();
-        // Prevent Android WebView from freezing timers & network when minimized
+    public void onResume() {
+        super.onResume();
         try {
             if (getBridge() != null && getBridge().getWebView() != null) {
                 getBridge().getWebView().onResume();
@@ -246,12 +245,22 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    public void onStop() {
-        super.onStop();
-        // Keep WebView timers and network running during background minimization
+    public void onPause() {
+        super.onPause();
+        // Keep WebView timers running without forcing GPU composition on a hidden surface
         try {
             if (getBridge() != null && getBridge().getWebView() != null) {
-                getBridge().getWebView().onResume();
+                getBridge().getWebView().resumeTimers();
+            }
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        // Keep JavaScript timers running without forcing GPU rendering on detached surface
+        try {
+            if (getBridge() != null && getBridge().getWebView() != null) {
                 getBridge().getWebView().resumeTimers();
             }
         } catch (Exception ignored) {}

@@ -18,7 +18,7 @@ export function keepAlivePulse() {
     if (primaryDb && typeof primaryDb.goOnline === 'function' && navigator.onLine) {
         try { primaryDb.goOnline(); } catch (_) {}
     }
-    if (silentAudioEl && silentAudioEl.paused) {
+    if (silentAudioEl && silentAudioEl.paused && !document.hidden) {
         silentAudioEl.play().catch(() => {});
     }
     if (typeof window !== 'undefined') {

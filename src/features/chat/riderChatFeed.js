@@ -445,7 +445,8 @@ function executeRenderRiderCustomerChatFeed() {
                 t.cateredByRiderName = null;
                 t.cateredBy = null;
                 if (wasInCatering) {
-                    t.folder = 'inbox'; // Reset to inbox, NEVER to done!
+                    const isFinished = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || t.completedAt;
+                    t.folder = isFinished ? 'done' : (t.isApplicant ? 'applicant' : 'inbox');
                 }
             }
         }
@@ -1255,8 +1256,9 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                 meta.cateredByRiderId = null;
                 meta.cateredByRiderName = null;
                 meta.cateredBy = null;
+                const isFinished = isCompletedStatus || meta.completedAt || meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled';
                 if (wasInCatering) {
-                    threadFolder = isApplicant ? 'applicant' : (isFollowUp ? 'followup' : 'inbox'); // RESET TO INBOX / APPLICANT / FOLLOWUP, NEVER TO DONE!
+                    threadFolder = isFinished ? 'done' : (isApplicant ? 'applicant' : (isFollowUp ? 'followup' : 'inbox'));
                 }
                 if (db && key && !isFromCache) {
                     const healPayload = {
@@ -1264,8 +1266,7 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                         cateredByRiderName: null,
                         cateredBy: null,
                         folder: threadFolder,
-                        status: 'active',
-                        lastUpdated: Date.now()
+                        status: isFinished ? (meta.status === 'cancelled' ? 'cancelled' : 'completed') : 'active'
                     };
                     db.ref(`customerChats/${key}/metadata`).update(healPayload).catch(() => {});
                     db.ref(`customerChatMeta/${key}`).update(healPayload).catch(() => {});
@@ -1920,8 +1921,7 @@ export function reopenThreadToInbox(custId) {
     if (db) {
         const payload = {
             folder: 'inbox',
-            status: 'open',
-            lastUpdated: (typeof firebase !== 'undefined' && firebase.database) ? firebase.database.ServerValue.TIMESTAMP : Date.now()
+            status: 'open'
         };
         db.ref(`customerChats/${custId}/metadata`).update(payload).catch(() => {});
         db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});

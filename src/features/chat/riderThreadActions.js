@@ -1268,8 +1268,7 @@ export function markThreadUndone() {
             cateredByRiderId: null,
             cateredByRiderName: null,
             cateredBy: null,
-            status: 'active',
-            lastUpdated: Date.now()
+            status: 'active'
         };
         db.ref(`customerChats/${custId}/metadata`).update(payload).catch(() => {});
         db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
