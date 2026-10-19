@@ -362,6 +362,41 @@ export async function reloadRiderChatFromFirebase(custId) {
     listenToRiderChatMessages(targetCustId, true);
 }
 
+function triggerInstantFbAttachmentResolution(custId, msg, container, activeCustData) {
+    if (!custId || !msg || !msg.id) return;
+    const mid = msg.mid || (String(msg.id).startsWith('m_') ? msg.id : null) || msg.id;
+    resolveFacebookMessageAttachment(custId, msg.id, mid).then(url => {
+        if (url && activeRiderChatCustId === custId) {
+            const existing = loadedRiderMsgsMap.get(msg.id) || msg;
+            existing.imageUrl = url;
+            existing.type = 'image';
+            loadedRiderMsgsMap.set(msg.id, existing);
+
+            const updatedSorted = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+            riderChatMemoryCache.set(custId, updatedSorted);
+            idbSet('chats', custId, updatedSorted).catch(() => {});
+
+            if (container) {
+                appendOrUpdateSingleRiderMessage(container, existing, activeCustData);
+            }
+
+            try {
+                const preloader = new Image();
+                preloader.src = url;
+            } catch (_) {}
+        }
+    }).catch(() => {});
+}
+
+function autoResolveRecentFbCustomerAttachments(custId, container, activeCustData) {
+    if (!String(custId).startsWith('fb_')) return;
+    const candidates = Array.from(loadedRiderMsgsMap.values())
+        .filter(m => m && !m.imageUrl && m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]')));
+    for (const m of candidates) {
+        triggerInstantFbAttachmentResolution(custId, m, container, activeCustData);
+    }
+}
+
 function autoResolveRecentFbCustomerReplies(custId, container, activeCustData) {
     if (!String(custId).startsWith('fb_')) return;
     const candidates = Array.from(loadedRiderMsgsMap.values())
@@ -448,6 +483,7 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
         setTimeout(() => { isInitialScrollDone = true; }, 250);
         autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
+        autoResolveRecentFbCustomerAttachments(custId, container, activeCustData);
     } else {
         container.innerHTML = `
         <div id="rider-chat-loading-skeleton" class="flex flex-col gap-3 py-6 px-4 animate-pulse">
@@ -494,6 +530,7 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                         renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, !isInitialScrollDone, 0, activeCustData);
                         isInitialScrollDone = true;
                         autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
+                        autoResolveRecentFbCustomerAttachments(custId, container, activeCustData);
                     }
                 }
             }
@@ -550,6 +587,9 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         if (loadedRiderMsgsMap.has(key)) {
             loadedRiderMsgsMap.set(key, fullMsg);
             appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
+            if (String(custId).startsWith('fb_') && !fullMsg.imageUrl && fullMsg.text && (fullMsg.text.includes('[Facebook image]') || fullMsg.text.includes('[Facebook attachment]'))) {
+                triggerInstantFbAttachmentResolution(custId, fullMsg, container, activeCustData);
+            }
             return;
         }
 
@@ -586,8 +626,14 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
             renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
             isInitialScrollDone = true;
             autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
+            autoResolveRecentFbCustomerAttachments(custId, container, activeCustData);
         } else {
             appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
+
+            // Proactively resolve incoming Facebook photo attachment immediately
+            if (String(custId).startsWith('fb_') && !fullMsg.imageUrl && fullMsg.text && (fullMsg.text.includes('[Facebook image]') || fullMsg.text.includes('[Facebook attachment]'))) {
+                triggerInstantFbAttachmentResolution(custId, fullMsg, container, activeCustData);
+            }
 
             if (isNew && isFromCustomer) {
                 const isCatered = !!(currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredByRiderId || currentRiderChatMeta?.cateredBy || (currentRiderChatMeta?.folder || '').toLowerCase() === 'catering');
@@ -635,6 +681,9 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         if (loadedRiderMsgsMap.has(key)) {
             loadedRiderMsgsMap.set(key, fullMsg);
             appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
+            if (String(custId).startsWith('fb_') && !fullMsg.imageUrl && fullMsg.text && (fullMsg.text.includes('[Facebook image]') || fullMsg.text.includes('[Facebook attachment]'))) {
+                triggerInstantFbAttachmentResolution(custId, fullMsg, container, activeCustData);
+            }
         }
     });
 }
@@ -767,16 +816,7 @@ export async function loadOlderRiderMessages(container, custId) {
         if (String(targetCustId).startsWith('fb_')) {
             nextBatch.forEach(msg => {
                 if (!msg.imageUrl && msg.text && (msg.text.includes('[Facebook image]') || msg.text.includes('[Facebook attachment]'))) {
-                    resolveFacebookMessageAttachment(targetCustId, msg.id, msg.mid || msg.id).then(url => {
-                        if (url && activeRiderChatCustId === targetCustId) {
-                            const existing = loadedRiderMsgsMap.get(msg.id);
-                            if (existing) {
-                                existing.imageUrl = url;
-                                existing.type = 'image';
-                                renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, 0, activeCustData);
-                            }
-                        }
-                    }).catch(() => {});
+                    triggerInstantFbAttachmentResolution(targetCustId, msg, container, activeCustData);
                 }
             });
         }

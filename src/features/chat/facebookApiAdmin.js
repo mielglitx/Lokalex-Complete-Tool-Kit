@@ -1379,6 +1379,7 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
 }
 
 const inFlightAttachmentResolutions = new Map();
+const resolvedAttachmentMemoryCache = new Map();
 
 /**
  * Resolves a missing image attachment URL from Meta Graph API for a Facebook message
@@ -1388,6 +1389,25 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid) {
     const cleanMid = rawMid || msgId;
     const cacheKey = `${custId}_${msgId}`;
 
+    // 1. Instant check in memory cache (0ms)
+    if (resolvedAttachmentMemoryCache.has(cacheKey)) {
+        return resolvedAttachmentMemoryCache.get(cacheKey);
+    }
+    if (resolvedAttachmentMemoryCache.has(cleanMid)) {
+        return resolvedAttachmentMemoryCache.get(cleanMid);
+    }
+
+    // 2. Instant check in localStorage (0ms across app sessions)
+    try {
+        const storedUrl = localStorage.getItem(`fb_att_${cleanMid}`) || localStorage.getItem(`fb_att_${msgId}`);
+        if (storedUrl && (storedUrl.startsWith('http://') || storedUrl.startsWith('https://') || storedUrl.startsWith('data:'))) {
+            resolvedAttachmentMemoryCache.set(cacheKey, storedUrl);
+            resolvedAttachmentMemoryCache.set(cleanMid, storedUrl);
+            return storedUrl;
+        }
+    } catch (_) {}
+
+    // 3. Deduplicate in-flight network requests
     if (inFlightAttachmentResolutions.has(cacheKey)) {
         return inFlightAttachmentResolutions.get(cacheKey);
     }
@@ -1402,25 +1422,66 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid) {
             }
             if (apiList.length === 0) return null;
 
-            for (const api of apiList) {
-                const token = (api.pageAccessToken || '').trim();
-                if (!token) continue;
-
-                const resp = await fetch(`https://graph.facebook.com/v19.0/${cleanMid}?fields=id,message,attachments&access_token=${token}`);
-                if (resp.ok) {
-                    const data = await resp.json();
-                    const att = data?.attachments?.data?.[0];
-                    const imgUrl = att?.image_data?.url || att?.payload?.url;
-                    if (imgUrl) {
-                        if (db) {
-                            db.ref(`customerChats/${custId}/messages/${msgId}`).update({
-                                imageUrl: imgUrl,
-                                type: 'image'
-                            }).catch(() => {});
-                        }
-                        return imgUrl;
-                    }
+            // Query tokens in parallel for immediate resolution
+            const fetchAttachmentWithToken = async (token) => {
+                const cleanToken = (token || '').trim();
+                if (!cleanToken) throw new Error("No token");
+                const resp = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(cleanMid)}?fields=id,message,attachments&access_token=${encodeURIComponent(cleanToken)}`);
+                if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+                const data = await resp.json();
+                const attachments = data?.attachments?.data || [];
+                let imgUrl = null;
+                for (const att of attachments) {
+                    imgUrl = att?.image_data?.url || 
+                             att?.payload?.url || 
+                             att?.media?.image?.src || 
+                             att?.file_url || 
+                             att?.subattachments?.data?.[0]?.image_data?.url || 
+                             att?.subattachments?.data?.[0]?.media?.image?.src || 
+                             att?.subattachments?.data?.[0]?.payload?.url;
+                    if (imgUrl) break;
                 }
+                if (!imgUrl) throw new Error("No image found in attachment");
+                return imgUrl;
+            };
+
+            const promises = apiList
+                .map(api => (api.pageAccessToken || '').trim())
+                .filter(Boolean)
+                .map(token => fetchAttachmentWithToken(token));
+
+            if (promises.length === 0) return null;
+
+            let resolvedUrl = null;
+            try {
+                resolvedUrl = await Promise.any(promises);
+            } catch (_) {
+                resolvedUrl = null;
+            }
+
+            if (resolvedUrl) {
+                // Populate caches immediately
+                resolvedAttachmentMemoryCache.set(cacheKey, resolvedUrl);
+                resolvedAttachmentMemoryCache.set(cleanMid, resolvedUrl);
+                try {
+                    localStorage.setItem(`fb_att_${cleanMid}`, resolvedUrl);
+                    localStorage.setItem(`fb_att_${msgId}`, resolvedUrl);
+                } catch (_) {}
+
+                // Pre-warm browser image cache
+                try {
+                    const preloader = new Image();
+                    preloader.src = resolvedUrl;
+                } catch (_) {}
+
+                // Update Firebase RTDB so all clients receive direct URL
+                if (db) {
+                    db.ref(`customerChats/${custId}/messages/${msgId}`).update({
+                        imageUrl: resolvedUrl,
+                        type: 'image'
+                    }).catch(() => {});
+                }
+                return resolvedUrl;
             }
         } catch (e) {
             console.warn(`[FB Attachment] Resolution failed for mid ${cleanMid}:`, e);
