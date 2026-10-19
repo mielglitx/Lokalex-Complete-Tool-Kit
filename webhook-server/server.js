@@ -610,11 +610,20 @@ app.post('/webhook', async (req, res) => {
             const midResp = await fetch(`https://graph.facebook.com/v19.0/${item.message.mid}?fields=attachments&access_token=${token}`);
             if (midResp.ok) {
               const midData = await midResp.json();
-              const graphAtt = midData?.attachments?.data?.[0];
-              const graphUrl = graphAtt?.image_data?.url || graphAtt?.payload?.url;
-              if (graphUrl) {
-                imageUrl = graphUrl;
-                attachmentType = "image";
+              const attachments = midData?.attachments?.data || [];
+              for (const att of attachments) {
+                const graphUrl = att?.image_data?.url || 
+                                 att?.payload?.url || 
+                                 att?.media?.image?.src || 
+                                 att?.file_url || 
+                                 att?.subattachments?.data?.[0]?.image_data?.url || 
+                                 att?.subattachments?.data?.[0]?.media?.image?.src || 
+                                 att?.subattachments?.data?.[0]?.payload?.url;
+                if (graphUrl) {
+                  imageUrl = graphUrl;
+                  attachmentType = "image";
+                  break;
+                }
               }
             }
           } catch(e) {
