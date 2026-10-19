@@ -21,20 +21,43 @@ import java.util.concurrent.TimeUnit;
 public class LokalexForegroundService extends Service {
     private static final String CHANNEL_ID = "lokalex_keepalive_channel";
     private static final int NOTIFICATION_ID = 8831;
+    private static volatile boolean isRunning = false;
+    private static Bitmap cachedLargeIcon = null;
+
     private PowerManager.WakeLock wakeLock = null;
     private ScheduledExecutorService scheduler = null;
+
+    public static boolean isRunning() {
+        return isRunning;
+    }
 
     @Override
     public void onCreate() {
         super.onCreate();
+        isRunning = true;
         createNotificationChannel();
         acquireWakeLock();
+        startForegroundSafely();
+    }
+
+    private void startForegroundSafely() {
+        Notification notification = buildNotification();
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+        } catch (Exception e) {
+            try {
+                startForeground(NOTIFICATION_ID, notification);
+            } catch (Exception ignored) {}
+        }
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         acquireWakeLock();
-        Notification notification = buildNotification();
 
         if (scheduler == null || scheduler.isShutdown()) {
             scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -45,33 +68,7 @@ public class LokalexForegroundService extends Service {
                         activity.pulseWebViewKeepAlive();
                     }
                 } catch (Exception ignored) {}
-            }, 3, 15, TimeUnit.SECONDS);
-        }
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { // Android 10+ (API 29+)
-                int serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
-                // Add LOCATION type if permission is available
-                if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
-                    checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                    serviceType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
-                }
-                startForeground(NOTIFICATION_ID, notification, serviceType);
-            } else {
-                startForeground(NOTIFICATION_ID, notification);
-            }
-        } catch (Exception e) {
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
-                } else {
-                    startForeground(NOTIFICATION_ID, notification);
-                }
-            } catch (Exception ignored) {
-                try {
-                    startForeground(NOTIFICATION_ID, notification);
-                } catch (Exception ignored2) {}
-            }
+            }, 10, 25, TimeUnit.SECONDS);
         }
 
         return START_STICKY;
@@ -125,10 +122,11 @@ public class LokalexForegroundService extends Service {
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0
         );
 
-        Bitmap largeIcon = null;
-        try {
-            largeIcon = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher_round);
-        } catch (Exception ignored) {}
+        if (cachedLargeIcon == null) {
+            try {
+                cachedLargeIcon = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher_round);
+            } catch (Exception ignored) {}
+        }
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("Lokalex Hub Active")
@@ -139,8 +137,8 @@ public class LokalexForegroundService extends Service {
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE);
 
-        if (largeIcon != null) {
-            builder.setLargeIcon(largeIcon);
+        if (cachedLargeIcon != null) {
+            builder.setLargeIcon(cachedLargeIcon);
         }
 
         return builder.build();
@@ -153,6 +151,7 @@ public class LokalexForegroundService extends Service {
 
     @Override
     public void onDestroy() {
+        isRunning = false;
         if (scheduler != null && !scheduler.isShutdown()) {
             scheduler.shutdownNow();
             scheduler = null;

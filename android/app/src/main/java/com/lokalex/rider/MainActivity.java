@@ -214,6 +214,9 @@ public class MainActivity extends BridgeActivity {
     }
 
     public void startKeepAliveService() {
+        if (LokalexForegroundService.isRunning()) {
+            return;
+        }
         try {
             Intent serviceIntent = new Intent(this, LokalexForegroundService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

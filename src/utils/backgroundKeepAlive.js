@@ -90,7 +90,7 @@ function initHeartbeatWorker() {
                     if (!intervalId) {
                         intervalId = setInterval(function() {
                             self.postMessage('ping');
-                        }, 4000);
+                        }, 15000);
                     }
                 } else if (e.data === 'stop') {
                     if (intervalId) {
@@ -106,13 +106,6 @@ function initHeartbeatWorker() {
 
         heartbeatWorker.onmessage = function() {
             keepAlivePulse();
-
-            // Ensure Android Native Foreground Service is active
-            if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.startKeepAlive === 'function') {
-                try {
-                    window.NativePermissionsBridge.startKeepAlive();
-                } catch (_) {}
-            }
         };
 
         heartbeatWorker.postMessage('start');

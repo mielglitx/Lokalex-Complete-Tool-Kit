@@ -107,9 +107,6 @@ export async function initNativeBridge() {
                 // Rider switched apps or locked screen
                 window.dispatchEvent(new Event('appPausedToBackground'));
                 keepAlivePulse();
-                if (window.NativePermissionsBridge && typeof window.NativePermissionsBridge.startKeepAlive === 'function') {
-                    window.NativePermissionsBridge.startKeepAlive();
-                }
             }
         });
     } catch (e) {
