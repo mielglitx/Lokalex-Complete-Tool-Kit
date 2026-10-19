@@ -283,25 +283,30 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                 db.ref(`customerChatMeta/${targetChatId}`).update(updateObj).catch(() => {});
             };
 
-            if (overrideCustId) {
-                applyChatCaterUpdate(overrideCustId);
+            const targetChatId = overrideCustId || (custSelect && custSelect.value.trim().toLowerCase() === cleanSearchName ? (custSelect.selectedOptions?.[0]?.dataset?.custId || null) : null);
+
+            if (targetChatId) {
+                applyChatCaterUpdate(targetChatId);
+            } else {
+                db.ref('customerChatMeta').once('value', (snapshot) => {
+                    const chats = snapshot.val();
+                    if (chats) {
+                        Object.keys(chats).forEach(custId => {
+                            const meta = chats[custId]?.metadata || chats[custId] || {};
+                            // Do not hijack or reopen done / completed / voided chats!
+                            if (meta.folder === 'done' || meta.status === 'completed' || meta.status === 'voided') return;
+
+                            const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
+                            const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
+                            const fbName = (resolvedFb?.name || "").toLowerCase().trim();
+
+                            if (chatCustName === cleanSearchName || fbName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName) || (fbName && isCustomerMatch(fbName, cleanSearchName))) {
+                                applyChatCaterUpdate(custId);
+                            }
+                        });
+                    }
+                });
             }
-
-            db.ref('customerChatMeta').once('value', (snapshot) => {
-                const chats = snapshot.val();
-                if (chats) {
-                    Object.keys(chats).forEach(custId => {
-                        const meta = chats[custId]?.metadata || chats[custId] || {};
-                        const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
-                        const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
-                        const fbName = (resolvedFb?.name || "").toLowerCase().trim();
-
-                        if (chatCustName === cleanSearchName || fbName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName) || (fbName && isCustomerMatch(fbName, cleanSearchName))) {
-                            applyChatCaterUpdate(custId);
-                        }
-                    });
-                }
-            });
         }
 
         // Switch to the catering filter so rider immediately sees customer thread

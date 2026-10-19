@@ -303,6 +303,9 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
                 const targetLower = (custNameToComplete || "").trim().toLowerCase();
                 Object.keys(chats).forEach(custId => {
                     const meta = chats[custId]?.metadata || chats[custId] || {};
+                    // If chat is already done, completed, or voided, do not mutate it or update its timestamp
+                    if (meta.folder === 'done' || meta.status === 'completed' || meta.status === 'voided') return;
+
                     const chatCustName = (meta.customerName || meta.name || "").trim().toLowerCase();
                     const isRiderMatch = (meta.cateredByRiderId && meta.cateredByRiderId.toString() === resolvedTargetId.toString()) ||
                                          (meta.cateredByRiderName && meta.cateredByRiderName.trim().toLowerCase() === resolvedTargetName.trim().toLowerCase());
@@ -644,6 +647,9 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             const targetLower = (custNameToVoid || "").trim().toLowerCase();
             Object.keys(chats).forEach(custId => {
                 const meta = chats[custId]?.metadata || chats[custId] || {};
+                // If chat is already done, completed, or voided, do not mutate it or update its timestamp
+                if (meta.folder === 'done' || meta.status === 'completed' || meta.status === 'voided') return;
+
                 const chatCustName = (meta.customerName || meta.name || "").trim().toLowerCase();
                 const isRiderMatch = (meta.cateredByRiderId && meta.cateredByRiderId.toString() === resolvedTargetId.toString()) ||
                                      (meta.cateredByRiderName && meta.cateredByRiderName.trim().toLowerCase() === resolvedTargetName.trim().toLowerCase());

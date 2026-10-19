@@ -417,6 +417,8 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
 
             Object.keys(chats).forEach(custId => {
                 const meta = chats[custId]?.metadata || chats[custId] || {};
+                if (meta.folder === 'done' || meta.status === 'completed' || meta.status === 'voided') return;
+
                 const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
                 if (chatCustName && (chatCustName === cleanTargetCust || isCustomerMatch(chatCustName, cleanTargetCust))) {
                     const now = Date.now();
@@ -500,6 +502,8 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
 
         Object.keys(chats).forEach(custId => {
             const meta = chats[custId]?.metadata || chats[custId] || {};
+            if (meta.folder === 'done' || meta.status === 'completed' || meta.status === 'voided') return;
+
             const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
 
             if (chatCustName && (chatCustName === cleanSrc || isCustomerMatch(chatCustName, cleanSrc))) {

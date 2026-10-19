@@ -439,30 +439,46 @@ export function isCustomerMatch(cust1 = "", cust2 = "") {
     if (!c1 || !c2) return false;
     if (c1 === c2) return true;
 
-    // Token-based matching to prevent loose substring collisions (e.g. "anne" inside "stephanie")
-    const words1 = s1.split(/[\s,._-]+/).filter(w => w.length >= 2);
-    const words2 = s2.split(/[\s,._-]+/).filter(w => w.length >= 2);
-    if (words1.length === 0 || words2.length === 0) return false;
+    // Token-based matching
+    const rawWords1 = s1.split(/[\s,._-]+/).filter(w => w.length >= 2);
+    const rawWords2 = s2.split(/[\s,._-]+/).filter(w => w.length >= 2);
+    if (rawWords1.length === 0 || rawWords2.length === 0) return false;
 
-    // If one is a single word token (e.g. "sheila"), it must exactly match a whole word token in the other
-    if (words1.length === 1) {
-        return words2.some(w => w === words1[0]);
-    }
-    if (words2.length === 1) {
-        return words1.some(w => w === words2[0]);
-    }
+    // Strip generational suffixes from end (e.g. Jr, Sr, II, III)
+    const SUFFIXES = new Set(['jr', 'sr', 'ii', 'iii', 'iv', 'v']);
+    const words1 = rawWords1.filter((w, idx) => idx === 0 || !SUFFIXES.has(w));
+    const words2 = rawWords2.filter((w, idx) => idx === 0 || !SUFFIXES.has(w));
 
-    // Both have multiple words: check if shorter is subset of longer
-    const [shorter, longer] = words1.length <= words2.length ? [words1, words2] : [words2, words1];
-    const allShorterMatch = shorter.every(sw => longer.includes(sw));
-    if (allShorterMatch) return true;
-
-    // If both have at least 2 tokens and share first name + last name
-    if (words1[0] === words2[0] && words1[words1.length - 1] === words2[words2.length - 1]) {
-        return true;
+    // CRITICAL: A single-word name (e.g. "Mary", "Mark", "John") can NEVER match a multi-word name
+    // (e.g. "Maryclair Malto", "Mary Ann Santos"). Doing so causes severe cross-customer collisions!
+    if (words1.length <= 1 || words2.length <= 1) {
+        return false;
     }
 
-    return false;
+    // Both names must have at least 2 tokens
+    // Rule 1: First name token MUST match
+    if (words1[0] !== words2[0]) return false;
+
+    // Rule 2: Last name token MUST match
+    if (words1[words1.length - 1] !== words2[words2.length - 1]) return false;
+
+    // Rule 3: Middle tokens validation
+    // E.g. "Mary Jane Santos" vs "Mary Ann Santos" must NOT match!
+    const mid1 = words1.slice(1, -1);
+    const mid2 = words2.slice(1, -1);
+
+    if (mid1.length > 0 && mid2.length > 0) {
+        const minLen = Math.min(mid1.length, mid2.length);
+        for (let i = 0; i < minLen; i++) {
+            const m1 = mid1[i];
+            const m2 = mid2[i];
+            if (m1 !== m2 && !m1.startsWith(m2) && !m2.startsWith(m1)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 /**

@@ -228,29 +228,43 @@ export async function submitAdminForceCatering() {
     // Concurrently update customerChats in background without blocking status change
     if (db && custName) {
         const cleanSearchName = custName.trim().toLowerCase();
-        db.ref('customerChatMeta').once('value').then((snapshot) => {
-            const chats = snapshot.val() || {};
-            Object.keys(chats).forEach(custId => {
-                const meta = chats[custId]?.metadata || chats[custId] || {};
-                const chatCustName = (meta.customerName || meta.name || "").trim().toLowerCase();
-                const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
-                const fbName = (resolvedFb?.name || "").trim().toLowerCase();
+        const selectedCustId = custSelect && custSelect.value.trim().toLowerCase() === cleanSearchName
+            ? (custSelect.selectedOptions?.[0]?.dataset?.custId || null)
+            : null;
 
-                if (chatCustName === cleanSearchName || fbName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName) || (fbName && isCustomerMatch(fbName, cleanSearchName))) {
-                    const updateObj = {
-                        folder: 'catering',
-                        cateredByRiderId: targetId,
-                        cateredByRiderName: targetName,
-                        cateredBy: targetName,
-                        forcedBy: adminName,
-                        isForcedCater: true,
-                        lastUpdated: Date.now()
-                    };
-                    db.ref(`customerChats/${custId}/metadata`).update(updateObj).catch(() => {});
-                    db.ref(`customerChatMeta/${custId}`).update(updateObj).catch(() => {});
-                }
-            });
-        }).catch(() => {});
+        const updateObj = {
+            folder: 'catering',
+            status: 'active',
+            cateredByRiderId: targetId,
+            cateredByRiderName: targetName,
+            cateredBy: targetName,
+            forcedBy: adminName,
+            isForcedCater: true,
+            lastUpdated: Date.now()
+        };
+
+        if (selectedCustId) {
+            db.ref(`customerChats/${selectedCustId}/metadata`).update(updateObj).catch(() => {});
+            db.ref(`customerChatMeta/${selectedCustId}`).update(updateObj).catch(() => {});
+        } else {
+            db.ref('customerChatMeta').once('value').then((snapshot) => {
+                const chats = snapshot.val() || {};
+                Object.keys(chats).forEach(custId => {
+                    const meta = chats[custId]?.metadata || chats[custId] || {};
+                    // Never reopen or hijack completed, voided, or done chats
+                    if (meta.folder === 'done' || meta.status === 'completed' || meta.status === 'voided') return;
+
+                    const chatCustName = (meta.customerName || meta.name || "").trim().toLowerCase();
+                    const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
+                    const fbName = (resolvedFb?.name || "").trim().toLowerCase();
+
+                    if (chatCustName === cleanSearchName || fbName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName) || (fbName && isCustomerMatch(fbName, cleanSearchName))) {
+                        db.ref(`customerChats/${custId}/metadata`).update(updateObj).catch(() => {});
+                        db.ref(`customerChatMeta/${custId}`).update(updateObj).catch(() => {});
+                    }
+                });
+            }).catch(() => {});
+        }
     }
 
     const forceExtraData = { 
