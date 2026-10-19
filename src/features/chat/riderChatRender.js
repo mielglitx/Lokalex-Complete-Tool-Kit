@@ -504,7 +504,7 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const imageMarkup = imgHtml 
         ? (isLikeSticker 
             ? `<div class="p-0.5 select-none flex items-center justify-start"><img src="${imgHtml}" alt="👍" class="w-10 h-10 object-contain hover:scale-110 active:scale-90 transition-transform cursor-pointer" onclick="event.stopPropagation()"></div>`
-            : `<img src="${imgHtml}" loading="eager" decoding="async" fetchpriority="high" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgHtml)}', 'rider')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-95 transition bg-gray-100 dark:bg-gray-800 min-h-[120px] object-cover">`)
+            : `<img src="${imgHtml}" loading="eager" decoding="async" fetchpriority="high" onerror="window.handleChatImageLoadError && window.handleChatImageLoadError(this, '${m.id}')" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgHtml)}', 'rider')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-95 transition bg-gray-100 dark:bg-gray-800 min-h-[120px] object-cover">`)
         : (isResolvingFbImage 
             ? `<div class="flex items-center gap-2 py-2 px-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-600 dark:text-blue-400 text-xs mt-1 font-medium animate-pulse"><i class="fa-solid fa-spinner fa-spin text-blue-500"></i><span>Loading photo...</span></div>` 
             : '');
@@ -651,6 +651,20 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
     }
 }
 
+export function handleChatImageLoadError(imgEl, msgId) {
+    if (!imgEl || !msgId) return;
+    const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
+    if (!activeCustId) return;
+
+    if (typeof window.resolveFacebookMessageAttachment === 'function') {
+        window.resolveFacebookMessageAttachment(activeCustId, msgId, msgId).then(freshUrl => {
+            if (freshUrl && freshUrl !== imgEl.src) {
+                imgEl.src = freshUrl;
+            }
+        }).catch(() => {});
+    }
+}
+
 if (typeof window !== 'undefined') {
     window.handleMsgPointerDown = handleMsgPointerDown;
     window.handleMsgPointerMove = handleMsgPointerMove;
@@ -660,4 +674,5 @@ if (typeof window !== 'undefined') {
     window.closeChatPhoneModal = closeChatPhoneModal;
     window.executeChatPhoneAction = executeChatPhoneAction;
     window.saveChatPhoneToCustomerDetails = saveChatPhoneToCustomerDetails;
+    window.handleChatImageLoadError = handleChatImageLoadError;
 }

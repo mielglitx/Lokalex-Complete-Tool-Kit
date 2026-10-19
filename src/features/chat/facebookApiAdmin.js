@@ -71,6 +71,21 @@ let visibleLinksSet = new Set();
             }
         }
     } catch (_) {}
+
+    // Proactive background fetch to ensure cachedAdminApisMap always has valid tokens across all devices
+    fetch(`https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/adminSettings/facebookApis.json`)
+        .then(res => res.json())
+        .then(apis => {
+            if (apis && typeof apis === 'object') {
+                try {
+                    localStorage.setItem('lokalex_cached_admin_facebook_apis', JSON.stringify(apis));
+                } catch (_) {}
+                Object.entries(apis).forEach(([id, data]) => {
+                    if (data) cachedAdminApisMap.set(id, { id, ...data });
+                });
+            }
+        })
+        .catch(() => {});
 })();
 
 /**
@@ -1416,9 +1431,26 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid) {
         try {
             let apiList = Array.from(cachedAdminApisMap.values()).filter(a => a && a.pageAccessToken);
             if (apiList.length === 0 && db) {
-                const apiSnap = await db.ref('adminSettings/facebookApis').once('value');
-                const apis = apiSnap.val() || {};
-                apiList = Object.values(apis).filter(a => a && a.pageAccessToken);
+                try {
+                    const apiSnap = await db.ref('adminSettings/facebookApis').once('value');
+                    const apis = apiSnap.val() || {};
+                    apiList = Object.values(apis).filter(a => a && a.pageAccessToken);
+                } catch (_) {}
+            }
+            if (apiList.length === 0) {
+                try {
+                    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/adminSettings/facebookApis.json?t=${Date.now()}`;
+                    const res = await fetch(directRestUrl);
+                    if (res.ok) {
+                        const val = await res.json();
+                        if (val && typeof val === 'object') {
+                            apiList = Object.values(val).filter(a => a && a.pageAccessToken);
+                            Object.entries(val).forEach(([id, data]) => {
+                                if (data) cachedAdminApisMap.set(id, { id, ...data });
+                            });
+                        }
+                    }
+                } catch (_) {}
             }
             if (apiList.length === 0) return null;
 
@@ -1513,9 +1545,26 @@ export async function resolveFacebookMessageReplyTo(custId, msgId, rawMid) {
         try {
             let apiList = Array.from(cachedAdminApisMap.values()).filter(a => a && a.pageAccessToken);
             if (apiList.length === 0 && db) {
-                const apiSnap = await db.ref('adminSettings/facebookApis').once('value');
-                const apis = apiSnap.val() || {};
-                apiList = Object.values(apis).filter(a => a && a.pageAccessToken);
+                try {
+                    const apiSnap = await db.ref('adminSettings/facebookApis').once('value');
+                    const apis = apiSnap.val() || {};
+                    apiList = Object.values(apis).filter(a => a && a.pageAccessToken);
+                } catch (_) {}
+            }
+            if (apiList.length === 0) {
+                try {
+                    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/adminSettings/facebookApis.json?t=${Date.now()}`;
+                    const res = await fetch(directRestUrl);
+                    if (res.ok) {
+                        const val = await res.json();
+                        if (val && typeof val === 'object') {
+                            apiList = Object.values(val).filter(a => a && a.pageAccessToken);
+                            Object.entries(val).forEach(([id, data]) => {
+                                if (data) cachedAdminApisMap.set(id, { id, ...data });
+                            });
+                        }
+                    }
+                } catch (_) {}
             }
             if (apiList.length === 0) return null;
 
