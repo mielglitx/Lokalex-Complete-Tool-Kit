@@ -518,8 +518,15 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                     riderChatMemoryCache.set(custId, allMsgs);
                     idbSet('chats', custId, allMsgs).catch(() => {});
 
-                    if (!hasLocalRecord || loadedRiderMsgsMap.size <= RIDER_CHAT_BATCH_SIZE) {
-                        const displayChunk = allMsgs.slice(-RIDER_CHAT_BATCH_SIZE);
+                    const latestMsgInAll = allMsgs[allMsgs.length - 1];
+                    const lastLoadedMsg = Array.from(loadedRiderMsgsMap.values()).pop();
+                    const hasNewerMessages = !lastLoadedMsg || 
+                        (latestMsgInAll && !loadedRiderMsgsMap.has(latestMsgInAll.id)) ||
+                        (latestMsgInAll && lastLoadedMsg && getMessageTimestamp(latestMsgInAll) > getMessageTimestamp(lastLoadedMsg));
+
+                    if (!hasLocalRecord || loadedRiderMsgsMap.size === 0 || hasNewerMessages) {
+                        const countToLoad = Math.max(loadedRiderMsgsMap.size, RIDER_CHAT_BATCH_SIZE);
+                        const displayChunk = allMsgs.slice(-countToLoad);
                         loadedRiderMsgsMap.clear();
                         displayChunk.forEach(m => loadedRiderMsgsMap.set(m.id, m));
                         hasMoreRiderMsgs = allMsgs.length > displayChunk.length;
@@ -527,8 +534,13 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                             oldestRiderMsgTimestamp = getMessageTimestamp(displayChunk[0]);
                             oldestRiderMsgKey = displayChunk[0].id || null;
                         }
-                        renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, !isInitialScrollDone, 0, activeCustData);
+                        renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
                         isInitialScrollDone = true;
+                        requestAnimationFrame(() => {
+                            container.scrollTop = container.scrollHeight;
+                            setTimeout(() => { container.scrollTop = container.scrollHeight; }, 60);
+                            setTimeout(() => { container.scrollTop = container.scrollHeight; }, 180);
+                        });
                         autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
                         autoResolveRecentFbCustomerAttachments(custId, container, activeCustData);
                     }
@@ -540,7 +552,7 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
     // Realtime Firebase connection
     const messagesQuery = db.ref(`customerChats/${custId}/messages`);
 
-    // Initial check for empty chat thread
+    // Authoritative check & synchronization of newest incoming messages on thread open
     messagesQuery.once('value', (snapshot) => {
         if (activeRiderChatCustId !== custId) return;
         const data = snapshot.val();
@@ -556,7 +568,35 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
 
             riderChatMemoryCache.set(custId, allMsgs);
             idbSet('chats', custId, allMsgs).catch(() => {});
-            hasMoreRiderMsgs = allMsgs.length > loadedRiderMsgsMap.size;
+
+            const latestMsgInAll = allMsgs[allMsgs.length - 1];
+            const lastLoadedMsg = Array.from(loadedRiderMsgsMap.values()).pop();
+            const hasNewerMessages = !lastLoadedMsg || 
+                (latestMsgInAll && !loadedRiderMsgsMap.has(latestMsgInAll.id)) ||
+                (latestMsgInAll && lastLoadedMsg && getMessageTimestamp(latestMsgInAll) > getMessageTimestamp(lastLoadedMsg));
+
+            if (!hasLocalRecord || loadedRiderMsgsMap.size === 0 || hasNewerMessages) {
+                const countToLoad = Math.max(loadedRiderMsgsMap.size, RIDER_CHAT_BATCH_SIZE);
+                const displayChunk = allMsgs.slice(-countToLoad);
+                loadedRiderMsgsMap.clear();
+                displayChunk.forEach(m => loadedRiderMsgsMap.set(m.id, m));
+                hasMoreRiderMsgs = allMsgs.length > displayChunk.length;
+                if (displayChunk.length > 0) {
+                    oldestRiderMsgTimestamp = getMessageTimestamp(displayChunk[0]);
+                    oldestRiderMsgKey = displayChunk[0].id || null;
+                }
+                renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
+                isInitialScrollDone = true;
+                requestAnimationFrame(() => {
+                    container.scrollTop = container.scrollHeight;
+                    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 60);
+                    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 180);
+                });
+                autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
+                autoResolveRecentFbCustomerAttachments(custId, container, activeCustData);
+            } else {
+                hasMoreRiderMsgs = allMsgs.length > loadedRiderMsgsMap.size;
+            }
         }
     });
 
@@ -621,10 +661,16 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         }
 
         const isNearBottom = (container.scrollHeight - container.scrollTop - container.clientHeight) < 140;
+        const isRecentlyOpened = (Date.now() - openSessionTime) < 4000;
+        const shouldScroll = isNearBottom || isRecentlyOpened;
 
         if (!isInitialScrollDone) {
             renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
             isInitialScrollDone = true;
+            requestAnimationFrame(() => {
+                container.scrollTop = container.scrollHeight;
+                setTimeout(() => { container.scrollTop = container.scrollHeight; }, 60);
+            });
             autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
             autoResolveRecentFbCustomerAttachments(custId, container, activeCustData);
         } else {
@@ -644,15 +690,21 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                     playChatChime('inbox');
                 }
 
-                if (isNearBottom) {
-                    requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+                if (shouldScroll) {
+                    requestAnimationFrame(() => { 
+                        container.scrollTop = container.scrollHeight;
+                        setTimeout(() => { container.scrollTop = container.scrollHeight; }, 60);
+                    });
                 } else {
                     const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
                     const preview = fullMsg.text || (fullMsg.imageUrl ? "📷 Photo" : "📍 Location");
                     showRiderInChatToast(container, fullMsg.sender || custName, preview);
                 }
-            } else if (isNearBottom) {
-                requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+            } else if (shouldScroll) {
+                requestAnimationFrame(() => { 
+                    container.scrollTop = container.scrollHeight;
+                    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 60);
+                });
             }
         }
     });
@@ -703,18 +755,34 @@ export function syncIncomingMessageFromMeta(custId, meta) {
 
     // If metadata indicates a newer message than what we currently have in memory:
     if (lastMsgTime > 0 && lastMsgTime > newestLoadedTime) {
-        db.ref(`customerChats/${custId}/messages`).limitToLast(2).once('value', (snap) => {
+        db.ref(`customerChats/${custId}/messages`).once('value', (snap) => {
             if (activeRiderChatCustId !== custId) return;
             const data = snap.val();
             if (data && typeof data === 'object') {
-                Object.entries(data).forEach(([key, msg]) => {
-                    if (!loadedRiderMsgsMap.has(key)) {
-                        const fullMsg = { id: key, ...msg };
-                        loadedRiderMsgsMap.set(key, fullMsg);
+                const allMsgs = Object.entries(data)
+                    .map(([key, msg]) => ({ id: key, ...msg }))
+                    .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+
+                riderChatMemoryCache.set(custId, allMsgs);
+                idbSet('chats', custId, allMsgs).catch(() => {});
+
+                let hasAppended = false;
+                allMsgs.forEach(fullMsg => {
+                    if (!loadedRiderMsgsMap.has(fullMsg.id)) {
+                        loadedRiderMsgsMap.set(fullMsg.id, fullMsg);
                         appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
-                        requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+                        hasAppended = true;
                     }
                 });
+
+                if (hasAppended) {
+                    requestAnimationFrame(() => { 
+                        container.scrollTop = container.scrollHeight; 
+                        setTimeout(() => { container.scrollTop = container.scrollHeight; }, 60);
+                    });
+                    autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
+                    autoResolveRecentFbCustomerAttachments(custId, container, activeCustData);
+                }
             }
         });
     }
