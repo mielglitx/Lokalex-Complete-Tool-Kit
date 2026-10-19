@@ -999,7 +999,8 @@ async function processMetaEntries(entries, cfg) {
               }
             }
           }
-        } catch (autoErr) {
+        }
+      } catch (autoErr) {
           console.warn("Full booking auto-reply check in worker error:", autoErr);
         }
       } catch (err) {

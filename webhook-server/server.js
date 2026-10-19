@@ -893,7 +893,8 @@ app.post('/webhook', async (req, res) => {
                 }
               }
             }
-          } catch (autoErr) {
+          }
+        } catch (autoErr) {
             console.warn("Full booking auto-reply check in server error:", autoErr);
           }
         } catch (err) {
