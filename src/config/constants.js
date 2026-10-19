@@ -15,17 +15,11 @@
  */
 
 export const API_URL = "https://script.google.com/macros/s/AKfycbyIz6OEd7dZh2gx1T5oT3G6xo7i4D3Lq8jPre4ke26tcqqq3v0pollbGtRcTr8JATnvtQ/exec"; 
-export const CSV_AUTH_URL = "https://docs.google.com/spreadsheets/d/1lc-1os3xTnAuE0dsm6UmEle7vxuRyewBnuBlSrfPSWk/export?format=csv&gid=0";
 export const HUB_LOCATION = { lat: 15.6881, lng: 120.4144, mapUrl: "https://maps.app.goo.gl/sCBrMSjP9FEjB43C7" };
 
 // Only keep the primary Admin ID (Amiel) here. If Allan was 5548562 or 4547425,
 // keeping only the true owner ID prevents ordinary riders from inheriting 0% fee exemptions.
 export const ADMIN_IDS = ["4547425", "amiel"];
-
-// FACEBOOK APP & PAGE CONFIGURATION
-export const FB_APP_ID = "3509728395866188";
-export const FB_PAGE_USERNAME = "lokaledeliverygroup"; 
-export const FB_PAGE_URL = `https://m.me/${FB_PAGE_USERNAME}`;
 
 export const BARANGAY_DATA = [
     { name: "Anoling 1st", km: "5.5", fee: 95 }, { name: "Anoling 2nd", km: "6.7", fee: 110 },

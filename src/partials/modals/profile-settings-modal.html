@@ -141,14 +141,19 @@
 
             <!-- OVER-THE-AIR (OTA) LIVE UPDATE CONTROLS -->
             <div class="pt-2 border-t border-gray-200 dark:border-gray-800">
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between gap-2">
                     <div>
                         <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Software Updates</label>
                         <p class="text-[10px] text-gray-500 dark:text-gray-400">Live Over-The-Air GitHub Updates</p>
                     </div>
-                    <button type="button" onclick="window.checkForOtaUpdate && window.checkForOtaUpdate(true)" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow-xs">
-                        <i class="fa-solid fa-arrows-rotate"></i> Check for Updates
-                    </button>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <button type="button" onclick="window.openOtaUpdateSelectorModal && window.openOtaUpdateSelectorModal()" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-[11px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer" title="Pick version or rollback">
+                            <i class="fa-solid fa-code-branch text-emerald-500"></i> Versions
+                        </button>
+                        <button type="button" onclick="window.checkForOtaUpdate && window.checkForOtaUpdate(true)" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer">
+                            <i class="fa-solid fa-arrows-rotate"></i> Check Update
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -168,7 +173,7 @@
                     <i class="fa-solid fa-arrow-right-from-bracket"></i> Log Out of Account
                 </button>
                 <div class="mt-2 text-center">
-                    <button type="button" onclick="window.checkForOtaUpdate && window.checkForOtaUpdate(true)" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition hover:bg-gray-100 dark:hover:bg-gray-800/60 cursor-pointer" title="Tap to check for updates">
+                    <button type="button" onclick="window.openOtaUpdateSelectorModal && window.openOtaUpdateSelectorModal()" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition hover:bg-gray-100 dark:hover:bg-gray-800/60 cursor-pointer" title="Tap to select version or rollback">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                         <span>Lokalex Hub</span>
                         <span class="app-version-tracker font-mono font-bold text-gray-600 dark:text-gray-300">v1.0.4</span>

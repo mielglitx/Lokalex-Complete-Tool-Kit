@@ -601,7 +601,7 @@
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-Ck9o7TGI.js"></script>
+  <script type="module" crossorigin src="./assets/index-yEKokXzR.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
@@ -6308,6 +6308,76 @@
         </div>
     </div>
 </div>
+
+<!-- OTA UPDATE & ROLLBACK SELECTOR MODAL -->
+<div id="ota-update-selector-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-cardBg border border-emerald-500/50 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3 max-h-[90vh] overflow-hidden text-gray-900 dark:text-white">
+        <!-- MODAL HEADER -->
+        <div class="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-2xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-base font-black border border-emerald-500/30">
+                    <i class="fa-solid fa-code-branch"></i>
+                </div>
+                <div>
+                    <h3 class="font-black text-sm text-gray-900 dark:text-white leading-tight">Version Selector & Rollback</h3>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Choose any release from GitHub repository</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeOtaUpdateSelectorModal && window.closeOtaUpdateSelectorModal()" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+
+        <!-- CURRENT STATUS BANNER -->
+        <div class="px-4 pt-1 shrink-0">
+            <div class="bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl p-3 shadow-md flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                    <span class="text-[9px] uppercase tracking-wider text-emerald-200 font-bold block">Current Active Version</span>
+                    <div id="ota-current-version-badge" class="font-black text-base sm:text-lg font-mono">v1.0.28</div>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onclick="window.openOtaUpdateSelectorModal && window.openOtaUpdateSelectorModal()" class="bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Refresh available versions from GitHub">
+                        <i class="fa-solid fa-arrows-rotate"></i> Refresh
+                    </button>
+                    <button type="button" onclick="window.resetToBuiltinVersion && window.resetToBuiltinVersion()" class="bg-red-500/80 hover:bg-red-600 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Revert to built-in APK factory bundle">
+                        <i class="fa-solid fa-triangle-exclamation"></i> Reset to APK
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- VERSIONS LIST CONTAINER -->
+        <div class="px-4 flex-1 min-h-[220px] max-h-[48vh] overflow-y-auto flex flex-col gap-2">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mt-1">
+                Available GitHub OTA Releases
+            </div>
+            <div id="ota-versions-list" class="flex flex-col gap-2 pb-2">
+                <div class="text-center text-gray-500 italic py-10 flex flex-col items-center gap-2 text-xs">
+                    <i class="fa-solid fa-spinner fa-spin text-emerald-500 text-lg"></i>
+                    <span>Loading available releases...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- MANUAL / CUSTOM INPUT DRAWER -->
+        <div class="p-3 bg-gray-50 dark:bg-black/20 border-t border-gray-200 dark:border-gray-800 flex flex-col gap-2 shrink-0">
+            <span class="text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400">Custom Version or Direct URL</span>
+            <div class="flex gap-2">
+                <input type="text" id="ota-custom-version-input" placeholder="e.g. 1.0.28 or https://...dist.zip" class="flex-1 bg-white dark:bg-inputBg text-xs rounded-xl px-3 py-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-mono placeholder:text-gray-400">
+                <button type="button" onclick="window.applyCustomOtaInput && window.applyCustomOtaInput()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition active:scale-95 shrink-0 shadow-xs cursor-pointer">
+                    Apply
+                </button>
+            </div>
+        </div>
+
+        <!-- CLOSE FOOTER -->
+        <div class="px-4 pb-3 shrink-0">
+            <button type="button" onclick="window.closeOtaUpdateSelectorModal && window.closeOtaUpdateSelectorModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
     <!-- src/partials/modals/store-account-modal.html -->
 <div id="admin-store-account-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-cardBg border border-gray-800 w-full max-w-md rounded-3xl p-5 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
@@ -6902,14 +6972,19 @@
 
             <!-- OVER-THE-AIR (OTA) LIVE UPDATE CONTROLS -->
             <div class="pt-2 border-t border-gray-200 dark:border-gray-800">
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between gap-2">
                     <div>
                         <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Software Updates</label>
                         <p class="text-[10px] text-gray-500 dark:text-gray-400">Live Over-The-Air GitHub Updates</p>
                     </div>
-                    <button type="button" onclick="window.checkForOtaUpdate && window.checkForOtaUpdate(true)" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow-xs">
-                        <i class="fa-solid fa-arrows-rotate"></i> Check for Updates
-                    </button>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <button type="button" onclick="window.openOtaUpdateSelectorModal && window.openOtaUpdateSelectorModal()" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 text-[11px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer" title="Pick version or rollback">
+                            <i class="fa-solid fa-code-branch text-emerald-500"></i> Versions
+                        </button>
+                        <button type="button" onclick="window.checkForOtaUpdate && window.checkForOtaUpdate(true)" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow-xs cursor-pointer">
+                            <i class="fa-solid fa-arrows-rotate"></i> Check Update
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -6929,7 +7004,7 @@
                     <i class="fa-solid fa-arrow-right-from-bracket"></i> Log Out of Account
                 </button>
                 <div class="mt-2 text-center">
-                    <button type="button" onclick="window.checkForOtaUpdate && window.checkForOtaUpdate(true)" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition hover:bg-gray-100 dark:hover:bg-gray-800/60 cursor-pointer" title="Tap to check for updates">
+                    <button type="button" onclick="window.openOtaUpdateSelectorModal && window.openOtaUpdateSelectorModal()" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition hover:bg-gray-100 dark:hover:bg-gray-800/60 cursor-pointer" title="Tap to select version or rollback">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                         <span>Lokalex Hub</span>
                         <span class="app-version-tracker font-mono font-bold text-gray-600 dark:text-gray-300">v1.0.4</span>

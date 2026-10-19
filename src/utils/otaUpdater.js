@@ -226,11 +226,279 @@ export async function checkForOtaUpdate(isManual = false) {
     }
 }
 
+/**
+ * Fetches all available OTA release zips from GitHub repository.
+ */
+export async function fetchAvailableOtaVersions() {
+    const versions = [];
+    try {
+        const res = await fetch(`https://api.github.com/repos/mielglitx/LokalexOTAUpdate/contents?t=${Date.now()}`, {
+            headers: { 'Accept': 'application/vnd.github.v3+json' },
+            cache: 'no-store'
+        });
+        if (res.ok) {
+            const files = await res.json();
+            if (Array.isArray(files)) {
+                files.forEach(f => {
+                    const match = f.name && f.name.match(/^dist-v(\d+\.\d+\.\d+)\.zip$/);
+                    if (match) {
+                        const ver = match[1];
+                        versions.push({
+                            version: ver,
+                            fileName: f.name,
+                            url: `https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/${f.name}`,
+                            size: f.size ? `${(f.size / (1024 * 1024)).toFixed(2)} MB` : ''
+                        });
+                    }
+                });
+            }
+        }
+    } catch (e) {
+        console.warn("[OTA] GitHub contents fetch failed:", e);
+    }
+
+    // Sort descending by semantic version (e.g. 1.0.28, 1.0.27, ..., 1.0.9)
+    versions.sort((a, b) => compareVersions(b.version, a.version));
+
+    // Fallback if GitHub API rate-limits
+    if (versions.length === 0) {
+        const knownVersions = [
+            '1.0.28', '1.0.27', '1.0.26', '1.0.25', '1.0.24', '1.0.23',
+            '1.0.22', '1.0.21', '1.0.20', '1.0.19', '1.0.18', '1.0.17',
+            '1.0.16', '1.0.15', '1.0.14', '1.0.13', '1.0.12', '1.0.11',
+            '1.0.10', '1.0.9'
+        ];
+        knownVersions.forEach(ver => {
+            versions.push({
+                version: ver,
+                fileName: `dist-v${ver}.zip`,
+                url: `https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist-v${ver}.zip`,
+                size: '0.78 MB'
+            });
+        });
+    }
+
+    return versions;
+}
+
+/**
+ * Installs or rolls back to a specific OTA version.
+ */
+export async function installSpecificOtaVersion(version, customUrl = null) {
+    if (!version) return;
+    const cleanVer = version.toString().trim().replace(/^v/i, '');
+    const currentVersion = await getCurrentAppVersion();
+    const isRollback = compareVersions(cleanVer, currentVersion) < 0;
+    const isSame = compareVersions(cleanVer, currentVersion) === 0;
+
+    const actionName = isRollback ? "I-rollback" : (isSame ? "I-reinstall" : "I-update");
+    const confirmMsg = `${actionName} ang app sa bersyon v${cleanVer}?\n\nKasalukuyang bersyon: v${currentVersion}\n\nI-da-download at ilalapat ang bundle mula sa GitHub.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    const downloadUrl = customUrl || `https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist-v${cleanVer}.zip`;
+
+    showToast(`⏳ Dina-download ang v${cleanVer}...`);
+
+    try {
+        if (isNativePlatform()) {
+            console.log(`[OTA] Installing specific version ${cleanVer} from ${downloadUrl}...`);
+            const bundle = await CapacitorUpdater.download({
+                url: downloadUrl,
+                version: cleanVer
+            });
+
+            if (bundle && bundle.id) {
+                localStorage.setItem('lokalex_ota_version', cleanVer);
+                showToast(`🎉 Na-download ang v${cleanVer}! Inilalapat ang bundle...`);
+
+                try {
+                    await CapacitorUpdater.set({ id: bundle.id });
+                } catch (setErr) {
+                    console.warn("[OTA] CapacitorUpdater.set error, attempting reload:", setErr);
+                }
+
+                setTimeout(() => {
+                    window.location.reload();
+                }, 800);
+            } else {
+                throw new Error("No bundle ID returned from updater");
+            }
+        } else {
+            localStorage.setItem('lokalex_ota_version', cleanVer);
+            showToast(`✅ Na-set ang v${cleanVer}! Nagre-reload...`);
+            setTimeout(() => window.location.reload(), 1200);
+        }
+    } catch (err) {
+        console.error(`[OTA] Failed to install version ${cleanVer}:`, err);
+        showToast(`⚠️ Hindi ma-install ang v${cleanVer}: ${err.message || 'Error'}`);
+    }
+}
+
+/**
+ * Resets the app back to the built-in factory APK version.
+ */
+export async function resetToBuiltinVersion() {
+    if (!confirm(`⚠️ I-reset ang app pabalik sa factory APK bundle (v${CURRENT_BUILT_IN_VERSION})?\n\nLahat ng na-download na live updates ay aalisin.`)) {
+        return;
+    }
+
+    showToast("⏳ Nililinis ang live updates...");
+
+    try {
+        if (isNativePlatform()) {
+            await CapacitorUpdater.reset();
+        }
+        localStorage.setItem('lokalex_ota_version', CURRENT_BUILT_IN_VERSION);
+        showToast("✨ Na-reset sa factory APK! Nagre-reload...");
+        setTimeout(() => {
+            window.location.reload();
+        }, 800);
+    } catch (err) {
+        console.error("[OTA] Reset error:", err);
+        showToast(`⚠️ Reset error: ${err.message || 'Error'}`);
+    }
+}
+
+/**
+ * Opens the OTA update selector modal and loads available versions.
+ */
+export async function openOtaUpdateSelectorModal() {
+    const modal = document.getElementById('ota-update-selector-modal');
+    if (!modal) return;
+
+    modal.classList.remove('hidden');
+
+    const curVerEl = document.getElementById('ota-current-version-badge');
+    const listEl = document.getElementById('ota-versions-list');
+
+    const currentVersion = await getCurrentAppVersion();
+    if (curVerEl) curVerEl.textContent = `v${currentVersion}`;
+
+    if (listEl) {
+        listEl.innerHTML = `
+            <div class="text-center text-gray-500 italic py-10 flex flex-col items-center gap-2 text-xs">
+                <i class="fa-solid fa-spinner fa-spin text-emerald-500 text-lg"></i>
+                <span>Kinukuha ang available updates mula sa GitHub...</span>
+            </div>
+        `;
+    }
+
+    try {
+        const versions = await fetchAvailableOtaVersions();
+        renderOtaVersionsList(versions, currentVersion);
+    } catch (e) {
+        if (listEl) {
+            listEl.innerHTML = `<div class="text-center text-red-500 py-8 text-xs">Failed to load versions from GitHub. Subukan muli.</div>`;
+        }
+    }
+}
+
+export function closeOtaUpdateSelectorModal() {
+    const modal = document.getElementById('ota-update-selector-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+export function applyCustomOtaInput() {
+    const input = document.getElementById('ota-custom-version-input');
+    const val = input ? input.value.trim() : "";
+    if (!val) {
+        showToast("⚠️ Paki-lagay ang version (hal. 1.0.28) o zip URL.");
+        return;
+    }
+
+    if (val.startsWith('http://') || val.startsWith('https://')) {
+        const verName = prompt("Ilagay ang label/version name para sa custom bundle (hal. 1.0.28-custom):", "custom");
+        if (!verName) return;
+        installSpecificOtaVersion(verName, val);
+    } else {
+        const clean = val.replace(/^v/i, '');
+        installSpecificOtaVersion(clean);
+    }
+}
+
+function renderOtaVersionsList(versions, currentVersion) {
+    const listEl = document.getElementById('ota-versions-list');
+    if (!listEl) return;
+
+    if (!versions || versions.length === 0) {
+        listEl.innerHTML = `<div class="text-center text-gray-500 py-8 text-xs italic">Walang available updates na nahanap.</div>`;
+        return;
+    }
+
+    const latestVer = versions[0]?.version;
+
+    listEl.innerHTML = versions.map((item) => {
+        const isCurrent = compareVersions(item.version, currentVersion) === 0;
+        const isLatest = item.version === latestVer;
+        const isRollback = compareVersions(item.version, currentVersion) < 0;
+
+        let badgeHtml = '';
+        if (isCurrent) {
+            badgeHtml = `<span class="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-600/40 text-[9px] font-bold px-2 py-0.5 rounded-full">Active</span>`;
+        } else if (isLatest) {
+            badgeHtml = `<span class="bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-600/40 text-[9px] font-bold px-2 py-0.5 rounded-full">Latest</span>`;
+        } else if (isRollback) {
+            badgeHtml = `<span class="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-600/40 text-[9px] font-bold px-2 py-0.5 rounded-full">Past Release</span>`;
+        }
+
+        let actionBtn = '';
+        if (isCurrent) {
+            actionBtn = `
+                <button type="button" onclick="window.installSpecificOtaVersion && window.installSpecificOtaVersion('${item.version}', '${item.url}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer">
+                    <i class="fa-solid fa-rotate text-xs text-emerald-500"></i> Reinstall
+                </button>
+            `;
+        } else if (isRollback) {
+            actionBtn = `
+                <button type="button" onclick="window.installSpecificOtaVersion && window.installSpecificOtaVersion('${item.version}', '${item.url}')" class="bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer">
+                    <i class="fa-solid fa-clock-rotate-left text-xs"></i> Rollback
+                </button>
+            `;
+        } else {
+            actionBtn = `
+                <button type="button" onclick="window.installSpecificOtaVersion && window.installSpecificOtaVersion('${item.version}', '${item.url}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer">
+                    <i class="fa-solid fa-cloud-arrow-down text-xs"></i> Install
+                </button>
+            `;
+        }
+
+        return `
+            <div class="bg-white dark:bg-cardBg border ${isCurrent ? 'border-emerald-500/70 shadow-sm' : 'border-gray-200 dark:border-gray-800'} rounded-2xl p-3 flex items-center justify-between gap-3 transition">
+                <div class="flex items-center gap-3 min-w-0 flex-1">
+                    <div class="w-10 h-10 rounded-xl ${isCurrent ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700/50' : 'bg-gray-100 dark:bg-black/30 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-800'} flex items-center justify-center shrink-0">
+                        <i class="fa-solid ${isCurrent ? 'fa-circle-check text-base' : 'fa-box-archive text-sm'}"></i>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-bold text-xs sm:text-sm text-gray-900 dark:text-white font-mono">v${item.version}</span>
+                            ${badgeHtml}
+                        </div>
+                        <p class="text-[10px] text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                            ${item.fileName} ${item.size ? `• ${item.size}` : ''}
+                        </p>
+                    </div>
+                </div>
+                <div class="shrink-0">
+                    ${actionBtn}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
 // Bind to window for HTML button onclick
 if (typeof window !== 'undefined') {
     window.checkForOtaUpdate = checkForOtaUpdate;
     window.getCurrentAppVersion = getCurrentAppVersion;
     window.syncVersionTrackerElements = syncVersionTrackerElements;
+    window.fetchAvailableOtaVersions = fetchAvailableOtaVersions;
+    window.installSpecificOtaVersion = installSpecificOtaVersion;
+    window.resetToBuiltinVersion = resetToBuiltinVersion;
+    window.openOtaUpdateSelectorModal = openOtaUpdateSelectorModal;
+    window.closeOtaUpdateSelectorModal = closeOtaUpdateSelectorModal;
+    window.applyCustomOtaInput = applyCustomOtaInput;
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => { syncVersionTrackerElements(); });
     } else {
