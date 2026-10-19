@@ -813,10 +813,24 @@ async function processMetaEntries(entries, cfg) {
         ? 'catering' 
         : (existingFolder === 'followup' ? 'followup' : 'inbox');
 
+      const isDoc = imageUrl && (attachmentType === 'file' || /\.(pdf|docx?|xlsx?|csv|pptx?|txt|zip|rar|7z|apk)$/i.test(imageUrl.split('?')[0].split('#')[0]));
+      let docName = "Document";
+      if (isDoc && imageUrl) {
+        try {
+          const clean = imageUrl.split('?')[0].split('#')[0];
+          const parts = clean.split('/');
+          docName = decodeURIComponent(parts[parts.length - 1] || 'Document');
+        } catch (_) {}
+      }
+
+      const lastSummary = isLikeSticker 
+        ? "👍 Liked" 
+        : (isDoc ? `📄 ${docName}` : (imageUrl && (!item.message.text || !item.message.text.trim()) ? "📷 Photo" : messageText));
+
       const threadMeta = {
         customerName: customerName,
         avatarUrl: avatarUrl,
-        lastMessage: isLikeSticker ? "👍 Liked" : (imageUrl && (!item.message.text || !item.message.text.trim()) ? "📷 Photo" : messageText),
+        lastMessage: lastSummary,
         lastUpdated: timestamp,
         folder: resolvedFolder,
         status: 'active',
@@ -855,8 +869,14 @@ async function processMetaEntries(entries, cfg) {
       }
 
       if (imageUrl) {
-        chatMessage.imageUrl = imageUrl;
-        chatMessage.type = isLikeSticker ? "sticker" : "image";
+        if (isDoc) {
+          chatMessage.fileUrl = imageUrl;
+          chatMessage.fileName = docName;
+          chatMessage.type = "file";
+        } else {
+          chatMessage.imageUrl = imageUrl;
+          chatMessage.type = isLikeSticker ? "sticker" : "image";
+        }
       }
 
       try {

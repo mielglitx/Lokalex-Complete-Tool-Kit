@@ -3,6 +3,7 @@ import { appState } from '../../../store/state.js';
 import { escapeHtml } from '../../../utils/helpers.js';
 import { custChatState, MAPS_API_KEY } from './custChatState.js';
 import { formatChatDateTime } from '../chatUtils.js';
+import { formatChatTextWithPhoneLinks, isDocumentUrlOrType, renderDocumentCardHtml } from '../riderChatRender.js';
 
 export function renderMessageStatusIndicator(msg) {
     const sentTime = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
@@ -174,7 +175,10 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
         }
 
         const timeStr = formatChatDateTime(m.timestamp);
-        const imageSrc = m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null);
+        const isDoc = isDocumentUrlOrType(m);
+        const docMarkup = isDoc ? renderDocumentCardHtml(m, isCustomer) : '';
+
+        const imageSrc = !isDoc ? (m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null)) : null;
         const imgHtml = imageSrc ? `<img src="${imageSrc}" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imageSrc)}', 'customer')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">` : '';
         
         let senderName = m.sender || "Lokalex";
@@ -233,6 +237,9 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
         const encodedText = encodeURIComponent(m.text || '');
         const encodedSender = encodeURIComponent(senderName);
 
+        const isDocFilenameText = isDoc && m.text && (m.text === m.fileName || m.text === m.fileUrl || m.text === m.imageUrl || m.text === '📄 Document' || m.text.startsWith('http'));
+        const showText = m.text && (!imgHtml || (!m.text.includes('[Facebook image]') && !m.text.includes('[Facebook attachment]') && m.text !== '📷 Photo' && m.text !== 'Facebook Message')) && !locationHtml && !isDocFilenameText;
+
         return `
         <div id="msg-bubble-${m.id}" class="flex items-start gap-1.5 ${isCustomer ? 'flex-row-reverse' : 'flex-row'} my-0.5 group/row">
             ${senderAvatarHtml}
@@ -251,7 +258,8 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
                     </div>
                 </div>
                 ${replyBlockHtml}
-                ${(m.text && (!imgHtml || (!m.text.includes('[Facebook image]') && !m.text.includes('[Facebook attachment]') && m.text !== '📷 Photo' && m.text !== 'Facebook Message')) && !locationHtml) ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words pointer-events-none">${escapeHtml(m.text)}</div>` : ''}
+                ${showText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${formatChatTextWithPhoneLinks(m.text)}</div>` : ''}
+                ${docMarkup}
                 ${imgHtml}
                 ${locationHtml}
                 ${reactionsHtml}

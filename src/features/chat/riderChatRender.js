@@ -16,12 +16,54 @@ export function formatChatTextWithPhoneLinks(rawText) {
     if (!rawText) return '';
     const safeText = escapeHtml(rawText);
 
-    // Matches numbers starting with +63, 09, or 9 (followed by digits, spaces, hyphens)
+    // 1. Matches URLs starting with http://, https://, or www.
+    const urlRegex = /(https?:\/\/[^\s<>"'{}|\\^`]+|(?:^|[\s(])www\.[^\s<>"'{}|\\^`]+)/gi;
+
+    // 2. Matches phone numbers starting with +63, 09, or 9
     const phoneRegex = /(?:(?:\+63)|(?:\b09)|(?:\b9))[\d\s\-()]{5,20}\b/g;
 
-    return safeText.replace(phoneRegex, (match) => {
+    // First, linkify web URLs and detect dedicated app intents
+    const withLinks = safeText.replace(urlRegex, (fullMatch, urlGroup) => {
+        let cleanUrl = urlGroup.trim();
+        let prefix = '';
+        if (fullMatch.startsWith(' ') || fullMatch.startsWith('(')) {
+            prefix = fullMatch[0];
+            cleanUrl = cleanUrl.substring(1);
+        }
+
+        const fullHref = cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://') 
+            ? cleanUrl 
+            : `https://${cleanUrl}`;
+
+        // Determine appropriate app badge and icon
+        let appIcon = '<i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>';
+        let badgeClass = 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200';
+        let appTitle = 'Open Link';
+
+        if (/maps\.google\.com|google\.com\/maps|goo\.gl\/maps|maps\.app\.goo\.gl/i.test(fullHref)) {
+            appIcon = '<i class="fa-solid fa-map-location-dot text-emerald-600 dark:text-emerald-400 text-[10px]"></i>';
+            badgeClass = 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-200';
+            appTitle = 'Open in Google Maps';
+        } else if (/maps\.apple\.com/i.test(fullHref)) {
+            appIcon = '<i class="fa-solid fa-map text-emerald-500 text-[10px]"></i>';
+            badgeClass = 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-200';
+            appTitle = 'Open in Apple Maps';
+        } else if (/(?:facebook\.com|fb\.me|fb\.watch|m\.me|fb\.com)/i.test(fullHref)) {
+            appIcon = '<i class="fa-brands fa-facebook text-blue-600 dark:text-blue-400 text-[11px]"></i>';
+            badgeClass = 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200';
+            appTitle = 'Open in Facebook';
+        }
+
+        const encodedHref = encodeURIComponent(fullHref).replace(/'/g, '%27');
+        const linkHtml = `<a href="${fullHref}" onclick="event.stopPropagation(); window.handleChatLinkClick && window.handleChatLinkClick(event, '${encodedHref}')" class="inline-flex items-center gap-1 font-bold underline ${badgeClass} break-all transition active:scale-95 cursor-pointer" title="${appTitle}" target="_blank" rel="noopener noreferrer">${appIcon}<span>${cleanUrl}</span></a>`;
+
+        return prefix + linkHtml;
+    });
+
+    // Second, linkify phone numbers in remaining plain text segments
+    return withLinks.replace(phoneRegex, (match) => {
+        if (match.includes('<a') || match.includes('</a>')) return match;
         const digits = match.replace(/\D/g, '');
-        // Must contain more than 6 digits
         if (digits.length <= 6) return match;
 
         let normalized = digits;
@@ -35,6 +77,175 @@ export function formatChatTextWithPhoneLinks(rawText) {
 
         return `<button type="button" onclick="event.stopPropagation(); window.handleChatPhoneClick && window.handleChatPhoneClick('${normalized}')" class="inline-flex items-center gap-1 font-bold underline text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200 bg-blue-500/10 hover:bg-blue-500/20 px-1.5 py-0.5 rounded transition active:scale-95 cursor-pointer"><i class="fa-solid fa-phone text-[9px]"></i><span>${match}</span></button>`;
     });
+}
+
+export async function handleChatLinkClick(event, encodedUrl) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const url = decodeURIComponent(encodedUrl || '');
+    if (!url) return;
+
+    if (typeof window.openExternalLink === 'function') {
+        await window.openExternalLink(url);
+    } else {
+        window.open(url, '_blank', 'noopener,noreferrer');
+    }
+}
+
+export function formatFileSize(bytes) {
+    if (!bytes || isNaN(bytes)) return '';
+    const num = Number(bytes);
+    if (num < 1024) return `${num} B`;
+    if (num < 1024 * 1024) return `${(num / 1024).toFixed(1)} KB`;
+    return `${(num / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function isDocumentUrlOrType(msg) {
+    if (!msg) return false;
+    if (msg.type === 'file' || msg.type === 'document' || msg.fileUrl) return true;
+    const url = msg.fileUrl || msg.imageUrl || msg.text || '';
+    if (typeof url !== 'string') return false;
+    const cleanUrl = url.split('?')[0].split('#')[0].toLowerCase();
+    const docExtensions = /\.(pdf|docx?|xlsx?|csv|pptx?|txt|zip|rar|7z|tar|gz|apk|rtf)$/i;
+    return docExtensions.test(cleanUrl);
+}
+
+export function getDocumentDetails(msg) {
+    const rawUrl = msg.fileUrl || msg.imageUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : '');
+    let fileName = msg.fileName || '';
+    if (!fileName && rawUrl) {
+        try {
+            const clean = rawUrl.split('?')[0].split('#')[0];
+            const parts = clean.split('/');
+            fileName = decodeURIComponent(parts[parts.length - 1] || 'Document');
+        } catch (_) {
+            fileName = 'Document';
+        }
+    }
+    if (!fileName) fileName = 'Document';
+
+    const extMatch = fileName.match(/\.([a-zA-Z0-9]+)$/);
+    const ext = extMatch ? extMatch[1].toLowerCase() : (msg.fileType ? msg.fileType.toLowerCase() : 'doc');
+
+    let iconHtml = '<i class="fa-solid fa-file text-blue-500 text-xl"></i>';
+    let typeLabel = `${ext.toUpperCase()} File`;
+
+    switch (ext) {
+        case 'pdf':
+            iconHtml = '<i class="fa-solid fa-file-pdf text-rose-500 text-xl"></i>';
+            typeLabel = 'PDF Document';
+            break;
+        case 'doc':
+        case 'docx':
+            iconHtml = '<i class="fa-solid fa-file-word text-blue-600 text-xl"></i>';
+            typeLabel = 'Word Document';
+            break;
+        case 'xls':
+        case 'xlsx':
+        case 'csv':
+            iconHtml = '<i class="fa-solid fa-file-excel text-emerald-600 text-xl"></i>';
+            typeLabel = ext === 'csv' ? 'CSV Spreadsheet' : 'Excel Spreadsheet';
+            break;
+        case 'ppt':
+        case 'pptx':
+            iconHtml = '<i class="fa-solid fa-file-powerpoint text-orange-600 text-xl"></i>';
+            typeLabel = 'PowerPoint Presentation';
+            break;
+        case 'zip':
+        case 'rar':
+        case '7z':
+        case 'tar':
+        case 'gz':
+            iconHtml = '<i class="fa-solid fa-file-zipper text-amber-500 text-xl"></i>';
+            typeLabel = 'Compressed Archive';
+            break;
+        case 'txt':
+        case 'rtf':
+            iconHtml = '<i class="fa-solid fa-file-lines text-slate-500 text-xl"></i>';
+            typeLabel = 'Text Document';
+            break;
+        case 'apk':
+            iconHtml = '<i class="fa-brands fa-android text-emerald-500 text-xl"></i>';
+            typeLabel = 'Android Package';
+            break;
+        default:
+            iconHtml = '<i class="fa-solid fa-file text-blue-500 text-xl"></i>';
+            typeLabel = `${ext.toUpperCase()} Document`;
+            break;
+    }
+
+    const fileSizeFormatted = msg.fileSize ? formatFileSize(msg.fileSize) : '';
+
+    return {
+        url: rawUrl,
+        fileName,
+        ext,
+        iconHtml,
+        typeLabel: fileSizeFormatted ? `${typeLabel} • ${fileSizeFormatted}` : typeLabel
+    };
+}
+
+export function renderDocumentCardHtml(msg, isRider = false) {
+    const details = getDocumentDetails(msg);
+    if (!details.url) return '';
+
+    const encodedUrl = encodeURIComponent(details.url).replace(/'/g, '%27');
+    const encodedName = encodeURIComponent(details.fileName).replace(/'/g, '%27');
+
+    const cardBg = isRider
+        ? 'bg-black/20 hover:bg-black/30 border-white/20 text-white'
+        : 'bg-gray-50 dark:bg-black/30 hover:bg-gray-100 dark:hover:bg-black/50 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100';
+
+    const btnClass = isRider
+        ? 'bg-white/20 hover:bg-white/30 text-white border-white/30'
+        : 'bg-blue-600 hover:bg-blue-700 text-white border-blue-500';
+
+    return `
+    <div class="mt-1.5 p-2.5 rounded-xl border ${cardBg} flex items-center justify-between gap-3 transition max-w-sm w-full select-none">
+        <div class="flex items-center gap-2.5 min-w-0 flex-1">
+            <div class="w-10 h-10 rounded-xl bg-white dark:bg-gray-800 shadow-2xs border border-gray-200 dark:border-gray-700 flex items-center justify-center shrink-0">
+                ${details.iconHtml}
+            </div>
+            <div class="min-w-0 flex-1">
+                <div class="font-bold text-xs truncate" title="${escapeHtml(details.fileName)}">${escapeHtml(details.fileName)}</div>
+                <div class="text-[10px] opacity-75 truncate">${escapeHtml(details.typeLabel)}</div>
+            </div>
+        </div>
+        <button type="button" onclick="event.stopPropagation(); window.downloadChatDocument && window.downloadChatDocument('${encodedUrl}', '${encodedName}')" class="px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 border flex items-center gap-1.5 shadow-2xs active:scale-95 transition cursor-pointer ${btnClass}" title="Download ${escapeHtml(details.fileName)}">
+            <i class="fa-solid fa-download text-[11px]"></i>
+            <span>Download</span>
+        </button>
+    </div>`;
+}
+
+export async function downloadChatDocument(encodedUrl, encodedName) {
+    const rawUrl = decodeURIComponent(encodedUrl || '');
+    const fileName = decodeURIComponent(encodedName || 'document');
+    if (!rawUrl) return;
+
+    if (typeof showToast === 'function') {
+        showToast(`📥 Downloading ${fileName}...`);
+    }
+
+    if (typeof window.openExternalLink === 'function') {
+        await window.openExternalLink(rawUrl);
+        return;
+    }
+
+    try {
+        const link = document.createElement('a');
+        link.href = rawUrl;
+        link.download = fileName;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => link.remove(), 200);
+    } catch (e) {
+        window.open(rawUrl, '_blank', 'noopener,noreferrer');
+    }
 }
 
 export function handleChatPhoneClick(phoneNumber) {
@@ -497,9 +708,12 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const replyBlockHtml = renderReplyPreviewInsideMessage(m.replyTo);
     const reactionsHtml = renderReactionsHtml(m.reactions, m.id);
 
-    const imgHtml = m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null);
-    const isResolvingFbImage = !imgHtml && m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]'));
-    const isLikeSticker = Boolean(m.isSticker || m.stickerType === 'like' || (imgHtml && (imgHtml.includes('369239') || imgHtml.includes('sticker') || imgHtml.includes('like'))));
+    const isDoc = isDocumentUrlOrType(m);
+    const documentMarkup = isDoc ? renderDocumentCardHtml(m, isRider) : '';
+
+    const imgHtml = !isDoc ? (m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null)) : null;
+    const isResolvingFbImage = !isDoc && !imgHtml && m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]'));
+    const isLikeSticker = !isDoc && Boolean(m.isSticker || m.stickerType === 'like' || (imgHtml && (imgHtml.includes('369239') || imgHtml.includes('sticker') || imgHtml.includes('like'))));
     
     const imageMarkup = imgHtml 
         ? (isLikeSticker 
@@ -546,7 +760,8 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const encodedSender = encodeURIComponent(senderName).replace(/'/g, '%27');
 
     const isPlaceholderText = m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]') || m.text === '📷 Photo' || m.text === 'Facebook Message');
-    const showText = m.text && (!imgHtml || !isPlaceholderText) && !isResolvingFbImage && !locationHtml && !(isLikeSticker && imgHtml);
+    const isDocFilenameText = isDoc && m.text && (m.text === m.fileName || m.text === m.fileUrl || m.text === m.imageUrl || m.text === '📄 Document' || m.text.startsWith('http'));
+    const showText = m.text && (!imgHtml || !isPlaceholderText) && !isResolvingFbImage && !locationHtml && !(isLikeSticker && imgHtml) && !isDocFilenameText;
 
     const msgTs = getMessageTimestamp(m);
 
@@ -577,6 +792,7 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
                 </div>
                 ${replyBlockHtml}
                 ${showText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${formatChatTextWithPhoneLinks(m.text)}</div>` : ''}
+                ${documentMarkup}
                 ${imageMarkup}
                 ${locationHtml}
                 ${reactionsHtml}
@@ -675,4 +891,6 @@ if (typeof window !== 'undefined') {
     window.executeChatPhoneAction = executeChatPhoneAction;
     window.saveChatPhoneToCustomerDetails = saveChatPhoneToCustomerDetails;
     window.handleChatImageLoadError = handleChatImageLoadError;
+    window.handleChatLinkClick = handleChatLinkClick;
+    window.downloadChatDocument = downloadChatDocument;
 }

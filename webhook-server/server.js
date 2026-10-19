@@ -714,10 +714,24 @@ app.post('/webhook', async (req, res) => {
           ? 'catering' 
           : (existingFolder === 'followup' ? 'followup' : 'inbox');
 
+        const isDoc = imageUrl && (attachmentType === 'file' || /\.(pdf|docx?|xlsx?|csv|pptx?|txt|zip|rar|7z|apk)$/i.test(imageUrl.split('?')[0].split('#')[0]));
+        let docName = "Document";
+        if (isDoc && imageUrl) {
+          try {
+            const clean = imageUrl.split('?')[0].split('#')[0];
+            const parts = clean.split('/');
+            docName = decodeURIComponent(parts[parts.length - 1] || 'Document');
+          } catch (_) {}
+        }
+
+        const lastSummary = isLikeSticker 
+          ? "👍 Liked" 
+          : (isDoc ? `📄 ${docName}` : (imageUrl && (!item.message.text || !item.message.text.trim()) ? "📷 Photo" : messageText));
+
         const threadMeta = {
           customerName,
           avatarUrl,
-          lastMessage: isLikeSticker ? "👍 Liked" : (imageUrl && (!item.message.text || !item.message.text.trim()) ? "📷 Photo" : messageText),
+          lastMessage: lastSummary,
           lastUpdated: timestamp,
           folder: resolvedFolder,
           status: 'active',
@@ -755,8 +769,14 @@ app.post('/webhook', async (req, res) => {
         }
 
         if (imageUrl) {
-          chatMsg.imageUrl = imageUrl;
-          chatMsg.type = isLikeSticker ? "sticker" : "image";
+          if (isDoc) {
+            chatMsg.fileUrl = imageUrl;
+            chatMsg.fileName = docName;
+            chatMsg.type = "file";
+          } else {
+            chatMsg.imageUrl = imageUrl;
+            chatMsg.type = isLikeSticker ? "sticker" : "image";
+          }
         }
 
         try {

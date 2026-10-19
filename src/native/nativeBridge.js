@@ -307,5 +307,77 @@ if (typeof window !== 'undefined') {
     window.openNativeAppSettings = openNativeAppSettings;
     window.showNativeNotification = showNativeNotification;
     window.clearNativeNotification = clearNativeNotification;
+    window.openExternalLink = openExternalLink;
+}
+
+/**
+ * Opens links in the appropriate native app (Facebook, Google Maps, Apple Maps)
+ * or external system browser when running in Capacitor or Web.
+ */
+export async function openExternalLink(rawUrl) {
+    if (!rawUrl) return;
+    let url = String(rawUrl).trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('geo:') && !url.startsWith('fb:') && !url.startsWith('maps:')) {
+        url = 'https://' + url;
+    }
+
+    const isNative = Capacitor.isNativePlatform();
+    const platform = Capacitor.getPlatform();
+
+    // 1. Google Maps Links
+    const isGoogleMaps = /maps\.google\.com|google\.com\/maps|goo\.gl\/maps|maps\.app\.goo\.gl/i.test(url);
+    if (isGoogleMaps) {
+        if (isNative) {
+            try {
+                await App.openUrl({ url });
+                return;
+            } catch (_) {}
+        }
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return;
+    }
+
+    // 2. Apple Maps Links
+    const isAppleMaps = /maps\.apple\.com/i.test(url);
+    if (isAppleMaps) {
+        if (isNative && platform === 'ios') {
+            try {
+                const appleScheme = url.replace(/^https?:\/\//i, 'maps://');
+                await App.openUrl({ url: appleScheme });
+                return;
+            } catch (_) {}
+        }
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return;
+    }
+
+    // 3. Facebook Links
+    const isFacebook = /(?:facebook\.com|fb\.me|fb\.watch|m\.me|fb\.com)/i.test(url);
+    if (isFacebook) {
+        if (isNative) {
+            try {
+                // Try direct Facebook app deep link
+                const fbScheme = `fb://facewebmodal/f?href=${encodeURIComponent(url)}`;
+                await App.openUrl({ url: fbScheme });
+                return;
+            } catch (_) {
+                try {
+                    await App.openUrl({ url });
+                    return;
+                } catch (_) {}
+            }
+        }
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return;
+    }
+
+    // 4. Default External Links
+    if (isNative) {
+        try {
+            await App.openUrl({ url });
+            return;
+        } catch (_) {}
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
 }
 

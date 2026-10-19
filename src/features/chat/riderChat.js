@@ -1139,7 +1139,7 @@ export function sendRiderChatMessage(content = null, type = 'text', explicitCust
     sendRiderToCustomerChat(content, type === 'image' ? content : null, null, explicitCustId);
 }
 
-export async function sendRiderToCustomerChat(customText = "", customImageUrl = null, customLocationCoords = null, explicitCustId = null) {
+export async function sendRiderToCustomerChat(customText = "", customImageUrl = null, customLocationCoords = null, explicitCustId = null, customDoc = null) {
     // Freeze target customer ID immediately so background operations never divert to another thread!
     const targetCustId = explicitCustId || activeRiderChatCustId;
     if (!targetCustId) return;
@@ -1151,7 +1151,7 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
     const savedDraft = threadDraftsMap.get(targetCustId) || "";
     const text = (typeof customText === 'string' && customText.trim()) ? customText.trim() : (val1 || val2 || savedDraft);
 
-    if (!text && !customImageUrl && !customLocationCoords) return;
+    if (!text && !customImageUrl && !customLocationCoords && !customDoc) return;
 
     // Clear inputs and remove draft for target thread immediately
     if (!customText) {
@@ -1246,6 +1246,16 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
         newMsg.locationCoords = customLocationCoords;
         newMsg.type = 'location';
     }
+    if (customDoc) {
+        newMsg.fileUrl = customDoc.fileUrl;
+        newMsg.fileName = customDoc.fileName || 'Document';
+        newMsg.fileSize = customDoc.fileSize || 0;
+        newMsg.fileType = customDoc.fileType || 'file';
+        newMsg.type = 'file';
+        if (!newMsg.text) {
+            newMsg.text = customDoc.fileName || 'Document';
+        }
+    }
 
     let newMsgKey = null;
     if (db) {
@@ -1277,8 +1287,11 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
                 }
             }
             const currentName = targetCustDataSnapshot?.name || targetCustDataSnapshot?.customerName || targetMeta?.customerName;
+            const lastSummary = customDoc 
+                ? `📄 ${customDoc.fileName || 'Document'}` 
+                : (text || (finalImageUrl ? "📷 Photo" : "📍 Location"));
             const metaPayload = sanitizeForFirebase({
-                lastMessage: `You: ${text || (finalImageUrl ? "📷 Photo" : "📍 Location")}`,
+                lastMessage: `You: ${lastSummary}`,
                 lastUpdated: now,
                 unreadForRider: false
             });
@@ -1308,6 +1321,8 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
             apiId: targetApiId,
             text: text,
             imageUrl: finalImageUrl,
+            fileUrl: customDoc?.fileUrl || null,
+            fileName: customDoc?.fileName || null,
             locationCoords: customLocationCoords,
             riderName: riderName,
             replyToMid: cleanReplyMid,
@@ -1466,7 +1481,7 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
 /**
  * Forwards outbound rider chat message directly to Facebook Messenger via the webhook bridge
  */
-export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, locationCoords, riderName, replyToMid, replyToText, newMsgKey, suppressToast = false }) {
+export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, fileUrl, fileName, locationCoords, riderName, replyToMid, replyToText, newMsgKey, suppressToast = false }) {
     try {
         const cleanPsid = String(custId || '').replace(/^fb_/, '');
         if (!cleanPsid) return;
@@ -1489,6 +1504,53 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
         const token = (typeof getFbPageAccessToken === 'function') 
             ? await getFbPageAccessToken(apiId) 
             : null;
+
+        // 0. DIRECT DOCUMENT / FILE ATTACHMENT TO META GRAPH API
+        if (fileUrl && token) {
+            try {
+                let sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messaging_type: 'RESPONSE',
+                        recipient: { id: cleanPsid },
+                        message: {
+                            attachment: {
+                                type: 'file',
+                                payload: { url: fileUrl, is_reusable: true }
+                            }
+                        }
+                    })
+                });
+                let sendData = await sendResp.json().catch(() => ({}));
+                if (!sendResp.ok && sendData?.error?.code === 10) {
+                    sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            messaging_type: 'MESSAGE_TAG',
+                            tag: 'CONFIRMED_EVENT_UPDATE',
+                            recipient: { id: cleanPsid },
+                            message: {
+                                attachment: {
+                                    type: 'file',
+                                    payload: { url: fileUrl, is_reusable: true }
+                                }
+                            }
+                        })
+                    });
+                    sendData = await sendResp.json().catch(() => ({}));
+                }
+                if (sendResp.ok) {
+                    if (sendData?.message_id) recordFbMid(sendData.message_id);
+                    console.log("✅ Document delivered directly to Facebook Messenger!");
+                    if (!suppressToast) showToast(`✅ Document (${fileName || 'file'}) sent to Messenger!`);
+                    return;
+                }
+            } catch (docErr) {
+                console.warn("Direct Facebook document send error:", docErr);
+            }
+        }
 
         // 1. DIRECT ATTACHMENT UPLOAD TO META GRAPH API (Instant, bypasses size limits, 100% reliable)
         if (imageUrl) {
@@ -1733,8 +1795,10 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 recipientId: cleanPsid,
-                text: text || "",
+                text: text || (fileUrl ? `📄 ${fileName || 'Document'}: ${fileUrl}` : ""),
                 imageUrl: safeFbImageUrl,
+                fileUrl: fileUrl || null,
+                fileName: fileName || null,
                 locationCoords: locationCoords,
                 senderName: riderName,
                 apiId: apiId,

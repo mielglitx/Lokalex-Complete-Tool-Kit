@@ -226,11 +226,11 @@ export async function toggleCustomerMessageReaction(msgId, emoji) {
     }
 }
 
-export async function sendCustomerToRiderChat(customText = "", customImageUrl = null, customLocationCoords = null) {
+export async function sendCustomerToRiderChat(customText = "", customImageUrl = null, customLocationCoords = null, customDoc = null) {
     const input = document.getElementById('cust-rider-chat-input');
     const text = customText || (input ? input.value.trim() : "");
 
-    if (!text && !customImageUrl && !customLocationCoords) return;
+    if (!text && !customImageUrl && !customLocationCoords && !customDoc) return;
 
     const custFbId = localStorage.getItem('lokalex_customer_fb_id') || localStorage.getItem('customerId') || appState.customerFacebookId || appState.customerId || `CUST_${Date.now()}`;
     const custName = localStorage.getItem('customerName') || localStorage.getItem('lokalex_customer_name') || appState.customerName || "Customer";
@@ -270,6 +270,14 @@ export async function sendCustomerToRiderChat(customText = "", customImageUrl = 
 
     if (finalImageUrl) newMsg.imageUrl = finalImageUrl;
     if (customLocationCoords) newMsg.locationCoords = customLocationCoords;
+    if (customDoc) {
+        newMsg.fileUrl = customDoc.fileUrl;
+        newMsg.fileName = customDoc.fileName || 'Document';
+        newMsg.fileSize = customDoc.fileSize || 0;
+        newMsg.fileType = customDoc.fileType || 'file';
+        newMsg.type = 'file';
+        if (!newMsg.text) newMsg.text = customDoc.fileName || 'Document';
+    }
 
     if (db) {
         await db.ref(`customerChats/${custFbId}/messages`).push(sanitizeForFirebase(newMsg));
@@ -289,8 +297,9 @@ export async function sendCustomerToRiderChat(customText = "", customImageUrl = 
             }
         } catch (_) {}
 
+        const lastMsgDesc = customDoc ? `📄 ${customDoc.fileName || 'Document'}` : (text || (finalImageUrl ? "📷 Photo" : "📍 Shared Location"));
         db.ref(`customerChats/${custFbId}/metadata`).update(sanitizeForFirebase({
-            lastMessage: text || (finalImageUrl ? "📷 Photo" : "📍 Shared Location"),
+            lastMessage: lastMsgDesc,
             lastUpdated: now,
             customerName: custName,
             customerFbId: custFbId,

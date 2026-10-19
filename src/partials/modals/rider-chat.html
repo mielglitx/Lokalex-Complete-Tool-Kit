@@ -141,6 +141,10 @@
                     <i class="fa-solid fa-image text-[11px]"></i>
                     <span class="text-[10px] font-bold">Photo</span>
                 </button>
+                <button type="button" onclick="window.triggerImageCapture && window.triggerImageCapture('document')" class="px-2.5 py-1 bg-inputBg hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Send Document or File">
+                    <i class="fa-solid fa-paperclip text-[11px]"></i>
+                    <span class="text-[10px] font-bold">File</span>
+                </button>
                 <button type="button" onclick="window.sendChatLocationPin && window.sendChatLocationPin()" class="px-2.5 py-1 bg-inputBg hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Pick Rider Location Pin on Map">
                     <i class="fa-solid fa-location-dot text-[11px]"></i>
                     <span class="text-[10px] font-bold">Pin</span>
@@ -162,7 +166,8 @@
         </div>
 
         <input type="file" id="chat-camera-input" accept="image/*" capture="environment" class="hidden" onchange="window.handleChatImageUpload && window.handleChatImageUpload(this)">
-        <input type="file" id="chat-file-input" accept="image/*" multiple class="hidden" onchange="window.handleChatImageUpload && window.handleChatImageUpload(this)">
+        <input type="file" id="chat-file-input" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar,.7z" multiple class="hidden" onchange="window.handleChatImageUpload && window.handleChatImageUpload(this)">
+        <input type="file" id="chat-document-input" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar,.7z,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,application/zip" multiple class="hidden" onchange="window.handleChatDocumentUpload && window.handleChatDocumentUpload(this)">
 
     </div>
 </div>
@@ -270,17 +275,17 @@
     </div>
 </div>
 
-<!-- CHAT IMAGE ATTACHMENT PICKER MODAL (CAMERA VS SAVED IMAGES) -->
+<!-- CHAT IMAGE & DOCUMENT ATTACHMENT PICKER MODAL -->
 <div id="chat-image-picker-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-xs rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
         <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-3">
             <div class="flex items-center gap-2.5">
                 <div class="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">
-                    <i class="fa-solid fa-camera"></i>
+                    <i class="fa-solid fa-paperclip"></i>
                 </div>
                 <div>
-                    <h3 class="font-bold text-sm text-gray-900 dark:text-white">Send Image</h3>
-                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Choose photo source</p>
+                    <h3 class="font-bold text-sm text-gray-900 dark:text-white">Send Attachment</h3>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Choose photo or document source</p>
                 </div>
             </div>
             <button type="button" onclick="window.closeImagePickerModal && window.closeImagePickerModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
@@ -288,29 +293,39 @@
             </button>
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
-            <button type="button" onclick="window.triggerImageCapture && window.triggerImageCapture('camera')" class="p-4 rounded-2xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800/60 flex flex-col items-center justify-center gap-2 transition active:scale-95 group">
-                <div class="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-lg shadow-sm group-hover:scale-105 transition">
+        <div class="grid grid-cols-3 gap-2 sm:gap-3">
+            <button type="button" onclick="window.triggerImageCapture && window.triggerImageCapture('camera')" class="p-3 rounded-2xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800/60 flex flex-col items-center justify-center gap-1.5 transition active:scale-95 group cursor-pointer">
+                <div class="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-base shadow-sm group-hover:scale-105 transition">
                     <i class="fa-solid fa-camera"></i>
                 </div>
                 <div class="text-center">
                     <div class="font-bold text-xs text-blue-900 dark:text-blue-200">Camera</div>
-                    <div class="text-[10px] text-blue-600 dark:text-blue-400 font-medium">Take a photo</div>
+                    <div class="text-[9px] text-blue-600 dark:text-blue-400 font-medium">Take photo</div>
                 </div>
             </button>
 
-            <button type="button" onclick="window.triggerImageCapture && window.triggerImageCapture('gallery')" class="p-4 rounded-2xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800/60 flex flex-col items-center justify-center gap-2 transition active:scale-95 group">
-                <div class="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center text-lg shadow-sm group-hover:scale-105 transition">
+            <button type="button" onclick="window.triggerImageCapture && window.triggerImageCapture('gallery')" class="p-3 rounded-2xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800/60 flex flex-col items-center justify-center gap-1.5 transition active:scale-95 group cursor-pointer">
+                <div class="w-10 h-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center text-base shadow-sm group-hover:scale-105 transition">
                     <i class="fa-solid fa-images"></i>
                 </div>
                 <div class="text-center">
-                    <div class="font-bold text-xs text-purple-900 dark:text-purple-200">Saved Images</div>
-                    <div class="text-[10px] text-purple-600 dark:text-purple-400 font-medium">From gallery</div>
+                    <div class="font-bold text-xs text-purple-900 dark:text-purple-200">Gallery</div>
+                    <div class="text-[9px] text-purple-600 dark:text-purple-400 font-medium">From photos</div>
+                </div>
+            </button>
+
+            <button type="button" onclick="window.triggerImageCapture && window.triggerImageCapture('document')" class="p-3 rounded-2xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800/60 flex flex-col items-center justify-center gap-1.5 transition active:scale-95 group cursor-pointer">
+                <div class="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-base shadow-sm group-hover:scale-105 transition">
+                    <i class="fa-solid fa-file-lines"></i>
+                </div>
+                <div class="text-center">
+                    <div class="font-bold text-xs text-indigo-900 dark:text-indigo-200">Files</div>
+                    <div class="text-[9px] text-indigo-600 dark:text-indigo-400 font-medium">PDF, Docs</div>
                 </div>
             </button>
         </div>
 
-        <button type="button" onclick="window.closeImagePickerModal && window.closeImagePickerModal()" class="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition active:scale-95">
+        <button type="button" onclick="window.closeImagePickerModal && window.closeImagePickerModal()" class="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer">
             Cancel
         </button>
     </div>

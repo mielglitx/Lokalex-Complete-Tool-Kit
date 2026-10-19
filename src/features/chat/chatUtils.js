@@ -3,6 +3,7 @@ import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { showToast } from '../../ui/notifications.js';
 import { escapeHtml, copyText } from '../../utils/helpers.js';
+import { uploadImage } from '../../utils/imageUpload.js';
 
 export let isHdMode = typeof localStorage !== 'undefined' 
     ? localStorage.getItem('lokalex_hd_mode') !== 'false' 
@@ -327,14 +328,65 @@ export function triggerImageCapture(sourceType) {
     closeImagePickerModal();
     if (sourceType === 'camera') {
         document.getElementById('chat-camera-input')?.click();
+    } else if (sourceType === 'document') {
+        document.getElementById('chat-document-input')?.click();
     } else {
         document.getElementById('chat-file-input')?.click();
+    }
+}
+
+export async function handleChatDocumentUpload(inputEl) {
+    const files = Array.from(inputEl?.files || []);
+    if (files.length === 0) return;
+    const targetCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
+
+    try {
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const sizeStr = file.size > 1048576 
+                ? (file.size / 1048576).toFixed(1) + ' MB' 
+                : (file.size / 1024).toFixed(0) + ' KB';
+            showToast(`📄 Uploading ${file.name} (${sizeStr})...`);
+
+            const storagePath = `chat_documents/${targetCustId || 'general'}/${Date.now()}_${file.name}`;
+            const fileUrl = await uploadImage(file, storagePath, { originalName: file.name, size: String(file.size) });
+
+            if (fileUrl) {
+                const customDoc = {
+                    fileUrl: fileUrl,
+                    fileName: file.name,
+                    fileSize: file.size,
+                    fileType: file.type || file.name.split('.').pop() || 'document'
+                };
+
+                if (targetCustId || (window.sendRiderToCustomerChat && typeof window.sendRiderToCustomerChat === 'function')) {
+                    await window.sendRiderToCustomerChat(file.name, null, null, targetCustId, customDoc);
+                } else if (window.sendCustomerToRiderChat && typeof window.sendCustomerToRiderChat === 'function') {
+                    await window.sendCustomerToRiderChat(file.name, null, customDoc);
+                }
+                showToast(`✅ ${file.name} sent!`);
+            } else {
+                showToast(`❌ Failed to upload ${file.name}`);
+            }
+        }
+    } catch (err) {
+        console.error("[ChatUpload] Error uploading document:", err);
+        showToast("⚠️ Document upload failed. Please try again.");
+    } finally {
+        if (inputEl) inputEl.value = "";
     }
 }
 
 export async function handleChatImageUpload(inputEl) {
     const files = Array.from(inputEl?.files || []);
     if (files.length === 0) return;
+
+    // If user selected non-image documents, seamlessly route to handleChatDocumentUpload
+    const hasNonImages = files.some(f => !f.type.startsWith('image/'));
+    if (hasNonImages) {
+        return handleChatDocumentUpload(inputEl);
+    }
+
     const targetCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
 
     const total = files.length;
@@ -540,6 +592,7 @@ if (typeof window !== 'undefined') {
     window.closeImagePickerModal = closeImagePickerModal;
     window.triggerImageCapture = triggerImageCapture;
     window.handleChatImageUpload = handleChatImageUpload;
+    window.handleChatDocumentUpload = handleChatDocumentUpload;
 
     window.openMessageActionPopover = openMessageActionPopover;
     window.closeMessageActionPopover = closeMessageActionPopover;
