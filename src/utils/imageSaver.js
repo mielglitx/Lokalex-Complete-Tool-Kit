@@ -44,6 +44,20 @@ export async function saveImageToDevice(imageSrc, filename = 'lokalex_image.png'
     }
 
     try {
+        // 1. Native Android Bridge (Direct to Gallery / Pictures)
+        // Completely bypasses browser CORS and WebView limitations for remote CDN images & Canvas receipts!
+        if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.saveImageToDevice === 'function') {
+            try {
+                const ok = window.NativePermissionsBridge.saveImageToDevice(imageSrc, filename, showNativeToast);
+                if (ok) {
+                    return true;
+                }
+            } catch (nativeBridgeErr) {
+                console.warn("[ImageSaver] Native bridge call error:", nativeBridgeErr);
+            }
+        }
+
+        // 2. Web fallback (Browser / PWA)
         let dataUrl = imageSrc;
         let blob = null;
 
@@ -78,15 +92,6 @@ export async function saveImageToDevice(imageSrc, filename = 'lokalex_image.png'
             }
         } else if (imageSrc.startsWith('data:')) {
             blob = dataUrlToBlob(imageSrc);
-        }
-
-        // 1. Native Android Bridge (Direct to Gallery / Pictures with auto-overwrite)
-        if (window.NativePermissionsBridge && typeof window.NativePermissionsBridge.saveImageToDevice === 'function') {
-            const ok = window.NativePermissionsBridge.saveImageToDevice(dataUrl, filename, showNativeToast);
-            if (ok) {
-                if (showNativeToast) showToast("💾 Litrato na-save sa Gallery / Pictures!");
-                return true;
-            }
         }
 
         // 2. Web Share API (Mobile browsers where user can tap 'Save Image' / 'Photos')

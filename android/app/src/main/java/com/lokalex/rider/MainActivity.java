@@ -77,77 +77,144 @@ public class MainActivity extends BridgeActivity {
                 }
 
                 @JavascriptInterface
-                public boolean saveImageToDevice(String base64Data, String filename) {
-                    return saveImageToDevice(base64Data, filename, true);
+                public boolean saveImageToDevice(String imageSource, String filename) {
+                    return saveImageToDevice(imageSource, filename, true);
                 }
 
                 @JavascriptInterface
-                public boolean saveImageToDevice(String base64Data, String filename, boolean showToast) {
-                    if (base64Data == null || base64Data.trim().isEmpty()) return false;
+                public boolean saveImageToDevice(String imageSource, String filename, boolean showToast) {
+                    if (imageSource == null || imageSource.trim().isEmpty()) return false;
                     try {
-                        String cleanBase64 = base64Data.trim();
-                        String mimeType = "image/png";
-                        if (cleanBase64.contains(",")) {
-                            String header = cleanBase64.substring(0, cleanBase64.indexOf(","));
-                            if (header.contains("jpeg") || header.contains("jpg")) mimeType = "image/jpeg";
-                            else if (header.contains("webp")) mimeType = "image/webp";
-                            cleanBase64 = cleanBase64.substring(cleanBase64.indexOf(",") + 1);
+                        String cleanSource = imageSource.trim();
+                        byte[] imageBytes = null;
+                        String mimeType = "image/jpeg";
+
+                        if (cleanSource.startsWith("http://") || cleanSource.startsWith("https://")) {
+                            // Direct native download via Java HTTP URL connection (No browser CORS restrictions!)
+                            java.net.URL url = new java.net.URL(cleanSource);
+                            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                            conn.setInstanceFollowRedirects(true);
+                            conn.setConnectTimeout(20000);
+                            conn.setReadTimeout(20000);
+                            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android " + Build.VERSION.RELEASE + "; " + Build.MODEL + ")");
+                            conn.connect();
+
+                            int code = conn.getResponseCode();
+                            if (code >= 300 && code < 400) {
+                                String redirectUrl = conn.getHeaderField("Location");
+                                if (redirectUrl != null && !redirectUrl.isEmpty()) {
+                                    conn.disconnect();
+                                    url = new java.net.URL(redirectUrl);
+                                    conn = (java.net.HttpURLConnection) url.openConnection();
+                                    conn.setConnectTimeout(20000);
+                                    conn.setReadTimeout(20000);
+                                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android " + Build.VERSION.RELEASE + "; " + Build.MODEL + ")");
+                                    conn.connect();
+                                    code = conn.getResponseCode();
+                                }
+                            }
+
+                            if (code >= 400) {
+                                throw new Exception("HTTP server returned error code " + code);
+                            }
+
+                            String cType = conn.getContentType();
+                            if (cType != null) {
+                                if (cType.contains("png")) mimeType = "image/png";
+                                else if (cType.contains("webp")) mimeType = "image/webp";
+                                else if (cType.contains("gif")) mimeType = "image/gif";
+                                else mimeType = "image/jpeg";
+                            }
+
+                            java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+                            try (java.io.InputStream in = conn.getInputStream()) {
+                                byte[] data = new byte[8192];
+                                int nRead;
+                                while ((nRead = in.read(data, 0, data.length)) != -1) {
+                                    buffer.write(data, 0, nRead);
+                                }
+                                buffer.flush();
+                            }
+                            imageBytes = buffer.toByteArray();
+                            conn.disconnect();
+                        } else {
+                            // Base64 Data URL or raw base64 (Canvas receipts, inline attachments)
+                            String cleanBase64 = cleanSource;
+                            if (cleanBase64.contains(",")) {
+                                String header = cleanBase64.substring(0, cleanBase64.indexOf(","));
+                                if (header.contains("png")) mimeType = "image/png";
+                                else if (header.contains("webp")) mimeType = "image/webp";
+                                else mimeType = "image/jpeg";
+                                cleanBase64 = cleanBase64.substring(cleanBase64.indexOf(",") + 1);
+                            }
+                            imageBytes = Base64.decode(cleanBase64, Base64.DEFAULT);
                         }
-                        byte[] imageBytes = Base64.decode(cleanBase64, Base64.DEFAULT);
+
+                        if (imageBytes == null || imageBytes.length == 0) {
+                            throw new Exception("No image bytes could be decoded");
+                        }
+
+                        String extension = mimeType.contains("png") ? ".png" : (mimeType.contains("webp") ? ".webp" : ".jpg");
                         String safeName = (filename != null && !filename.trim().isEmpty()) 
                                 ? filename.trim() 
-                                : ("Lokalex_" + System.currentTimeMillis() + (mimeType.contains("jpeg") ? ".jpg" : ".png"));
+                                : ("Lokalex_" + System.currentTimeMillis());
                         if (!safeName.contains(".")) {
-                            safeName += mimeType.contains("jpeg") ? ".jpg" : ".png";
+                            safeName += extension;
                         }
 
+                        boolean saved = false;
+                        Uri savedUri = null;
+
+                        // Modern Android (API 29+ / Android 10, 11, 12, 13, 14, 15, 16): MediaStore without buggy IS_PENDING
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            String targetPath = Environment.DIRECTORY_PICTURES + "/Lokalex";
-                            // Auto-overwrite existing image by deleting any prior entry with matching name in Lokalex folder
-                            try {
-                                String selection = MediaStore.Images.Media.DISPLAY_NAME + "=?";
-                                String[] selectionArgs = new String[]{ safeName };
-                                getContentResolver().delete(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, selection, selectionArgs);
-                            } catch (Exception ignored) {}
-
                             ContentValues values = new ContentValues();
-                            values.put(MediaStore.Images.Media.DISPLAY_NAME, safeName);
-                            values.put(MediaStore.Images.Media.MIME_TYPE, mimeType);
-                            values.put(MediaStore.Images.Media.RELATIVE_PATH, targetPath);
-                            values.put(MediaStore.Images.Media.IS_PENDING, 1);
+                            values.put(MediaStore.MediaColumns.DISPLAY_NAME, safeName);
+                            values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
+                            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Lokalex");
 
-                            Uri uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-                            if (uri != null) {
-                                try (OutputStream out = getContentResolver().openOutputStream(uri)) {
-                                    if (out != null) {
-                                        out.write(imageBytes);
-                                        out.flush();
+                            try {
+                                savedUri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                                if (savedUri != null) {
+                                    try (OutputStream out = getContentResolver().openOutputStream(savedUri, "w")) {
+                                        if (out != null) {
+                                            out.write(imageBytes);
+                                            out.flush();
+                                            saved = true;
+                                        }
                                     }
                                 }
-                                values.clear();
-                                values.put(MediaStore.Images.Media.IS_PENDING, 0);
-                                getContentResolver().update(uri, values, null, null);
+                            } catch (Exception insertEx) {
+                                insertEx.printStackTrace();
                             }
-                        } else {
+                        }
+
+                        // Fallback: Direct public Pictures directory
+                        if (!saved) {
                             File picturesDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "Lokalex");
                             if (!picturesDir.exists()) picturesDir.mkdirs();
                             File imageFile = new File(picturesDir, safeName);
-                            if (imageFile.exists()) {
-                                imageFile.delete();
-                            }
                             try (FileOutputStream fos = new FileOutputStream(imageFile, false)) {
                                 fos.write(imageBytes);
                                 fos.flush();
+                                saved = true;
+                                MediaScannerConnection.scanFile(MainActivity.this, new String[]{imageFile.getAbsolutePath()}, new String[]{mimeType}, null);
                             }
-                            MediaScannerConnection.scanFile(MainActivity.this, new String[]{imageFile.getAbsolutePath()}, new String[]{mimeType}, null);
+                        } else if (savedUri != null) {
+                            try {
+                                sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, savedUri));
+                            } catch (Exception ignored) {}
                         }
 
-                        if (showToast) {
-                            new Handler(Looper.getMainLooper()).post(() -> {
-                                Toast.makeText(MainActivity.this, "💾 Litrato na-save sa Gallery / Pictures!", Toast.LENGTH_SHORT).show();
-                            });
+                        if (saved) {
+                            if (showToast) {
+                                new Handler(Looper.getMainLooper()).post(() -> {
+                                    Toast.makeText(MainActivity.this, "💾 Litrato na-save sa Gallery / Pictures!", Toast.LENGTH_SHORT).show();
+                                });
+                            }
+                            return true;
+                        } else {
+                            throw new Exception("Storage write failed");
                         }
-                        return true;
                     } catch (Exception e) {
                         e.printStackTrace();
                         if (showToast) {

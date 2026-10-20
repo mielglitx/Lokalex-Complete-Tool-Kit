@@ -616,14 +616,14 @@ function triggerDirectAnchorDownload(url, fileName) {
 }
 
 export async function downloadReceiptImage() {
-    const rawData = currentReceiptDataUrl || (currentReceiptCanvas ? currentReceiptCanvas.toDataURL('image/png') : null);
+    const rawData = currentReceiptDataUrl || (currentReceiptCanvas ? currentReceiptCanvas.toDataURL('image/jpeg', 0.90) : null);
     if (!rawData) {
         return showToast("⚠️ Image receipt not ready yet.");
     }
 
     const rawTxId = wizState.currentReceiptTransactionId || Date.now().toString(36);
     const shortRef = formatShortRef(rawTxId);
-    const fileName = `Lokalex_Receipt_${shortRef}.png`;
+    const fileName = `Lokalex_Receipt_${shortRef}.jpg`;
 
     showToast("⏳ Sine-save ang resibo...");
     await saveImageToDevice(rawData, fileName);

@@ -7,6 +7,7 @@ import { isRiderMatch } from '../roster/rosterUtils.js';
 import { formatChatDateTime, getMessageTimestamp } from './chatUtils.js';
 import { showToast } from '../../ui/notifications.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
+import { saveImageToDevice } from '../../utils/imageSaver.js';
 
 const MAPS_API_KEY = "AIzaSyBVAwn0UnyHJ926oHeK0k789ncADMzmX80";
 
@@ -227,6 +228,11 @@ export async function downloadChatDocument(encodedUrl, encodedName) {
 
     if (typeof showToast === 'function') {
         showToast(`📥 Downloading ${fileName}...`);
+    }
+
+    if (rawUrl.startsWith('data:image/') || rawUrl.match(/\.(png|jpe?g|webp|gif)(\?.*)?$/i) || fileName.match(/\.(png|jpe?g|webp|gif)$/i)) {
+        await saveImageToDevice(rawUrl, fileName);
+        return;
     }
 
     if (typeof window.openExternalLink === 'function') {
