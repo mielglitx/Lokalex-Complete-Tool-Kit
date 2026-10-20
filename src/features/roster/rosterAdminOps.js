@@ -326,7 +326,7 @@ export async function adminForceStatus(id, name, actionValue) {
     }
 
     if (actionValue === 'VoidActive') {
-        if (!hasTlPermission('canVoidCustomer')) {
+        if (!isAdmin() && !canManageRoster() && !hasTlPermission('canVoidCustomer')) {
             return showToast("⚠️ Unauthorized: You do not have permission to Void Active Orders.");
         }
         openSlideDeleteModal(`Void Order for ${name}?`, `Sigurado ka bang nais i-void ang active order ni ${name}? Malilipat sya sa #1 SPOT ng Available queue.`, async () => {
@@ -403,7 +403,7 @@ export async function adminForceStatus(id, name, actionValue) {
 }
 
 export async function adminVoidSpecificCustomer(targetId, targetName, custNameToVoid) {
-    if (!hasTlPermission('canVoidCustomer')) {
+    if (!isAdmin() && !canManageRoster() && !hasTlPermission('canVoidCustomer')) {
         return showToast("⚠️ Unauthorized: You do not have permission to Void Active Customers.");
     }
 

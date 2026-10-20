@@ -199,6 +199,7 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         if (typeof syncChatHdButtonUI === 'function') syncChatHdButtonUI();
         else if (window.syncChatHdButtonUI) window.syncChatHdButtonUI();
         if (window.initSharedQuickRepliesListener) window.initSharedQuickRepliesListener();
+        renderRiderCateredSwitcher();
     }
 
     cancelRiderReply();
@@ -261,6 +262,7 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
             bindRiderToActiveStoreOrders(currentRiderChatMeta);
             syncMilestoneBarUI(currentRiderChatMeta);
             syncApplicantUI(currentRiderChatMeta);
+            renderRiderCateredSwitcher();
 
             // Instant reconcile: any metadata change while thread is open synchronizes incoming messages immediately!
             if (activeRiderChatCustId === custId) {
@@ -355,6 +357,143 @@ function bindRiderToActiveStoreOrders(meta) {
             }).catch(() => {});
         });
     }
+}
+
+export function renderRiderCateredSwitcher() {
+    const container = document.getElementById('rider-chat-catered-switcher');
+    const pillsWrapper = document.getElementById('rider-chat-catered-pills');
+    if (!container || !pillsWrapper) return;
+
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+
+    const roster = globalState.rosterMembers || [];
+    const myRecord = roster.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        return (myId && mId === myId) || (myName && mName === myName);
+    });
+
+    const cateredList = [];
+    const addedNames = new Set();
+
+    if (myRecord) {
+        if (myRecord.customerName) {
+            const custs = myRecord.customerName.split(',').map(c => c.trim()).filter(Boolean);
+            custs.forEach(c => {
+                const lower = c.toLowerCase();
+                if (!addedNames.has(lower)) {
+                    addedNames.add(lower);
+                    cateredList.push({ name: c });
+                }
+            });
+        }
+        if (myRecord.forcedCaters && typeof myRecord.forcedCaters === 'object') {
+            Object.entries(myRecord.forcedCaters).forEach(([k, v]) => {
+                const fName = (v && typeof v === 'object' && v.customerName) ? v.customerName : (typeof v === 'string' ? v : "");
+                if (fName && typeof fName === 'string') {
+                    const lower = fName.toLowerCase();
+                    if (!addedNames.has(lower)) {
+                        addedNames.add(lower);
+                        cateredList.push({ name: fName, forcedKey: k });
+                    }
+                }
+            });
+        }
+    }
+
+    const threadMap = (typeof window.getCachedCustomerThreadsMap === 'function') ? window.getCachedCustomerThreadsMap() : null;
+    if (threadMap && threadMap.size > 0) {
+        for (const [tId, t] of threadMap.entries()) {
+            const isMe = (myId && t.cateredByRiderId && t.cateredByRiderId.toString() === myId) ||
+                         (myName && t.cateredByRiderName && t.cateredByRiderName.toLowerCase() === myName);
+            if (isMe && t.folder === 'catering' && t.status !== 'completed' && t.status !== 'cancelled') {
+                const cName = t.customerName || t.name || "";
+                if (cName && typeof cName === 'string') {
+                    const lower = cName.toLowerCase();
+                    if (!addedNames.has(lower)) {
+                        addedNames.add(lower);
+                        cateredList.push({ name: cName, threadId: tId, thread: t });
+                    } else {
+                        const item = cateredList.find(i => i.name.toLowerCase() === lower);
+                        if (item && !item.threadId) {
+                            item.threadId = tId;
+                            item.thread = t;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (cateredList.length === 0) {
+        container.classList.add('hidden');
+        pillsWrapper.innerHTML = '';
+        return;
+    }
+
+    // Match thread IDs if missing
+    cateredList.forEach(item => {
+        if (!item.threadId && threadMap) {
+            const targetLower = item.name.toLowerCase().trim();
+            for (const [tId, t] of threadMap.entries()) {
+                const chatName = (t.customerName || t.name || "").trim().toLowerCase();
+                if (chatName && (chatName === targetLower || isCustomerMatch(chatName, targetLower))) {
+                    item.threadId = tId;
+                    item.thread = t;
+                    break;
+                }
+            }
+        }
+        if (!item.threadId) {
+            item.threadId = item.forcedKey || item.name;
+        }
+    });
+
+    container.classList.remove('hidden');
+
+    const currentActiveId = activeRiderChatCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : "");
+    const currentNameEl = document.getElementById('rider-chat-cust-name');
+    const currentActiveName = (currentNameEl ? currentNameEl.innerText.trim() : "").toLowerCase();
+
+    pillsWrapper.innerHTML = cateredList.map(item => {
+        const isCurrentActive = Boolean(
+            (currentActiveId && (item.threadId === currentActiveId || (item.thread && item.thread.custId === currentActiveId))) ||
+            (currentActiveName && (item.name.toLowerCase() === currentActiveName || isCustomerMatch(item.name, currentActiveName)))
+        );
+
+        const hasUnread = Boolean(
+            !isCurrentActive && item.thread && (item.thread.isUnread || item.thread.unreadForRider)
+        );
+
+        const escapedName = escapeHtml(item.name);
+        const escapedId = escapeHtml(item.threadId || item.name);
+
+        const activeClasses = isCurrentActive
+            ? "bg-emerald-600 text-white font-black shadow-sm ring-2 ring-emerald-400/60"
+            : "bg-white dark:bg-cardBg text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700 hover:border-emerald-500 font-bold";
+
+        return `
+            <button type="button" 
+                onclick="window.switchCateredCustomerChat('${escapedId}', '${escapedName}')"
+                class="relative px-3 py-1 rounded-full text-xs transition active:scale-95 flex items-center gap-1.5 shrink-0 ${activeClasses} cursor-pointer">
+                <i class="fa-solid fa-user text-[10px] ${isCurrentActive ? 'text-white' : 'text-gray-400'}"></i>
+                <span class="max-w-[120px] truncate">${escapedName}</span>
+                ${hasUnread ? `
+                    <span class="relative flex h-2 w-2 shrink-0">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                    </span>
+                ` : ''}
+            </button>
+        `;
+    }).join('');
+}
+
+export function switchCateredCustomerChat(targetCustId, targetCustName) {
+    if (!targetCustId && !targetCustName) return;
+    openRiderCustomerChatModal(targetCustId, targetCustName);
+    renderRiderCateredSwitcher();
 }
 
 export async function reloadRiderChatFromFirebase(custId) {
@@ -2208,8 +2347,17 @@ if (typeof window !== 'undefined') {
     window.saveCurrentThreadDraft = saveCurrentThreadDraft;
     window.restoreThreadDraft = restoreThreadDraft;
     window.handleRiderChatInputDraft = handleRiderChatInputDraft;
+    window.renderRiderCateredSwitcher = renderRiderCateredSwitcher;
+    window.switchCateredCustomerChat = switchCateredCustomerChat;
 
     listenToGlobalStoreChats();
+
+    window.addEventListener('rosterUpdated', () => {
+        if (activeRiderChatCustId) renderRiderCateredSwitcher();
+    });
+    window.addEventListener('customerChatsUpdated', () => {
+        if (activeRiderChatCustId) renderRiderCateredSwitcher();
+    });
 
     if (typeof document !== 'undefined') {
         document.addEventListener('visibilitychange', () => {

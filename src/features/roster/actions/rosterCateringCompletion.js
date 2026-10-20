@@ -443,6 +443,59 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     return true;
 }
 
+export function checkCustomerReceiptExists(custName, riderName = "", riderId = "") {
+    if (!custName) return false;
+    const cleanCust = custName.trim().toLowerCase();
+    const cleanCustKey = sanitizeFirebaseKey(cleanCust);
+    const todayStr = getLocalTodayStr();
+
+    // 1. Session check
+    if (typeof hasReceiptForActiveSession === 'function' && hasReceiptForActiveSession(custName)) {
+        return true;
+    }
+
+    // 2. Global daily receipts check
+    const receipts = globalState.globalDailyReceipts || [];
+    const hasDaily = receipts.some(rc => {
+        if (!rc) return false;
+        const matchCust = isCustomerMatch(rc.customerName, custName) ||
+                          (rc.customerName && rc.customerName.trim().toLowerCase() === cleanCust) ||
+                          (rc.id && rc.id.toLowerCase().includes(cleanCustKey)) ||
+                          (rc.transactionId && rc.transactionId.toLowerCase().includes(cleanCustKey));
+        return matchCust;
+    });
+    if (hasDaily) return true;
+
+    // 3. Roster member customerFees
+    const rosterMembers = globalState.rosterMembers || [];
+    const member = rosterMembers.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        if (riderId && mId && mId === riderId.toString().trim()) return true;
+        if (riderName && mName && mName === riderName.toString().trim().toLowerCase()) return true;
+        return false;
+    });
+    if (member?.customerFees && (member.customerFees[cleanCustKey] || member.customerFees[cleanCust])) {
+        return true;
+    }
+
+    // 4. Cart saved summaries
+    try {
+        const cartKeys = ['cart_state_1', 'cart_state_2', 'cart_state_3', 'lokalex_cart_state_v1'];
+        for (const ck of cartKeys) {
+            const raw = localStorage.getItem(ck);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed?.receiptSummary && isCustomerMatch(parsed.customerName, custName)) {
+                    return true;
+                }
+            }
+        }
+    } catch (_) {}
+
+    return false;
+}
+
 export async function voidSingleCateringCustomer(targetId, targetName, custNameToVoid) {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
@@ -452,12 +505,12 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
 
     // 1. Authoritative Permission Verification Gate (Admin, Authorized TL, or Self)
     const isMe = (myId && cleanTargetId && myId === cleanTargetId) || (myName && cleanTargetName && myName === cleanTargetName);
-    const hasAdminPower = isAdmin();
-    const hasTlVoidPower = hasTlPermission('canVoidCustomer') || hasTlPermission('canVoid') || hasTlPermission('canForceCater') || canManageRoster();
+    const hasAdminPower = isAdmin() || canManageRoster();
+    const hasTlVoidPower = hasTlPermission('canVoidCustomer') || hasTlPermission('canVoid') || hasTlPermission('canForceCater');
 
     if (!isMe && !hasAdminPower && !hasTlVoidPower) {
         showToast("🚫 Wala kang pahintulot na mag-void ng customer ng ibang rider.");
-        return;
+        return false;
     }
 
     const rosterMembers = globalState.rosterMembers || [];
@@ -473,7 +526,17 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
     const resolvedTargetId = targetRecord ? (targetRecord.telegramId || targetRecord.id || cleanTargetId) : cleanTargetId;
     const resolvedTargetName = targetRecord ? (targetRecord.riderName || targetRecord.name || targetName) : targetName;
 
-    if (!resolvedTargetId && !targetRecord) return;
+    if (!resolvedTargetId && !targetRecord) return false;
+
+    // 1B. SAFEGUARD (Ordinary Rider vs Admin/TL):
+    // When an ordinary rider cancelled a customer but he already created a receipt for the customer, then do not cancel it.
+    if (!hasAdminPower && !hasTlVoidPower) {
+        const hasReceipt = checkCustomerReceiptExists(custNameToVoid, resolvedTargetName, resolvedTargetId);
+        if (hasReceipt) {
+            showToast("⚠️ Hindi maaaring i-cancel ang order na may nagawa nang resibo. Makipag-ugnayan sa Admin o TL para mag-void.");
+            return false;
+        }
+    }
 
     let remainingCusts = [];
     let remainingTimes = [];
@@ -800,4 +863,5 @@ if (typeof window !== 'undefined') {
     window.completeSingleCateringCustomer = completeSingleCateringCustomer;
     window.voidSingleCateringCustomer = voidSingleCateringCustomer;
     window.adminVoidSpecificCustomer = adminVoidSpecificCustomer;
+    window.checkCustomerReceiptExists = checkCustomerReceiptExists;
 }

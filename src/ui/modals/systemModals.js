@@ -144,28 +144,11 @@ export function onSlideStart(e) {
     const rangeEl = document.getElementById('slide-delete-range');
     if (!rangeEl) return;
 
-    const rect = rangeEl.getBoundingClientRect();
-    const clientX = (e.touches && e.touches.length > 0) 
-        ? e.touches[0].clientX 
-        : (e.clientX !== undefined ? e.clientX : null);
-
-    if (clientX !== null && rect.width > 0) {
-        const touchPercent = ((clientX - rect.left) / rect.width) * 100;
-        // Rider must initiate touch within the 0% to 12% handle zone
-        if (touchPercent <= 12) {
-            isSlideDragValid = true;
-        } else {
-            isSlideDragValid = false;
-            rangeEl.value = 0;
-            if (e.cancelable) e.preventDefault();
-        }
+    // Allow slide start if current value is near origin
+    if (parseFloat(rangeEl.value || 0) <= 35) {
+        isSlideDragValid = true;
     } else {
-        if (parseFloat(rangeEl.value) <= 10) {
-            isSlideDragValid = true;
-        } else {
-            isSlideDragValid = false;
-            rangeEl.value = 0;
-        }
+        isSlideDragValid = false;
     }
 }
 
@@ -173,27 +156,34 @@ export function onSlideProgress(val) {
     const rangeEl = document.getElementById('slide-delete-range');
     const num = parseFloat(val) || 0;
 
-    // Block progress if the drag did not start within the 0% to 12% origin zone
+    if (!isSlideDragValid && num <= 25) {
+        isSlideDragValid = true;
+    }
+
     if (!isSlideDragValid) {
         if (rangeEl) rangeEl.value = 0;
         return;
     }
 
-    if (num >= 92) {
+    if (num >= 88) {
         if (rangeEl) rangeEl.value = 100;
         isSlideDragValid = false;
         
         if (slideDeleteCallback && typeof slideDeleteCallback === 'function') {
-            let cb = slideDeleteCallback;
+            const cb = slideDeleteCallback;
             closeSlideDeleteModal();
-            cb();
+            try {
+                cb();
+            } catch (err) {
+                console.error("Slide action execution error:", err);
+            }
         }
     }
 }
 
 export function onSlideEnd() {
     const range = document.getElementById('slide-delete-range');
-    if (range && parseFloat(range.value) < 92) { 
+    if (range && parseFloat(range.value) < 88) { 
         range.value = 0; 
     }
     isSlideDragValid = false;

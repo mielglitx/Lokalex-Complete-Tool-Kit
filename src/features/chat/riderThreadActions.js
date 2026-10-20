@@ -8,7 +8,7 @@ import { voidSingleCateringCustomer } from '../roster/rosterStatus.js';
 import { uploadImage } from '../../utils/imageUpload.js';
 import { escapeHtml, cleanCustomerForMatch } from '../../utils/helpers.js';
 import { isCustomerMatch, isAdmin, canManageRoster, hasTlPermission, hasReceiptForActiveSession } from '../roster/rosterUtils.js';
-import { completeSingleCateringCustomer } from '../roster/actions/rosterCateringCompletion.js';
+import { completeSingleCateringCustomer, checkCustomerReceiptExists } from '../roster/actions/rosterCateringCompletion.js';
 import { loadDirectoryCache } from '../directory/directoryStorage.js';
 import { idbGet } from '../../utils/storageEngine.js';
 import { resolveFacebookCustomerName } from './facebookApiAdmin.js';
@@ -1543,7 +1543,33 @@ export function openConfirmDoneModal(targetCustId = null, targetCustName = "") {
     const { custId, custName: resolvedName, meta } = getThreadMetadataAndCustomerName(targetCustId, targetCustName);
     if (!custId) return;
 
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+    const rosterMembers = globalState.rosterMembers || [];
+
     const { record: cateringRiderRecord, matchingCustName: matchingCustNameOnRoster } = findCateringRiderForCustomer(resolvedName, meta);
+
+    const isCateredByMe = Boolean(
+        cateringRiderRecord && (
+            (myId && (cateringRiderRecord.telegramId || cateringRiderRecord.id || "").toString().trim() === myId) ||
+            (myName && (cateringRiderRecord.riderName || cateringRiderRecord.name || "").toString().trim().toLowerCase() === myName)
+        )
+    );
+
+    const isThreadInCatering = (meta?.folder === 'catering') ||
+        Boolean(meta?.cateredByRiderId && meta.cateredByRiderId.toString().trim() !== "") ||
+        Boolean(meta?.cateredByRiderName && meta.cateredByRiderName.toString().trim() !== "") ||
+        Boolean(meta?.cateredBy && meta.cateredBy.toString().trim() !== "") ||
+        Boolean(cateringRiderRecord && !isCateredByMe);
+
+    // Rule: "if the chat thread is in catering then just close the window."
+    if (!isCateredByMe && isThreadInCatering) {
+        showToast("🛵 Ang customer na ito ay nasa Catering ng ibang rider. Isinara ang chat window.");
+        if (typeof window.closeRiderCustomerChatModal === 'function') {
+            window.closeRiderCustomerChatModal();
+        }
+        return;
+    }
 
     const finalDisplayName = (resolvedName && resolvedName !== 'Customer')
         ? resolvedName
@@ -1552,9 +1578,10 @@ export function openConfirmDoneModal(targetCustId = null, targetCustName = "") {
     pendingDoneData = {
         custId,
         custName: finalDisplayName,
-        cateringRiderRecord,
+        cateringRiderRecord: isCateredByMe ? cateringRiderRecord : null,
         matchingCustNameOnRoster: matchingCustNameOnRoster || finalDisplayName,
-        meta
+        meta,
+        isCateredByMe
     };
 
     const modal = document.getElementById('rider-chat-confirm-done-modal');
@@ -1575,7 +1602,7 @@ export function openConfirmDoneModal(targetCustId = null, targetCustName = "") {
         custNameEl.textContent = finalDisplayName;
     }
 
-    if (cateringRiderRecord) {
+    if (isCateredByMe) {
         const rName = cateringRiderRecord.riderName || cateringRiderRecord.name || "Rider";
         if (titleEl) titleEl.textContent = "Confirm Delivery Completion";
         if (subtitleEl) subtitleEl.textContent = `Active Catering • Rider: ${rName}`;
@@ -1589,9 +1616,9 @@ export function openConfirmDoneModal(targetCustId = null, targetCustName = "") {
 
         // Receipt verification preview check
         const cleanTarget = (matchingCustNameOnRoster || finalDisplayName).toLowerCase().trim();
-        const hasReceipt = (typeof hasReceiptForActiveSession === 'function' && hasReceiptForActiveSession(cleanTarget)) ||
-            (cateringRiderRecord?.customerFees && Boolean(cateringRiderRecord.customerFees[cleanTarget])) ||
-            (globalState.globalDailyReceipts || []).some(rc => isCustomerMatch(rc.customerName, cleanTarget));
+        const hasReceipt = (typeof checkCustomerReceiptExists === 'function')
+            ? checkCustomerReceiptExists(cleanTarget, myName, myId)
+            : (hasReceiptForActiveSession(cleanTarget) || (globalState.globalDailyReceipts || []).some(rc => isCustomerMatch(rc.customerName, cleanTarget)));
 
         if (receiptNoticeEl) {
             if (!hasReceipt) {
@@ -1631,20 +1658,47 @@ export function closeConfirmDoneModal() {
 
 export async function confirmAndExecuteDone() {
     if (!pendingDoneData) return;
-    const { custId, custName, cateringRiderRecord, matchingCustNameOnRoster, meta } = pendingDoneData;
+    const { custId, custName, cateringRiderRecord, matchingCustNameOnRoster, meta, isCateredByMe } = pendingDoneData;
 
     closeConfirmDoneModal();
 
-    // 1. If customer is being catered on the roster, execute completeSingleCateringCustomer like the catering roster Done button
-    if (cateringRiderRecord && matchingCustNameOnRoster && typeof completeSingleCateringCustomer === 'function') {
-        const rId = cateringRiderRecord.telegramId || cateringRiderRecord.id;
-        const rName = cateringRiderRecord.riderName || cateringRiderRecord.name;
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+
+    // 1. If customer is being catered by the current rider:
+    // "if the rider clicked done on the chat thread of a customer and the customer is being catered by the same rider then process the done process, check if receipt is created and if yes then release the rider from the customer, record the transaction, like an ordinary done button on the roster."
+    if (isCateredByMe && cateringRiderRecord && matchingCustNameOnRoster && typeof completeSingleCateringCustomer === 'function') {
+        const hasReceipt = (typeof checkCustomerReceiptExists === 'function')
+            ? checkCustomerReceiptExists(matchingCustNameOnRoster || custName, myName, myId)
+            : hasReceiptForActiveSession(matchingCustNameOnRoster || custName);
+
+        if (!hasReceipt) {
+            showToast(`⚠️ Paki-gawaan muna ng resibo si ${matchingCustNameOnRoster || custName} bago i-mark as Done!`);
+            if (typeof window.syncSmartCartsWithCateringCustomers === 'function') {
+                window.syncSmartCartsWithCateringCustomers();
+            }
+            let targetSlot = 1;
+            if (typeof window.getCartSlotForCustomer === 'function') {
+                targetSlot = window.getCartSlotForCustomer(matchingCustNameOnRoster || custName);
+            }
+            if (typeof window.switchCartTab === 'function') {
+                window.switchCartTab(targetSlot);
+            }
+            if (typeof window.closeRiderCustomerChatModal === 'function') {
+                window.closeRiderCustomerChatModal();
+            }
+            if (typeof window.switchView === 'function') {
+                window.switchView('view-cart');
+            }
+            return;
+        }
+
+        const rId = cateringRiderRecord.telegramId || cateringRiderRecord.id || myId;
+        const rName = cateringRiderRecord.riderName || cateringRiderRecord.name || myName;
 
         const success = await completeSingleCateringCustomer(rId, rName, matchingCustNameOnRoster);
 
-        // If completeSingleCateringCustomer halted (e.g. no receipt created yet), abort without moving chat to Done!
         if (success === false) {
-            // completeSingleCateringCustomer already prompted toast and switched to cart
             if (typeof window.closeRiderCustomerChatModal === 'function') {
                 window.closeRiderCustomerChatModal();
             }
@@ -1662,7 +1716,23 @@ export async function confirmAndExecuteDone() {
         return;
     }
 
-    // 2. Fallback for non-roster threads (e.g. general inbox inquiries being moved to Done)
+    // 2. If customer is in catering but NOT catered by me:
+    // "if the chat thread is in catering then just close the window."
+    const isThreadInCatering = (meta?.folder === 'catering') ||
+        Boolean(meta?.cateredByRiderId && meta.cateredByRiderId.toString().trim() !== "") ||
+        Boolean(meta?.cateredByRiderName && meta.cateredByRiderName.toString().trim() !== "") ||
+        Boolean(meta?.cateredBy && meta.cateredBy.toString().trim() !== "");
+
+    if (isThreadInCatering) {
+        showToast("🛵 Ang customer na ito ay nasa Catering ng ibang rider. Isinara ang chat window.");
+        if (typeof window.closeRiderCustomerChatModal === 'function') {
+            window.closeRiderCustomerChatModal();
+        }
+        return;
+    }
+
+    // 3. Customer is in Inbox (not catering):
+    // "but if the rider clicked done on a customer he is not catering in the inbox (not on the catering) then just close the chat window and move the chat thread to done folder"
     await executeThreadDone(custId, custName);
 }
 
@@ -1676,22 +1746,9 @@ export async function executeThreadDone(targetCustId = null, targetCustName = ""
     if (!custId) return;
 
     let custName = (resolvedName && resolvedName !== 'Customer') ? resolvedName : "";
-
-    const { record: cateringRiderRecord, matchingCustName: matchingCustNameOnRoster } = findCateringRiderForCustomer(custName, meta);
-
-    // Trigger completeSingleCateringCustomer on the roster
-    if (cateringRiderRecord && matchingCustNameOnRoster && typeof completeSingleCateringCustomer === 'function') {
-        const rId = cateringRiderRecord.telegramId || cateringRiderRecord.id;
-        const rName = cateringRiderRecord.riderName || cateringRiderRecord.name;
-        const success = await completeSingleCateringCustomer(rId, rName, matchingCustNameOnRoster);
-        if (success === false) {
-            if (!targetCustId && window.closeRiderCustomerChatModal) window.closeRiderCustomerChatModal();
-            return;
-        }
-    }
-
     const now = Date.now();
-    // 2. Move customer thread to Done folder in Firebase
+
+    // Move customer thread to Done folder in Firebase
     if (db) {
         const payload = {
             cateredByRiderId: null,
@@ -1707,7 +1764,7 @@ export async function executeThreadDone(targetCustId = null, targetCustName = ""
         db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
     }
 
-    // 3. Immediately synchronize in-memory thread and update feed
+    // Immediately synchronize in-memory thread and update feed
     if (typeof window.getCachedCustomerThreadsMap === 'function') {
         const threadMap = window.getCachedCustomerThreadsMap();
         if (threadMap) {
@@ -1947,6 +2004,20 @@ export function cancelCustomerThread() {
     const myName = appState.riderName || localStorage.getItem('riderName') || "Rider";
 
     if (!custId && !custName) return;
+
+    const hasAdminPower = isAdmin() || canManageRoster();
+    const hasTlVoidPower = hasTlPermission('canVoidCustomer') || hasTlPermission('canVoid') || hasTlPermission('canForceCater');
+
+    // SAFEGUARD (Ordinary Rider vs Admin/TL):
+    // "when an ordinary rider cancelled a customer but he already created a receipt for the customer, then do not cancel it."
+    if (!hasAdminPower && !hasTlVoidPower) {
+        const receiptExists = (typeof checkCustomerReceiptExists === 'function')
+            ? checkCustomerReceiptExists(custName, myName, myId)
+            : false;
+        if (receiptExists) {
+            return showToast("⚠️ Hindi maaaring i-cancel ang order na may nagawa nang resibo. Makipag-ugnayan sa Admin o TL para mag-void.");
+        }
+    }
 
     openSlideDeleteModal(
         `Cancel & Void Customer?`,
