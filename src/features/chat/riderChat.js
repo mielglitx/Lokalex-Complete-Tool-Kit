@@ -1705,20 +1705,65 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
         const cleanPsid = String(custId || '').replace(/^fb_/, '');
         if (!cleanPsid) return;
 
-        const recordFbMid = async (rawMid) => {
-            if (!newMsgKey || !rawMid || !db) return;
-            const safeMid = String(rawMid).replace(/[.#$\[\]\/]/g, '_');
+        const markDeliverySuccess = async (rawMid = null) => {
+            if (!newMsgKey || !custId) return;
+            const safeMid = rawMid ? String(rawMid).replace(/[.#$\[\]\/]/g, '_') : null;
+
+            // 1. Immediately update loaded memory and cache
             const local = loadedRiderMsgsMap.get(newMsgKey);
             if (local) {
-                local.mid = safeMid;
-                local.metaMid = rawMid;
+                local.status = 'sent';
+                local.failed = false;
+                local.failedReason = null;
+                if (safeMid) {
+                    local.mid = safeMid;
+                    local.metaMid = rawMid;
+                }
             }
-            await Promise.all([
-                db.ref(`customerChats/${custId}/messages/${newMsgKey}`).update({ mid: safeMid, metaMid: rawMid }),
-                db.ref(`customerChats/${custId}/midIndex/${safeMid}`).set(newMsgKey),
-                db.ref(`customerChats/${custId}/midIndex/${rawMid}`).set(newMsgKey)
-            ]).catch(e => console.warn("Failed to record fb mid:", e));
+
+            let memCached = riderChatMemoryCache.get(custId) || [];
+            const memItem = memCached.find(m => m.id === newMsgKey);
+            if (memItem) {
+                memItem.status = 'sent';
+                memItem.failed = false;
+                memItem.failedReason = null;
+                if (safeMid) {
+                    memItem.mid = safeMid;
+                    memItem.metaMid = rawMid;
+                }
+                idbSet('chats', custId, memCached).catch(() => {});
+            }
+
+            // 2. Immediately re-render the DOM bubble to clear "Sending failed • Retry"
+            const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
+            if (container && local) {
+                appendOrUpdateSingleRiderMessage(container, local, activeCustData);
+            }
+
+            // 3. Persist success status to Firebase RTDB
+            if (db) {
+                const updates = {
+                    status: 'sent',
+                    failed: null,
+                    failedReason: null
+                };
+                if (safeMid) {
+                    updates.mid = safeMid;
+                    updates.metaMid = rawMid;
+                }
+
+                const promises = [
+                    db.ref(`customerChats/${custId}/messages/${newMsgKey}`).update(updates)
+                ];
+                if (safeMid) {
+                    promises.push(db.ref(`customerChats/${custId}/midIndex/${safeMid}`).set(newMsgKey));
+                    promises.push(db.ref(`customerChats/${custId}/midIndex/${rawMid}`).set(newMsgKey));
+                }
+                await Promise.all(promises).catch(e => console.warn("Failed to record delivered status in RTDB:", e));
+            }
         };
+
+        const recordFbMid = markDeliverySuccess;
 
         const token = (typeof getFbPageAccessToken === 'function') 
             ? await getFbPageAccessToken(apiId) 
@@ -1761,7 +1806,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                     sendData = await sendResp.json().catch(() => ({}));
                 }
                 if (sendResp.ok) {
-                    if (sendData?.message_id) recordFbMid(sendData.message_id);
+                    recordFbMid(sendData?.message_id || null);
                     console.log("✅ Document delivered directly to Facebook Messenger!");
                     if (!suppressToast) showToast(`✅ Document (${fileName || 'file'}) sent to Messenger!`);
                     return;
@@ -1835,7 +1880,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                                 }
 
                                 if (sendResp.ok) {
-                                    if (sendData?.message_id) recordFbMid(sendData.message_id);
+                                    recordFbMid(sendData?.message_id || null);
                                     console.log("✅ Photo delivered directly to Facebook Messenger via attachment_id!");
                                     if (text && typeof text === 'string' && text.trim()) {
                                         await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey, suppressToast });
@@ -1894,7 +1939,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                     }
 
                     if (sendResp.ok) {
-                        if (sendData?.message_id) recordFbMid(sendData.message_id);
+                        recordFbMid(sendData?.message_id || null);
                         console.log("✅ HTTPS Photo delivered directly to Facebook Messenger!");
                         if (text && typeof text === 'string' && text.trim()) {
                             await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey, suppressToast });
@@ -1961,7 +2006,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                     sendData = await sendResp.json().catch(() => ({}));
                 }
                 if (sendResp.ok) {
-                    if (sendData?.message_id) recordFbMid(sendData.message_id);
+                    recordFbMid(sendData?.message_id || null);
                     console.log("✅ Text reply delivered directly to Facebook Messenger!");
                     if (!suppressToast) showToast("✅ Delivered to customer Messenger!");
                     return;
@@ -2059,9 +2104,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
             }
         } else {
             const respData = await resp.json().catch(() => ({}));
-            if (respData?.message_id || respData?.mid) {
-                recordFbMid(respData.message_id || respData.mid);
-            }
+            recordFbMid(respData?.message_id || respData?.mid || null);
             console.log("✅ Rider reply delivered to Facebook Messenger!");
             showToast("✅ Delivered to customer Messenger!");
         }
@@ -2088,29 +2131,83 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
 export async function retryRiderChatMessage(msgId) {
     if (!msgId || !loadedRiderMsgsMap.has(msgId)) return;
     const msg = loadedRiderMsgsMap.get(msgId);
-    msg.status = 'sent';
+    const targetCustId = msg.custId || activeRiderChatCustId;
+    if (!targetCustId) return;
+
+    // 1. Instantly display sending state in DOM & memory (clear failure badge immediately)
+    msg.status = 'sending';
     msg.failed = false;
+    msg.failedReason = null;
     const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
     if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
 
-    if (msg.channel === 'messenger' || String(activeRiderChatCustId).startsWith('fb_')) {
-        await forwardRiderReplyToMessenger({
-            custId: activeRiderChatCustId,
-            apiId: msg.apiId,
-            text: msg.text,
-            imageUrl: msg.imageUrl,
-            locationCoords: msg.locationCoords,
-            riderName: msg.sender || appState.riderName,
-            newMsgKey: msgId
-        });
-    } else if (db && activeRiderChatCustId) {
+    const isFb = msg.channel === 'messenger' || String(targetCustId).startsWith('fb_');
+
+    if (isFb) {
         try {
-            await db.ref(`customerChats/${activeRiderChatCustId}/messages/${msgId}`).update({
+            await forwardRiderReplyToMessenger({
+                custId: targetCustId,
+                apiId: msg.apiId,
+                text: msg.text,
+                imageUrl: msg.imageUrl,
+                fileUrl: msg.fileUrl || null,
+                fileName: msg.fileName || null,
+                locationCoords: msg.locationCoords || null,
+                riderName: msg.sender || appState.riderName,
+                replyToMid: msg.replyTo?.id || msg.replyToMid || null,
+                replyToText: msg.replyTo?.text || msg.replyToText || null,
+                newMsgKey: msgId
+            });
+
+            // Double ensure status is persisted as sent & failure fields removed
+            if (db && targetCustId) {
+                await db.ref(`customerChats/${targetCustId}/messages/${msgId}`).update({
+                    status: 'sent',
+                    failed: null,
+                    failedReason: null
+                }).catch(() => {});
+            }
+            msg.status = 'sent';
+            msg.failed = false;
+            msg.failedReason = null;
+
+            let memCached = riderChatMemoryCache.get(targetCustId) || [];
+            const memItem = memCached.find(m => m.id === msgId);
+            if (memItem) {
+                memItem.status = 'sent';
+                memItem.failed = false;
+                memItem.failedReason = null;
+                idbSet('chats', targetCustId, memCached).catch(() => {});
+            }
+
+            if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
+        } catch (err) {
+            console.error("retryRiderChatMessage failed:", err);
+            msg.status = 'failed';
+            msg.failed = true;
+            msg.failedReason = err?.message || 'Send failed';
+            if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
+        }
+    } else if (db && targetCustId) {
+        try {
+            await db.ref(`customerChats/${targetCustId}/messages/${msgId}`).update({
                 status: 'sent',
-                failed: null
+                failed: null,
+                failedReason: null
             });
             msg.status = 'sent';
             msg.failed = false;
+            msg.failedReason = null;
+
+            let memCached = riderChatMemoryCache.get(targetCustId) || [];
+            const memItem = memCached.find(m => m.id === msgId);
+            if (memItem) {
+                memItem.status = 'sent';
+                memItem.failed = false;
+                memItem.failedReason = null;
+                idbSet('chats', targetCustId, memCached).catch(() => {});
+            }
+
             if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
         } catch (_) {
             msg.status = 'failed';
