@@ -44,7 +44,7 @@ public class LokalexForegroundService extends Service {
         Notification notification = buildNotification();
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
             } else {
                 startForeground(NOTIFICATION_ID, notification);
             }
@@ -147,6 +147,14 @@ public class LokalexForegroundService extends Service {
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    @Override
+    public void onTimeout(int startId, int fgsType) {
+        // Prevent ForegroundServiceDidNotStopInTimeException crash on Android 15/16+
+        try {
+            stopSelf(startId);
+        } catch (Exception ignored) {}
     }
 
     @Override

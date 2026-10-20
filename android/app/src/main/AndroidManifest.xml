@@ -63,7 +63,7 @@
             android:name=".LokalexForegroundService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="location" />
     </application>
 
 </manifest>
