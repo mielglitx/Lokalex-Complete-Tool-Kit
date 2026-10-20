@@ -77,8 +77,22 @@ export function getMessageTimestamp(msg) {
     if (msg.timestamp && typeof msg.timestamp === 'number') return msg.timestamp;
     if (msg.timestamp && !isNaN(Number(msg.timestamp))) return Number(msg.timestamp);
     if (msg.time && !isNaN(Number(msg.time))) return Number(msg.time);
-    if (msg.createdAt && !isNaN(Number(msg.createdAt))) return Number(msg.createdAt);
-    if (msg.created_time && !isNaN(Number(msg.created_time))) return Number(msg.created_time);
+    if (msg.createdAt) {
+        const num = Number(msg.createdAt);
+        if (!isNaN(num) && num > 0) return num;
+        const parsed = new Date(msg.createdAt).getTime();
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    if (msg.created_time) {
+        const num = Number(msg.created_time);
+        if (!isNaN(num) && num > 0) return num;
+        const parsed = new Date(msg.created_time).getTime();
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    if (msg.date) {
+        const parsed = new Date(msg.date).getTime();
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
     if (msg.id && typeof msg.id === 'string' && msg.id.startsWith('-')) {
         try {
             const PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';

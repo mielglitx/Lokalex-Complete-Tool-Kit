@@ -229,9 +229,12 @@ function createRefWrapper(primaryRef, backupRef) {
             return wrapper;
         },
         child(childPath) {
+            if (!childPath || typeof childPath !== 'string' || !childPath.trim()) {
+                return wrapper;
+            }
             return createRefWrapper(
-                primaryRef.child(childPath),
-                backupRef ? backupRef.child(childPath) : null
+                primaryRef.child(childPath.trim()),
+                backupRef ? backupRef.child(childPath.trim()) : null
             );
         },
 
@@ -448,9 +451,10 @@ function createQueryWrapper(primaryQuery, backupRef) {
 }
 
 export const db = fb ? {
-    ref(path = '') {
-        const pRef = primaryDb ? primaryDb.ref(path) : null;
-        const bRef = backupDb ? backupDb.ref(path) : null;
+    ref(path) {
+        const cleanPath = (typeof path === 'string' && path.trim()) ? path.trim() : null;
+        const pRef = primaryDb ? (cleanPath ? primaryDb.ref(cleanPath) : primaryDb.ref()) : null;
+        const bRef = backupDb ? (cleanPath ? backupDb.ref(cleanPath) : backupDb.ref()) : null;
         return createRefWrapper(pRef, bRef);
     },
     goOnline() {

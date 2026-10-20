@@ -1131,13 +1131,16 @@ export function autoResolvePendingFacebookThreads(threadsList) {
 
         if (pending.length === 0) return;
 
-        for (const t of pending) {
+        // Process at most 3 items per run to prevent network/Firebase write storms
+        const batch = pending.slice(0, 3);
+        for (const t of batch) {
             const cid = t.custId || t.id;
             try {
                 await resolveFacebookCustomerName(cid);
+                await new Promise(r => setTimeout(r, 2000));
             } catch (e) {}
         }
-    }, 1200);
+    }, 5000);
 }
 
 export async function syncAllFacebookCustomerNames() {
@@ -1259,6 +1262,7 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
 
         let updatedFoldersCount = 0;
         const foldersToQuery = ['inbox', 'page_done', 'other'];
+        const batchFolderUpdates = {};
 
         for (const api of apiList) {
             const pageId = api.pageId || "1098954353295816";
@@ -1360,10 +1364,8 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
                                 updatePayload.unreadForRider = true;
                             }
 
-                            await Promise.all([
-                                db.ref(`customerChatMeta/${custId}`).update(updatePayload),
-                                db.ref(`customerChats/${custId}/metadata`).update(updatePayload)
-                            ]).catch(() => {});
+                            batchFolderUpdates[`customerChatMeta/${custId}`] = updatePayload;
+                            batchFolderUpdates[`customerChats/${custId}/metadata`] = updatePayload;
 
                             existingMeta.folder = targetFolder;
                             existingMeta.status = targetStatus;
@@ -1374,6 +1376,10 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
                     console.warn(`[FB Sync] Error fetching FB folder ${fbFolderParam}:`, folderFetchErr);
                 }
             }
+        }
+
+        if (Object.keys(batchFolderUpdates).length > 0 && db) {
+            await db.ref().update(batchFolderUpdates).catch(() => {});
         }
 
         if (updatedFoldersCount > 0) {

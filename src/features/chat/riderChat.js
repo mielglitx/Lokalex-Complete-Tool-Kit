@@ -261,6 +261,11 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
             bindRiderToActiveStoreOrders(currentRiderChatMeta);
             syncMilestoneBarUI(currentRiderChatMeta);
             syncApplicantUI(currentRiderChatMeta);
+
+            // Instant reconcile: any metadata change while thread is open synchronizes incoming messages immediately!
+            if (activeRiderChatCustId === custId) {
+                syncIncomingMessageFromMeta(custId, currentRiderChatMeta);
+            }
         });
 
         listenToRiderChatMessages(custId);
@@ -634,7 +639,7 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         }
 
         // If initial 10-message slice is already rendered, check if this is an older historical message
-        if (isInitialScrollDone && oldestRiderMsgTimestamp && msgTs < oldestRiderMsgTimestamp && msgTs < (openSessionTime - 30000)) {
+        if (isInitialScrollDone && oldestRiderMsgTimestamp && msgTs > 0 && msgTs < oldestRiderMsgTimestamp && msgTs < (openSessionTime - 30000)) {
             // Older message: leave in cache for scroll-up pagination, do not append to bottom of DOM
             hasMoreRiderMsgs = true;
             return;
@@ -749,12 +754,19 @@ export function syncIncomingMessageFromMeta(custId, meta) {
     const container = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
     if (!container) return;
 
-    const lastMsgTime = Number(meta.lastUpdated) || Number(meta.timestamp) || 0;
     const msgs = Array.from(loadedRiderMsgsMap.values());
+    const lastLoaded = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+    const lastLoadedText = (lastLoaded?.text || lastLoaded?.message || '').trim();
+    const metaLastText = (meta?.lastMessage || meta?.text || '').trim();
+
+    const isDifferentText = Boolean(metaLastText && !metaLastText.startsWith('You:') && metaLastText !== lastLoadedText);
+    const isNewId = Boolean(meta?.lastMessageId && !loadedRiderMsgsMap.has(meta.lastMessageId));
+    const lastMsgTime = Number(meta?.lastUpdated) || Number(meta?.timestamp) || 0;
     const newestLoadedTime = msgs.length > 0 ? Math.max(...msgs.map(m => getMessageTimestamp(m))) : 0;
+    const isNewerTime = Boolean(lastMsgTime > 0 && lastMsgTime > (newestLoadedTime - 3000));
 
     // If metadata indicates a newer message than what we currently have in memory:
-    if (lastMsgTime > 0 && lastMsgTime > newestLoadedTime) {
+    if (isDifferentText || isNewId || isNewerTime) {
         db.ref(`customerChats/${custId}/messages`).once('value', (snap) => {
             if (activeRiderChatCustId !== custId) return;
             const data = snap.val();

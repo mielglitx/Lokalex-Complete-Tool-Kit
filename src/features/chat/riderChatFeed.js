@@ -35,7 +35,7 @@ let isInitialCustomerChatMetaLoad = true;
 const lastKnownMessageStateMap = new Map();
 let currentFeedLimit = 35;
 let feedRenderRafId = null;
-let lastAutoResolveFbTime = 0;
+let lastAutoResolveFbTime = Date.now() + 180000;
 let riderChatSearchQuery = '';
 
 export function toggleRiderChatSearch() {
@@ -143,7 +143,7 @@ function getThreadDedupKey(key, meta) {
     // 1. Facebook Messenger threads represent unique 1-on-1 conversations by Meta PSID.
     // They must NEVER be collapsed into each other!
     if (typeof key === 'string' && (key.startsWith('fb_') || key.startsWith('messenger_'))) {
-        return `fb_${key}`;
+        return key.startsWith('fb_') ? key : `fb_${key}`;
     }
 
     // 2. For non-FB web threads, dedup by verified phone number if available
@@ -1071,12 +1071,6 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(key) : null;
             if (cached && cached.name && (!displayName || displayName.startsWith('FB Customer (') || displayName === 'Customer')) {
                 displayName = cached.name;
-            } else if (!isFromCache && (!displayName || displayName.startsWith('FB Customer (') || displayName === 'Customer')) {
-                if (typeof resolveFacebookCustomerName === 'function') {
-                    resolveFacebookCustomerName(key).then(res => {
-                        if (res && res.name) renderRiderCustomerChatFeed();
-                    }).catch(() => {});
-                }
             }
         }
 
@@ -1087,10 +1081,6 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                 const rawExtracted = key.replace(/^cust_/, '').replace(/_/g, ' ').trim();
                 if (rawExtracted) {
                     displayName = rawExtracted.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-                    if (db && key && !isFromCache) {
-                        db.ref(`customerChatMeta/${key}/customerName`).set(displayName).catch(() => {});
-                        db.ref(`customerChats/${key}/metadata/customerName`).set(displayName).catch(() => {});
-                    }
                 }
             }
             // Check live roster forcedCaters for a mapped name
@@ -1157,10 +1147,6 @@ function processCustomerChatMetaData(data, isFromCache = false) {
         if (rawLastMsg && rawLastMsg.startsWith('You:')) {
             // Outgoing rider messages can NEVER be unread
             isUnread = false;
-            if (meta.unreadForRider === true && db && key && !isFromCache) {
-                db.ref(`customerChats/${key}/metadata/unreadForRider`).set(false).catch(() => {});
-                db.ref(`customerChatMeta/${key}/unreadForRider`).set(false).catch(() => {});
-            }
         } else if (isAlreadyDone && !isNewMessageAfterDone && !isApplicant && !isFollowUp) {
             // Completed threads do not show unread badge for old messages
             isUnread = false;
@@ -1193,18 +1179,6 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             meta.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
             meta.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
             meta.cateredBy = meta.cateredByRiderName;
-            if (meta.folder !== 'catering' && db && key && !isFromCache) {
-                const healPayload = {
-                    folder: 'catering',
-                    status: 'active',
-                    cateredByRiderId: meta.cateredByRiderId,
-                    cateredByRiderName: meta.cateredByRiderName,
-                    cateredBy: meta.cateredByRiderName,
-                    lastUpdated: meta.lastUpdated || Date.now()
-                };
-                db.ref(`customerChats/${key}/metadata`).update(healPayload).catch(() => {});
-                db.ref(`customerChatMeta/${key}`).update(healPayload).catch(() => {});
-            }
         } else if (isNewMessageAfterDone) {
             // Customer sent a new message! Automatically reactivate thread back to Inbox (or Catering if catered)
             meta.status = 'active';
@@ -1212,41 +1186,11 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             meta.cateredByRiderId = activeCaterer ? (activeCaterer.telegramId || activeCaterer.id || "").toString().trim() : null;
             meta.cateredByRiderName = activeCaterer ? (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim() : null;
             meta.cateredBy = meta.cateredByRiderName;
-            if (db && key && !isFromCache) {
-                const reactivatePayload = {
-                    folder: threadFolder,
-                    status: 'active',
-                    cateredByRiderId: meta.cateredByRiderId,
-                    cateredByRiderName: meta.cateredByRiderName,
-                    cateredBy: meta.cateredBy,
-                    completedAt: null,
-                    completedByRiderId: null,
-                    completedByRiderName: null,
-                    lastUpdated: meta.lastUpdated || Date.now()
-                };
-                db.ref(`customerChats/${key}/metadata`).update(reactivatePayload).catch(() => {});
-                db.ref(`customerChatMeta/${key}`).update(reactivatePayload).catch(() => {});
-            }
         } else if (isCompletedStatus) {
             threadFolder = 'done';
             meta.cateredByRiderId = null;
             meta.cateredByRiderName = null;
             meta.cateredBy = null;
-            if (db && key && !isFromCache && (meta.folder !== 'done' || meta.cateredByRiderId || meta.cateredByRiderName || meta.unreadForRider === true)) {
-                const donePayload = {
-                    folder: 'done',
-                    status: (meta.status === 'cancelled') ? 'cancelled' : 'completed',
-                    cateredByRiderId: null,
-                    cateredByRiderName: null,
-                    cateredBy: null,
-                    unreadForRider: false
-                };
-                if (!completedAt) {
-                    donePayload.completedAt = Number(meta.lastUpdated) || Date.now();
-                }
-                db.ref(`customerChats/${key}/metadata`).update(donePayload).catch(() => {});
-                db.ref(`customerChatMeta/${key}`).update(donePayload).catch(() => {});
-            }
         } else if (globalState.rosterMembers && globalState.rosterMembers.length > 0) {
             // Roster is loaded and NO rider is actively catering this customer!
             const hadStaleCaterer = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy);
@@ -1259,17 +1203,6 @@ function processCustomerChatMetaData(data, isFromCache = false) {
                 const isFinished = isCompletedStatus || meta.completedAt || meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled';
                 if (wasInCatering) {
                     threadFolder = isFinished ? 'done' : (isApplicant ? 'applicant' : (isFollowUp ? 'followup' : 'inbox'));
-                }
-                if (db && key && !isFromCache) {
-                    const healPayload = {
-                        cateredByRiderId: null,
-                        cateredByRiderName: null,
-                        cateredBy: null,
-                        folder: threadFolder,
-                        status: isFinished ? (meta.status === 'cancelled' ? 'cancelled' : 'completed') : 'active'
-                    };
-                    db.ref(`customerChats/${key}/metadata`).update(healPayload).catch(() => {});
-                    db.ref(`customerChatMeta/${key}`).update(healPayload).catch(() => {});
                 }
             }
         }
