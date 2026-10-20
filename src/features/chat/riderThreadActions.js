@@ -897,11 +897,15 @@ export function renderSharedQuickReplies(data) {
         const isLast = index === parsedList.length - 1;
         const escapedTitle = escapeHtml(item.title);
         const escapedText = escapeHtml(item.text);
-        const encodedText = encodeURIComponent(item.text);
-        const encodedTitle = encodeURIComponent(item.title);
 
         return `
-        <div class="quick-reply-card flex items-center justify-between gap-2.5 p-2 bg-white dark:bg-cardBg hover:bg-amber-50/70 dark:hover:bg-amber-950/20 border border-gray-200 dark:border-gray-800 hover:border-amber-400/60 rounded-xl shadow-2xs transition group cursor-pointer" data-id="${item.id}" draggable="true" ondragstart="window.handleQuickReplyDragStart && window.handleQuickReplyDragStart(event, '${item.id}')" ondragover="window.handleQuickReplyDragOver && window.handleQuickReplyDragOver(event)" ondrop="window.handleQuickReplyDrop && window.handleQuickReplyDrop(event, '${item.id}')">
+        <div class="quick-reply-card flex items-center justify-between gap-2.5 p-2 bg-white dark:bg-cardBg hover:bg-amber-50/70 dark:hover:bg-amber-950/20 border border-gray-200 dark:border-gray-800 hover:border-amber-400/60 rounded-xl shadow-2xs transition group cursor-pointer" 
+             data-id="${item.id}"
+             onclick="window.handleQuickReplyChipClick && window.handleQuickReplyChipClick('${item.id}')"
+             draggable="true" 
+             ondragstart="window.handleQuickReplyDragStart && window.handleQuickReplyDragStart(event, '${item.id}')" 
+             ondragover="window.handleQuickReplyDragOver && window.handleQuickReplyDragOver(event)" 
+             ondrop="window.handleQuickReplyDrop && window.handleQuickReplyDrop(event, '${item.id}')">
             <!-- REORDER CONTROLS (MOVE TO TOP / UP / DOWN) -->
             <div class="flex items-center gap-0.5 text-gray-400 shrink-0" onclick="event.stopPropagation()">
                 <button type="button" onclick="window.moveQuickReplyToTop && window.moveQuickReplyToTop('${item.id}')" ${isFirst ? 'disabled class="opacity-20 cursor-not-allowed w-6 h-6 flex items-center justify-center text-gray-400"' : 'class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 text-gray-500 hover:text-amber-600 transition active:scale-90 cursor-pointer"'} title="Move to top">
@@ -916,7 +920,7 @@ export function renderSharedQuickReplies(data) {
             </div>
 
             <!-- TITLE CARD (CLICK TO CHOOSE / SEND) -->
-            <div onclick="window.handleQuickReplyChipClick && window.handleQuickReplyChipClick(decodeURIComponent('${encodedText}'), decodeURIComponent('${encodedTitle}'))" class="flex-1 min-w-0 flex flex-col justify-center select-none py-0.5" title="Tap to select reply">
+            <div class="flex-1 min-w-0 flex flex-col justify-center select-none py-0.5 pointer-events-none" title="Tap to select reply">
                 <div class="flex items-center gap-1.5">
                     <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
                     <span class="font-bold text-xs text-gray-900 dark:text-gray-100 truncate group-hover:text-amber-600 dark:group-hover:text-amber-400">
@@ -1056,7 +1060,41 @@ export function toggleQuickReplies() {
 
 let activeSelectedQuickReplyText = "";
 
-export function handleQuickReplyChipClick(text, title) {
+export function handleQuickReplyChipClick(idOrText, title = "") {
+    if (!idOrText) return;
+
+    let text = "";
+    let effectiveTitle = title || "";
+
+    // 1. Check in-memory parsed list by ID
+    if (Array.isArray(currentQuickRepliesList)) {
+        const found = currentQuickRepliesList.find(i => i.id === idOrText);
+        if (found) {
+            text = found.text || "";
+            effectiveTitle = found.title || effectiveTitle;
+        }
+    }
+
+    // 2. Check local storage cache by ID
+    if (!text) {
+        try {
+            const cached = localStorage.getItem('lokalex_shared_quick_replies_cache');
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (parsed && parsed[idOrText]) {
+                    const item = parsed[idOrText];
+                    text = typeof item === 'string' ? item : (item.text || "");
+                    effectiveTitle = typeof item === 'object' ? (item.title || "") : effectiveTitle;
+                }
+            }
+        } catch (_) {}
+    }
+
+    // 3. Fallback: maybe raw text was passed
+    if (!text) {
+        text = idOrText;
+    }
+
     if (!text) return;
     activeSelectedQuickReplyText = text;
 
@@ -1072,7 +1110,7 @@ export function handleQuickReplyChipClick(text, title) {
     if (editInput) editInput.value = text;
     if (choiceView) choiceView.classList.remove('hidden');
     if (editView) editView.classList.add('hidden');
-    if (titleEl) titleEl.innerText = title ? `Quick Reply: ${title}` : "Quick Reply";
+    if (titleEl) titleEl.innerText = effectiveTitle ? `Quick Reply: ${effectiveTitle}` : "Quick Reply";
     if (subtitleEl) subtitleEl.innerText = "Choose to send or edit before sending";
 
     if (modal) {
@@ -1214,18 +1252,29 @@ export async function submitSaveQuickReply() {
 
     closeAddQuickReplyModal();
 
+    // Immediately cache and display locally so the new reply is usable without round-trip lag
+    saveQuickReplyToLocalCache(localId, newEntry);
+
     if (!db) {
-        saveQuickReplyToLocalCache(localId, newEntry);
         showToast("✅ Quick reply saved locally!");
         return;
     }
 
     try {
-        await db.ref('sharedQuickReplies').push(newEntry);
+        const pushed = await db.ref('sharedQuickReplies').push(newEntry);
+        if (pushed && pushed.key && pushed.key !== localId) {
+            try {
+                const cached = localStorage.getItem('lokalex_shared_quick_replies_cache');
+                const data = cached ? JSON.parse(cached) : {};
+                delete data[localId];
+                data[pushed.key] = newEntry;
+                localStorage.setItem('lokalex_shared_quick_replies_cache', JSON.stringify(data));
+                renderSharedQuickReplies(data);
+            } catch (_) {}
+        }
         showToast("✅ Quick reply saved! Makikita na ito ng lahat ng riders.");
     } catch (e) {
         console.error("Save quick reply error:", e);
-        saveQuickReplyToLocalCache(localId, newEntry);
         if (e.message && e.message.includes('PERMISSION_DENIED')) {
             showToast("⚠️ Naka-save locally. I-publish ang updated database.rules.json sa Firebase Console!");
         } else {
