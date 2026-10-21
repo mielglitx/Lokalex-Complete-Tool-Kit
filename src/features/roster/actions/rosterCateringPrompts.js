@@ -25,24 +25,37 @@ export function promptCateringStatus() {
         loadRosterCache();
     }
 
-    const rosterMembers = globalState.rosterMembers || [];
+    const activeRole = localStorage.getItem('lokalex_active_role');
     const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
-    const currentName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+    const currentName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
+    const isPrivileged = canManageRoster();
+
+    if ((!currentId || !currentName || activeRole !== 'rider') && !isPrivileged) {
+        showToast("⚠️ Hindi ka naka-login bilang rider. Mag-login muna bago mag-cater.");
+        if (typeof window.switchView === 'function') window.switchView('view-login');
+        else if (typeof window.renderViewUI === 'function') window.renderViewUI('view-login');
+        return;
+    }
+
+    const rosterMembers = globalState.rosterMembers || [];
 
     const myRecord = rosterMembers.find(m => {
         const mId = (m.telegramId || m.id || "").toString().trim();
         const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
         if (currentId && mId && mId === currentId) return true;
-        if (currentName && mName && mName === currentName) return true;
+        if (currentName && mName && mName === currentName.toLowerCase()) return true;
         return false;
     });
 
     const myId = myRecord ? (myRecord.telegramId || myRecord.id || currentId) : currentId;
-    const myName = myRecord ? (myRecord.riderName || myRecord.name || appState.riderName || "Rider") : (appState.riderName || "Rider");
+    const myName = myRecord ? (myRecord.riderName || myRecord.name || currentName || "Rider") : (currentName || "Rider");
 
     if (!myId && !myRecord) return showToast("⚠️ Missing Rider identity.");
 
-    if (myRecord && !canManageRoster()) {
+    if (!isPrivileged) {
+        if (!myRecord || myRecord.status === 'End' || !myRecord.status) {
+            return showToast("⚠️ Naka-End Shift ka. Pindutin muna ang Available sa roster bago mag-cater.");
+        }
         if (myRecord.status === 'Cooldown') return showToast("⚠️ Naka-penalty cooldown ka pa. Maghintay muna matapos.");
     }
 
@@ -82,6 +95,19 @@ export function promptCateringStatus() {
 
 export async function confirmCateringStatus(overrideCustName = null, overrideCustId = null) {
     try {
+        const activeRole = localStorage.getItem('lokalex_active_role');
+        const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+        const currentName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
+        const isPrivileged = canManageRoster();
+
+        if ((!currentId || !currentName || activeRole !== 'rider') && !isPrivileged) {
+            closeCateringModal();
+            showToast("⚠️ Hindi ka naka-login bilang rider. Mag-login muna bago mag-cater.");
+            if (typeof window.switchView === 'function') window.switchView('view-login');
+            else if (typeof window.renderViewUI === 'function') window.renderViewUI('view-login');
+            return false;
+        }
+
         const input = document.getElementById('catering-customer-name') || document.getElementById('admin-cater-cust-name');
         const custSelect = document.getElementById('catering-customer-select') || document.getElementById('admin-cater-customer-select');
         const penaltySelect = document.getElementById('catering-penalty-select') || document.getElementById('admin-cater-penalty-select');
@@ -98,9 +124,6 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
         }
         let liveRoster = globalState.rosterMembers || [];
 
-        const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
-        const currentName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
-
         let myRecord = liveRoster.find(m => {
             const mId = (m.telegramId || m.id || "").toString().trim();
             const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
@@ -116,12 +139,11 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
             return showToast("⚠️ Rider identity not found. Please log in first.");
         }
 
-        if (resolvedId && !appState.telegramId) {
-            appState.telegramId = resolvedId;
-            try { localStorage.setItem('telegramId', resolvedId); } catch(e) {}
-        }
-
-        if (myRecord && !canManageRoster()) {
+        if (!isPrivileged) {
+            if (!myRecord || myRecord.status === 'End' || !myRecord.status) {
+                closeCateringModal();
+                return showToast("⚠️ Naka-End Shift ka. Pindutin muna ang Available sa roster bago mag-cater.");
+            }
             if (myRecord.status === 'Cooldown') {
                 closeCateringModal();
                 return showToast("⚠️ Naka-penalty cooldown ka pa.");
@@ -133,7 +155,6 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
         const isFirstAvailable = liveAvailableRiders.length > 0 && (liveAvailableRiders[0]?.telegramId || liveAvailableRiders[0]?.id || "").toString().trim() === resolvedId;
 
         const hasPenalty = penaltySelect && parseInt(penaltySelect.value) > 0;
-        const isPrivileged = canManageRoster();
 
         const isQueueJump = liveAvailableRiders.length > 0 && !isFirstAvailable && !amIAlreadyCatering;
         const isBypassingAvailability = !myRecord || (myRecord.status !== 'Available' && !amIAlreadyCatering);

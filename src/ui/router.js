@@ -392,11 +392,16 @@ export function goBack() {
         const activeRole = localStorage.getItem('lokalex_active_role');
         const isCustomer = activeRole === 'customer' || (!appState.telegramId && !!localStorage.getItem('lokalex_customer_fb_id'));
         const isMerchant = activeRole === 'merchant' || (!appState.telegramId && !!localStorage.getItem('lokalex_merchant_account_id'));
-        
+        const isRiderLoggedIn = Boolean((appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId')) && activeRole === 'rider');
+
         if (isMerchant) {
             switchView('view-store-hub', true);
+        } else if (isCustomer) {
+            switchView('view-customer-home', true);
+        } else if (isRiderLoggedIn) {
+            switchView('view-home', true);
         } else {
-            switchView(isCustomer ? 'view-customer-home' : 'view-home', true);
+            switchView('view-login', true);
         }
     }
 }
@@ -454,11 +459,16 @@ window.addEventListener('popstate', function(event) {
             const activeRole = localStorage.getItem('lokalex_active_role');
             const isCustomer = activeRole === 'customer' || (!appState.telegramId && !!localStorage.getItem('lokalex_customer_fb_id'));
             const isMerchant = activeRole === 'merchant' || (!appState.telegramId && !!localStorage.getItem('lokalex_merchant_account_id'));
+            const isRiderLoggedIn = Boolean((appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId')) && activeRole === 'rider');
 
             if (isMerchant) {
                 renderViewUI('view-store-hub');
+            } else if (isCustomer) {
+                renderViewUI('view-customer-home');
+            } else if (isRiderLoggedIn) {
+                renderViewUI('view-home');
             } else {
-                renderViewUI(isCustomer ? 'view-customer-home' : 'view-home');
+                renderViewUI('view-login');
             }
         }
     }

@@ -1831,6 +1831,34 @@ export function handleThreadSwipeCater(btnOrCustId, optionalName) {
     }
     const fg = document.getElementById(`thread-card-fg-${custId}`);
     if (fg) resetSwipeCard(fg);
+
+    const activeRole = localStorage.getItem('lokalex_active_role');
+    const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const currentName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
+
+    const isAdminUser = typeof window.isAdmin === 'function' ? window.isAdmin() : (typeof isAdmin === 'function' ? isAdmin() : false);
+    const canManage = typeof window.canManageRoster === 'function' ? window.canManageRoster() : (typeof canManageRoster === 'function' ? canManageRoster() : false);
+
+    if ((!currentId || !currentName || activeRole !== 'rider') && !isAdminUser && !canManage) {
+        showToast("⚠️ Hindi ka naka-login bilang rider. Mag-login muna bago mag-cater.");
+        if (typeof window.switchView === 'function') window.switchView('view-login');
+        else if (typeof window.renderViewUI === 'function') window.renderViewUI('view-login');
+        return;
+    }
+
+    const liveRoster = globalState.rosterMembers || [];
+    const myRecord = liveRoster.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        return (currentId && mId === currentId) || (currentName && mName === currentName.toLowerCase());
+    });
+
+    if (!isAdminUser && !canManage) {
+        if (!myRecord || myRecord.status === 'End' || !myRecord.status) {
+            return showToast("⚠️ Naka-End Shift ka. Pindutin muna ang Available sa roster bago mag-cater.");
+        }
+    }
+
     if (window.confirmCateringStatus && custId) {
         window.confirmCateringStatus(custName || 'Customer', custId);
     }

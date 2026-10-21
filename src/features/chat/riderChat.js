@@ -1282,7 +1282,15 @@ function evaluateRiderChatLockPermissions() {
             if (cancelBtn) cancelBtn.classList.remove('hidden');
             if (goCartBtn) goCartBtn.classList.remove('hidden');
         } else {
-            if (caterBtn) caterBtn.classList.remove('hidden');
+            const activeRole = localStorage.getItem('lokalex_active_role');
+            const isRiderLoggedIn = Boolean(myId && myName && activeRole === 'rider');
+            if (caterBtn) {
+                if (isRiderLoggedIn || isUserAdmin) {
+                    caterBtn.classList.remove('hidden');
+                } else {
+                    caterBtn.classList.add('hidden');
+                }
+            }
             if (cancelBtn) cancelBtn.classList.add('hidden');
             if (goCartBtn) goCartBtn.classList.add('hidden');
         }
