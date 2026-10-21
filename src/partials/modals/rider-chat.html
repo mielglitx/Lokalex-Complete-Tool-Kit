@@ -346,14 +346,15 @@
 <!-- ADD SHARED QUICK REPLY MODAL -->
 <div id="add-quick-reply-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" style="z-index: 999999 !important;">
     <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+        <input type="hidden" id="editing-quick-reply-id" value="">
         <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-3">
             <div class="flex items-center gap-2.5">
-                <div class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center text-sm font-bold">
+                <div id="add-quick-reply-modal-icon" class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center text-sm font-bold">
                     <i class="fa-solid fa-bolt"></i>
                 </div>
                 <div>
-                    <h3 class="font-bold text-sm text-gray-900 dark:text-white">New Quick Reply</h3>
-                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Available to all riders in real time</p>
+                    <h3 id="add-quick-reply-modal-title" class="font-bold text-sm text-gray-900 dark:text-white">New Quick Reply</h3>
+                    <p id="add-quick-reply-modal-subtitle" class="text-[10px] text-gray-500 dark:text-gray-400">Available to all riders in real time</p>
                 </div>
             </div>
             <button type="button" onclick="window.closeAddQuickReplyModal && window.closeAddQuickReplyModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
@@ -378,7 +379,7 @@
             <button type="button" onclick="window.closeAddQuickReplyModal && window.closeAddQuickReplyModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 py-2.5 rounded-xl text-xs font-bold transition active:scale-95">
                 Cancel
             </button>
-            <button type="button" onclick="window.submitSaveQuickReply && window.submitSaveQuickReply()" class="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2.5 rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center justify-center gap-1.5">
+            <button type="button" id="submit-save-quick-reply-btn" onclick="window.submitSaveQuickReply && window.submitSaveQuickReply()" class="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2.5 rounded-xl text-xs font-bold shadow-md transition active:scale-95 flex items-center justify-center gap-1.5">
                 <i class="fa-solid fa-floppy-disk"></i> Save Reply
             </button>
         </div>
@@ -418,6 +419,9 @@
                 <button type="button" onclick="window.openEditQuickReplyModal && window.openEditQuickReplyModal()" class="w-full bg-amber-500 hover:bg-amber-400 text-white font-bold py-3 px-4 rounded-xl shadow-md transition active:scale-95 flex items-center justify-center gap-2 text-xs">
                     <i class="fa-solid fa-pen-to-square"></i> Edit Before Sending
                 </button>
+                <button type="button" onclick="window.openPermanentEditFromActionModal && window.openPermanentEditFromActionModal()" class="w-full bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300 font-bold py-2.5 px-4 rounded-xl border border-amber-300 dark:border-amber-700/60 transition active:scale-95 flex items-center justify-center gap-2 text-xs">
+                    <i class="fa-solid fa-wrench"></i> Edit Template Permanently
+                </button>
                 <button type="button" onclick="window.closeQuickReplyActionModal && window.closeQuickReplyActionModal()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 py-2.5 rounded-xl text-xs font-bold transition active:scale-95">
                     Cancel
                 </button>
@@ -429,7 +433,14 @@
             <div class="flex flex-col gap-1.5">
                 <label for="edit-quick-reply-textarea" class="text-xs font-bold text-gray-700 dark:text-gray-300">Edit Message:</label>
                 <textarea id="edit-quick-reply-textarea" rows="4" placeholder="Edit your reply..." onkeydown="if((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.sendEditedQuickReply && window.sendEditedQuickReply(); }" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 resize-none leading-relaxed"></textarea>
-                <p class="text-[10px] text-gray-500 dark:text-gray-400 italic">Editing modifies only this sent message, not the saved template.</p>
+                
+                <label class="flex items-center gap-2 mt-1 cursor-pointer select-none">
+                    <input type="checkbox" id="save-quick-reply-permanently-checkbox" class="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-gray-300 dark:border-gray-600 cursor-pointer">
+                    <span class="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                        <i class="fa-solid fa-floppy-disk text-amber-500 text-[11px]"></i> Save changes permanently to template
+                    </span>
+                </label>
+                <p class="text-[10px] text-gray-500 dark:text-gray-400 italic">Check the box above to save this edit permanently for all riders.</p>
             </div>
 
             <div class="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">

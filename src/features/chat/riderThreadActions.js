@@ -932,8 +932,11 @@ export function renderSharedQuickReplies(data) {
                 </p>
             </div>
 
-            <!-- DELETE BUTTON -->
+            <!-- ACTION BUTTONS: EDIT & DELETE -->
             <div class="flex items-center gap-1 shrink-0" onclick="event.stopPropagation()">
+                <button type="button" onclick="window.promptEditQuickReply && window.promptEditQuickReply('${item.id}')" class="text-gray-400 hover:text-amber-500 dark:hover:text-amber-400 p-1.5 text-xs opacity-60 hover:opacity-100 transition active:scale-90 cursor-pointer" title="Edit template permanently">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                </button>
                 <button type="button" onclick="window.deleteQuickReply && window.deleteQuickReply('${item.id}')" class="text-gray-400 hover:text-red-500 p-1.5 text-xs opacity-60 hover:opacity-100 transition active:scale-90 cursor-pointer" title="Delete reply">
                     <i class="fa-solid fa-trash-can"></i>
                 </button>
@@ -1059,17 +1062,20 @@ export function toggleQuickReplies() {
 }
 
 let activeSelectedQuickReplyText = "";
+let activeSelectedQuickReplyId = null;
 
 export function handleQuickReplyChipClick(idOrText, title = "") {
     if (!idOrText) return;
 
     let text = "";
     let effectiveTitle = title || "";
+    activeSelectedQuickReplyId = idOrText;
 
     // 1. Check in-memory parsed list by ID
     if (Array.isArray(currentQuickRepliesList)) {
         const found = currentQuickRepliesList.find(i => i.id === idOrText);
         if (found) {
+            activeSelectedQuickReplyId = found.id;
             text = found.text || "";
             effectiveTitle = found.title || effectiveTitle;
         }
@@ -1083,6 +1089,7 @@ export function handleQuickReplyChipClick(idOrText, title = "") {
                 const parsed = JSON.parse(cached);
                 if (parsed && parsed[idOrText]) {
                     const item = parsed[idOrText];
+                    activeSelectedQuickReplyId = idOrText;
                     text = typeof item === 'string' ? item : (item.text || "");
                     effectiveTitle = typeof item === 'object' ? (item.title || "") : effectiveTitle;
                 }
@@ -1105,6 +1112,8 @@ export function handleQuickReplyChipClick(idOrText, title = "") {
     const editView = document.getElementById('quick-reply-edit-view');
     const titleEl = document.getElementById('quick-reply-modal-title');
     const subtitleEl = document.getElementById('quick-reply-modal-subtitle');
+    const permCheckbox = document.getElementById('save-quick-reply-permanently-checkbox');
+    if (permCheckbox) permCheckbox.checked = false;
 
     if (previewEl) previewEl.textContent = text;
     if (editInput) editInput.value = text;
@@ -1116,6 +1125,14 @@ export function handleQuickReplyChipClick(idOrText, title = "") {
     if (modal) {
         modal.classList.remove('hidden');
         toggleBodyScroll(true);
+    }
+}
+
+export function openPermanentEditFromActionModal() {
+    const idToEdit = activeSelectedQuickReplyId;
+    closeQuickReplyActionModal();
+    if (idToEdit && window.promptEditQuickReply) {
+        window.promptEditQuickReply(idToEdit);
     }
 }
 
@@ -1132,6 +1149,8 @@ export function openEditQuickReplyModal() {
     const editInput = document.getElementById('edit-quick-reply-textarea');
     const titleEl = document.getElementById('quick-reply-modal-title');
     const subtitleEl = document.getElementById('quick-reply-modal-subtitle');
+    const permCheckbox = document.getElementById('save-quick-reply-permanently-checkbox');
+    if (permCheckbox) permCheckbox.checked = false;
 
     if (choiceView) choiceView.classList.add('hidden');
     if (editView) editView.classList.remove('hidden');
@@ -1159,24 +1178,67 @@ export function backToQuickReplyChoiceView() {
     if (subtitleEl) subtitleEl.innerText = "Choose to send or edit before sending";
 }
 
-export function sendEditedQuickReply() {
+export async function sendEditedQuickReply() {
     const editInput = document.getElementById('edit-quick-reply-textarea');
+    const permCheckbox = document.getElementById('save-quick-reply-permanently-checkbox');
+    const shouldSavePermanently = permCheckbox ? permCheckbox.checked : false;
     const text = editInput ? editInput.value.trim() : '';
     if (!text) {
         showToast("⚠️ Please enter a message to send.");
         return;
     }
+
+    const currentReplyId = activeSelectedQuickReplyId;
     closeQuickReplyActionModal();
     sendQuickReply(text);
+
+    if (shouldSavePermanently && currentReplyId) {
+        const riderName = appState.riderName || localStorage.getItem('riderName') || 'Rider';
+        try {
+            const cached = localStorage.getItem('lokalex_shared_quick_replies_cache');
+            const data = cached ? JSON.parse(cached) : {};
+            if (data[currentReplyId]) {
+                const existing = data[currentReplyId];
+                const updated = {
+                    ...(typeof existing === 'object' ? existing : {}),
+                    text: text,
+                    updatedAt: Date.now(),
+                    updatedBy: riderName
+                };
+                data[currentReplyId] = updated;
+                localStorage.setItem('lokalex_shared_quick_replies_cache', JSON.stringify(data));
+                renderSharedQuickReplies(data);
+            }
+        } catch (_) {}
+
+        if (db) {
+            try {
+                await db.ref(`sharedQuickReplies/${currentReplyId}`).update({
+                    text: text,
+                    updatedAt: Date.now(),
+                    updatedBy: riderName
+                });
+                showToast("✅ Reply sent & template permanently updated!");
+            } catch (e) {
+                console.warn("RTDB template update error:", e);
+                showToast("✅ Reply sent & template saved locally!");
+            }
+        } else {
+            showToast("✅ Reply sent & template saved locally!");
+        }
+    }
 }
 
 export function closeQuickReplyActionModal() {
     const modal = document.getElementById('quick-reply-action-modal');
+    const permCheckbox = document.getElementById('save-quick-reply-permanently-checkbox');
+    if (permCheckbox) permCheckbox.checked = false;
     if (modal) {
         modal.classList.add('hidden');
         toggleBodyScroll(false);
     }
     activeSelectedQuickReplyText = "";
+    activeSelectedQuickReplyId = null;
 }
 
 export function sendQuickReply(text) {
@@ -1194,19 +1256,92 @@ export function sendQuickReply(text) {
 
 export function promptAddQuickReply() {
     const modal = document.getElementById('add-quick-reply-modal');
+    const editingIdInput = document.getElementById('editing-quick-reply-id');
     const titleInput = document.getElementById('new-quick-reply-title');
     const textInput = document.getElementById('new-quick-reply-input');
+    const modalTitle = document.getElementById('add-quick-reply-modal-title');
+    const modalSub = document.getElementById('add-quick-reply-modal-subtitle');
+    const submitBtn = document.getElementById('submit-save-quick-reply-btn');
+    const iconContainer = document.getElementById('add-quick-reply-modal-icon');
+
+    if (editingIdInput) editingIdInput.value = '';
+    if (titleInput) titleInput.value = '';
+    if (textInput) textInput.value = '';
+    if (modalTitle) modalTitle.innerText = "New Quick Reply";
+    if (modalSub) modalSub.innerText = "Available to all riders in real time";
+    if (submitBtn) submitBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Save Reply`;
+    if (iconContainer) iconContainer.innerHTML = `<i class="fa-solid fa-bolt"></i>`;
+
     if (modal) {
-        if (titleInput) titleInput.value = '';
-        if (textInput) textInput.value = '';
         modal.classList.remove('hidden');
         toggleBodyScroll(true);
         setTimeout(() => (titleInput || textInput)?.focus(), 150);
     }
 }
 
+export function promptEditQuickReply(id) {
+    if (!id) return;
+    const modal = document.getElementById('add-quick-reply-modal');
+    const editingIdInput = document.getElementById('editing-quick-reply-id');
+    const titleInput = document.getElementById('new-quick-reply-title');
+    const textInput = document.getElementById('new-quick-reply-input');
+    const modalTitle = document.getElementById('add-quick-reply-modal-title');
+    const modalSub = document.getElementById('add-quick-reply-modal-subtitle');
+    const submitBtn = document.getElementById('submit-save-quick-reply-btn');
+    const iconContainer = document.getElementById('add-quick-reply-modal-icon');
+
+    let foundItem = null;
+    if (Array.isArray(currentQuickRepliesList)) {
+        foundItem = currentQuickRepliesList.find(i => i.id === id);
+    }
+    if (!foundItem) {
+        try {
+            const cached = localStorage.getItem('lokalex_shared_quick_replies_cache');
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (parsed && parsed[id]) {
+                    const raw = parsed[id];
+                    foundItem = {
+                        id,
+                        title: typeof raw === 'object' ? (raw.title || '') : '',
+                        text: typeof raw === 'object' ? (raw.text || '') : raw,
+                        order: typeof raw === 'object' ? (raw.order || 0) : 0,
+                        createdAt: typeof raw === 'object' ? (raw.createdAt || 0) : 0
+                    };
+                }
+            }
+        } catch (_) {}
+    }
+
+    if (!foundItem) {
+        showToast("⚠️ Hindi mahanap ang quick reply na ie-edit.");
+        return;
+    }
+
+    if (editingIdInput) editingIdInput.value = id;
+    if (titleInput) titleInput.value = foundItem.title || '';
+    if (textInput) textInput.value = foundItem.text || '';
+    if (modalTitle) modalTitle.innerText = "Edit Quick Reply";
+    if (modalSub) modalSub.innerText = "Update template permanently for all riders";
+    if (submitBtn) submitBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Update Permanently`;
+    if (iconContainer) iconContainer.innerHTML = `<i class="fa-solid fa-pen-to-square"></i>`;
+
+    if (modal) {
+        modal.classList.remove('hidden');
+        toggleBodyScroll(true);
+        setTimeout(() => {
+            if (textInput) {
+                textInput.focus();
+                textInput.setSelectionRange(textInput.value.length, textInput.value.length);
+            }
+        }, 150);
+    }
+}
+
 export function closeAddQuickReplyModal() {
     const modal = document.getElementById('add-quick-reply-modal');
+    const editingIdInput = document.getElementById('editing-quick-reply-id');
+    if (editingIdInput) editingIdInput.value = '';
     if (modal) {
         modal.classList.add('hidden');
         toggleBodyScroll(false);
@@ -1224,6 +1359,8 @@ function saveQuickReplyToLocalCache(id, item) {
 }
 
 export async function submitSaveQuickReply() {
+    const editingIdInput = document.getElementById('editing-quick-reply-id');
+    const editingId = editingIdInput ? editingIdInput.value.trim() : '';
     const titleInput = document.getElementById('new-quick-reply-title');
     const textInput = document.getElementById('new-quick-reply-input');
     const text = textInput ? textInput.value.trim() : '';
@@ -1238,6 +1375,57 @@ export async function submitSaveQuickReply() {
     }
 
     const riderName = appState.riderName || localStorage.getItem('riderName') || 'Rider';
+
+    if (editingId) {
+        // PERMANENT EDIT OF EXISTING TEMPLATE
+        closeAddQuickReplyModal();
+
+        // 1. Update local cache immediately
+        let existingItem = null;
+        try {
+            const cached = localStorage.getItem('lokalex_shared_quick_replies_cache');
+            const data = cached ? JSON.parse(cached) : {};
+            existingItem = data[editingId];
+            const updatedEntry = {
+                ...(typeof existingItem === 'object' ? existingItem : {}),
+                title: title,
+                text: text,
+                updatedAt: Date.now(),
+                updatedBy: riderName
+            };
+            data[editingId] = updatedEntry;
+            localStorage.setItem('lokalex_shared_quick_replies_cache', JSON.stringify(data));
+            renderSharedQuickReplies(data);
+        } catch (e) {
+            console.warn("Local cache update error:", e);
+        }
+
+        if (!db) {
+            showToast("✅ Quick reply updated permanently (locally)!");
+            return;
+        }
+
+        try {
+            const updatePayload = {
+                title: title,
+                text: text,
+                updatedAt: Date.now(),
+                updatedBy: riderName
+            };
+            await db.ref(`sharedQuickReplies/${editingId}`).update(updatePayload);
+            showToast("✅ Quick reply updated permanently for all riders!");
+        } catch (e) {
+            console.error("Update quick reply error:", e);
+            if (e.message && e.message.includes('PERMISSION_DENIED')) {
+                showToast("⚠️ Naka-update locally. I-publish ang updated rules sa Firebase Console!");
+            } else {
+                showToast("⚠️ Naka-update locally: " + e.message);
+            }
+        }
+        return;
+    }
+
+    // CREATE NEW QUICK REPLY (editingId is empty)
     const localId = 'qr_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
     
     // Find next order number
@@ -2457,6 +2645,8 @@ if (typeof window !== 'undefined') {
     window.initSharedQuickRepliesListener = initSharedQuickRepliesListener;
     window.renderSharedQuickReplies = renderSharedQuickReplies;
     window.promptAddQuickReply = promptAddQuickReply;
+    window.promptEditQuickReply = promptEditQuickReply;
+    window.openPermanentEditFromActionModal = openPermanentEditFromActionModal;
     window.closeAddQuickReplyModal = closeAddQuickReplyModal;
     window.handleQuickReplyChipClick = handleQuickReplyChipClick;
     window.confirmSendQuickReply = confirmSendQuickReply;
