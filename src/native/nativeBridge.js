@@ -211,6 +211,32 @@ export function syncRiderSession(riderId, riderName) {
     return false;
 }
 
+export function getSystemNotificationSounds() {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.getSystemNotificationSounds === 'function') {
+        try {
+            const raw = window.NativePermissionsBridge.getSystemNotificationSounds();
+            if (raw) return JSON.parse(raw);
+        } catch (e) {
+            console.warn("getSystemNotificationSounds parse error:", e);
+        }
+    }
+    return [
+        { id: 'system_default', name: 'Device Default Ringtone', uri: 'system_default' }
+    ];
+}
+
+export function playSystemSound(uriString = '') {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.playSystemSound === 'function') {
+        try {
+            window.NativePermissionsBridge.playSystemSound(uriString || 'system_default');
+            return true;
+        } catch (e) {
+            console.warn("playSystemSound error:", e);
+        }
+    }
+    return false;
+}
+
 /**
  * Post notification directly into the Android notification bar / system tray
  */
@@ -325,6 +351,8 @@ if (typeof window !== 'undefined') {
     window.requestBatteryOptimizationExemption = requestBatteryOptimizationExemption;
     window.isBatteryOptimizationIgnored = isBatteryOptimizationIgnored;
     window.syncRiderSession = syncRiderSession;
+    window.getSystemNotificationSounds = getSystemNotificationSounds;
+    window.playSystemSound = playSystemSound;
 }
 
 /**

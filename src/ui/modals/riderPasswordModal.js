@@ -17,15 +17,12 @@ export async function openRiderPasswordSetupModal(targetId = null, targetName = 
     }
 
     riderPasswordSuccessCallback = onSuccessCallback;
-    riderPhoneVerified = false;
+    riderPhoneVerified = true;
     riderSetupConfirmationResult = null;
     riderSetupVerifiedPhone = "";
 
     const modal = document.getElementById('rider-password-setup-modal');
     const phoneInput = document.getElementById('rider-setup-phone-input');
-    const otpBox = document.getElementById('rider-setup-otp-box');
-    const otpCode = document.getElementById('rider-setup-otp-code');
-    const verifiedBadge = document.getElementById('rider-phone-verified-badge');
     const passStep = document.getElementById('rider-setup-step-pass');
     const p1 = document.getElementById('rider-new-pass-1');
     const p2 = document.getElementById('rider-new-pass-2');
@@ -33,16 +30,13 @@ export async function openRiderPasswordSetupModal(targetId = null, targetName = 
     const saveBtn = document.getElementById('rider-setup-save-btn');
 
     if (phoneInput) phoneInput.value = '';
-    if (otpBox) otpBox.classList.add('hidden');
-    if (otpCode) otpCode.value = '';
-    if (verifiedBadge) verifiedBadge.classList.add('hidden');
     if (passStep) {
-        passStep.classList.add('opacity-50', 'pointer-events-none');
+        passStep.classList.remove('opacity-50', 'pointer-events-none');
     }
     if (p1) p1.value = '';
     if (p2) p2.value = '';
     if (errBox) errBox.classList.add('hidden');
-    if (saveBtn) saveBtn.disabled = true;
+    if (saveBtn) saveBtn.disabled = false;
 
     const myId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || '').toString().trim();
     if (myId && db) {
@@ -57,7 +51,8 @@ export async function openRiderPasswordSetupModal(targetId = null, targetName = 
 
     if (modal) {
         modal.classList.remove('hidden');
-        if (phoneInput) phoneInput.focus();
+        if (phoneInput && !phoneInput.value) phoneInput.focus();
+        else if (p1) p1.focus();
     }
 }
 
@@ -233,15 +228,22 @@ export async function verifyRiderSetupOTP() {
 }
 
 export async function handleSaveRiderPassword() {
-    if (!riderPhoneVerified) {
-        showToast("⚠️ Paki-verify muna ang iyong Mobile Number gamit ang OTP!");
-        return;
-    }
-
+    const phoneInput = document.getElementById('rider-setup-phone-input');
     const p1 = document.getElementById('rider-new-pass-1');
     const p2 = document.getElementById('rider-new-pass-2');
     const errBox = document.getElementById('rider-pass-error-msg');
     const errTxt = document.getElementById('rider-pass-error-text');
+
+    const rawPhone = phoneInput ? phoneInput.value.trim() : '';
+    let formattedPhone = "";
+    if (rawPhone) {
+        formattedPhone = formatPhoneNumber(rawPhone);
+        if (!/^\+639\d{9}$/.test(formattedPhone)) {
+            showToast("⚠️ Maling mobile number format. Dapat 11 digits (hal. 09123456789).");
+            if (phoneInput) phoneInput.focus();
+            return;
+        }
+    }
 
     const pass1 = p1 ? p1.value.trim() : '';
     const pass2 = p2 ? p2.value.trim() : '';
@@ -276,27 +278,39 @@ export async function handleSaveRiderPassword() {
 
     if (errBox) errBox.classList.add('hidden');
 
+    const saveBtn = document.getElementById('rider-setup-save-btn');
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
+    }
+
     try {
+        const phoneToSave = formattedPhone || rawPhone || "";
         if (db) {
-            await db.ref(`riders/${myId}`).update({ 
+            const updates = { 
                 password: pass1,
-                phoneNumber: riderSetupVerifiedPhone,
                 hasPassword: true,
                 skipPasswordSetup: false,
                 passwordUpdatedAt: Date.now()
-            });
+            };
+            if (phoneToSave) {
+                updates.phoneNumber = phoneToSave;
+            }
+            await db.ref(`riders/${myId}`).update(updates);
             await db.ref(`roster/${myId}`).update({
                 hasPassword: true
             }).catch(() => {});
         }
 
-        appState.phoneNumber = riderSetupVerifiedPhone;
+        if (phoneToSave) {
+            appState.phoneNumber = phoneToSave;
+            localStorage.setItem('lokalex_rider_phone', phoneToSave);
+        }
         localStorage.setItem(`lokalex_pass_${myId}`, pass1);
-        localStorage.setItem('lokalex_rider_phone', riderSetupVerifiedPhone);
         localStorage.removeItem(`lokalex_skip_pass_${myId}`);
 
-        showToast("✅ Matagumpay na nai-save ang iyong Mobile & Password!");
-        showSideNotification("SECURITY SETUP COMPLETE", "Account verified & password set", "fa-shield-check", "text-emerald-400", "border-emerald-500");
+        showToast("✅ Matagumpay na nai-save ang iyong Password!");
+        showSideNotification("SECURITY SETUP COMPLETE", "Password successfully saved", "fa-shield-check", "text-emerald-400", "border-emerald-500");
 
         const cb = riderPasswordSuccessCallback;
         closeRiderPasswordSetupModal();
@@ -307,5 +321,10 @@ export async function handleSaveRiderPassword() {
     } catch(e) {
         console.error("Save password error:", e);
         showToast("❌ Bigo sa pag-save ng password. Subukan muli.");
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = `<i class="fa-solid fa-check"></i> Save & Continue`;
+        }
     }
 }

@@ -41,7 +41,8 @@ import * as helpers from '../utils/helpers.js';
 import { 
     unlockAudioContext, 
     startBackgroundAudioPulse, 
-    requestWakeLock 
+    requestWakeLock,
+    showToast 
 } from '../ui/notifications.js';
 
 import { registerServiceWorker, initFCMNotifications } from './appPush.js';
@@ -97,7 +98,7 @@ export async function hydrateInstantLocalStores() {
     } catch (_) {}
 }
 
-export function bootApp() {
+export async function bootApp() {
     try {
         registerServiceWorker();
         updateNetworkStatus();
@@ -173,6 +174,22 @@ export function bootApp() {
         const savedRiderName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
 
         if ((savedRiderId || savedRiderName) && (!activeUserRole || activeUserRole === 'rider')) {
+            // Verify if rider account still exists in Firebase database
+            if (savedRiderId && db) {
+                try {
+                    const riderSnap = await db.ref(`riders/${savedRiderId}`).once('value');
+                    if (!riderSnap.exists()) {
+                        console.warn(`Rider ${savedRiderId} deleted from database; clearing session.`);
+                        localStorage.clear();
+                        syncRiderSession('', '');
+                        history.replaceState({ view: 'view-login' }, '', '#view-login');
+                        router.renderViewUI('view-login');
+                        showToast("⚠️ Ang iyong account ay tinanggal na o hindi na umiiral.");
+                        return;
+                    }
+                } catch (_) {}
+            }
+
             if (!appState.telegramId && savedRiderId) appState.telegramId = savedRiderId;
             if (!appState.riderName && savedRiderName) appState.riderName = savedRiderName;
             localStorage.setItem('telegramId', appState.telegramId || savedRiderId);
@@ -194,9 +211,33 @@ export function bootApp() {
             startBackgroundAudioPulse();
             requestWakeLock();
         } else if (appState.merchantAccountId && appState.merchantStoreId && activeUserRole === 'merchant') {
+            if (db) {
+                try {
+                    const merchSnap = await db.ref(`storeAccounts/${appState.merchantAccountId}`).once('value');
+                    if (!merchSnap.exists()) {
+                        localStorage.clear();
+                        history.replaceState({ view: 'view-login' }, '', '#view-login');
+                        router.renderViewUI('view-login');
+                        showToast("⚠️ Ang iyong Store Merchant account ay tinanggal na.");
+                        return;
+                    }
+                } catch (_) {}
+            }
             history.replaceState({ view: 'view-store-hub' }, '', '#view-store-hub');
             router.renderViewUI('view-store-hub');
         } else if (savedCustomerFbId && activeUserRole === 'customer') {
+            if (db) {
+                try {
+                    const custSnap = await db.ref(`customers/${savedCustomerFbId}`).once('value');
+                    if (!custSnap.exists()) {
+                        localStorage.clear();
+                        history.replaceState({ view: 'view-login' }, '', '#view-login');
+                        router.renderViewUI('view-login');
+                        showToast("⚠️ Ang iyong Customer account ay tinanggal na.");
+                        return;
+                    }
+                } catch (_) {}
+            }
             appState.customerFacebookId = savedCustomerFbId;
             appState.customerName = savedCustomerName || "Customer";
 

@@ -6,6 +6,7 @@ import { fetchGCashDetails, openRiderPasswordSetupModal } from '../../ui/modals.
 import { renderViewUI } from '../../ui/router.js';
 import { calibrateGPS, startBackgroundRosterGpsTracker, stopBackgroundRosterGpsTracker } from './authGps.js';
 import { isUserBlocked } from './authAdmin.js';
+import { finalizeCustomerSession } from './authCustomer.js';
 
 let deferredPwaPrompt = null;
 
@@ -34,6 +35,156 @@ export function installPwaApp() {
 export function closePwaInstallModal() {
     const modal = document.getElementById('pwa-install-modal');
     if (modal) modal.classList.add('hidden');
+}
+
+export async function processUnifiedLogin() {
+    unlockAudioContext();
+    const identInput = document.getElementById('unified-login-identifier') || document.getElementById('login-id');
+    const passInput = document.getElementById('unified-login-password') || document.getElementById('login-pass');
+    const btn = document.getElementById('unified-login-btn') || document.getElementById('login-btn');
+
+    const identifier = (identInput?.value || '').trim();
+    const password = passInput?.value || '';
+
+    if (!identifier) {
+        showToast("⚠️ Paki-lagay ang iyong Rider ID, Mobile Number, o Store Username.");
+        if (identInput) identInput.focus();
+        return;
+    }
+    if (!password) {
+        showToast("⚠️ Paki-lagay ang iyong Password.");
+        if (passInput) passInput.focus();
+        return;
+    }
+
+    if (btn) {
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Checking Account...`;
+        btn.disabled = true;
+    }
+
+    try {
+        if (!db) throw new Error("Database connection unavailable.");
+
+        // 1. Check Rider Database First (Rider portal priority)
+        let riderRecord = null;
+        const snap = await db.ref(`riders/${identifier}`).once('value');
+        riderRecord = snap.val();
+
+        if (!riderRecord) {
+            const rosterSnap = await db.ref(`roster/${identifier}`).once('value');
+            riderRecord = rosterSnap.val();
+        }
+
+        if (riderRecord) {
+            const cleanName = riderRecord.name || riderRecord.riderName || identifier;
+            const cleanUserType = (riderRecord.userType || riderRecord.type || "rider").toLowerCase().trim();
+
+            if (isUserBlocked(cleanName) || isUserBlocked(identifier)) {
+                throw new Error("🚫 Access Denied: Your account is blocked by Admin.");
+            }
+
+            const existingPassword = riderRecord.password || riderRecord.pass || null;
+            const isSkipped = localStorage.getItem(`lokalex_skip_pass_${identifier}`) === 'true' || riderRecord.skipPasswordSetup === true;
+
+            if (!existingPassword) {
+                if (!isSkipped) {
+                    if (btn) {
+                        btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> LOGIN`;
+                        btn.disabled = false;
+                    }
+                    openRiderPasswordSetupModal(identifier, cleanName, async () => {
+                        await executeRiderLoginSequence(identifier, cleanName, cleanUserType, riderRecord);
+                    });
+                    return;
+                }
+            } else {
+                if (password !== existingPassword.toString()) {
+                    throw new Error("❌ Mali ang iyong Rider Password. Paki-ulit.");
+                }
+            }
+
+            await executeRiderLoginSequence(identifier, cleanName, cleanUserType, riderRecord);
+            return;
+        }
+
+        // 2. Check Customer Account (Phone Number / Email)
+        const isPotentialPhone = /^(?:09|\+639|639|9)\d{8,9}$/.test(identifier.replace(/[\s-]/g, ''));
+        if (isPotentialPhone && auth) {
+            let phoneVal = identifier.replace(/[^0-9]/g, '');
+            if (phoneVal.startsWith('6309') && phoneVal.length >= 4) phoneVal = '9' + phoneVal.substring(4);
+            else if (phoneVal.startsWith('639') && phoneVal.length >= 3) phoneVal = '9' + phoneVal.substring(3);
+            else if (phoneVal.startsWith('09') && phoneVal.length >= 2) phoneVal = '9' + phoneVal.substring(2);
+            else if (phoneVal.startsWith('0')) phoneVal = phoneVal.substring(1);
+
+            const cleanPhoneKey = '63' + phoneVal;
+            const formattedPhone = '+63' + phoneVal;
+
+            let custData = null;
+            let uid = null;
+
+            const phoneSnap = await db.ref(`phones/${cleanPhoneKey}`).once('value');
+            const phoneRec = phoneSnap.val();
+            uid = phoneRec?.uid;
+
+            if (uid) {
+                const custSnap = await db.ref(`customers/${uid}`).once('value');
+                custData = custSnap.val();
+            } else {
+                const snap = await db.ref('customers').orderByChild('phoneNumber').equalTo(formattedPhone).once('value');
+                const val = snap.val();
+                if (val) {
+                    uid = Object.keys(val)[0];
+                    custData = val[uid];
+                }
+            }
+
+            if (custData && uid) {
+                const loginEmail = custData.loginEmail || custData.email || `${cleanPhoneKey}@lokalex.app`;
+                const userCred = await auth.signInWithEmailAndPassword(loginEmail, password);
+                finalizeCustomerSession(userCred.user.uid, custData.name, formattedPhone, custData.avatarUrl);
+                showToast(`✅ Welcome back, ${custData.name}!`);
+                history.replaceState({ view: 'view-customer-home' }, '', '#view-customer-home');
+                renderViewUI('view-customer-home');
+                return;
+            }
+        }
+
+        // 3. Check Store Merchant Account
+        const storeSnap = await db.ref('storeAccounts').orderByChild('username').equalTo(identifier.toLowerCase()).once('value');
+        const storeVal = storeSnap.val();
+        if (storeVal) {
+            const accId = Object.keys(storeVal)[0];
+            const targetAccount = storeVal[accId];
+            if (targetAccount.password !== password) {
+                throw new Error("❌ Mali ang Password para sa Store Account.");
+            }
+
+            localStorage.setItem('lokalex_merchant_account_id', accId);
+            localStorage.setItem('lokalex_merchant_store_id', targetAccount.storeId);
+            localStorage.setItem('lokalex_merchant_store_name', targetAccount.storeName);
+            localStorage.setItem('lokalex_merchant_username', targetAccount.username);
+            localStorage.setItem('lokalex_active_role', 'merchant');
+
+            appState.merchantAccountId = accId;
+            appState.merchantStoreId = targetAccount.storeId;
+            appState.merchantStoreName = targetAccount.storeName;
+            appState.merchantUsername = targetAccount.username;
+
+            showToast(`✅ Store Login Successful! Welcome ${targetAccount.storeName}`);
+            history.replaceState({ view: 'view-store-hub' }, '', '#view-store-hub');
+            renderViewUI('view-store-hub');
+            return;
+        }
+
+        throw new Error("🚫 Hindi mahanap ang account na ito. Paki-check ang iyong Rider ID, Mobile No., o Username.");
+    } catch (err) {
+        showToast(err.message || "❌ Bigo sa pag-login.");
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> LOGIN`;
+        }
+    }
 }
 
 export async function processLogin() {

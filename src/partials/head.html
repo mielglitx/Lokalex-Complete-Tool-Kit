@@ -169,6 +169,56 @@
         border-color: #10b981 !important;
         box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
     }
+
+    /* ========================================================================== */
+    /* LOW SCREEN RESOLUTION & COMPACT MOBILE OPTIMIZATION                        */
+    /* ========================================================================== */
+    html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+    }
+
+    @media (max-width: 380px) {
+        body {
+            overflow-x: hidden !important;
+        }
+
+        #app-header {
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+            gap: 0.25rem !important;
+        }
+
+        .max-w-sm, .max-w-md {
+            max-width: calc(100vw - 14px) !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+            padding: 0.85rem !important;
+        }
+
+        .grid-cols-4, .grid-cols-2 {
+            gap: 0.35rem !important;
+        }
+        .grid-cols-4 > button, .grid-cols-2 > button {
+            padding-left: 0.25rem !important;
+            padding-right: 0.25rem !important;
+            padding-top: 0.5rem !important;
+            padding-bottom: 0.5rem !important;
+        }
+        .grid-cols-4 > button span, .grid-cols-2 > button span {
+            font-size: 10px !important;
+        }
+
+        #rider-chat-modal .p-3, #rider-chat-modal .p-4 {
+            padding: 0.6rem !important;
+        }
+    }
+
+    @media (max-height: 680px) {
+        .max-h-\[85vh\], .max-h-\[80vh\] {
+            max-height: 92vh !important;
+        }
+    }
 </style>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">

@@ -60,8 +60,8 @@ export function renderFinalReceiptText() {
     if (gcashName || gcashNo) {
         gcashTxt = 
 `\n📱 **ePAYMENT / GCASH DETAILS:**
-👤 Account Name: ${gcashName || 'N/A'}
-📱 Mobile / Account No: \`${gcashNo || 'N/A'}\`
+👤 **GCash Name: ${gcashName || 'N/A'}**
+📱 **GCash Number: \`${gcashNo || 'N/A'}\`**
 📷 **Note:** Ang QR Code ay GCash account (Scan via GCash App).
 ➖➖➖➖➖➖➖➖➖➖➖➖\n`;
     }

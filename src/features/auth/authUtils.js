@@ -33,6 +33,23 @@ export function switchLoginPortalTab(mode) {
     }
 }
 
+export function toggleCustomerRegisterSection(show = null) {
+    const regSection = document.getElementById('unified-register-section');
+    const loginSection = document.getElementById('unified-login-section');
+    if (!regSection || !loginSection) return;
+
+    const isHidden = regSection.classList.contains('hidden');
+    const shouldShow = show !== null ? show : isHidden;
+
+    if (shouldShow) {
+        regSection.classList.remove('hidden');
+        loginSection.classList.add('hidden');
+    } else {
+        regSection.classList.add('hidden');
+        loginSection.classList.remove('hidden');
+    }
+}
+
 export function switchCustomerAuthTab(tabName) {
     const loginView = document.getElementById('auth-view-login');
     const regView = document.getElementById('auth-view-register');
@@ -189,4 +206,5 @@ if (typeof window !== 'undefined') {
     window.togglePasswordVisibility = togglePasswordVisibility;
     window.switchLoginPortalTab = switchLoginPortalTab;
     window.switchCustomerAuthTab = switchCustomerAuthTab;
+    window.toggleCustomerRegisterSection = toggleCustomerRegisterSection;
 }

@@ -3,6 +3,7 @@ import { appState } from '../../store/state.js';
 import { unlockAudioContext } from '../../ui/notifications.js';
 import { showToast } from '../../ui/notifications.js';
 import { toggleBodyScroll } from './chatUtils.js';
+import { getSystemNotificationSounds, playSystemSound } from '../../native/nativeBridge.js';
 
 /**
  * ============================================================================
@@ -168,8 +169,13 @@ export function getUserChimeSettings() {
     let isMuted = localStorage.getItem(muteKey) === 'true' || localStorage.getItem('lokalex_chime_muted') === 'true';
 
     // Verify presets exist
-    if (!CHIME_CATALOG.some(c => c.id === inboxChime)) inboxChime = 'crystal_bell';
-    if (!CHIME_CATALOG.some(c => c.id === cateringChime)) cateringChime = 'harmonic_bloom';
+    const isValidChime = (id) => {
+        if (!id) return false;
+        if (id.startsWith('system_')) return true;
+        return CHIME_CATALOG.some(c => c.id === id);
+    };
+    if (!isValidChime(inboxChime)) inboxChime = 'crystal_bell';
+    if (!isValidChime(cateringChime)) cateringChime = 'harmonic_bloom';
     if (isNaN(volume) || volume < 0) volume = 0.85;
 
     return { inboxChime, cateringChime, volume, isMuted };
@@ -200,6 +206,20 @@ export function saveUserChimeSettings({ inboxChime, cateringChime, volume, isMut
  */
 export function playChime(chimeId, volumeMultiplier = 0.85) {
     if (!chimeId || chimeId === 'mute') return;
+
+    // 1. Native device system notification tone
+    if (typeof chimeId === 'string' && chimeId.startsWith('system_')) {
+        let uri = '';
+        try {
+            const list = getSystemNotificationSounds();
+            const found = list.find(s => s.id === chimeId);
+            if (found && found.uri) uri = found.uri;
+        } catch (_) {}
+        const played = playSystemSound(uri || 'system_default');
+        if (played) return;
+        // Fallback to web synth if not on native device
+        chimeId = 'crystal_bell';
+    }
 
     const preset = CHIME_CATALOG.find(c => c.id === chimeId);
     if (!preset || !preset.notes || preset.notes.length === 0) return;
@@ -307,9 +327,25 @@ export function populateChimeDropdowns() {
     const cateringSelect = document.getElementById('sound-select-catering');
     if (!inboxSelect || !cateringSelect) return;
 
-    const optionsHtml = CHIME_CATALOG.map(c => {
-        return `<option value="${c.id}">${c.name} — ${c.category}</option>`;
-    }).join('');
+    let sysSounds = [];
+    try {
+        sysSounds = getSystemNotificationSounds() || [];
+    } catch (_) {}
+
+    let optionsHtml = '';
+    if (sysSounds && sysSounds.length > 0) {
+        optionsHtml += `<optgroup label="📱 Phone System Chimes">`;
+        sysSounds.forEach(s => {
+            optionsHtml += `<option value="${s.id}">${s.name} (Device Sound)</option>`;
+        });
+        optionsHtml += `</optgroup>`;
+    }
+
+    optionsHtml += `<optgroup label="🔔 Built-in Acoustic Chimes">`;
+    CHIME_CATALOG.forEach(c => {
+        optionsHtml += `<option value="${c.id}">${c.name} — ${c.category}</option>`;
+    });
+    optionsHtml += `</optgroup>`;
 
     inboxSelect.innerHTML = optionsHtml;
     cateringSelect.innerHTML = optionsHtml;

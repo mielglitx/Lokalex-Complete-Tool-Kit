@@ -27,6 +27,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.media.AudioAttributes;
+import android.media.Ringtone;
 import android.media.RingtoneManager;
 import androidx.core.app.NotificationCompat;
 import java.io.File;
@@ -247,6 +248,55 @@ public class MainActivity extends BridgeActivity {
                                 .putString("rider_name", riderName != null ? riderName.trim() : "")
                                 .apply();
                     }
+                }
+
+                @JavascriptInterface
+                public String getSystemNotificationSounds() {
+                    org.json.JSONArray soundList = new org.json.JSONArray();
+                    try {
+                        // 1. Device Default Notification Tone
+                        org.json.JSONObject defaultObj = new org.json.JSONObject();
+                        defaultObj.put("id", "system_default");
+                        defaultObj.put("name", "Device Default Ringtone");
+                        Uri defUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+                        defaultObj.put("uri", defUri != null ? defUri.toString() : "system_default");
+                        soundList.put(defaultObj);
+
+                        // 2. Query System Notification Ringtones installed on phone
+                        RingtoneManager rm = new RingtoneManager(MainActivity.this);
+                        rm.setType(RingtoneManager.TYPE_NOTIFICATION);
+                        android.database.Cursor cursor = rm.getCursor();
+                        int count = 0;
+                        while (cursor != null && cursor.moveToNext() && count < 40) {
+                            String title = cursor.getString(RingtoneManager.TITLE_COLUMN_INDEX);
+                            String uriStr = cursor.getString(RingtoneManager.URI_COLUMN_INDEX) + "/" + cursor.getString(RingtoneManager.ID_COLUMN_INDEX);
+                            if (title != null && !title.isEmpty()) {
+                                org.json.JSONObject item = new org.json.JSONObject();
+                                item.put("id", "system_" + Math.abs(uriStr.hashCode()));
+                                item.put("name", title);
+                                item.put("uri", uriStr);
+                                soundList.put(item);
+                                count++;
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                    return soundList.toString();
+                }
+
+                @JavascriptInterface
+                public void playSystemSound(String uriString) {
+                    try {
+                        Uri soundUri;
+                        if (uriString == null || uriString.isEmpty() || "system_default".equals(uriString)) {
+                            soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+                        } else {
+                            soundUri = Uri.parse(uriString);
+                        }
+                        Ringtone r = RingtoneManager.getRingtone(MainActivity.this.getApplicationContext(), soundUri);
+                        if (r != null) {
+                            r.play();
+                        }
+                    } catch (Exception ignored) {}
                 }
 
                 @JavascriptInterface

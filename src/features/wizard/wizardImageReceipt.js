@@ -317,7 +317,7 @@ export async function renderReceiptCanvas() {
 
     // QR & GCash section
     if (hasGcashDetails) {
-        estimatedHeight += (hasQrDrawn ? 325 : 70);
+        estimatedHeight += (hasQrDrawn ? 335 : 85);
     }
 
     // Footer
@@ -535,11 +535,12 @@ export async function renderReceiptCanvas() {
         ctx.fillText("SCAN TO PAY VIA GCASH / ePAYMENT", width / 2, y);
         y += 17;
 
-        ctx.font = "600 11.5px 'SF Mono', Consolas, 'Courier New', monospace";
-        ctx.fillText(`Account Name: ${gcashName || riderName}`, width / 2, y);
-        y += 16;
-        ctx.fillText(`Mobile Number: ${gcashNo || '09120600138'}`, width / 2, y);
-        y += 16;
+        ctx.font = "800 13px 'SF Mono', Consolas, 'Courier New', monospace";
+        ctx.fillText(`GCash Name: ${gcashName || riderName}`, width / 2, y);
+        y += 18;
+        ctx.font = "900 14px 'SF Mono', Consolas, 'Courier New', monospace";
+        ctx.fillText(`GCash Number: ${gcashNo || '09120600138'}`, width / 2, y);
+        y += 18;
 
         if (hasQrDrawn) {
             // Explicitly state that the QR Code is a GCash account

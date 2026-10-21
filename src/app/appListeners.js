@@ -28,11 +28,97 @@ import * as maps from '../features/maps.js';
 import { endLiveGpsSession } from '../features/liveTracker.js';
 import { updateNetworkStatus } from './appMonitors.js';
 
+export function forceRevokeSession(reason = "⚠️ Ang iyong account ay tinanggal na.") {
+    console.warn("Session revoked:", reason);
+    if (typeof window !== 'undefined' && typeof window.syncRiderSession === 'function') {
+        try { window.syncRiderSession('', ''); } catch (_) {}
+    }
+    
+    // Clear all session storage and local storage
+    try {
+        localStorage.clear();
+        sessionStorage.clear();
+    } catch (_) {}
+
+    appState.telegramId = null;
+    appState.riderName = null;
+    appState.userType = null;
+    appState.customerFacebookId = null;
+    appState.customerName = null;
+    appState.merchantAccountId = null;
+    appState.merchantStoreId = null;
+
+    showToast(reason);
+
+    setTimeout(() => {
+        if (typeof history !== 'undefined') {
+            history.replaceState({ view: 'view-login' }, '', '#view-login');
+        }
+        window.location.reload();
+    }, 1200);
+}
+
+export function initAccountRevocationListener() {
+    if (!db) return;
+
+    const activeRole = localStorage.getItem('lokalex_active_role') || (appState.userType || '').toLowerCase();
+    const activeRiderId = (appState.telegramId || localStorage.getItem('telegramId') || '').toString().trim();
+    const activeCustomerFbId = appState.customerFacebookId || localStorage.getItem('lokalex_customer_fb_id');
+    const activeMerchantId = appState.merchantAccountId || localStorage.getItem('merchantAccountId') || localStorage.getItem('lokalex_merchant_account_id');
+
+    if (activeRiderId && (!activeRole || activeRole === 'rider')) {
+        let isInitial = true;
+        db.ref(`riders/${activeRiderId}`).on('value', (snap) => {
+            if (isInitial) {
+                isInitial = false;
+                if (!snap.exists()) {
+                    forceRevokeSession("⚠️ Ang iyong Rider account ay tinanggal na ng Admin.");
+                }
+                return;
+            }
+            if (!snap.exists()) {
+                forceRevokeSession("⚠️ Ang iyong Rider account ay tinanggal na ng Admin.");
+            }
+        });
+    } else if (activeCustomerFbId && activeRole === 'customer') {
+        let isInitial = true;
+        db.ref(`customers/${activeCustomerFbId}`).on('value', (snap) => {
+            if (isInitial) {
+                isInitial = false;
+                if (!snap.exists()) {
+                    forceRevokeSession("⚠️ Ang iyong Customer account ay tinanggal na.");
+                }
+                return;
+            }
+            if (!snap.exists()) {
+                forceRevokeSession("⚠️ Ang iyong Customer account ay tinanggal na.");
+            }
+        });
+    } else if (activeMerchantId && activeRole === 'merchant') {
+        let isInitial = true;
+        db.ref(`storeAccounts/${activeMerchantId}`).on('value', (snap) => {
+            if (isInitial) {
+                isInitial = false;
+                if (!snap.exists()) {
+                    forceRevokeSession("⚠️ Ang iyong Merchant account ay tinanggal na.");
+                }
+                return;
+            }
+            if (!snap.exists()) {
+                forceRevokeSession("⚠️ Ang iyong Merchant account ay tinanggal na.");
+            }
+        });
+    }
+}
+
 export function initRealtimeFirebaseListeners() {
     try {
         if (db && typeof db.goOnline === 'function') {
             try { db.goOnline(); } catch (_) {}
         }
+
+        // Active account revocation & deletion watchdog
+        initAccountRevocationListener();
 
         if (db) {
             db.ref('.info/connected').on('value', (snap) => {
