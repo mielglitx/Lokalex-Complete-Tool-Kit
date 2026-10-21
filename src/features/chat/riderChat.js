@@ -615,9 +615,10 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
     const hasLocalRecord = Array.isArray(localMessages) && localMessages.length > 0;
 
     if (hasLocalRecord) {
-        // Fast initial render: strictly sort by timestamp first, then load the last 10 messages
+        // Fast initial render: strictly sort by timestamp first, then load ONLY the last 10 messages
         localMessages.sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
         const initialChunk = localMessages.slice(-RIDER_CHAT_BATCH_SIZE);
+        loadedRiderMsgsMap.clear();
         initialChunk.forEach(m => loadedRiderMsgsMap.set(m.id, m));
         hasMoreRiderMsgs = localMessages.length > initialChunk.length;
         if (initialChunk.length > 0) {
@@ -646,55 +647,9 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         </div>`;
     }
 
-    // Direct REST fast-fetch fallback (useful on mobile networks before WebSocket establishes)
-    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChats/${encodeURIComponent(custId)}/messages.json?t=${Date.now()}`;
-    fetch(directRestUrl, { cache: 'no-store' })
-        .then(res => res.json())
-        .then(data => {
-            if (activeRiderChatCustId !== custId) return;
-            if (data && typeof data === 'object') {
-                const entries = Object.entries(data);
-                if (entries.length > 0) {
-                    const allMsgs = entries
-                        .map(([key, msg]) => ({ id: key, ...msg }))
-                        .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-
-                    riderChatMemoryCache.set(custId, allMsgs);
-                    idbSet('chats', custId, allMsgs).catch(() => {});
-
-                    const latestMsgInAll = allMsgs[allMsgs.length - 1];
-                    const lastLoadedMsg = Array.from(loadedRiderMsgsMap.values()).pop();
-                    const hasNewerMessages = !lastLoadedMsg || 
-                        (latestMsgInAll && !loadedRiderMsgsMap.has(latestMsgInAll.id)) ||
-                        (latestMsgInAll && lastLoadedMsg && getMessageTimestamp(latestMsgInAll) > getMessageTimestamp(lastLoadedMsg));
-
-                    if (!hasLocalRecord || loadedRiderMsgsMap.size === 0 || hasNewerMessages) {
-                        const countToLoad = Math.max(loadedRiderMsgsMap.size, RIDER_CHAT_BATCH_SIZE);
-                        const displayChunk = allMsgs.slice(-countToLoad);
-                        loadedRiderMsgsMap.clear();
-                        displayChunk.forEach(m => loadedRiderMsgsMap.set(m.id, m));
-                        hasMoreRiderMsgs = allMsgs.length > displayChunk.length;
-                        if (displayChunk.length > 0) {
-                            oldestRiderMsgTimestamp = getMessageTimestamp(displayChunk[0]);
-                            oldestRiderMsgKey = displayChunk[0].id || null;
-                        }
-                        renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
-                        isInitialScrollDone = true;
-                        requestAnimationFrame(() => {
-                            container.scrollTop = container.scrollHeight;
-                            setTimeout(() => { container.scrollTop = container.scrollHeight; }, 60);
-                            setTimeout(() => { container.scrollTop = container.scrollHeight; }, 180);
-                        });
-                        autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
-                        autoResolveRecentFbCustomerAttachments(custId, container, activeCustData);
-                    }
-                }
-            }
-        })
-        .catch(() => {});
-
-    // Realtime Firebase connection
-    const messagesQuery = db.ref(`customerChats/${custId}/messages`);
+    // Realtime Firebase connection: strictly load only the last 10 messages for lightning-fast startup
+    const messagesQuery = db.ref(`customerChats/${custId}/messages`).limitToLast(RIDER_CHAT_BATCH_SIZE);
+    activeRiderChatListener = messagesQuery;
 
     // Authoritative check & synchronization of newest incoming messages on thread open
     messagesQuery.once('value', (snapshot) => {
@@ -710,8 +665,13 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 .map(([key, msg]) => ({ id: key, ...msg }))
                 .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
 
-            riderChatMemoryCache.set(custId, allMsgs);
-            idbSet('chats', custId, allMsgs).catch(() => {});
+            // Merge into persistent cache without wiping older history
+            let memCached = riderChatMemoryCache.get(custId) || [];
+            const map = new Map(memCached.map(m => [m.id, m]));
+            allMsgs.forEach(m => map.set(m.id, m));
+            const merged = Array.from(map.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+            riderChatMemoryCache.set(custId, merged);
+            idbSet('chats', custId, merged).catch(() => {});
 
             const latestMsgInAll = allMsgs[allMsgs.length - 1];
             const lastLoadedMsg = Array.from(loadedRiderMsgsMap.values()).pop();
@@ -720,11 +680,11 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 (latestMsgInAll && lastLoadedMsg && getMessageTimestamp(latestMsgInAll) > getMessageTimestamp(lastLoadedMsg));
 
             if (!hasLocalRecord || loadedRiderMsgsMap.size === 0 || hasNewerMessages) {
-                const countToLoad = Math.max(loadedRiderMsgsMap.size, RIDER_CHAT_BATCH_SIZE);
-                const displayChunk = allMsgs.slice(-countToLoad);
+                // Strictly display only the last 10 messages on initial open
+                const displayChunk = allMsgs.slice(-RIDER_CHAT_BATCH_SIZE);
                 loadedRiderMsgsMap.clear();
                 displayChunk.forEach(m => loadedRiderMsgsMap.set(m.id, m));
-                hasMoreRiderMsgs = allMsgs.length > displayChunk.length;
+                hasMoreRiderMsgs = merged.length > displayChunk.length || allMsgs.length >= RIDER_CHAT_BATCH_SIZE;
                 if (displayChunk.length > 0) {
                     oldestRiderMsgTimestamp = getMessageTimestamp(displayChunk[0]);
                     oldestRiderMsgKey = displayChunk[0].id || null;
@@ -739,7 +699,7 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
                 autoResolveRecentFbCustomerAttachments(custId, container, activeCustData);
             } else {
-                hasMoreRiderMsgs = allMsgs.length > loadedRiderMsgsMap.size;
+                hasMoreRiderMsgs = merged.length > loadedRiderMsgsMap.size || allMsgs.length >= RIDER_CHAT_BATCH_SIZE;
             }
         }
     });
@@ -777,9 +737,14 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
             return;
         }
 
-        // If initial 10-message slice is already rendered, check if this is an older historical message
-        if (isInitialScrollDone && oldestRiderMsgTimestamp && msgTs > 0 && msgTs < oldestRiderMsgTimestamp && msgTs < (openSessionTime - 30000)) {
-            // Older message: leave in cache for scroll-up pagination, do not append to bottom of DOM
+        // If initial 10-message slice is already rendered, ignore any older historical message
+        if (isInitialScrollDone && oldestRiderMsgTimestamp && msgTs > 0 && msgTs < oldestRiderMsgTimestamp) {
+            hasMoreRiderMsgs = true;
+            return;
+        }
+
+        // If initial load is still preparing, cap to RIDER_CHAT_BATCH_SIZE
+        if (!isInitialScrollDone && loadedRiderMsgsMap.size >= RIDER_CHAT_BATCH_SIZE) {
             hasMoreRiderMsgs = true;
             return;
         }
@@ -853,8 +818,8 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         }
     });
 
-    // 2. Immediate child_changed for reactions, status, or edited text
-    activeRiderChatChangedListener = messagesQuery;
+    // 2. Immediate child_changed for reactions, status, or edited text on base messages ref
+    activeRiderChatChangedListener = db.ref(`customerChats/${custId}/messages`);
     activeRiderChatChangedListener.on('child_changed', (childSnap) => {
         if (activeRiderChatCustId !== custId) return;
         const key = childSnap.key;
@@ -906,20 +871,26 @@ export function syncIncomingMessageFromMeta(custId, meta) {
 
     // If metadata indicates a newer message than what we currently have in memory:
     if (isDifferentText || isNewId || isNewerTime) {
-        db.ref(`customerChats/${custId}/messages`).once('value', (snap) => {
+        db.ref(`customerChats/${custId}/messages`).limitToLast(5).once('value', (snap) => {
             if (activeRiderChatCustId !== custId) return;
             const data = snap.val();
             if (data && typeof data === 'object') {
-                const allMsgs = Object.entries(data)
+                const recentMsgs = Object.entries(data)
                     .map(([key, msg]) => ({ id: key, ...msg }))
                     .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
 
-                riderChatMemoryCache.set(custId, allMsgs);
-                idbSet('chats', custId, allMsgs).catch(() => {});
+                let memCached = riderChatMemoryCache.get(custId) || [];
+                const map = new Map(memCached.map(m => [m.id, m]));
+                recentMsgs.forEach(m => map.set(m.id, m));
+                const merged = Array.from(map.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+                riderChatMemoryCache.set(custId, merged);
+                idbSet('chats', custId, merged).catch(() => {});
 
                 let hasAppended = false;
-                allMsgs.forEach(fullMsg => {
-                    if (!loadedRiderMsgsMap.has(fullMsg.id)) {
+                recentMsgs.forEach(fullMsg => {
+                    const ts = getMessageTimestamp(fullMsg);
+                    // Only append if it's truly a newer incoming message, never an older past message
+                    if (!loadedRiderMsgsMap.has(fullMsg.id) && (newestLoadedTime === 0 || ts >= (newestLoadedTime - 3000))) {
                         loadedRiderMsgsMap.set(fullMsg.id, fullMsg);
                         appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
                         hasAppended = true;
@@ -986,7 +957,7 @@ export async function loadOlderRiderMessages(container, custId) {
 
     if (Array.isArray(memCached) && memCached.length > 0) {
         const unrenderedCached = memCached
-            .filter(m => m && m.id && !loadedRiderMsgsMap.has(m.id))
+            .filter(m => m && m.id && !loadedRiderMsgsMap.has(m.id) && (!oldestRiderMsgTimestamp || getMessageTimestamp(m) <= oldestRiderMsgTimestamp))
             .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
 
         if (unrenderedCached.length > 0) {
@@ -1006,34 +977,51 @@ export async function loadOlderRiderMessages(container, custId) {
     }
 
     try {
-        const snap = await db.ref(`customerChats/${targetCustId}/messages`).once('value');
+        if (!oldestRiderMsgKey) {
+            hasMoreRiderMsgs = false;
+            hideRiderTopSpinner();
+            isLoadingRiderHistory = false;
+            renderRiderMessages(container, loadedRiderMsgsMap, false, false, oldScrollHeight, activeCustData);
+            return;
+        }
+
+        const snap = await db.ref(`customerChats/${targetCustId}/messages`)
+            .orderByKey()
+            .endAt(oldestRiderMsgKey)
+            .limitToLast(RIDER_CHAT_OLDER_BATCH_SIZE + 1)
+            .once('value');
         const data = snap.val() || {};
         hideRiderTopSpinner();
 
-        const allMsgs = Object.entries(data)
-            .map(([key, msg]) => ({ id: key, ...msg }))
-            .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+        if (data[oldestRiderMsgKey]) {
+            delete data[oldestRiderMsgKey];
+        }
 
-        riderChatMemoryCache.set(targetCustId, allMsgs);
-        idbSet('chats', targetCustId, allMsgs).catch(() => {});
-
-        const unrendered = allMsgs
-            .filter(m => m && m.id && !loadedRiderMsgsMap.has(m.id))
-            .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-
-        if (unrendered.length === 0) {
+        const entries = Object.entries(data);
+        if (entries.length === 0) {
             hasMoreRiderMsgs = false;
             isLoadingRiderHistory = false;
             renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, oldScrollHeight, activeCustData);
             return;
         }
 
-        const nextBatch = unrendered.slice(-RIDER_CHAT_OLDER_BATCH_SIZE);
-        nextBatch.forEach(m => loadedRiderMsgsMap.set(m.id, m));
+        const olderMsgs = entries
+            .map(([key, msg]) => ({ id: key, ...msg }))
+            .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+
+        // Merge older messages into persistent cache
+        let cached = riderChatMemoryCache.get(targetCustId) || [];
+        const map = new Map(cached.map(m => [m.id, m]));
+        olderMsgs.forEach(m => map.set(m.id, m));
+        const merged = Array.from(map.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+        riderChatMemoryCache.set(targetCustId, merged);
+        idbSet('chats', targetCustId, merged).catch(() => {});
+
+        olderMsgs.forEach(m => loadedRiderMsgsMap.set(m.id, m));
 
         // Auto-resolve missing Facebook image attachment from Graph API for newly loaded history
         if (String(targetCustId).startsWith('fb_')) {
-            nextBatch.forEach(msg => {
+            olderMsgs.forEach(msg => {
                 if (!msg.imageUrl && msg.text && (msg.text.includes('[Facebook image]') || msg.text.includes('[Facebook attachment]'))) {
                     triggerInstantFbAttachmentResolution(targetCustId, msg, container, activeCustData);
                 }
@@ -1045,7 +1033,7 @@ export async function loadOlderRiderMessages(container, custId) {
             oldestRiderMsgTimestamp = getMessageTimestamp(sortedMsgs[0]);
             oldestRiderMsgKey = sortedMsgs[0].id || null;
         }
-        hasMoreRiderMsgs = unrendered.length > nextBatch.length;
+        hasMoreRiderMsgs = entries.length >= RIDER_CHAT_OLDER_BATCH_SIZE;
 
         renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, false, oldScrollHeight, activeCustData);
     } catch (e) {
