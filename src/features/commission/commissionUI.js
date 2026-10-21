@@ -10,7 +10,7 @@ import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { getLocalTodayStr, copyText, getWeekString, getMonthString, escapeHtml } from '../../utils/helpers.js';
 import { switchView } from '../../ui/router.js';
-import { isAdmin as checkIsAdmin, getMergedDeduplicatedCommissionList, isSameDateStr, normalizeToDateStr, saveRosterCache, isRiderMatch } from '../roster/rosterUtils.js';
+import { isAdmin as checkIsAdmin, getMergedDeduplicatedCommissionList, isSameDateStr, normalizeToDateStr, saveRosterCache, isRiderMatch, invalidateRosterGrossCache } from '../roster/rosterUtils.js';
 import { getCommissionRates, fetchCommissionSettings } from './commissionRates.js';
 
 export let viewSettings = {
@@ -51,13 +51,16 @@ export function initCommissionLiveListeners() {
                 id: k,
                 transactionId: v.transactionId || k,
                 ...v
-            })) : [];
+            })).filter(r => r.status !== 'voided' && !r.voided && !r.isVoided) : [];
 
-            const recordMap = new Map();
-            (globalState.globalDailyReceipts || []).forEach(r => recordMap.set(r.transactionId || r.id, r));
-            todayRecords.forEach(r => recordMap.set(r.transactionId || r.id, r));
-            globalState.globalDailyReceipts = Array.from(recordMap.values());
+            // Replace today's slice cleanly so voided/deleted receipts are immediately purged on all clients
+            const otherDayReceipts = (globalState.globalDailyReceipts || []).filter(r => {
+                const rDate = r.date || (r.timestamp ? new Date(r.timestamp).toISOString().split('T')[0] : null);
+                return rDate && rDate !== todayStr;
+            });
+            globalState.globalDailyReceipts = [...otherDayReceipts, ...todayRecords];
 
+            invalidateRosterGrossCache();
             saveRosterCache();
             refreshCommissionView();
             window.dispatchEvent(new CustomEvent('receiptsUpdated'));
@@ -73,13 +76,16 @@ export function initCommissionLiveListeners() {
                 id: k,
                 transactionId: v.transactionId || k,
                 ...v
-            })) : [];
+            })).filter(h => h.status !== 'voided' && !h.voided && !h.isVoided) : [];
 
-            const histMap = new Map();
-            (globalState.globalCateredHistory || []).forEach(h => histMap.set(h.transactionId || h.id, h));
-            todayCatered.forEach(h => histMap.set(h.transactionId || h.id, h));
-            globalState.globalCateredHistory = Array.from(histMap.values());
+            // Replace today's slice cleanly so voided/deleted history is immediately purged on all clients
+            const otherDayHistory = (globalState.globalCateredHistory || []).filter(h => {
+                const hDate = h.completedDate || h.date || (h.timestamp ? new Date(h.timestamp).toISOString().split('T')[0] : null);
+                return hDate && hDate !== todayStr;
+            });
+            globalState.globalCateredHistory = [...otherDayHistory, ...todayCatered];
 
+            invalidateRosterGrossCache();
             saveRosterCache();
             refreshCommissionView();
             window.dispatchEvent(new CustomEvent('cateredUpdated'));
@@ -100,30 +106,27 @@ export async function fetchCommissionData() {
 
         const rcptVal = rcptSnap.val();
         if (rcptVal) {
-            const fetchedList = Object.entries(rcptVal).map(([k, v]) => ({
+            globalState.globalDailyReceipts = Object.entries(rcptVal).map(([k, v]) => ({
                 id: k,
                 transactionId: v.transactionId || k,
                 ...v
-            }));
-            const recordMap = new Map();
-            (globalState.globalDailyReceipts || []).forEach(r => recordMap.set(r.transactionId || r.id, r));
-            fetchedList.forEach(r => recordMap.set(r.transactionId || r.id, r));
-            globalState.globalDailyReceipts = Array.from(recordMap.values());
+            })).filter(r => r.status !== 'voided' && !r.voided && !r.isVoided);
+        } else {
+            globalState.globalDailyReceipts = [];
         }
 
         const catVal = catSnap.val();
         if (catVal) {
-            const fetchedHistory = Object.entries(catVal).map(([k, v]) => ({
+            globalState.globalCateredHistory = Object.entries(catVal).map(([k, v]) => ({
                 id: k,
                 transactionId: v.transactionId || k,
                 ...v
-            }));
-            const histMap = new Map();
-            (globalState.globalCateredHistory || []).forEach(h => histMap.set(h.transactionId || h.id, h));
-            fetchedHistory.forEach(h => histMap.set(h.transactionId || h.id, h));
-            globalState.globalCateredHistory = Array.from(histMap.values());
+            })).filter(h => h.status !== 'voided' && !h.voided && !h.isVoided);
+        } else {
+            globalState.globalCateredHistory = [];
         }
 
+        invalidateRosterGrossCache();
         saveRosterCache();
         window.dispatchEvent(new CustomEvent('cateredUpdated'));
         window.dispatchEvent(new CustomEvent('receiptsUpdated'));

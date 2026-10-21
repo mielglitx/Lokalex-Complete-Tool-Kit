@@ -192,6 +192,9 @@ export function initRealtimeFirebaseListeners() {
 
             if (roster && roster.saveRosterCache) roster.saveRosterCache();
             window.dispatchEvent(new Event('rosterUpdated'));
+            if (typeof window.requestRosterUIRefresh === 'function') {
+                window.requestRosterUIRefresh();
+            }
         });
 
         db.ref('blockedUsers').on('value', (snapshot) => {

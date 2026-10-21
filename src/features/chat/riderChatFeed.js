@@ -475,7 +475,7 @@ function executeRenderRiderCustomerChatFeed() {
 
         // Determine effective folder for this thread
         const liveActiveCaterer = getFastCaterer(t.customerName, t.custId);
-        const isCurrentlyCatered = Boolean(liveActiveCaterer || t.cateredByRiderName || t.cateredByRiderId) && t.status !== 'completed' && t.status !== 'cancelled';
+        const isCurrentlyCatered = Boolean(liveActiveCaterer) || (Boolean(t.cateredByRiderName || t.cateredByRiderId) && t.status !== 'completed' && t.status !== 'cancelled');
         if (isCurrentlyCatered) {
             t.folder = 'catering';
             t.status = 'active';
@@ -542,16 +542,19 @@ function executeRenderRiderCustomerChatFeed() {
         return true;
     });
 
-    // In the Catering tab, pin the rider's own customers to the very top!
-    filteredThreads.sort((a, b) => {
-        if (!isSearching && activeRiderChatFilter === 'catering') {
-            const aMine = isMyCustomerThread(a, loggedInAuth);
-            const bMine = isMyCustomerThread(b, loggedInAuth);
-            if (aMine && !bMine) return -1;
-            if (!aMine && bMine) return 1;
+    // In the Catering tab, pin the rider's own customers to the very top (O(N) precompute avoids O(N log N) regexes)
+    if (!isSearching && activeRiderChatFilter === 'catering') {
+        for (let i = 0; i < filteredThreads.length; i++) {
+            filteredThreads[i]._isMine = isMyCustomerThread(filteredThreads[i], loggedInAuth);
         }
-        return (b.lastUpdated || 0) - (a.lastUpdated || 0);
-    });
+        filteredThreads.sort((a, b) => {
+            if (a._isMine && !b._isMine) return -1;
+            if (!a._isMine && b._isMine) return 1;
+            return (b.lastUpdated || 0) - (a.lastUpdated || 0);
+        });
+    } else {
+        filteredThreads.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+    }
 
     updateInboxUnreadBadge();
     updateDoneUnreadBadge();
@@ -877,13 +880,21 @@ export function getSourceBadgeName(meta, key) {
     return 'Web App';
 }
 
+let persistMetaTimeout = null;
+function schedulePersistMetaCache(data) {
+    if (persistMetaTimeout) clearTimeout(persistMetaTimeout);
+    persistMetaTimeout = setTimeout(() => {
+        try {
+            localStorage.setItem('lokalex_cached_customer_chat_meta', JSON.stringify(data));
+        } catch (_) {}
+    }, 2500);
+}
+
 function processCustomerChatMetaData(data, isFromCache = false) {
     if (!data || typeof data !== 'object') return;
     rawCustomerChatMetaData = data;
     if (!isFromCache) {
-        try {
-            localStorage.setItem('lokalex_cached_customer_chat_meta', JSON.stringify(data));
-        } catch (_) {}
+        schedulePersistMetaCache(data);
     }
     const inboxBadge = document.getElementById('rider-inbox-unread-badge');
     const doneBadge = document.getElementById('rider-done-unread-badge');
@@ -1168,11 +1179,11 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             threadFolder = 'done';
         }
 
-        // Validate catering against live roster: ACTIVE ROSTER CATERING ALWAYS TAKES PRECEDENCE FOR ACTIVE THREADS!
-        const isExplicitlyDoneOrCancelled = isCompletedStatus || meta.status === 'cancelled' || meta.status === 'completed' || meta.folder === 'done';
-        const activeCaterer = (!isExplicitlyDoneOrCancelled) ? getActiveRosterCaterer(displayName, key, meta) : null;
+        // Validate catering against live roster: ACTIVE ROSTER CATERING ALWAYS TAKES PRECEDENCE!
+        const activeCaterer = getActiveRosterCaterer(displayName, key, meta);
+        const isExplicitlyDoneOrCancelled = !activeCaterer && (isCompletedStatus || meta.status === 'cancelled' || meta.status === 'completed' || meta.folder === 'done');
 
-        if (activeCaterer && !isExplicitlyDoneOrCancelled) {
+        if (activeCaterer) {
             isCompletedStatus = false;
             threadFolder = 'catering';
             meta.status = 'active';
@@ -1227,8 +1238,8 @@ function processCustomerChatMetaData(data, isFromCache = false) {
             hasRealMessages: hasValidLastMsg
         };
 
-        // Cross-reference with live roster so newly incoming threads immediately transition to catering (skip if completed or cancelled)
-        if (!isCompletedStatus && !isExplicitlyDoneOrCancelled) {
+        // Cross-reference with live roster so newly incoming threads immediately transition to catering
+        {
             const liveRoster = globalState.rosterMembers || [];
             const activeCateringRider = liveRoster.find(m => {
                 if (m.status !== 'Catering') return false;
@@ -1360,9 +1371,14 @@ export function listenToAllCustomerChatsForRider() {
     isCustomerChatMetaListening = true;
 
     // 3. REALTIME WEBSOCKET LISTENER FOR INCOMING LIVE MESSAGES
+    let metaRafId = null;
     db.ref('customerChatMeta').on('value', (snapshot) => {
-        let data = snapshot.val();
-        processCustomerChatMetaData(data, false);
+        const data = snapshot.val();
+        if (metaRafId) cancelAnimationFrame(metaRafId);
+        metaRafId = requestAnimationFrame(() => {
+            metaRafId = null;
+            processCustomerChatMetaData(data, false);
+        });
     }, (error) => {
         console.error("Firebase customerChatMeta listener error:", error);
     });

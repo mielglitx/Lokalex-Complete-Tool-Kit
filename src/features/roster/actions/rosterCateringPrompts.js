@@ -314,8 +314,11 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                     if (chats) {
                         Object.keys(chats).forEach(custId => {
                             const meta = chats[custId]?.metadata || chats[custId] || {};
-                            // Do not hijack or reopen done / completed / voided chats!
-                            if (meta.folder === 'done' || meta.status === 'completed' || meta.status === 'voided') return;
+                            // If returning customer was previously done or completed, reactivate into catering!
+                            if (meta.status === 'voided') {
+                                const lastVoid = Number(meta.lastUpdated || meta.completedAt || 0);
+                                if (Date.now() - lastVoid < 60000) return;
+                            }
 
                             const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
                             const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;

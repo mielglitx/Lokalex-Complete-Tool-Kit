@@ -661,8 +661,8 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         </div>`;
     }
 
-    // Realtime Firebase connection: strictly load only the last 10 messages for lightning-fast startup
-    const messagesQuery = db.ref(`customerChats/${custId}/messages`).limitToLast(RIDER_CHAT_BATCH_SIZE);
+    // Realtime Firebase connection: strictly load only the last 10 messages for lightning-fast startup ordered by timestamp
+    const messagesQuery = db.ref(`customerChats/${custId}/messages`).orderByChild('timestamp').limitToLast(RIDER_CHAT_BATCH_SIZE);
     activeRiderChatListener = messagesQuery;
 
     // Authoritative check & synchronization of newest incoming messages on thread open
@@ -753,12 +753,6 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
 
         // If initial 10-message slice is already rendered, ignore any older historical message
         if (isInitialScrollDone && oldestRiderMsgTimestamp && msgTs > 0 && msgTs < oldestRiderMsgTimestamp) {
-            hasMoreRiderMsgs = true;
-            return;
-        }
-
-        // If initial load is still preparing, cap to RIDER_CHAT_BATCH_SIZE
-        if (!isInitialScrollDone && loadedRiderMsgsMap.size >= RIDER_CHAT_BATCH_SIZE) {
             hasMoreRiderMsgs = true;
             return;
         }
@@ -877,7 +871,7 @@ export function syncIncomingMessageFromMeta(custId, meta) {
     const lastLoadedText = (lastLoaded?.text || lastLoaded?.message || '').trim();
     const metaLastText = (meta?.lastMessage || meta?.text || '').trim();
 
-    const isDifferentText = Boolean(metaLastText && !metaLastText.startsWith('You:') && metaLastText !== lastLoadedText);
+    const isDifferentText = Boolean(metaLastText && metaLastText !== lastLoadedText);
     const isNewId = Boolean(meta?.lastMessageId && !loadedRiderMsgsMap.has(meta.lastMessageId));
     const lastMsgTime = Number(meta?.lastUpdated) || Number(meta?.timestamp) || 0;
     const newestLoadedTime = msgs.length > 0 ? Math.max(...msgs.map(m => getMessageTimestamp(m))) : 0;
@@ -885,7 +879,7 @@ export function syncIncomingMessageFromMeta(custId, meta) {
 
     // If metadata indicates a newer message than what we currently have in memory:
     if (isDifferentText || isNewId || isNewerTime) {
-        db.ref(`customerChats/${custId}/messages`).limitToLast(5).once('value', (snap) => {
+        db.ref(`customerChats/${custId}/messages`).orderByChild('timestamp').limitToLast(10).once('value', (snap) => {
             if (activeRiderChatCustId !== custId) return;
             const data = snap.val();
             if (data && typeof data === 'object') {
@@ -999,17 +993,29 @@ export async function loadOlderRiderMessages(container, custId) {
             return;
         }
 
-        const snap = await db.ref(`customerChats/${targetCustId}/messages`)
-            .orderByKey()
-            .endAt(oldestRiderMsgKey)
-            .limitToLast(RIDER_CHAT_OLDER_BATCH_SIZE + 1)
-            .once('value');
+        let snap;
+        if (oldestRiderMsgTimestamp && oldestRiderMsgTimestamp > 0) {
+            snap = await db.ref(`customerChats/${targetCustId}/messages`)
+                .orderByChild('timestamp')
+                .endAt(oldestRiderMsgTimestamp)
+                .limitToLast(RIDER_CHAT_OLDER_BATCH_SIZE + 1)
+                .once('value');
+        } else {
+            snap = await db.ref(`customerChats/${targetCustId}/messages`)
+                .orderByKey()
+                .endAt(oldestRiderMsgKey)
+                .limitToLast(RIDER_CHAT_OLDER_BATCH_SIZE + 1)
+                .once('value');
+        }
         const data = snap.val() || {};
         hideRiderTopSpinner();
 
-        if (data[oldestRiderMsgKey]) {
+        if (oldestRiderMsgKey && data[oldestRiderMsgKey]) {
             delete data[oldestRiderMsgKey];
         }
+        Object.keys(data).forEach(k => {
+            if (loadedRiderMsgsMap.has(k)) delete data[k];
+        });
 
         const entries = Object.entries(data);
         if (entries.length === 0) {

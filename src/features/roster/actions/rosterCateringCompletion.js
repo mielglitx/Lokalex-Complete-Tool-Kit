@@ -731,9 +731,13 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             const rcpts = snap.val() || {};
             Object.entries(rcpts).forEach(([rId, r]) => {
                 const matchRider = isRiderMatch(resolvedTargetName, r.riderName) || (r.riderId && r.riderId.toString() === resolvedTargetId.toString());
-                const matchCust = isCustomerMatch(r.customerName, custNameToVoid) || (rId && rId.toLowerCase().includes(cleanCustKey));
+                const matchCust = isCustomerMatch(r.customerName, custNameToVoid) || (rId && rId.toLowerCase().includes(cleanCustKey)) || (r.customerName || '').toLowerCase().includes(cleanVoidCust);
                 if (matchRider && matchCust) {
-                    db.ref(`receipts/${rId}`).remove().catch(() => {});
+                    // 1. Tombstone first so all connected clients immediately zero out fees
+                    db.ref(`receipts/${rId}`).update({ status: 'voided', voided: true, isVoided: true, totalFees: 0 }).catch(() => {});
+                    setTimeout(() => {
+                        db.ref(`receipts/${rId}`).remove().catch(() => {});
+                    }, 1200);
                 }
             });
         }).catch(() => {});
@@ -744,9 +748,13 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
                 const hist = snap.val() || {};
                 Object.entries(hist).forEach(([hId, h]) => {
                     const matchRider = isRiderMatch(resolvedTargetName, h.riderName) || (h.riderId && h.riderId.toString() === resolvedTargetId.toString()) || (h.telegramId && h.telegramId.toString() === resolvedTargetId.toString());
-                    const matchCust = isCustomerMatch(h.customerName, custNameToVoid) || (hId && hId.toLowerCase().includes(cleanCustKey));
+                    const matchCust = isCustomerMatch(h.customerName, custNameToVoid) || (hId && hId.toLowerCase().includes(cleanCustKey)) || (h.customerName || '').toLowerCase().includes(cleanVoidCust);
                     if (matchRider && matchCust) {
-                        db.ref(`cateredHistory/${hId}`).remove().catch(() => {});
+                        // 1. Tombstone first so all connected clients immediately zero out fees
+                        db.ref(`cateredHistory/${hId}`).update({ status: 'voided', voided: true, isVoided: true, totalFees: 0 }).catch(() => {});
+                        setTimeout(() => {
+                            db.ref(`cateredHistory/${hId}`).remove().catch(() => {});
+                        }, 1200);
                     }
                 });
             }).catch(() => {});

@@ -1350,22 +1350,29 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
 
                         if (currentFolder !== targetFolder || currentStatus !== targetStatus) {
                             const now = Date.now();
-                            const updatePayload = {
-                                folder: targetFolder,
-                                status: targetStatus,
-                                fbFolder: fbFolderParam,
-                                lastUpdated: existingMeta.lastUpdated || now
-                            };
-                            if (targetFolder === 'done') {
-                                updatePayload.completedAt = existingMeta.completedAt || now;
-                                updatePayload.unreadForRider = false;
-                            } else if (targetFolder === 'inbox' && isAlreadyDone) {
-                                updatePayload.completedAt = null;
-                                updatePayload.unreadForRider = true;
-                            }
+                            // Granular child path updates to prevent wiping customerName, avatarUrl & lastMessage!
+                            batchFolderUpdates[`customerChatMeta/${custId}/folder`] = targetFolder;
+                            batchFolderUpdates[`customerChatMeta/${custId}/status`] = targetStatus;
+                            batchFolderUpdates[`customerChatMeta/${custId}/fbFolder`] = fbFolderParam;
+                            batchFolderUpdates[`customerChatMeta/${custId}/lastUpdated`] = existingMeta.lastUpdated || now;
 
-                            batchFolderUpdates[`customerChatMeta/${custId}`] = updatePayload;
-                            batchFolderUpdates[`customerChats/${custId}/metadata`] = updatePayload;
+                            batchFolderUpdates[`customerChats/${custId}/metadata/folder`] = targetFolder;
+                            batchFolderUpdates[`customerChats/${custId}/metadata/status`] = targetStatus;
+                            batchFolderUpdates[`customerChats/${custId}/metadata/fbFolder`] = fbFolderParam;
+                            batchFolderUpdates[`customerChats/${custId}/metadata/lastUpdated`] = existingMeta.lastUpdated || now;
+
+                            if (targetFolder === 'done') {
+                                const cAt = existingMeta.completedAt || now;
+                                batchFolderUpdates[`customerChatMeta/${custId}/completedAt`] = cAt;
+                                batchFolderUpdates[`customerChatMeta/${custId}/unreadForRider`] = false;
+                                batchFolderUpdates[`customerChats/${custId}/metadata/completedAt`] = cAt;
+                                batchFolderUpdates[`customerChats/${custId}/metadata/unreadForRider`] = false;
+                            } else if (targetFolder === 'inbox' && isAlreadyDone) {
+                                batchFolderUpdates[`customerChatMeta/${custId}/completedAt`] = null;
+                                batchFolderUpdates[`customerChatMeta/${custId}/unreadForRider`] = true;
+                                batchFolderUpdates[`customerChats/${custId}/metadata/completedAt`] = null;
+                                batchFolderUpdates[`customerChats/${custId}/metadata/unreadForRider`] = true;
+                            }
 
                             existingMeta.folder = targetFolder;
                             existingMeta.status = targetStatus;
