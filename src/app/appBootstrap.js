@@ -48,6 +48,11 @@ import { registerServiceWorker, initFCMNotifications } from './appPush.js';
 import { updateNetworkStatus, initBatteryMonitor } from './appMonitors.js';
 import { runBackgroundPersistenceSync } from './appSync.js';
 import { initRealtimeFirebaseListeners } from './appListeners.js';
+import { 
+    syncRiderSession, 
+    isBatteryOptimizationIgnored, 
+    requestBatteryOptimizationExemption 
+} from '../native/nativeBridge.js';
 import { db, primaryDb } from '../config/firebase.js';
 
 export function initGlobalWindowBridge() {
@@ -174,6 +179,16 @@ export function bootApp() {
             localStorage.setItem('riderName', appState.riderName || savedRiderName);
             localStorage.setItem('lokalex_active_role', 'rider');
 
+            // Sync rider credentials to Native Android background service preferences
+            syncRiderSession(appState.telegramId || savedRiderId, appState.riderName || savedRiderName);
+            try {
+                if (!isBatteryOptimizationIgnored()) {
+                    setTimeout(() => {
+                        requestBatteryOptimizationExemption();
+                    }, 2500);
+                }
+            } catch (_) {}
+
             history.replaceState({ view: 'view-home' }, '', '#view-home');
             router.renderViewUI('view-home');
             startBackgroundAudioPulse();
@@ -216,6 +231,19 @@ export function initAppLifecycleEvents() {
     window.addEventListener('loginSuccess', () => {
         if (commission && commission.fetchCommissionSettings) {
             commission.fetchCommissionSettings();
+        }
+
+        const currentRiderId = appState.telegramId || localStorage.getItem('telegramId') || '';
+        const currentRiderName = appState.riderName || localStorage.getItem('riderName') || '';
+        if (currentRiderId || currentRiderName) {
+            syncRiderSession(currentRiderId, currentRiderName);
+            try {
+                if (!isBatteryOptimizationIgnored()) {
+                    setTimeout(() => {
+                        requestBatteryOptimizationExemption();
+                    }, 2500);
+                }
+            } catch (_) {}
         }
 
         if (navigator.serviceWorker?.controller) {

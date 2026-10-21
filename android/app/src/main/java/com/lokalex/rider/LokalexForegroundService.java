@@ -1,5 +1,6 @@
 package com.lokalex.rider;
 
+import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -7,13 +8,26 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 import androidx.core.app.NotificationCompat;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
+import androidx.core.content.ContextCompat;
+
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -21,11 +35,17 @@ import java.util.concurrent.TimeUnit;
 public class LokalexForegroundService extends Service {
     private static final String CHANNEL_ID = "lokalex_keepalive_channel";
     private static final int NOTIFICATION_ID = 8831;
+    private static final String FIREBASE_META_QUERY_URL =
+            "https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?orderBy=\"lastUpdated\"&limitToLast=8";
+
     private static volatile boolean isRunning = false;
     private static Bitmap cachedLargeIcon = null;
 
     private PowerManager.WakeLock wakeLock = null;
     private ScheduledExecutorService scheduler = null;
+
+    private long lastKnownMsgTimestamp = 0;
+    private final Set<String> processedMsgSignatures = new HashSet<>();
 
     public static boolean isRunning() {
         return isRunning;
@@ -35,6 +55,7 @@ public class LokalexForegroundService extends Service {
     public void onCreate() {
         super.onCreate();
         isRunning = true;
+        lastKnownMsgTimestamp = System.currentTimeMillis();
         createNotificationChannel();
         acquireWakeLock();
         startForegroundSafely();
@@ -44,7 +65,11 @@ public class LokalexForegroundService extends Service {
         Notification notification = buildNotification();
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+                int serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                    serviceType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
+                }
+                startForeground(NOTIFICATION_ID, notification, serviceType);
             } else {
                 startForeground(NOTIFICATION_ID, notification);
             }
@@ -59,19 +84,122 @@ public class LokalexForegroundService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         acquireWakeLock();
 
+        if (lastKnownMsgTimestamp == 0) {
+            lastKnownMsgTimestamp = System.currentTimeMillis();
+        }
+
         if (scheduler == null || scheduler.isShutdown()) {
             scheduler = Executors.newSingleThreadScheduledExecutor();
-            scheduler.scheduleAtFixedRate(() -> {
-                try {
-                    MainActivity activity = MainActivity.getInstance();
-                    if (activity != null) {
-                        activity.pulseWebViewKeepAlive();
-                    }
-                } catch (Exception ignored) {}
-            }, 10, 25, TimeUnit.SECONDS);
+            scheduler.scheduleWithFixedDelay(this::performBackgroundCheck, 2, 5, TimeUnit.SECONDS);
         }
 
         return START_STICKY;
+    }
+
+    private void performBackgroundCheck() {
+        try {
+            // 1. Wake up WebView event loop and JS timers if MainActivity is alive
+            MainActivity activity = MainActivity.getInstance();
+            if (activity != null) {
+                activity.pulseWebViewKeepAlive();
+            }
+
+            // 2. Query Firebase directly in Java to monitor incoming messages even when screen is off
+            URL url = new URL(FIREBASE_META_QUERY_URL);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(4500);
+            conn.setReadTimeout(4500);
+            conn.setRequestProperty("User-Agent", "LokalexBackgroundMonitor/1.0");
+
+            int responseCode = conn.getResponseCode();
+            if (responseCode == 200) {
+                BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = in.readLine()) != null) {
+                    sb.append(line);
+                }
+                in.close();
+
+                processIncomingMetaJson(sb.toString());
+            }
+            conn.disconnect();
+        } catch (Exception ignored) {}
+    }
+
+    private void processIncomingMetaJson(String jsonStr) {
+        if (jsonStr == null || jsonStr.trim().isEmpty() || jsonStr.equals("null")) return;
+        try {
+            JSONObject root = new JSONObject(jsonStr);
+            Iterator<String> keys = root.keys();
+
+            SharedPreferences prefs = getSharedPreferences("lokalex_prefs", Context.MODE_PRIVATE);
+            String myRiderId = prefs.getString("rider_id", "").trim();
+            String myRiderName = prefs.getString("rider_name", "").trim().toLowerCase();
+
+            while (keys.hasNext()) {
+                String custId = keys.next();
+                JSONObject meta = root.optJSONObject(custId);
+                if (meta == null) continue;
+
+                long lastUpdated = meta.optLong("lastUpdated", 0);
+                boolean unreadForRider = meta.optBoolean("unreadForRider", false);
+                String lastMessage = meta.optString("lastMessage", "").trim();
+                String folder = meta.optString("folder", "inbox").toLowerCase();
+                String status = meta.optString("status", "active").toLowerCase();
+                String customerName = meta.optString("customerName", "Customer").trim();
+                String apiName = meta.optString("apiName", "Camiling FB");
+
+                // Strictly filter for new incoming messages for the rider
+                if (!unreadForRider) continue;
+                if (lastMessage.isEmpty() || lastMessage.equalsIgnoreCase("No messages yet")) continue;
+                if (lastMessage.startsWith("You:")) continue;
+                if (folder.equals("spam") || folder.equals("other") || status.equals("spam")) continue;
+                if (status.equals("completed") || status.equals("cancelled") || status.equals("done")) continue;
+
+                // Only notify for messages received after the monitoring service started
+                if (lastUpdated <= 0 || lastUpdated < (lastKnownMsgTimestamp - 2000)) continue;
+
+                // If thread is in catering, only notify if catered by this rider (or unassigned)
+                if (folder.equals("catering")) {
+                    String cateredByRiderId = meta.optString("cateredByRiderId", "").trim();
+                    String cateredByRiderName = meta.optString("cateredByRiderName", "").trim().toLowerCase();
+                    if (!myRiderId.isEmpty() && !cateredByRiderId.isEmpty() && !cateredByRiderId.equals(myRiderId)) {
+                        continue;
+                    }
+                    if (!myRiderName.isEmpty() && !cateredByRiderName.isEmpty() && !cateredByRiderName.equals(myRiderName)) {
+                        continue;
+                    }
+                }
+
+                String signature = custId + "_" + lastUpdated;
+                if (processedMsgSignatures.contains(signature)) continue;
+
+                processedMsgSignatures.add(signature);
+                if (processedMsgSignatures.size() > 100) {
+                    processedMsgSignatures.clear();
+                    processedMsgSignatures.add(signature);
+                }
+
+                if (lastUpdated > lastKnownMsgTimestamp) {
+                    lastKnownMsgTimestamp = lastUpdated;
+                }
+
+                String title = customerName + (apiName.isEmpty() ? "" : " • " + apiName);
+                String body = lastMessage;
+                if (body.contains("[Facebook image]") || body.contains("[Facebook attachment]")) {
+                    body = "📷 Sent a photo";
+                } else if (body.contains("📍") || body.contains("[Location]")) {
+                    body = "📍 Sent a location pin";
+                }
+
+                // Dispatch native Android notification directly with sound, vibration, and heads-up banner!
+                MainActivity.dispatchNativeNotification(this, title, body, "chat_" + custId, custId);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private void acquireWakeLock() {

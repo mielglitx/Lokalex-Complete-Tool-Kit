@@ -99,6 +99,12 @@ export async function initNativeBridge() {
             window.NativePermissionsBridge.startKeepAlive();
         }
 
+        const cachedRiderId = localStorage.getItem('telegramId') || localStorage.getItem('riderId') || '';
+        const cachedRiderName = localStorage.getItem('riderName') || '';
+        if (cachedRiderId) {
+            syncRiderSession(cachedRiderId, cachedRiderName);
+        }
+
         App.addListener('appStateChange', (state) => {
             if (state.isActive) {
                 // Rider returned to the app (from Google Maps / Waze / Screen Unlock)
@@ -193,6 +199,16 @@ export function isBatteryOptimizationIgnored() {
         return window.NativePermissionsBridge.isIgnoringBatteryOptimizations();
     }
     return true;
+}
+
+export function syncRiderSession(riderId, riderName) {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.syncRiderSession === 'function') {
+        try {
+            window.NativePermissionsBridge.syncRiderSession(String(riderId || ''), String(riderName || ''));
+            return true;
+        } catch (_) {}
+    }
+    return false;
 }
 
 /**
@@ -306,6 +322,9 @@ if (typeof window !== 'undefined') {
     window.showNativeNotification = showNativeNotification;
     window.clearNativeNotification = clearNativeNotification;
     window.openExternalLink = openExternalLink;
+    window.requestBatteryOptimizationExemption = requestBatteryOptimizationExemption;
+    window.isBatteryOptimizationIgnored = isBatteryOptimizationIgnored;
+    window.syncRiderSession = syncRiderSession;
 }
 
 /**

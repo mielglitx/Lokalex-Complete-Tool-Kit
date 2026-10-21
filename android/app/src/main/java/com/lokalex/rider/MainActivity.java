@@ -239,6 +239,17 @@ public class MainActivity extends BridgeActivity {
                 }
 
                 @JavascriptInterface
+                public void syncRiderSession(String riderId, String riderName) {
+                    if (riderId != null) {
+                        getSharedPreferences("lokalex_prefs", Context.MODE_PRIVATE)
+                                .edit()
+                                .putString("rider_id", riderId.trim())
+                                .putString("rider_name", riderName != null ? riderName.trim() : "")
+                                .apply();
+                    }
+                }
+
+                @JavascriptInterface
                 public void clearNotification(String tag) {
                     MainActivity.this.clearNativeNotification(tag);
                 }
@@ -317,9 +328,10 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onPause() {
         super.onPause();
-        // Keep WebView timers running without forcing GPU composition on a hidden surface
+        // Unpause WebView engine so background WebSockets and JS listeners stay connected!
         try {
             if (getBridge() != null && getBridge().getWebView() != null) {
+                getBridge().getWebView().onResume();
                 getBridge().getWebView().resumeTimers();
             }
         } catch (Exception ignored) {}
@@ -328,9 +340,10 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onStop() {
         super.onStop();
-        // Keep JavaScript timers running without forcing GPU rendering on detached surface
+        // Keep WebView engine running so Firebase listeners don't sleep when screen is off
         try {
             if (getBridge() != null && getBridge().getWebView() != null) {
+                getBridge().getWebView().onResume();
                 getBridge().getWebView().resumeTimers();
             }
         } catch (Exception ignored) {}
@@ -458,10 +471,15 @@ public class MainActivity extends BridgeActivity {
     }
 
     public void dispatchNativeNotification(String title, String message, String tag, String custId) {
-        try {
-            createMessagesNotificationChannel();
+        dispatchNativeNotification(this, title, message, tag, custId);
+    }
 
-            Intent launchIntent = new Intent(this, MainActivity.class);
+    public static void dispatchNativeNotification(Context context, String title, String message, String tag, String custId) {
+        if (context == null) return;
+        try {
+            ensureMessagesChannel(context);
+
+            Intent launchIntent = new Intent(context, MainActivity.class);
             launchIntent.setAction(Intent.ACTION_MAIN);
             launchIntent.addCategory(Intent.CATEGORY_LAUNCHER);
             launchIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -478,7 +496,7 @@ public class MainActivity extends BridgeActivity {
 
             int reqCode = (tag != null && !tag.isEmpty()) ? Math.abs(tag.hashCode()) : (int) (System.currentTimeMillis() % 100000);
             PendingIntent pendingIntent = PendingIntent.getActivity(
-                    this,
+                    context,
                     reqCode,
                     launchIntent,
                     flags
@@ -491,17 +509,18 @@ public class MainActivity extends BridgeActivity {
 
             Bitmap largeIcon = null;
             try {
-                largeIcon = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher_round);
+                largeIcon = BitmapFactory.decodeResource(context.getResources(), R.mipmap.ic_launcher_round);
             } catch (Exception ignored) {}
 
-            NotificationCompat.Builder builder = new NotificationCompat.Builder(this, MESSAGES_CHANNEL_ID)
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(context, MESSAGES_CHANNEL_ID)
                     .setSmallIcon(R.mipmap.ic_launcher)
                     .setContentTitle(safeTitle)
                     .setContentText(safeMsg)
                     .setStyle(new NotificationCompat.BigTextStyle().bigText(safeMsg))
                     .setContentIntent(pendingIntent)
                     .setAutoCancel(true)
-                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setDefaults(Notification.DEFAULT_ALL)
                     .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                     .setSound(defaultSoundUri)
@@ -511,13 +530,43 @@ public class MainActivity extends BridgeActivity {
                 builder.setLargeIcon(largeIcon);
             }
 
-            NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager != null) {
                 int notifId = (tag != null && !tag.isEmpty()) ? Math.abs(tag.hashCode()) : (int) (System.currentTimeMillis() % 100000);
                 manager.notify(tag != null && !tag.isEmpty() ? tag : "lokalex_msg", notifId, builder.build());
             }
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    public static void ensureMessagesChannel(Context context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && context != null) {
+            NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (manager != null) {
+                NotificationChannel channel = manager.getNotificationChannel(MESSAGES_CHANNEL_ID);
+                if (channel == null) {
+                    channel = new NotificationChannel(
+                            MESSAGES_CHANNEL_ID,
+                            "Lokalex Messages & Orders",
+                            NotificationManager.IMPORTANCE_HIGH
+                    );
+                    channel.setDescription("Incoming chat messages from selected sources and orders");
+                    channel.enableVibration(true);
+                    channel.setVibrationPattern(new long[]{0, 250, 150, 250});
+                    channel.setShowBadge(true);
+                    channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+
+                    Uri defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+                    AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .setUsage(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT)
+                            .build();
+                    channel.setSound(defaultSoundUri, audioAttributes);
+
+                    manager.createNotificationChannel(channel);
+                }
+            }
         }
     }
 

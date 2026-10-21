@@ -179,6 +179,12 @@ export function logout() {
         auth.signOut().catch(() => {});
     }
 
+    if (typeof window !== 'undefined' && typeof window.syncRiderSession === 'function') {
+        try {
+            window.syncRiderSession('', '');
+        } catch (_) {}
+    }
+
     const sessionKeysToClear = [
         'lokalex_active_role',
         'telegramId', 'riderName', 'userType', 'riderPhotoUrl', 'lokalex_photo_url', 'lokalex_rider_phone',
