@@ -102,7 +102,17 @@ function cleanFirebasePathKey(key) {
 }
 
 export function getActiveRiderChatCustId() { return activeRiderChatCustId; }
-export function getCurrentRiderChatMeta() { return currentRiderChatMeta; }
+export function getCurrentRiderChatMeta() { 
+    if (activeRiderChatCustId && typeof window.getCachedCustomerThreadsMap === 'function') {
+        const map = window.getCachedCustomerThreadsMap();
+        const thread = map ? (map.get(activeRiderChatCustId) || map.get(`fb_${activeRiderChatCustId}`) || (activeRiderChatCustId.startsWith('fb_') ? map.get(activeRiderChatCustId.replace(/^fb_/, '')) : null)) : null;
+        if (thread) {
+            return { ...thread, ...(currentRiderChatMeta || {}) };
+        }
+    }
+    return currentRiderChatMeta || {}; 
+}
+export function getLoadedRiderMsgsMap() { return loadedRiderMsgsMap; }
 export function getActiveCustData() { return activeCustData; }
 export function setActiveCustData(data) { activeCustData = data; }
 
@@ -267,6 +277,10 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
             // Instant reconcile: any metadata change while thread is open synchronizes incoming messages immediately!
             if (activeRiderChatCustId === custId) {
                 syncIncomingMessageFromMeta(custId, currentRiderChatMeta);
+                const container = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
+                if (container && typeof window.updateRiderChatSeenAvatar === 'function') {
+                    window.updateRiderChatSeenAvatar(container, activeCustData, loadedRiderMsgsMap);
+                }
             }
         });
 
@@ -2409,6 +2423,7 @@ export async function promptRenameCustomerChat() {
 if (typeof window !== 'undefined') {
     window.getActiveRiderChatCustId = getActiveRiderChatCustId;
     window.getCurrentRiderChatMeta = getCurrentRiderChatMeta;
+    window.getLoadedRiderMsgsMap = getLoadedRiderMsgsMap;
     window.getActiveCustData = getActiveCustData;
     window.setActiveCustData = setActiveCustData;
 

@@ -627,6 +627,51 @@ async function processMetaEntries(entries, cfg) {
         continue;
       }
 
+      // 0.1 Handle customer read receipts (Meta Messenger message_reads)
+      if (item.read) {
+        const senderId = item.sender?.id;
+        if (!senderId) continue;
+        const custId = `fb_${senderId}`;
+        const watermark = item.read.watermark || item.timestamp || Date.now();
+
+        await Promise.all([
+          fetch(`${cfg.dbUrl}/customerChatMeta/${custId}/customerLastSeenTimestamp.json`, {
+            method: "PUT",
+            body: JSON.stringify(watermark)
+          }),
+          fetch(`${cfg.dbUrl}/customerChats/${custId}/metadata/customerLastSeenTimestamp.json`, {
+            method: "PUT",
+            body: JSON.stringify(watermark)
+          })
+        ]).catch(() => {});
+
+        try {
+          const msgsResp = await fetch(`${cfg.dbUrl}/customerChats/${custId}/messages.json?orderBy="timestamp"&endAt=${watermark}&limitToLast=10`);
+          if (msgsResp.ok) {
+            const msgs = await msgsResp.json();
+            if (msgs && typeof msgs === "object") {
+              const updates = {};
+              for (const [mKey, mVal] of Object.entries(msgs)) {
+                if (mVal && (mVal.isRider || mVal.senderType === 'rider') && mVal.status !== 'seen') {
+                  updates[`/customerChats/${custId}/messages/${mKey}/status`] = "seen";
+                  updates[`/customerChats/${custId}/messages/${mKey}/seenAt`] = watermark;
+                }
+              }
+              if (Object.keys(updates).length > 0) {
+                await fetch(`${cfg.dbUrl}/.json`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(updates)
+                }).catch(() => {});
+              }
+            }
+          }
+        } catch(e) {
+          console.warn("Failed to mark messages seen in Firebase:", e);
+        }
+        continue;
+      }
+
       // Ignore echoes (messages sent by our own page) and delivery receipts
       if (!item.message || item.message.is_echo) continue;
 

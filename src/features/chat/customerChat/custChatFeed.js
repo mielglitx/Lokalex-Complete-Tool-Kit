@@ -75,6 +75,8 @@ export function listenToCustomerRiderChat() {
         });
 
         if (hasUnseen && db) {
+            seenUpdates[`customerChatMeta/${custFbId}/customerLastSeenTimestamp`] = now;
+            seenUpdates[`customerChats/${custFbId}/metadata/customerLastSeenTimestamp`] = now;
             db.ref().update(seenUpdates).catch(() => {});
         }
 

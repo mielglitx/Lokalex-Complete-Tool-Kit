@@ -516,9 +516,12 @@ export function handleMsgContextMenu(e, msgId, chatType, text, sender) {
     }
 }
 
-export function renderRiderMessageStatusIndicator(msg) {
+export function renderRiderMessageStatusIndicator(msg, forceSeen = false) {
+    const isSeen = Boolean(forceSeen || msg.status === 'seen' || msg.seenAt);
     const sentTime = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
-    const seenTime = msg.seenAt ? new Date(msg.seenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+    const seenTime = msg.seenAt 
+        ? new Date(msg.seenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+        : (isSeen && msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "");
     
     let iconHtml = '<i class="fa-regular fa-clock text-blue-200" title="Sending..."></i>';
     let titleAttr = `Sent ${sentTime}`;
@@ -526,19 +529,19 @@ export function renderRiderMessageStatusIndicator(msg) {
     if (msg.status === 'failed' || msg.failed) {
         iconHtml = '<i class="fa-solid fa-circle-exclamation text-rose-300 animate-pulse" title="Sending failed"></i>';
         titleAttr = `Sending failed`;
-    } else if (msg.status === 'sent') {
-        iconHtml = '<i class="fa-solid fa-check text-blue-200" title="Sent"></i>';
+    } else if (isSeen) {
+        iconHtml = '<i class="fa-solid fa-check-double text-cyan-200" title="Seen"></i>';
+        titleAttr += ` • Seen${seenTime ? ` at ${seenTime}` : ''}`;
     } else if (msg.status === 'delivered') {
         iconHtml = '<i class="fa-solid fa-check-double text-blue-200" title="Delivered"></i>';
         titleAttr += ` • Delivered`;
-    } else if (msg.status === 'seen') {
-        iconHtml = '<i class="fa-solid fa-check-double text-cyan-200" title="Seen"></i>';
-        titleAttr += ` • Seen at ${seenTime}`;
+    } else if (msg.status === 'sent') {
+        iconHtml = '<i class="fa-solid fa-check text-blue-200" title="Sent"></i>';
     }
 
     return `<span class="inline-flex items-center gap-1 ml-1 cursor-help" title="${titleAttr}">
         ${iconHtml}
-        ${msg.status === 'seen' && seenTime ? `<span class="text-[8px] text-cyan-200 opacity-90 font-mono">Seen ${seenTime}</span>` : ''}
+        ${isSeen && seenTime ? `<span class="text-[8px] text-cyan-200 opacity-90 font-mono">Seen ${seenTime}</span>` : ''}
     </span>`;
 }
 
@@ -710,7 +713,13 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
 
     const senderName = m.sender || (isRider ? (m.senderName || riderName) : custName);
     const senderAvatar = getMessageSenderAvatar(m, isRider, custAvatar);
-    const statusIndicator = isRider ? renderRiderMessageStatusIndicator(m) : '';
+
+    const meta = (typeof window.getCurrentRiderChatMeta === 'function') ? window.getCurrentRiderChatMeta() : {};
+    const customerLastSeenTs = Number(meta?.customerLastSeenTimestamp || activeCustData?.customerLastSeenTimestamp || meta?.watermark || 0) || 0;
+    const msgTs = getMessageTimestamp(m);
+    const isSeen = !isFailed && (m.status === 'seen' || Boolean(m.seenAt) || (customerLastSeenTs > 0 && msgTs > 0 && msgTs <= customerLastSeenTs));
+
+    const statusIndicator = isRider ? renderRiderMessageStatusIndicator(m, isSeen) : '';
     const replyBlockHtml = renderReplyPreviewInsideMessage(m.replyTo);
     const reactionsHtml = renderReactionsHtml(m.reactions, m.id);
 
@@ -768,8 +777,6 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const isPlaceholderText = m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]') || m.text === '📷 Photo' || m.text === 'Facebook Message');
     const isDocFilenameText = isDoc && m.text && (m.text === m.fileName || m.text === m.fileUrl || m.text === m.imageUrl || m.text === '📄 Document' || m.text.startsWith('http'));
     const showText = m.text && (!imgHtml || !isPlaceholderText) && !isResolvingFbImage && !locationHtml && !(isLikeSticker && imgHtml) && !isDocFilenameText;
-
-    const msgTs = getMessageTimestamp(m);
 
     const failedTagHtml = isFailed ? `
         <div class="flex items-center gap-1 text-[9.5px] font-black text-rose-500 dark:text-rose-400 mt-0.5 ${isRider ? 'justify-end mr-8' : 'justify-start ml-8'} select-none">
@@ -835,6 +842,86 @@ export function appendOrUpdateSingleRiderMessage(container, msg, activeCustData 
             container.appendChild(newBubble);
         }
     }
+
+    updateRiderChatSeenAvatar(container, activeCustData);
+}
+
+export function updateRiderChatSeenAvatar(container, activeCustData = null, msgsMap = null) {
+    if (!container) return;
+
+    // Remove any previous seen avatar element in this container
+    const oldAvatars = container.querySelectorAll('.chat-seen-avatar-wrapper');
+    oldAvatars.forEach(el => el.remove());
+
+    const nameEl = document.getElementById('rider-chat-cust-name');
+    let custName = nameEl?.innerText?.trim();
+    if (!custName || custName === 'Customer' || custName === 'Customer Name' || custName.startsWith('FB Customer (')) {
+        custName = activeCustData?.customerName || activeCustData?.name || (typeof window.getCurrentRiderChatMeta === 'function' ? window.getCurrentRiderChatMeta()?.customerName : null) || "Customer";
+    }
+
+    const meta = (typeof window.getCurrentRiderChatMeta === 'function') ? window.getCurrentRiderChatMeta() : {};
+    const custAvatar = activeCustData?.avatarUrl 
+        || meta?.avatarUrl 
+        || document.getElementById('rider-chat-avatar')?.src 
+        || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff`;
+
+    const customerLastSeenTs = Number(meta?.customerLastSeenTimestamp || activeCustData?.customerLastSeenTimestamp || meta?.watermark || 0) || 0;
+
+    // Get messages map
+    const sourceMap = msgsMap || (typeof window.getLoadedRiderMsgsMap === 'function' ? window.getLoadedRiderMsgsMap() : null);
+    if (!sourceMap || sourceMap.size === 0) return;
+
+    const msgs = Array.from(sourceMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+
+    // Find latest customer reply timestamp
+    let latestCustomerReplyTs = 0;
+    for (const m of msgs) {
+        if (!m.isRider && m.senderType !== 'rider') {
+            const ts = getMessageTimestamp(m);
+            if (ts > latestCustomerReplyTs) latestCustomerReplyTs = ts;
+        }
+    }
+
+    // Find the last rider message seen by customer
+    let lastSeenMsg = null;
+    for (let i = 0; i < msgs.length; i++) {
+        const m = msgs[i];
+        if (!m) continue;
+        const isRider = Boolean(m.isRider || m.senderType === 'rider');
+        if (!isRider) continue;
+        const isFailed = Boolean(m.status === 'failed' || m.failed === true || m.error);
+        if (isFailed) continue;
+
+        const ts = getMessageTimestamp(m);
+        const isExplicitSeen = m.status === 'seen' || Boolean(m.seenAt);
+        const isSeenByCustomerTs = customerLastSeenTs > 0 && ts > 0 && ts <= customerLastSeenTs;
+        const isSeenByReply = latestCustomerReplyTs > 0 && ts > 0 && ts <= latestCustomerReplyTs;
+
+        if (isExplicitSeen || isSeenByCustomerTs || isSeenByReply) {
+            lastSeenMsg = m;
+        }
+    }
+
+    if (!lastSeenMsg || !lastSeenMsg.id) return;
+
+    const targetBubble = document.getElementById(`msg-bubble-${lastSeenMsg.id}`);
+    if (!targetBubble) return;
+
+    const seenAtTs = lastSeenMsg.seenAt 
+        || (customerLastSeenTs >= getMessageTimestamp(lastSeenMsg) ? customerLastSeenTs : null) 
+        || (latestCustomerReplyTs >= getMessageTimestamp(lastSeenMsg) ? latestCustomerReplyTs : null)
+        || lastSeenMsg.timestamp;
+    const seenTimeStr = seenAtTs ? new Date(seenAtTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'chat-seen-avatar-wrapper flex items-center justify-end gap-1 mt-0.5 mr-8 select-none transition-all duration-200';
+    wrapper.title = `Seen by ${custName}${seenTimeStr ? ` at ${seenTimeStr}` : ''}`;
+    wrapper.innerHTML = `
+        <span class="text-[9px] text-gray-400 dark:text-gray-400 font-medium opacity-0 hover:opacity-100 transition-opacity">Seen ${seenTimeStr}</span>
+        <img src="${custAvatar}" alt="${escapeHtml(custName)}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff'" class="w-3.5 h-3.5 rounded-full border border-white dark:border-gray-800 shadow-xs object-cover pointer-events-none ring-1 ring-blue-500/30">
+    `;
+
+    targetBubble.appendChild(wrapper);
 }
 
 export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, isInitialLoad = false, oldScrollHeight = 0, activeCustData = null) {
@@ -860,6 +947,7 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
     }
 
     container.innerHTML = topHeader + messagesHtml;
+    updateRiderChatSeenAvatar(container, activeCustData, loadedRiderMsgsMap);
 
     if (isInitialLoad) {
         requestAnimationFrame(() => {
@@ -899,4 +987,5 @@ if (typeof window !== 'undefined') {
     window.handleChatImageLoadError = handleChatImageLoadError;
     window.handleChatLinkClick = handleChatLinkClick;
     window.downloadChatDocument = downloadChatDocument;
+    window.updateRiderChatSeenAvatar = updateRiderChatSeenAvatar;
 }
