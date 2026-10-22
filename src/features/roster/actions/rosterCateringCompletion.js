@@ -134,15 +134,39 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
 
     // 1. Receipt Verification Gate & Milestone Extraction
     let receiptTimeFound = "";
-    if (targetRecord?.customerFees && cleanCustKey && targetRecord.customerFees[cleanCustKey]?.receiptTime) {
-        receiptTimeFound = targetRecord.customerFees[cleanCustKey].receiptTime;
+    let cFeeObj = null;
+    let matchedCfKey = null;
+
+    if (targetRecord?.customerFees && typeof targetRecord.customerFees === 'object') {
+        if (cleanCustKey && targetRecord.customerFees[cleanCustKey]) {
+            cFeeObj = targetRecord.customerFees[cleanCustKey];
+            matchedCfKey = cleanCustKey;
+        } else {
+            for (const [cfK, cfV] of Object.entries(targetRecord.customerFees)) {
+                if (!cfV) continue;
+                const cfName = (cfV.customerName || cfK || "").trim();
+                if (cfK.toLowerCase() === cleanCust.toLowerCase() ||
+                    cfName.toLowerCase() === cleanCust.toLowerCase() ||
+                    isCustomerMatch(cfName, custNameToComplete)) {
+                    cFeeObj = cfV;
+                    matchedCfKey = cfK;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (cFeeObj?.receiptTime) {
+        receiptTimeFound = cFeeObj.receiptTime;
     }
 
     const matchReceipt = (globalState.globalDailyReceipts || []).find(rc => {
+        if (!rc) return false;
         const rMatch = isRiderMatch(resolvedTargetName, rc.riderName, resolvedTargetId, rc.telegramId);
-        const cMatch = isCustomerMatch(rc.customerName, custNameToComplete);
+        const cMatch = isCustomerMatch(rc.customerName, custNameToComplete) || 
+                       (rc.customerName && rc.customerName.trim().toLowerCase() === cleanCust);
         const dMatch = isSameDateStr(rc.date || rc.completedDate, todayStr);
-        return rMatch && cMatch && dMatch;
+        return (rMatch || !rc.riderName) && cMatch && (dMatch || !rc.date);
     });
 
     if (!receiptTimeFound && matchReceipt) {
@@ -150,7 +174,7 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     }
 
     const hasReceipt = hasReceiptForActiveSession(custNameToComplete, completedStartTime) ||
-        (targetRecord?.customerFees && cleanCustKey && !!targetRecord.customerFees[cleanCustKey]) ||
+        !!cFeeObj ||
         !!matchReceipt;
 
     if (!hasReceipt) {
@@ -179,8 +203,7 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     let finalFees = 0;
     let finalFeeDetails = null;
 
-    if (targetRecord?.customerFees && cleanCustKey && targetRecord.customerFees[cleanCustKey]) {
-        const cFeeObj = targetRecord.customerFees[cleanCustKey];
+    if (cFeeObj) {
         finalFeeDetails = cFeeObj.fees || null;
         if (cFeeObj.totalFees !== undefined && cFeeObj.totalFees !== null) {
             finalFees = parseFloat(cFeeObj.totalFees) || 0;
@@ -191,7 +214,7 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     }
 
     if (finalFees <= 0 && matchReceipt) {
-        finalFeeDetails = matchReceipt.fees || null;
+        finalFeeDetails = finalFeeDetails || matchReceipt.fees || null;
         if (finalFeeDetails && typeof finalFeeDetails === 'object') {
             const parseNum = (v) => {
                 if (typeof v === 'number') return v;
@@ -208,6 +231,13 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
             finalFees = parseItemGross(matchReceipt);
         }
         targetTxId = matchReceipt.transactionId || matchReceipt.id || targetTxId;
+    }
+
+    if (finalFees <= 0 && targetRecord?.lastReceiptTotalFees) {
+        finalFees = parseFloat(targetRecord.lastReceiptTotalFees) || 0;
+        if (!finalFeeDetails && targetRecord.lastReceiptFees) {
+            finalFeeDetails = targetRecord.lastReceiptFees;
+        }
     }
 
     const splitDuration = calculateSplitDuration(completedStartTime, endTimeStr, 1);
@@ -236,10 +266,24 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     if (db) {
         db.ref(`cateredHistory/${targetTxId}`).set(hItem).catch(() => {});
         db.ref(`catered/${todayStr}/${targetTxId}`).set(hItem).catch(() => {});
-        db.ref(`receipts/${targetTxId}`).update({
-            doneTime: endTimeStr,
-            completedTime: endTimeStr
-        }).catch(() => {});
+        if (targetTxId) {
+            db.ref(`receipts/${targetTxId}`).update({
+                doneTime: endTimeStr,
+                completedTime: endTimeStr
+            }).catch(() => {});
+        }
+        if (matchReceipt?.id && matchReceipt.id !== targetTxId) {
+            db.ref(`receipts/${matchReceipt.id}`).update({
+                doneTime: endTimeStr,
+                completedTime: endTimeStr
+            }).catch(() => {});
+        }
+        if (matchReceipt?.transactionId && matchReceipt.transactionId !== targetTxId) {
+            db.ref(`receipts/${matchReceipt.transactionId}`).update({
+                doneTime: endTimeStr,
+                completedTime: endTimeStr
+            }).catch(() => {});
+        }
 
         if (db) {
             const markChatCompleted = (targetChatId) => {
@@ -319,10 +363,14 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
             }).catch(() => {});
         }
 
-        if (resolvedTargetId && cleanCustKey) {
-            db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
+        if (resolvedTargetId) {
+            if (cleanCustKey) db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
+            if (matchedCfKey) db.ref(`roster/${resolvedTargetId}/customerFees/${matchedCfKey}`).remove().catch(() => {});
+            db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCust}`).remove().catch(() => {});
+            db.ref(`roster/${resolvedTargetId}/customerFees/${custNameToComplete}`).remove().catch(() => {});
+            if (cleanCustKey) db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
             db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCust}`).remove().catch(() => {});
+            db.ref(`roster/${resolvedTargetId}/forcedCaters/${custNameToComplete}`).remove().catch(() => {});
         }
     }
 
@@ -435,11 +483,15 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         showSideNotification("ROTATION UPDATED", `${resolvedTargetName} is now Available`, "fa-motorcycle", "text-blue-400", "border-blue-500");
     }
 
+    invalidateRosterGrossCache();
     saveRosterCache();
     window.dispatchEvent(new CustomEvent('cateredUpdated'));
     window.dispatchEvent(new CustomEvent('receiptsUpdated'));
     window.dispatchEvent(new CustomEvent('rosterUpdated'));
     updateRosterUI();
+    if (typeof window.refreshCommissionView === 'function') {
+        window.refreshCommissionView();
+    }
     return true;
 }
 

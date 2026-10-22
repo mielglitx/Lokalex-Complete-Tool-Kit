@@ -21,6 +21,7 @@
 
 import { showToast } from './notifications.js';
 import { appState, globalState } from '../store/state.js';
+import { isAdmin, canManageRoster } from '../features/roster/rosterUtils.js';
 
 let backPressCount = 0;
 let backPressTimer = null;
@@ -136,13 +137,17 @@ if (typeof window !== 'undefined' && window.matchMedia) {
 export function isFeatureAllowed(featureKey) {
     if (!featureKey) return true;
 
+    // Full administrators, managers, and authorized roster managers have unrestricted access to all features
+    if (isAdmin() || canManageRoster() || Boolean(globalState.adminControlsEnabled) || (typeof localStorage !== 'undefined' && localStorage.getItem('adminControlsEnabled') === 'true')) {
+        return true;
+    }
+
     const activeRole = localStorage.getItem('lokalex_active_role');
     const riderId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
 
     // Customers and Merchants do not use the rider tool gating system
     if (!riderId && activeRole !== 'rider') return true;
 
-    // Full administrators have unrestricted access to all features
     const userType = (appState.userType || localStorage.getItem('userType') || "").toLowerCase().trim();
     if (userType === 'admin') return true;
 
@@ -325,6 +330,10 @@ export function syncHeaderAndWidgets(targetViewId) {
 }
 
 export function renderViewUI(targetViewId) {
+    if (typeof document !== 'undefined' && document.documentElement) {
+        document.documentElement.classList.add('app-mounted');
+        document.documentElement.classList.remove('instant-session-home', 'instant-session-customer', 'instant-session-merchant');
+    }
     document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
     const targetEl = document.getElementById(targetViewId);
     if (targetEl) targetEl.classList.remove('hidden');

@@ -53,12 +53,15 @@
         })();
     </script>
     <style>
-        html.instant-session-home #view-login { display: none !important; }
-        html.instant-session-home #view-home { display: flex !important; }
-        html.instant-session-customer #view-login { display: none !important; }
-        html.instant-session-customer #view-customer-home { display: flex !important; }
-        html.instant-session-merchant #view-login { display: none !important; }
-        html.instant-session-merchant #view-store-hub { display: flex !important; }
+        html.instant-session-home:not(.app-mounted) #view-login { display: none !important; }
+        html.instant-session-home:not(.app-mounted) #view-home:not(.hidden) { display: flex !important; }
+        html.instant-session-home #view-home.hidden { display: none !important; }
+        html.instant-session-customer:not(.app-mounted) #view-login { display: none !important; }
+        html.instant-session-customer:not(.app-mounted) #view-customer-home:not(.hidden) { display: flex !important; }
+        html.instant-session-customer #view-customer-home.hidden { display: none !important; }
+        html.instant-session-merchant:not(.app-mounted) #view-login { display: none !important; }
+        html.instant-session-merchant:not(.app-mounted) #view-store-hub:not(.hidden) { display: flex !important; }
+        html.instant-session-merchant #view-store-hub.hidden { display: none !important; }
     </style>
 
     <!-- HEAD PARTIAL (TAILWIND, FONTAWESOME & MAPS) -->

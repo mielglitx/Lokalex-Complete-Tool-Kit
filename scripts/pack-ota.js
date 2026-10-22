@@ -56,7 +56,17 @@ console.log(`🔑 SHA-256 Checksum: ${checksum}`);
 const versionedZipPath = path.join(outDir, `dist-v${targetVersion}.zip`);
 fs.copyFileSync(zipPath, versionedZipPath);
 
-// 4. Generate version.json
+// 4. Generate version.json and update checksums.json
+const checksumsPath = path.join(outDir, 'checksums.json');
+let checksumsMap = {};
+if (fs.existsSync(checksumsPath)) {
+    try {
+        checksumsMap = JSON.parse(fs.readFileSync(checksumsPath, 'utf-8'));
+    } catch (_) {}
+}
+checksumsMap[targetVersion] = checksum;
+fs.writeFileSync(checksumsPath, JSON.stringify(checksumsMap, null, 2), 'utf-8');
+
 const manifest = {
     version: targetVersion,
     url: `https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist-v${targetVersion}.zip`,
@@ -75,11 +85,12 @@ console.log(`📁 Files in ota-release/:`);
 console.log(`   - dist.zip (${(zipStats.size / 1024 / 1024).toFixed(2)} MB)`);
 console.log(`   - dist-v${targetVersion}.zip`);
 console.log(`   - version.json (v${targetVersion})`);
+console.log(`   - checksums.json (updated)`);
 console.log(`   - checksum: ${checksum}`);
 console.log(`\n🚀 NEXT STEP:`);
 console.log(`Push files to https://github.com/mielglitx/LokalexOTAUpdate:`);
 console.log(`   cd ota-release`);
-console.log(`   git add dist.zip dist-v${targetVersion}.zip version.json`);
+console.log(`   git add dist.zip dist-v${targetVersion}.zip version.json checksums.json`);
 console.log(`   git commit -m "Release v${targetVersion}"`);
 console.log(`   git push origin main`);
 

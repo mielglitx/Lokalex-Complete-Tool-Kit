@@ -19,8 +19,10 @@ import { showToast } from '../ui/notifications.js';
  */
 
 const OTA_MANIFEST_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/version.json';
+const OTA_CHECKSUMS_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/checksums.json';
 const CURRENT_BUILT_IN_VERSION = '1.0.6';
 let isCheckingUpdate = false;
+let globalOtaChecksumsMap = {};
 
 /**
  * Safely compares two version strings (e.g. "1.0.2" vs "1.0.1").
@@ -232,6 +234,14 @@ export async function checkForOtaUpdate(isManual = false) {
 export async function fetchAvailableOtaVersions() {
     const versions = [];
     try {
+        // Fetch checksums manifest in parallel
+        try {
+            const chkRes = await fetch(`${OTA_CHECKSUMS_URL}?t=${Date.now()}`, { cache: 'no-store' });
+            if (chkRes.ok) {
+                globalOtaChecksumsMap = await chkRes.json();
+            }
+        } catch (_) {}
+
         const res = await fetch(`https://api.github.com/repos/mielglitx/LokalexOTAUpdate/contents?t=${Date.now()}`, {
             headers: { 'Accept': 'application/vnd.github.v3+json' },
             cache: 'no-store'
@@ -247,6 +257,7 @@ export async function fetchAvailableOtaVersions() {
                             version: ver,
                             fileName: f.name,
                             url: `https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/${f.name}`,
+                            checksum: globalOtaChecksumsMap[ver] || '',
                             size: f.size ? `${(f.size / (1024 * 1024)).toFixed(2)} MB` : ''
                         });
                     }
@@ -257,15 +268,16 @@ export async function fetchAvailableOtaVersions() {
         console.warn("[OTA] GitHub contents fetch failed:", e);
     }
 
-    // Sort descending by semantic version (e.g. 1.0.28, 1.0.27, ..., 1.0.9)
+    // Sort descending by semantic version (e.g. 1.0.50, 1.0.49, ..., 1.0.9)
     versions.sort((a, b) => compareVersions(b.version, a.version));
 
     // Fallback if GitHub API rate-limits
     if (versions.length === 0) {
         const knownVersions = [
-            '1.0.28', '1.0.27', '1.0.26', '1.0.25', '1.0.24', '1.0.23',
-            '1.0.22', '1.0.21', '1.0.20', '1.0.19', '1.0.18', '1.0.17',
-            '1.0.16', '1.0.15', '1.0.14', '1.0.13', '1.0.12', '1.0.11',
+            '1.0.50', '1.0.49', '1.0.48', '1.0.47', '1.0.46', '1.0.45', '1.0.44', '1.0.43', '1.0.42', '1.0.41',
+            '1.0.40', '1.0.39', '1.0.38', '1.0.37', '1.0.36', '1.0.35', '1.0.34', '1.0.33', '1.0.32', '1.0.31',
+            '1.0.30', '1.0.29', '1.0.28', '1.0.27', '1.0.26', '1.0.25', '1.0.24', '1.0.23', '1.0.22', '1.0.21',
+            '1.0.20', '1.0.19', '1.0.18', '1.0.17', '1.0.16', '1.0.15', '1.0.14', '1.0.13', '1.0.12', '1.0.11',
             '1.0.10', '1.0.9'
         ];
         knownVersions.forEach(ver => {
@@ -273,7 +285,8 @@ export async function fetchAvailableOtaVersions() {
                 version: ver,
                 fileName: `dist-v${ver}.zip`,
                 url: `https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist-v${ver}.zip`,
-                size: '0.78 MB'
+                checksum: globalOtaChecksumsMap[ver] || '',
+                size: '0.80 MB'
             });
         });
     }
@@ -284,7 +297,7 @@ export async function fetchAvailableOtaVersions() {
 /**
  * Installs or rolls back to a specific OTA version.
  */
-export async function installSpecificOtaVersion(version, customUrl = null) {
+export async function installSpecificOtaVersion(version, customUrl = null, customChecksum = null) {
     if (!version) return;
     const cleanVer = version.toString().trim().replace(/^v/i, '');
     const currentVersion = await getCurrentAppVersion();
@@ -302,11 +315,28 @@ export async function installSpecificOtaVersion(version, customUrl = null) {
 
     try {
         if (isNativePlatform()) {
-            console.log(`[OTA] Installing specific version ${cleanVer} from ${downloadUrl}...`);
-            const bundle = await CapacitorUpdater.download({
+            // Resolve checksum required by CapacitorUpdater v8+
+            let resolvedChecksum = customChecksum || globalOtaChecksumsMap[cleanVer] || null;
+            if (!resolvedChecksum) {
+                try {
+                    const chkRes = await fetch(`${OTA_CHECKSUMS_URL}?t=${Date.now()}`, { cache: 'no-store' });
+                    if (chkRes.ok) {
+                        globalOtaChecksumsMap = await chkRes.json();
+                        resolvedChecksum = globalOtaChecksumsMap[cleanVer] || null;
+                    }
+                } catch (_) {}
+            }
+
+            const downloadOpts = {
                 url: downloadUrl,
                 version: cleanVer
-            });
+            };
+            if (resolvedChecksum) {
+                downloadOpts.checksum = resolvedChecksum;
+            }
+
+            console.log(`[OTA] Installing specific version ${cleanVer} from ${downloadUrl} (checksum: ${resolvedChecksum || 'none'})...`);
+            const bundle = await CapacitorUpdater.download(downloadOpts);
 
             if (bundle && bundle.id) {
                 localStorage.setItem('lokalex_ota_version', cleanVer);
@@ -445,19 +475,19 @@ function renderOtaVersionsList(versions, currentVersion) {
         let actionBtn = '';
         if (isCurrent) {
             actionBtn = `
-                <button type="button" onclick="window.installSpecificOtaVersion && window.installSpecificOtaVersion('${item.version}', '${item.url}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer">
+                <button type="button" onclick="window.installSpecificOtaVersion && window.installSpecificOtaVersion('${item.version}', '${item.url}', '${item.checksum || ''}')" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer">
                     <i class="fa-solid fa-rotate text-xs text-emerald-500"></i> Reinstall
                 </button>
             `;
         } else if (isRollback) {
             actionBtn = `
-                <button type="button" onclick="window.installSpecificOtaVersion && window.installSpecificOtaVersion('${item.version}', '${item.url}')" class="bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer">
+                <button type="button" onclick="window.installSpecificOtaVersion && window.installSpecificOtaVersion('${item.version}', '${item.url}', '${item.checksum || ''}')" class="bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer">
                     <i class="fa-solid fa-clock-rotate-left text-xs"></i> Rollback
                 </button>
             `;
         } else {
             actionBtn = `
-                <button type="button" onclick="window.installSpecificOtaVersion && window.installSpecificOtaVersion('${item.version}', '${item.url}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer">
+                <button type="button" onclick="window.installSpecificOtaVersion && window.installSpecificOtaVersion('${item.version}', '${item.url}', '${item.checksum || ''}')" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer">
                     <i class="fa-solid fa-cloud-arrow-down text-xs"></i> Install
                 </button>
             `;

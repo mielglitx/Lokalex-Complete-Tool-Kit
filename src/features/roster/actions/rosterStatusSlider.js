@@ -33,6 +33,7 @@ import {
 import { checkRiderTimeInAllowed } from '../rosterStatusLimits.js';
 import { updateRosterStatus, clockOutRider } from '../rosterStatusCore.js';
 import { dismissQueueAlarm } from './rosterAlarms.js';
+import { completeSingleCateringCustomer } from './rosterCateringCompletion.js';
 
 
 
@@ -276,6 +277,14 @@ export async function triggerStatusWithSlide(targetStatus) {
                 switchView('view-cart');
                 return;
             }
+
+            // All active catering deliveries have verified receipts:
+            // Complete each customer properly so fees, receipts, and catered history records are permanently credited
+            showToast("⏳ Kinukumpleto ang mga delivery records at inililipat sa Available...");
+            for (const item of activeCustList) {
+                await completeSingleCateringCustomer(myId, myName, item.name);
+            }
+            return;
         }
 
         const availableTimestamp = Date.now();

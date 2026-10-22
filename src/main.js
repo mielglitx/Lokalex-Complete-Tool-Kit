@@ -86,6 +86,11 @@ export * from './app/appSync.js';
 export * from './app/appListeners.js';
 export * from './app/appBootstrap.js';
 
+// 1. Mark app mounted to transition from instant synchronous session preview
+if (typeof document !== 'undefined' && document.documentElement) {
+    document.documentElement.classList.add('app-mounted');
+}
+
 // 1. Initialize global window bindings for HTML onclick compatibility
 initGlobalWindowBridge();
 
