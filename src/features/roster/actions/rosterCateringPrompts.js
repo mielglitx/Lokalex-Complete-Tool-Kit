@@ -57,16 +57,20 @@ export function promptCateringStatus() {
             return showToast("⚠️ Naka-End Shift ka. Pindutin muna ang Available sa roster bago mag-cater.");
         }
         if (myRecord.status === 'Cooldown') return showToast("⚠️ Naka-penalty cooldown ka pa. Maghintay muna matapos.");
+        if (myRecord.status === 'Break') return showToast("⚠️ Naka-Break ka. Pindutin muna ang Available sa roster bago mag-cater.");
     }
 
     const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
     const liveAvailableRiders = sortAvailableRidersByGross(rosterMembers.filter(m => m.status === 'Available'));
 
-    if (!canManageRoster() && !amIAlreadyCatering && liveAvailableRiders.length > 0) {
+    if (!canManageRoster() && liveAvailableRiders.length > 0) {
         const firstAvailable = liveAvailableRiders[0];
         const firstId = (firstAvailable?.telegramId || firstAvailable?.id || "").toString().trim();
+        const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
+        if (amIAlreadyCatering) {
+            return showToast(`🚫 May available rider sa pila: Si ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) ang 1st in line. Bawal kumuha ng additional booking habang may available rider.`);
+        }
         if (firstId !== myId) {
-            const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
             const myGross = getRiderTodayGross(myRecord?.riderName || myRecord?.name, myId);
             return showToast(`⚠️ 1st in line: ${firstAvailable.riderName || 'Rider'} (Kita: ₱${firstGross.toFixed(0)}) vs Iyo (₱${myGross.toFixed(0)}). Maghintay sa iyong turn.`);
         }
@@ -142,30 +146,19 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
         if (!isPrivileged) {
             if (!myRecord || myRecord.status === 'End' || !myRecord.status) {
                 closeCateringModal();
-                return showToast("⚠️ Naka-End Shift ka. Pindutin muna ang Available sa roster bago mag-cater.");
+                showToast("⚠️ Naka-End Shift ka. Pindutin muna ang Available sa roster bago mag-cater.");
+                return false;
             }
             if (myRecord.status === 'Cooldown') {
                 closeCateringModal();
-                return showToast("⚠️ Naka-penalty cooldown ka pa.");
+                showToast("⚠️ Naka-penalty cooldown ka pa.");
+                return false;
             }
-        }
-
-        const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
-        const liveAvailableRiders = sortAvailableRidersByGross(liveRoster.filter(m => m.status === 'Available'));
-        const isFirstAvailable = liveAvailableRiders.length > 0 && (liveAvailableRiders[0]?.telegramId || liveAvailableRiders[0]?.id || "").toString().trim() === resolvedId;
-
-        const hasPenalty = penaltySelect && parseInt(penaltySelect.value) > 0;
-
-        const isQueueJump = liveAvailableRiders.length > 0 && !isFirstAvailable && !amIAlreadyCatering;
-        const isBypassingAvailability = !myRecord || (myRecord.status !== 'Available' && !amIAlreadyCatering);
-        const isForcedByRole = isPrivileged && (isQueueJump || isBypassingAvailability || hasPenalty);
-
-        if (!isPrivileged && !amIAlreadyCatering && liveAvailableRiders.length > 0 && !isFirstAvailable) {
-            closeCateringModal();
-            const firstAvailable = liveAvailableRiders[0];
-            const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
-            showToast(`🚫 Naunahan ka sa pila: Si ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) ang 1st in line.`);
-            return;
+            if (myRecord.status === 'Break') {
+                closeCateringModal();
+                showToast("⚠️ Naka-Break ka. Pindutin muna ang Available sa roster bago mag-cater.");
+                return false;
+            }
         }
 
         let existingCustomers = [];
@@ -178,11 +171,38 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
 
         const isAlreadyInList = existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase());
 
+        const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
+        const liveAvailableRiders = sortAvailableRidersByGross(liveRoster.filter(m => m.status === 'Available'));
+        const isFirstAvailable = liveAvailableRiders.length > 0 && (liveAvailableRiders[0]?.telegramId || liveAvailableRiders[0]?.id || "").toString().trim() === resolvedId;
+
+        const hasPenalty = penaltySelect && parseInt(penaltySelect.value) > 0;
+
+        const isQueueJump = !isAlreadyInList && liveAvailableRiders.length > 0 && (!isFirstAvailable || amIAlreadyCatering);
+        const isBypassingAvailability = !myRecord || (myRecord.status !== 'Available' && !amIAlreadyCatering);
+        const isForcedByRole = isPrivileged && (isQueueJump || isBypassingAvailability || hasPenalty);
+
+        if (!isPrivileged && !isAlreadyInList && liveAvailableRiders.length > 0) {
+            closeCateringModal();
+            const firstAvailable = liveAvailableRiders[0];
+            const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
+
+            if (amIAlreadyCatering) {
+                showToast(`🚫 May available rider sa pila: Si ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) ang 1st in line. Bawal kumuha ng additional booking habang may available rider.`);
+                return false;
+            }
+
+            if (!isFirstAvailable) {
+                showToast(`🚫 Naunahan ka sa pila: Si ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) ang 1st in line.`);
+                return false;
+            }
+        }
+
         if (!isAlreadyInList) {
             const limitCheck = canRiderTakeMoreBookings(resolvedId, myName);
             if (!limitCheck.allowed) {
                 const modeLabel = limitCheck.isAuto ? " (Auto Income Tier Limit)" : "";
-                return showToast(`⚠️ Reached maximum limit of ${limitCheck.maxAllowed} active catering customer(s)${modeLabel}!`);
+                showToast(`⚠️ Reached maximum limit of ${limitCheck.maxAllowed} active catering customer(s)${modeLabel}!`);
+                return false;
             }
         }
 
