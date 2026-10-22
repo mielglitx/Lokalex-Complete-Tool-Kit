@@ -42,6 +42,7 @@ public class MainActivity extends BridgeActivity {
     private static final int PERMISSION_REQ_CODE = 9922;
     public static final String MESSAGES_CHANNEL_ID = "lokalex_messages_channel";
     private static MainActivity instance = null;
+    private Ringtone activeSystemRingtone = null;
 
     public static MainActivity getInstance() {
         return instance;
@@ -253,31 +254,64 @@ public class MainActivity extends BridgeActivity {
                 @JavascriptInterface
                 public String getSystemNotificationSounds() {
                     org.json.JSONArray soundList = new org.json.JSONArray();
+                    java.util.HashSet<String> seenUris = new java.util.HashSet<>();
+                    java.util.HashSet<String> seenTitles = new java.util.HashSet<>();
                     try {
                         // 1. Device Default Notification Tone
-                        org.json.JSONObject defaultObj = new org.json.JSONObject();
-                        defaultObj.put("id", "system_default");
-                        defaultObj.put("name", "Device Default Ringtone");
-                        Uri defUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-                        defaultObj.put("uri", defUri != null ? defUri.toString() : "system_default");
-                        soundList.put(defaultObj);
+                        Uri defNotifUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+                        if (defNotifUri != null) {
+                            org.json.JSONObject defaultNotif = new org.json.JSONObject();
+                            defaultNotif.put("id", "system_default");
+                            defaultNotif.put("name", "Default Notification Tone");
+                            defaultNotif.put("uri", defNotifUri.toString());
+                            soundList.put(defaultNotif);
+                            seenUris.add(defNotifUri.toString());
+                            seenTitles.add("default notification tone");
+                        }
 
-                        // 2. Query System Notification Ringtones installed on phone
-                        RingtoneManager rm = new RingtoneManager(MainActivity.this);
-                        rm.setType(RingtoneManager.TYPE_NOTIFICATION);
-                        android.database.Cursor cursor = rm.getCursor();
-                        int count = 0;
-                        while (cursor != null && cursor.moveToNext() && count < 40) {
-                            String title = cursor.getString(RingtoneManager.TITLE_COLUMN_INDEX);
-                            String uriStr = cursor.getString(RingtoneManager.URI_COLUMN_INDEX) + "/" + cursor.getString(RingtoneManager.ID_COLUMN_INDEX);
-                            if (title != null && !title.isEmpty()) {
-                                org.json.JSONObject item = new org.json.JSONObject();
-                                item.put("id", "system_" + Math.abs(uriStr.hashCode()));
-                                item.put("name", title);
-                                item.put("uri", uriStr);
-                                soundList.put(item);
-                                count++;
-                            }
+                        // 2. Device Default Phone Ringtone
+                        Uri defRingtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+                        if (defRingtoneUri != null && !seenUris.contains(defRingtoneUri.toString())) {
+                            org.json.JSONObject defaultRingtone = new org.json.JSONObject();
+                            defaultRingtone.put("id", "system_phone_ringtone");
+                            defaultRingtone.put("name", "Default Phone Ringtone");
+                            defaultRingtone.put("uri", defRingtoneUri.toString());
+                            soundList.put(defaultRingtone);
+                            seenUris.add(defRingtoneUri.toString());
+                            seenTitles.add("default phone ringtone");
+                        }
+
+                        // 3. Query All Phone System Ringtones, Notifications, and Alarms
+                        int[] soundTypes = new int[]{ 
+                            RingtoneManager.TYPE_RINGTONE, 
+                            RingtoneManager.TYPE_NOTIFICATION, 
+                            RingtoneManager.TYPE_ALARM 
+                        };
+
+                        for (int t : soundTypes) {
+                            try {
+                                RingtoneManager rm = new RingtoneManager(MainActivity.this);
+                                rm.setType(t);
+                                android.database.Cursor cursor = rm.getCursor();
+                                while (cursor != null && cursor.moveToNext() && soundList.length() < 250) {
+                                    String title = cursor.getString(RingtoneManager.TITLE_COLUMN_INDEX);
+                                    String uriBase = cursor.getString(RingtoneManager.URI_COLUMN_INDEX);
+                                    String id = cursor.getString(RingtoneManager.ID_COLUMN_INDEX);
+                                    if (title != null && !title.trim().isEmpty() && uriBase != null && id != null) {
+                                        String uriStr = uriBase + "/" + id;
+                                        String normTitle = title.trim();
+                                        if (!seenUris.contains(uriStr) && !seenTitles.contains(normTitle.toLowerCase())) {
+                                            seenUris.add(uriStr);
+                                            seenTitles.add(normTitle.toLowerCase());
+                                            org.json.JSONObject item = new org.json.JSONObject();
+                                            item.put("id", "system_" + Math.abs(uriStr.hashCode()));
+                                            item.put("name", normTitle);
+                                            item.put("uri", uriStr);
+                                            soundList.put(item);
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {}
                         }
                     } catch (Exception ignored) {}
                     return soundList.toString();
@@ -286,15 +320,20 @@ public class MainActivity extends BridgeActivity {
                 @JavascriptInterface
                 public void playSystemSound(String uriString) {
                     try {
+                        if (activeSystemRingtone != null && activeSystemRingtone.isPlaying()) {
+                            activeSystemRingtone.stop();
+                        }
                         Uri soundUri;
                         if (uriString == null || uriString.isEmpty() || "system_default".equals(uriString)) {
                             soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+                        } else if ("system_phone_ringtone".equals(uriString)) {
+                            soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
                         } else {
                             soundUri = Uri.parse(uriString);
                         }
-                        Ringtone r = RingtoneManager.getRingtone(MainActivity.this.getApplicationContext(), soundUri);
-                        if (r != null) {
-                            r.play();
+                        activeSystemRingtone = RingtoneManager.getRingtone(MainActivity.this.getApplicationContext(), soundUri);
+                        if (activeSystemRingtone != null) {
+                            activeSystemRingtone.play();
                         }
                     } catch (Exception ignored) {}
                 }

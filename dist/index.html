@@ -651,7 +651,7 @@
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-C3q-fvki.js"></script>
+  <script type="module" crossorigin src="./assets/index-BP1XzLmF.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
@@ -3791,6 +3791,25 @@
                 <select id="sound-select-catering" class="w-full bg-white dark:bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-amber-500 font-medium">
                     <!-- Populated dynamically by populateChimeDropdowns() -->
                 </select>
+            </div>
+
+            <!-- CUSTOM AUDIO CHIMES SECTION (FILE PICKER) -->
+            <div class="bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900/50 p-3 rounded-2xl flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                    <span class="font-bold text-purple-900 dark:text-purple-300 text-xs flex items-center gap-1.5">
+                        <i class="fa-solid fa-file-audio text-purple-600 dark:text-purple-400"></i> Custom Audio Chimes
+                    </span>
+                    <button type="button" onclick="document.getElementById('custom-chime-file-input')?.click()" class="bg-purple-600 hover:bg-purple-500 text-white text-[9.5px] font-bold px-2.5 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Pick an audio file from your device">
+                        <i class="fa-solid fa-plus text-[8px]"></i> Pick Audio File
+                    </button>
+                    <input type="file" id="custom-chime-file-input" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac" class="hidden" onchange="window.handleCustomChimeFileSelected && window.handleCustomChimeFileSelected(event)">
+                </div>
+                <p class="text-[9.5px] text-gray-500 dark:text-gray-400">Add custom MP3, WAV, OGG, or M4A audio files from your phone to use as notification chimes.</p>
+                
+                <!-- LIST OF CUSTOM CHIMES -->
+                <div id="custom-chimes-container" class="flex flex-col gap-1.5 max-h-36 overflow-y-auto no-scrollbar">
+                    <!-- Dynamic custom chimes injected here by renderCustomChimesListUI() -->
+                </div>
             </div>
 
             <!-- VOLUME & MUTE CONTROLS -->

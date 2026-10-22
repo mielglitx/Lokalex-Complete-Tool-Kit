@@ -172,6 +172,7 @@ export function getUserChimeSettings() {
     const isValidChime = (id) => {
         if (!id) return false;
         if (id.startsWith('system_')) return true;
+        if (id.startsWith('custom_')) return true;
         return CHIME_CATALOG.some(c => c.id === id);
     };
     if (!isValidChime(inboxChime)) inboxChime = 'crystal_bell';
@@ -202,12 +203,204 @@ export function saveUserChimeSettings({ inboxChime, cateringChime, volume, isMut
 }
 
 /**
+ * Custom Audio Chimes Management (Local Storage + HTML5 Audio)
+ */
+const CUSTOM_CHIMES_KEY = 'lokalex_custom_chimes_data';
+let activeCustomAudio = null;
+
+export function getCustomChimesList() {
+    try {
+        const raw = localStorage.getItem(CUSTOM_CHIMES_KEY);
+        if (raw) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) return list;
+        }
+    } catch (e) {
+        console.warn("Failed to parse custom chimes from storage:", e);
+    }
+    return [];
+}
+
+export function saveCustomChimesList(list) {
+    try {
+        localStorage.setItem(CUSTOM_CHIMES_KEY, JSON.stringify(list || []));
+    } catch (e) {
+        console.error("Failed to save custom chimes to storage:", e);
+        showToast("Storage error: Audio file might be too large.");
+    }
+}
+
+export function playCustomChimeAudio(chimeId, volumeMultiplier = 0.85) {
+    if (!chimeId) return false;
+    const list = getCustomChimesList();
+    const found = list.find(c => c.id === chimeId);
+    if (!found || !found.dataUrl) return false;
+
+    try {
+        if (activeCustomAudio) {
+            activeCustomAudio.pause();
+            activeCustomAudio.currentTime = 0;
+            activeCustomAudio = null;
+        }
+        activeCustomAudio = new Audio(found.dataUrl);
+        activeCustomAudio.volume = Math.max(0.01, Math.min(1.0, volumeMultiplier));
+        activeCustomAudio.play().catch(err => {
+            console.warn("Custom audio playback failed:", err);
+        });
+        return true;
+    } catch (e) {
+        console.error("Custom audio chime error:", e);
+        return false;
+    }
+}
+
+export function handleCustomChimeFileSelected(event) {
+    const file = event.target?.files?.[0];
+    if (event.target) event.target.value = ''; // Reset input to allow re-selection
+    if (!file) return;
+
+    // Check size: limit to 4.5MB to protect localStorage quotas
+    const MAX_SIZE = 4.5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+        showToast("⚠️ Audio file is too large (max 4.5MB). Please pick a shorter audio clip.");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const dataUrl = e.target?.result;
+        if (!dataUrl) {
+            showToast("⚠️ Could not read audio file.");
+            return;
+        }
+
+        // Clean name (strip extension, max 35 chars)
+        let cleanName = (file.name || 'Custom Chime').replace(/\.[^/.]+$/, '').trim();
+        if (cleanName.length > 35) cleanName = cleanName.substring(0, 32) + '...';
+
+        const customChimes = getCustomChimesList();
+        const newChime = {
+            id: 'custom_' + Date.now(),
+            name: cleanName,
+            fileName: file.name,
+            size: file.size,
+            dataUrl: dataUrl,
+            createdAt: Date.now()
+        };
+
+        customChimes.push(newChime);
+        saveCustomChimesList(customChimes);
+
+        // Update dropdowns & UI
+        populateChimeDropdowns();
+        renderCustomChimesListUI();
+
+        // Automatically select in sound-select-inbox so user can test or save right away
+        const inboxSelect = document.getElementById('sound-select-inbox');
+        if (inboxSelect) {
+            inboxSelect.value = newChime.id;
+        }
+
+        // Play preview immediately
+        playCustomChimeAudio(newChime.id, 0.85);
+
+        showToast(`🎵 Custom chime "${cleanName}" added!`);
+    };
+
+    reader.onerror = () => {
+        showToast("⚠️ Error reading file.");
+    };
+
+    reader.readAsDataURL(file);
+}
+
+export function renderCustomChimesListUI() {
+    const container = document.getElementById('custom-chimes-container');
+    if (!container) return;
+
+    const customList = getCustomChimesList();
+    if (!customList || customList.length === 0) {
+        container.innerHTML = `
+            <div class="text-[10px] text-gray-400 italic text-center py-2 bg-white/40 dark:bg-black/20 rounded-xl border border-dashed border-gray-300 dark:border-gray-700">
+                Walang custom audio chimes. I-click ang "+ Pick Audio File" para magdagdag.
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+    customList.forEach(item => {
+        const kbSize = item.size ? Math.round(item.size / 1024) : 0;
+        const sizeLabel = kbSize > 1024 ? `${(kbSize / 1024).toFixed(1)} MB` : `${kbSize} KB`;
+
+        html += `
+            <div class="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-cardBg border border-purple-200 dark:border-purple-900/40 shadow-2xs gap-2">
+                <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <div class="w-6 h-6 rounded-lg bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center text-xs shrink-0">
+                        <i class="fa-solid fa-music"></i>
+                    </div>
+                    <div class="flex flex-col min-w-0 flex-1">
+                        <span class="text-[11px] font-bold text-gray-900 dark:text-white truncate" title="${item.name}">${item.name}</span>
+                        <span class="text-[9px] text-gray-400 font-mono">${sizeLabel}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                    <button type="button" onclick="window.previewChime && window.previewChime('${item.id}')" class="w-6 h-6 rounded-lg bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/30 dark:hover:bg-purple-800/40 text-purple-600 dark:text-purple-300 flex items-center justify-center text-[10px] transition active:scale-95 cursor-pointer" title="Preview Audio">
+                        <i class="fa-solid fa-play"></i>
+                    </button>
+                    <button type="button" onclick="window.deleteCustomChime && window.deleteCustomChime('${item.id}')" class="w-6 h-6 rounded-lg bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-800/40 text-red-600 dark:text-red-400 flex items-center justify-center text-[10px] transition active:scale-95 cursor-pointer" title="Delete Chime">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+export function deleteCustomChime(chimeId) {
+    if (!chimeId) return;
+    const list = getCustomChimesList();
+    const updated = list.filter(c => c.id !== chimeId);
+    saveCustomChimesList(updated);
+
+    // If currently active in user settings, revert to defaults
+    const settings = getUserChimeSettings();
+    let changed = false;
+    if (settings.inboxChime === chimeId) {
+        settings.inboxChime = 'crystal_bell';
+        changed = true;
+    }
+    if (settings.cateringChime === chimeId) {
+        settings.cateringChime = 'harmonic_bloom';
+        changed = true;
+    }
+    if (changed) {
+        saveUserChimeSettings(settings);
+    }
+
+    populateChimeDropdowns();
+    syncModalInputs();
+    renderCustomChimesListUI();
+    showToast("🗑️ Custom chime removed.");
+}
+
+/**
  * Synthesizes and plays a chosen chime with Web Audio API.
  */
 export function playChime(chimeId, volumeMultiplier = 0.85) {
     if (!chimeId || chimeId === 'mute') return;
 
-    // 1. Native device system notification tone
+    // 1. Custom Picked Audio file
+    if (typeof chimeId === 'string' && chimeId.startsWith('custom_')) {
+        const played = playCustomChimeAudio(chimeId, volumeMultiplier);
+        if (played) return;
+        // Fallback to default if audio missing
+        chimeId = 'crystal_bell';
+    }
+
+    // 2. Native device system notification / ringtone / alarm
     if (typeof chimeId === 'string' && chimeId.startsWith('system_')) {
         let uri = '';
         try {
@@ -215,7 +408,7 @@ export function playChime(chimeId, volumeMultiplier = 0.85) {
             const found = list.find(s => s.id === chimeId);
             if (found && found.uri) uri = found.uri;
         } catch (_) {}
-        const played = playSystemSound(uri || 'system_default');
+        const played = playSystemSound(uri || chimeId);
         if (played) return;
         // Fallback to web synth if not on native device
         chimeId = 'crystal_bell';
@@ -309,6 +502,7 @@ export function openChatSoundSettingsModal() {
 
     populateChimeDropdowns();
     syncModalInputs();
+    renderCustomChimesListUI();
 
     modal.classList.remove('hidden');
     toggleBodyScroll(true);
@@ -327,12 +521,27 @@ export function populateChimeDropdowns() {
     const cateringSelect = document.getElementById('sound-select-catering');
     if (!inboxSelect || !cateringSelect) return;
 
+    const currentInboxVal = inboxSelect.value;
+    const currentCateringVal = cateringSelect.value;
+
+    let optionsHtml = '';
+
+    // 1. Custom Picked Audio Chimes
+    const customList = getCustomChimesList();
+    if (customList && customList.length > 0) {
+        optionsHtml += `<optgroup label="🎵 Custom Picked Chimes">`;
+        customList.forEach(c => {
+            optionsHtml += `<option value="${c.id}">${c.name || 'Custom Audio'} (My File)</option>`;
+        });
+        optionsHtml += `</optgroup>`;
+    }
+
+    // 2. Phone System Chimes
     let sysSounds = [];
     try {
         sysSounds = getSystemNotificationSounds() || [];
     } catch (_) {}
 
-    let optionsHtml = '';
     if (sysSounds && sysSounds.length > 0) {
         optionsHtml += `<optgroup label="📱 Phone System Chimes">`;
         sysSounds.forEach(s => {
@@ -341,6 +550,7 @@ export function populateChimeDropdowns() {
         optionsHtml += `</optgroup>`;
     }
 
+    // 3. Built-in Acoustic Chimes
     optionsHtml += `<optgroup label="🔔 Built-in Acoustic Chimes">`;
     CHIME_CATALOG.forEach(c => {
         optionsHtml += `<option value="${c.id}">${c.name} — ${c.category}</option>`;
@@ -349,6 +559,9 @@ export function populateChimeDropdowns() {
 
     inboxSelect.innerHTML = optionsHtml;
     cateringSelect.innerHTML = optionsHtml;
+
+    if (currentInboxVal) inboxSelect.value = currentInboxVal;
+    if (currentCateringVal) cateringSelect.value = currentCateringVal;
 }
 
 export function syncModalInputs() {
@@ -412,4 +625,8 @@ if (typeof window !== 'undefined') {
     window.handleSoundVolumeChange = handleSoundVolumeChange;
     window.playChatChime = playChatChime;
     window.previewChime = previewChime;
+    window.handleCustomChimeFileSelected = handleCustomChimeFileSelected;
+    window.deleteCustomChime = deleteCustomChime;
+    window.renderCustomChimesListUI = renderCustomChimesListUI;
+    window.playCustomChimeAudio = playCustomChimeAudio;
 }
