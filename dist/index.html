@@ -32,6 +32,35 @@
     <!-- OCR ENGINE FOR AUTO-DETECTING CUSTOMER NAMES FROM CHAT SCREENSHOTS -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
+    <!-- ULTRA-FAST ZERO-LATENCY SESSION PRE-ROUTER (INSTANT DASHBOARD PAINT) -->
+    <script>
+        (function() {
+            try {
+                var role = localStorage.getItem('lokalex_active_role');
+                var riderId = localStorage.getItem('telegramId') || localStorage.getItem('riderId');
+                var riderName = localStorage.getItem('riderName');
+                var custFbId = localStorage.getItem('lokalex_customer_fb_id');
+                var merchId = localStorage.getItem('lokalex_merchant_account_id');
+
+                if ((riderId || riderName) && (!role || role === 'rider')) {
+                    document.documentElement.classList.add('instant-session-home');
+                } else if (custFbId && role === 'customer') {
+                    document.documentElement.classList.add('instant-session-customer');
+                } else if (merchId && role === 'merchant') {
+                    document.documentElement.classList.add('instant-session-merchant');
+                }
+            } catch (_) {}
+        })();
+    </script>
+    <style>
+        html.instant-session-home #view-login { display: none !important; }
+        html.instant-session-home #view-home { display: flex !important; }
+        html.instant-session-customer #view-login { display: none !important; }
+        html.instant-session-customer #view-customer-home { display: flex !important; }
+        html.instant-session-merchant #view-login { display: none !important; }
+        html.instant-session-merchant #view-store-hub { display: flex !important; }
+    </style>
+
     <!-- HEAD PARTIAL (TAILWIND, FONTAWESOME & MAPS) -->
     <!-- src/partials/head.html -->
 <!--
@@ -651,7 +680,7 @@
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-BXJBeVdy.js"></script>
+  <script type="module" crossorigin src="./assets/index-BmNcQVrs.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 

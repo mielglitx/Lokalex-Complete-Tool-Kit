@@ -326,6 +326,10 @@ export async function executeRiderLoginSequence(idInput, cleanName, cleanUserTyp
 export function logout() { 
     stopBackgroundRosterGpsTracker();
 
+    if (typeof document !== 'undefined' && document.documentElement) {
+        document.documentElement.classList.remove('instant-session-home', 'instant-session-customer', 'instant-session-merchant');
+    }
+
     if (auth && typeof auth.signOut === 'function') {
         auth.signOut().catch(() => {});
     }

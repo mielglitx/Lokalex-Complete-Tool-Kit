@@ -150,38 +150,6 @@ export async function bootApp() {
         updateNetworkStatus();
         initBatteryMonitor();
 
-        // 1. Tier 1: Instant Local Cache Hydration
-        hydrateInstantLocalStores();
-
-        if (roster && roster.loadRosterCache) roster.loadRosterCache();
-        if (roster && roster.updateRosterUI) roster.updateRosterUI();
-        if (roster && roster.loadGlobalCateredList) roster.loadGlobalCateredList();
-        if (roster && roster.loadGlobalLoginList) roster.loadGlobalLoginList();
-        if (commission && commission.loadCommissionSettingsCache) commission.loadCommissionSettingsCache();
-        if (directory && directory.loadDirectoryCache) directory.loadDirectoryCache();
-        if (cart && cart.loadCartState) cart.loadCartState();
-
-        // 2. Tier 2: Realtime Firebase Event Bus
-        initRealtimeFirebaseListeners();
-
-        if (commission && commission.fetchCommissionSettings) commission.fetchCommissionSettings();
-        if (directory && directory.silentSyncDirectory) directory.silentSyncDirectory();
-
-        // 3. Tier 3: Silent Background Persistence Daemon
-        setTimeout(() => {
-            runBackgroundPersistenceSync();
-        }, 1200);
-
-        if (roster && roster.startAutoEndShiftScheduler) {
-            roster.startAutoEndShiftScheduler();
-        } else {
-            setInterval(() => {
-                if (roster && roster.checkAndTriggerAutoEndShift) {
-                    roster.checkAndTriggerAutoEndShift();
-                }
-            }, 10000);
-        }
-
         const urlParams = new URLSearchParams(window.location.search);
         
         // Deep-link portal parameter handling
@@ -209,7 +177,9 @@ export async function bootApp() {
             return;
         }
 
-        // Role-Gated Session Routing
+        // ====================================================================
+        // FAST-PATH: INSTANT ZERO-LATENCY SESSION RESTORATION (0ms LAUNCH)
+        // ====================================================================
         const activeUserRole = localStorage.getItem('lokalex_active_role');
         const savedCustomerFbId = localStorage.getItem('lokalex_customer_fb_id');
         const savedCustomerName = localStorage.getItem('lokalex_customer_name') || localStorage.getItem('customerName');
@@ -218,34 +188,41 @@ export async function bootApp() {
 
         const savedRiderId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
         const savedRiderName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
+        const savedMerchAccId = localStorage.getItem('lokalex_merchant_account_id') || appState.merchantAccountId;
+        const savedMerchStoreId = localStorage.getItem('lokalex_merchant_store_id') || appState.merchantStoreId;
 
         if ((savedRiderId || savedRiderName) && (!activeUserRole || activeUserRole === 'rider')) {
-            showAutoLoginSplash(savedRiderName || savedRiderId, 'Rider');
-            // Verify if rider account still exists in Firebase database
-            if (savedRiderId && db) {
-                try {
-                    const riderSnap = await db.ref(`riders/${savedRiderId}`).once('value');
-                    if (!riderSnap.exists()) {
-                        console.warn(`Rider ${savedRiderId} deleted from database; clearing session.`);
-                        hideAutoLoginSplash();
-                        localStorage.clear();
-                        syncRiderSession('', '');
-                        history.replaceState({ view: 'view-login' }, '', '#view-login');
-                        router.renderViewUI('view-login');
-                        showToast("⚠️ Ang iyong account ay tinanggal na o hindi na umiiral.");
-                        return;
-                    }
-                } catch (_) {}
-            }
-
             if (!appState.telegramId && savedRiderId) appState.telegramId = savedRiderId;
             if (!appState.riderName && savedRiderName) appState.riderName = savedRiderName;
             localStorage.setItem('telegramId', appState.telegramId || savedRiderId);
             localStorage.setItem('riderName', appState.riderName || savedRiderName);
             localStorage.setItem('lokalex_active_role', 'rider');
 
-            // Sync rider credentials to Native Android background service preferences
+            // Instantly render Home view with zero network latency
+            history.replaceState({ view: 'view-home' }, '', '#view-home');
+            router.renderViewUI('view-home');
+            startBackgroundAudioPulse();
+            requestWakeLock();
             syncRiderSession(appState.telegramId || savedRiderId, appState.riderName || savedRiderName);
+
+            // Asynchronous non-blocking account validity check
+            if (savedRiderId && db) {
+                db.ref(`riders/${savedRiderId}`).once('value').then(riderSnap => {
+                    if (!riderSnap.exists()) {
+                        console.warn(`Rider ${savedRiderId} deleted from database; clearing session.`);
+                        if (typeof document !== 'undefined' && document.documentElement) {
+                            document.documentElement.classList.remove('instant-session-home');
+                        }
+                        hideAutoLoginSplash();
+                        localStorage.clear();
+                        syncRiderSession('', '');
+                        history.replaceState({ view: 'view-login' }, '', '#view-login');
+                        router.renderViewUI('view-login');
+                        showToast("⚠️ Ang iyong account ay tinanggal na o hindi na umiiral.");
+                    }
+                }).catch(() => {});
+            }
+
             try {
                 if (!isBatteryOptimizationIgnored()) {
                     setTimeout(() => {
@@ -253,43 +230,28 @@ export async function bootApp() {
                     }, 2500);
                 }
             } catch (_) {}
+        } else if (savedMerchAccId && savedMerchStoreId && activeUserRole === 'merchant') {
+            appState.merchantAccountId = savedMerchAccId;
+            appState.merchantStoreId = savedMerchStoreId;
+            history.replaceState({ view: 'view-store-hub' }, '', '#view-store-hub');
+            router.renderViewUI('view-store-hub');
 
-            history.replaceState({ view: 'view-home' }, '', '#view-home');
-            router.renderViewUI('view-home');
-            startBackgroundAudioPulse();
-            requestWakeLock();
-        } else if (appState.merchantAccountId && appState.merchantStoreId && activeUserRole === 'merchant') {
-            showAutoLoginSplash(appState.merchantAccountId, 'Store Merchant');
+            // Asynchronous non-blocking check
             if (db) {
-                try {
-                    const merchSnap = await db.ref(`storeAccounts/${appState.merchantAccountId}`).once('value');
+                db.ref(`storeAccounts/${savedMerchAccId}`).once('value').then(merchSnap => {
                     if (!merchSnap.exists()) {
+                        if (typeof document !== 'undefined' && document.documentElement) {
+                            document.documentElement.classList.remove('instant-session-merchant');
+                        }
                         hideAutoLoginSplash();
                         localStorage.clear();
                         history.replaceState({ view: 'view-login' }, '', '#view-login');
                         router.renderViewUI('view-login');
                         showToast("⚠️ Ang iyong Store Merchant account ay tinanggal na.");
-                        return;
                     }
-                } catch (_) {}
+                }).catch(() => {});
             }
-            history.replaceState({ view: 'view-store-hub' }, '', '#view-store-hub');
-            router.renderViewUI('view-store-hub');
         } else if (savedCustomerFbId && activeUserRole === 'customer') {
-            showAutoLoginSplash(savedCustomerName || 'Customer', 'Customer');
-            if (db) {
-                try {
-                    const custSnap = await db.ref(`customers/${savedCustomerFbId}`).once('value');
-                    if (!custSnap.exists()) {
-                        hideAutoLoginSplash();
-                        localStorage.clear();
-                        history.replaceState({ view: 'view-login' }, '', '#view-login');
-                        router.renderViewUI('view-login');
-                        showToast("⚠️ Ang iyong Customer account ay tinanggal na.");
-                        return;
-                    }
-                } catch (_) {}
-            }
             appState.customerFacebookId = savedCustomerFbId;
             appState.customerName = savedCustomerName || "Customer";
 
@@ -311,10 +273,58 @@ export async function bootApp() {
 
             history.replaceState({ view: 'view-customer-home' }, '', '#view-customer-home');
             router.renderViewUI('view-customer-home');
+
+            // Asynchronous non-blocking check
+            if (db) {
+                db.ref(`customers/${savedCustomerFbId}`).once('value').then(custSnap => {
+                    if (!custSnap.exists()) {
+                        if (typeof document !== 'undefined' && document.documentElement) {
+                            document.documentElement.classList.remove('instant-session-customer');
+                        }
+                        hideAutoLoginSplash();
+                        localStorage.clear();
+                        history.replaceState({ view: 'view-login' }, '', '#view-login');
+                        router.renderViewUI('view-login');
+                        showToast("⚠️ Ang iyong Customer account ay tinanggal na.");
+                    }
+                }).catch(() => {});
+            }
         } else {
             hideAutoLoginSplash();
             history.replaceState({ view: 'view-login' }, '', '#view-login');
             router.renderViewUI('view-login');
+        }
+
+        // ====================================================================
+        // PARALLEL DATA HYDRATION & LISTENERS (RUNS WHILE DASHBOARD IS VISIBLE)
+        // ====================================================================
+        hydrateInstantLocalStores();
+
+        if (roster && roster.loadRosterCache) roster.loadRosterCache();
+        if (roster && roster.updateRosterUI) roster.updateRosterUI();
+        if (roster && roster.loadGlobalCateredList) roster.loadGlobalCateredList();
+        if (roster && roster.loadGlobalLoginList) roster.loadGlobalLoginList();
+        if (commission && commission.loadCommissionSettingsCache) commission.loadCommissionSettingsCache();
+        if (directory && directory.loadDirectoryCache) directory.loadDirectoryCache();
+        if (cart && cart.loadCartState) cart.loadCartState();
+
+        initRealtimeFirebaseListeners();
+
+        if (commission && commission.fetchCommissionSettings) commission.fetchCommissionSettings();
+        if (directory && directory.silentSyncDirectory) directory.silentSyncDirectory();
+
+        setTimeout(() => {
+            runBackgroundPersistenceSync();
+        }, 1200);
+
+        if (roster && roster.startAutoEndShiftScheduler) {
+            roster.startAutoEndShiftScheduler();
+        } else {
+            setInterval(() => {
+                if (roster && roster.checkAndTriggerAutoEndShift) {
+                    roster.checkAndTriggerAutoEndShift();
+                }
+            }, 10000);
         }
     } catch (err) {
         console.error("Booting Error caught:", err);
