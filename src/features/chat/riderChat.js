@@ -182,18 +182,29 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(custId) : null;
         if (cached && cached.name && (!effectiveName || effectiveName.startsWith('FB Customer ('))) {
             effectiveName = cached.name;
-            effectiveAvatar = cached.avatarUrl || effectiveAvatar;
-        } else if (!effectiveName || effectiveName.startsWith('FB Customer (')) {
+        }
+        if (cached && cached.avatarUrl && !cached.avatarUrl.includes('ui-avatars.com')) {
+            effectiveAvatar = cached.avatarUrl;
+        }
+        
+        // Background check to resolve customer name or real Facebook photo if missing/placeholder
+        const needsName = !effectiveName || effectiveName.startsWith('FB Customer (');
+        const needsAvatar = !effectiveAvatar || effectiveAvatar.includes('ui-avatars.com');
+        if (needsName || needsAvatar) {
             if (typeof resolveFacebookCustomerName === 'function') {
                 resolveFacebookCustomerName(custId).then(resolved => {
-                    if (resolved && resolved.name && activeRiderChatCustId === custId) {
-                        if (nameEl) nameEl.innerText = resolved.name;
-                        if (resolved.avatarUrl) currentActiveRiderChatCustAvatar = resolved.avatarUrl;
-                        if (avatarEl) {
-                            if (avatarEl.tagName === 'IMG' && resolved.avatarUrl) {
-                                avatarEl.src = resolved.avatarUrl;
-                            } else if (resolved.avatarUrl) {
-                                avatarEl.innerHTML = `<img src="${resolved.avatarUrl}" class="w-full h-full rounded-full object-cover">`;
+                    if (resolved && activeRiderChatCustId === custId) {
+                        if (resolved.name && needsName && nameEl) {
+                            nameEl.innerText = resolved.name;
+                        }
+                        if (resolved.avatarUrl && !resolved.avatarUrl.includes('ui-avatars.com')) {
+                            currentActiveRiderChatCustAvatar = resolved.avatarUrl;
+                            if (avatarEl) {
+                                if (avatarEl.tagName === 'IMG') {
+                                    avatarEl.src = resolved.avatarUrl;
+                                } else {
+                                    avatarEl.innerHTML = `<img src="${resolved.avatarUrl}" class="w-full h-full rounded-full object-cover">`;
+                                }
                             }
                         }
                     }

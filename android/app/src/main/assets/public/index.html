@@ -651,7 +651,7 @@
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-BP1XzLmF.js"></script>
+  <script type="module" crossorigin src="./assets/index-BIqwwYMK.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
@@ -5765,8 +5765,12 @@
             <!-- NAME CARD WITH AVATAR -->
             <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex items-center justify-between gap-3">
                 <div class="flex items-center gap-2.5 min-w-0 flex-1">
-                    <div class="relative shrink-0 cursor-pointer" onclick="window.openImageViewerModal && window.openImageViewerModal(document.getElementById('cust-modal-avatar-img')?.src, 'customer')" title="Tap to enlarge photo">
-                        <img id="cust-modal-avatar-img" src="" class="w-11 h-11 rounded-full object-cover border-2 border-blue-500/40 shadow-xs hover:scale-105 transition" onerror="this.src='https://ui-avatars.com/api/?name=Customer&background=0084FF&color=fff'">
+                    <div class="relative shrink-0 group">
+                        <img id="cust-modal-avatar-img" src="" onclick="window.openImageViewerModal && window.openImageViewerModal(this.src, 'customer')" class="w-11 h-11 rounded-full object-cover border-2 border-blue-500/40 shadow-xs hover:scale-105 transition cursor-pointer" onerror="this.src='https://ui-avatars.com/api/?name=Customer&background=0084FF&color=fff'" title="Tap to enlarge photo">
+                        <button type="button" onclick="document.getElementById('cust-photo-upload-input')?.click()" class="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center text-[10px] shadow border border-white dark:border-darkBg transition active:scale-95 cursor-pointer" title="Change Customer Profile Photo">
+                            <i class="fa-solid fa-camera"></i>
+                        </button>
+                        <input type="file" id="cust-photo-upload-input" accept="image/*" class="hidden" onchange="window.handleCustomerPhotoUpload && window.handleCustomerPhotoUpload(event)">
                     </div>
                     <div class="min-w-0 flex-1">
                         <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Full Name</span>

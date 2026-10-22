@@ -1065,20 +1065,20 @@ export async function resolveFacebookCustomerName(custId, force = false) {
                                 }
 
                                 const avatar = realAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(realName)}&background=0084FF&color=fff`;
-                                const resolved = { name: realName, avatarUrl: avatar };
+                                const resolved = { name: realName, avatarUrl: realAvatar || avatar };
                                 fbNameResolutionCache.set(psid, resolved);
 
                                 // Update Firebase in the background
                                 if (db) {
+                                    const updatePayload = {
+                                        customerName: realName
+                                    };
+                                    if (realAvatar) {
+                                        updatePayload.avatarUrl = realAvatar;
+                                    }
                                     await Promise.all([
-                                        db.ref(`customerChatMeta/${cleanId}`).update({
-                                            customerName: realName,
-                                            avatarUrl: avatar
-                                        }),
-                                        db.ref(`customerChats/${cleanId}/metadata`).update({
-                                            customerName: realName,
-                                            avatarUrl: avatar
-                                        })
+                                        db.ref(`customerChatMeta/${cleanId}`).update(updatePayload),
+                                        db.ref(`customerChats/${cleanId}/metadata`).update(updatePayload)
                                     ]).catch(() => {});
                                 }
                                 return resolved;
@@ -1102,19 +1102,19 @@ export async function resolveFacebookCustomerName(custId, force = false) {
                                 ? profile.picture.data.url 
                                 : (profile.profile_pic || null);
                             const avatar = realAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=0084FF&color=fff`;
-                            const resolved = { name: fullName, avatarUrl: avatar };
+                            const resolved = { name: fullName, avatarUrl: realAvatar || avatar };
                             fbNameResolutionCache.set(psid, resolved);
 
                             if (db) {
+                                const updatePayload = {
+                                    customerName: fullName
+                                };
+                                if (realAvatar) {
+                                    updatePayload.avatarUrl = realAvatar;
+                                }
                                 await Promise.all([
-                                    db.ref(`customerChatMeta/${cleanId}`).update({
-                                        customerName: fullName,
-                                        avatarUrl: avatar
-                                    }),
-                                    db.ref(`customerChats/${cleanId}/metadata`).update({
-                                        customerName: fullName,
-                                        avatarUrl: avatar
-                                    })
+                                    db.ref(`customerChatMeta/${cleanId}`).update(updatePayload),
+                                    db.ref(`customerChats/${cleanId}/metadata`).update(updatePayload)
                                 ]).catch(() => {});
                             }
                             return resolved;
@@ -1153,7 +1153,9 @@ export function autoResolvePendingFacebookThreads(threadsList) {
             const cid = t.custId || t.id || '';
             if (!cid.startsWith('fb_')) return false;
             const name = (t.customerName || t.name || '').trim();
-            return !name || name.startsWith('FB Customer (') || name.toLowerCase() === 'customer';
+            const hasNoName = !name || name.startsWith('FB Customer (') || name.toLowerCase() === 'customer';
+            const hasNoAvatar = !t.avatarUrl || t.avatarUrl.includes('ui-avatars.com');
+            return hasNoName || hasNoAvatar;
         });
 
         if (pending.length === 0) return;
@@ -1251,22 +1253,25 @@ export async function syncAllFacebookCustomerNames() {
             }
         }
 
-        // 2. Direct resolution fallback for any remaining FB Customer entries
+        // 2. Direct resolution fallback for any remaining FB Customer entries or missing avatars
         for (const [custId, item] of Object.entries(allMeta)) {
             if (!custId.startsWith('fb_')) continue;
             const currentName = item.customerName || item.metadata?.customerName || '';
-            if (!currentName || currentName.startsWith('FB Customer (')) {
+            const currentAvatar = item.avatarUrl || item.metadata?.avatarUrl || '';
+            const needsName = !currentName || currentName.startsWith('FB Customer (');
+            const needsAvatar = !currentAvatar || currentAvatar.includes('ui-avatars.com');
+            if (needsName || needsAvatar) {
                 const resolved = await resolveFacebookCustomerName(custId, true);
-                if (resolved && resolved.name && resolved.name !== currentName) {
+                if (resolved && (resolved.name !== currentName || (resolved.avatarUrl && !resolved.avatarUrl.includes('ui-avatars.com')))) {
                     updatedCount++;
                 }
             }
         }
 
         if (updatedCount > 0) {
-            showToast(`✅ Na-update ang ${updatedCount} Facebook customer name(s)!`);
+            showToast(`✅ Na-update ang ${updatedCount} Facebook profile(s)!`);
         } else {
-            showToast("ℹ️ Lahat ng Facebook customer names ay up-to-date na.");
+            showToast("ℹ️ Lahat ng Facebook customer profiles ay up-to-date na.");
         }
 
         // Also sync folder status (inbox vs done vs spam)

@@ -226,10 +226,29 @@ export function renderCustomerDetailsUI(custId, data = {}, meta = {}, dirRecord 
 
     // Populate Fields
     const avatarImg = document.getElementById('cust-modal-avatar-img');
-    const custAvatar = meta.avatarUrl || data.avatarUrl || data.photoUrl || (typeof getResolvedFbName === 'function' ? getResolvedFbName(custId)?.avatarUrl : null) || `https://ui-avatars.com/api/?name=${encodeURIComponent(actualCustName)}&background=0084FF&color=fff`;
+    let custAvatar = meta.avatarUrl || data.avatarUrl || data.photoUrl || (typeof getResolvedFbName === 'function' ? getResolvedFbName(custId)?.avatarUrl : null);
+    if (!custAvatar || custAvatar.includes('ui-avatars.com')) {
+        if (dirRecord?.photoUrl || dirRecord?.avatarUrl) {
+            custAvatar = dirRecord.photoUrl || dirRecord.avatarUrl;
+        }
+    }
+    if (!custAvatar) {
+        custAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(actualCustName)}&background=0084FF&color=fff`;
+    }
     if (avatarImg) {
         avatarImg.src = custAvatar;
         avatarImg.alt = actualCustName;
+    }
+
+    // Auto-resolve real Facebook profile picture in the background if currently a placeholder
+    if (custId && custId.startsWith('fb_') && custAvatar.includes('ui-avatars.com')) {
+        resolveFacebookCustomerName(custId).then(resolved => {
+            if (resolved && resolved.avatarUrl && !resolved.avatarUrl.includes('ui-avatars.com')) {
+                if (avatarImg && currentChatDetailsCustId === custId) {
+                    avatarImg.src = resolved.avatarUrl;
+                }
+            }
+        }).catch(() => {});
     }
 
     if (nameEl) {
@@ -2683,7 +2702,84 @@ export const followUpCustomerOrder = markThreadFollowUp;
 export const completeCatering = markThreadDone;
 export const cancelCatering = cancelCustomerThread;
 
+export async function handleCustomerPhotoUpload(event) {
+    const file = event?.target?.files?.[0];
+    if (event?.target) event.target.value = '';
+    if (!file) return;
+
+    const custId = currentChatDetailsCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null);
+    if (!custId) {
+        showToast("⚠️ Walang aktibong customer na napili.");
+        return;
+    }
+
+    if (!file.type || !file.type.startsWith('image/')) {
+        showToast("⚠️ Mangyaring pumili ng image file (JPG, PNG, WebP).");
+        return;
+    }
+
+    showToast("⏳ Sinusuri at sine-save ang customer photo...");
+
+    try {
+        const compressedBase64 = await compressAndResizeImage(file, 320, 320, 0.85);
+        if (!compressedBase64) {
+            throw new Error("Failed to process image.");
+        }
+
+        let finalAvatarUrl = compressedBase64;
+        try {
+            const cleanPath = `customer_avatars/${cleanFirebasePathKey(custId)}_${Date.now()}.jpg`;
+            const uploadedUrl = await uploadImage(compressedBase64, cleanPath);
+            if (uploadedUrl && typeof uploadedUrl === 'string' && uploadedUrl.startsWith('http')) {
+                finalAvatarUrl = uploadedUrl;
+            }
+        } catch (_) {}
+
+        if (db) {
+            await Promise.all([
+                db.ref(`customerChatMeta/${custId}/avatarUrl`).set(finalAvatarUrl),
+                db.ref(`customerChats/${custId}/metadata/avatarUrl`).set(finalAvatarUrl)
+            ]).catch(err => {
+                console.warn("RTDB avatar update note:", err);
+            });
+        }
+
+        const avatarImg = document.getElementById('cust-modal-avatar-img');
+        if (avatarImg) {
+            avatarImg.src = finalAvatarUrl;
+        }
+
+        const chatAvatar = document.getElementById('rider-chat-avatar') || document.getElementById('rider-chat-cust-avatar');
+        if (chatAvatar) {
+            if (chatAvatar.tagName === 'IMG') {
+                chatAvatar.src = finalAvatarUrl;
+            } else {
+                chatAvatar.innerHTML = `<img src="${finalAvatarUrl}" class="w-full h-full rounded-full object-cover">`;
+            }
+        }
+
+        if (typeof window !== 'undefined') {
+            window.currentActiveRiderChatCustAvatar = finalAvatarUrl;
+            if (typeof window.getCachedCustomerThreadsMap === 'function') {
+                const map = window.getCachedCustomerThreadsMap();
+                if (map && map.has(custId)) {
+                    map.get(custId).avatarUrl = finalAvatarUrl;
+                }
+            }
+            if (typeof window.renderRiderCustomerChatFeed === 'function') {
+                window.renderRiderCustomerChatFeed();
+            }
+        }
+
+        showToast("✅ Customer profile picture updated!");
+    } catch (err) {
+        console.error("Failed to upload customer avatar:", err);
+        showToast("❌ Hindi na-save ang larawan: " + (err.message || "Error"));
+    }
+}
+
 if (typeof window !== 'undefined') {
+    window.handleCustomerPhotoUpload = handleCustomerPhotoUpload;
     window.goToCustomerCartFromChat = goToCustomerCartFromChat;
     window.showCustomerDetails = showCustomerDetails;
     window.closeCustomerDetailsModal = closeCustomerDetailsModal;

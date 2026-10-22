@@ -787,12 +787,15 @@ async function processMetaEntries(entries, cfg) {
       let customerName = existingCustomerName || `FB Customer (${senderId.slice(-4)})`;
       let avatarUrl = existingAvatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(customerName)}&background=0084FF&color=fff`;
 
-      // 3. Resolve customer name via Facebook Graph API
-      if (token && (!existingCustomerName || existingCustomerName.startsWith("FB Customer ("))) {
-        // Method A: Page Conversations API (Works for ALL public customers without requiring User Profile Advanced Access)
+      const needsNameResolution = !existingCustomerName || existingCustomerName.startsWith("FB Customer (");
+      const needsAvatarResolution = !existingAvatarUrl || existingAvatarUrl.includes("ui-avatars.com");
+
+      // 3. Resolve customer name and real Facebook profile picture via Facebook Graph API
+      if (token && (needsNameResolution || needsAvatarResolution)) {
+        // Method A: Page Conversations API (Retrieves participant name & picture from conversation)
         try {
           const convResp = await fetch(
-            `https://graph.facebook.com/v19.0/${resolvedPageId || 'me'}/conversations?user_id=${senderId}&fields=participants,senders&access_token=${token}`
+            `https://graph.facebook.com/v19.0/${resolvedPageId || 'me'}/conversations?user_id=${senderId}&fields=participants{id,name,picture.type(large)},senders{id,name,picture.type(large)}&access_token=${token}`
           );
           if (convResp.ok) {
             const convData = await convResp.json();
@@ -802,29 +805,37 @@ async function processMetaEntries(entries, cfg) {
                 ...(convData.data[0].senders?.data || [])
               ];
               const matched = participants.find(p => String(p.id) === String(senderId));
-              if (matched && matched.name) {
-                customerName = matched.name.trim();
-                avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(customerName)}&background=0084FF&color=fff`;
+              if (matched) {
+                if (matched.name && needsNameResolution) {
+                  customerName = matched.name.trim();
+                }
+                if (matched.picture?.data?.url && !matched.picture.data.is_silhouette) {
+                  avatarUrl = matched.picture.data.url;
+                }
               }
             }
           }
         } catch (e) {
-          console.warn("Conversations API name lookup failed:", e);
+          console.warn("Conversations API lookup note:", e);
         }
 
-        // Method B: Direct PSID Node API (Fallback / retrieves high-res profile picture when available)
+        // Method B: Direct PSID Node API (Retrieves real profile picture when Advanced Access / Live mode is active)
         try {
           const profileResp = await fetch(
-            `https://graph.facebook.com/v19.0/${senderId}?fields=first_name,last_name,name,profile_pic&access_token=${token}`
+            `https://graph.facebook.com/v19.0/${senderId}?fields=first_name,last_name,name,profile_pic,picture.type(large)&access_token=${token}`
           );
           if (profileResp.ok) {
             const profile = await profileResp.json();
             const fullName = profile.name || `${profile.first_name || ""} ${profile.last_name || ""}`.trim();
-            if (fullName) customerName = fullName;
-            if (profile.profile_pic) avatarUrl = profile.profile_pic;
+            if (fullName && needsNameResolution) customerName = fullName;
+            if (profile.picture?.data?.url && !profile.picture.data.is_silhouette) {
+              avatarUrl = profile.picture.data.url;
+            } else if (profile.profile_pic) {
+              avatarUrl = profile.profile_pic;
+            }
           }
         } catch (e) {
-          console.warn("Direct PSID profile lookup failed:", e);
+          console.warn("Direct PSID profile lookup note:", e);
         }
       }
 
