@@ -283,16 +283,18 @@ export async function confirmTransferCredits() {
             } catch (_) {}
 
             // 3. Log transfer audit record in Firebase
-            const transferLogKey = `TX_${Date.now()}_${myId || 'ADMIN'}_${targetId}`;
-            await db.ref(`directoryCreditTransfers/${transferLogKey}`).set({
-                senderId: myId || "ADMIN",
-                senderName: myName,
-                recipientId: targetId,
-                recipientName: targetName,
-                amount: amount,
-                timestamp: Date.now(),
-                date: new Date().toLocaleDateString()
-            }).catch(() => {});
+            try {
+                const transferLogKey = `TX_${Date.now()}_${myId || 'ADMIN'}_${targetId}`;
+                await db.ref(`directoryCreditTransfers/${transferLogKey}`).set({
+                    senderId: myId || "ADMIN",
+                    senderName: myName,
+                    recipientId: targetId,
+                    recipientName: targetName,
+                    amount: amount,
+                    timestamp: Date.now(),
+                    date: new Date().toLocaleDateString()
+                });
+            } catch (_) {}
         }
 
         if (!isAdmin) {
