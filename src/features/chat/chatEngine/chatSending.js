@@ -963,3 +963,4 @@ export function sendChatLocationPin() {
 export function sendRiderLocation() {
     openMapPicker('rider-chat');
 }
+

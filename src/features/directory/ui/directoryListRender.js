@@ -795,3 +795,4 @@ export function setupAlphabetScrubber(availableLetters) {
         updateElasticDistortion(e.clientY);
     };
 }
+

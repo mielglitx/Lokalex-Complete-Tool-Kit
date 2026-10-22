@@ -726,3 +726,4 @@ export function toggleCustomerChatUnread(targetCustId) {
         markCustomerChatAsUnread(targetCustId);
     }
 }
+

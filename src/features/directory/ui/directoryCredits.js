@@ -271,12 +271,16 @@ export async function confirmTransferCredits() {
             // 1. Deduct from sender if not admin
             if (!isAdmin && myId) {
                 await db.ref(`riders/${myId}/directoryCredits`).transaction(c => Math.max(0, (c || 0) - amount));
-                await db.ref(`roster/${myId}/directoryCredits`).transaction(c => Math.max(0, (c || 0) - amount)).catch(() => {});
+                try {
+                    await db.ref(`roster/${myId}/directoryCredits`).transaction(c => Math.max(0, (c || 0) - amount));
+                } catch (_) {}
             }
 
             // 2. Add to recipient
             await db.ref(`riders/${targetId}/directoryCredits`).transaction(c => (c || 0) + amount);
-            await db.ref(`roster/${targetId}/directoryCredits`).transaction(c => (c || 0) + amount).catch(() => {});
+            try {
+                await db.ref(`roster/${targetId}/directoryCredits`).transaction(c => (c || 0) + amount);
+            } catch (_) {}
 
             // 3. Log transfer audit record in Firebase
             const transferLogKey = `TX_${Date.now()}_${myId || 'ADMIN'}_${targetId}`;

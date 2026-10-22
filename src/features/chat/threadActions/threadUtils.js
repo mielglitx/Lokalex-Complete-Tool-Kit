@@ -47,3 +47,4 @@ export function extractCleanSearchName(rawName) {
     }
     return s;
 }
+

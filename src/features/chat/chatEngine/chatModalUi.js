@@ -658,3 +658,4 @@ export async function promptRenameCustomerChat() {
         window.renderRiderCustomerChatFeed();
     }
 }
+

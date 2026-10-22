@@ -1417,3 +1417,4 @@ export function closeGalleryLightbox() {
     const lightbox = document.getElementById('gallery-lightbox');
     if (lightbox) lightbox.classList.add('hidden');
 }
+
