@@ -88,8 +88,12 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
                 }
             }
         }
-        if (typeof window.updateInboxUnreadBadge === 'function') window.updateInboxUnreadBadge();
-        if (typeof window.updateDoneUnreadBadge === 'function') window.updateDoneUnreadBadge();
+        if (typeof window.updateAllChatFolderBadges === 'function') {
+            window.updateAllChatFolderBadges();
+        } else {
+            if (typeof window.updateInboxUnreadBadge === 'function') window.updateInboxUnreadBadge();
+            if (typeof window.updateDoneUnreadBadge === 'function') window.updateDoneUnreadBadge();
+        }
     }
 
     const modal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');

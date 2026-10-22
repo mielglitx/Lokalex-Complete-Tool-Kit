@@ -73,6 +73,7 @@ export {
     listenToAllCustomerChatsForRider,
     processCustomerChatMetaData,
     schedulePersistMetaCache,
+    updateAllChatFolderBadges,
     updateInboxUnreadBadge,
     updateDoneUnreadBadge,
     markCustomerChatAsUnread,
@@ -115,6 +116,7 @@ import {
 
 import {
     listenToAllCustomerChatsForRider,
+    updateAllChatFolderBadges,
     updateInboxUnreadBadge,
     updateDoneUnreadBadge,
     markCustomerChatAsUnread,
@@ -163,6 +165,7 @@ if (typeof window !== 'undefined') {
     window.markCustomerChatAsUnread = markCustomerChatAsUnread;
     window.markCustomerChatAsRead = markCustomerChatAsRead;
     window.toggleCustomerChatUnread = toggleCustomerChatUnread;
+    window.updateAllChatFolderBadges = updateAllChatFolderBadges;
     window.updateInboxUnreadBadge = updateInboxUnreadBadge;
     window.updateDoneUnreadBadge = updateDoneUnreadBadge;
     window.isThreadFromSelectedSource = isThreadFromSelectedSource;

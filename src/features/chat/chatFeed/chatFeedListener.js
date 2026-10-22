@@ -17,7 +17,7 @@ import {
     fullBookingState,
     hasAvailableRiderOnRoster
 } from '../fullBookingMode.js';
-import { playChatChime } from '../chatSoundManager.js';
+import { playChatChime, updateFolderMuteIcons } from '../chatSoundManager.js';
 import { listenToGlobalStoreChats } from '../riderStoreChat.js';
 import { getActiveRiderChatCustId, closeRiderCustomerChatModal } from '../riderChat.js';
 import {
@@ -42,6 +42,8 @@ import {
     getSourceBadgeName
 } from './chatFeedState.js';
 import { renderRiderCustomerChatFeed } from './chatFeedRender.js';
+import { checkAdminAccess } from '../../directory/directoryPermissions.js';
+import { storeChatState } from '../storeChat/storeChatState.js';
 
 export function schedulePersistMetaCache(data) {
     if (persistMetaTimeout) clearTimeout(persistMetaTimeout);
@@ -74,10 +76,8 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
 
     // Acoustic notification chimes & Native Notification Bar alerts for incoming messages
     const newlyArrivedThreadKeys = new Set();
+    const arrivedFolders = new Set();
     if (!isInitialCustomerChatMetaLoad && !isFromCache && data) {
-        let shouldPlayInboxChime = false;
-        let shouldPlayCateringChime = false;
-
         Object.keys(data).forEach(key => {
             const item = data[key] || {};
             const meta = item.metadata || item;
@@ -118,17 +118,29 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                         return;
                     }
 
-                    const isCatered = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy || (meta.folder || '').toLowerCase() === 'catering');
-                    let isEligible = false;
+                    const rawFolder = (meta.folder || 'inbox').toLowerCase();
+                    const isDone = rawFolder === 'done' || meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled';
+                    const isCatered = !isDone && (rawFolder === 'catering' || Boolean(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy));
+                    const isApplicant = !isDone && !isCatered && (rawFolder === 'applicant' || meta.isApplicant === true);
+                    const isFollowup = !isDone && !isCatered && !isApplicant && (rawFolder === 'followup');
 
-                    if (isCatered) {
+                    let targetFolder = 'inbox';
+                    if (isDone) targetFolder = 'done';
+                    else if (isCatered) targetFolder = 'catering';
+                    else if (isApplicant) targetFolder = 'applicant';
+                    else if (isFollowup) targetFolder = 'followup';
+                    else targetFolder = 'inbox';
+
+                    let isEligible = false;
+                    if (targetFolder === 'catering') {
                         const isMine = isMyCustomerThread({ custId: key, ...meta });
-                        if (isMine) {
-                            shouldPlayCateringChime = true;
+                        const isAdmin = (typeof checkAdminAccess === 'function') ? checkAdminAccess() : false;
+                        if (isMine || isAdmin) {
+                            arrivedFolders.add('catering');
                             isEligible = true;
                         }
-                    } else if ((meta.folder || 'inbox').toLowerCase() === 'inbox' || (meta.folder || '').toLowerCase() === 'done') {
-                        shouldPlayInboxChime = true;
+                    } else {
+                        arrivedFolders.add(targetFolder);
                         isEligible = true;
                     }
 
@@ -172,10 +184,12 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
             }
         });
 
-        if (shouldPlayCateringChime) {
-            playChatChime('catering');
-        } else if (shouldPlayInboxChime) {
-            playChatChime('inbox');
+        if (arrivedFolders.size > 0) {
+            const priority = ['catering', 'inbox', 'followup', 'applicant', 'done'];
+            const chosenFolder = priority.find(f => arrivedFolders.has(f)) || Array.from(arrivedFolders)[0];
+            if (chosenFolder) {
+                playChatChime(chosenFolder);
+            }
         }
     }
 
@@ -485,8 +499,7 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
         }
     }
 
-    updateInboxUnreadBadge();
-    updateDoneUnreadBadge();
+    updateAllChatFolderBadges();
 
     if (activeRiderChatFilter !== 'stores') {
         renderRiderCustomerChatFeed();
@@ -505,6 +518,7 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
 export function listenToAllCustomerChatsForRider() {
     listenToGlobalStoreChats();
     initFullBookingListener();
+    updateFolderMuteIcons();
 
     // 1. INSTANT LOCAL DISK CACHE (0ms - Facebook & Web customer threads load instantly on screen!)
     try {
@@ -547,104 +561,114 @@ export function listenToAllCustomerChatsForRider() {
     });
 }
 
-export function updateInboxUnreadBadge() {
-    const inboxBadge = document.getElementById('rider-inbox-unread-badge');
-    if (!inboxBadge) return;
-
+export function updateAllChatFolderBadges() {
     const isAllSources = (typeof isAllSourcesSelected === 'function') ? isAllSourcesSelected() : true;
-    const allThreads = Array.from(cachedCustomerThreadsMap.values());
+    const allThreads = cachedCustomerThreadsMap ? Array.from(cachedCustomerThreadsMap.values()) : [];
 
-    const unreadInboxCount = allThreads.filter(t => {
+    const counts = {
+        inbox: 0,
+        catering: 0,
+        applicant: 0,
+        followup: 0,
+        done: 0,
+        stores: 0
+    };
+
+    allThreads.forEach(t => {
         // 1. Must be marked unread
-        if (!t.isUnread) return false;
+        if (!t.isUnread) return;
 
         // 2. Outgoing rider messages can NEVER be unread
-        if (t.lastMessage && t.lastMessage.startsWith('You:')) return false;
+        if (t.lastMessage && t.lastMessage.startsWith('You:')) return;
 
-        // 3. Exclude completed / done / cancelled threads
-        const isDone = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
-        if (isDone) return false;
-
-        // 4. Must be in inbox folder and not catered
-        const folder = (t.folder || 'inbox').toLowerCase();
-        const isCatered = !!(t.cateredByRiderName || t.cateredByRiderId || t.cateredBy);
-        if (folder !== 'inbox' || isCatered) return false;
-
-        // 5. Must match active chat sources filter
-        if (typeof isSourceSelected === 'function' && !isAllSources) {
-            if (t.channel === 'messenger') {
-                const threadFbId = t.apiId || t.channelId || t.fbApiId;
-                if (threadFbId) {
-                    if (!isSourceSelected(threadFbId)) return false;
-                } else {
-                    if (!isSourceSelected('messenger') && !hasAnyFbSourceSelected()) return false;
-                }
-            } else {
-                if (!isSourceSelected('web')) return false;
-            }
-        }
-
-        // 6. Exclude placeholder names without real messages
+        // 3. Exclude placeholder names without real messages
         const name = (t.customerName || '').trim().toLowerCase();
-        if (!name || name === 'customer' || name === 'customer name' || name === 'unknown') return false;
-
-        return true;
-    }).length;
-
-    if (unreadInboxCount > 0) {
-        inboxBadge.innerText = unreadInboxCount.toString();
-        inboxBadge.classList.remove('hidden');
-    } else {
-        inboxBadge.classList.add('hidden');
-    }
-}
-
-export function updateDoneUnreadBadge() {
-    const doneBadge = document.getElementById('rider-done-unread-badge');
-    if (!doneBadge) return;
-
-    const isAllSources = (typeof isAllSourcesSelected === 'function') ? isAllSourcesSelected() : true;
-    const allThreads = Array.from(cachedCustomerThreadsMap.values());
-
-    const unreadDoneCount = allThreads.filter(t => {
-        // 1. Must be marked unread
-        if (!t.isUnread) return false;
-
-        // 2. Outgoing rider messages can NEVER be unread
-        if (t.lastMessage && t.lastMessage.startsWith('You:')) return false;
-
-        // 3. Must be in done folder or marked completed/done
-        const folder = (t.folder || '').toLowerCase();
-        const isDone = folder === 'done' || t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
-        if (!isDone) return false;
+        if (!name || name === 'customer' || name === 'customer name' || name === 'unknown') return;
 
         // 4. Must match active chat sources filter
         if (typeof isSourceSelected === 'function' && !isAllSources) {
             if (t.channel === 'messenger') {
                 const threadFbId = t.apiId || t.channelId || t.fbApiId;
                 if (threadFbId) {
-                    if (!isSourceSelected(threadFbId)) return false;
+                    if (!isSourceSelected(threadFbId)) return;
                 } else {
-                    if (!isSourceSelected('messenger') && !hasAnyFbSourceSelected()) return false;
+                    if (!isSourceSelected('messenger') && !hasAnyFbSourceSelected()) return;
                 }
             } else {
-                if (!isSourceSelected('web')) return false;
+                if (!isSourceSelected('web')) return;
             }
         }
 
-        // 5. Exclude placeholder names without real messages
-        const name = (t.customerName || '').trim().toLowerCase();
-        if (!name || name === 'customer' || name === 'customer name' || name === 'unknown') return false;
+        const isAlreadyDone = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+        const folder = (t.folder || 'inbox').toLowerCase();
 
-        return true;
-    }).length;
+        // Check if spam / other
+        if (folder === 'spam' || folder === 'other' || t.status === 'spam' || t.fbFolder === 'spam' || t.fbFolder === 'other') {
+            return;
+        }
 
-    if (unreadDoneCount > 0) {
-        doneBadge.innerText = unreadDoneCount.toString();
-        doneBadge.classList.remove('hidden');
-    } else {
-        doneBadge.classList.add('hidden');
-    }
+        // Determine destination folder
+        if (folder === 'done' || isAlreadyDone) {
+            counts.done++;
+        } else {
+            const isCatered = folder === 'catering' || Boolean(t.cateredByRiderName || t.cateredByRiderId || t.cateredBy);
+            if (isCatered) {
+                counts.catering++;
+            } else if (folder === 'applicant' || t.isApplicant === true) {
+                counts.applicant++;
+            } else if (folder === 'followup') {
+                counts.followup++;
+            } else {
+                counts.inbox++;
+            }
+        }
+    });
+
+    // 5. Stores count from storeChatState
+    try {
+        if (storeChatState && storeChatState.cachedStoreChatsData) {
+            Object.values(storeChatState.cachedStoreChatsData).forEach(val => {
+                if (val && val.unreadForRider && !val.isDone && val.status !== 'done') {
+                    counts.stores++;
+                }
+            });
+        }
+    } catch (_) {}
+
+    // Update DOM badges
+    const badgeMap = {
+        inbox: ['rider-inbox-unread-badge'],
+        catering: ['rider-catering-unread-badge'],
+        applicant: ['rider-applicant-unread-badge'],
+        followup: ['rider-followup-unread-badge'],
+        done: ['rider-done-unread-badge'],
+        stores: ['rider-store-unread-badge', 'rider-stores-unread-badge']
+    };
+
+    Object.entries(badgeMap).forEach(([folderKey, elementIds]) => {
+        const count = counts[folderKey] || 0;
+        elementIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                if (count > 0) {
+                    el.innerText = count > 99 ? '99+' : count.toString();
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            }
+        });
+    });
+
+    return counts;
+}
+
+export function updateInboxUnreadBadge() {
+    return updateAllChatFolderBadges();
+}
+
+export function updateDoneUnreadBadge() {
+    return updateAllChatFolderBadges();
 }
 
 export function markCustomerChatAsUnread(targetCustId = null) {
@@ -665,8 +689,7 @@ export function markCustomerChatAsUnread(targetCustId = null) {
         }
     }
 
-    updateInboxUnreadBadge();
-    updateDoneUnreadBadge();
+    updateAllChatFolderBadges();
     if (activeRiderChatFilter !== 'stores') {
         renderRiderCustomerChatFeed();
     }
@@ -701,8 +724,7 @@ export function markCustomerChatAsRead(targetCustId = null) {
         }
     }
 
-    updateInboxUnreadBadge();
-    updateDoneUnreadBadge();
+    updateAllChatFolderBadges();
     if (activeRiderChatFilter !== 'stores') {
         renderRiderCustomerChatFeed();
     }
@@ -725,5 +747,14 @@ export function toggleCustomerChatUnread(targetCustId) {
     } else {
         markCustomerChatAsUnread(targetCustId);
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.updateAllChatFolderBadges = updateAllChatFolderBadges;
+    window.updateInboxUnreadBadge = updateInboxUnreadBadge;
+    window.updateDoneUnreadBadge = updateDoneUnreadBadge;
+    window.markCustomerChatAsRead = markCustomerChatAsRead;
+    window.markCustomerChatAsUnread = markCustomerChatAsUnread;
+    window.toggleCustomerChatUnread = toggleCustomerChatUnread;
 }
 

@@ -26,8 +26,10 @@ import {
 import {
     updateInboxUnreadBadge,
     updateDoneUnreadBadge,
+    updateAllChatFolderBadges,
     toggleCustomerChatUnread
 } from './chatFeedListener.js';
+import { updateFolderMuteIcons } from '../chatSoundManager.js';
 
 export function renderRiderCustomerChatFeed() {
     if (feedRenderRafId) cancelAnimationFrame(feedRenderRafId);
@@ -45,8 +47,8 @@ function executeRenderRiderCustomerChatFeed() {
     // do not rebuild the underlying feed DOM (prevents keyboard lag & frame drops).
     const chatModal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
     if (chatModal && !chatModal.classList.contains('hidden')) {
-        updateInboxUnreadBadge();
-        updateDoneUnreadBadge();
+        updateAllChatFolderBadges();
+        updateFolderMuteIcons();
         return;
     }
 
@@ -338,8 +340,8 @@ function executeRenderRiderCustomerChatFeed() {
         filteredThreads.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
     }
 
-    updateInboxUnreadBadge();
-    updateDoneUnreadBadge();
+    updateAllChatFolderBadges();
+    updateFolderMuteIcons();
 
     if (badge) {
         if (isSearching) {
@@ -620,8 +622,8 @@ function executeRenderRiderCustomerChatFeed() {
 
     feed.innerHTML = searchBannerHtml + cateringBannerHtml + cardsHtml + showMoreHtml;
 
-    updateInboxUnreadBadge();
-    updateDoneUnreadBadge();
+    updateAllChatFolderBadges();
+    updateFolderMuteIcons();
 }
 
 // ============================================================================
@@ -969,8 +971,8 @@ export function reopenThreadToInbox(custId) {
             break;
         }
     }
-    updateInboxUnreadBadge();
-    updateDoneUnreadBadge();
+    updateAllChatFolderBadges();
+    updateFolderMuteIcons();
     renderRiderCustomerChatFeed();
     showToast("📥 Chat moved back to Inbox");
 }

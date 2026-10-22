@@ -341,12 +341,24 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
             }
 
             if (isNew && isFromCustomer) {
-                const isCatered = !!(currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredByRiderId || currentRiderChatMeta?.cateredBy || (currentRiderChatMeta?.folder || '').toLowerCase() === 'catering');
-                const isMine = isMyCustomerThread({ custId, ...(currentRiderChatMeta || {}) });
-                if (isCatered) {
+                const rawFolder = (currentRiderChatMeta?.folder || 'inbox').toLowerCase();
+                const isDone = rawFolder === 'done' || currentRiderChatMeta?.status === 'completed' || currentRiderChatMeta?.status === 'done';
+                const isCatered = !isDone && (rawFolder === 'catering' || Boolean(currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredByRiderId || currentRiderChatMeta?.cateredBy));
+                const isApplicant = !isDone && !isCatered && (rawFolder === 'applicant' || currentRiderChatMeta?.isApplicant === true);
+                const isFollowup = !isDone && !isCatered && !isApplicant && (rawFolder === 'followup');
+
+                let targetFolder = 'inbox';
+                if (isDone) targetFolder = 'done';
+                else if (isCatered) targetFolder = 'catering';
+                else if (isApplicant) targetFolder = 'applicant';
+                else if (isFollowup) targetFolder = 'followup';
+                else targetFolder = 'inbox';
+
+                if (targetFolder === 'catering') {
+                    const isMine = isMyCustomerThread({ custId, ...(currentRiderChatMeta || {}) });
                     if (isMine) playChatChime('catering');
                 } else {
-                    playChatChime('inbox');
+                    playChatChime(targetFolder);
                 }
 
                 if (shouldScroll) {

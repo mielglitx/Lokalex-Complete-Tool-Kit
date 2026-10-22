@@ -5,6 +5,7 @@ import { showToast } from '../../../ui/notifications.js';
 import { escapeHtml } from '../../../utils/helpers.js';
 import { storeChatState, cleanFirebasePathKey } from './storeChatState.js';
 import { formatChatDateParts } from '../chatUtils.js';
+import { playChatChime } from '../chatSoundManager.js';
 
 export function renderReactionsHtml(reactions, msgId) {
     if (!reactions || typeof reactions !== 'object') return '';
@@ -81,23 +82,54 @@ export function listenToGlobalStoreChats() {
         // Listen strictly to the lightweight metadata index with limitToLast(30)
         // Avoids downloading full messages trees across all stores in the database
         storeChatState.globalStoreChatsListener = db.ref('storeRiderChatMeta').limitToLast(30);
+        let isInitialStoreMetaLoad = true;
+        const lastStoreMsgTimestampMap = new Map();
+
         storeChatState.globalStoreChatsListener.on('value', (snapshot) => {
-            storeChatState.cachedStoreChatsData = snapshot.val() || {};
+            const data = snapshot.val() || {};
+            storeChatState.cachedStoreChatsData = data;
             
-            let unreadCount = 0;
-            Object.entries(storeChatState.cachedStoreChatsData).forEach(([key, val]) => {
+            let hasIncomingNew = false;
+            Object.entries(data).forEach(([key, val]) => {
                 if (val && val.unreadForRider && !val.isDone && val.status !== 'done') {
-                    unreadCount++;
+                    const prevTime = lastStoreMsgTimestampMap.get(key) || 0;
+                    const curTime = val.lastUpdated || val.timestamp || 0;
+                    if (!isInitialStoreMetaLoad && curTime > prevTime) {
+                        hasIncomingNew = true;
+                    }
+                }
+                if (val) {
+                    lastStoreMsgTimestampMap.set(key, val.lastUpdated || val.timestamp || 0);
                 }
             });
 
-            const storeBadge = document.getElementById('rider-store-unread-badge');
-            if (storeBadge) {
-                if (unreadCount > 0) {
-                    storeBadge.innerText = unreadCount;
-                    storeBadge.classList.remove('hidden');
-                } else {
-                    storeBadge.classList.add('hidden');
+            if (!isInitialStoreMetaLoad && hasIncomingNew) {
+                const modal = document.getElementById('rider-to-store-chat-modal');
+                const isModalOpen = modal && !modal.classList.contains('hidden');
+                if (!isModalOpen) {
+                    playChatChime('stores');
+                }
+            }
+            isInitialStoreMetaLoad = false;
+
+            if (typeof window.updateAllChatFolderBadges === 'function') {
+                window.updateAllChatFolderBadges();
+            } else {
+                let unreadCount = 0;
+                Object.entries(storeChatState.cachedStoreChatsData).forEach(([key, val]) => {
+                    if (val && val.unreadForRider && !val.isDone && val.status !== 'done') {
+                        unreadCount++;
+                    }
+                });
+
+                const storeBadge = document.getElementById('rider-store-unread-badge');
+                if (storeBadge) {
+                    if (unreadCount > 0) {
+                        storeBadge.innerText = unreadCount;
+                        storeBadge.classList.remove('hidden');
+                    } else {
+                        storeBadge.classList.add('hidden');
+                    }
                 }
             }
 

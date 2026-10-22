@@ -17,6 +17,59 @@ import { getSystemNotificationSounds, playSystemSound } from '../../native/nativ
  * ============================================================================
  */
 
+export const FOLDER_CONFIG = {
+    inbox: {
+        id: 'inbox',
+        name: 'Inbox',
+        icon: 'fa-inbox',
+        color: 'blue',
+        defaultChime: 'crystal_bell',
+        desc: 'New customer inquiries and unassigned chats'
+    },
+    catering: {
+        id: 'catering',
+        name: 'Catering',
+        icon: 'fa-motorcycle',
+        color: 'amber',
+        defaultChime: 'harmonic_bloom',
+        desc: 'Active orders currently being catered by you'
+    },
+    stores: {
+        id: 'stores',
+        name: 'Stores',
+        icon: 'fa-store',
+        color: 'orange',
+        defaultChime: 'marimba_pop',
+        desc: 'Merchant partner and store order pickup coordination'
+    },
+    applicant: {
+        id: 'applicant',
+        name: 'Applicant',
+        icon: 'fa-user-plus',
+        color: 'emerald',
+        defaultChime: 'triple_ping',
+        desc: 'Rider applicant inquiries and messages'
+    },
+    followup: {
+        id: 'followup',
+        name: 'Follow Up',
+        icon: 'fa-bookmark',
+        color: 'violet',
+        defaultChime: 'golden_marimba',
+        desc: 'Flagged customer follow-up conversations'
+    },
+    done: {
+        id: 'done',
+        name: 'Done',
+        icon: 'fa-circle-check',
+        color: 'zinc',
+        defaultChime: 'gentle_pulse',
+        desc: 'Customer replies on completed or archived orders'
+    }
+};
+
+export const CHAT_FOLDERS = Object.keys(FOLDER_CONFIG);
+
 export const CHIME_CATALOG = [
     {
         id: 'crystal_bell',
@@ -158,48 +211,133 @@ export function getCurrentUserSoundKey() {
 
 export function getUserChimeSettings() {
     const userKey = getCurrentUserSoundKey();
-    const inboxKey = `lokalex_chime_inbox_${userKey}`;
-    const cateringKey = `lokalex_chime_catering_${userKey}`;
     const volumeKey = `lokalex_chime_volume_${userKey}`;
     const muteKey = `lokalex_chime_muted_${userKey}`;
 
-    let inboxChime = localStorage.getItem(inboxKey) || localStorage.getItem('lokalex_chime_inbox') || 'crystal_bell';
-    let cateringChime = localStorage.getItem(cateringKey) || localStorage.getItem('lokalex_chime_catering') || 'harmonic_bloom';
     let volume = parseFloat(localStorage.getItem(volumeKey) || localStorage.getItem('lokalex_chime_volume') || '0.85');
     let isMuted = localStorage.getItem(muteKey) === 'true' || localStorage.getItem('lokalex_chime_muted') === 'true';
 
     // Verify presets exist
     const isValidChime = (id) => {
         if (!id) return false;
+        if (id === 'mute') return true;
         if (id.startsWith('system_')) return true;
         if (id.startsWith('custom_')) return true;
         return CHIME_CATALOG.some(c => c.id === id);
     };
-    if (!isValidChime(inboxChime)) inboxChime = 'crystal_bell';
-    if (!isValidChime(cateringChime)) cateringChime = 'harmonic_bloom';
+
+    const folderChimes = {};
+    const folderMutes = {};
+
+    CHAT_FOLDERS.forEach(folder => {
+        const chimeKey = `lokalex_chime_${folder}_${userKey}`;
+        const legacyChimeKey = `lokalex_chime_${folder}`;
+        const fMuteKey = `lokalex_mute_${folder}_${userKey}`;
+        const legacyMuteKey = `lokalex_mute_${folder}`;
+
+        let chime = localStorage.getItem(chimeKey) || localStorage.getItem(legacyChimeKey);
+        // Fallbacks for inbox and catering legacy keys
+        if (!chime && folder === 'inbox') chime = localStorage.getItem('lokalex_chime_inbox');
+        if (!chime && folder === 'catering') chime = localStorage.getItem('lokalex_chime_catering');
+        if (!chime || !isValidChime(chime)) chime = FOLDER_CONFIG[folder].defaultChime;
+
+        let muted = localStorage.getItem(fMuteKey) === 'true' || localStorage.getItem(legacyMuteKey) === 'true';
+        if (chime === 'mute') muted = true;
+
+        folderChimes[folder] = chime;
+        folderMutes[folder] = muted;
+    });
+
     if (isNaN(volume) || volume < 0) volume = 0.85;
 
-    return { inboxChime, cateringChime, volume, isMuted };
+    return {
+        folderChimes,
+        folderMutes,
+        inboxChime: folderChimes.inbox,
+        cateringChime: folderChimes.catering,
+        volume,
+        isMuted
+    };
 }
 
-export function saveUserChimeSettings({ inboxChime, cateringChime, volume, isMuted }) {
+export function isFolderMuted(folder = 'inbox', settings = null) {
+    const s = settings || getUserChimeSettings();
+    if (s.isMuted) return true; // Global mute
+    const key = (folder || 'inbox').toLowerCase();
+    if (s.folderMutes && s.folderMutes[key]) return true;
+    const chime = s.folderChimes ? s.folderChimes[key] : (key === 'catering' ? s.cateringChime : s.inboxChime);
+    return !chime || chime === 'mute';
+}
+
+export function getFolderChimeId(folder = 'inbox', settings = null) {
+    const s = settings || getUserChimeSettings();
+    const key = (folder || 'inbox').toLowerCase();
+    if (s.folderChimes && s.folderChimes[key]) {
+        return s.folderChimes[key];
+    }
+    if (key === 'catering') return s.cateringChime || 'harmonic_bloom';
+    if (key === 'inbox') return s.inboxChime || 'crystal_bell';
+    const cfg = FOLDER_CONFIG[key];
+    return cfg ? cfg.defaultChime : 'crystal_bell';
+}
+
+export function updateFolderMuteIcons(settings = null) {
+    const s = settings || getUserChimeSettings();
+    CHAT_FOLDERS.forEach(folder => {
+        // Find icon elements (e.g. #rider-inbox-mute-icon, #rider-stores-mute-icon)
+        const icon = document.getElementById(`rider-${folder}-mute-icon`) || 
+                     (folder === 'stores' ? document.getElementById('rider-store-mute-icon') : null);
+        if (icon) {
+            const muted = isFolderMuted(folder, s);
+            if (muted) {
+                icon.classList.remove('hidden');
+            } else {
+                icon.classList.add('hidden');
+            }
+        }
+    });
+}
+
+export function saveUserChimeSettings(settings) {
     const userKey = getCurrentUserSoundKey();
-    if (inboxChime) {
-        localStorage.setItem(`lokalex_chime_inbox_${userKey}`, inboxChime);
-        localStorage.setItem('lokalex_chime_inbox', inboxChime);
+    const fChimes = settings.folderChimes || {};
+    const fMutes = settings.folderMutes || {};
+
+    // Backward compatibility mappings
+    if (settings.inboxChime && !fChimes.inbox) fChimes.inbox = settings.inboxChime;
+    if (settings.cateringChime && !fChimes.catering) fChimes.catering = settings.cateringChime;
+
+    CHAT_FOLDERS.forEach(folder => {
+        const chime = fChimes[folder];
+        if (chime) {
+            localStorage.setItem(`lokalex_chime_${folder}_${userKey}`, chime);
+            localStorage.setItem(`lokalex_chime_${folder}`, chime);
+        }
+        if (typeof fMutes[folder] === 'boolean') {
+            localStorage.setItem(`lokalex_mute_${folder}_${userKey}`, fMutes[folder].toString());
+            localStorage.setItem(`lokalex_mute_${folder}`, fMutes[folder].toString());
+        }
+    });
+
+    if (fChimes.inbox) {
+        localStorage.setItem(`lokalex_chime_inbox_${userKey}`, fChimes.inbox);
+        localStorage.setItem('lokalex_chime_inbox', fChimes.inbox);
     }
-    if (cateringChime) {
-        localStorage.setItem(`lokalex_chime_catering_${userKey}`, cateringChime);
-        localStorage.setItem('lokalex_chime_catering', cateringChime);
+    if (fChimes.catering) {
+        localStorage.setItem(`lokalex_chime_catering_${userKey}`, fChimes.catering);
+        localStorage.setItem('lokalex_chime_catering', fChimes.catering);
     }
-    if (typeof volume === 'number') {
-        localStorage.setItem(`lokalex_chime_volume_${userKey}`, volume.toString());
-        localStorage.setItem('lokalex_chime_volume', volume.toString());
+
+    if (typeof settings.volume === 'number') {
+        localStorage.setItem(`lokalex_chime_volume_${userKey}`, settings.volume.toString());
+        localStorage.setItem('lokalex_chime_volume', settings.volume.toString());
     }
-    if (typeof isMuted === 'boolean') {
-        localStorage.setItem(`lokalex_chime_muted_${userKey}`, isMuted.toString());
-        localStorage.setItem('lokalex_chime_muted', isMuted.toString());
+    if (typeof settings.isMuted === 'boolean') {
+        localStorage.setItem(`lokalex_chime_muted_${userKey}`, settings.isMuted.toString());
+        localStorage.setItem('lokalex_chime_muted', settings.isMuted.toString());
     }
+
+    updateFolderMuteIcons(settings);
 }
 
 /**
@@ -455,33 +593,37 @@ export function playChime(chimeId, volumeMultiplier = 0.85) {
 
 /**
  * Plays the personalized notification sound for an incoming message.
- * Category must be 'inbox' or 'catering'.
+ * Category can be any folder: 'inbox', 'catering', 'stores', 'applicant', 'followup', 'done'.
  */
 export function playChatChime(category = 'inbox') {
+    const folder = (category || 'inbox').toLowerCase();
     const now = Date.now();
-    // Debounce guard: Prevent double chime bursts within 900ms
-    if (now - lastChimePlayedTimestamp < 900 && lastChimeCategory === category) {
+    // Debounce guard: Prevent double chime bursts within 900ms for the same folder
+    if (now - lastChimePlayedTimestamp < 900 && lastChimeCategory === folder) {
         return;
     }
 
     const settings = getUserChimeSettings();
     if (settings.isMuted) return;
+    if (isFolderMuted(folder, settings)) return;
 
-    const targetChimeId = category === 'catering' ? settings.cateringChime : settings.inboxChime;
+    const targetChimeId = getFolderChimeId(folder, settings);
     if (!targetChimeId || targetChimeId === 'mute') return;
 
     lastChimePlayedTimestamp = now;
-    lastChimeCategory = category;
+    lastChimeCategory = folder;
 
     playChime(targetChimeId, settings.volume);
 
     // Haptic vibration feedback on supported mobile devices
     try {
         if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-            if (category === 'catering') {
+            if (folder === 'catering') {
                 navigator.vibrate([70, 50, 90, 50, 70]);
-            } else {
+            } else if (folder === 'inbox') {
                 navigator.vibrate([60, 40, 60]);
+            } else {
+                navigator.vibrate([40, 30, 40]);
             }
         }
     } catch (_) {}
@@ -517,14 +659,10 @@ export function closeChatSoundSettingsModal() {
 }
 
 export function populateChimeDropdowns() {
-    const inboxSelect = document.getElementById('sound-select-inbox');
-    const cateringSelect = document.getElementById('sound-select-catering');
-    if (!inboxSelect || !cateringSelect) return;
-
-    const currentInboxVal = inboxSelect.value;
-    const currentCateringVal = cateringSelect.value;
-
     let optionsHtml = '';
+
+    // 0. Mute option at the top
+    optionsHtml += `<option value="mute">🔕 Mute (Silent)</option>`;
 
     // 1. Custom Picked Audio Chimes
     const customList = getCustomChimesList();
@@ -553,29 +691,41 @@ export function populateChimeDropdowns() {
     // 3. Built-in Acoustic Chimes
     optionsHtml += `<optgroup label="🔔 Built-in Acoustic Chimes">`;
     CHIME_CATALOG.forEach(c => {
-        optionsHtml += `<option value="${c.id}">${c.name} — ${c.category}</option>`;
+        if (c.id !== 'mute') {
+            optionsHtml += `<option value="${c.id}">${c.name} — ${c.category}</option>`;
+        }
     });
     optionsHtml += `</optgroup>`;
 
-    inboxSelect.innerHTML = optionsHtml;
-    cateringSelect.innerHTML = optionsHtml;
-
-    if (currentInboxVal) inboxSelect.value = currentInboxVal;
-    if (currentCateringVal) cateringSelect.value = currentCateringVal;
+    CHAT_FOLDERS.forEach(folder => {
+        const select = document.getElementById(`sound-select-${folder}`);
+        if (select) {
+            const currentVal = select.value;
+            select.innerHTML = optionsHtml;
+            if (currentVal) select.value = currentVal;
+        }
+    });
 }
 
 export function syncModalInputs() {
     const settings = getUserChimeSettings();
 
-    const inboxSelect = document.getElementById('sound-select-inbox');
-    const cateringSelect = document.getElementById('sound-select-catering');
+    CHAT_FOLDERS.forEach(folder => {
+        const select = document.getElementById(`sound-select-${folder}`);
+        const muteBox = document.getElementById(`sound-mute-${folder}`);
+        if (select) {
+            select.value = settings.folderChimes[folder] || FOLDER_CONFIG[folder].defaultChime;
+        }
+        if (muteBox) {
+            muteBox.checked = isFolderMuted(folder, settings);
+        }
+    });
+
     const volumeSlider = document.getElementById('sound-volume-slider');
     const volumeText = document.getElementById('sound-volume-text');
     const muteCheckbox = document.getElementById('sound-mute-checkbox');
     const userNameBadge = document.getElementById('sound-user-name-badge');
 
-    if (inboxSelect) inboxSelect.value = settings.inboxChime;
-    if (cateringSelect) cateringSelect.value = settings.cateringChime;
     if (volumeSlider) volumeSlider.value = Math.round(settings.volume * 100);
     if (volumeText) volumeText.innerText = `${Math.round(settings.volume * 100)}%`;
     if (muteCheckbox) muteCheckbox.checked = settings.isMuted;
@@ -592,29 +742,56 @@ export function handleSoundVolumeChange(val) {
     if (volumeText) volumeText.innerText = `${num}%`;
 }
 
-export function previewSelectedModalChime(category) {
-    const select = document.getElementById(category === 'catering' ? 'sound-select-catering' : 'sound-select-inbox');
+export function previewSelectedModalChime(category = 'inbox') {
+    const folder = (category || 'inbox').toLowerCase();
+    const muteBox = document.getElementById(`sound-mute-${folder}`);
+    if (muteBox && muteBox.checked) {
+        showToast(`🔕 ${FOLDER_CONFIG[folder]?.name || folder} is currently set to Muted.`);
+        return;
+    }
+
+    const select = document.getElementById(`sound-select-${folder}`);
     const volumeSlider = document.getElementById('sound-volume-slider');
     const volume = volumeSlider ? parseInt(volumeSlider.value, 10) / 100 : 0.85;
 
-    const chimeId = select ? select.value : (category === 'catering' ? 'harmonic_bloom' : 'crystal_bell');
+    const chimeId = select ? select.value : getFolderChimeId(folder);
+    if (!chimeId || chimeId === 'mute') {
+        showToast(`🔕 ${FOLDER_CONFIG[folder]?.name || folder} is set to Mute (Silent).`);
+        return;
+    }
+
     playChime(chimeId, volume);
 }
 
 export function saveChatSoundSettingsFromModal() {
-    const inboxSelect = document.getElementById('sound-select-inbox');
-    const cateringSelect = document.getElementById('sound-select-catering');
+    const folderChimes = {};
+    const folderMutes = {};
+
+    CHAT_FOLDERS.forEach(folder => {
+        const select = document.getElementById(`sound-select-${folder}`);
+        const muteBox = document.getElementById(`sound-mute-${folder}`);
+        const chosen = select ? select.value : FOLDER_CONFIG[folder].defaultChime;
+        folderChimes[folder] = chosen;
+        folderMutes[folder] = muteBox ? muteBox.checked : (chosen === 'mute');
+    });
+
     const volumeSlider = document.getElementById('sound-volume-slider');
     const muteCheckbox = document.getElementById('sound-mute-checkbox');
 
-    const inboxChime = inboxSelect ? inboxSelect.value : 'crystal_bell';
-    const cateringChime = cateringSelect ? cateringSelect.value : 'harmonic_bloom';
     const volume = volumeSlider ? (parseInt(volumeSlider.value, 10) / 100) : 0.85;
     const isMuted = muteCheckbox ? muteCheckbox.checked : false;
 
-    saveUserChimeSettings({ inboxChime, cateringChime, volume, isMuted });
+    saveUserChimeSettings({ 
+        folderChimes, 
+        folderMutes, 
+        inboxChime: folderChimes.inbox,
+        cateringChime: folderChimes.catering,
+        volume, 
+        isMuted 
+    });
+
     closeChatSoundSettingsModal();
-    showToast(isMuted ? "🔕 Sound alerts muted." : "🔔 Chime preferences saved!");
+    showToast(isMuted ? "🔕 All chat sound alerts muted." : "🔔 Folder chimes & mute settings saved!");
 }
 
 if (typeof window !== 'undefined') {
@@ -629,4 +806,7 @@ if (typeof window !== 'undefined') {
     window.deleteCustomChime = deleteCustomChime;
     window.renderCustomChimesListUI = renderCustomChimesListUI;
     window.playCustomChimeAudio = playCustomChimeAudio;
+    window.updateFolderMuteIcons = updateFolderMuteIcons;
+    window.isFolderMuted = isFolderMuted;
+    window.getFolderChimeId = getFolderChimeId;
 }
