@@ -210,7 +210,7 @@ export function updateCustomerCartItemQty(storeId, itemIdx, delta) {
 export function promptDeleteCartItem(storeId, itemIdx, itemName = "Item") {
     openSlideDeleteModal(
         `Remove ${itemName}?`,
-        `I-drag pakanan ang slider upang alisin ang [${itemName}] sa iyong Cart.`,
+        `I-type ang "confirm" upang alisin ang [${itemName}] sa iyong Cart.`,
         () => {
             removeCustomerCartItem(storeId, itemIdx);
         }

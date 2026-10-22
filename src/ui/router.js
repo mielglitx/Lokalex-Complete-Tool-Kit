@@ -423,6 +423,7 @@ window.addEventListener('popstate', function(event) {
         { id: 'quick-replies-edit-modal', closeFn: window.closeQuickReplyEditModal },
         { id: 'rider-sources-filter-modal', closeFn: window.closeRiderChatSourcesModal },
         { id: 'admin-fb-api-modal', closeFn: window.closeAdminFbApiModal },
+        { id: 'slide-delete-modal', closeFn: window.closeSlideDeleteModal },
         { id: 'slide-delete-confirm-modal', closeFn: window.closeSlideDeleteModal },
         { id: 'rider-chat-modal', closeFn: window.closeRiderChatModal }
     ];

@@ -84,6 +84,10 @@ import {
     closeEditItemModal,
     openSlideDeleteModal,
     closeSlideDeleteModal,
+    openTypeConfirmModal,
+    closeTypeConfirmModal,
+    handleConfirmTypeInput,
+    submitConfirmTypeModal,
     onSlideProgress,
     onSlideEnd
 } from './modals/systemModals.js';
@@ -151,6 +155,10 @@ export {
     closeEditItemModal,
     openSlideDeleteModal,
     closeSlideDeleteModal,
+    openTypeConfirmModal,
+    closeTypeConfirmModal,
+    handleConfirmTypeInput,
+    submitConfirmTypeModal,
     onSlideProgress,
     onSlideEnd
 };
@@ -210,6 +218,10 @@ if (typeof window !== 'undefined') {
     window.closeEditItemModal = closeEditItemModal;
     window.openSlideDeleteModal = openSlideDeleteModal;
     window.closeSlideDeleteModal = closeSlideDeleteModal;
+    window.openTypeConfirmModal = openTypeConfirmModal;
+    window.closeTypeConfirmModal = closeTypeConfirmModal;
+    window.handleConfirmTypeInput = handleConfirmTypeInput;
+    window.submitConfirmTypeModal = submitConfirmTypeModal;
     window.onSlideProgress = onSlideProgress;
     window.onSlideEnd = onSlideEnd;
 }

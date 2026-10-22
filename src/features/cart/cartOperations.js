@@ -15,7 +15,7 @@ export function handleCartActionBtn() {
 
     const isLocked = globalState.cartLocked && globalState.cartLocked[activeCartSlot - 1];
     if (isLocked) {
-        return showToast("⚠️ I-slide muna ang lock sa overlay screen upang i-unlock ang cart.");
+        return showToast("⚠️ I-unlock muna ang cart sa overlay screen upang baguhin ang resibo.");
     }
 
     openSlideDeleteModal(
@@ -281,7 +281,7 @@ export function validateAndProceedToWizard() {
 
     const isLocked = globalState.cartLocked && globalState.cartLocked[activeCartSlot - 1];
     if (isLocked) {
-        return showToast("⚠️ I-slide muna ang lock sa overlay screen upang i-unlock ang cart.");
+        return showToast("⚠️ I-unlock muna ang cart sa overlay screen upang baguhin ang resibo.");
     }
 
     const activeItems = currentCart.filter(i => !i.isUnavailable);

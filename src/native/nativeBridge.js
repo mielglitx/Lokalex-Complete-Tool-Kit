@@ -66,6 +66,7 @@ export async function initNativeBridge() {
                 { id: 'rider-sources-filter-modal', closeFn: window.closeRiderChatSourcesModal },
                 { id: 'admin-fb-api-modal', closeFn: window.closeAdminFbApiModal },
                 { id: 'ota-update-selector-modal', closeFn: window.closeOtaUpdateSelectorModal },
+                { id: 'slide-delete-modal', closeFn: window.closeSlideDeleteModal },
                 { id: 'slide-delete-confirm-modal', closeFn: window.closeSlideDeleteModal },
                 { id: 'rider-chat-modal', closeFn: window.closeRiderChatModal }
             ];

@@ -680,7 +680,7 @@
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-BOZ-Wzr_.js"></script>
+  <script type="module" crossorigin src="./assets/index-BPKFSDPu.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
@@ -6404,26 +6404,48 @@
     </div>
 </div>
 
-<!-- UNIVERSAL SLIDE CONFIRMATION MODAL -->
-<div id="slide-delete-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[999999] flex items-end sm:items-center justify-center p-4" style="z-index: 999999 !important;">
-    <div class="bg-[#1E1A1A] border border-red-500/30 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl flex flex-col gap-4 text-white">
-        <i id="slide-modal-icon" class="fa-solid fa-triangle-exclamation text-red-500 text-3xl mx-auto"></i>
-        <h3 id="slide-delete-title" class="font-bold text-base">Confirm Action</h3>
-        <p id="slide-delete-sub" class="text-xs text-gray-400 whitespace-pre-line">I-drag pakanan ang slider para kumpirmahin.</p>
-        
-        <div class="relative h-12 bg-black/40 rounded-full border border-red-500/30 flex items-center px-2 overflow-hidden mt-2">
-            <span class="absolute inset-0 flex items-center justify-center text-[10px] text-white/30 font-bold tracking-widest pointer-events-none">&gt;&gt;&gt;&gt; SLIDE TO CONFIRM &gt;&gt;&gt;&gt;</span>
-            <input type="range" id="slide-delete-range" min="0" max="100" value="0"
-                onpointerdown="window.onSlideStart && window.onSlideStart(event)"
-                ontouchstart="window.onSlideStart && window.onSlideStart(event)"
-                onmousedown="window.onSlideStart && window.onSlideStart(event)"
-                oninput="window.onSlideProgress && window.onSlideProgress(this.value)"
-                onpointerup="window.onSlideEnd && window.onSlideEnd()"
-                onmouseup="window.onSlideEnd && window.onSlideEnd()"
-                ontouchend="window.onSlideEnd && window.onSlideEnd()"
-                class="w-full accent-red-500 cursor-pointer z-10 opacity-80 h-10">
+<!-- UNIVERSAL TYPING CONFIRMATION MODAL -->
+<div id="slide-delete-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[999999] flex items-end sm:items-center justify-center p-4 transition-all" style="z-index: 999999 !important;">
+    <div class="bg-[#1E1A1A] border border-red-500/30 p-5 rounded-3xl max-w-sm w-full text-center shadow-2xl flex flex-col gap-3.5 text-white animate-in fade-in zoom-in-95 duration-150">
+        <div class="w-12 h-12 mx-auto rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-500 text-2xl shadow-inner">
+            <i id="slide-modal-icon" class="fa-solid fa-triangle-exclamation"></i>
         </div>
-        <button onclick="window.closeSlideDeleteModal && window.closeSlideDeleteModal()" class="text-xs text-gray-400 py-1">Cancel</button>
+        <div class="flex flex-col gap-1">
+            <h3 id="slide-delete-title" class="font-bold text-base text-white tracking-tight">Confirm Action</h3>
+            <p id="slide-delete-sub" class="text-xs text-gray-400 whitespace-pre-line leading-relaxed">I-type ang "confirm" upang kumpirmahin.</p>
+        </div>
+        
+        <div class="flex flex-col gap-1.5 text-left bg-black/40 border border-white/10 rounded-2xl p-3">
+            <label for="confirm-type-input" class="text-[11px] font-medium text-gray-300 flex items-center justify-between">
+                <span>Type <span class="font-mono font-black text-red-400 select-all">confirm</span> to proceed:</span>
+                <span id="confirm-type-status-hint" class="text-[10px] text-gray-500">Required</span>
+            </label>
+            <div class="relative">
+                <input type="text" id="confirm-type-input"
+                    autocomplete="off" 
+                    autocapitalize="none" 
+                    spellcheck="false" 
+                    placeholder='Type "confirm"' 
+                    oninput="window.handleConfirmTypeInput && window.handleConfirmTypeInput(this.value)" 
+                    onkeydown="if(event.key==='Enter'){event.preventDefault();window.submitConfirmTypeModal && window.submitConfirmTypeModal();}"
+                    class="w-full bg-black/60 border border-gray-700 focus:border-red-500 rounded-xl px-3 py-2.5 text-sm font-mono text-center tracking-wider text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500/30 transition">
+                <div id="confirm-type-match-indicator" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 text-sm">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden legacy range element for backward-compatibility -->
+        <input type="range" id="slide-delete-range" min="0" max="100" value="0" class="hidden" style="display: none;">
+
+        <div class="flex items-center gap-2 pt-1">
+            <button type="button" onclick="window.closeSlideDeleteModal && window.closeSlideDeleteModal()" class="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition active:scale-95 cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" id="confirm-type-submit-btn" disabled onclick="window.submitConfirmTypeModal && window.submitConfirmTypeModal()" class="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-gray-700/60 border border-gray-600/40 opacity-50 cursor-not-allowed transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm">
+                <i class="fa-solid fa-check"></i> <span>Confirm</span>
+            </button>
+        </div>
     </div>
 </div>
 

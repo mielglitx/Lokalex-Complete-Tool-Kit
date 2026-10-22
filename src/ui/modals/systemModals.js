@@ -107,7 +107,7 @@ export function closeEditItemModal() {
 }
 
 export function openSlideDeleteModal(title, arg2, arg3) {
-    let subtitle = "I-drag pakanan ang slider para kumpirmahin.";
+    let subtitle = 'I-type ang "confirm" upang kumpirmahin.';
     let callback = null;
 
     if (typeof arg2 === 'function') {
@@ -119,75 +119,133 @@ export function openSlideDeleteModal(title, arg2, arg3) {
         }
     }
 
+    if (subtitle && (subtitle.includes('slider') || subtitle.includes('I-drag') || subtitle.includes('i-drag') || subtitle.includes('slide') || subtitle.includes('Slide'))) {
+        subtitle = subtitle
+            .replace(/I-drag pakanan ang slider para kumpirmahin\.?/gi, 'I-type ang "confirm" upang kumpirmahin.')
+            .replace(/I-drag pakanan ang slider upang alisin ang/gi, 'I-type ang "confirm" upang alisin ang')
+            .replace(/I-drag pakanan ang slider/gi, 'I-type ang "confirm"')
+            .replace(/I-slide pakanan ang slider/gi, 'I-type ang "confirm"');
+    }
+
     const titleEl = document.getElementById('slide-delete-title');
     const subEl = document.getElementById('slide-delete-sub');
+    const inputEl = document.getElementById('confirm-type-input');
+    const btnEl = document.getElementById('confirm-type-submit-btn');
+    const indicatorEl = document.getElementById('confirm-type-match-indicator');
+    const hintEl = document.getElementById('confirm-type-status-hint');
     const rangeEl = document.getElementById('slide-delete-range');
 
-    if (titleEl) titleEl.innerText = title;
+    if (titleEl) titleEl.innerText = title || "Confirm Action";
     if (subEl) subEl.innerText = subtitle;
     if (rangeEl) rangeEl.value = 0;
+
+    if (inputEl) {
+        inputEl.value = "";
+        inputEl.classList.remove('border-emerald-500', 'ring-2', 'ring-emerald-500/30', 'border-red-500');
+    }
+    if (indicatorEl) indicatorEl.classList.add('hidden');
+    if (hintEl) hintEl.innerHTML = 'Required';
+    if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-gray-700/60 border border-gray-600/40 opacity-50 cursor-not-allowed transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm";
+    }
 
     isSlideDragValid = false;
     slideDeleteCallback = callback;
     const modal = document.getElementById('slide-delete-modal');
-    if (modal) modal.classList.remove('hidden');
+    if (modal) {
+        modal.classList.remove('hidden');
+        setTimeout(() => {
+            if (inputEl) inputEl.focus();
+        }, 120);
+    }
 }
 
 export function closeSlideDeleteModal() {
     const modal = document.getElementById('slide-delete-modal');
     if (modal) modal.classList.add('hidden');
+    const inputEl = document.getElementById('confirm-type-input');
+    if (inputEl) inputEl.value = "";
     slideDeleteCallback = null;
     isSlideDragValid = false;
 }
 
-export function onSlideStart(e) {
+export function handleConfirmTypeInput(val = "") {
+    const inputEl = document.getElementById('confirm-type-input');
+    const btnEl = document.getElementById('confirm-type-submit-btn');
+    const indicatorEl = document.getElementById('confirm-type-match-indicator');
+    const hintEl = document.getElementById('confirm-type-status-hint');
     const rangeEl = document.getElementById('slide-delete-range');
-    if (!rangeEl) return;
 
-    // Allow slide start if current value is near origin
-    if (parseFloat(rangeEl.value || 0) <= 35) {
-        isSlideDragValid = true;
-    } else {
-        isSlideDragValid = false;
-    }
-}
+    const clean = (val || "").trim().toLowerCase();
+    const isMatched = clean === 'confirm';
 
-export function onSlideProgress(val) {
-    const rangeEl = document.getElementById('slide-delete-range');
-    const num = parseFloat(val) || 0;
-
-    if (!isSlideDragValid && num <= 25) {
-        isSlideDragValid = true;
-    }
-
-    if (!isSlideDragValid) {
-        if (rangeEl) rangeEl.value = 0;
-        return;
-    }
-
-    if (num >= 88) {
+    if (isMatched) {
         if (rangeEl) rangeEl.value = 100;
-        isSlideDragValid = false;
-        
-        if (slideDeleteCallback && typeof slideDeleteCallback === 'function') {
-            const cb = slideDeleteCallback;
-            closeSlideDeleteModal();
-            try {
-                cb();
-            } catch (err) {
-                console.error("Slide action execution error:", err);
-            }
+        if (indicatorEl) indicatorEl.classList.remove('hidden');
+        if (hintEl) hintEl.innerHTML = '<span class="text-emerald-400 font-bold">Ready</span>';
+        if (inputEl) {
+            inputEl.classList.add('border-emerald-500', 'ring-2', 'ring-emerald-500/30');
+            inputEl.classList.remove('border-red-500');
+        }
+        if (btnEl) {
+            btnEl.disabled = false;
+            btnEl.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-red-600 hover:bg-red-500 border border-red-500/60 cursor-pointer shadow-lg shadow-red-600/40 ring-2 ring-red-400/50 opacity-100 transition active:scale-95 flex items-center justify-center gap-1.5";
+        }
+    } else {
+        if (rangeEl) rangeEl.value = 0;
+        if (indicatorEl) indicatorEl.classList.add('hidden');
+        if (hintEl) hintEl.innerHTML = 'Required';
+        if (inputEl) {
+            inputEl.classList.remove('border-emerald-500', 'ring-2', 'ring-emerald-500/30');
+        }
+        if (btnEl) {
+            btnEl.disabled = true;
+            btnEl.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-gray-700/60 border border-gray-600/40 opacity-50 cursor-not-allowed transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm";
         }
     }
 }
 
-export function onSlideEnd() {
-    const range = document.getElementById('slide-delete-range');
-    if (range && parseFloat(range.value) < 88) { 
-        range.value = 0; 
+export function submitConfirmTypeModal() {
+    const inputEl = document.getElementById('confirm-type-input');
+    const clean = (inputEl?.value || "").trim().toLowerCase();
+
+    if (clean !== 'confirm') {
+        if (inputEl) {
+            inputEl.focus();
+            inputEl.classList.add('border-red-500', 'ring-2', 'ring-red-500/40');
+            setTimeout(() => {
+                inputEl.classList.remove('ring-2', 'ring-red-500/40');
+            }, 600);
+        }
+        return;
     }
-    isSlideDragValid = false;
+
+    if (slideDeleteCallback && typeof slideDeleteCallback === 'function') {
+        const cb = slideDeleteCallback;
+        closeSlideDeleteModal();
+        try {
+            cb();
+        } catch (err) {
+            console.error("Confirm action execution error:", err);
+        }
+    } else {
+        closeSlideDeleteModal();
+    }
 }
+
+// Aliases for modern naming
+export const openTypeConfirmModal = openSlideDeleteModal;
+export const closeTypeConfirmModal = closeSlideDeleteModal;
+
+// Backward-compatibility stubs for range slider callers
+export function onSlideStart() {}
+export function onSlideProgress(val) {
+    if (parseFloat(val) >= 88) {
+        submitConfirmTypeModal();
+    }
+}
+export function onSlideEnd() {}
 
 // Global window attachments
 if (typeof window !== 'undefined') {
@@ -208,6 +266,10 @@ if (typeof window !== 'undefined') {
     window.closeEditItemModal = closeEditItemModal;
     window.openSlideDeleteModal = openSlideDeleteModal;
     window.closeSlideDeleteModal = closeSlideDeleteModal;
+    window.openTypeConfirmModal = openTypeConfirmModal;
+    window.closeTypeConfirmModal = closeTypeConfirmModal;
+    window.handleConfirmTypeInput = handleConfirmTypeInput;
+    window.submitConfirmTypeModal = submitConfirmTypeModal;
     window.onSlideStart = onSlideStart;
     window.onSlideProgress = onSlideProgress;
     window.onSlideEnd = onSlideEnd;

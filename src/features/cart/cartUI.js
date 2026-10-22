@@ -1,6 +1,7 @@
 // src/features/cart/cartUI.js
 import { globalState, multiCarts, activeCartSlot, setActiveCartSlot } from '../../store/state.js';
 import { showToast } from '../../ui/notifications.js';
+import { openSlideDeleteModal } from '../../ui/modals.js';
 import { escapeHtml } from '../../utils/helpers.js';
 import { 
     getMyCateringCustomers, 
@@ -129,15 +130,29 @@ export function onCartCustomerSelected(val) {
     saveCartState();
 }
 
+export function unlockActiveCart() {
+    if (!globalState.cartLocked) globalState.cartLocked = [false, false, false, false];
+    globalState.cartLocked[activeCartSlot - 1] = false;
+    saveCartState();
+    renderCartTabs();
+    renderCartItems();
+    showToast(`🔓 Unlocked Cart ${activeCartSlot} for editing!`);
+}
+
+export function promptUnlockCart() {
+    if (typeof openSlideDeleteModal === 'function') {
+        openSlideDeleteModal(`Unlock Cart ${activeCartSlot}?`, `Sigurado ka bang nais i-unlock ang Cart ${activeCartSlot} para baguhin ang resibo?`, () => {
+            unlockActiveCart();
+        });
+    } else {
+        unlockActiveCart();
+    }
+}
+
 export function handleOverlaySlideEnd(sliderEl) {
     const val = parseInt(sliderEl.value) || 0;
     if (val >= 90) {
-        if (!globalState.cartLocked) globalState.cartLocked = [false, false, false, false];
-        globalState.cartLocked[activeCartSlot - 1] = false;
-        saveCartState();
-        renderCartTabs();
-        renderCartItems();
-        showToast(`🔓 Unlocked Cart ${activeCartSlot} for editing!`);
+        unlockActiveCart();
     } else {
         sliderEl.value = 0;
     }
@@ -215,15 +230,10 @@ export function renderCartItems() {
                     <i class="fa-solid fa-calculator text-sm"></i> 💵 SUKLI / CHANGE CALCULATOR
                 </button>
 
-                <div class="w-full flex flex-col items-center gap-1 pt-1 border-t border-gray-200 dark:border-gray-800">
-                    <span class="text-[9.5px] text-gray-500 dark:text-gray-400 font-medium">I-slide pakanan kung nais baguhin ang resibo:</span>
-                    <div class="relative w-full max-w-xs h-11 bg-black/60 rounded-full border border-emerald-500/50 flex items-center px-2 overflow-hidden shadow-inner">
-                        <span class="absolute inset-0 flex items-center justify-center text-[10px] text-emerald-400/60 font-black tracking-widest pointer-events-none select-none">&gt;&gt;&gt;&gt; SLIDE TO UNLOCK &gt;&gt;&gt;&gt;</span>
-                        <input type="range" min="0" max="100" value="0" 
-                            onmouseup="handleOverlaySlideEnd(this)" 
-                            ontouchend="handleOverlaySlideEnd(this)" 
-                            class="w-full accent-emerald-500 cursor-pointer z-10 opacity-80 h-9">
-                    </div>
+                <div class="w-full flex flex-col items-center gap-1.5 pt-1.5 border-t border-gray-200 dark:border-gray-800">
+                    <button type="button" onclick="window.promptUnlockCart && window.promptUnlockCart()" class="w-full py-2.5 px-3 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-600 dark:text-amber-400 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition active:scale-95 shadow-xs cursor-pointer">
+                        <i class="fa-solid fa-lock-open text-xs"></i> <span>Unlock Cart to Edit Receipt</span>
+                    </button>
                 </div>
             </div>`;
 
@@ -424,6 +434,8 @@ if (typeof window !== 'undefined') {
     window.renderCartCustomerSelector = renderCartCustomerSelector;
     window.onCartCustomerSelected = onCartCustomerSelected;
     window.handleOverlaySlideEnd = handleOverlaySlideEnd;
+    window.unlockActiveCart = unlockActiveCart;
+    window.promptUnlockCart = promptUnlockCart;
     window.renderCartItems = renderCartItems;
     window.getMaxCartSlots = getMaxCartSlots;
 }
