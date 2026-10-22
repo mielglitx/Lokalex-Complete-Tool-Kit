@@ -80,6 +80,52 @@ export function initGlobalWindowBridge() {
     window.unlockAudioContext = unlockAudioContext;
 }
 
+export function showAutoLoginSplash(accountName, role) {
+    try {
+        const loginSection = document.getElementById('unified-login-section');
+        const splash = document.getElementById('auto-login-splash');
+        const titleEl = document.getElementById('auto-login-title');
+        const pillEl = document.getElementById('auto-login-account-name');
+
+        if (loginSection) loginSection.classList.add('hidden');
+        if (splash) splash.classList.remove('hidden');
+
+        if (titleEl && accountName) {
+            titleEl.textContent = `Welcome back, ${accountName}!`;
+        }
+        if (pillEl && role) {
+            pillEl.textContent = `${role}: ${accountName || 'Active Session'}`;
+        }
+    } catch (_) {}
+}
+
+export function hideAutoLoginSplash() {
+    try {
+        const loginSection = document.getElementById('unified-login-section');
+        const splash = document.getElementById('auto-login-splash');
+        if (splash) splash.classList.add('hidden');
+        if (loginSection) loginSection.classList.remove('hidden');
+    } catch (_) {}
+}
+
+if (typeof window !== 'undefined') {
+    window.showAutoLoginSplash = showAutoLoginSplash;
+    window.hideAutoLoginSplash = hideAutoLoginSplash;
+    window.cancelAutoLogin = function() {
+        hideAutoLoginSplash();
+        localStorage.removeItem('telegramId');
+        localStorage.removeItem('riderId');
+        localStorage.removeItem('riderName');
+        localStorage.removeItem('lokalex_customer_fb_id');
+        localStorage.removeItem('lokalex_customer_name');
+        localStorage.removeItem('lokalex_active_role');
+        localStorage.removeItem('lokalex_merchant_account_id');
+        localStorage.removeItem('lokalex_merchant_store_id');
+        syncRiderSession('', '');
+        showToast("ℹ️ Auto-login cancelled. Pwede ka nang mag-login gamit ang ibang account.");
+    };
+}
+
 export async function hydrateInstantLocalStores() {
     try {
         const cachedStores = await storageEngine.idbGet('stores', 'all_stores');
@@ -174,12 +220,14 @@ export async function bootApp() {
         const savedRiderName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
 
         if ((savedRiderId || savedRiderName) && (!activeUserRole || activeUserRole === 'rider')) {
+            showAutoLoginSplash(savedRiderName || savedRiderId, 'Rider');
             // Verify if rider account still exists in Firebase database
             if (savedRiderId && db) {
                 try {
                     const riderSnap = await db.ref(`riders/${savedRiderId}`).once('value');
                     if (!riderSnap.exists()) {
                         console.warn(`Rider ${savedRiderId} deleted from database; clearing session.`);
+                        hideAutoLoginSplash();
                         localStorage.clear();
                         syncRiderSession('', '');
                         history.replaceState({ view: 'view-login' }, '', '#view-login');
@@ -211,10 +259,12 @@ export async function bootApp() {
             startBackgroundAudioPulse();
             requestWakeLock();
         } else if (appState.merchantAccountId && appState.merchantStoreId && activeUserRole === 'merchant') {
+            showAutoLoginSplash(appState.merchantAccountId, 'Store Merchant');
             if (db) {
                 try {
                     const merchSnap = await db.ref(`storeAccounts/${appState.merchantAccountId}`).once('value');
                     if (!merchSnap.exists()) {
+                        hideAutoLoginSplash();
                         localStorage.clear();
                         history.replaceState({ view: 'view-login' }, '', '#view-login');
                         router.renderViewUI('view-login');
@@ -226,10 +276,12 @@ export async function bootApp() {
             history.replaceState({ view: 'view-store-hub' }, '', '#view-store-hub');
             router.renderViewUI('view-store-hub');
         } else if (savedCustomerFbId && activeUserRole === 'customer') {
+            showAutoLoginSplash(savedCustomerName || 'Customer', 'Customer');
             if (db) {
                 try {
                     const custSnap = await db.ref(`customers/${savedCustomerFbId}`).once('value');
                     if (!custSnap.exists()) {
+                        hideAutoLoginSplash();
                         localStorage.clear();
                         history.replaceState({ view: 'view-login' }, '', '#view-login');
                         router.renderViewUI('view-login');
@@ -260,6 +312,7 @@ export async function bootApp() {
             history.replaceState({ view: 'view-customer-home' }, '', '#view-customer-home');
             router.renderViewUI('view-customer-home');
         } else {
+            hideAutoLoginSplash();
             history.replaceState({ view: 'view-login' }, '', '#view-login');
             router.renderViewUI('view-login');
         }

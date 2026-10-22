@@ -651,7 +651,7 @@
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-BIqwwYMK.js"></script>
+  <script type="module" crossorigin src="./assets/index-BXJBeVdy.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
@@ -731,6 +731,41 @@
     <!-- UNIFIED AUTH CONTAINER -->
     <div class="bg-cardBg w-full max-w-sm p-5 sm:p-6 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl flex flex-col gap-4 text-center">
         
+        <!-- 0. AUTO-LOGIN / RESTORING SESSION SPLASH CARD -->
+        <div id="auto-login-splash" class="hidden flex flex-col items-center justify-center py-5 px-3 gap-3.5 text-center animate-fade-in">
+            <!-- Pulsing Icon / Spinner -->
+            <div class="relative flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20">
+                <div class="absolute inset-0 rounded-full border-4 border-blue-500/20 border-t-blue-600 animate-spin"></div>
+                <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400 text-xl sm:text-2xl shadow-inner">
+                    <i id="auto-login-icon" class="fa-solid fa-user-check"></i>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <h3 id="auto-login-title" class="text-base sm:text-lg font-black text-gray-900 dark:text-white tracking-tight">
+                    Logging you back in...
+                </h3>
+                <p id="auto-login-subtitle" class="text-xs text-gray-500 dark:text-gray-400">
+                    Restoring your session, please wait
+                </p>
+            </div>
+
+            <!-- Role / Account badge pill -->
+            <div id="auto-login-account-pill" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 text-blue-700 dark:text-blue-300 text-xs font-bold shadow-xs">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span id="auto-login-account-name">Verifying credentials...</span>
+            </div>
+
+            <p class="text-[11px] text-gray-400 dark:text-gray-500 italic mt-0.5">
+                Connecting to Lokalex Cloud...
+            </p>
+
+            <!-- Switch Account / Cancel button -->
+            <button type="button" id="auto-login-switch-btn" onclick="window.cancelAutoLogin && window.cancelAutoLogin()" class="text-xs text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 underline font-semibold mt-1 transition cursor-pointer">
+                Switch account or login manually
+            </button>
+        </div>
+
         <!-- 1. UNIFIED LOGIN FORM -->
         <div id="unified-login-section" class="flex flex-col gap-3">
             <div>
@@ -895,6 +930,46 @@
         <div id="portal-form-rider"></div>
         <div id="portal-form-merchant"></div>
     </div>
+
+    <!-- SYNCHRONOUS AUTO-LOGIN DETECTOR (PREVENTS INPUT FLASHING) -->
+    <script>
+        (function() {
+            try {
+                var riderId = localStorage.getItem('telegramId') || localStorage.getItem('riderId');
+                var riderName = localStorage.getItem('riderName');
+                var custFbId = localStorage.getItem('lokalex_customer_fb_id');
+                var custName = localStorage.getItem('lokalex_customer_name') || localStorage.getItem('customerName');
+                var merchId = localStorage.getItem('lokalex_merchant_account_id');
+                var role = localStorage.getItem('lokalex_active_role');
+
+                var hasSession = (riderId || riderName) || (custFbId && role === 'customer') || (merchId && role === 'merchant');
+
+                if (hasSession) {
+                    var loginSection = document.getElementById('unified-login-section');
+                    var splash = document.getElementById('auto-login-splash');
+                    var titleEl = document.getElementById('auto-login-title');
+                    var pillEl = document.getElementById('auto-login-account-name');
+
+                    if (loginSection) loginSection.classList.add('hidden');
+                    if (splash) splash.classList.remove('hidden');
+
+                    var displayName = (role === 'customer' ? custName : (role === 'merchant' ? merchId : (riderName || riderId))) || 'User';
+                    if (titleEl) {
+                        titleEl.textContent = 'Welcome back, ' + displayName + '!';
+                    }
+                    if (pillEl) {
+                        if (role === 'customer') {
+                            pillEl.textContent = 'Customer: ' + displayName;
+                        } else if (role === 'merchant') {
+                            pillEl.textContent = 'Merchant: ' + displayName;
+                        } else {
+                            pillEl.textContent = 'Rider: ' + displayName;
+                        }
+                    }
+                }
+            } catch (_) {}
+        })();
+    </script>
 </section>
 
         <!-- src/partials/views/customer-home.html -->

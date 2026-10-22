@@ -14,8 +14,11 @@ import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
+import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
@@ -33,10 +36,13 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class LokalexForegroundService extends Service {
+    private static final String TAG = "LokalexForegroundService";
     private static final String CHANNEL_ID = "lokalex_keepalive_channel";
     private static final int NOTIFICATION_ID = 8831;
+
+    // Properly URL-encoded Firebase query to avoid OkHttp URI syntax errors
     private static final String FIREBASE_META_QUERY_URL =
-            "https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?orderBy=\"lastUpdated\"&limitToLast=8";
+            "https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?orderBy=%22lastUpdated%22&limitToLast=35";
 
     private static volatile boolean isRunning = false;
     private static Bitmap cachedLargeIcon = null;
@@ -44,6 +50,7 @@ public class LokalexForegroundService extends Service {
     private PowerManager.WakeLock wakeLock = null;
     private ScheduledExecutorService scheduler = null;
 
+    private boolean isInitialCheck = true;
     private long lastKnownMsgTimestamp = 0;
     private final Set<String> processedMsgSignatures = new HashSet<>();
 
@@ -55,7 +62,9 @@ public class LokalexForegroundService extends Service {
     public void onCreate() {
         super.onCreate();
         isRunning = true;
+        isInitialCheck = true;
         lastKnownMsgTimestamp = System.currentTimeMillis();
+        Log.i(TAG, "LokalexForegroundService onCreate: Initializing background service");
         createNotificationChannel();
         acquireWakeLock();
         startForegroundSafely();
@@ -90,7 +99,8 @@ public class LokalexForegroundService extends Service {
 
         if (scheduler == null || scheduler.isShutdown()) {
             scheduler = Executors.newSingleThreadScheduledExecutor();
-            scheduler.scheduleWithFixedDelay(this::performBackgroundCheck, 2, 5, TimeUnit.SECONDS);
+            scheduler.scheduleWithFixedDelay(this::performBackgroundCheck, 1, 5, TimeUnit.SECONDS);
+            Log.i(TAG, "LokalexForegroundService scheduler started (5s interval)");
         }
 
         return START_STICKY;
@@ -98,6 +108,9 @@ public class LokalexForegroundService extends Service {
 
     private void performBackgroundCheck() {
         try {
+            // Keep CPU alive during network processing
+            acquireWakeLock();
+
             // 1. Wake up WebView event loop and JS timers if MainActivity is alive
             MainActivity activity = MainActivity.getInstance();
             if (activity != null) {
@@ -123,9 +136,13 @@ public class LokalexForegroundService extends Service {
                 in.close();
 
                 processIncomingMetaJson(sb.toString());
+            } else {
+                Log.w(TAG, "Firebase meta query response code: " + responseCode);
             }
             conn.disconnect();
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            Log.e(TAG, "Background check cycle exception: " + e.getMessage());
+        }
     }
 
     private void processIncomingMetaJson(String jsonStr) {
@@ -137,6 +154,25 @@ public class LokalexForegroundService extends Service {
             SharedPreferences prefs = getSharedPreferences("lokalex_prefs", Context.MODE_PRIVATE);
             String myRiderId = prefs.getString("rider_id", "").trim();
             String myRiderName = prefs.getString("rider_name", "").trim().toLowerCase();
+
+            // Handle Initial Startup Snapshot: prime signatures so historical chats do not spam
+            if (isInitialCheck) {
+                int primedCount = 0;
+                while (keys.hasNext()) {
+                    String custId = keys.next();
+                    JSONObject meta = root.optJSONObject(custId);
+                    if (meta == null) continue;
+                    long lastUpdated = meta.optLong("lastUpdated", 0);
+                    processedMsgSignatures.add(custId + "_" + lastUpdated);
+                    if (lastUpdated > lastKnownMsgTimestamp) {
+                        lastKnownMsgTimestamp = lastUpdated;
+                    }
+                    primedCount++;
+                }
+                isInitialCheck = false;
+                Log.i(TAG, "Initial meta snapshot primed with " + primedCount + " chats. Monitoring for new arrivals...");
+                return;
+            }
 
             while (keys.hasNext()) {
                 String custId = keys.next();
@@ -151,17 +187,14 @@ public class LokalexForegroundService extends Service {
                 String customerName = meta.optString("customerName", "Customer").trim();
                 String apiName = meta.optString("apiName", "Camiling FB");
 
-                // Strictly filter for new incoming messages for the rider
+                // Strictly filter for active incoming messages for riders
                 if (!unreadForRider) continue;
                 if (lastMessage.isEmpty() || lastMessage.equalsIgnoreCase("No messages yet")) continue;
                 if (lastMessage.startsWith("You:")) continue;
                 if (folder.equals("spam") || folder.equals("other") || status.equals("spam")) continue;
                 if (status.equals("completed") || status.equals("cancelled") || status.equals("done")) continue;
 
-                // Only notify for messages received after the monitoring service started
-                if (lastUpdated <= 0 || lastUpdated < (lastKnownMsgTimestamp - 2000)) continue;
-
-                // If thread is in catering, only notify if catered by this rider (or unassigned)
+                // If thread is in catering, only notify if catered by this rider (or unassigned/open)
                 if (folder.equals("catering")) {
                     String cateredByRiderId = meta.optString("cateredByRiderId", "").trim();
                     String cateredByRiderName = meta.optString("cateredByRiderName", "").trim().toLowerCase();
@@ -177,7 +210,7 @@ public class LokalexForegroundService extends Service {
                 if (processedMsgSignatures.contains(signature)) continue;
 
                 processedMsgSignatures.add(signature);
-                if (processedMsgSignatures.size() > 100) {
+                if (processedMsgSignatures.size() > 300) {
                     processedMsgSignatures.clear();
                     processedMsgSignatures.add(signature);
                 }
@@ -194,12 +227,30 @@ public class LokalexForegroundService extends Service {
                     body = "📍 Sent a location pin";
                 }
 
-                // Dispatch native Android notification directly with sound, vibration, and heads-up banner!
+                Log.i(TAG, "🔔 New incoming chat detected from " + customerName + ": " + body);
+
+                // Dispatch native Android notification with high priority, sound & vibration
                 MainActivity.dispatchNativeNotification(this, title, body, "chat_" + custId, custId);
+
+                // Wake up screen briefly so rider sees incoming alert even if phone is on table with screen off
+                wakeScreenBriefly();
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            Log.e(TAG, "processIncomingMetaJson error: " + e.getMessage(), e);
         }
+    }
+
+    private void wakeScreenBriefly() {
+        try {
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                PowerManager.WakeLock screenLock = pm.newWakeLock(
+                        PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE,
+                        "Lokalex:IncomingChatScreenWake"
+                );
+                screenLock.acquire(4000);
+            }
+        } catch (Exception ignored) {}
     }
 
     private void acquireWakeLock() {
@@ -211,8 +262,9 @@ public class LokalexForegroundService extends Service {
                     wakeLock.setReferenceCounted(false);
                 }
             }
-            if (wakeLock != null && !wakeLock.isHeld()) {
-                wakeLock.acquire();
+            if (wakeLock != null) {
+                // Acquire with 15-minute safety timeout, continuously refreshed by performBackgroundCheck
+                wakeLock.acquire(15 * 60 * 1000L);
             }
         } catch (Exception ignored) {}
     }
@@ -279,9 +331,23 @@ public class LokalexForegroundService extends Service {
 
     @Override
     public void onTimeout(int startId, int fgsType) {
-        // Prevent ForegroundServiceDidNotStopInTimeException crash on Android 15/16+
+        Log.w(TAG, "onTimeout triggered for startId " + startId + " fgsType " + fgsType);
         try {
             stopSelf(startId);
+            // Seamlessly restart foreground service to reset Android 15/16 timeout quota
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                try {
+                    Intent restartIntent = new Intent(getApplicationContext(), LokalexForegroundService.class);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        getApplicationContext().startForegroundService(restartIntent);
+                    } else {
+                        getApplicationContext().startService(restartIntent);
+                    }
+                    Log.i(TAG, "LokalexForegroundService restarted successfully after timeout");
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to restart service after timeout: " + e.getMessage());
+                }
+            }, 1500);
         } catch (Exception ignored) {}
     }
 
@@ -293,6 +359,7 @@ public class LokalexForegroundService extends Service {
             scheduler = null;
         }
         releaseWakeLock();
+        Log.i(TAG, "LokalexForegroundService onDestroy executed");
         super.onDestroy();
     }
 }

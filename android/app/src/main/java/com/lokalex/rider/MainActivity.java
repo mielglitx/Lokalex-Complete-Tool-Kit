@@ -39,6 +39,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 
 public class MainActivity extends BridgeActivity {
+    private static final String TAG = "LokalexNative";
     private static final int PERMISSION_REQ_CODE = 9922;
     public static final String MESSAGES_CHANNEL_ID = "lokalex_messages_channel";
     private static MainActivity instance = null;
@@ -248,6 +249,7 @@ public class MainActivity extends BridgeActivity {
                                 .putString("rider_id", riderId.trim())
                                 .putString("rider_name", riderName != null ? riderName.trim() : "")
                                 .apply();
+                        android.util.Log.i(TAG, "syncRiderSession persisted rider_id=" + riderId + ", rider_name=" + riderName);
                     }
                 }
 
@@ -624,6 +626,18 @@ public class MainActivity extends BridgeActivity {
                 int notifId = (tag != null && !tag.isEmpty()) ? Math.abs(tag.hashCode()) : (int) (System.currentTimeMillis() % 100000);
                 manager.notify(tag != null && !tag.isEmpty() ? tag : "lokalex_msg", notifId, builder.build());
             }
+
+            // Wake up device screen briefly so rider sees incoming notification even if screen is locked/off
+            try {
+                PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+                if (pm != null) {
+                    PowerManager.WakeLock screenLock = pm.newWakeLock(
+                            PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE,
+                            "Lokalex:NotificationScreenWake"
+                    );
+                    screenLock.acquire(4000);
+                }
+            } catch (Exception ignored) {}
         } catch (Exception e) {
             e.printStackTrace();
         }
