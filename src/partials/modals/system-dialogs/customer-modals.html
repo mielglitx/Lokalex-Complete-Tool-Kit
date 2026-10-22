@@ -174,13 +174,18 @@
                 </div>
             </div>
 
-            <!-- NAME CARD -->
-            <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex justify-between items-start gap-2">
-                <div class="min-w-0">
-                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Full Name</span>
-                    <span id="cust-modal-name" class="font-bold text-sm text-gray-900 dark:text-white mt-0.5 block truncate">Customer Name</span>
+            <!-- NAME CARD WITH AVATAR -->
+            <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div class="relative shrink-0 cursor-pointer" onclick="window.openImageViewerModal && window.openImageViewerModal(document.getElementById('cust-modal-avatar-img')?.src, 'customer')" title="Tap to enlarge photo">
+                        <img id="cust-modal-avatar-img" src="" class="w-11 h-11 rounded-full object-cover border-2 border-blue-500/40 shadow-xs hover:scale-105 transition" onerror="this.src='https://ui-avatars.com/api/?name=Customer&background=0084FF&color=fff'">
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Full Name</span>
+                        <span id="cust-modal-name" class="font-bold text-sm text-gray-900 dark:text-white mt-0.5 block truncate">Customer Name</span>
+                    </div>
                 </div>
-                <div id="cust-modal-source-pill" class="shrink-0 mt-0.5"></div>
+                <div id="cust-modal-source-pill" class="shrink-0"></div>
             </div>
 
             <!-- PHONE NUMBER CARD -->

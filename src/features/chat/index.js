@@ -250,12 +250,13 @@ export function renderFilteredCustomerChats(targetFolder = 'inbox') {
         const custName = escapeHtml(formatTitleCase(meta.customerName || meta.name || "Customer"));
         const lastMsg = escapeHtml(meta.lastMessage || meta.lastMsg || "No messages yet");
         const riderName = meta.cateredByRiderName || meta.cateredBy ? formatTitleCase(meta.cateredByRiderName || meta.cateredBy) : "";
+        const custAvatar = meta.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff`;
 
         return `
         <div onclick="window.openCustomerChatThread && window.openCustomerChatThread('${chat.id}')" class="bg-cardBg border border-gray-200 dark:border-gray-800 hover:border-blue-500/50 p-3 rounded-2xl flex items-center justify-between cursor-pointer transition active:scale-[0.98]">
             <div class="flex items-center gap-3 min-w-0 flex-1">
-                <div class="w-10 h-10 rounded-full bg-blue-600/20 text-blue-400 font-bold flex items-center justify-center text-sm shrink-0 border border-blue-500/30">
-                    <i class="fa-solid fa-user"></i>
+                <div class="relative shrink-0" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(custAvatar)}', 'customer')" title="Tap to view photo">
+                    <img src="${escapeHtml(custAvatar)}" loading="lazy" decoding="async" class="w-10 h-10 rounded-full object-cover border border-blue-500/30 cursor-pointer hover:scale-105 transition" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff'">
                 </div>
                 <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">

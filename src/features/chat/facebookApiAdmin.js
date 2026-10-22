@@ -1024,11 +1024,11 @@ export async function resolveFacebookCustomerName(custId, force = false) {
                 // Method A: Targeted Page Conversations API by user_id
                 try {
                     const convEndpoint = api.pageId 
-                        ? `https://graph.facebook.com/v19.0/${api.pageId}/conversations?user_id=${psid}&fields=participants,senders&access_token=${token}`
-                        : `https://graph.facebook.com/v19.0/me/conversations?user_id=${psid}&fields=participants,senders&access_token=${token}`;
+                        ? `https://graph.facebook.com/v19.0/${api.pageId}/conversations?user_id=${psid}&fields=participants{id,name,picture.type(large)},senders{id,name,picture.type(large)}&access_token=${token}`
+                        : `https://graph.facebook.com/v19.0/me/conversations?user_id=${psid}&fields=participants{id,name,picture.type(large)},senders{id,name,picture.type(large)}&access_token=${token}`;
                     let convResp = await fetch(convEndpoint);
                     if (!convResp.ok) {
-                        convResp = await fetch(`https://graph.facebook.com/v19.0/me/conversations?user_id=${psid}&fields=participants,senders&access_token=${token}`);
+                        convResp = await fetch(`https://graph.facebook.com/v19.0/me/conversations?user_id=${psid}&fields=participants{id,name,picture.type(large)},senders{id,name,picture.type(large)}&access_token=${token}`);
                     }
                     if (convResp.ok) {
                         const convData = await convResp.json();
@@ -1040,7 +1040,31 @@ export async function resolveFacebookCustomerName(custId, force = false) {
                             const match = people.find(p => String(p.id) === String(psid));
                             if (match && match.name) {
                                 const realName = match.name.trim();
-                                const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(realName)}&background=0084FF&color=fff`;
+
+                                // Retrieve real Facebook profile picture
+                                let realAvatar = (match.picture?.data && !match.picture.data.is_silhouette) ? match.picture.data.url : null;
+                                if (!realAvatar) {
+                                    try {
+                                        const picResp = await fetch(`https://graph.facebook.com/v19.0/${psid}/picture?type=large&redirect=false&access_token=${token}`);
+                                        if (picResp.ok) {
+                                            const picJson = await picResp.json();
+                                            if (picJson?.data?.url && !picJson.data.is_silhouette) {
+                                                realAvatar = picJson.data.url;
+                                            }
+                                        }
+                                    } catch (_) {}
+                                }
+                                if (!realAvatar) {
+                                    try {
+                                        const profileResp = await fetch(`https://graph.facebook.com/v19.0/${psid}?fields=profile_pic,picture.type(large)&access_token=${token}`);
+                                        if (profileResp.ok) {
+                                            const profData = await profileResp.json();
+                                            realAvatar = (profData.picture?.data && !profData.picture.data.is_silhouette) ? profData.picture.data.url : (profData.profile_pic || null);
+                                        }
+                                    } catch (_) {}
+                                }
+
+                                const avatar = realAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(realName)}&background=0084FF&color=fff`;
                                 const resolved = { name: realName, avatarUrl: avatar };
                                 fbNameResolutionCache.set(psid, resolved);
 
@@ -1068,13 +1092,16 @@ export async function resolveFacebookCustomerName(custId, force = false) {
                 // Method B: Direct PSID Node API (Fallback for app testers / admins with profile picture)
                 try {
                     const profileResp = await fetch(
-                        `https://graph.facebook.com/v19.0/${psid}?fields=first_name,last_name,name,profile_pic&access_token=${token}`
+                        `https://graph.facebook.com/v19.0/${psid}?fields=first_name,last_name,name,profile_pic,picture.type(large)&access_token=${token}`
                     );
                     if (profileResp.ok) {
                         const profile = await profileResp.json();
                         const fullName = (profile.name || `${profile.first_name || ''} ${profile.last_name || ''}`).trim();
                         if (fullName) {
-                            const avatar = profile.profile_pic || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=0084FF&color=fff`;
+                            const realAvatar = (profile.picture?.data && !profile.picture.data.is_silhouette) 
+                                ? profile.picture.data.url 
+                                : (profile.profile_pic || null);
+                            const avatar = realAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=0084FF&color=fff`;
                             const resolved = { name: fullName, avatarUrl: avatar };
                             fbNameResolutionCache.set(psid, resolved);
 
@@ -1167,12 +1194,13 @@ export async function syncAllFacebookCustomerNames() {
 
             try {
                 const convResp = await fetch(
-                    `https://graph.facebook.com/v19.0/${pageId}/conversations?fields=participants,senders&limit=100&access_token=${token}`
+                    `https://graph.facebook.com/v19.0/${pageId}/conversations?fields=participants{id,name,picture.type(large)},senders{id,name,picture.type(large)}&limit=100&access_token=${token}`
                 );
                 if (convResp.ok) {
                     const convData = await convResp.json();
                     if (Array.isArray(convData.data)) {
                         const nameMap = new Map();
+                        const photoMap = new Map();
                         convData.data.forEach(c => {
                             const people = [
                                 ...(c.participants?.data || []),
@@ -1180,7 +1208,11 @@ export async function syncAllFacebookCustomerNames() {
                             ];
                             people.forEach(p => {
                                 if (p.id && String(p.id) !== String(pageId) && p.name) {
-                                    nameMap.set(String(p.id).trim(), p.name.trim());
+                                    const psidKey = String(p.id).trim();
+                                    nameMap.set(psidKey, p.name.trim());
+                                    if (p.picture?.data?.url && !p.picture.data.is_silhouette) {
+                                        photoMap.set(psidKey, p.picture.data.url);
+                                    }
                                 }
                             });
                         });
@@ -1192,8 +1224,9 @@ export async function syncAllFacebookCustomerNames() {
 
                             if (nameMap.has(psid)) {
                                 const realName = nameMap.get(psid);
-                                if (realName && (realName !== currentName || currentName.startsWith('FB Customer ('))) {
-                                    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(realName)}&background=0084FF&color=fff`;
+                                const realPhoto = photoMap.get(psid);
+                                if (realName && (realName !== currentName || currentName.startsWith('FB Customer (') || (realPhoto && !item.avatarUrl?.includes('fbcdn') && !item.avatarUrl?.includes('fbsbx')))) {
+                                    const avatar = realPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(realName)}&background=0084FF&color=fff`;
                                     fbNameResolutionCache.set(psid, { name: realName, avatarUrl: avatar });
                                     await Promise.all([
                                         db.ref(`customerChatMeta/${custId}`).update({
@@ -1206,6 +1239,7 @@ export async function syncAllFacebookCustomerNames() {
                                         })
                                     ]).catch(() => {});
                                     item.customerName = realName;
+                                    item.avatarUrl = avatar;
                                     updatedCount++;
                                 }
                             }

@@ -225,6 +225,13 @@ export function renderCustomerDetailsUI(custId, data = {}, meta = {}, dirRecord 
     }
 
     // Populate Fields
+    const avatarImg = document.getElementById('cust-modal-avatar-img');
+    const custAvatar = meta.avatarUrl || data.avatarUrl || data.photoUrl || (typeof getResolvedFbName === 'function' ? getResolvedFbName(custId)?.avatarUrl : null) || `https://ui-avatars.com/api/?name=${encodeURIComponent(actualCustName)}&background=0084FF&color=fff`;
+    if (avatarImg) {
+        avatarImg.src = custAvatar;
+        avatarImg.alt = actualCustName;
+    }
+
     if (nameEl) {
         if (dirRecord && dirRecord.name) {
             nameEl.innerHTML = `
@@ -756,7 +763,8 @@ function fallbackCopyPhoneText(text) {
     }
 }
 
-export function openNewDirectoryCustomerFromChat() {
+export async function openNewDirectoryCustomerFromChat() {
+    const activeCustId = currentChatDetailsCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null);
     closeCustomerDetailsModal();
     const custModalName = document.getElementById('cust-modal-name')?.innerText?.trim();
     const chatHeaderName = document.getElementById('rider-chat-cust-name')?.innerText?.trim();
@@ -764,15 +772,63 @@ export function openNewDirectoryCustomerFromChat() {
         ? custModalName 
         : (chatHeaderName && !chatHeaderName.startsWith('FB Customer') && chatHeaderName !== 'Customer' ? chatHeaderName : '');
     const fallbackName = extractCleanSearchName(candidateRaw);
+
+    const phoneEl = document.getElementById('cust-modal-phone');
+    const phoneText = phoneEl?.innerText?.trim();
+    const cleanPhone = (phoneText && phoneText !== '---' && phoneText !== 'No contact recorded') ? phoneText : '';
     
     if (window.closeRiderChatModal) {
         window.closeRiderChatModal();
     }
-    
+
+    // Auto-capture rider's exact current GPS location
+    showToast("📍 Kinukuha ang eksaktong GPS location mo...");
+
+    let capturedLat = appState.lat || null;
+    let capturedLon = appState.lon || null;
+    let mapPinLink = "";
+
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        try {
+            const pos = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: 4500,
+                    maximumAge: 10000
+                });
+            });
+            if (pos && pos.coords) {
+                capturedLat = pos.coords.latitude;
+                capturedLon = pos.coords.longitude;
+                appState.lat = capturedLat;
+                appState.lon = capturedLon;
+            }
+        } catch (_) {
+            // Keep fallback lat/lon from appState
+        }
+    }
+
+    if (capturedLat && capturedLon) {
+        mapPinLink = `https://maps.google.com/?q=${Number(capturedLat).toFixed(6)},${Number(capturedLon).toFixed(6)}`;
+    }
+
     if (typeof window.openForm === 'function') {
         globalState.currentType = 'customers';
-        window.openForm({ name: fallbackName, type: 'customers' });
-        showToast(`📝 Adding new customer: ${fallbackName || 'New Customer'}`);
+        if (activeCustId) {
+            window._pendingLinkCustIdFromChat = activeCustId;
+        }
+        await window.openForm({ 
+            name: fallbackName, 
+            contact: cleanPhone,
+            lat_lon_link: mapPinLink,
+            isNew: true,
+            type: 'customers' 
+        });
+        if (mapPinLink) {
+            showToast(`📍 Na-capture ang eksaktong GPS location mo para sa customer profile!`);
+        } else {
+            showToast(`📝 Adding new customer: ${fallbackName || 'New Customer'}`);
+        }
     } else {
         showToast("⚠️ Directory form unavailable.");
     }

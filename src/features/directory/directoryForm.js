@@ -471,7 +471,12 @@ export async function handleRateMunicipalityChange(municipalityName) {
 }
 
 export async function openForm(record = null) {
-    editingRecord = record;
+    const isNewCustomerPrefill = Boolean(record && (record.isNew || (!record.compositeKey && (!globalState.records || !globalState.records.some(r => r.name === record.name && r.type === (record.type || 'customers'))))));
+    if (isNewCustomerPrefill) {
+        editingRecord = null;
+    } else {
+        editingRecord = record;
+    }
     switchView('view-form');
 
     const warningEl = document.getElementById('edit-warning');
@@ -492,9 +497,14 @@ export async function openForm(record = null) {
     }
 
     if (record) {
-        if (warningEl) warningEl.classList.remove('hidden');
-        if (warningText) warningText.innerText = `Editing record: ${record.name}`;
-        if (submitBtn) submitBtn.innerText = "UPDATE RECORD";
+        if (isNewCustomerPrefill) {
+            if (warningEl) warningEl.classList.add('hidden');
+            if (submitBtn) submitBtn.innerText = "SAVE RECORD";
+        } else {
+            if (warningEl) warningEl.classList.remove('hidden');
+            if (warningText) warningText.innerText = `Editing record: ${record.name}`;
+            if (submitBtn) submitBtn.innerText = "UPDATE RECORD";
+        }
 
         if (isRates) {
             const originSelect = document.getElementById('form-rate-origin');
@@ -767,6 +777,15 @@ export async function submitForm() {
     saveDirectoryCache();
     const savedName = recordData.name;
     editingRecord = null;
+
+    // Automatically link newly created customer profile back to the originating chat thread
+    if (window._pendingLinkCustIdFromChat && recordData && (type === 'customers')) {
+        const targetChatCustId = window._pendingLinkCustIdFromChat;
+        window._pendingLinkCustIdFromChat = null;
+        if (typeof window.linkChatToDirectoryRecord === 'function') {
+            window.linkChatToDirectoryRecord(targetChatCustId, recordData).catch(() => {});
+        }
+    }
 
     // DIRECTORY REGISTRATION REWARD ENGINE (HONORS ADMIN SETTINGS)
     const creditConfig = globalState.directoryCreditsConfig || {

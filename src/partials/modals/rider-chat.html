@@ -5,7 +5,7 @@
         <!-- HEADER WITH INFO BUTTON -->
         <div class="p-3 sm:p-4 bg-gray-50 dark:bg-cardBg border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0">
             <div class="flex items-center gap-2.5 min-w-0 flex-1">
-                <div id="rider-chat-avatar" class="w-10 h-10 rounded-full bg-emerald-600 text-white font-black flex items-center justify-center text-sm shadow-sm shrink-0">
+                <div id="rider-chat-avatar" onclick="window.viewCurrentCustomerPhoto && window.viewCurrentCustomerPhoto()" class="w-10 h-10 rounded-full bg-emerald-600 text-white font-black flex items-center justify-center text-sm shadow-sm shrink-0 cursor-pointer overflow-hidden ring-2 ring-emerald-500/40 hover:ring-emerald-400 transition" title="Tap to view customer profile picture">
                     CU
                 </div>
                 <div class="min-w-0 flex-1">
@@ -13,9 +13,6 @@
                         <h3 id="rider-chat-cust-name" class="font-black text-sm text-gray-900 dark:text-white truncate min-w-0 flex-1">Customer Name</h3>
                         <span id="rider-chat-applicant-pill" class="hidden bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700/50 text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0" title="Rider Applicant"><i class="fa-solid fa-user-tie text-purple-600 dark:text-purple-400"></i> APPLICANT</span>
                         <span id="rider-chat-followup-pill" class="hidden bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/50 text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0" title="Customer Follow-Up"><i class="fa-solid fa-bookmark text-amber-600 dark:text-amber-400"></i> FOLLOW UP</span>
-                        <button type="button" onclick="window.promptRenameCustomerChat && window.promptRenameCustomerChat()" class="text-gray-400 hover:text-blue-500 p-1 text-xs active:scale-90 shrink-0" title="Edit Customer Name">
-                            <i class="fa-solid fa-pen text-[10px]"></i>
-                        </button>
                         <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-6 h-6 rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-transparent hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-xs shadow-xs shrink-0" title="View Customer Info">
                             <i class="fa-solid fa-circle-info"></i>
                         </button>

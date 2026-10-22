@@ -808,8 +808,8 @@ function executeRenderRiderCustomerChatFeed() {
                 onclick="window.handleThreadCardClick && window.handleThreadCardClick(event, this)" 
                 class="w-full relative z-10 ${cardBorderClass} hover:bg-gray-50 dark:hover:bg-slate-800 p-3 rounded-2xl flex items-center justify-between cursor-pointer transition-transform duration-200 ease-out select-none">
                 <div class="flex items-center gap-3 min-w-0 flex-1">
-                    <div class="relative shrink-0">
-                        <img src="${escapeHtml(t.avatarUrl)}" loading="lazy" decoding="async" class="w-10 h-10 rounded-full object-cover border-2 ${avatarBorderClass}">
+                    <div class="relative shrink-0" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(t.avatarUrl)}', 'customer')" title="Tap to view profile picture">
+                        <img src="${escapeHtml(t.avatarUrl)}" loading="lazy" decoding="async" class="w-10 h-10 rounded-full object-cover border-2 ${avatarBorderClass} hover:scale-105 transition cursor-pointer" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(t.customerName)}&background=0084FF&color=fff'">
                         ${t.isUnread ? '<div class="absolute -top-0.5 -right-0.5 w-3 h-3 bg-blue-500 rounded-full border-2 border-white dark:border-darkBg animate-ping"></div>' : ''}
                     </div>
                     <div class="min-w-0 flex-1">

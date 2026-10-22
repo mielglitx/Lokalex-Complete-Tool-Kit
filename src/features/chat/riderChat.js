@@ -120,6 +120,15 @@ export function openRiderChatModal(custId, custName) {
     openRiderCustomerChatModal(custId, custName);
 }
 
+let currentActiveRiderChatCustAvatar = "";
+
+export function viewCurrentCustomerPhoto() {
+    const avatarUrl = currentActiveRiderChatCustAvatar || document.getElementById('rider-chat-avatar')?.querySelector('img')?.src;
+    if (avatarUrl && window.openImageViewerModal) {
+        window.openImageViewerModal(avatarUrl, 'customer');
+    }
+}
+
 export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
     if (activeRiderChatCustId && activeRiderChatCustId !== custId) {
         saveCurrentThreadDraft(activeRiderChatCustId);
@@ -179,6 +188,7 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
                 resolveFacebookCustomerName(custId).then(resolved => {
                     if (resolved && resolved.name && activeRiderChatCustId === custId) {
                         if (nameEl) nameEl.innerText = resolved.name;
+                        if (resolved.avatarUrl) currentActiveRiderChatCustAvatar = resolved.avatarUrl;
                         if (avatarEl) {
                             if (avatarEl.tagName === 'IMG' && resolved.avatarUrl) {
                                 avatarEl.src = resolved.avatarUrl;
@@ -193,6 +203,7 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
     }
 
     const resolvedAvatar = effectiveAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(effectiveName || "Customer")}&background=0084FF&color=fff`;
+    currentActiveRiderChatCustAvatar = resolvedAvatar;
 
     if (nameEl) nameEl.innerText = effectiveName || "Customer";
     if (avatarEl) {
@@ -2435,6 +2446,7 @@ if (typeof window !== 'undefined') {
 
     window.openRiderChatModal = openRiderChatModal;
     window.openRiderCustomerChatModal = openRiderCustomerChatModal;
+    window.viewCurrentCustomerPhoto = viewCurrentCustomerPhoto;
     window.closeRiderChatModal = closeRiderChatModal;
     window.closeRiderCustomerChatModal = closeRiderCustomerChatModal;
     window.promptRenameCustomerChat = promptRenameCustomerChat;
