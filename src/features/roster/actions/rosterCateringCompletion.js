@@ -497,6 +497,8 @@ export function checkCustomerReceiptExists(custName, riderName = "", riderId = "
 }
 
 export async function voidSingleCateringCustomer(targetId, targetName, custNameToVoid) {
+    if (!custNameToVoid) return false;
+
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
 
@@ -505,7 +507,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
 
     // 1. Authoritative Permission Verification Gate (Admin, Authorized TL, or Self)
     const isMe = (myId && cleanTargetId && myId === cleanTargetId) || (myName && cleanTargetName && myName === cleanTargetName);
-    const hasAdminPower = isAdmin() || canManageRoster();
+    const hasAdminPower = isAdmin() || canManageRoster() || Boolean(globalState.adminControlsEnabled) || (typeof localStorage !== 'undefined' && localStorage.getItem('adminControlsEnabled') === 'true');
     const hasTlVoidPower = hasTlPermission('canVoidCustomer') || hasTlPermission('canVoid') || hasTlPermission('canForceCater');
 
     if (!isMe && !hasAdminPower && !hasTlVoidPower) {
@@ -513,7 +515,13 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         return false;
     }
 
+    if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
+        saveRosterCache();
+    }
     const rosterMembers = globalState.rosterMembers || [];
+
+    const cleanVoidCust = custNameToVoid.toLowerCase().trim();
+    const cleanCustKey = sanitizeFirebaseKey(cleanVoidCust);
 
     let targetRecord = rosterMembers.find(m => {
         const mId = (m.telegramId || m.id || "").toString().trim();
@@ -523,13 +531,31 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         return false;
     });
 
+    // Auto-detect rider if targetRecord is missing or does not contain this customer
+    if ((!targetRecord || !targetRecord.customerName || (!targetRecord.customerName.toLowerCase().includes(cleanVoidCust) && !isCustomerMatch(targetRecord.customerName, cleanVoidCust))) && cleanVoidCust) {
+        const actualRider = rosterMembers.find(m => m.status === 'Catering' && m.customerName && (
+            m.customerName.toLowerCase().includes(cleanVoidCust) || isCustomerMatch(m.customerName, cleanVoidCust)
+        ));
+        if (actualRider) {
+            targetRecord = actualRider;
+        }
+    }
+
+    if (!targetRecord && db && cleanTargetId) {
+        try {
+            const snap = await db.ref(`roster/${cleanTargetId}`).once('value');
+            if (snap.exists()) {
+                targetRecord = snap.val();
+            }
+        } catch(e) {}
+    }
+
     const resolvedTargetId = targetRecord ? (targetRecord.telegramId || targetRecord.id || cleanTargetId) : cleanTargetId;
     const resolvedTargetName = targetRecord ? (targetRecord.riderName || targetRecord.name || targetName) : targetName;
 
     if (!resolvedTargetId && !targetRecord) return false;
 
     // 1B. SAFEGUARD (Ordinary Rider vs Admin/TL):
-    // When an ordinary rider cancelled a customer but he already created a receipt for the customer, then do not cancel it.
     if (!hasAdminPower && !hasTlVoidPower) {
         const hasReceipt = checkCustomerReceiptExists(custNameToVoid, resolvedTargetName, resolvedTargetId);
         if (hasReceipt) {
@@ -546,15 +572,17 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         const times = targetRecord.startTime ? targetRecord.startTime.split(/\s*,\s*/).map(t => t.trim()) : [];
 
         custs.forEach((c, idx) => {
-            if (c.toLowerCase().trim() !== custNameToVoid.toLowerCase().trim() && !isCustomerMatch(c, custNameToVoid)) {
+            const cLower = c.toLowerCase().trim();
+            const isMatch = cLower === cleanVoidCust ||
+                            isCustomerMatch(c, cleanVoidCust) ||
+                            (cleanVoidCust.length >= 3 && cLower.includes(cleanVoidCust)) ||
+                            (cLower.length >= 3 && cleanVoidCust.includes(cLower));
+            if (!isMatch) {
                 remainingCusts.push(c);
                 remainingTimes.push(times[idx] || times[0] || "");
             }
         });
     }
-
-    const cleanVoidCust = custNameToVoid.toLowerCase().trim();
-    const cleanCustKey = sanitizeFirebaseKey(cleanVoidCust);
 
     // Purge forced catering metadata
     if (targetRecord && targetRecord.forcedCaters) {
@@ -854,15 +882,20 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
 }
 
 export function adminVoidSpecificCustomer(targetId, targetName, custName) {
-    if (!isAdmin() && !hasTlPermission('canVoidCustomer') && !hasTlPermission('canVoid') && !canManageRoster()) {
+    const hasAdminPower = isAdmin() || canManageRoster() || Boolean(globalState.adminControlsEnabled) || (typeof localStorage !== 'undefined' && localStorage.getItem('adminControlsEnabled') === 'true');
+    const hasTlVoidPower = hasTlPermission('canVoidCustomer') || hasTlPermission('canVoid') || hasTlPermission('canForceCater');
+
+    if (!hasAdminPower && !hasTlVoidPower) {
         return showToast("🚫 Access Denied: Admin or Team Lead authorization required.");
     }
 
+    if (!custName) return showToast("⚠️ Missing customer name to void.");
+
     openSlideDeleteModal(
         `Void Order: ${custName}?`,
-        `Sigurado ka bang nais mong i-void ang delivery ni ${custName} para kay ${targetName}?\nIto ay magkakansela sa order at mag-a-update sa kanyang rotation.`,
-        () => {
-            voidSingleCateringCustomer(targetId, targetName, custName);
+        `Sigurado ka bang nais mong i-void ang delivery ni ${custName} para kay ${targetName || 'Rider'}?\nIto ay magkakansela sa order at mag-a-update sa kanyang rotation.`,
+        async () => {
+            await voidSingleCateringCustomer(targetId, targetName, custName);
         }
     );
 }

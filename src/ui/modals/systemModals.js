@@ -225,9 +225,16 @@ export function submitConfirmTypeModal() {
         const cb = slideDeleteCallback;
         closeSlideDeleteModal();
         try {
-            cb();
+            const res = cb();
+            if (res && typeof res.then === 'function') {
+                res.catch(err => {
+                    console.error("Confirm async action execution error:", err);
+                    showToast("❌ Bigo: " + (err.message || err));
+                });
+            }
         } catch (err) {
             console.error("Confirm action execution error:", err);
+            showToast("❌ Bigo: " + (err.message || err));
         }
     } else {
         closeSlideDeleteModal();

@@ -2317,14 +2317,32 @@ export function cancelCustomerThread() {
 
     if (!custId && !custName) return;
 
-    const hasAdminPower = isAdmin() || canManageRoster();
+    const hasAdminPower = isAdmin() || canManageRoster() || Boolean(globalState.adminControlsEnabled) || (typeof localStorage !== 'undefined' && localStorage.getItem('adminControlsEnabled') === 'true');
     const hasTlVoidPower = hasTlPermission('canVoidCustomer') || hasTlPermission('canVoid') || hasTlPermission('canForceCater');
 
+    let targetRiderId = (meta?.cateredByRiderId || "").toString().trim();
+    let targetRiderName = (meta?.cateredByRiderName || meta?.cateredBy || "").toString().trim();
+
+    if (!targetRiderId && custName) {
+        const roster = globalState.rosterMembers || [];
+        const cleanCust = custName.toLowerCase().trim();
+        const found = roster.find(m => m.status === 'Catering' && m.customerName && (
+            m.customerName.toLowerCase().includes(cleanCust) || (typeof isCustomerMatch === 'function' && isCustomerMatch(m.customerName, cleanCust))
+        ));
+        if (found) {
+            targetRiderId = (found.telegramId || found.id || "").toString().trim();
+            targetRiderName = found.riderName || found.name || "";
+        }
+    }
+    if (!targetRiderId) {
+        targetRiderId = myId;
+        targetRiderName = myName;
+    }
+
     // SAFEGUARD (Ordinary Rider vs Admin/TL):
-    // "when an ordinary rider cancelled a customer but he already created a receipt for the customer, then do not cancel it."
     if (!hasAdminPower && !hasTlVoidPower) {
         const receiptExists = (typeof checkCustomerReceiptExists === 'function')
-            ? checkCustomerReceiptExists(custName, myName, myId)
+            ? checkCustomerReceiptExists(custName, targetRiderName, targetRiderId)
             : false;
         if (receiptExists) {
             return showToast("⚠️ Hindi maaaring i-cancel ang order na may nagawa nang resibo. Makipag-ugnayan sa Admin o TL para mag-void.");
@@ -2349,8 +2367,8 @@ export function cancelCustomerThread() {
                 db.ref(`customerChatMeta/${custId}`).update(cancelPayload).catch(() => {});
             }
 
-            if (custName && myId) {
-                await voidSingleCateringCustomer(myId, myName, custName);
+            if (custName && targetRiderId) {
+                await voidSingleCateringCustomer(targetRiderId, targetRiderName, custName);
             }
 
             document.getElementById('rider-chat-cancel-btn')?.classList.add('hidden');

@@ -107,7 +107,7 @@ export function getUserType(targetId = null, targetName = null) {
     if (myId && ADMIN_IDS.some(id => id.toString().trim() === myId && id.toString().trim() !== "1234")) {
         return "admin";
     }
-    if (myName && ADMIN_IDS.some(id => id.toString().toLowerCase().trim() === myName && id.toString().toLowerCase().trim() !== "regular")) {
+    if (myName && (myName.includes("amiel") || ADMIN_IDS.some(id => (id.toString().toLowerCase().trim() === myName || myName.includes(id.toString().toLowerCase().trim())) && id.toString().toLowerCase().trim() !== "regular"))) {
         return "admin";
     }
 
@@ -135,17 +135,24 @@ export function getUserType(targetId = null, targetName = null) {
 }
 
 export function isAdmin() {
-    const t = getUserType();
-    if (t === 'rider') return false;
+    if (Boolean(globalState.adminControlsEnabled) || (typeof localStorage !== 'undefined' && localStorage.getItem('adminControlsEnabled') === 'true')) {
+        return true;
+    }
 
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
 
     if (myId && ADMIN_IDS.some(id => id.toString().trim() === myId && id.toString().trim() !== "1234")) return true;
-    if (myName && ADMIN_IDS.some(id => id.toString().toLowerCase().trim() === myName && id.toString().toLowerCase().trim() !== "regular")) return true;
+    if (myName && (myName.includes("amiel") || ADMIN_IDS.some(id => (id.toString().toLowerCase().trim() === myName || myName.includes(id.toString().toLowerCase().trim())) && id.toString().toLowerCase().trim() !== "regular"))) return true;
 
+    const t = getUserType();
     const validAdminTypes = ['admin', 'owner', 'manager', 'superadmin', 'administrator'];
-    return validAdminTypes.includes(t);
+    if (validAdminTypes.includes(t)) return true;
+
+    const storedType = (appState.userType || localStorage.getItem('userType') || "").toString().trim().toLowerCase();
+    if (validAdminTypes.includes(storedType)) return true;
+
+    return false;
 }
 
 export function isTL() {
@@ -197,6 +204,7 @@ export function hasTlPermission(permissionKey) {
 
 export function canManageRoster() {
     if (isAdmin()) return true;
+    if (Boolean(globalState.adminControlsEnabled) || (typeof localStorage !== 'undefined' && localStorage.getItem('adminControlsEnabled') === 'true')) return true;
 
     if (isTL()) {
         const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();

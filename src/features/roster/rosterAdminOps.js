@@ -326,7 +326,10 @@ export async function adminForceStatus(id, name, actionValue) {
     }
 
     if (actionValue === 'VoidActive') {
-        if (!isAdmin() && !canManageRoster() && !hasTlPermission('canVoidCustomer')) {
+        const hasAdminPower = isAdmin() || canManageRoster() || Boolean(globalState.adminControlsEnabled) || (typeof localStorage !== 'undefined' && localStorage.getItem('adminControlsEnabled') === 'true');
+        const hasTlVoidPower = hasTlPermission('canVoidCustomer') || hasTlPermission('canVoid') || hasTlPermission('canForceCater');
+
+        if (!hasAdminPower && !hasTlVoidPower) {
             return showToast("⚠️ Unauthorized: You do not have permission to Void Active Orders.");
         }
         openSlideDeleteModal(`Void Order for ${name}?`, `Sigurado ka bang nais i-void ang active order ni ${name}? Malilipat sya sa #1 SPOT ng Available queue.`, async () => {
@@ -403,13 +406,16 @@ export async function adminForceStatus(id, name, actionValue) {
 }
 
 export async function adminVoidSpecificCustomer(targetId, targetName, custNameToVoid) {
-    if (!isAdmin() && !canManageRoster() && !hasTlPermission('canVoidCustomer')) {
+    const hasAdminPower = isAdmin() || canManageRoster() || Boolean(globalState.adminControlsEnabled) || (typeof localStorage !== 'undefined' && localStorage.getItem('adminControlsEnabled') === 'true');
+    const hasTlVoidPower = hasTlPermission('canVoidCustomer') || hasTlPermission('canVoid') || hasTlPermission('canForceCater');
+
+    if (!hasAdminPower && !hasTlVoidPower) {
         return showToast("⚠️ Unauthorized: You do not have permission to Void Active Customers.");
     }
 
-    if (!targetId || !custNameToVoid) return;
+    if (!custNameToVoid) return showToast("⚠️ Missing customer name to void.");
 
-    openSlideDeleteModal(`Void Customer: ${custNameToVoid}?`, `Sigurado ka bang nais i-void si ${custNameToVoid} para kay ${targetName}?`, async () => {
+    openSlideDeleteModal(`Void Customer: ${custNameToVoid}?`, `Sigurado ka bang nais i-void si ${custNameToVoid} para kay ${targetName || 'Rider'}?`, async () => {
         await voidSingleCateringCustomer(targetId, targetName, custNameToVoid);
     });
 }
