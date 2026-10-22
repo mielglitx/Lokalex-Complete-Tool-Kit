@@ -120,7 +120,8 @@ function getOrCreateMenuGalleryModal() {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'store-menu-gallery-modal';
-        modal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2.5 sm:p-5 hidden';
+        modal.className = 'fixed inset-0 z-[100001] flex items-center justify-center bg-black/85 backdrop-blur-md p-2.5 sm:p-5 hidden';
+        modal.style.zIndex = '100001';
         modal.innerHTML = `
         <div class="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-3xl max-w-2xl w-full max-h-[92vh] shadow-2xl flex flex-col overflow-hidden animate-scaleUp">
             <!-- Header -->
@@ -188,20 +189,20 @@ function getOrCreateMenuGalleryModal() {
                     </button>
                 </div>
             </div>
+        </div>
 
-            <!-- Lightbox / Preview Layer -->
-            <div id="gallery-lightbox" class="fixed inset-0 z-60 bg-black/95 flex flex-col items-center justify-center p-3 hidden" onclick="window.closeGalleryLightbox && window.closeGalleryLightbox()">
-                <div class="absolute top-4 right-4 flex items-center gap-2">
-                    <a id="lightbox-download-single" href="#" download="menu_page.jpg" onclick="event.stopPropagation()" class="bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 backdrop-blur-md">
-                        <i class="fa-solid fa-download"></i> Save Image
-                    </a>
-                    <button type="button" class="text-white text-xl p-2 cursor-pointer" onclick="window.closeGalleryLightbox && window.closeGalleryLightbox()">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </div>
-                <img id="lightbox-image" src="" alt="Menu Full View" class="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl select-none" onclick="event.stopPropagation()">
-                <div id="lightbox-caption" class="text-white text-xs font-bold mt-2 text-center bg-black/60 px-3 py-1 rounded-lg backdrop-blur-xs select-none"></div>
+        <!-- Lightbox / Preview Layer -->
+        <div id="gallery-lightbox" class="fixed inset-0 z-[1000002] bg-black/95 flex flex-col items-center justify-center p-3 hidden" style="z-index: 1000002 !important;" onclick="window.closeGalleryLightbox && window.closeGalleryLightbox()">
+            <div class="absolute top-4 right-4 flex items-center gap-2">
+                <a id="lightbox-download-single" href="#" download="menu_page.jpg" onclick="event.stopPropagation()" class="bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 backdrop-blur-md">
+                    <i class="fa-solid fa-download"></i> Save Image
+                </a>
+                <button type="button" class="text-white text-xl p-2 cursor-pointer" onclick="window.closeGalleryLightbox && window.closeGalleryLightbox()">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
             </div>
+            <img id="lightbox-image" src="" alt="Menu Full View" class="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl select-none" onclick="event.stopPropagation()">
+            <div id="lightbox-caption" class="text-white text-xs font-bold mt-2 text-center bg-black/60 px-3 py-1 rounded-lg backdrop-blur-xs select-none"></div>
         </div>`;
         document.body.appendChild(modal);
     }
@@ -269,7 +270,8 @@ export function getOrCreateMenuCameraModal() {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'store-menu-camera-modal';
-        modal.className = 'fixed inset-0 z-60 bg-black flex flex-col justify-between hidden select-none animate-scaleUp';
+        modal.className = 'fixed inset-0 z-[1000005] bg-black flex flex-col justify-between hidden select-none animate-scaleUp';
+        modal.style.zIndex = '1000005';
         modal.innerHTML = `
         <!-- Camera Top Bar -->
         <div class="flex items-center justify-between px-4 py-3 bg-black/85 backdrop-blur-md text-white z-20 border-b border-white/10">
@@ -367,6 +369,14 @@ export async function openMenuCameraScanner() {
     }
 
     const modal = getOrCreateMenuCameraModal();
+    // Ensure camera modal is at top of DOM stack and z-index above store menu modal
+    if (modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    } else {
+        document.body.appendChild(modal);
+    }
+    modal.style.zIndex = '1000005';
+
     const titleEl = document.getElementById('menu-camera-title');
     if (titleEl) titleEl.innerText = `${activeGalleryStore.name} - Camera`;
 
@@ -639,6 +649,13 @@ export function handleOpenMenuGalleryClick(btn) {
 
 export async function openStoreMenuGalleryModal(storeName, compositeKey) {
     const modal = getOrCreateMenuGalleryModal();
+    if (modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    } else {
+        document.body.appendChild(modal);
+    }
+    modal.style.zIndex = '100001';
+
     const cleanName = (storeName || "Store").trim();
     const galleryKey = (compositeKey || cleanName).toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -1060,7 +1077,8 @@ function getOrCreateMenuCustomerRecipientPickerModal() {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'menu-recipient-picker-modal';
-        modal.className = 'fixed inset-0 z-[75] flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 hidden';
+        modal.className = 'fixed inset-0 z-[1000003] flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 hidden';
+        modal.style.zIndex = '1000003';
         modal.innerHTML = `
         <div class="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-3xl max-w-sm w-full max-h-[85vh] shadow-2xl flex flex-col overflow-hidden animate-scaleUp">
             <!-- Header -->
@@ -1100,6 +1118,12 @@ function getOrCreateMenuCustomerRecipientPickerModal() {
 export function openMenuCustomerRecipientPicker(pagesToSend) {
     menuRecipientPickerPendingPages = pagesToSend || [];
     const modal = getOrCreateMenuCustomerRecipientPickerModal();
+    if (modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    } else {
+        document.body.appendChild(modal);
+    }
+    modal.style.zIndex = '1000003';
 
     const sub = document.getElementById('menu-recipient-modal-sub');
     const storeName = activeGalleryStore?.name || "Store";
@@ -1228,7 +1252,8 @@ function getOrCreateChatStoreMenuPickerModal() {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'chat-store-menu-picker-modal';
-        modal.className = 'fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 hidden';
+        modal.className = 'fixed inset-0 z-[100000] flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 hidden';
+        modal.style.zIndex = '100000';
         modal.innerHTML = `
         <div class="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-3xl max-w-sm sm:max-w-md w-full max-h-[85vh] shadow-2xl flex flex-col overflow-hidden animate-scaleUp">
             <!-- Header -->
@@ -1267,6 +1292,12 @@ function getOrCreateChatStoreMenuPickerModal() {
 
 export function openStoreMenuPickerFromChat() {
     const modal = getOrCreateChatStoreMenuPickerModal();
+    if (modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    } else {
+        document.body.appendChild(modal);
+    }
+    modal.style.zIndex = '100000';
     const searchInput = document.getElementById('chat-store-picker-search');
     if (searchInput) searchInput.value = "";
     modal.classList.remove('hidden');
