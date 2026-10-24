@@ -313,6 +313,9 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                     cateredBy: myName,
                     lastUpdated: Date.now()
                 };
+                if (custName && custName.toLowerCase() !== 'customer') {
+                    updateObj.customerName = custName;
+                }
                 if (isForcedByRole) {
                     updateObj.forcedBy = myName;
                     updateObj.isForcedCater = true;
@@ -343,8 +346,12 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                             const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
                             const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
                             const fbName = (resolvedFb?.name || "").toLowerCase().trim();
+                            const hasFbName = Boolean(fbName && fbName !== 'customer');
 
-                            if (chatCustName === cleanSearchName || fbName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName) || (fbName && isCustomerMatch(fbName, cleanSearchName))) {
+                            const matchesFb = hasFbName && (fbName === cleanSearchName || isCustomerMatch(fbName, cleanSearchName));
+                            const matchesMeta = !hasFbName && (chatCustName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName));
+
+                            if (matchesFb || matchesMeta) {
                                 applyChatCaterUpdate(custId);
                             }
                         });

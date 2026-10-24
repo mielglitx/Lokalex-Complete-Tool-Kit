@@ -1,0 +1,37 @@
+<!-- src/partials/modals/video-viewer.html -->
+<div id="video-viewer-modal" class="hidden fixed inset-0 bg-black/95 backdrop-blur-md z-[999999] flex flex-col justify-between p-3 select-none" style="z-index: 999999 !important;">
+    <!-- TOP CONTROL BAR -->
+    <div class="flex justify-between items-center bg-cardBg/90 border border-gray-800 p-2.5 rounded-2xl shadow-xl z-10 gap-2">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+            <button type="button" onclick="window.closeVideoViewerModal && window.closeVideoViewerModal()" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0" title="Close">
+                <i class="fa-solid fa-arrow-left text-xs"></i>
+            </button>
+            <div class="min-w-0 flex-1">
+                <h3 id="video-viewer-title" class="font-bold text-xs sm:text-sm text-gray-900 dark:text-white truncate">Video Player</h3>
+                <p id="video-viewer-subtitle" class="text-[10px] text-gray-400 truncate">Lokalex Media</p>
+            </div>
+        </div>
+
+        <!-- SPEED & DOWNLOAD CONTROLS -->
+        <div class="flex items-center gap-1.5 shrink-0">
+            <button type="button" id="video-viewer-speed-btn" onclick="window.cycleVideoPlaybackSpeed && window.cycleVideoPlaybackSpeed()" class="bg-gray-800 hover:bg-gray-700 text-cyan-400 font-bold px-2.5 py-1.5 rounded-xl text-xs active:scale-95 transition" title="Playback Speed">1.0x</button>
+            <button type="button" id="video-viewer-download-btn" onclick="window.downloadCurrentViewerVideo && window.downloadCurrentViewerVideo()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition flex items-center gap-1.5 cursor-pointer shadow-xs" title="Save / Download Video">
+                <i class="fa-solid fa-download text-xs"></i> <span class="hidden sm:inline">Save</span>
+            </button>
+            <button type="button" onclick="window.closeVideoViewerModal && window.closeVideoViewerModal()" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer" title="Close">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- MAIN VIDEO VIEWPORT -->
+    <div id="video-viewer-viewport" class="flex-1 w-full h-full flex items-center justify-center overflow-hidden my-2 relative">
+        <video id="video-viewer-player" controls playsinline class="max-w-full max-h-[80vh] rounded-2xl bg-black object-contain shadow-2xl border border-white/10"></video>
+    </div>
+
+    <!-- BOTTOM CAPTION DISPLAY (SHOWN WHEN VIDEO HAS CAPTION) -->
+    <div id="video-viewer-caption-container" class="hidden bg-cardBg/90 border border-gray-800 p-2.5 rounded-2xl shadow-xl flex items-center justify-center z-10 max-w-xl mx-auto w-full">
+        <p id="video-viewer-caption" class="text-xs text-white/90 text-center font-medium leading-relaxed break-words px-2"></p>
+    </div>
+</div>
+

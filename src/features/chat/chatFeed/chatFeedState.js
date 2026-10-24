@@ -189,6 +189,30 @@ export function getLoggedInRiderInfo() {
     return { myId, myName };
 }
 
+export function getThreadCustomerCandidates(tOrMeta = {}, fallbackName = '', custId = '') {
+    const candidates = new Set();
+    const add = (val) => {
+        if (!val || typeof val !== 'string') return;
+        const clean = val.trim().toLowerCase();
+        if (clean && clean !== 'customer' && clean !== 'customer name' && clean !== 'null' && clean !== 'undefined') {
+            candidates.add(clean);
+        }
+    };
+
+    add(fallbackName);
+    add(tOrMeta?.customerName);
+    add(tOrMeta?.name);
+    add(tOrMeta?.originalCustomerName);
+    add(tOrMeta?.facebookName);
+    add(tOrMeta?.linkedDirectoryName);
+    add(tOrMeta?.linkedDirectoryKey);
+    const id = custId || tOrMeta?.custId || tOrMeta?.id || '';
+    if (id && id.startsWith('cust_')) {
+        add(id.replace(/^cust_/, '').replace(/_/g, ' '));
+    }
+    return candidates;
+}
+
 export function isMyCustomerThread(t, cachedAuth = null) {
     if (!t) return false;
     const { myId, myName } = cachedAuth || getLoggedInRiderInfo();
@@ -206,18 +230,15 @@ export function isMyCustomerThread(t, cachedAuth = null) {
         (myName && (m.riderName || m.name || "").trim().toLowerCase() === myName)
     );
     if (myRecord && myRecord.status === 'Catering') {
-        let custName = (t.customerName || '').toLowerCase().trim();
-        if (!custName || custName === 'customer' || custName === 'customer name') {
-            if (t.custId && t.custId.startsWith('cust_')) {
-                custName = t.custId.replace(/^cust_/, '').replace(/_/g, ' ').trim().toLowerCase();
-            }
-        }
-        if (!custName || custName === 'customer' || custName === 'customer name') return false;
+        const candidateNames = getThreadCustomerCandidates(t, t.customerName, t.custId);
+        if (candidateNames.size === 0) return false;
 
-        if (myRecord.customerName && custName) {
+        if (myRecord.customerName) {
             const custs = myRecord.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c !== 'customer' && c !== 'customer name');
-            if (custs.some(c => c === custName || isCustomerMatch(c, custName))) {
-                return true;
+            for (const c of custs) {
+                for (const candidate of candidateNames) {
+                    if (c === candidate || isCustomerMatch(c, candidate)) return true;
+                }
             }
         }
         if (myRecord.forcedCaters && typeof myRecord.forcedCaters === 'object') {
@@ -225,7 +246,11 @@ export function isMyCustomerThread(t, cachedAuth = null) {
                 if (fKey === t.custId && fKey !== 'customer') return true;
                 const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
                 const cleanFName = (fName || '').toLowerCase().trim();
-                if (cleanFName !== 'customer' && cleanFName !== 'customer name' && custName && isCustomerMatch(fName, custName)) return true;
+                if (cleanFName !== 'customer' && cleanFName !== 'customer name') {
+                    for (const candidate of candidateNames) {
+                        if (cleanFName === candidate || isCustomerMatch(fName, candidate)) return true;
+                    }
+                }
             }
         }
     }
@@ -241,13 +266,8 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
     const liveRoster = globalState.rosterMembers || [];
     if (!liveRoster || liveRoster.length === 0) return null;
 
-    let tCustName = (custName || meta?.customerName || meta?.name || '').toLowerCase().trim();
-    if (!tCustName || tCustName === 'customer' || tCustName === 'customer name') {
-        if (custId && custId.startsWith('cust_')) {
-            tCustName = custId.replace(/^cust_/, '').replace(/_/g, ' ').trim().toLowerCase();
-        }
-    }
-    if (!tCustName || tCustName === 'customer' || tCustName === 'customer name') return null;
+    const candidateNames = getThreadCustomerCandidates(meta, custName, custId);
+    if (candidateNames.size === 0) return null;
 
     return liveRoster.find(m => {
         if (m.status !== 'Catering') return false;
@@ -255,7 +275,11 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
         // 1. Check comma-separated customerName field
         if (m.customerName) {
             const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c && c !== 'customer' && c !== 'customer name');
-            if (custs.some(c => c === tCustName || isCustomerMatch(c, tCustName))) return true;
+            for (const c of custs) {
+                for (const candidate of candidateNames) {
+                    if (c === candidate || isCustomerMatch(c, candidate)) return true;
+                }
+            }
         }
 
         // 2. Check forcedCaters map
@@ -264,8 +288,10 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
                 if (custId && fKey === custId && fKey !== 'customer') return true;
                 const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
                 const cleanFName = (fName || '').toLowerCase().trim();
-                if (cleanFName && cleanFName !== 'customer' && cleanFName !== 'customer name' && (cleanFName === tCustName || isCustomerMatch(fName, tCustName))) {
-                    return true;
+                if (cleanFName && cleanFName !== 'customer' && cleanFName !== 'customer name') {
+                    for (const candidate of candidateNames) {
+                        if (cleanFName === candidate || isCustomerMatch(fName, candidate)) return true;
+                    }
                 }
             }
         }

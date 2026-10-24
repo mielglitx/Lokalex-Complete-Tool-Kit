@@ -25,6 +25,8 @@ import { getLocalTodayStr } from '../../../utils/helpers.js';
 import { idbSet } from '../../../utils/storageEngine.js';
 import { 
     parseQueueTime, 
+    parseTimeToMinutes,
+    resolveOrderDate,
     hasReceiptForActiveSession, 
     parseItemGross, 
     calculateSplitDuration, 
@@ -303,8 +305,13 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
                     unreadForRider: false,
                     lastUpdated: now
                 };
-                db.ref(`customerChats/${targetChatId}/metadata`).update(doneUpdate).catch(() => {});
-                db.ref(`customerChatMeta/${targetChatId}`).update(doneUpdate).catch(() => {});
+                try {
+                    const safeKey = sanitizeFirebaseKey(targetChatId);
+                    if (safeKey) {
+                        db.ref(`customerChats/${safeKey}/metadata`).update(doneUpdate).catch(() => {});
+                        db.ref(`customerChatMeta/${safeKey}`).update(doneUpdate).catch(() => {});
+                    }
+                } catch (_) {}
             };
 
             if (cleanCustKey) {
@@ -364,13 +371,11 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         }
 
         if (resolvedTargetId) {
-            if (cleanCustKey) db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
-            if (matchedCfKey) db.ref(`roster/${resolvedTargetId}/customerFees/${matchedCfKey}`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCust}`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}/customerFees/${custNameToComplete}`).remove().catch(() => {});
-            if (cleanCustKey) db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCust}`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}/forcedCaters/${custNameToComplete}`).remove().catch(() => {});
+            try {
+                if (cleanCustKey) db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
+                if (matchedCfKey && matchedCfKey !== cleanCustKey) db.ref(`roster/${resolvedTargetId}/customerFees/${sanitizeFirebaseKey(matchedCfKey)}`).remove().catch(() => {});
+                if (cleanCustKey) db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
+            } catch (_) {}
         }
     }
 
@@ -501,24 +506,7 @@ export function checkCustomerReceiptExists(custName, riderName = "", riderId = "
     const cleanCustKey = sanitizeFirebaseKey(cleanCust);
     const todayStr = getLocalTodayStr();
 
-    // 1. Session check
-    if (typeof hasReceiptForActiveSession === 'function' && hasReceiptForActiveSession(custName)) {
-        return true;
-    }
-
-    // 2. Global daily receipts check
-    const receipts = globalState.globalDailyReceipts || [];
-    const hasDaily = receipts.some(rc => {
-        if (!rc) return false;
-        const matchCust = isCustomerMatch(rc.customerName, custName) ||
-                          (rc.customerName && rc.customerName.trim().toLowerCase() === cleanCust) ||
-                          (rc.id && rc.id.toLowerCase().includes(cleanCustKey)) ||
-                          (rc.transactionId && rc.transactionId.toLowerCase().includes(cleanCustKey));
-        return matchCust;
-    });
-    if (hasDaily) return true;
-
-    // 3. Roster member customerFees
+    // 1. Locate the active roster member catering this customer
     const rosterMembers = globalState.rosterMembers || [];
     const member = rosterMembers.find(m => {
         const mId = (m.telegramId || m.id || "").toString().trim();
@@ -526,24 +514,80 @@ export function checkCustomerReceiptExists(custName, riderName = "", riderId = "
         if (riderId && mId && mId === riderId.toString().trim()) return true;
         if (riderName && mName && mName === riderName.toString().trim().toLowerCase()) return true;
         return false;
-    });
-    if (member?.customerFees && (member.customerFees[cleanCustKey] || member.customerFees[cleanCust])) {
-        return true;
+    }) || rosterMembers.find(m => m.status === 'Catering' && m.customerName && (
+        m.customerName.toLowerCase().includes(cleanCust) || isCustomerMatch(m.customerName, cleanCust)
+    ));
+
+    // Extract this customer's catering start time
+    let custStartTime = "";
+    if (member?.customerName && member?.startTime) {
+        const custs = member.customerName.split(/\s*,\s*/).map(c => c.trim());
+        const times = member.startTime.split(/\s*,\s*/).map(t => t.trim());
+        const idx = custs.findIndex(c => isCustomerMatch(c, custName) || c.toLowerCase() === cleanCust);
+        if (idx !== -1) {
+            custStartTime = times[idx] || times[0] || "";
+        }
     }
 
-    // 4. Cart saved summaries
-    try {
-        const cartKeys = ['cart_state_1', 'cart_state_2', 'cart_state_3', 'lokalex_cart_state_v1'];
-        for (const ck of cartKeys) {
-            const raw = localStorage.getItem(ck);
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (parsed?.receiptSummary && isCustomerMatch(parsed.customerName, custName)) {
-                    return true;
+    // 2. Check active customerFees on the rider's roster record
+    if (member?.customerFees && typeof member.customerFees === 'object') {
+        let activeFeeObj = member.customerFees[cleanCustKey] || member.customerFees[cleanCust];
+        if (!activeFeeObj) {
+            for (const [k, v] of Object.entries(member.customerFees)) {
+                if (isCustomerMatch(k, custName) || (v?.customerName && isCustomerMatch(v.customerName, custName))) {
+                    activeFeeObj = v;
+                    break;
                 }
             }
         }
-    } catch (_) {}
+        if (activeFeeObj && activeFeeObj.transactionId && activeFeeObj.status !== 'voided' && activeFeeObj.voided !== true) {
+            const txId = activeFeeObj.transactionId;
+            const rc = (globalState.globalDailyReceipts || []).find(r => (r.transactionId || r.id) === txId);
+            const isCompleted = rc && (rc.doneTime || rc.completedTime || rc.status === 'completed' || rc.isCompleted === true);
+            if (!isCompleted && (!rc || (rc.status !== 'voided' && rc.voided !== true && rc.isVoided !== true))) {
+                return true;
+            }
+        }
+    }
+
+    // 3. Check for active uncompleted receipt record in globalDailyReceipts
+    const completedTxIds = new Set((globalState.globalCateredHistory || []).map(h => (h.transactionId || h.id)));
+    const receipts = globalState.globalDailyReceipts || [];
+    const hasActiveReceipt = receipts.some(rc => {
+        if (!rc) return false;
+        if (rc.status === 'voided' || rc.voided === true || rc.isVoided === true) return false;
+        if (rc.doneTime || rc.completedTime || rc.status === 'completed' || rc.isCompleted === true) return false;
+
+        const txId = rc.transactionId || rc.id;
+        if (txId && completedTxIds.has(txId)) return false; // Already finished past delivery
+
+        const matchRider = isRiderMatch(riderName, rc.riderName, riderId, rc.telegramId);
+        const matchCust = isCustomerMatch(rc.customerName, custName) ||
+                          (rc.customerName && rc.customerName.trim().toLowerCase() === cleanCust);
+        if (!matchCust) return false;
+        if (riderName && !matchRider) return false;
+
+        // Verify receipt was created AFTER or within the current ongoing catering session
+        if (custStartTime && rc.receiptTime) {
+            const rTimeMins = parseTimeToMinutes(rc.receiptTime);
+            const sTimeMins = parseTimeToMinutes(custStartTime);
+            if (rTimeMins !== null && sTimeMins !== null && rTimeMins < (sTimeMins - 5)) {
+                return false;
+            }
+        }
+        return true;
+    });
+    if (hasActiveReceipt) return true;
+
+    // 4. Specific session key check in localStorage (with exact start time)
+    if (custStartTime) {
+        const resolvedRiderName = (riderName || member?.riderName || appState.riderName || "").trim().toLowerCase();
+        const resolvedOrderDate = resolveOrderDate(custStartTime, todayStr);
+        const keyWithTime = `receipt_done_${resolvedRiderName}_${cleanCust}_${custStartTime}_${resolvedOrderDate}`;
+        if (localStorage.getItem(keyWithTime) === 'true') {
+            return true;
+        }
+    }
 
     return false;
 }
@@ -609,10 +653,28 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
 
     // 1B. SAFEGUARD (Ordinary Rider vs Admin/TL):
     if (!hasAdminPower && !hasTlVoidPower) {
-        const hasReceipt = checkCustomerReceiptExists(custNameToVoid, resolvedTargetName, resolvedTargetId);
-        if (hasReceipt) {
-            showToast("⚠️ Hindi maaaring i-cancel ang order na may nagawa nang resibo. Makipag-ugnayan sa Admin o TL para mag-void.");
-            return false;
+        // If the order or chat is already marked as cancelled or done, allow the rider to clear it!
+        let isAlreadyCancelled = false;
+        if (cleanCustKey) {
+            const threadsMap = (typeof window.getCachedCustomerThreadsMap === 'function') ? window.getCachedCustomerThreadsMap() : null;
+            if (threadsMap) {
+                for (const t of threadsMap.values()) {
+                    if (isCustomerMatch(t.customerName, custNameToVoid) || (t.custId && t.custId.toLowerCase().includes(cleanCustKey))) {
+                        if (t.status === 'cancelled' || t.status === 'voided' || t.folder === 'done' || t.folder === 'followup') {
+                            isAlreadyCancelled = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!isAlreadyCancelled) {
+            const hasReceipt = checkCustomerReceiptExists(custNameToVoid, resolvedTargetName, resolvedTargetId);
+            if (hasReceipt) {
+                showToast("⚠️ Hindi maaaring i-cancel ang order na may nagawa nang resibo. Makipag-ugnayan sa Admin o TL para mag-void.");
+                return false;
+            }
         }
     }
 
@@ -656,15 +718,18 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
 
     // Explicitly delete forcedCaters and customerFees from Firebase RTDB
     if (db && resolvedTargetId) {
-        if (cleanCustKey) {
-            db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanVoidCust}`).remove().catch(() => {});
-        }
-        if (remainingCusts.length === 0) {
-            db.ref(`roster/${resolvedTargetId}/forcedCaters`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}/customerFees`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}/availableLocation`).remove().catch(() => {});
+        try {
+            if (cleanCustKey) {
+                db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
+                db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
+            }
+            if (remainingCusts.length === 0) {
+                db.ref(`roster/${resolvedTargetId}/forcedCaters`).remove().catch(() => {});
+                db.ref(`roster/${resolvedTargetId}/customerFees`).remove().catch(() => {});
+                db.ref(`roster/${resolvedTargetId}/availableLocation`).remove().catch(() => {});
+            }
+        } catch (dbErr) {
+            console.warn("RTDB void cleanup warning:", dbErr);
         }
     }
 
@@ -744,8 +809,13 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
 
         const markChatVoided = (targetChatId) => {
             if (!targetChatId) return;
-            db.ref(`customerChats/${targetChatId}/metadata`).update(voidPayload).catch(() => {});
-            db.ref(`customerChatMeta/${targetChatId}`).update(voidPayload).catch(() => {});
+            try {
+                const safeKey = sanitizeFirebaseKey(targetChatId);
+                if (safeKey) {
+                    db.ref(`customerChats/${safeKey}/metadata`).update(voidPayload).catch(() => {});
+                    db.ref(`customerChatMeta/${safeKey}`).update(voidPayload).catch(() => {});
+                }
+            } catch (_) {}
         };
 
         // Update customerChats matching cleanCustKey
@@ -934,10 +1004,16 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
 }
 
 export function adminVoidSpecificCustomer(targetId, targetName, custName) {
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+    const cleanTargetId = (targetId || "").toString().trim();
+    const cleanTargetName = (targetName || "").toString().trim().toLowerCase();
+    const isMe = (myId && cleanTargetId && myId === cleanTargetId) || (myName && cleanTargetName && myName === cleanTargetName);
+
     const hasAdminPower = isAdmin() || canManageRoster() || Boolean(globalState.adminControlsEnabled) || (typeof localStorage !== 'undefined' && localStorage.getItem('adminControlsEnabled') === 'true');
     const hasTlVoidPower = hasTlPermission('canVoidCustomer') || hasTlPermission('canVoid') || hasTlPermission('canForceCater');
 
-    if (!hasAdminPower && !hasTlVoidPower) {
+    if (!isMe && !hasAdminPower && !hasTlVoidPower) {
         return showToast("🚫 Access Denied: Admin or Team Lead authorization required.");
     }
 

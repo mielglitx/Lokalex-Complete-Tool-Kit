@@ -39,8 +39,8 @@ import {
     syncIncomingMessageFromMeta
 } from './chatListeners.js';
 
-export function openRiderChatModal(custId, custName) {
-    openRiderCustomerChatModal(custId, custName);
+export function openRiderChatModal(custId, custName, avatarUrl) {
+    openRiderCustomerChatModal(custId, custName, avatarUrl);
 }
 
 export function viewCurrentCustomerPhoto() {
@@ -100,41 +100,42 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
     const nameEl = document.getElementById('rider-chat-cust-name');
     const avatarEl = document.getElementById('rider-chat-avatar') || document.getElementById('rider-chat-cust-avatar');
 
+    // Immediately clear previous thread's metadata to prevent cross-customer data leakage
+    setCurrentRiderChatMeta(null);
+
     let effectiveName = custName || "Customer";
     let effectiveAvatar = avatarUrl;
 
     if (custId && custId.startsWith('fb_')) {
         const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(custId) : null;
-        if (cached && cached.name && (!effectiveName || effectiveName.startsWith('FB Customer ('))) {
+        if (cached && cached.name && (!effectiveName || effectiveName.startsWith('FB Customer (') || effectiveName.toLowerCase() === 'customer')) {
             effectiveName = cached.name;
         }
-        if (cached && cached.avatarUrl && !cached.avatarUrl.includes('ui-avatars.com')) {
+        if (cached && cached.avatarUrl && !cached.avatarUrl.includes('ui-avatars.com') && (!effectiveAvatar || effectiveAvatar.includes('ui-avatars.com'))) {
             effectiveAvatar = cached.avatarUrl;
         }
         
-        // Background check to resolve customer name or real Facebook photo if missing/placeholder
-        const needsName = !effectiveName || effectiveName.startsWith('FB Customer (');
-        const needsAvatar = !effectiveAvatar || effectiveAvatar.includes('ui-avatars.com');
-        if (needsName || needsAvatar) {
-            if (typeof resolveFacebookCustomerName === 'function') {
-                resolveFacebookCustomerName(custId).then(resolved => {
-                    if (resolved && activeRiderChatCustId === custId) {
-                        if (resolved.name && needsName && nameEl) {
-                            nameEl.innerText = resolved.name;
-                        }
-                        if (resolved.avatarUrl && !resolved.avatarUrl.includes('ui-avatars.com')) {
-                            setCurrentActiveRiderChatCustAvatar(resolved.avatarUrl);
-                            if (avatarEl) {
-                                if (avatarEl.tagName === 'IMG') {
-                                    avatarEl.src = resolved.avatarUrl;
-                                } else {
-                                    avatarEl.innerHTML = `<img src="${resolved.avatarUrl}" class="w-full h-full rounded-full object-cover">`;
-                                }
+        // Background check to resolve customer name or real Facebook photo
+        if (typeof resolveFacebookCustomerName === 'function') {
+            resolveFacebookCustomerName(custId).then(resolved => {
+                if (resolved && activeRiderChatCustId === custId) {
+                    const currentTitle = nameEl?.innerText?.trim();
+                    if (resolved.name && (!currentTitle || currentTitle.startsWith('FB Customer (') || currentTitle.toLowerCase() === 'customer') && nameEl) {
+                        nameEl.innerText = resolved.name;
+                    }
+                    if (resolved.avatarUrl && !resolved.avatarUrl.includes('ui-avatars.com')) {
+                        setCurrentActiveRiderChatCustAvatar(resolved.avatarUrl);
+                        if (avatarEl) {
+                            if (avatarEl.tagName === 'IMG') {
+                                avatarEl.src = resolved.avatarUrl;
+                            } else {
+                                avatarEl.innerHTML = `<img src="${resolved.avatarUrl}" class="w-full h-full rounded-full object-cover">`;
                             }
                         }
                     }
-                }).catch(() => {});
-            }
+                    renderRiderCateredSwitcher();
+                }
+            }).catch(() => {});
         }
     }
 
@@ -209,13 +210,24 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
                     fetchedMeta.folder = 'followup';
                 }
             }
+            if (activeRiderChatCustId !== custId) return;
+
+            const hasLinkedDir = Boolean(fetchedMeta.linkedDirectoryKey || fetchedMeta.linkedDirectoryName);
             if (fetchedMeta?.customerName && nameEl) {
-                if (!nameEl.innerText || nameEl.innerText === 'Customer' || nameEl.innerText.startsWith('FB Customer (')) {
-                    nameEl.innerText = fetchedMeta.customerName;
+                nameEl.innerText = fetchedMeta.customerName;
+            } else if (custId && custId.startsWith('fb_') && !hasLinkedDir) {
+                const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(custId) : null;
+                if (cached && cached.name && nameEl) {
+                    nameEl.innerText = cached.name;
                 }
             }
-            if (fetchedMeta?.avatarUrl && avatarEl && avatarEl.tagName === 'IMG') {
-                avatarEl.src = fetchedMeta.avatarUrl;
+            if (fetchedMeta?.avatarUrl && avatarEl) {
+                setCurrentActiveRiderChatCustAvatar(fetchedMeta.avatarUrl);
+                if (avatarEl.tagName === 'IMG') {
+                    avatarEl.src = fetchedMeta.avatarUrl;
+                } else {
+                    avatarEl.innerHTML = `<img src="${fetchedMeta.avatarUrl}" class="w-full h-full rounded-full object-cover">`;
+                }
             }
             evaluateRiderChatLockPermissions();
             bindRiderToActiveStoreOrders(fetchedMeta);
@@ -400,8 +412,11 @@ export function renderRiderCateredSwitcher() {
         if (!item.threadId && threadMap) {
             const targetLower = item.name.toLowerCase().trim();
             for (const [tId, t] of threadMap.entries()) {
+                const resolvedFb = (typeof getResolvedFbName === 'function') ? getResolvedFbName(tId) : null;
+                const fbName = (resolvedFb?.name || "").trim().toLowerCase();
                 const chatName = (t.customerName || t.name || "").trim().toLowerCase();
-                if (chatName && (chatName === targetLower || isCustomerMatch(chatName, targetLower))) {
+                if ((fbName && (fbName === targetLower || isCustomerMatch(fbName, targetLower))) ||
+                    (chatName && (chatName === targetLower || isCustomerMatch(chatName, targetLower)))) {
                     item.threadId = tId;
                     item.thread = t;
                     break;
@@ -420,10 +435,18 @@ export function renderRiderCateredSwitcher() {
     const currentActiveName = (currentNameEl ? currentNameEl.innerText.trim() : "").toLowerCase();
 
     pillsWrapper.innerHTML = cateredList.map(item => {
-        const isCurrentActive = Boolean(
-            (currentActiveId && (item.threadId === currentActiveId || (item.thread && item.thread.custId === currentActiveId))) ||
-            (currentActiveName && (item.name.toLowerCase() === currentActiveName || isCustomerMatch(item.name, currentActiveName)))
+        const matchesId = Boolean(
+            currentActiveId && (
+                item.threadId === currentActiveId || 
+                (item.thread && (item.thread.custId === currentActiveId || item.thread.id === currentActiveId))
+            )
         );
+        const matchesName = Boolean(
+            !currentActiveId && currentActiveName && (
+                item.name.toLowerCase() === currentActiveName || isCustomerMatch(item.name, currentActiveName)
+            )
+        );
+        const isCurrentActive = matchesId || matchesName;
 
         const hasUnread = Boolean(
             !isCurrentActive && item.thread && (item.thread.isUnread || item.thread.unreadForRider)

@@ -680,11 +680,15 @@ export function cancelCustomerThread() {
 
     // SAFEGUARD (Ordinary Rider vs Admin/TL):
     if (!hasAdminPower && !hasTlVoidPower) {
-        const receiptExists = (typeof checkCustomerReceiptExists === 'function')
-            ? checkCustomerReceiptExists(custName, targetRiderName, targetRiderId)
-            : false;
-        if (receiptExists) {
-            return showToast("⚠️ Hindi maaaring i-cancel ang order na may nagawa nang resibo. Makipag-ugnayan sa Admin o TL para mag-void.");
+        // If the order or chat is already marked cancelled or done, allow the rider to clear it
+        const isCancelledOrder = meta?.status === 'cancelled' || meta?.status === 'voided' || meta?.isCancelled === true || meta?.folder === 'done';
+        if (!isCancelledOrder) {
+            const receiptExists = (typeof checkCustomerReceiptExists === 'function')
+                ? checkCustomerReceiptExists(custName, targetRiderName, targetRiderId)
+                : false;
+            if (receiptExists) {
+                return showToast("⚠️ Hindi maaaring i-cancel ang order na may nagawa nang resibo. Makipag-ugnayan sa Admin o TL para mag-void.");
+            }
         }
     }
 

@@ -683,7 +683,7 @@
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-UWsxGDMk.js"></script>
+  <script type="module" crossorigin src="./assets/index-B6PS3m4t.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
@@ -1625,6 +1625,9 @@
                     <span class="font-black text-gray-900 dark:text-white flex items-center gap-1.5">
                         <i class="fa-solid fa-comments text-blue-600 dark:text-blue-400"></i> Live Chats Feed
                     </span>
+                    <button id="btn-force-refresh-chat-feed" type="button" onclick="window.forceRefreshLiveChatsFeed && window.forceRefreshLiveChatsFeed(this)" class="bg-white dark:bg-cardBg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-gray-300 dark:border-gray-700 text-[9.5px] font-bold px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer" title="Force Refresh Live Chats Feed">
+                        <i class="fa-solid fa-arrows-rotate text-blue-500 text-[9px]"></i> Refresh
+                    </button>
                     <button id="admin-fb-settings-btn" onclick="window.openAdminFbApiModal && window.openAdminFbApiModal()" class="bg-blue-600 hover:bg-blue-500 text-white text-[9.5px] font-black px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Configure Facebook Messenger APIs">
                         <i class="fa-brands fa-facebook-messenger"></i> FB APIs
                     </button>
@@ -1752,7 +1755,12 @@
     <div class="bg-cardBg dark:bg-tgBg text-gray-900 dark:text-[#f5f5f5] rounded-2xl border border-gray-200 dark:border-gray-800 p-3.5 flex flex-col gap-3 shadow-sm">
         <!-- HEADER & RIDER/ADMIN TOOLS -->
         <div class="flex justify-between items-center flex-wrap gap-1.5">
-            <h3 class="text-xs font-black tracking-wide text-gray-900 dark:text-white">🛵 LOKALEX RIDER ROTATION</h3>
+            <div class="flex items-center gap-1.5">
+                <h3 class="text-xs font-black tracking-wide text-gray-900 dark:text-white">🛵 LOKALEX RIDER ROTATION</h3>
+                <button id="btn-force-refresh-roster" type="button" onclick="window.forceRefreshRosterList && window.forceRefreshRosterList(this)" class="bg-white dark:bg-cardBg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-gray-300 dark:border-gray-700 text-[9px] px-2 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer" title="Force Refresh Roster & Queue">
+                    <i class="fa-solid fa-arrows-rotate text-emerald-500 text-[9px]"></i> Refresh
+                </button>
+            </div>
             
             <div class="flex items-center gap-1.5 flex-wrap">
                 <!-- RIDER DIRECTORY CREDITS PILL -->
@@ -3086,8 +3094,8 @@
         </div>
     </div>
 
-    <div id="viewer-image-viewport" class="flex-1 w-full h-full flex items-center justify-center overflow-hidden my-2 relative touch-none">
-        <img id="viewer-image" src="" class="max-w-full max-h-full object-contain rounded-xl transition-transform duration-75 origin-center shadow-2xl">
+    <div id="viewer-image-viewport" class="flex-1 w-full h-full flex items-center justify-center overflow-hidden my-2 relative touch-none select-none">
+        <img id="viewer-image" src="" class="max-w-full max-h-full object-contain rounded-xl transition-transform duration-75 origin-center shadow-2xl select-none" draggable="false">
     </div>
 
     <div class="bg-cardBg/90 border border-gray-800 p-2.5 rounded-2xl shadow-xl flex items-center gap-3 z-10">
@@ -3194,6 +3202,102 @@
 
     </div>
 </div>
+    <!-- src/partials/modals/video-viewer.html -->
+<div id="video-viewer-modal" class="hidden fixed inset-0 bg-black/95 backdrop-blur-md z-[999999] flex flex-col justify-between p-3 select-none" style="z-index: 999999 !important;">
+    <!-- TOP CONTROL BAR -->
+    <div class="flex justify-between items-center bg-cardBg/90 border border-gray-800 p-2.5 rounded-2xl shadow-xl z-10 gap-2">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+            <button type="button" onclick="window.closeVideoViewerModal && window.closeVideoViewerModal()" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0" title="Close">
+                <i class="fa-solid fa-arrow-left text-xs"></i>
+            </button>
+            <div class="min-w-0 flex-1">
+                <h3 id="video-viewer-title" class="font-bold text-xs sm:text-sm text-gray-900 dark:text-white truncate">Video Player</h3>
+                <p id="video-viewer-subtitle" class="text-[10px] text-gray-400 truncate">Lokalex Media</p>
+            </div>
+        </div>
+
+        <!-- SPEED & DOWNLOAD CONTROLS -->
+        <div class="flex items-center gap-1.5 shrink-0">
+            <button type="button" id="video-viewer-speed-btn" onclick="window.cycleVideoPlaybackSpeed && window.cycleVideoPlaybackSpeed()" class="bg-gray-800 hover:bg-gray-700 text-cyan-400 font-bold px-2.5 py-1.5 rounded-xl text-xs active:scale-95 transition" title="Playback Speed">1.0x</button>
+            <button type="button" id="video-viewer-download-btn" onclick="window.downloadCurrentViewerVideo && window.downloadCurrentViewerVideo()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-xl text-xs active:scale-95 transition flex items-center gap-1.5 cursor-pointer shadow-xs" title="Save / Download Video">
+                <i class="fa-solid fa-download text-xs"></i> <span class="hidden sm:inline">Save</span>
+            </button>
+            <button type="button" onclick="window.closeVideoViewerModal && window.closeVideoViewerModal()" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer" title="Close">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- MAIN VIDEO VIEWPORT -->
+    <div id="video-viewer-viewport" class="flex-1 w-full h-full flex items-center justify-center overflow-hidden my-2 relative">
+        <video id="video-viewer-player" controls playsinline class="max-w-full max-h-[80vh] rounded-2xl bg-black object-contain shadow-2xl border border-white/10"></video>
+    </div>
+
+    <!-- BOTTOM CAPTION DISPLAY (SHOWN WHEN VIDEO HAS CAPTION) -->
+    <div id="video-viewer-caption-container" class="hidden bg-cardBg/90 border border-gray-800 p-2.5 rounded-2xl shadow-xl flex items-center justify-center z-10 max-w-xl mx-auto w-full">
+        <p id="video-viewer-caption" class="text-xs text-white/90 text-center font-medium leading-relaxed break-words px-2"></p>
+    </div>
+</div>
+
+
+    <!-- src/partials/modals/video-preview-modal.html -->
+<div id="video-preview-modal" class="hidden fixed inset-0 z-[999999] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 select-none" style="z-index: 999999 !important;">
+    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-4 shadow-2xl flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150">
+        <!-- HEADER -->
+        <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-2.5">
+            <div class="flex items-center gap-2 min-w-0">
+                <div class="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center text-sm font-bold shrink-0">
+                    <i class="fa-solid fa-video"></i>
+                </div>
+                <div class="min-w-0">
+                    <h3 class="font-bold text-xs sm:text-sm text-gray-900 dark:text-white truncate">Send Video</h3>
+                    <p id="video-preview-meta" class="text-[10px] text-gray-500 dark:text-gray-400 truncate">Preview before sending</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeVideoPreviewModal && window.closeVideoPreviewModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+
+        <!-- VIDEO PREVIEW CONTAINER -->
+        <div class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-inner flex items-center justify-center border border-gray-200 dark:border-gray-800">
+            <video id="video-preview-player" controls playsinline class="w-full h-full object-contain"></video>
+            <div id="video-preview-badge" class="absolute top-2 right-2 bg-black/70 backdrop-blur-xs px-2 py-0.5 rounded-full text-[9px] font-bold text-white flex items-center gap-1 shadow-sm">
+                <i class="fa-solid fa-clock text-rose-400 text-[8px]"></i>
+                <span id="video-preview-duration">0:00</span>
+            </div>
+        </div>
+
+        <!-- CAPTION INPUT -->
+        <div class="flex flex-col gap-1">
+            <label for="video-preview-caption-input" class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase">Caption (Optional)</label>
+            <input type="text" id="video-preview-caption-input" placeholder="Add notes about this video..." class="w-full bg-inputBg text-xs rounded-xl px-3 py-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-rose-500">
+        </div>
+
+        <!-- UPLOAD PROGRESS BAR (HIDDEN INITIALLY) -->
+        <div id="video-preview-progress-container" class="hidden flex flex-col gap-1.5 p-2 bg-rose-50 dark:bg-rose-950/30 rounded-xl border border-rose-200 dark:border-rose-800/40">
+            <div class="flex justify-between text-[10px] font-bold text-rose-700 dark:text-rose-300">
+                <span id="video-preview-progress-label">Uploading video...</span>
+                <span id="video-preview-progress-percent">0%</span>
+            </div>
+            <div class="w-full h-2 bg-rose-200 dark:bg-rose-900/50 rounded-full overflow-hidden">
+                <div id="video-preview-progress-bar" class="h-full bg-rose-500 rounded-full transition-all duration-150" style="width: 0%;"></div>
+            </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="flex items-center gap-2 pt-1">
+            <button type="button" onclick="window.closeVideoPreviewModal && window.closeVideoPreviewModal()" class="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" id="video-preview-send-btn" onclick="window.confirmSendChatVideo && window.confirmSendChatVideo()" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-md transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-paper-plane text-xs"></i> Send Video
+            </button>
+        </div>
+    </div>
+</div>
+
+
     <!-- src/partials/modals/chat.html -->
 
 
@@ -3561,6 +3665,10 @@
                     <i class="fa-solid fa-image text-[11px]"></i>
                     <span class="text-[10px] font-bold">Photo</span>
                 </button>
+                <button type="button" onclick="window.promptVideoAttachmentSource && window.promptVideoAttachmentSource()" class="px-2.5 py-1 bg-inputBg hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Send Video">
+                    <i class="fa-solid fa-video text-[11px]"></i>
+                    <span class="text-[10px] font-bold">Video</span>
+                </button>
                 <button type="button" onclick="window.triggerImageCapture && window.triggerImageCapture('document')" class="px-2.5 py-1 bg-inputBg hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Send Document or File">
                     <i class="fa-solid fa-paperclip text-[11px]"></i>
                     <span class="text-[10px] font-bold">File</span>
@@ -3588,6 +3696,8 @@
         <input type="file" id="chat-camera-input" accept="image/*" capture="environment" class="hidden" onchange="window.handleChatImageUpload && window.handleChatImageUpload(this)">
         <input type="file" id="chat-file-input" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar,.7z" multiple class="hidden" onchange="window.handleChatImageUpload && window.handleChatImageUpload(this)">
         <input type="file" id="chat-document-input" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar,.7z,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,application/zip" multiple class="hidden" onchange="window.handleChatDocumentUpload && window.handleChatDocumentUpload(this)">
+        <input type="file" id="chat-video-camera-input" accept="video/*" capture="camcorder" class="hidden" onchange="window.handleChatVideoSelected && window.handleChatVideoSelected(this)">
+        <input type="file" id="chat-video-file-input" accept="video/*" class="hidden" onchange="window.handleChatVideoSelected && window.handleChatVideoSelected(this)">
 
     </div>
 </div>
@@ -3713,7 +3823,7 @@
             </button>
         </div>
 
-        <div class="grid grid-cols-3 gap-2 sm:gap-3">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
             <button type="button" onclick="window.triggerImageCapture && window.triggerImageCapture('camera')" class="p-3 rounded-2xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800/60 flex flex-col items-center justify-center gap-1.5 transition active:scale-95 group cursor-pointer">
                 <div class="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-base shadow-sm group-hover:scale-105 transition">
                     <i class="fa-solid fa-camera"></i>
@@ -3721,6 +3831,16 @@
                 <div class="text-center">
                     <div class="font-bold text-xs text-blue-900 dark:text-blue-200">Camera</div>
                     <div class="text-[9px] text-blue-600 dark:text-blue-400 font-medium">Take photo</div>
+                </div>
+            </button>
+
+            <button type="button" onclick="window.promptVideoAttachmentSource && window.promptVideoAttachmentSource()" class="p-3 rounded-2xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800/60 flex flex-col items-center justify-center gap-1.5 transition active:scale-95 group cursor-pointer">
+                <div class="w-10 h-10 rounded-2xl bg-rose-600 text-white flex items-center justify-center text-base shadow-sm group-hover:scale-105 transition">
+                    <i class="fa-solid fa-video"></i>
+                </div>
+                <div class="text-center">
+                    <div class="font-bold text-xs text-rose-900 dark:text-rose-200">Video</div>
+                    <div class="text-[9px] text-rose-600 dark:text-rose-400 font-medium">Record or clip</div>
                 </div>
             </button>
 
@@ -3746,6 +3866,52 @@
         </div>
 
         <button type="button" onclick="window.closeImagePickerModal && window.closeImagePickerModal()" class="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer">
+            Cancel
+        </button>
+    </div>
+</div>
+
+<!-- CHAT VIDEO ATTACHMENT SOURCE PICKER MODAL -->
+<div id="chat-video-picker-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" style="z-index: 999999 !important;">
+    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+        <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-3">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center text-sm font-bold">
+                    <i class="fa-solid fa-video"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm text-gray-900 dark:text-white">Send Video</h3>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Record a clip or choose from gallery</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeVideoPickerModal && window.closeVideoPickerModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <button type="button" onclick="window.triggerVideoInput && window.triggerVideoInput('camera')" class="p-3.5 rounded-2xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800/60 flex flex-col items-center justify-center gap-2 transition active:scale-95 group cursor-pointer">
+                <div class="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center text-lg shadow-sm group-hover:scale-105 transition">
+                    <i class="fa-solid fa-video"></i>
+                </div>
+                <div class="text-center">
+                    <div class="font-bold text-xs text-rose-900 dark:text-rose-200">Record Video</div>
+                    <div class="text-[9px] text-rose-600 dark:text-rose-400 font-medium">Use camera</div>
+                </div>
+            </button>
+
+            <button type="button" onclick="window.triggerVideoInput && window.triggerVideoInput('gallery')" class="p-3.5 rounded-2xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800/60 flex flex-col items-center justify-center gap-2 transition active:scale-95 group cursor-pointer">
+                <div class="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center text-lg shadow-sm group-hover:scale-105 transition">
+                    <i class="fa-solid fa-film"></i>
+                </div>
+                <div class="text-center">
+                    <div class="font-bold text-xs text-purple-900 dark:text-purple-200">Choose Video</div>
+                    <div class="text-[9px] text-purple-600 dark:text-purple-400 font-medium">From gallery / files</div>
+                </div>
+            </button>
+        </div>
+
+        <button type="button" onclick="window.closeVideoPickerModal && window.closeVideoPickerModal()" class="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer">
             Cancel
         </button>
     </div>
@@ -7206,6 +7372,75 @@
                         <i class="fa-solid fa-moon text-indigo-400"></i>
                         <span>Dark</span>
                     </button>
+                </div>
+            </div>
+
+            <!-- TEXT READABILITY & FONT SIZING CONTROLS -->
+            <div class="pt-2 border-t border-gray-200 dark:border-gray-800 space-y-3">
+                <div class="flex items-center justify-between">
+                    <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase flex items-center gap-1.5">
+                        <i class="fa-solid fa-font text-blue-500"></i>
+                        <span>Text Sizing & Readability</span>
+                    </label>
+                    <button type="button" onclick="window.resetFontScales && window.resetFontScales()" class="text-[10px] text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer">
+                        Reset All (100%)
+                    </button>
+                </div>
+
+                <!-- 1. Overall App Scale -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[11px] font-bold text-gray-800 dark:text-gray-200">Overall Font Size</span>
+                        <span class="text-[10px] text-gray-500">App-wide zoom</span>
+                    </div>
+                    <div id="font-scale-group-app" class="grid grid-cols-4 gap-1.5">
+                        <button type="button" data-scale="0.9" onclick="window.setFontScale && window.setFontScale('app', 0.9)">90% (Small)</button>
+                        <button type="button" data-scale="1.0" onclick="window.setFontScale && window.setFontScale('app', 1.0)">100% (Normal)</button>
+                        <button type="button" data-scale="1.1" onclick="window.setFontScale && window.setFontScale('app', 1.1)">110% (Medium)</button>
+                        <button type="button" data-scale="1.2" onclick="window.setFontScale && window.setFontScale('app', 1.2)">120% (Large)</button>
+                    </div>
+                </div>
+
+                <!-- 2. Chat & Messages Module Scale -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[11px] font-bold text-gray-800 dark:text-gray-200">Chat & Messages</span>
+                        <span class="text-[10px] text-gray-500">Bubbles & feed</span>
+                    </div>
+                    <div id="font-scale-group-chat" class="grid grid-cols-4 gap-1.5">
+                        <button type="button" data-scale="0.9" onclick="window.setFontScale && window.setFontScale('chat', 0.9)">90% (Small)</button>
+                        <button type="button" data-scale="1.0" onclick="window.setFontScale && window.setFontScale('chat', 1.0)">100% (Default)</button>
+                        <button type="button" data-scale="1.12" onclick="window.setFontScale && window.setFontScale('chat', 1.12)">112% (Large)</button>
+                        <button type="button" data-scale="1.25" onclick="window.setFontScale && window.setFontScale('chat', 1.25)">125% (X-Large)</button>
+                    </div>
+                </div>
+
+                <!-- 3. Interface & System UI Scale -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[11px] font-bold text-gray-800 dark:text-gray-200">Interface & System UI</span>
+                        <span class="text-[10px] text-gray-500">Buttons, cards, tabs</span>
+                    </div>
+                    <div id="font-scale-group-ui" class="grid grid-cols-4 gap-1.5">
+                        <button type="button" data-scale="0.9" onclick="window.setFontScale && window.setFontScale('ui', 0.9)">90% (Small)</button>
+                        <button type="button" data-scale="1.0" onclick="window.setFontScale && window.setFontScale('ui', 1.0)">100% (Default)</button>
+                        <button type="button" data-scale="1.12" onclick="window.setFontScale && window.setFontScale('ui', 1.12)">112% (Large)</button>
+                        <button type="button" data-scale="1.25" onclick="window.setFontScale && window.setFontScale('ui', 1.25)">125% (X-Large)</button>
+                    </div>
+                </div>
+
+                <!-- 4. Roster & Lineup Scale -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[11px] font-bold text-gray-800 dark:text-gray-200">Roster & Lineup</span>
+                        <span class="text-[10px] text-gray-500">Rider rotation cards</span>
+                    </div>
+                    <div id="font-scale-group-roster" class="grid grid-cols-4 gap-1.5">
+                        <button type="button" data-scale="0.9" onclick="window.setFontScale && window.setFontScale('roster', 0.9)">90% (Small)</button>
+                        <button type="button" data-scale="1.0" onclick="window.setFontScale && window.setFontScale('roster', 1.0)">100% (Default)</button>
+                        <button type="button" data-scale="1.12" onclick="window.setFontScale && window.setFontScale('roster', 1.12)">112% (Large)</button>
+                        <button type="button" data-scale="1.25" onclick="window.setFontScale && window.setFontScale('roster', 1.25)">125% (X-Large)</button>
+                    </div>
                 </div>
             </div>
 

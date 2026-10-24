@@ -6,7 +6,7 @@ import { uploadImage, dataUrlToBlob } from '../../../utils/imageUpload.js';
 import { openMapPicker } from '../../maps.js';
 import { getMessageTimestamp } from '../chatUtils.js';
 import { appendOrUpdateSingleRiderMessage, hideRiderInChatToast } from '../riderChatRender.js';
-import { getPublicFbSendEndpoint, getFbPageAccessToken } from '../facebookApiAdmin.js';
+import { getPublicFbSendEndpoint, getFbPageAccessToken, getResolvedFbName } from '../facebookApiAdmin.js';
 import { idbGet, idbSet } from '../../../utils/storageEngine.js';
 import {
     activeRiderChatCustId,
@@ -97,7 +97,7 @@ export function sendRiderChatMessage(content = null, type = 'text', explicitCust
     sendRiderToCustomerChat(content, type === 'image' ? content : null, null, explicitCustId);
 }
 
-export async function sendRiderToCustomerChat(customText = "", customImageUrl = null, customLocationCoords = null, explicitCustId = null, customDoc = null) {
+export async function sendRiderToCustomerChat(customText = "", customImageUrl = null, customLocationCoords = null, explicitCustId = null, customDoc = null, customVideo = null) {
     // Freeze target customer ID immediately so background operations never divert to another thread!
     const targetCustId = explicitCustId || activeRiderChatCustId;
     if (!targetCustId) return;
@@ -109,7 +109,7 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
     const savedDraft = threadDraftsMap.get(targetCustId) || "";
     const text = (typeof customText === 'string' && customText.trim()) ? customText.trim() : (val1 || val2 || savedDraft);
 
-    if (!text && !customImageUrl && !customLocationCoords && !customDoc) return;
+    if (!text && !customImageUrl && !customLocationCoords && !customDoc && !customVideo) return;
 
     // Clear inputs and remove draft for target thread immediately
     if (!customText) {
@@ -188,7 +188,7 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
     };
 
     if (replyTargetSnapshot) {
-        const targetText = replyTargetSnapshot.text || (replyTargetSnapshot.imageUrl ? "📷 Photo" : (replyTargetSnapshot.locationCoords ? "📍 Location" : "Message"));
+        const targetText = replyTargetSnapshot.text || (replyTargetSnapshot.videoUrl ? "🎥 Video" : (replyTargetSnapshot.imageUrl ? "📷 Photo" : (replyTargetSnapshot.locationCoords ? "📍 Location" : "Message")));
         newMsg.replyTo = {
             id: replyTargetSnapshot.id,
             sender: replyTargetSnapshot.sender || "User",
@@ -212,6 +212,17 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
         newMsg.type = 'file';
         if (!newMsg.text) {
             newMsg.text = customDoc.fileName || 'Document';
+        }
+    }
+    if (customVideo) {
+        newMsg.videoUrl = customVideo.videoUrl || (typeof customVideo === 'string' ? customVideo : '');
+        newMsg.videoThumbnail = customVideo.videoThumbnail || null;
+        newMsg.videoDuration = customVideo.videoDuration || 0;
+        newMsg.videoSize = customVideo.videoSize || 0;
+        newMsg.videoName = customVideo.videoName || 'Video';
+        newMsg.type = 'video';
+        if (!newMsg.text) {
+            newMsg.text = customVideo.caption || customVideo.videoName || '🎥 Video';
         }
     }
 
@@ -244,18 +255,29 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
                     }
                 }
             }
-            const currentName = targetCustDataSnapshot?.name || targetCustDataSnapshot?.customerName || targetMeta?.customerName;
-            const lastSummary = customDoc 
-                ? `📄 ${customDoc.fileName || 'Document'}` 
-                : (text || (finalImageUrl ? "📷 Photo" : "📍 Location"));
+            const lastSummary = customVideo 
+                ? `🎥 ${customVideo.videoName || 'Video'}`
+                : (customDoc 
+                    ? `📄 ${customDoc.fileName || 'Document'}` 
+                    : (text || (finalImageUrl ? "📷 Photo" : "📍 Location")));
             const metaPayload = sanitizeForFirebase({
                 lastMessage: `You: ${lastSummary}`,
                 lastUpdated: now,
                 unreadForRider: false
             });
-            if (currentName) {
-                metaPayload.customerName = currentName;
-            } else if (targetCustId.startsWith('cust_')) {
+
+            // Safeguard customer name in metadata: Never cross-contaminate with stale activeCustData
+            let resolvedCustName = null;
+            if (targetCustId.startsWith('fb_')) {
+                const fbResolved = (typeof getResolvedFbName === 'function') ? getResolvedFbName(targetCustId) : null;
+                resolvedCustName = fbResolved?.name || targetMeta?.customerName || null;
+            } else {
+                resolvedCustName = targetMeta?.customerName || targetCustDataSnapshot?.name || targetCustDataSnapshot?.customerName || null;
+            }
+
+            if (resolvedCustName && (!targetMeta?.customerName || targetMeta.customerName.startsWith('FB Customer (') || targetMeta.customerName.toLowerCase() === 'customer')) {
+                metaPayload.customerName = resolvedCustName;
+            } else if (!targetMeta?.customerName && targetCustId.startsWith('cust_')) {
                 const ext = targetCustId.replace(/^cust_/, '').replace(/_/g, ' ').trim();
                 if (ext) metaPayload.customerName = ext.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
             }

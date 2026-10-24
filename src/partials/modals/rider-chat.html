@@ -150,6 +150,10 @@
                     <i class="fa-solid fa-image text-[11px]"></i>
                     <span class="text-[10px] font-bold">Photo</span>
                 </button>
+                <button type="button" onclick="window.promptVideoAttachmentSource && window.promptVideoAttachmentSource()" class="px-2.5 py-1 bg-inputBg hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Send Video">
+                    <i class="fa-solid fa-video text-[11px]"></i>
+                    <span class="text-[10px] font-bold">Video</span>
+                </button>
                 <button type="button" onclick="window.triggerImageCapture && window.triggerImageCapture('document')" class="px-2.5 py-1 bg-inputBg hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Send Document or File">
                     <i class="fa-solid fa-paperclip text-[11px]"></i>
                     <span class="text-[10px] font-bold">File</span>
@@ -177,6 +181,8 @@
         <input type="file" id="chat-camera-input" accept="image/*" capture="environment" class="hidden" onchange="window.handleChatImageUpload && window.handleChatImageUpload(this)">
         <input type="file" id="chat-file-input" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar,.7z" multiple class="hidden" onchange="window.handleChatImageUpload && window.handleChatImageUpload(this)">
         <input type="file" id="chat-document-input" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.rar,.7z,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,application/zip" multiple class="hidden" onchange="window.handleChatDocumentUpload && window.handleChatDocumentUpload(this)">
+        <input type="file" id="chat-video-camera-input" accept="video/*" capture="camcorder" class="hidden" onchange="window.handleChatVideoSelected && window.handleChatVideoSelected(this)">
+        <input type="file" id="chat-video-file-input" accept="video/*" class="hidden" onchange="window.handleChatVideoSelected && window.handleChatVideoSelected(this)">
 
     </div>
 </div>
@@ -302,7 +308,7 @@
             </button>
         </div>
 
-        <div class="grid grid-cols-3 gap-2 sm:gap-3">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
             <button type="button" onclick="window.triggerImageCapture && window.triggerImageCapture('camera')" class="p-3 rounded-2xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800/60 flex flex-col items-center justify-center gap-1.5 transition active:scale-95 group cursor-pointer">
                 <div class="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-base shadow-sm group-hover:scale-105 transition">
                     <i class="fa-solid fa-camera"></i>
@@ -310,6 +316,16 @@
                 <div class="text-center">
                     <div class="font-bold text-xs text-blue-900 dark:text-blue-200">Camera</div>
                     <div class="text-[9px] text-blue-600 dark:text-blue-400 font-medium">Take photo</div>
+                </div>
+            </button>
+
+            <button type="button" onclick="window.promptVideoAttachmentSource && window.promptVideoAttachmentSource()" class="p-3 rounded-2xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800/60 flex flex-col items-center justify-center gap-1.5 transition active:scale-95 group cursor-pointer">
+                <div class="w-10 h-10 rounded-2xl bg-rose-600 text-white flex items-center justify-center text-base shadow-sm group-hover:scale-105 transition">
+                    <i class="fa-solid fa-video"></i>
+                </div>
+                <div class="text-center">
+                    <div class="font-bold text-xs text-rose-900 dark:text-rose-200">Video</div>
+                    <div class="text-[9px] text-rose-600 dark:text-rose-400 font-medium">Record or clip</div>
                 </div>
             </button>
 
@@ -335,6 +351,52 @@
         </div>
 
         <button type="button" onclick="window.closeImagePickerModal && window.closeImagePickerModal()" class="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer">
+            Cancel
+        </button>
+    </div>
+</div>
+
+<!-- CHAT VIDEO ATTACHMENT SOURCE PICKER MODAL -->
+<div id="chat-video-picker-modal" class="hidden fixed inset-0 z-[999999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" style="z-index: 999999 !important;">
+    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+        <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-3">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center text-sm font-bold">
+                    <i class="fa-solid fa-video"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm text-gray-900 dark:text-white">Send Video</h3>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Record a clip or choose from gallery</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeVideoPickerModal && window.closeVideoPickerModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <button type="button" onclick="window.triggerVideoInput && window.triggerVideoInput('camera')" class="p-3.5 rounded-2xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 border border-rose-200 dark:border-rose-800/60 flex flex-col items-center justify-center gap-2 transition active:scale-95 group cursor-pointer">
+                <div class="w-12 h-12 rounded-2xl bg-rose-600 text-white flex items-center justify-center text-lg shadow-sm group-hover:scale-105 transition">
+                    <i class="fa-solid fa-video"></i>
+                </div>
+                <div class="text-center">
+                    <div class="font-bold text-xs text-rose-900 dark:text-rose-200">Record Video</div>
+                    <div class="text-[9px] text-rose-600 dark:text-rose-400 font-medium">Use camera</div>
+                </div>
+            </button>
+
+            <button type="button" onclick="window.triggerVideoInput && window.triggerVideoInput('gallery')" class="p-3.5 rounded-2xl bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800/60 flex flex-col items-center justify-center gap-2 transition active:scale-95 group cursor-pointer">
+                <div class="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center text-lg shadow-sm group-hover:scale-105 transition">
+                    <i class="fa-solid fa-film"></i>
+                </div>
+                <div class="text-center">
+                    <div class="font-bold text-xs text-purple-900 dark:text-purple-200">Choose Video</div>
+                    <div class="text-[9px] text-purple-600 dark:text-purple-400 font-medium">From gallery / files</div>
+                </div>
+            </button>
+        </div>
+
+        <button type="button" onclick="window.closeVideoPickerModal && window.closeVideoPickerModal()" class="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer">
             Cancel
         </button>
     </div>

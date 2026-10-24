@@ -41,7 +41,7 @@ import android.graphics.BitmapFactory;
 public class MainActivity extends BridgeActivity {
     private static final String TAG = "LokalexNative";
     private static final int PERMISSION_REQ_CODE = 9922;
-    public static final String MESSAGES_CHANNEL_ID = "lokalex_messages_channel";
+    public static final String MESSAGES_CHANNEL_ID = "lokalex_messages_channel_v3";
     private static MainActivity instance = null;
     private Ringtone activeSystemRingtone = null;
 

@@ -6,8 +6,18 @@ import { saveImageToDevice } from '../../utils/imageSaver.js';
 
 let currentViewerImageUrl = null;
 let currentViewerTargetType = 'customer';
-let viewerZoomScale = 1;
-let isViewerPinchInitialized = false;
+let viewerZoomScale = 1.0;
+let viewerPanX = 0;
+let viewerPanY = 0;
+let isViewerGesturesInitialized = false;
+
+// Drag / Pan Tracking State
+let isDragging = false;
+let startPointerX = 0;
+let startPointerY = 0;
+let initialPanX = 0;
+let initialPanY = 0;
+let lastTapTime = 0;
 
 export async function downloadCurrentViewerImage() {
     if (!currentViewerImageUrl) {
@@ -19,23 +29,54 @@ export async function downloadCurrentViewerImage() {
     await saveImageToDevice(currentViewerImageUrl, filename);
 }
 
-export function setViewerZoom(scale) {
-    viewerZoomScale = Math.max(0.5, Math.min(4.0, scale));
+function updateViewerTransform() {
     const img = document.getElementById('viewer-image');
+    const viewport = document.getElementById('viewer-image-viewport');
+    if (!img) return;
+
+    if (viewerZoomScale <= 1.0) {
+        viewerPanX = 0;
+        viewerPanY = 0;
+    } else if (viewport) {
+        // Clamp panning so image cannot be dragged completely off-screen
+        const imgWidth = img.offsetWidth || 300;
+        const imgHeight = img.offsetHeight || 300;
+        const viewWidth = viewport.clientWidth || window.innerWidth;
+        const viewHeight = viewport.clientHeight || window.innerHeight;
+
+        const maxPanX = Math.max(20, ((imgWidth * viewerZoomScale) - viewWidth) / 2 + 60);
+        const maxPanY = Math.max(20, ((imgHeight * viewerZoomScale) - viewHeight) / 2 + 60);
+
+        viewerPanX = Math.max(-maxPanX, Math.min(maxPanX, viewerPanX));
+        viewerPanY = Math.max(-maxPanY, Math.min(maxPanY, viewerPanY));
+    }
+
+    img.style.transform = `translate(${viewerPanX}px, ${viewerPanY}px) scale(${viewerZoomScale})`;
+    img.style.cursor = viewerZoomScale > 1.0 ? (isDragging ? 'grabbing' : 'grab') : 'default';
+
     const slider = document.getElementById('viewer-zoom-slider');
     const valLabel = document.getElementById('viewer-zoom-val');
-
-    if (img) img.style.transform = `scale(${viewerZoomScale})`;
     if (slider) slider.value = Math.round(viewerZoomScale * 100);
     if (valLabel) valLabel.innerText = `${Math.round(viewerZoomScale * 100)}%`;
 }
 
+export function setViewerZoom(scale, resetPan = false) {
+    viewerZoomScale = Math.max(0.5, Math.min(4.0, scale));
+    if (resetPan || viewerZoomScale <= 1.0) {
+        viewerPanX = 0;
+        viewerPanY = 0;
+    }
+    updateViewerTransform();
+}
+
 export function zoomViewerImage(delta) {
-    setViewerZoom(viewerZoomScale + delta);
+    setViewerZoom(viewerZoomScale + delta, false);
 }
 
 export function resetViewerZoom() {
-    setViewerZoom(1.0);
+    viewerPanX = 0;
+    viewerPanY = 0;
+    setViewerZoom(1.0, true);
 }
 
 export function openImageViewerModal(imageUrl, targetType = null) {
@@ -51,16 +92,18 @@ export function openImageViewerModal(imageUrl, targetType = null) {
     if (img) img.src = imageUrl;
     if (downloadBtn) downloadBtn.href = imageUrl;
 
-    setViewerZoom(1.0);
+    viewerPanX = 0;
+    viewerPanY = 0;
+    setViewerZoom(1.0, true);
 
     if (modal) {
         modal.classList.remove('hidden');
         toggleBodyScroll(true);
     }
 
-    if (!isViewerPinchInitialized) {
-        setupImageViewerPinchGestures();
-        isViewerPinchInitialized = true;
+    if (!isViewerGesturesInitialized) {
+        setupImageViewerGestures();
+        isViewerGesturesInitialized = true;
     }
 }
 
@@ -71,7 +114,9 @@ export function closeImageViewerModal() {
         toggleBodyScroll(false);
     }
     currentViewerImageUrl = null;
-    viewerZoomScale = 1;
+    viewerZoomScale = 1.0;
+    viewerPanX = 0;
+    viewerPanY = 0;
 }
 
 export function editViewerImage() {
@@ -92,8 +137,9 @@ export function editViewerImage() {
     img.src = imgUrl;
 }
 
-function setupImageViewerPinchGestures() {
+function setupImageViewerGestures() {
     const viewport = document.getElementById('viewer-image-viewport');
+    const img = document.getElementById('viewer-image');
     if (!viewport) return;
 
     let initialPinchDistance = 0;
@@ -101,9 +147,67 @@ function setupImageViewerPinchGestures() {
 
     const getDistance = (touches) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
 
+    // Pointer Down (Mouse or Touch Start)
+    viewport.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+        // Double tap / double click detection
+        const now = Date.now();
+        if (now - lastTapTime < 280) {
+            e.preventDefault();
+            if (viewerZoomScale > 1.05) {
+                resetViewerZoom();
+            } else {
+                viewerPanX = 0;
+                viewerPanY = 0;
+                setViewerZoom(2.0, false);
+            }
+            lastTapTime = 0;
+            return;
+        }
+        lastTapTime = now;
+
+        if (viewerZoomScale > 1.0) {
+            isDragging = true;
+            startPointerX = e.clientX;
+            startPointerY = e.clientY;
+            initialPanX = viewerPanX;
+            initialPanY = viewerPanY;
+            viewport.setPointerCapture(e.pointerId);
+            if (img) img.style.cursor = 'grabbing';
+        }
+    });
+
+    // Pointer Move (Drag / Pan)
+    viewport.addEventListener('pointermove', (e) => {
+        if (!isDragging || viewerZoomScale <= 1.0) return;
+        e.preventDefault();
+
+        const deltaX = e.clientX - startPointerX;
+        const deltaY = e.clientY - startPointerY;
+
+        viewerPanX = initialPanX + deltaX;
+        viewerPanY = initialPanY + deltaY;
+
+        updateViewerTransform();
+    });
+
+    // Pointer Up & Cancel
+    const endDrag = (e) => {
+        if (isDragging) {
+            isDragging = false;
+            try { viewport.releasePointerCapture(e.pointerId); } catch (_) {}
+            updateViewerTransform();
+        }
+    };
+    viewport.addEventListener('pointerup', endDrag);
+    viewport.addEventListener('pointercancel', endDrag);
+
+    // Pinch-to-zoom (multi-touch)
     viewport.addEventListener('touchstart', (e) => {
         if (e.touches.length === 2) {
             e.preventDefault();
+            isDragging = false;
             initialPinchDistance = getDistance(e.touches);
             initialZoomScale = viewerZoomScale;
         }
@@ -112,17 +216,22 @@ function setupImageViewerPinchGestures() {
     viewport.addEventListener('touchmove', (e) => {
         if (e.touches.length === 2 && initialPinchDistance > 0) {
             e.preventDefault();
-            setViewerZoom(initialZoomScale * (getDistance(e.touches) / initialPinchDistance));
+            const currentDist = getDistance(e.touches);
+            const newScale = initialZoomScale * (currentDist / initialPinchDistance);
+            setViewerZoom(newScale, false);
         }
     }, { passive: false });
 
     viewport.addEventListener('touchend', (e) => {
-        if (e.touches.length < 2) initialPinchDistance = 0;
+        if (e.touches.length < 2) {
+            initialPinchDistance = 0;
+        }
     });
 
+    // Desktop Mouse Wheel Zoom
     viewport.addEventListener('wheel', (e) => {
         e.preventDefault();
-        zoomViewerImage(e.deltaY < 0 ? 0.15 : -0.15);
+        zoomViewerImage(e.deltaY < 0 ? 0.2 : -0.2);
     }, { passive: false });
 }
 

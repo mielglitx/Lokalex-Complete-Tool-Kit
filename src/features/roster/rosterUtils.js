@@ -996,30 +996,46 @@ export function hasReceiptForActiveSession(custName, custStartTime) {
     const resolvedOrderDate = resolveOrderDate(sTime, todayStr);
 
     const keyWithTime = `receipt_done_${rName}_${cName}_${sTime}_${resolvedOrderDate}`;
-    const keyTypo = `receipt_done_${rName}_${cName}__${resolvedOrderDate}`;
-    const keyWithoutTime = `receipt_done_${rName}_${cName}_${resolvedOrderDate}`;
 
-    if (localStorage.getItem(keyWithTime) === 'true' ||
-        localStorage.getItem(keyTypo) === 'true' ||
-        localStorage.getItem(keyWithoutTime) === 'true') {
+    if (sTime && localStorage.getItem(keyWithTime) === 'true') {
         return true;
     }
 
     const receipts = globalState.globalDailyReceipts || [];
     const hasReceiptRecord = receipts.some(rc => {
+        if (!rc || rc.status === 'voided' || rc.voided === true || rc.isVoided === true) return false;
+        // Exclude orders that were already finalized and completed earlier
+        if (rc.doneTime || rc.completedTime || rc.status === 'completed' || rc.isCompleted === true) return false;
+
         const rcRider = (rc.riderName || "").trim().toLowerCase();
         const rcDate = rc.date || rc.completedDate;
 
-        return isRiderMatch(rName, rcRider, appState.telegramId, rc.telegramId) && 
-               isCustomerMatch(rc.customerName, custName) && 
-               (isSameDateStr(rcDate, resolvedOrderDate) || isSameDateStr(rcDate, todayStr));
+        const isMatch = isRiderMatch(rName, rcRider, appState.telegramId, rc.telegramId) && 
+                        isCustomerMatch(rc.customerName, custName) && 
+                        (isSameDateStr(rcDate, resolvedOrderDate) || isSameDateStr(rcDate, todayStr));
+        if (!isMatch) return false;
+
+        // Verify receipt was created AFTER or within the current catering session
+        if (sTime && rc.receiptTime) {
+            const rTimeMins = parseTimeToMinutes(rc.receiptTime);
+            const sTimeMins = parseTimeToMinutes(sTime);
+            if (rTimeMins !== null && sTimeMins !== null && rTimeMins < (sTimeMins - 5)) {
+                return false;
+            }
+        }
+        return true;
     });
 
     if (hasReceiptRecord) return true;
 
     const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === (appState.telegramId || "").toString()) : null;
     const cleanCName = sanitizeFirebaseKey(cName);
-    if (myRecord && myRecord.customerFees && cleanCName && myRecord.customerFees[cleanCName]) {
+    const feeObj = myRecord?.customerFees ? (myRecord.customerFees[cleanCName] || myRecord.customerFees[cName]) : null;
+    if (feeObj && feeObj.status !== 'voided' && feeObj.voided !== true) {
+        if (feeObj.transactionId) {
+            const rc = receipts.find(r => (r.transactionId || r.id) === feeObj.transactionId);
+            if (rc && (rc.doneTime || rc.completedTime || rc.status === 'completed')) return false;
+        }
         return true;
     }
 

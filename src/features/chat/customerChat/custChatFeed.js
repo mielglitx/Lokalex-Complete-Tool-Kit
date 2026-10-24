@@ -228,11 +228,11 @@ export async function toggleCustomerMessageReaction(msgId, emoji) {
     }
 }
 
-export async function sendCustomerToRiderChat(customText = "", customImageUrl = null, customLocationCoords = null, customDoc = null) {
+export async function sendCustomerToRiderChat(customText = "", customImageUrl = null, customLocationCoords = null, customDoc = null, customVideo = null) {
     const input = document.getElementById('cust-rider-chat-input');
     const text = customText || (input ? input.value.trim() : "");
 
-    if (!text && !customImageUrl && !customLocationCoords && !customDoc) return;
+    if (!text && !customImageUrl && !customLocationCoords && !customDoc && !customVideo) return;
 
     const custFbId = localStorage.getItem('lokalex_customer_fb_id') || localStorage.getItem('customerId') || appState.customerFacebookId || appState.customerId || `CUST_${Date.now()}`;
     const custName = localStorage.getItem('customerName') || localStorage.getItem('lokalex_customer_name') || appState.customerName || "Customer";
@@ -280,6 +280,15 @@ export async function sendCustomerToRiderChat(customText = "", customImageUrl = 
         newMsg.type = 'file';
         if (!newMsg.text) newMsg.text = customDoc.fileName || 'Document';
     }
+    if (customVideo) {
+        newMsg.videoUrl = customVideo.videoUrl || (typeof customVideo === 'string' ? customVideo : '');
+        newMsg.videoThumbnail = customVideo.videoThumbnail || null;
+        newMsg.videoDuration = customVideo.videoDuration || 0;
+        newMsg.videoSize = customVideo.videoSize || 0;
+        newMsg.videoName = customVideo.videoName || 'Video';
+        newMsg.type = 'video';
+        if (!newMsg.text) newMsg.text = customVideo.caption || customVideo.videoName || '🎥 Video';
+    }
 
     if (db) {
         await db.ref(`customerChats/${custFbId}/messages`).push(sanitizeForFirebase(newMsg));
@@ -299,7 +308,9 @@ export async function sendCustomerToRiderChat(customText = "", customImageUrl = 
             }
         } catch (_) {}
 
-        const lastMsgDesc = customDoc ? `📄 ${customDoc.fileName || 'Document'}` : (text || (finalImageUrl ? "📷 Photo" : "📍 Shared Location"));
+        const lastMsgDesc = customVideo 
+            ? `🎥 ${customVideo.videoName || 'Video'}`
+            : (customDoc ? `📄 ${customDoc.fileName || 'Document'}` : (text || (finalImageUrl ? "📷 Photo" : "📍 Shared Location")));
         db.ref(`customerChats/${custFbId}/metadata`).update(sanitizeForFirebase({
             lastMessage: lastMsgDesc,
             lastUpdated: now,

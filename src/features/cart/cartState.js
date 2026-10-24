@@ -170,8 +170,20 @@ export function syncSmartCartsWithCateringCustomers() {
         // Check if current slot's name is invalid, duplicated, or belongs to another slot
         const isDuplicate = currentCust && assignedLowerSet.has(currentLower);
         const isUnrecognized = currentCust && currentCust !== "Sample" && !multiCarts[slot].isManual && !myCustomers.some(c => c.toLowerCase() === currentLower || isCustomerMatch(c, currentCust));
+        const isChangingCustomer = currentCust && currentCust !== "Sample" && currentLower !== expectedCust.toLowerCase() && !isCustomerMatch(currentCust, expectedCust);
 
-        if (!currentCust || currentCust === "Sample" || isDuplicate || isUnrecognized || (!multiCarts[slot].isManual && currentLower !== expectedCust.toLowerCase())) {
+        if (!currentCust || currentCust === "Sample" || isDuplicate || isUnrecognized || (!multiCarts[slot].isManual && isChangingCustomer)) {
+            // When customer changes in this slot, purge lingering items and unlock slot!
+            if (isChangingCustomer || isDuplicate || isUnrecognized) {
+                if (Array.isArray(multiCarts[slot].items)) multiCarts[slot].items.length = 0;
+                multiCarts[slot].selectedIds = new Set();
+                multiCarts[slot].receiptSummary = null;
+                multiCarts[slot].txId = "";
+                const slotIdx = slot - 1;
+                if (globalState.cartLocked && globalState.cartLocked[slotIdx] !== undefined) {
+                    globalState.cartLocked[slotIdx] = false;
+                }
+            }
             multiCarts[slot].customerName = expectedCust;
             multiCarts[slot].isManual = false;
         }
@@ -217,6 +229,18 @@ export function getCartSlotForCustomer(custName) {
         if (!multiCarts[targetSlot]) {
             multiCarts[targetSlot] = { items: [], selectedIds: new Set(), customerName: myCustomers[custIdx], isManual: false, txId: "", receiptSummary: null };
         } else {
+            const prevCust = (multiCarts[targetSlot].customerName || "").trim().toLowerCase();
+            const newCust = myCustomers[custIdx].trim().toLowerCase();
+            if (prevCust && prevCust !== newCust && !isCustomerMatch(prevCust, newCust)) {
+                if (Array.isArray(multiCarts[targetSlot].items)) multiCarts[targetSlot].items.length = 0;
+                multiCarts[targetSlot].selectedIds = new Set();
+                multiCarts[targetSlot].receiptSummary = null;
+                multiCarts[targetSlot].txId = "";
+                const slotIdx = targetSlot - 1;
+                if (globalState.cartLocked && globalState.cartLocked[slotIdx] !== undefined) {
+                    globalState.cartLocked[slotIdx] = false;
+                }
+            }
             multiCarts[targetSlot].customerName = myCustomers[custIdx];
             multiCarts[targetSlot].isManual = false;
         }

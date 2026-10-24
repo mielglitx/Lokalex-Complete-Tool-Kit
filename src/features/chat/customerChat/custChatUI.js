@@ -3,7 +3,7 @@ import { appState } from '../../../store/state.js';
 import { escapeHtml } from '../../../utils/helpers.js';
 import { custChatState, MAPS_API_KEY } from './custChatState.js';
 import { formatChatDateTime } from '../chatUtils.js';
-import { formatChatTextWithPhoneLinks, isDocumentUrlOrType, renderDocumentCardHtml } from '../riderChatRender.js';
+import { formatChatTextWithPhoneLinks, isDocumentUrlOrType, renderDocumentCardHtml, isVideoUrlOrType, renderVideoCardHtml } from '../riderChatRender.js';
 
 export function renderMessageStatusIndicator(msg) {
     const sentTime = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
@@ -57,7 +57,7 @@ export function renderReplyPreviewInsideMessage(replyTo) {
     const textPreview = replyTo.text 
         || replyTo.message?.text 
         || (typeof replyTo.message === 'string' ? replyTo.message : null)
-        || (replyTo.imageUrl || replyTo.message?.imageUrl ? '📷 Photo' : (replyTo.locationCoords ? '📍 Location' : 'Quoted Message'));
+        || (replyTo.videoUrl || replyTo.message?.videoUrl ? '🎥 Video' : (replyTo.imageUrl || replyTo.message?.imageUrl ? '📷 Photo' : (replyTo.locationCoords ? '📍 Location' : 'Quoted Message')));
     if (!textPreview) return '';
     const sender = (replyTo.sender && replyTo.sender !== 'Unknown')
         ? replyTo.sender 
@@ -178,7 +178,10 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
         const isDoc = isDocumentUrlOrType(m);
         const docMarkup = isDoc ? renderDocumentCardHtml(m, isCustomer) : '';
 
-        const imageSrc = !isDoc ? (m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null)) : null;
+        const isVid = !isDoc && isVideoUrlOrType(m);
+        const videoMarkup = isVid ? renderVideoCardHtml(m, !isCustomer) : '';
+
+        const imageSrc = (!isDoc && !isVid) ? (m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null)) : null;
         const imgHtml = imageSrc ? `<img src="${imageSrc}" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imageSrc)}', 'customer')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">` : '';
         
         let senderName = m.sender || "Lokalex";
@@ -238,7 +241,8 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
         const encodedSender = encodeURIComponent(senderName);
 
         const isDocFilenameText = isDoc && m.text && (m.text === m.fileName || m.text === m.fileUrl || m.text === m.imageUrl || m.text === '📄 Document' || m.text.startsWith('http'));
-        const showText = m.text && (!imgHtml || (!m.text.includes('[Facebook image]') && !m.text.includes('[Facebook attachment]') && m.text !== '📷 Photo' && m.text !== 'Facebook Message')) && !locationHtml && !isDocFilenameText;
+        const isVideoPlaceholderText = isVid && m.text && (m.text === '🎥 Video' || m.text === m.videoName || m.text === m.videoUrl || m.text.startsWith('http'));
+        const showText = m.text && (!imgHtml || (!m.text.includes('[Facebook image]') && !m.text.includes('[Facebook attachment]') && m.text !== '📷 Photo' && m.text !== 'Facebook Message')) && !locationHtml && !isDocFilenameText && !isVideoPlaceholderText;
 
         return `
         <div id="msg-bubble-${m.id}" class="flex items-start gap-1.5 ${isCustomer ? 'flex-row-reverse' : 'flex-row'} my-0.5 group/row">
@@ -260,6 +264,7 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
                 ${replyBlockHtml}
                 ${showText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${formatChatTextWithPhoneLinks(m.text)}</div>` : ''}
                 ${docMarkup}
+                ${videoMarkup}
                 ${imgHtml}
                 ${locationHtml}
                 ${reactionsHtml}

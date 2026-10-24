@@ -78,6 +78,9 @@ public class LokalexForegroundService extends Service {
                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                     serviceType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
                 }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    serviceType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING;
+                }
                 startForeground(NOTIFICATION_ID, notification, serviceType);
             } else {
                 startForeground(NOTIFICATION_ID, notification);
@@ -188,9 +191,8 @@ public class LokalexForegroundService extends Service {
                 String apiName = meta.optString("apiName", "Camiling FB");
 
                 // Strictly filter for active incoming messages for riders
-                if (!unreadForRider) continue;
                 if (lastMessage.isEmpty() || lastMessage.equalsIgnoreCase("No messages yet")) continue;
-                if (lastMessage.startsWith("You:")) continue;
+                if (lastMessage.startsWith("You:") || lastMessage.startsWith("🧾")) continue;
                 if (folder.equals("spam") || folder.equals("other") || status.equals("spam")) continue;
                 if (status.equals("completed") || status.equals("cancelled") || status.equals("done")) continue;
 

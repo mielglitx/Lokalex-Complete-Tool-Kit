@@ -105,6 +105,24 @@ export {
     sendRiderLocation
 } from './chatEngine/chatSending.js';
 
+// Re-export Video Playback & Video Attachment Features
+export {
+    openVideoViewerModal,
+    closeVideoViewerModal,
+    cycleVideoPlaybackSpeed,
+    downloadCurrentViewerVideo
+} from './videoViewer.js';
+
+export {
+    promptVideoAttachmentSource,
+    closeVideoPickerModal,
+    triggerVideoInput,
+    handleChatVideoSelected,
+    openVideoPreviewModal,
+    closeVideoPreviewModal,
+    confirmSendChatVideo
+} from './videoSender.js';
+
 import {
     getActiveRiderChatCustId,
     getCurrentRiderChatMeta,

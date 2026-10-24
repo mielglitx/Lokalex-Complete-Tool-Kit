@@ -26,40 +26,48 @@
  *    - Fullscreen image lightbox with multi-touch pinch-to-zoom and wheel zoom (50%-400%).
  *    - Direct handoff bridge from viewer into the image markup editor.
  * 
- * 4. customerChat.js (Facade)
+ * 4. videoViewer.js
+ *    - Fullscreen in-chat video player with custom controls, speed toggles, and downloads.
+ * 
+ * 5. videoSender.js
+ *    - Video clip recorder/picker, thumbnail generation, preview modal, and upload dispatcher.
+ * 
+ * 6. customerChat.js (Facade)
  *    - Sub-barrel for customer-facing chat components (state, animations, UI, feeds, actions).
  * 
- * 5. riderChat.js
+ * 7. riderChat.js
  *    - Active rider-to-customer chat session manager and message dispatcher.
  *    - Lock enforcement preventing unauthorized replies if catered by another rider.
  *    - Infinite scroll history pagination with top-loading progress spinners.
  * 
- * 6. riderChatFeed.js
+ * 8. riderChatFeed.js
  *    - Filtered thread feed management (inbox, catering, stores, followup, done).
  *    - Customer account deduplication algorithm merging matching names/phone numbers.
  *    - Unread inbox badge calculation.
  * 
- * 7. riderChatRender.js
- *    - Bubble DOM renderer with seen/delivered status indicators and static map previews.
+ * 9. riderChatRender.js
+ *    - Bubble DOM renderer with seen/delivered status indicators, static map previews, and inline video cards.
  *    - Pointer long-press popovers and playful rapid-tap animations with particle bursts.
  *    - In-chat toast banners for unread messages received while scrolled up.
  * 
- * 8. riderStoreChat.js
- *    - Integration module for direct rider-to-merchant store communication channels.
+ * 10. riderStoreChat.js
+ *     - Integration module for direct rider-to-merchant store communication channels.
  * 
- * 9. riderThreadActions.js
- *    - Order delivery lifecycle: customer info modals, quick replies, and thread voiding.
- *    - Proof of Delivery (POD) photo capture, compression, and delivery submission.
- *    - Order milestone tracking checkpoints (preparing, picked_up, arrived, delivered).
+ * 11. riderThreadActions.js
+ *     - Order delivery lifecycle: customer info modals, quick replies, and thread voiding.
+ *     - Proof of Delivery (POD) photo capture, compression, and delivery submission.
+ *     - Order milestone tracking checkpoints (preparing, picked_up, arrived, delivered).
  * 
- * 10. teamComms.js (Facade)
- *     - Sub-barrel for internal staff team communications, draggable widgets, and group rooms.
+ * 12. teamComms.js (Facade)
+ *      - Sub-barrel for internal staff team communications, draggable widgets, and group rooms.
  * ============================================================================
  */
 
 import * as chatUtils from './chatUtils.js';
 import * as imageEditor from './imageEditor.js';
 import * as imageViewer from './imageViewer.js';
+import * as videoViewer from './videoViewer.js';
+import * as videoSender from './videoSender.js';
 import * as customerChat from './customerChat.js';
 import * as riderChat from './riderChat.js';
 import * as riderChatFeed from './riderChatFeed.js';
@@ -79,6 +87,8 @@ import { canRiderTakeMoreBookings } from '../roster/rosterStatus.js';
 export * from './chatUtils.js';
 export * from './imageEditor.js';
 export * from './imageViewer.js';
+export * from './videoViewer.js';
+export * from './videoSender.js';
 export * from './customerChat.js';
 export * from './riderChat.js';
 export * from './riderChatFeed.js';
@@ -97,6 +107,8 @@ if (typeof window !== 'undefined') {
         chatUtils, 
         imageEditor, 
         imageViewer, 
+        videoViewer,
+        videoSender,
         customerChat, 
         riderChat, 
         riderChatFeed,

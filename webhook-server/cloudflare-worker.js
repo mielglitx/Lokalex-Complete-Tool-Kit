@@ -902,6 +902,7 @@ async function processMetaEntries(entries, cfg) {
       const chatMessage = {
         sender: customerName,
         senderType: "customer",
+        avatarUrl: avatarUrl,
         text: messageText,
         timestamp: timestamp,
         isRider: false,

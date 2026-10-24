@@ -5,6 +5,7 @@ import { showToast, showSideNotification } from '../../../ui/notifications.js';
 import { toggleBodyScroll, compressAndResizeImage } from '../chatUtils.js';
 import { uploadImage } from '../../../utils/imageUpload.js';
 import { escapeHtml, cleanCustomerForMatch } from '../../../utils/helpers.js';
+import { isCustomerMatch } from '../../roster/rosterUtils.js';
 import { idbGet } from '../../../utils/storageEngine.js';
 import { resolveFacebookCustomerName } from '../facebookApiAdmin.js';
 import { cleanFirebasePathKey, formatMapPinUrl, extractCleanSearchName } from './threadUtils.js';
@@ -582,20 +583,32 @@ export async function unlinkCurrentChatDirectory() {
     if (!custId) return;
 
     let restoredName = null;
-    let meta = (window.getCurrentRiderChatMeta && window.getCurrentRiderChatMeta()) || {};
+    let meta = {};
+    if (window.getActiveRiderChatCustId && window.getActiveRiderChatCustId() === custId && window.getCurrentRiderChatMeta) {
+        meta = window.getCurrentRiderChatMeta() || {};
+    }
     
-    // Check if we have original customer name or Facebook name stored
-    if (meta.originalCustomerName) {
-        restoredName = meta.originalCustomerName;
-    } else if (meta.facebookName) {
-        restoredName = meta.facebookName;
-    } else if (custId.startsWith('fb_')) {
-        try {
-            const resolved = await resolveFacebookCustomerName(custId, true);
-            if (resolved && resolved.name && !resolved.name.startsWith('FB Customer (')) {
-                restoredName = resolved.name;
-            }
-        } catch(e) {}
+    // Check Facebook Graph API first for Facebook threads to ensure 100% accuracy and prevent cross-contamination
+    if (custId.startsWith('fb_')) {
+        const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(custId) : null;
+        if (cached && cached.name && !cached.name.startsWith('FB Customer (')) {
+            restoredName = cached.name;
+        } else {
+            try {
+                const resolved = await resolveFacebookCustomerName(custId, true);
+                if (resolved && resolved.name && !resolved.name.startsWith('FB Customer (')) {
+                    restoredName = resolved.name;
+                }
+            } catch(e) {}
+        }
+    }
+
+    if (!restoredName) {
+        if (meta.facebookName && !meta.facebookName.startsWith('FB Customer (')) {
+            restoredName = meta.facebookName;
+        } else if (meta.originalCustomerName && !meta.originalCustomerName.startsWith('FB Customer (')) {
+            restoredName = meta.originalCustomerName;
+        }
     }
 
     const unlinkCustPayload = {
@@ -619,6 +632,28 @@ export async function unlinkCurrentChatDirectory() {
                 db.ref(`customerChats/${custId}/metadata`).update(unlinkMetaPayload),
                 db.ref(`customerChatMeta/${custId}`).update(unlinkMetaPayload)
             ]);
+            if (restoredName) {
+                const liveRoster = globalState.rosterMembers || [];
+                const activeCaterer = liveRoster.find(m => {
+                    if (m.status !== 'Catering') return false;
+                    const custs = (m.customerName || "").split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(Boolean);
+                    return custs.some(c => c === (meta.customerName || "").toLowerCase() || isCustomerMatch(c, meta.customerName || ""));
+                });
+                if (activeCaterer) {
+                    const rId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+                    if (rId) {
+                        let custs = (activeCaterer.customerName || "").split(/\s*,\s*/).map(c => c.trim()).filter(Boolean);
+                        const idx = custs.findIndex(c => c.toLowerCase() === (meta.customerName || "").toLowerCase() || isCustomerMatch(c, meta.customerName || ""));
+                        if (idx !== -1) {
+                            custs[idx] = restoredName;
+                            const updatedNames = custs.join(', ');
+                            activeCaterer.customerName = updatedNames;
+                            db.ref(`roster/${rId}/customerName`).set(updatedNames).catch(() => {});
+                            window.dispatchEvent(new Event('rosterUpdated'));
+                        }
+                    }
+                }
+            }
         } catch(e) {
             console.warn("Notice: Error unlinking customer directory:", e);
         }
@@ -649,11 +684,32 @@ export async function linkChatToDirectoryRecord(custId, dirRecord) {
     const mapPin = dirRecord.lat_lon_link || "";
     const barangay = dirRecord.barangay || "";
 
-    const currentMeta = (window.getCurrentRiderChatMeta && window.getCurrentRiderChatMeta()) || {};
-    const chatHeaderName = document.getElementById('rider-chat-cust-name')?.innerText?.trim();
-    const originalName = currentMeta.originalCustomerName || currentMeta.facebookName || 
-                         (chatHeaderName && !chatHeaderName.startsWith('FB Customer (') && chatHeaderName !== 'Customer' ? chatHeaderName : null) || 
-                         currentMeta.customerName || dirName;
+    // Strictly resolve original name for THIS custId specifically to avoid cross-customer contamination
+    let originalName = null;
+    if (custId.startsWith('fb_')) {
+        const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(custId) : null;
+        if (cached && cached.name && !cached.name.startsWith('FB Customer (')) {
+            originalName = cached.name;
+        } else {
+            try {
+                const resolved = await resolveFacebookCustomerName(custId);
+                if (resolved && resolved.name && !resolved.name.startsWith('FB Customer (')) {
+                    originalName = resolved.name;
+                }
+            } catch (_) {}
+        }
+    }
+
+    if (!originalName) {
+        let metaForThisCust = null;
+        if (window.getActiveRiderChatCustId && window.getActiveRiderChatCustId() === custId && window.getCurrentRiderChatMeta) {
+            metaForThisCust = window.getCurrentRiderChatMeta();
+        } else if (typeof window.getCachedCustomerThreadsMap === 'function') {
+            const thread = window.getCachedCustomerThreadsMap()?.get(custId);
+            if (thread) metaForThisCust = thread;
+        }
+        originalName = metaForThisCust?.originalCustomerName || metaForThisCust?.facebookName || metaForThisCust?.customerName || dirName;
+    }
 
     const customerUpdates = {
         linkedDirectoryKey: dirKey,
@@ -695,6 +751,49 @@ export async function linkChatToDirectoryRecord(custId, dirRecord) {
             ]);
             if (dirRecord.compositeKey) {
                 db.ref(`directory/customers/${dirRecord.compositeKey}/linkedChatId`).set(custId).catch(() => {});
+            }
+
+            // Sync active roster customer name if this thread is currently being actively catered
+            const liveRoster = globalState.rosterMembers || [];
+            const activeCaterer = liveRoster.find(m => {
+                if (m.status !== 'Catering') return false;
+                const custs = (m.customerName || "").split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(Boolean);
+                if (custs.some(c => c === (originalName || "").toLowerCase() || isCustomerMatch(c, originalName || "") || c === dirName.toLowerCase() || isCustomerMatch(c, dirName))) return true;
+                if (m.forcedCaters && typeof m.forcedCaters === 'object') {
+                    for (const [fKey, fVal] of Object.entries(m.forcedCaters)) {
+                        if (fKey === custId) return true;
+                        const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
+                        if (fName && (fName.toLowerCase() === (originalName || "").toLowerCase() || isCustomerMatch(fName, originalName || ""))) return true;
+                    }
+                }
+                return false;
+            });
+
+            if (activeCaterer) {
+                const rId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+                if (rId) {
+                    let custs = (activeCaterer.customerName || "").split(/\s*,\s*/).map(c => c.trim()).filter(Boolean);
+                    const idx = custs.findIndex(c => c.toLowerCase() === (originalName || "").toLowerCase() || isCustomerMatch(c, originalName || ""));
+                    if (idx !== -1) {
+                        custs[idx] = dirName;
+                        const updatedNames = custs.join(', ');
+                        activeCaterer.customerName = updatedNames;
+                        db.ref(`roster/${rId}/customerName`).set(updatedNames).catch(() => {});
+                    }
+                    if (activeCaterer.forcedCaters && typeof activeCaterer.forcedCaters === 'object') {
+                        for (const [fKey, fVal] of Object.entries(activeCaterer.forcedCaters)) {
+                            if (fKey === custId) {
+                                if (typeof fVal === 'object' && fVal !== null) {
+                                    fVal.customerName = dirName;
+                                    db.ref(`roster/${rId}/forcedCaters/${fKey}/customerName`).set(dirName).catch(() => {});
+                                } else {
+                                    db.ref(`roster/${rId}/forcedCaters/${fKey}`).set(dirName).catch(() => {});
+                                }
+                            }
+                        }
+                    }
+                    window.dispatchEvent(new Event('rosterUpdated'));
+                }
             }
         } catch(e) {
             console.warn("Notice: Firebase directory link update error:", e);

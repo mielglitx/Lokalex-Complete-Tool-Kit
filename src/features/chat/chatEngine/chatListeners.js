@@ -368,7 +368,7 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                     });
                 } else {
                     const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
-                    const preview = fullMsg.text || (fullMsg.imageUrl ? "📷 Photo" : "📍 Location");
+                    const preview = fullMsg.text || (fullMsg.videoUrl ? "🎥 Video" : (fullMsg.imageUrl ? "📷 Photo" : "📍 Location"));
                     showRiderInChatToast(container, fullMsg.sender || custName, preview);
                 }
             } else if (shouldScroll) {
@@ -626,7 +626,7 @@ export function setRiderReply(msgId, senderName, text) {
         targetMsg = loadedRiderMsgsMap.get(msgId);
     }
     if (!previewText && targetMsg) {
-        previewText = targetMsg.text || (targetMsg.imageUrl ? "📷 Photo" : (targetMsg.locationCoords ? "📍 Location" : "Message"));
+        previewText = targetMsg.text || (targetMsg.videoUrl ? "🎥 Video" : (targetMsg.imageUrl ? "📷 Photo" : (targetMsg.locationCoords ? "📍 Location" : "Message")));
     }
     if (!previewText) previewText = "Quoted Message";
 

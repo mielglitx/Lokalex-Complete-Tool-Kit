@@ -78,7 +78,8 @@ export {
     updateDoneUnreadBadge,
     markCustomerChatAsUnread,
     markCustomerChatAsRead,
-    toggleCustomerChatUnread
+    toggleCustomerChatUnread,
+    forceRefreshLiveChatsFeed
 } from './chatFeed/chatFeedListener.js';
 
 // Re-export feed rendering & swipe gestures
@@ -121,7 +122,8 @@ import {
     updateDoneUnreadBadge,
     markCustomerChatAsUnread,
     markCustomerChatAsRead,
-    toggleCustomerChatUnread
+    toggleCustomerChatUnread,
+    forceRefreshLiveChatsFeed
 } from './chatFeed/chatFeedListener.js';
 
 import {
@@ -165,6 +167,7 @@ if (typeof window !== 'undefined') {
     window.markCustomerChatAsUnread = markCustomerChatAsUnread;
     window.markCustomerChatAsRead = markCustomerChatAsRead;
     window.toggleCustomerChatUnread = toggleCustomerChatUnread;
+    window.forceRefreshLiveChatsFeed = forceRefreshLiveChatsFeed;
     window.updateAllChatFolderBadges = updateAllChatFolderBadges;
     window.updateInboxUnreadBadge = updateInboxUnreadBadge;
     window.updateDoneUnreadBadge = updateDoneUnreadBadge;

@@ -139,6 +139,75 @@
                 </div>
             </div>
 
+            <!-- TEXT READABILITY & FONT SIZING CONTROLS -->
+            <div class="pt-2 border-t border-gray-200 dark:border-gray-800 space-y-3">
+                <div class="flex items-center justify-between">
+                    <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase flex items-center gap-1.5">
+                        <i class="fa-solid fa-font text-blue-500"></i>
+                        <span>Text Sizing & Readability</span>
+                    </label>
+                    <button type="button" onclick="window.resetFontScales && window.resetFontScales()" class="text-[10px] text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer">
+                        Reset All (100%)
+                    </button>
+                </div>
+
+                <!-- 1. Overall App Scale -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[11px] font-bold text-gray-800 dark:text-gray-200">Overall Font Size</span>
+                        <span class="text-[10px] text-gray-500">App-wide zoom</span>
+                    </div>
+                    <div id="font-scale-group-app" class="grid grid-cols-4 gap-1.5">
+                        <button type="button" data-scale="0.9" onclick="window.setFontScale && window.setFontScale('app', 0.9)">90% (Small)</button>
+                        <button type="button" data-scale="1.0" onclick="window.setFontScale && window.setFontScale('app', 1.0)">100% (Normal)</button>
+                        <button type="button" data-scale="1.1" onclick="window.setFontScale && window.setFontScale('app', 1.1)">110% (Medium)</button>
+                        <button type="button" data-scale="1.2" onclick="window.setFontScale && window.setFontScale('app', 1.2)">120% (Large)</button>
+                    </div>
+                </div>
+
+                <!-- 2. Chat & Messages Module Scale -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[11px] font-bold text-gray-800 dark:text-gray-200">Chat & Messages</span>
+                        <span class="text-[10px] text-gray-500">Bubbles & feed</span>
+                    </div>
+                    <div id="font-scale-group-chat" class="grid grid-cols-4 gap-1.5">
+                        <button type="button" data-scale="0.9" onclick="window.setFontScale && window.setFontScale('chat', 0.9)">90% (Small)</button>
+                        <button type="button" data-scale="1.0" onclick="window.setFontScale && window.setFontScale('chat', 1.0)">100% (Default)</button>
+                        <button type="button" data-scale="1.12" onclick="window.setFontScale && window.setFontScale('chat', 1.12)">112% (Large)</button>
+                        <button type="button" data-scale="1.25" onclick="window.setFontScale && window.setFontScale('chat', 1.25)">125% (X-Large)</button>
+                    </div>
+                </div>
+
+                <!-- 3. Interface & System UI Scale -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[11px] font-bold text-gray-800 dark:text-gray-200">Interface & System UI</span>
+                        <span class="text-[10px] text-gray-500">Buttons, cards, tabs</span>
+                    </div>
+                    <div id="font-scale-group-ui" class="grid grid-cols-4 gap-1.5">
+                        <button type="button" data-scale="0.9" onclick="window.setFontScale && window.setFontScale('ui', 0.9)">90% (Small)</button>
+                        <button type="button" data-scale="1.0" onclick="window.setFontScale && window.setFontScale('ui', 1.0)">100% (Default)</button>
+                        <button type="button" data-scale="1.12" onclick="window.setFontScale && window.setFontScale('ui', 1.12)">112% (Large)</button>
+                        <button type="button" data-scale="1.25" onclick="window.setFontScale && window.setFontScale('ui', 1.25)">125% (X-Large)</button>
+                    </div>
+                </div>
+
+                <!-- 4. Roster & Lineup Scale -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[11px] font-bold text-gray-800 dark:text-gray-200">Roster & Lineup</span>
+                        <span class="text-[10px] text-gray-500">Rider rotation cards</span>
+                    </div>
+                    <div id="font-scale-group-roster" class="grid grid-cols-4 gap-1.5">
+                        <button type="button" data-scale="0.9" onclick="window.setFontScale && window.setFontScale('roster', 0.9)">90% (Small)</button>
+                        <button type="button" data-scale="1.0" onclick="window.setFontScale && window.setFontScale('roster', 1.0)">100% (Default)</button>
+                        <button type="button" data-scale="1.12" onclick="window.setFontScale && window.setFontScale('roster', 1.12)">112% (Large)</button>
+                        <button type="button" data-scale="1.25" onclick="window.setFontScale && window.setFontScale('roster', 1.25)">125% (X-Large)</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- OVER-THE-AIR (OTA) LIVE UPDATE CONTROLS -->
             <div class="pt-2 border-t border-gray-200 dark:border-gray-800">
                 <div class="flex items-center justify-between gap-2">

@@ -22,9 +22,13 @@
  */
 
 import { appState, globalState } from '../../../store/state.js';
+import { db } from '../../../config/firebase.js';
+import { showToast } from '../../../ui/notifications.js';
+import * as storageEngine from '../../../utils/storageEngine.js';
 import { escapeHtml, escapeJsAttr, formatTitleCase } from '../../../utils/helpers.js';
 import { 
     loadRosterCache, 
+    saveRosterCache, 
     canManageRoster, 
     isAdmin, 
     hasTlPermission,
@@ -433,7 +437,7 @@ export function updateRosterUI() {
         
         let controlsHtml = "";
         if (showControls) {
-            controlsHtml += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
+            controlsHtml += ` <select onchange="const val = this.value; this.value = ''; window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', val)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
 
             controlsHtml += `
             <div class="inline-flex gap-1 ml-1.5 text-[10px] align-middle">
@@ -482,7 +486,7 @@ export function updateRosterUI() {
                 </div>`;
 
         if (showControls) {
-            cardHtml += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer shrink-0"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void All Orders</option></select>`;
+            cardHtml += ` <select onchange="const val = this.value; this.value = ''; window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', val)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer shrink-0"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void All Orders</option></select>`;
         }
         cardHtml += `</div>`;
 
@@ -531,6 +535,9 @@ export function updateRosterUI() {
                             <button type="button" onclick="window.openEditCateringCustomerModal && window.openEditCateringCustomerModal('${mId}', '${escapeJsAttr(mName)}', '${escapeJsAttr(cName)}')" class="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-800 dark:text-amber-300 dark:border-amber-700/50 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1" title="Edit Customer Name">
                                 <i class="fa-solid fa-pen text-[9px]"></i> Edit
                             </button>
+                        ` : ''}
+
+                        ${(isMyLine || showControls) ? `
                             <button type="button" onclick="window.adminVoidSpecificCustomer && window.adminVoidSpecificCustomer('${mId}', '${escapeJsAttr(mName)}', '${escapeJsAttr(cName)}')" class="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/40 dark:hover:bg-red-800 dark:text-red-300 dark:border-red-700/50 px-1.5 py-0.5 rounded text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1" title="Void specific customer">
                                 <i class="fa-solid fa-ban text-[9px]"></i> Void
                             </button>
@@ -555,7 +562,7 @@ export function updateRosterUI() {
 
         let controlsHtml = "";
         if (showControls) {
-            controlsHtml += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
+            controlsHtml += ` <select onchange="const val = this.value; this.value = ''; window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', val)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
         }
 
         brkHtml.push(`
@@ -586,7 +593,7 @@ export function updateRosterUI() {
         let controlsHtml = ` <span class="text-amber-700 dark:text-yellow-400 font-mono text-[10px] font-bold">(${mins}:${secs} remaining)</span>`;
 
         if (showControls) {
-            controlsHtml += ` <select onchange="window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', this.value)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
+            controlsHtml += ` <select onchange="const val = this.value; this.value = ''; window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', val)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
         }
 
         cdHtml.push(`
@@ -641,7 +648,73 @@ export function updateRosterUI() {
     // Decoupled: loadGlobalCateredList() is no longer called here on high-frequency timers.
 }
 
+/**
+ * Force refresh Roster Queue & Lineup on demand via fresh REST query and UI re-render.
+ */
+export async function forceRefreshRosterList(btn = null) {
+    const icon = btn ? btn.querySelector('i') : null;
+    if (icon) icon.classList.add('fa-spin');
+    if (btn) btn.disabled = true;
+
+    try {
+        const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/roster.json?t=${Date.now()}`;
+        let rosterData = null;
+        try {
+            const res = await fetch(directRestUrl, { cache: 'no-store' });
+            if (res.ok) {
+                rosterData = await res.json();
+            }
+        } catch (fetchErr) {
+            console.warn("[ForceRefreshRoster] Direct REST fetch fallback:", fetchErr);
+        }
+
+        if (!rosterData && db) {
+            const snap = await db.ref('roster').once('value');
+            rosterData = snap.val();
+        }
+
+        if (rosterData && typeof rosterData === 'object') {
+            globalState.rosterMembers = Object.entries(rosterData).map(([key, item]) => ({
+                ...item,
+                telegramId: (item.telegramId || item.id || key).toString().trim(),
+                id: (item.telegramId || item.id || key).toString().trim()
+            }));
+            try {
+                storageEngine.idbSet('roster', 'active_roster', rosterData).catch(() => {});
+            } catch (_) {}
+        } else if (rosterData === null) {
+            globalState.rosterMembers = [];
+        }
+
+        saveRosterCache();
+        invalidateRosterGrossCache();
+        window.dispatchEvent(new Event('rosterUpdated'));
+        updateRosterUI();
+
+        if (typeof loadGlobalCateredList === 'function') {
+            loadGlobalCateredList();
+        }
+
+        showToast("✓ Roster rotation updated!");
+    } catch (err) {
+        console.error("Force refresh roster error:", err);
+        showToast("⚠️ Failed to refresh roster list.");
+    } finally {
+        if (icon) {
+            setTimeout(() => {
+                icon.classList.remove('fa-spin');
+            }, 400);
+        }
+        if (btn) {
+            setTimeout(() => {
+                btn.disabled = false;
+            }, 500);
+        }
+    }
+}
+
 if (typeof window !== 'undefined') {
+    window.forceRefreshRosterList = forceRefreshRosterList;
     window.updateRosterUI = updateRosterUI;
     window.requestRosterUIRefresh = requestRosterUIRefresh;
     window.openFindRidersMap = openFindRidersMap;

@@ -802,6 +802,7 @@ app.post('/webhook', async (req, res) => {
         const chatMsg = {
           sender: customerName,
           senderType: "customer",
+          avatarUrl,
           text: messageText,
           timestamp,
           isRider: false,

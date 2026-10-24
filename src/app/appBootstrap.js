@@ -55,8 +55,10 @@ import {
     requestBatteryOptimizationExemption 
 } from '../native/nativeBridge.js';
 import { db, primaryDb } from '../config/firebase.js';
+import { initFontSettings } from '../features/settings/index.js';
 
 export function initGlobalWindowBridge() {
+    initFontSettings();
     window.db = db;
     window.primaryDb = primaryDb;
 

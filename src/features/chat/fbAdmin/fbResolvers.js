@@ -62,57 +62,90 @@ export async function resolveFacebookCustomerName(custId, force = false) {
                     }
                     if (convResp.ok) {
                         const convData = await convResp.json();
+                        let match = null;
                         if (Array.isArray(convData.data) && convData.data.length > 0) {
-                            const people = [
-                                ...(convData.data[0].participants?.data || []),
-                                ...(convData.data[0].senders?.data || [])
-                            ];
-                            const match = people.find(p => String(p.id) === String(psid));
-                            if (match && match.name) {
-                                const realName = match.name.trim();
+                            for (const conv of convData.data) {
+                                const people = [
+                                    ...(conv.participants?.data || []),
+                                    ...(conv.senders?.data || [])
+                                ];
+                                const found = people.find(p => String(p.id) === String(psid));
+                                if (found && found.name) {
+                                    match = found;
+                                    break;
+                                }
+                            }
+                        }
 
-                                // Retrieve real Facebook profile picture
-                                let realAvatar = (match.picture?.data && !match.picture.data.is_silhouette) ? match.picture.data.url : null;
-                                if (!realAvatar) {
-                                    try {
-                                        const picResp = await fetch(`https://graph.facebook.com/v19.0/${psid}/picture?type=large&redirect=false&access_token=${token}`);
-                                        if (picResp.ok) {
-                                            const picJson = await picResp.json();
-                                            if (picJson?.data?.url && !picJson.data.is_silhouette) {
-                                                realAvatar = picJson.data.url;
+                        // Fallback: If not found in user_id query, check recent page conversations
+                        if (!match && pageId) {
+                            try {
+                                const fallbackResp = await fetch(
+                                    `https://graph.facebook.com/v19.0/${pageId}/conversations?fields=participants{id,name,picture.type(large)},senders{id,name,picture.type(large)}&limit=30&access_token=${token}`
+                                );
+                                if (fallbackResp.ok) {
+                                    const fbData = await fallbackResp.json();
+                                    if (Array.isArray(fbData?.data)) {
+                                        for (const conv of fbData.data) {
+                                            const people = [
+                                                ...(conv.participants?.data || []),
+                                                ...(conv.senders?.data || [])
+                                            ];
+                                            const found = people.find(p => String(p.id) === String(psid));
+                                            if (found && found.name) {
+                                                match = found;
+                                                break;
                                             }
                                         }
-                                    } catch (_) {}
-                                }
-                                if (!realAvatar) {
-                                    try {
-                                        const profileResp = await fetch(`https://graph.facebook.com/v19.0/${psid}?fields=profile_pic,picture.type(large)&access_token=${token}`);
-                                        if (profileResp.ok) {
-                                            const profData = await profileResp.json();
-                                            realAvatar = (profData.picture?.data && !profData.picture.data.is_silhouette) ? profData.picture.data.url : (profData.profile_pic || null);
-                                        }
-                                    } catch (_) {}
-                                }
-
-                                const avatar = realAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(realName)}&background=0084FF&color=fff`;
-                                const resolved = { name: realName, avatarUrl: realAvatar || avatar };
-                                fbNameResolutionCache.set(psid, resolved);
-
-                                // Update Firebase in the background
-                                if (db) {
-                                    const updatePayload = {
-                                        customerName: realName
-                                    };
-                                    if (realAvatar) {
-                                        updatePayload.avatarUrl = realAvatar;
                                     }
-                                    await Promise.all([
-                                        db.ref(`customerChatMeta/${cleanId}`).update(updatePayload),
-                                        db.ref(`customerChats/${cleanId}/metadata`).update(updatePayload)
-                                    ]).catch(() => {});
                                 }
-                                return resolved;
+                            } catch (_) {}
+                        }
+
+                        if (match && match.name) {
+                            const realName = match.name.trim();
+
+                            // Retrieve real Facebook profile picture
+                            let realAvatar = (match.picture?.data && !match.picture.data.is_silhouette) ? match.picture.data.url : null;
+                            if (!realAvatar) {
+                                try {
+                                    const picResp = await fetch(`https://graph.facebook.com/v19.0/${psid}/picture?type=large&redirect=false&access_token=${token}`);
+                                    if (picResp.ok) {
+                                        const picJson = await picResp.json();
+                                        if (picJson?.data?.url && !picJson.data.is_silhouette) {
+                                            realAvatar = picJson.data.url;
+                                        }
+                                    }
+                                } catch (_) {}
                             }
+                            if (!realAvatar) {
+                                try {
+                                    const profileResp = await fetch(`https://graph.facebook.com/v19.0/${psid}?fields=profile_pic,picture.type(large)&access_token=${token}`);
+                                    if (profileResp.ok) {
+                                        const profData = await profileResp.json();
+                                        realAvatar = (profData.picture?.data && !profData.picture.data.is_silhouette) ? profData.picture.data.url : (profData.profile_pic || null);
+                                    }
+                                } catch (_) {}
+                            }
+
+                            const avatar = realAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(realName)}&background=0084FF&color=fff`;
+                            const resolved = { name: realName, avatarUrl: realAvatar || avatar };
+                            fbNameResolutionCache.set(psid, resolved);
+
+                            // Update Firebase in the background
+                            if (db) {
+                                const updatePayload = {
+                                    customerName: realName
+                                };
+                                if (realAvatar) {
+                                    updatePayload.avatarUrl = realAvatar;
+                                }
+                                await Promise.all([
+                                    db.ref(`customerChatMeta/${cleanId}`).update(updatePayload),
+                                    db.ref(`customerChats/${cleanId}/metadata`).update(updatePayload)
+                                ]).catch(() => {});
+                            }
+                            return resolved;
                         }
                     }
                 } catch (errConv) {
@@ -178,28 +211,43 @@ export function autoResolvePendingFacebookThreads(threadsList) {
     }
 
     autoResolveDebounceTimer = setTimeout(async () => {
+        // Detect duplicates among active FB threads to auto-heal cross-contaminated names
+        const nameCounts = new Map();
+        threadsList.forEach(t => {
+            if (t && (t.custId || t.id || '').startsWith('fb_')) {
+                const n = (t.customerName || t.name || '').trim().toLowerCase();
+                if (n && n !== 'customer') {
+                    nameCounts.set(n, (nameCounts.get(n) || 0) + 1);
+                }
+            }
+        });
+
         const pending = threadsList.filter(t => {
             if (!t) return false;
             const cid = t.custId || t.id || '';
             if (!cid.startsWith('fb_')) return false;
+            const psid = cid.replace(/^fb_/, '').trim();
+            const cached = fbNameResolutionCache.get(psid);
             const name = (t.customerName || t.name || '').trim();
             const hasNoName = !name || name.startsWith('FB Customer (') || name.toLowerCase() === 'customer';
             const hasNoAvatar = !t.avatarUrl || t.avatarUrl.includes('ui-avatars.com');
-            return hasNoName || hasNoAvatar;
+            const isDuplicateName = (nameCounts.get(name.toLowerCase()) || 0) > 1;
+            const isNotCached = !cached;
+            return hasNoName || hasNoAvatar || isDuplicateName || isNotCached;
         });
 
         if (pending.length === 0) return;
 
-        // Process at most 3 items per run to prevent network/Firebase write storms
-        const batch = pending.slice(0, 3);
+        // Process at most 4 items per run to prevent network/Firebase write storms
+        const batch = pending.slice(0, 4);
         for (const t of batch) {
             const cid = t.custId || t.id;
             try {
                 await resolveFacebookCustomerName(cid);
-                await new Promise(r => setTimeout(r, 2000));
+                await new Promise(r => setTimeout(r, 1500));
             } catch (e) {}
         }
-    }, 5000);
+    }, 3000);
 }
 
 export async function syncAllFacebookCustomerNames() {

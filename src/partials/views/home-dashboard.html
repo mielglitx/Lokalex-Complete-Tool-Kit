@@ -184,6 +184,9 @@
                     <span class="font-black text-gray-900 dark:text-white flex items-center gap-1.5">
                         <i class="fa-solid fa-comments text-blue-600 dark:text-blue-400"></i> Live Chats Feed
                     </span>
+                    <button id="btn-force-refresh-chat-feed" type="button" onclick="window.forceRefreshLiveChatsFeed && window.forceRefreshLiveChatsFeed(this)" class="bg-white dark:bg-cardBg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-gray-300 dark:border-gray-700 text-[9.5px] font-bold px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer" title="Force Refresh Live Chats Feed">
+                        <i class="fa-solid fa-arrows-rotate text-blue-500 text-[9px]"></i> Refresh
+                    </button>
                     <button id="admin-fb-settings-btn" onclick="window.openAdminFbApiModal && window.openAdminFbApiModal()" class="bg-blue-600 hover:bg-blue-500 text-white text-[9.5px] font-black px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Configure Facebook Messenger APIs">
                         <i class="fa-brands fa-facebook-messenger"></i> FB APIs
                     </button>
@@ -311,7 +314,12 @@
     <div class="bg-cardBg dark:bg-tgBg text-gray-900 dark:text-[#f5f5f5] rounded-2xl border border-gray-200 dark:border-gray-800 p-3.5 flex flex-col gap-3 shadow-sm">
         <!-- HEADER & RIDER/ADMIN TOOLS -->
         <div class="flex justify-between items-center flex-wrap gap-1.5">
-            <h3 class="text-xs font-black tracking-wide text-gray-900 dark:text-white">🛵 LOKALEX RIDER ROTATION</h3>
+            <div class="flex items-center gap-1.5">
+                <h3 class="text-xs font-black tracking-wide text-gray-900 dark:text-white">🛵 LOKALEX RIDER ROTATION</h3>
+                <button id="btn-force-refresh-roster" type="button" onclick="window.forceRefreshRosterList && window.forceRefreshRosterList(this)" class="bg-white dark:bg-cardBg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-gray-300 dark:border-gray-700 text-[9px] px-2 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer" title="Force Refresh Roster & Queue">
+                    <i class="fa-solid fa-arrows-rotate text-emerald-500 text-[9px]"></i> Refresh
+                </button>
+            </div>
             
             <div class="flex items-center gap-1.5 flex-wrap">
                 <!-- RIDER DIRECTORY CREDITS PILL -->

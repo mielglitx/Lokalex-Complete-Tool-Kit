@@ -221,6 +221,93 @@ export function renderDocumentCardHtml(msg, isRider = false) {
     </div>`;
 }
 
+export function isVideoUrlOrType(msg) {
+    if (!msg) return false;
+    if (msg.type === 'video' || msg.videoUrl) return true;
+    const url = msg.videoUrl || msg.fileUrl || msg.imageUrl || msg.text || '';
+    if (typeof url !== 'string') return false;
+    const cleanUrl = url.split('?')[0].split('#')[0].toLowerCase();
+    const videoExtensions = /\.(mp4|webm|mov|m4v|3gp|mkv|ogg)$/i;
+    return videoExtensions.test(cleanUrl);
+}
+
+export function getVideoDetails(msg) {
+    const rawUrl = msg.videoUrl || msg.fileUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : '');
+    let videoName = msg.videoName || msg.fileName || '';
+    if (!videoName && rawUrl) {
+        try {
+            const clean = rawUrl.split('?')[0].split('#')[0];
+            const parts = clean.split('/');
+            videoName = decodeURIComponent(parts[parts.length - 1] || 'Video');
+        } catch (_) {
+            videoName = 'Video';
+        }
+    }
+    if (!videoName) videoName = 'Video';
+
+    const durationSec = Number(msg.videoDuration) || 0;
+    let durationStr = '';
+    if (durationSec > 0) {
+        const totalSec = Math.round(durationSec);
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
+        durationStr = `${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+    const sizeFormatted = msg.videoSize ? formatFileSize(msg.videoSize) : '';
+
+    return {
+        url: rawUrl,
+        videoName,
+        thumbnail: msg.videoThumbnail || null,
+        durationStr,
+        sizeFormatted,
+        caption: msg.caption || (msg.text && msg.text !== '🎥 Video' && !msg.text.startsWith('http') ? msg.text : '')
+    };
+}
+
+export function renderVideoCardHtml(msg, isRider = false) {
+    const details = getVideoDetails(msg);
+    if (!details.url) return '';
+
+    const safeUrl = escapeHtml(details.url);
+    const safeName = escapeHtml(details.videoName);
+    const safeSender = escapeHtml(msg.sender || (isRider ? 'Rider' : 'Customer'));
+    const safeCaption = escapeHtml(details.caption || '');
+
+    const badgeText = [details.durationStr, details.sizeFormatted].filter(Boolean).join(' • ');
+
+    const posterHtml = details.thumbnail
+        ? `<img src="${details.thumbnail}" alt="Video Thumbnail" class="w-full h-full object-cover">`
+        : `<div class="w-full h-full flex flex-col items-center justify-center bg-zinc-900 text-zinc-500">
+             <i class="fa-solid fa-film text-3xl opacity-50"></i>
+           </div>`;
+
+    return `
+    <div onclick="event.stopPropagation(); window.openVideoViewerModal && window.openVideoViewerModal('${safeUrl}', '${safeName}', '${safeSender}', '${safeCaption}')" 
+         class="relative w-56 sm:w-64 max-w-full rounded-2xl overflow-hidden mt-1.5 border border-black/20 dark:border-white/10 shadow-md cursor-pointer group active:scale-[0.98] transition select-none bg-black">
+        <div class="relative w-full aspect-video bg-black flex items-center justify-center overflow-hidden">
+            ${posterHtml}
+            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+            <div class="absolute inset-0 flex items-center justify-center">
+                <div class="w-11 h-11 rounded-full bg-black/60 backdrop-blur-md border border-white/30 text-white flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:bg-rose-600 transition pl-0.5">
+                    <i class="fa-solid fa-play text-sm text-white"></i>
+                </div>
+            </div>
+            <div class="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] font-bold text-white drop-shadow-md">
+                <span class="flex items-center gap-1 bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded-full border border-white/10">
+                    <i class="fa-solid fa-video text-rose-400 text-[9px]"></i>
+                    <span>${badgeText || 'Video'}</span>
+                </span>
+                <span class="bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded-full border border-white/10 flex items-center gap-1">
+                    <i class="fa-solid fa-expand text-[9px]"></i>
+                    <span>Watch</span>
+                </span>
+            </div>
+        </div>
+        ${details.caption ? `<div class="p-2 text-xs font-medium text-white/95 leading-snug break-words bg-zinc-900/90 border-t border-white/10">${formatChatTextWithPhoneLinks(details.caption)}</div>` : ''}
+    </div>`;
+}
+
 export async function downloadChatDocument(encodedUrl, encodedName) {
     const rawUrl = decodeURIComponent(encodedUrl || '');
     const fileName = decodeURIComponent(encodedName || 'document');
@@ -587,7 +674,7 @@ export function renderReplyPreviewInsideMessage(replyTo) {
     const textPreview = replyTo.text 
         || replyTo.message?.text 
         || (typeof replyTo.message === 'string' ? replyTo.message : null)
-        || (replyTo.imageUrl || replyTo.message?.imageUrl ? '📷 Photo' : (replyTo.locationCoords ? '📍 Location' : 'Quoted Message'));
+        || (replyTo.videoUrl || replyTo.message?.videoUrl ? '🎥 Video' : (replyTo.imageUrl || replyTo.message?.imageUrl ? '📷 Photo' : (replyTo.locationCoords ? '📍 Location' : 'Quoted Message')));
     if (!textPreview) return '';
     const sender = (replyTo.sender && replyTo.sender !== 'Unknown')
         ? replyTo.sender 
@@ -664,7 +751,17 @@ export function hideRiderTopSpinner() {
 
 function getMessageSenderAvatar(m, isRider, custAvatar) {
     if (!isRider) {
-        return m.avatarUrl || custAvatar;
+        if (m.avatarUrl && typeof m.avatarUrl === 'string' && m.avatarUrl.trim()) {
+            return m.avatarUrl.trim();
+        }
+        if (custAvatar && !custAvatar.includes('ui-avatars.com')) {
+            return custAvatar;
+        }
+        const sName = (m.sender || m.senderName || "").trim();
+        if (sName && sName.toLowerCase() !== 'customer') {
+            return `https://ui-avatars.com/api/?name=${encodeURIComponent(sName)}&background=0084FF&color=fff`;
+        }
+        return custAvatar;
     }
     // Check if the message has an explicit avatar/photo attached
     if (m.senderAvatar && typeof m.senderAvatar === 'string' && m.senderAvatar.trim()) {
@@ -708,13 +805,26 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const timeStr = formatChatDateTime(m.timestamp);
 
     const riderName = appState.riderName || "Rider";
-    const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
-    const custAvatar = activeCustData?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff`;
+    const currentCustId = (typeof window !== 'undefined' && (window.activeRiderChatCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null))) || null;
+    let custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
+    if (currentCustId && currentCustId.startsWith('fb_')) {
+        const cached = (typeof window !== 'undefined' && typeof window.getResolvedFbName === 'function') ? window.getResolvedFbName(currentCustId) : null;
+        if (cached?.name) custName = cached.name;
+    }
+
+    const meta = (typeof window.getCurrentRiderChatMeta === 'function') ? window.getCurrentRiderChatMeta() : {};
+    let custAvatar = activeCustData?.avatarUrl || meta?.avatarUrl;
+    if (!custAvatar && currentCustId && currentCustId.startsWith('fb_')) {
+        const cached = (typeof window !== 'undefined' && typeof window.getResolvedFbName === 'function') ? window.getResolvedFbName(currentCustId) : null;
+        if (cached?.avatarUrl) custAvatar = cached.avatarUrl;
+    }
+    if (!custAvatar) {
+        custAvatar = document.getElementById('rider-chat-avatar')?.querySelector('img')?.src 
+                  || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff`;
+    }
 
     const senderName = m.sender || (isRider ? (m.senderName || riderName) : custName);
     const senderAvatar = getMessageSenderAvatar(m, isRider, custAvatar);
-
-    const meta = (typeof window.getCurrentRiderChatMeta === 'function') ? window.getCurrentRiderChatMeta() : {};
     const customerLastSeenTs = Number(meta?.customerLastSeenTimestamp || activeCustData?.customerLastSeenTimestamp || meta?.watermark || 0) || 0;
     const msgTs = getMessageTimestamp(m);
     const isSeen = !isFailed && (m.status === 'seen' || Boolean(m.seenAt) || (customerLastSeenTs > 0 && msgTs > 0 && msgTs <= customerLastSeenTs));
@@ -726,7 +836,10 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const isDoc = isDocumentUrlOrType(m);
     const documentMarkup = isDoc ? renderDocumentCardHtml(m, isRider) : '';
 
-    const imgHtml = !isDoc ? (m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null)) : null;
+    const isVid = !isDoc && isVideoUrlOrType(m);
+    const videoMarkup = isVid ? renderVideoCardHtml(m, isRider) : '';
+
+    const imgHtml = (!isDoc && !isVid) ? (m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null)) : null;
     const isResolvingFbImage = !isDoc && !imgHtml && m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]'));
     const isLikeSticker = !isDoc && Boolean(m.isSticker || m.stickerType === 'like' || (imgHtml && (imgHtml.includes('369239') || imgHtml.includes('sticker') || imgHtml.includes('like'))));
     
@@ -776,7 +889,8 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
 
     const isPlaceholderText = m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]') || m.text === '📷 Photo' || m.text === 'Facebook Message');
     const isDocFilenameText = isDoc && m.text && (m.text === m.fileName || m.text === m.fileUrl || m.text === m.imageUrl || m.text === '📄 Document' || m.text.startsWith('http'));
-    const showText = m.text && (!imgHtml || !isPlaceholderText) && !isResolvingFbImage && !locationHtml && !(isLikeSticker && imgHtml) && !isDocFilenameText;
+    const isVideoPlaceholderText = isVid && m.text && (m.text === '🎥 Video' || m.text === m.videoName || m.text === m.videoUrl || m.text.startsWith('http'));
+    const showText = m.text && (!imgHtml || !isPlaceholderText) && !isResolvingFbImage && !locationHtml && !(isLikeSticker && imgHtml) && !isDocFilenameText && !isVideoPlaceholderText;
 
     const failedTagHtml = isFailed ? `
         <div class="flex items-center gap-1 text-[9.5px] font-black text-rose-500 dark:text-rose-400 mt-0.5 ${isRider ? 'justify-end mr-8' : 'justify-start ml-8'} select-none">
@@ -806,6 +920,7 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
                 ${replyBlockHtml}
                 ${showText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${formatChatTextWithPhoneLinks(m.text)}</div>` : ''}
                 ${documentMarkup}
+                ${videoMarkup}
                 ${imageMarkup}
                 ${locationHtml}
                 ${reactionsHtml}

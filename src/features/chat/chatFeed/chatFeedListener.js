@@ -255,10 +255,13 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
         }
 
         let displayName = (meta.customerName || meta.name || "").trim();
-        if (key.startsWith('fb_')) {
+        const hasLinkedDirectory = Boolean(meta.linkedDirectoryKey || meta.linkedDirectoryName);
+        if (key.startsWith('fb_') && !hasLinkedDirectory) {
             const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(key) : null;
-            if (cached && cached.name && (!displayName || displayName.startsWith('FB Customer (') || displayName === 'Customer')) {
-                displayName = cached.name;
+            if (cached && cached.name) {
+                if (!displayName || displayName.startsWith('FB Customer (') || displayName.toLowerCase() === 'customer') {
+                    displayName = cached.name;
+                }
             }
         }
 
@@ -749,7 +752,60 @@ export function toggleCustomerChatUnread(targetCustId) {
     }
 }
 
+/**
+ * Force refresh Live Chats Feed on demand via fresh REST query and UI re-render.
+ */
+export async function forceRefreshLiveChatsFeed(btn = null) {
+    const icon = btn ? btn.querySelector('i') : null;
+    if (icon) icon.classList.add('fa-spin');
+    if (btn) btn.disabled = true;
+
+    try {
+        const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?t=${Date.now()}`;
+        let chatData = null;
+        try {
+            const res = await fetch(directRestUrl, { cache: 'no-store' });
+            if (res.ok) {
+                chatData = await res.json();
+            }
+        } catch (fetchErr) {
+            console.warn('[ForceRefreshChat] REST fetch failed:', fetchErr);
+        }
+
+        if (!chatData && db) {
+            const snap = await db.ref('customerChatMeta').once('value');
+            chatData = snap.val();
+        }
+
+        if (chatData && typeof chatData === 'object') {
+            processCustomerChatMetaData(chatData, false);
+        }
+
+        updateAllChatFolderBadges();
+        if (activeRiderChatFilter !== 'stores') {
+            renderRiderCustomerChatFeed();
+        }
+
+        showToast("✓ Live Chat Feed updated!");
+    } catch (err) {
+        console.error("Force refresh live chat error:", err);
+        showToast("⚠️ Failed to refresh chat feed.");
+    } finally {
+        if (icon) {
+            setTimeout(() => {
+                icon.classList.remove('fa-spin');
+            }, 400);
+        }
+        if (btn) {
+            setTimeout(() => {
+                btn.disabled = false;
+            }, 500);
+        }
+    }
+}
+
 if (typeof window !== 'undefined') {
+    window.forceRefreshLiveChatsFeed = forceRefreshLiveChatsFeed;
     window.updateAllChatFolderBadges = updateAllChatFolderBadges;
     window.updateInboxUnreadBadge = updateInboxUnreadBadge;
     window.updateDoneUnreadBadge = updateDoneUnreadBadge;
