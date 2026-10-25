@@ -32,7 +32,7 @@ export function promptCateringStatus() {
     const isPrivileged = canManageRoster();
 
     if ((!currentId || !currentName || activeRole !== 'rider') && !isPrivileged) {
-        showToast("⚠️ Hindi ka naka-login bilang rider. Mag-login muna bago mag-cater.");
+        showToast("⚠️ You are not logged in as a rider. Please log in before catering.");
         if (typeof window.switchView === 'function') window.switchView('view-login');
         else if (typeof window.renderViewUI === 'function') window.renderViewUI('view-login');
         return;
@@ -55,10 +55,10 @@ export function promptCateringStatus() {
 
     if (!isPrivileged) {
         if (!myRecord || myRecord.status === 'End' || !myRecord.status) {
-            return showToast("⚠️ Naka-End Shift ka. Pindutin muna ang Available sa roster bago mag-cater.");
+            return showToast("⚠️ You are on End Shift. Please click Available on the roster before catering.");
         }
-        if (myRecord.status === 'Cooldown') return showToast("⚠️ Naka-penalty cooldown ka pa. Maghintay muna matapos.");
-        if (myRecord.status === 'Break') return showToast("⚠️ Naka-Break ka. Pindutin muna ang Available sa roster bago mag-cater.");
+        if (myRecord.status === 'Cooldown') return showToast("⚠️ You are still on penalty cooldown. Please wait until it ends.");
+        if (myRecord.status === 'Break') return showToast("⚠️ You are on Break. Please click Available on the roster before catering.");
     }
 
     const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
@@ -69,11 +69,11 @@ export function promptCateringStatus() {
         const firstId = (firstAvailable?.telegramId || firstAvailable?.id || "").toString().trim();
         const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
         if (amIAlreadyCatering) {
-            return showToast(`🚫 May available rider sa pila: Si ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) ang 1st in line. Bawal kumuha ng additional booking habang may available rider.`);
+            return showToast(`🚫 There is an available rider in queue: ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) is 1st in line. Additional bookings cannot be taken while other riders are available.`);
         }
         if (firstId !== myId) {
             const myGross = getRiderTodayGross(myRecord?.riderName || myRecord?.name, myId);
-            return showToast(`⚠️ 1st in line: ${firstAvailable.riderName || 'Rider'} (Kita: ₱${firstGross.toFixed(0)}) vs Iyo (₱${myGross.toFixed(0)}). Maghintay sa iyong turn.`);
+            return showToast(`⚠️ 1st in line: ${firstAvailable.riderName || 'Rider'} (Gross: ₱${firstGross.toFixed(0)}) vs Yours (₱${myGross.toFixed(0)}). Please wait for your turn.`);
         }
     }
 
@@ -107,7 +107,7 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
 
         if ((!currentId || !currentName || activeRole !== 'rider') && !isPrivileged) {
             closeCateringModal();
-            showToast("⚠️ Hindi ka naka-login bilang rider. Mag-login muna bago mag-cater.");
+            showToast("⚠️ You are not logged in as a rider. Please log in before catering.");
             if (typeof window.switchView === 'function') window.switchView('view-login');
             else if (typeof window.renderViewUI === 'function') window.renderViewUI('view-login');
             return false;
@@ -121,7 +121,7 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                        (input && input.value ? input.value.trim() : "") || 
                        (custSelect && custSelect.value ? custSelect.value.trim() : "");
         if (!custName || custName.toLowerCase() === 'customer' || custName.toLowerCase() === 'customer name') {
-            return showToast("⚠️ Pakilagay o piliin ang totoong pangalan ng customer.");
+            return showToast("⚠️ Please enter or select a valid customer name.");
         }
 
         if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
@@ -147,17 +147,17 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
         if (!isPrivileged) {
             if (!myRecord || myRecord.status === 'End' || !myRecord.status) {
                 closeCateringModal();
-                showToast("⚠️ Naka-End Shift ka. Pindutin muna ang Available sa roster bago mag-cater.");
+                showToast("⚠️ You are on End Shift. Please click Available on the roster before catering.");
                 return false;
             }
             if (myRecord.status === 'Cooldown') {
                 closeCateringModal();
-                showToast("⚠️ Naka-penalty cooldown ka pa.");
+                showToast("⚠️ You are still on penalty cooldown.");
                 return false;
             }
             if (myRecord.status === 'Break') {
                 closeCateringModal();
-                showToast("⚠️ Naka-Break ka. Pindutin muna ang Available sa roster bago mag-cater.");
+                showToast("⚠️ You are on Break. Please click Available on the roster before catering.");
                 return false;
             }
         }
@@ -188,12 +188,12 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
             const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
 
             if (amIAlreadyCatering) {
-                showToast(`🚫 May available rider sa pila: Si ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) ang 1st in line. Bawal kumuha ng additional booking habang may available rider.`);
+                showToast(`🚫 There is an available rider in queue: ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) is 1st in line. Additional bookings cannot be taken while other riders are available.`);
                 return false;
             }
 
             if (!isFirstAvailable) {
-                showToast(`🚫 Naunahan ka sa pila: Si ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) ang 1st in line.`);
+                showToast(`🚫 Someone is ahead of you in queue: ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) is 1st in line.`);
                 return false;
             }
         }
@@ -385,6 +385,6 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
         return true;
     } catch (err) {
         console.error("Error in confirmCateringStatus:", err);
-        showToast("❌ Bigo mag-Cater: " + (err.message || err));
+        showToast("❌ Failed to Cater: " + (err.message || err));
     }
 }

@@ -179,7 +179,7 @@ export async function triggerStatusWithSlide(targetStatus) {
     const myName = myRecord ? (myRecord.riderName || myRecord.name || appState.riderName || "Rider") : (appState.riderName || "Rider");
 
     if (myRecord && myRecord.status === 'End' && targetStatus !== 'Available') {
-        showToast("⚠️ Naka-End Shift ka. Ang Available button lamang ang maaaring pindutin.");
+        showToast("⚠️ You are on End Shift. Only the Available button can be clicked.");
         return;
     }
 
@@ -194,7 +194,7 @@ export async function triggerStatusWithSlide(targetStatus) {
         }
 
         if (currentStatus === 'Available') {
-            showToast("ℹ️ Naka-Available ka na sa pila (Queue position preserved).");
+            showToast("ℹ️ You are already Available in the queue (Queue position preserved).");
             return;
         }
 
@@ -220,13 +220,13 @@ export async function triggerStatusWithSlide(targetStatus) {
 
         const timeCheck = checkRiderTimeInAllowed(myId, myName);
         if (!timeCheck.allowed) {
-            showToast(`🚫 Bawal pa mag-Time In: Ang iyong allowed time-in ay ${timeCheck.allowedTime}. Humingi ng Early Time-In pass sa Admin.`);
+            showToast(`🚫 Time-In not yet allowed: Your scheduled time-in is ${timeCheck.allowedTime}. Request an Early Time-In pass from Admin.`);
             return;
         }
 
         if (myRecord && myRecord.status === 'Cooldown' && myRecord.cooldownUntil && Date.now() < myRecord.cooldownUntil) {
             const remMins = Math.ceil((myRecord.cooldownUntil - Date.now()) / 60000);
-            showToast(`⚠️ Naka-penalty cooldown ka pa. Maghintay ng ${remMins} min(s) bago maging Available.`);
+            showToast(`⚠️ You are on penalty cooldown. Please wait ${remMins} min(s) before becoming Available.`);
             return;
         }
 
@@ -247,7 +247,7 @@ export async function triggerStatusWithSlide(targetStatus) {
                 });
             }
 
-            showToast(`⚠️ Penalized! Naka-cooldown ka ng ${pMins} mins. Kusa kang gagawing Available pagkatapos.`);
+            showToast(`⚠️ Penalized! You are on cooldown for ${pMins} mins. You will be set to Available automatically afterward.`);
             return;
         }
 
@@ -262,7 +262,7 @@ export async function triggerStatusWithSlide(targetStatus) {
             }
 
             if (missingReceiptCust) {
-                showToast(`⚠️ Paki-gawaan muna ng resibo si ${missingReceiptCust.name} (o i-void kung cancel) bago mag-Available!`);
+                showToast(`⚠️ Please create a receipt for ${missingReceiptCust.name} (or void if cancelled) before going Available!`);
                 
                 if (typeof window.syncSmartCartsWithCateringCustomers === 'function') {
                     window.syncSmartCartsWithCateringCustomers();
@@ -280,7 +280,7 @@ export async function triggerStatusWithSlide(targetStatus) {
 
             // All active catering deliveries have verified receipts:
             // Complete each customer properly so fees, receipts, and catered history records are permanently credited
-            showToast("⏳ Kinukumpleto ang mga delivery records at inililipat sa Available...");
+            showToast("⏳ Completing delivery records and switching to Available...");
             for (const item of activeCustList) {
                 await completeSingleCateringCustomer(myId, myName, item.name);
             }
@@ -355,20 +355,20 @@ export async function triggerStatusWithSlide(targetStatus) {
             window.clearCartSlot();
         }
 
-        showToast("✅ Available na!");
+        showToast("✅ Now Available!");
 
     } else if (targetStatus === 'End') {
         const penaltyInfo = await evaluateEarlyShiftPenalty(myId, myRecord);
 
-        let promptTitle = "Sigurado ka bang mag-End Shift?";
-        let promptDesc = "Mag-o-off duty ka na para sa araw na ito.";
+        let promptTitle = "Are you sure you want to End Shift?";
+        let promptDesc = "You will go off duty for today.";
 
         if (penaltyInfo.isExempted) {
-            promptTitle = "Sigurado ka bang mag-End Shift?";
-            promptDesc = "Mayroon kang Admin Early Out Pass para sa araw na ito. Walang penalty na maia-apply sa iyong komisyon.";
+            promptTitle = "Are you sure you want to End Shift?";
+            promptDesc = "You have an Admin Early Out Pass for today. No penalty will be applied to your commission.";
         } else if (penaltyInfo.hasPenalty) {
             promptTitle = `⚠️ EARLY SHIFT OUT DETECTED!`;
-            promptDesc = `Nakapag-duty ka lamang ng ${penaltyInfo.workedHoursText} (Break: ${penaltyInfo.breakHoursText}, Target: ${penaltyInfo.assignedTargetHours}h).\nKulang ng ${penaltyInfo.deficitHours} oras dahil hindi kasama ang break time sa duty.\n\nMay dagdag na +${penaltyInfo.penaltyPercent}% penalty sa iyong babayarang komisyon ngayong araw.\n\nItuloy pa rin ang pag-End Shift?`;
+            promptDesc = `You have only worked for ${penaltyInfo.workedHoursText} (Break: ${penaltyInfo.breakHoursText}, Target: ${penaltyInfo.assignedTargetHours}h).\nShort by ${penaltyInfo.deficitHours} hour(s) because break time is excluded from duty.\n\nA +${penaltyInfo.penaltyPercent}% penalty will be added to your commission today.\n\nDo you still want to proceed with End Shift?`;
         }
 
         openSlideDeleteModal(promptTitle, promptDesc, async () => {
@@ -424,7 +424,7 @@ export async function triggerStatusWithSlide(targetStatus) {
             await updateRosterStatus('End', myId, myName);
         });
     } else {
-        openSlideDeleteModal(`Sigurado ka bang mag-iiba ng status sa [${targetStatus}]?`, async () => {
+        openSlideDeleteModal(`Are you sure you want to change status to [${targetStatus}]?`, async () => {
             dismissQueueAlarm();
             if (targetStatus === 'Break') endLiveGpsSession();
             await updateRosterStatus(targetStatus, myId, myName);

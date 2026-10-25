@@ -107,7 +107,7 @@ export function closeEditItemModal() {
 }
 
 export function openSlideDeleteModal(title, arg2, arg3) {
-    let subtitle = 'I-type ang "confirm" upang kumpirmahin.';
+    let subtitle = 'Type "confirm" to confirm.';
     let callback = null;
 
     if (typeof arg2 === 'function') {
@@ -121,10 +121,10 @@ export function openSlideDeleteModal(title, arg2, arg3) {
 
     if (subtitle && (subtitle.includes('slider') || subtitle.includes('I-drag') || subtitle.includes('i-drag') || subtitle.includes('slide') || subtitle.includes('Slide'))) {
         subtitle = subtitle
-            .replace(/I-drag pakanan ang slider para kumpirmahin\.?/gi, 'I-type ang "confirm" upang kumpirmahin.')
-            .replace(/I-drag pakanan ang slider upang alisin ang/gi, 'I-type ang "confirm" upang alisin ang')
-            .replace(/I-drag pakanan ang slider/gi, 'I-type ang "confirm"')
-            .replace(/I-slide pakanan ang slider/gi, 'I-type ang "confirm"');
+            .replace(/I-drag pakanan ang slider para kumpirmahin\.?/gi, 'Type "confirm" to confirm.')
+            .replace(/I-drag pakanan ang slider upang alisin ang/gi, 'Type "confirm" to remove')
+            .replace(/I-drag pakanan ang slider/gi, 'Type "confirm"')
+            .replace(/I-slide pakanan ang slider/gi, 'Type "confirm"');
     }
 
     const titleEl = document.getElementById('slide-delete-title');
@@ -229,12 +229,12 @@ export function submitConfirmTypeModal() {
             if (res && typeof res.then === 'function') {
                 res.catch(err => {
                     console.error("Confirm async action execution error:", err);
-                    showToast("❌ Bigo: " + (err.message || err));
+                    showToast("❌ Failed: " + (err.message || err));
                 });
             }
         } catch (err) {
             console.error("Confirm action execution error:", err);
-            showToast("❌ Bigo: " + (err.message || err));
+            showToast("❌ Failed: " + (err.message || err));
         }
     } else {
         closeSlideDeleteModal();

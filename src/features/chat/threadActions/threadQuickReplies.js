@@ -49,7 +49,7 @@ export function initSharedQuickRepliesListener() {
             } catch(e) {}
 
             if (!hadCached) {
-                container.innerHTML = `<span class="text-[10px] text-amber-600 dark:text-amber-400 italic shrink-0 py-1">⚠️ RTDB Permission: I-update ang rules sa Firebase Console para sa 'sharedQuickReplies'.</span>`;
+                container.innerHTML = `<span class="text-[10px] text-amber-600 dark:text-amber-400 italic shrink-0 py-1">⚠️ RTDB Permission: Update rules in Firebase Console for 'sharedQuickReplies'.</span>`;
             }
         }
     });
@@ -531,7 +531,7 @@ export function promptEditQuickReply(id) {
     }
 
     if (!foundItem) {
-        showToast("⚠️ Hindi mahanap ang quick reply na ie-edit.");
+        showToast("⚠️ Cannot find the quick reply to edit.");
         return;
     }
 
@@ -582,7 +582,7 @@ export async function submitSaveQuickReply() {
     const textInput = document.getElementById('new-quick-reply-input');
     const text = textInput ? textInput.value.trim() : '';
     if (!text) {
-        showToast("⚠️ Paki-type ang message content bago i-save!");
+        showToast("⚠️ Please enter the message content before saving!");
         return;
     }
 
@@ -634,9 +634,9 @@ export async function submitSaveQuickReply() {
         } catch (e) {
             console.error("Update quick reply error:", e);
             if (e.message && e.message.includes('PERMISSION_DENIED')) {
-                showToast("⚠️ Naka-update locally. I-publish ang updated rules sa Firebase Console!");
+                showToast("⚠️ Updated locally. Please publish updated rules in Firebase Console!");
             } else {
-                showToast("⚠️ Naka-update locally: " + e.message);
+                showToast("⚠️ Updated locally: " + e.message);
             }
         }
         return;
@@ -677,20 +677,20 @@ export async function submitSaveQuickReply() {
                 renderSharedQuickReplies(data);
             } catch (_) {}
         }
-        showToast("✅ Quick reply saved! Makikita na ito ng lahat ng riders.");
+        showToast("✅ Quick reply saved! It is now visible to all riders.");
     } catch (e) {
         console.error("Save quick reply error:", e);
         if (e.message && e.message.includes('PERMISSION_DENIED')) {
-            showToast("⚠️ Naka-save locally. I-publish ang updated database.rules.json sa Firebase Console!");
+            showToast("⚠️ Saved locally. Please publish updated database.rules.json in Firebase Console!");
         } else {
-            showToast("⚠️ Naka-save locally: " + e.message);
+            showToast("⚠️ Saved locally: " + e.message);
         }
     }
 }
 
 export async function deleteQuickReply(id) {
     if (!id) return;
-    if (!confirm("Sigurado ka bang nais mong tanggalin ang quick reply na ito para sa lahat ng riders?")) {
+    if (!confirm("Are you sure you want to delete this quick reply for all riders?")) {
         return;
     }
     try {

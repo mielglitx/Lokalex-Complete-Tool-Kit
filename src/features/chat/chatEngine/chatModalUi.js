@@ -535,7 +535,7 @@ export function evaluateRiderChatLockPermissions() {
             if (isCateringRider) {
                 lockBanner.classList.remove('hidden');
                 lockBanner.className = "bg-emerald-50 dark:bg-emerald-950/40 border-b-2 border-emerald-500 px-3 py-1.5 text-[11px] text-emerald-800 dark:text-emerald-300 font-bold text-center shrink-0 flex items-center justify-between gap-1.5";
-                lockBanner.innerHTML = `<span class="truncate"><i class="fa-solid fa-user-check text-emerald-600"></i> Kasalukuyan mong kinacater ang customer na ito.</span>
+                lockBanner.innerHTML = `<span class="truncate"><i class="fa-solid fa-user-check text-emerald-600"></i> You are currently catering to this customer.</span>
                 <button type="button" onclick="window.goToCustomerCartFromChat && window.goToCustomerCartFromChat()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black px-2.5 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer shrink-0">
                     <i class="fa-solid fa-cart-shopping"></i> Go to Cart
                 </button>`;
@@ -643,7 +643,7 @@ export async function promptRenameCustomerChat() {
         currentName = currentRiderChatMeta?.customerName || currentName;
     }
 
-    const newName = prompt("I-edit ang pangalan ng Customer:", currentName);
+    const newName = prompt("Edit customer name:", currentName);
     if (!newName || !newName.trim() || newName.trim() === currentName.trim()) return;
 
     const cleanName = newName.trim();

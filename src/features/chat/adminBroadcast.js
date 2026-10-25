@@ -14,10 +14,10 @@ let broadcastSearchQuery = '';
 let isBroadcastSending = false;
 
 const BROADCAST_TEMPLATES = {
-    volume: "Magandang araw mula sa Lokalex! Kasalukuyan pong mataas ang dami ng orders at deliveries. Pinoproseso na po ang inyong inquiry o order. Maraming salamat po sa inyong pasensya at suporta! 🙏🛵",
-    available: "Magandang araw! Online at available po ang Lokalex Delivery riders ngayon para sa inyong mga pabili, grocery, at food delivery. I-message lang po kami rito. Maraming salamat po!",
-    holiday: "Magandang araw po! Nais po namin ipabatid ang aming operating hours at delivery updates para sa araw na ito. Manatiling ligtas at masayang araw po sa inyo!",
-    delivery: "Paalala po mula sa Lokalex Rider: Papunta na po ang aming delivery rider. Paki-handa po ang bayad at pakisigurong bukas ang linya ng inyong telepono. Maraming salamat po! 🛵✨"
+    volume: "Good day from Lokalex! We are currently experiencing a high volume of orders and deliveries. Your inquiry or order is being processed. Thank you very much for your patience and support! 🙏🛵",
+    available: "Good day! Lokalex Delivery riders are online and available today for your errands, grocery, and food delivery. Just send us a message here. Thank you very much!",
+    holiday: "Good day! We would like to inform you of our operating hours and delivery updates for today. Stay safe and have a great day!",
+    delivery: "Reminder from Lokalex Rider: Our delivery rider is on the way. Please prepare your payment and ensure your phone line is open. Thank you very much! 🛵✨"
 };
 
 function checkAdminAuth() {
@@ -385,14 +385,14 @@ export async function executeBroadcastSend() {
 
     const recipients = getResolvedRecipients();
     if (recipients.length === 0) {
-        showToast("⚠️ Pumili ng kahit isang customer o grupo para mag-broadcast.");
+        showToast("⚠️ Please select at least one customer or group to broadcast to.");
         return;
     }
 
     const msgInput = document.getElementById('broadcast-message-input');
     let messageText = (msgInput ? msgInput.value.trim() : "");
     if (!messageText) {
-        showToast("⚠️ Paki-lagay ang mensaheng nais i-broadcast.");
+        showToast("⚠️ Please enter the message you want to broadcast.");
         return;
     }
 
@@ -405,7 +405,7 @@ export async function executeBroadcastSend() {
 
     openSlideDeleteModal(
         `Send Broadcast to ${recipients.length} Recipient(s)?`,
-        `Ipadadala ang mensahe sa ${recipients.length} customer(s).\nSigurado ka ba?`,
+        `The message will be sent to ${recipients.length} customer(s).\nAre you sure?`,
         async () => {
             isBroadcastSending = true;
             const progressContainer = document.getElementById('broadcast-progress-container');

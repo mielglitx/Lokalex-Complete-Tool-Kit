@@ -44,7 +44,7 @@ export async function submitSaveProfileSettings() {
 
     // OTP verification requirement enforced only for Customer and Merchant roles
     if (profileState.activeRole !== 'rider' && profileState.isPhoneModified && !profileState.isPhoneOtpVerified) {
-        return showToast("⚠️ Binago mo ang mobile number. I-verify muna ito gamit ang OTP bago i-save!");
+        return showToast("⚠️ You modified your mobile number. Please verify it with OTP before saving!");
     }
 
     const formattedPhone = `+63${phone}`;

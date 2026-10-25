@@ -119,7 +119,7 @@ export function renderRiderDayOffPicker() {
                 }).join('')}
             </div>`;
         } else {
-            occupantsHtml = `<div class="text-[9px] text-gray-500 italic mt-0.5">Walang naka-schedule na rider.</div>`;
+            occupantsHtml = `<div class="text-[9px] text-gray-500 italic mt-0.5">No riders scheduled.</div>`;
         }
 
         return `
@@ -159,7 +159,7 @@ export async function selectRiderDayOff(dayIndex) {
     const existing = allDayOffs[myId] || allDayOffs[storageKey] || allDayOffs[myName.toLowerCase().trim()] || {};
 
     if (existing && existing.dayOfWeek !== undefined && existing.dayOfWeek !== null && parseInt(existing.dayOfWeek) === parseInt(dayIndex)) {
-        return showToast("⚠️ Ito na ang iyong kasalukuyang Day-Off.");
+        return showToast("⚠️ This is already your current Day-Off.");
     }
 
     let changesMade = 0;
@@ -172,7 +172,7 @@ export async function selectRiderDayOff(dayIndex) {
         : 2;
 
     if (config.enabled && changesMade >= maxChanges) {
-        return showToast(`⚠️ Naabot mo na ang limit na ${maxChanges} day-off change(s) para sa buwang ito.`);
+        return showToast(`⚠️ You have reached the limit of ${maxChanges} day-off change(s) for this month.`);
     }
 
     if (config.enabled) {
@@ -189,7 +189,7 @@ export async function selectRiderDayOff(dayIndex) {
         });
 
         if (taken >= targetQuota) {
-            return showToast(`⚠️ Puno na ang slots (${taken}/${targetQuota}) para sa ${DAYS_NAMES[dayIndex]}.`);
+            return showToast(`⚠️ Slots are full (${taken}/${targetQuota}) for ${DAYS_NAMES[dayIndex]}.`);
         }
     }
 
@@ -221,7 +221,7 @@ export async function selectRiderDayOff(dayIndex) {
 
         renderRiderDayOffPicker();
         updateRosterUI();
-        showToast(`🏖️ Na-set ang Day-Off mo tuwing ${DAYS_NAMES[dayIndex]}!`);
+        showToast(`🏖️ Your Day-Off has been set to every ${DAYS_NAMES[dayIndex]}!`);
         showSideNotification("DAY-OFF SET", `Your weekly day-off is now set to Every ${DAYS_NAMES[dayIndex]}`, "fa-umbrella-beach", "text-teal-400", "border-teal-500");
     } catch(e) {
         console.error("Save rider day-off error:", e);

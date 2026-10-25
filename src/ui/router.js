@@ -220,7 +220,7 @@ if (typeof document !== 'undefined') {
         if (restrictedBtn) {
             e.preventDefault();
             e.stopImmediatePropagation();
-            showToast("🚫 Access Restricted: Hindi pinahihintulutan ng Admin ang access sa feature na ito.");
+            showToast("🚫 Access Restricted: Admin has not granted access to this feature.");
         }
     }, true);
 }
@@ -230,7 +230,7 @@ if (typeof document !== 'undefined') {
 // ============================================================================
 export function switchView(targetViewId, isBackwards = false, replace = false) {
     if (!isViewPermittedForCurrentRider(targetViewId)) {
-        showToast("🚫 Access Restricted: Hindi pinahihintulutan ng Admin ang access sa feature na ito.");
+        showToast("🚫 Access Restricted: Admin has not granted access to this feature.");
         return;
     }
 

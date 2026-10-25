@@ -101,7 +101,14 @@ import {
     openStoreMenuPickerFromChat,
     closeStoreMenuPickerFromChat,
     filterChatStoreMenuPicker,
-    handleSelectStoreFromChatPicker
+    handleSelectStoreFromChatPicker,
+    handleChatStoreMenuQuickSendClick,
+    handleChatStoreMenuViewClick,
+    quickSendStoreMenuToActiveChat,
+    askMenuSendConfirmation,
+    closeMenuSendConfirmModal,
+    showMenuSentConfirmationModal,
+    closeMenuSentConfirmationModal
 } from './ui/directoryGalleries.js';
 
 import {
@@ -188,6 +195,13 @@ if (typeof window !== 'undefined') {
     window.closeStoreMenuPickerFromChat = closeStoreMenuPickerFromChat;
     window.filterChatStoreMenuPicker = filterChatStoreMenuPicker;
     window.handleSelectStoreFromChatPicker = handleSelectStoreFromChatPicker;
+    window.handleChatStoreMenuQuickSendClick = handleChatStoreMenuQuickSendClick;
+    window.handleChatStoreMenuViewClick = handleChatStoreMenuViewClick;
+    window.quickSendStoreMenuToActiveChat = quickSendStoreMenuToActiveChat;
+    window.askMenuSendConfirmation = askMenuSendConfirmation;
+    window.closeMenuSendConfirmModal = closeMenuSendConfirmModal;
+    window.showMenuSentConfirmationModal = showMenuSentConfirmationModal;
+    window.closeMenuSentConfirmationModal = closeMenuSentConfirmationModal;
 
     // Navigation & List UI
     window.minimizeDirectorySearch = minimizeDirectorySearch;

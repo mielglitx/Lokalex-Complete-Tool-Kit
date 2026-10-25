@@ -934,7 +934,7 @@ export function handleThreadSwipeCater(btnOrCustId, optionalName) {
     const canManage = typeof window.canManageRoster === 'function' ? window.canManageRoster() : (typeof canManageRoster === 'function' ? canManageRoster() : false);
 
     if ((!currentId || !currentName || activeRole !== 'rider') && !isAdminUser && !canManage) {
-        showToast("⚠️ Hindi ka naka-login bilang rider. Mag-login muna bago mag-cater.");
+        showToast("⚠️ You are not logged in as a rider. Please log in before catering.");
         if (typeof window.switchView === 'function') window.switchView('view-login');
         else if (typeof window.renderViewUI === 'function') window.renderViewUI('view-login');
         return;
@@ -949,7 +949,7 @@ export function handleThreadSwipeCater(btnOrCustId, optionalName) {
 
     if (!isAdminUser && !canManage) {
         if (!myRecord || myRecord.status === 'End' || !myRecord.status) {
-            return showToast("⚠️ Naka-End Shift ka. Pindutin muna ang Available sa roster bago mag-cater.");
+            return showToast("⚠️ You are on End Shift. Please set your status to Available on the roster before catering.");
         }
     }
 

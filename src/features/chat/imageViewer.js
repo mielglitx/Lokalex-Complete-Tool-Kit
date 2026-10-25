@@ -21,10 +21,10 @@ let lastTapTime = 0;
 
 export async function downloadCurrentViewerImage() {
     if (!currentViewerImageUrl) {
-        showToast("⚠️ Walang litrato na mase-save.");
+        showToast("⚠️ No photo to save.");
         return;
     }
-    showToast("⏳ Sine-save ang litrato...");
+    showToast("⏳ Saving photo...");
     const filename = `Lokalex_Photo_${Date.now()}.jpg`;
     await saveImageToDevice(currentViewerImageUrl, filename);
 }

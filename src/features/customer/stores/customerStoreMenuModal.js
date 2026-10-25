@@ -162,7 +162,7 @@ export function renderStoreMenuItems(storeId) {
     }
 
     if (items.length === 0) {
-        feed.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">Walang paninda sa kategoryang ito.</div>`;
+        feed.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No items in this category.</div>`;
         return;
     }
 
@@ -300,7 +300,7 @@ export function openItemCustomizerModal(storeId, itemId) {
                 <label class="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-black/40 border border-gray-200 dark:border-gray-800 cursor-pointer hover:border-amber-500/50">
                     <div class="flex items-center gap-2">
                         <input type="radio" name="customizer_addon_group_${gIdx}" value="NONE" checked onchange="window.recalculateCustomizerPrice()" class="accent-amber-500">
-                        <span class="text-xs font-bold text-gray-500 dark:text-gray-400 italic">None / Walang Dagdag</span>
+                        <span class="text-xs font-bold text-gray-500 dark:text-gray-400 italic">None / No Add-on</span>
                     </div>
                     <span class="text-xs font-mono font-bold text-gray-400">+₱0.00</span>
                 </label>`;
@@ -476,7 +476,7 @@ export function submitAddCustomizedItemToCart() {
     if (!activeCustomizingItem) return;
 
     if (isPreviewMode) {
-        return showToast("⚠️ Naka-Preview Mode: Hindi maaaring mag-add to cart habang tinitingnan ang preview.");
+        return showToast("⚠️ Preview Mode: Cannot add to cart while viewing preview.");
     }
 
     const rawStoreId = activeCustomizingItem.storeId;
@@ -484,7 +484,7 @@ export function submitAddCustomizedItemToCart() {
     const store = storesCache[rawStoreId] || storesCache[storeId] || { storeName: "Store", address: "Poblacion" };
 
     if (!isStoreCurrentlyOpen(store, storeId)) {
-        return showToast(`⚠️ Kasalukuyang sarado ang ${store.storeName || 'Store'}. Hindi maaaring mag-order habang sarado.`);
+        return showToast(`⚠️ ${store.storeName || 'Store'} is currently closed. Cannot order while closed.`);
     }
 
     const rawSizes = activeCustomizingItem.sizes;
@@ -553,7 +553,7 @@ export function submitAddCustomizedItemToCart() {
         }
 
         if (isRequired && selectedInGroup === 0) {
-            return showToast(`⚠️ Paki-pili ang iyong '${group.categoryName}' bago mag-add to cart!`);
+            return showToast(`⚠️ Please select your '${group.categoryName}' before adding to cart!`);
         }
     }
 

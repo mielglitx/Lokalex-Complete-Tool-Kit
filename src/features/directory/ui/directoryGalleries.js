@@ -14,6 +14,7 @@ let activeGalleryStore = null;
 let currentGalleryPages = [];
 let selectedMenuPageIndices = new Set();
 let menuRecipientPickerPendingPages = null;
+let menuRecipientPickerPendingStoreName = "Store";
 
 let activeCameraStream = null;
 let activeCameraFacingMode = 'environment';
@@ -388,7 +389,7 @@ export function getOrCreateMenuCameraModal() {
 
 export async function openMenuCameraScanner() {
     if (!activeGalleryStore) {
-        showToast("⚠️ Paki-pili muna ang store bago mag-take ng photo.");
+        showToast("⚠️ Please select a store first before taking a photo.");
         return;
     }
 
@@ -412,7 +413,7 @@ export async function openMenuCameraScanner() {
     modal.classList.remove('hidden');
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        showToast("⚠️ Hindi suportado ang in-app camera sa browser na ito. Bubuksan ang camera...");
+        showToast("⚠️ In-app camera is not supported in this browser. Opening camera...");
         closeMenuCameraScanner();
         const fallbackInput = document.getElementById('gallery-camera-fallback-input');
         if (fallbackInput) fallbackInput.click();
@@ -471,7 +472,7 @@ async function startMenuCameraStream() {
     }
 
     if (!stream) {
-        showToast("⚠️ Hindi ma-access ang camera. Gamitin ang native camera...");
+        showToast("⚠️ Cannot access the camera. Use the native camera...");
         closeMenuCameraScanner();
         const fallbackInput = document.getElementById('gallery-camera-fallback-input');
         if (fallbackInput) fallbackInput.click();
@@ -683,7 +684,7 @@ export function applyCameraOrientationMode(mode, isAuto = false) {
         if (orientHint) {
             orientHint.innerHTML = `<span class="text-amber-400 font-bold">🔄 Landscape (Auto)</span> • Fit wide tarpaulin/board`;
         }
-        if (!isAuto) showToast("🔄 Landscape Mode: I-frame ang malapad na menu");
+        if (!isAuto) showToast("🔄 Landscape Mode: Frame the wide menu");
     } else {
         if (framingBox) {
             framingBox.dataset.orient = 'portrait';
@@ -775,13 +776,13 @@ export async function handleNativeMenuCameraCapture(event) {
         const caption = `Menu Page ${nextIdx}`;
 
         await uploadSingleMenuBlob(optimizedBlob, caption, activeGalleryStore.key, activeGalleryStore.name);
-        showToast(`✅ High-Res photo na-save para sa ${activeGalleryStore.name}!`);
+        showToast(`✅ High-Res photo saved for ${activeGalleryStore.name}!`);
         showSideNotification("MENU PAGE ADDED", `${activeGalleryStore.name} (${caption})`, "fa-camera", "text-amber-400", "border-amber-500");
         closeMenuCameraScanner();
         openStoreMenuGalleryModal(activeGalleryStore.name, activeGalleryStore.key);
     } catch(err) {
         console.error('[MenuCamera] Native camera upload error:', err);
-        showToast("❌ Bigo sa pag-save: " + (err.message || err));
+        showToast("❌ Failed to save: " + (err.message || err));
     } finally {
         if (event.target) event.target.value = "";
     }
@@ -795,7 +796,7 @@ export async function toggleMenuCameraTorch() {
     try {
         const capabilities = track.getCapabilities ? track.getCapabilities() : {};
         if (!capabilities.torch) {
-            showToast("ℹ️ Hindi suportado ang flashlight sa camera na ito.");
+            showToast("ℹ️ Flashlight is not supported on this camera.");
             return;
         }
 
@@ -897,7 +898,7 @@ export async function takeMenuCameraSnapshot() {
     }
 
     if (!capturedBlob) {
-        showToast("❌ Nabigo ang pagkuha ng litrato.");
+        showToast("❌ Failed to capture photo.");
         return;
     }
 
@@ -940,17 +941,17 @@ export async function confirmAndUploadMenuSnapshot() {
         const optimizedBlob = await compressImageToBlob(capturedSnapshotBlob, 2400, 0.90, false);
         const result = await uploadSingleMenuBlob(optimizedBlob, captionText, activeGalleryStore.key, activeGalleryStore.name);
 
-        showToast(`✅ Na-save ang ${captionText} para sa ${activeGalleryStore.name}!`);
+        showToast(`✅ Saved ${captionText} for ${activeGalleryStore.name}!`);
         showSideNotification("MENU PAGE ADDED", `${activeGalleryStore.name} (${captionText})`, "fa-camera", "text-amber-400", "border-amber-500");
 
         // Return to live camera so rider can capture next page or exit
         retakeMenuCameraSnapshot();
         const nextCaptionInput = document.getElementById('menu-camera-caption-input');
         if (nextCaptionInput) nextCaptionInput.value = `Menu Page ${result.count + 1}`;
-        showToast("📸 Kumuha ng susunod na page o i-tap ang Back.");
+        showToast("📸 Capture next page or tap Back.");
     } catch(err) {
         console.error('[MenuCamera] Upload error:', err);
-        showToast("❌ Hindi na-save ang litrato: " + (err.message || "Upload failed"));
+        showToast("❌ Failed to save photo: " + (err.message || "Upload failed"));
     } finally {
         if (confirmBtn) {
             confirmBtn.disabled = false;
@@ -973,10 +974,28 @@ export async function openStoreMenuGalleryModal(storeName, compositeKey) {
     } else {
         document.body.appendChild(modal);
     }
-    modal.style.zIndex = '100001';
+    modal.style.zIndex = '1000010';
 
     const cleanName = (storeName || "Store").trim();
-    const galleryKey = (compositeKey || cleanName).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normName = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    let galleryKey = (compositeKey || cleanName).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // Resolve true gallery key if present in metadata or candidate forms
+    const candidateKeys = [
+        galleryKey,
+        normName,
+        'stores' + normName,
+        'stores_' + normName,
+        (compositeKey || '').replace(/^[a-z0-9]+_stores_?/, ''),
+        (compositeKey || '').replace(/^[a-z0-9]+_/, '')
+    ].map(k => (k || '').trim()).filter(Boolean);
+
+    for (const k of candidateKeys) {
+        if (storeMenuMetadataMap[k] && storeMenuMetadataMap[k].pageCount > 0) {
+            galleryKey = k;
+            break;
+        }
+    }
 
     activeGalleryStore = {
         name: cleanName,
@@ -1042,8 +1061,8 @@ function renderMenuPages(pages = [], storeName = "Store") {
         container.innerHTML = `
         <div class="col-span-full text-center text-gray-500 dark:text-gray-400 italic py-12 text-xs flex flex-col items-center gap-2">
             <i class="fa-solid fa-camera-retro text-2xl text-amber-500/60"></i>
-            <span>Walang naka-save na photo menu para sa restaurant na ito.</span>
-            <span class="text-[10px] text-gray-400">Mag-picture ng menu gamit ang high-resolution camera o mag-upload mula gallery.</span>
+            <span>No saved photo menu for this restaurant.</span>
+            <span class="text-[10px] text-gray-400">Take a photo of the menu using the high-resolution camera or upload from gallery.</span>
             <button type="button" onclick="window.openMenuCameraScanner && window.openMenuCameraScanner()" class="mt-2 bg-amber-600 hover:bg-amber-500 text-white font-black text-xs px-4 py-2 rounded-xl transition active:scale-95 shadow-md flex items-center gap-1.5 cursor-pointer">
                 <i class="fa-solid fa-camera text-xs"></i> Take Photo Now
             </button>
@@ -1179,11 +1198,11 @@ export async function handleMenuPhotoUpload(e) {
             await uploadSingleMenuBlob(imageBlob, `Menu Page`, activeGalleryStore.key, activeGalleryStore.name);
         }
 
-        showToast(`✅ Na-upload ang ${files.length} pahina ng menu para sa ${activeGalleryStore.name}!`);
+        showToast(`✅ Uploaded ${files.length} menu page(s) for ${activeGalleryStore.name}!`);
         showSideNotification("MENU UPLOADED", `${activeGalleryStore.name} (+${files.length} pages)`, "fa-book-open", "text-emerald-400", "border-emerald-500");
     } catch(err) {
         console.error("Upload error:", err);
-        showToast("❌ Hindi na-save ang litrato: " + (err.message || "Upload failed"));
+        showToast("❌ Failed to save photo: " + (err.message || "Upload failed"));
     } finally {
         if (input) input.value = "";
     }
@@ -1199,7 +1218,7 @@ export async function downloadCompleteMenuToPhone() {
         const pages = snap.exists() ? Object.values(snap.val()) : [];
 
         if (pages.length === 0) {
-            showToast("⚠️ Walang naka-save na mga litrato.");
+            showToast("⚠️ No saved photos found.");
             return;
         }
 
@@ -1219,7 +1238,7 @@ export async function downloadCompleteMenuToPhone() {
         showToast(`✅ Successfully saved ${pages.length} menu picture(s) (auto-overwritten)!`);
     } catch(err) {
         console.error("Download error:", err);
-        showToast("⚠️ Hindi na-download ang kumpletong menu: " + (err.message || "Error"));
+        showToast("⚠️ Failed to download complete menu: " + (err.message || "Error"));
     }
 }
 
@@ -1279,38 +1298,43 @@ export function clearMenuPageSelections() {
 }
 
 export function sendSingleMenuPageToCustomer(imageUrl, caption) {
-    dispatchMenuPagesToSend([{ imageUrl, caption: caption || "Menu Page" }]);
+    const storeName = activeGalleryStore?.name || "Store";
+    dispatchMenuPagesToSend([{ imageUrl, caption: caption || "Menu Page" }], storeName);
 }
 
 export function sendSelectedMenuPagesToCustomer() {
     if (selectedMenuPageIndices.size === 0) {
-        showToast("⚠️ Paki-pili muna ang mga menu pages na nais ipadala.");
+        showToast("⚠️ Please select the menu pages to send first.");
         return;
     }
+    const storeName = activeGalleryStore?.name || "Store";
     const pages = Array.from(selectedMenuPageIndices).sort((a, b) => a - b).map(idx => {
         const p = currentGalleryPages[idx];
         return {
-            imageUrl: p.imageUrl,
+            imageUrl: p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image || "",
             caption: p.caption || `Page ${idx + 1}`
         };
-    });
-    dispatchMenuPagesToSend(pages);
+    }).filter(p => p.imageUrl);
+    dispatchMenuPagesToSend(pages, storeName);
 }
 
 export function sendAllMenuPagesToCustomer() {
     if (!currentGalleryPages || currentGalleryPages.length === 0) {
-        showToast("⚠️ Walang naka-save na litrato para sa store na ito.");
+        showToast("⚠️ No saved photos for this store.");
         return;
     }
+    const storeName = activeGalleryStore?.name || "Store";
     const pages = currentGalleryPages.map((p, idx) => ({
-        imageUrl: p.imageUrl,
+        imageUrl: p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image || "",
         caption: p.caption || `Page ${idx + 1}`
-    }));
-    dispatchMenuPagesToSend(pages);
+    })).filter(p => p.imageUrl);
+    dispatchMenuPagesToSend(pages, storeName);
 }
 
-export function dispatchMenuPagesToSend(pagesToSend) {
+export async function dispatchMenuPagesToSend(pagesToSend, storeName = "") {
     if (!pagesToSend || pagesToSend.length === 0) return;
+
+    const resolvedStoreName = storeName || activeGalleryStore?.name || "Store";
 
     // Check if rider is currently chatting inside rider-chat-modal
     const chatModal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
@@ -1323,32 +1347,45 @@ export function dispatchMenuPagesToSend(pagesToSend) {
 
     if (isChatOpen && validActiveCustId) {
         const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
-        if (confirm(`Ipadala ang ${pagesToSend.length} menu picture(s) kay ${custName}?`)) {
-            executeSendMenuPages(validActiveCustId, pagesToSend, custName);
+        const confirmed = await askMenuSendConfirmation({
+            storeName: resolvedStoreName,
+            pageCount: pagesToSend.length,
+            custName: custName
+        });
+        if (confirmed) {
+            executeSendMenuPages(validActiveCustId, pagesToSend, custName, resolvedStoreName);
         }
         return;
     }
 
     // Otherwise open customer picker modal
-    openMenuCustomerRecipientPicker(pagesToSend);
+    openMenuCustomerRecipientPicker(pagesToSend, resolvedStoreName);
 }
 
-export async function executeSendMenuPages(targetCustId, pages, custDisplayName = "Customer") {
+export async function executeSendMenuPages(targetCustId, pages, custDisplayName = "Customer", storeName = "Store") {
     const cleanCustId = String(targetCustId || '').trim();
     if (!cleanCustId || cleanCustId === 'undefined' || cleanCustId === 'null' || !pages || pages.length === 0) {
-        showToast("⚠️ Hindi mapili ang customer. Subukang muli.");
+        showToast("⚠️ Cannot select customer. Please try again.");
         return;
     }
 
     closeMenuCustomerRecipientPicker();
+    closeStoreMenuGalleryModal();
+    closeStoreMenuPickerFromChat();
     const total = pages.length;
-    showToast(`📤 Sinisimulan ang pagpapadala ng ${total} menu picture(s) kay ${custDisplayName}...`);
+    showToast(`📤 Starting to send ${total} menu picture(s) to ${custDisplayName}...`);
 
     let sent = 0;
     for (let i = 0; i < total; i++) {
         const p = pages[i];
         const pageNum = i + 1;
         const isLastPage = (i === total - 1);
+        const imgUrl = p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image || "";
+        if (!imgUrl) {
+            console.warn(`[MenuSend] Skipping page ${pageNum}: Missing image URL`, p);
+            continue;
+        }
+
         let caption = p.caption || `Page ${pageNum} of ${total}`;
         if (isLastPage) {
             caption = p.caption 
@@ -1363,7 +1400,29 @@ export async function executeSendMenuPages(targetCustId, pages, custDisplayName 
                 ? sendDirectMenuPhotoToCustomer 
                 : window.sendDirectMenuPhotoToCustomer;
             if (typeof sendFn === 'function') {
-                ok = await sendFn(cleanCustId, p.imageUrl, caption);
+                ok = await sendFn(cleanCustId, imgUrl, caption);
+            } else if (db) {
+                // Direct RTDB fallback
+                const riderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
+                const now = Date.now();
+                const fallbackMsg = {
+                    sender: riderName,
+                    senderType: 'rider',
+                    text: `📋 Menu: ${caption}`,
+                    imageUrl: imgUrl,
+                    type: 'image',
+                    timestamp: now,
+                    isRider: true,
+                    status: 'sent',
+                    channel: cleanCustId.startsWith('fb_') ? 'messenger' : 'web'
+                };
+                await db.ref(`customerChats/${cleanCustId}/messages`).push(fallbackMsg);
+                await db.ref(`customerChats/${cleanCustId}/metadata`).update({
+                    lastMessage: `You: 📋 ${caption}`,
+                    lastUpdated: now,
+                    unreadForRider: false
+                });
+                ok = true;
             }
         } catch (sendErr) {
             console.error(`[MenuSend] Error sending page ${pageNum}:`, sendErr);
@@ -1376,19 +1435,190 @@ export async function executeSendMenuPages(targetCustId, pages, custDisplayName 
         }
 
         if (i < total - 1) {
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise(r => setTimeout(r, 800));
         }
     }
 
-    if (sent === total) {
-        showToast(`✅ Matagumpay na naipadala ang ${total} picture(s) kay ${custDisplayName}!`);
-    } else if (sent > 0) {
-        showToast(`⚠️ Naipadala ang ${sent} sa ${total} menu picture(s) kay ${custDisplayName}.`);
+    if (sent > 0) {
+        showToast(`✅ Successfully sent ${sent} of ${total} picture(s) to ${custDisplayName}!`);
+        showSideNotification("MENU SENT", `${sent} page(s) sent to ${custDisplayName}`, "fa-paper-plane", "text-emerald-400", "border-emerald-500");
+        showMenuSentConfirmationModal(custDisplayName, cleanCustId, sent, storeName);
     } else {
-        showToast(`❌ Nabigo ang pagpapadala ng menu photos kay ${custDisplayName}.`);
+        showToast(`❌ Failed to send menu photos to ${custDisplayName}.`);
     }
 
     clearMenuPageSelections();
+}
+
+export function getOrCreateMenuSendConfirmModal() {
+    let modal = document.getElementById('menu-send-confirm-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'menu-send-confirm-modal';
+        modal.className = 'fixed inset-0 z-[1000030] flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 hidden';
+        modal.style.zIndex = '1000030';
+        modal.innerHTML = `
+        <div class="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl flex flex-col items-center text-center animate-scaleUp">
+            <div class="w-14 h-14 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center text-2xl mb-3 border border-orange-500/20 shadow-sm">
+                <i class="fa-solid fa-paper-plane"></i>
+            </div>
+            
+            <h3 id="menu-send-confirm-title" class="font-black text-base text-gray-900 dark:text-white mb-1.5">Send Store Menu?</h3>
+            
+            <div class="flex items-center gap-1.5 mb-3 flex-wrap justify-center">
+                <div id="menu-send-confirm-store" class="inline-flex items-center text-[11px] font-bold text-orange-700 dark:text-orange-400 bg-orange-500/10 border border-orange-500/30 px-2.5 py-1 rounded-full">
+                    <i class="fa-solid fa-store mr-1.5 text-orange-500"></i> <span id="menu-send-confirm-store-name">Store</span>
+                </div>
+                <div id="menu-send-confirm-recipient" class="inline-flex items-center text-[11px] font-bold text-blue-700 dark:text-blue-400 bg-blue-500/10 border border-blue-500/30 px-2.5 py-1 rounded-full">
+                    <i class="fa-solid fa-user mr-1.5 text-blue-500"></i> <span id="menu-send-confirm-cust-name">Customer</span>
+                </div>
+            </div>
+
+            <p id="menu-send-confirm-desc" class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed mb-5">
+                Send menu pictures to this customer?
+            </p>
+
+            <div class="flex items-center gap-2 w-full">
+                <button type="button" id="menu-send-confirm-cancel-btn" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-200 font-bold text-xs py-2.5 px-3 rounded-xl transition active:scale-95 cursor-pointer">
+                    Cancel
+                </button>
+                <button type="button" id="menu-send-confirm-proceed-btn" class="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-black text-xs py-2.5 px-3 rounded-xl transition active:scale-95 shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-paper-plane text-xs"></i> Send Menu
+                </button>
+            </div>
+        </div>`;
+        document.body.appendChild(modal);
+    }
+    return modal;
+}
+
+export function askMenuSendConfirmation({ storeName = "Store", pageCount = 1, custName = "Customer" }) {
+    return new Promise((resolve) => {
+        const modal = getOrCreateMenuSendConfirmModal();
+        if (modal.parentElement !== document.body) document.body.appendChild(modal);
+        modal.style.zIndex = '1000030';
+
+        const storeEl = document.getElementById('menu-send-confirm-store-name');
+        const custEl = document.getElementById('menu-send-confirm-cust-name');
+        const descEl = document.getElementById('menu-send-confirm-desc');
+        const cancelBtn = document.getElementById('menu-send-confirm-cancel-btn');
+        const proceedBtn = document.getElementById('menu-send-confirm-proceed-btn');
+
+        const cleanStore = storeName || "Store";
+        const cleanCust = custName || "Customer";
+        const pageText = `${pageCount} ${pageCount === 1 ? 'page' : 'pages'}`;
+
+        if (storeEl) storeEl.innerText = cleanStore;
+        if (custEl) custEl.innerText = cleanCust;
+        if (descEl) {
+            descEl.innerHTML = `Send all <strong>${pageText}</strong> of <strong>${escapeHtml(cleanStore)}</strong> to <strong>${escapeHtml(cleanCust)}</strong>?`;
+        }
+
+        const cleanup = (result) => {
+            modal.classList.add('hidden');
+            if (cancelBtn) cancelBtn.onclick = null;
+            if (proceedBtn) proceedBtn.onclick = null;
+            modal.onclick = null;
+            resolve(result);
+        };
+
+        if (cancelBtn) {
+            cancelBtn.onclick = (e) => {
+                e.stopPropagation();
+                cleanup(false);
+            };
+        }
+        if (proceedBtn) {
+            proceedBtn.onclick = (e) => {
+                e.stopPropagation();
+                cleanup(true);
+            };
+        }
+        modal.onclick = (e) => {
+            if (e.target === modal) cleanup(false);
+        };
+
+        modal.classList.remove('hidden');
+    });
+}
+
+export function closeMenuSendConfirmModal() {
+    const modal = document.getElementById('menu-send-confirm-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function getOrCreateMenuSentConfirmationModal() {
+    let modal = document.getElementById('menu-sent-confirmation-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'menu-sent-confirmation-modal';
+        modal.className = 'fixed inset-0 z-[1000020] flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 hidden';
+        modal.style.zIndex = '1000020';
+        modal.innerHTML = `
+        <div class="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl flex flex-col items-center text-center animate-scaleUp">
+            <div class="w-14 h-14 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 flex items-center justify-center text-2xl mb-3 border border-emerald-500/20 shadow-sm animate-bounce">
+                <i class="fa-solid fa-circle-check"></i>
+            </div>
+            
+            <h3 id="menu-sent-confirm-title" class="font-black text-base text-gray-900 dark:text-white mb-1">Menu Sent to Customer!</h3>
+            
+            <div id="menu-sent-confirm-recipient" class="inline-flex items-center text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-full mb-3">
+                <i class="fa-solid fa-user-check mr-1.5 text-emerald-500"></i> Customer Name
+            </div>
+
+            <p id="menu-sent-confirm-desc" class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed mb-5">
+                The restaurant menu pictures have been dispatched successfully.
+            </p>
+
+            <div class="flex items-center gap-2 w-full">
+                <button type="button" id="menu-sent-confirm-open-chat" class="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs py-2.5 px-3 rounded-xl transition active:scale-95 shadow-md flex items-center justify-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-comments text-xs"></i> View in Chat
+                </button>
+                <button type="button" onclick="window.closeMenuSentConfirmationModal && window.closeMenuSentConfirmationModal()" class="bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-200 font-bold text-xs py-2.5 px-4 rounded-xl transition active:scale-95 cursor-pointer">
+                    Done
+                </button>
+            </div>
+        </div>`;
+        document.body.appendChild(modal);
+    }
+    return modal;
+}
+
+export function showMenuSentConfirmationModal(custName, custId, count, storeName) {
+    const modal = getOrCreateMenuSentConfirmationModal();
+    const descEl = document.getElementById('menu-sent-confirm-desc');
+    const recipientBadge = document.getElementById('menu-sent-confirm-recipient');
+    const openChatBtn = document.getElementById('menu-sent-confirm-open-chat');
+
+    const cleanCustName = custName || "Customer";
+    const cleanStore = storeName || "Store";
+    const pageText = `${count} ${count === 1 ? 'page' : 'pages'}`;
+
+    if (descEl) {
+        descEl.innerHTML = `Successfully dispatched <strong>${pageText}</strong> of <strong>${escapeHtml(cleanStore)}</strong> to <strong>${escapeHtml(cleanCustName)}</strong>.`;
+    }
+    if (recipientBadge) {
+        recipientBadge.innerHTML = `<i class="fa-solid fa-user-check text-emerald-500 mr-1.5"></i> ${escapeHtml(cleanCustName)}`;
+    }
+    if (openChatBtn) {
+        openChatBtn.onclick = () => {
+            closeMenuSentConfirmationModal();
+            if (typeof window.openRiderCustomerChatModal === 'function' && custId) {
+                window.openRiderCustomerChatModal(custId, cleanCustName);
+            }
+        };
+    }
+
+    if (modal) {
+        if (modal.parentElement !== document.body) document.body.appendChild(modal);
+        modal.style.zIndex = '1000020';
+        modal.classList.remove('hidden');
+    }
+}
+
+export function closeMenuSentConfirmationModal() {
+    const modal = document.getElementById('menu-sent-confirmation-modal');
+    if (modal) modal.classList.add('hidden');
 }
 
 function getOrCreateMenuCustomerRecipientPickerModal() {
@@ -1434,7 +1664,7 @@ function getOrCreateMenuCustomerRecipientPickerModal() {
     return modal;
 }
 
-export function openMenuCustomerRecipientPicker(pagesToSend) {
+export function openMenuCustomerRecipientPicker(pagesToSend, storeName = "") {
     menuRecipientPickerPendingPages = pagesToSend || [];
     const modal = getOrCreateMenuCustomerRecipientPickerModal();
     if (modal.parentElement !== document.body) {
@@ -1445,9 +1675,10 @@ export function openMenuCustomerRecipientPicker(pagesToSend) {
     modal.style.zIndex = '1000003';
 
     const sub = document.getElementById('menu-recipient-modal-sub');
-    const storeName = activeGalleryStore?.name || "Store";
+    const resolvedStore = storeName || activeGalleryStore?.name || "Store";
+    menuRecipientPickerPendingStoreName = resolvedStore;
     if (sub) {
-        sub.innerText = `Sending ${menuRecipientPickerPendingPages.length} page(s) from ${storeName}`;
+        sub.innerText = `Sending ${menuRecipientPickerPendingPages.length} page(s) from ${resolvedStore}`;
     }
 
     const searchInput = document.getElementById('menu-recipient-search-input');
@@ -1518,7 +1749,7 @@ export async function renderMenuCustomerRecipients(searchQuery = "") {
     });
 
     if (filtered.length === 0) {
-        container.innerHTML = `<div class="text-center text-gray-400 text-xs py-8 italic">Walang nahanap na active customer thread.</div>`;
+        container.innerHTML = `<div class="text-center text-gray-400 text-xs py-8 italic">No active customer thread found.</div>`;
         return;
     }
 
@@ -1553,17 +1784,30 @@ export async function renderMenuCustomerRecipients(searchQuery = "") {
     }).join('');
 }
 
-export function handleSelectMenuCustomerRecipient(custId, custName) {
+export async function handleSelectMenuCustomerRecipient(custId, custName) {
     const cleanId = String(custId || '').trim();
     if (!cleanId || cleanId === 'undefined' || cleanId === 'null') {
-        showToast("⚠️ Invalid customer ID. Paki-pili muli ang customer.");
+        showToast("⚠️ Invalid customer ID. Please reselect the customer.");
         return;
     }
     if (!menuRecipientPickerPendingPages || menuRecipientPickerPendingPages.length === 0) {
         closeMenuCustomerRecipientPicker();
         return;
     }
-    executeSendMenuPages(cleanId, menuRecipientPickerPendingPages, custName);
+
+    const storeName = menuRecipientPickerPendingStoreName || activeGalleryStore?.name || "Store";
+    const pages = [...menuRecipientPickerPendingPages];
+    const count = pages.length;
+
+    const confirmed = await askMenuSendConfirmation({
+        storeName: storeName,
+        pageCount: count,
+        custName: custName
+    });
+    if (!confirmed) return;
+
+    closeMenuCustomerRecipientPicker();
+    executeSendMenuPages(cleanId, pages, custName, storeName);
 }
 
 function getOrCreateChatStoreMenuPickerModal() {
@@ -1571,22 +1815,22 @@ function getOrCreateChatStoreMenuPickerModal() {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'chat-store-menu-picker-modal';
-        modal.className = 'fixed inset-0 z-[100000] flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 hidden';
-        modal.style.zIndex = '100000';
+        modal.className = 'fixed inset-0 z-[1000005] flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 hidden';
+        modal.style.zIndex = '1000005';
         modal.innerHTML = `
         <div class="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-3xl max-w-sm sm:max-w-md w-full max-h-[85vh] shadow-2xl flex flex-col overflow-hidden animate-scaleUp">
             <!-- Header -->
             <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800/80 bg-gray-50/70 dark:bg-black/30">
-                <div class="flex items-center gap-2 min-w-0">
-                    <div class="w-8 h-8 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center text-sm font-bold shrink-0">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-9 h-9 rounded-2xl bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center text-sm font-bold shrink-0 shadow-2xs border border-orange-500/20">
                         <i class="fa-solid fa-book-open"></i>
                     </div>
                     <div class="min-w-0">
                         <h3 class="font-black text-xs sm:text-sm text-gray-900 dark:text-white truncate">Restaurant Menu Directory</h3>
-                        <p class="text-[10px] text-gray-500 dark:text-gray-400 truncate">Pick store to browse & send photos</p>
+                        <p id="chat-store-picker-subtitle" class="text-[10px] text-gray-500 dark:text-gray-400 truncate">Pick a store to send menu photos</p>
                     </div>
                 </div>
-                <button type="button" onclick="window.closeStoreMenuPickerFromChat && window.closeStoreMenuPickerFromChat()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 text-sm cursor-pointer">
+                <button type="button" onclick="window.closeStoreMenuPickerFromChat && window.closeStoreMenuPickerFromChat()" class="w-7 h-7 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center justify-center text-xs transition active:scale-95 cursor-pointer">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
@@ -1595,12 +1839,12 @@ function getOrCreateChatStoreMenuPickerModal() {
             <div class="p-2.5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/40 dark:bg-black/10">
                 <div class="relative flex items-center">
                     <i class="fa-solid fa-magnifying-glass absolute left-3 text-gray-400 text-xs"></i>
-                    <input type="text" id="chat-store-picker-search" placeholder="Search restaurant / store name..." oninput="window.filterChatStoreMenuPicker && window.filterChatStoreMenuPicker()" class="w-full bg-white dark:bg-black/40 border border-gray-200 dark:border-gray-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-gray-900 dark:text-white outline-none focus:border-orange-500">
+                    <input type="text" id="chat-store-picker-search" placeholder="Search restaurant or store name..." oninput="window.filterChatStoreMenuPicker && window.filterChatStoreMenuPicker()" class="w-full bg-white dark:bg-black/40 border border-gray-200 dark:border-gray-700 rounded-xl pl-8 pr-3 py-2 text-xs text-gray-900 dark:text-white outline-none focus:border-orange-500">
                 </div>
             </div>
 
             <!-- Stores List Body -->
-            <div id="chat-store-picker-list" class="flex-1 overflow-y-auto p-2.5 flex flex-col gap-1.5 max-h-[58vh]">
+            <div id="chat-store-picker-list" class="flex-1 overflow-y-auto p-2.5 flex flex-col gap-2 max-h-[58vh]">
                 <div class="text-center text-gray-400 text-xs py-8 italic">Loading store menus...</div>
             </div>
         </div>`;
@@ -1613,10 +1857,13 @@ export function openStoreMenuPickerFromChat() {
     const modal = getOrCreateChatStoreMenuPickerModal();
     if (modal.parentElement !== document.body) {
         document.body.appendChild(modal);
-    } else {
-        document.body.appendChild(modal);
     }
-    modal.style.zIndex = '100000';
+    modal.style.zIndex = '1000005';
+    const subtitle = document.getElementById('chat-store-picker-subtitle');
+    const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
+    if (subtitle) {
+        subtitle.innerHTML = `Sending menu to <strong class="text-orange-600 dark:text-orange-400">${escapeHtml(custName)}</strong>`;
+    }
     const searchInput = document.getElementById('chat-store-picker-search');
     if (searchInput) searchInput.value = "";
     modal.classList.remove('hidden');
@@ -1639,22 +1886,102 @@ export async function renderChatStoreMenuPicker(searchQuery = "") {
 
     let storeList = [];
     try {
-        const cached = await idbGet('directory', 'stores');
-        if (cached && Array.isArray(cached)) storeList = cached;
+        const cached = await idbGet('directory', 'all_directory_records');
+        if (cached && Array.isArray(cached)) {
+            storeList = cached.filter(r => (r.type || '').toLowerCase() === 'stores');
+        }
     } catch(e) {}
+
+    if (storeList.length === 0 && globalState.records && Array.isArray(globalState.records)) {
+        storeList = globalState.records.filter(r => (r.type || '').toLowerCase() === 'stores');
+    }
+
+    if (storeList.length === 0) {
+        try {
+            const raw = localStorage.getItem('lokalex_directory_cache_v2');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    storeList = parsed.filter(r => (r.type || '').toLowerCase() === 'stores');
+                }
+            }
+        } catch(e) {}
+    }
 
     if (storeList.length === 0 && globalState.directoryCache && globalState.directoryCache.stores) {
         storeList = globalState.directoryCache.stores;
     }
 
-    const knownKeys = new Set(storeList.map(s => (s.compositeKey || s.name || '').toLowerCase().replace(/[^a-z0-9]/g, '')));
-    Object.entries(storeMenuMetadataMap).forEach(([key, meta]) => {
-        if (!knownKeys.has(key) && meta.storeName) {
-            storeList.push({
-                name: meta.storeName,
-                compositeKey: key
+    // DEDUPLICATION: Use a unified map keyed by normalized store name!
+    // This prevents duplicate cards (e.g. Chowking x2, Chooks To Go x2)
+    const storeMap = new Map();
+    const normalizeKey = (str) => (str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // 1. Populate from directory store records
+    storeList.forEach(s => {
+        const name = (s.name || '').trim();
+        if (!name) return;
+        const normKey = normalizeKey(name);
+        if (!storeMap.has(normKey)) {
+            storeMap.set(normKey, {
+                name: name,
+                compositeKey: s.compositeKey || s.key || normKey,
+                metaKey: '',
+                pageCount: 0
             });
-            knownKeys.add(key);
+        } else {
+            const existing = storeMap.get(normKey);
+            if (!existing.compositeKey && s.compositeKey) {
+                existing.compositeKey = s.compositeKey;
+            }
+        }
+    });
+
+    // 2. Merge metadata entries from Firebase RTDB (storeMenuMetadataMap)
+    Object.entries(storeMenuMetadataMap).forEach(([metaKey, meta]) => {
+        if (!meta) return;
+        const storeName = (meta.storeName || '').trim();
+        if (!storeName) return;
+        const normKey = normalizeKey(storeName);
+        const pageCount = meta.pageCount || 0;
+
+        if (storeMap.has(normKey)) {
+            const existing = storeMap.get(normKey);
+            existing.metaKey = metaKey;
+            if (pageCount > (existing.pageCount || 0)) {
+                existing.pageCount = pageCount;
+            }
+            if (meta.updatedAt) existing.updatedAt = meta.updatedAt;
+        } else {
+            storeMap.set(normKey, {
+                name: storeName,
+                compositeKey: metaKey,
+                metaKey: metaKey,
+                pageCount: pageCount,
+                updatedAt: meta.updatedAt
+            });
+        }
+    });
+
+    // 3. Resolve metadata keys for any stores still missing metaKey
+    storeMap.forEach((entry, normKey) => {
+        if (!entry.pageCount || !entry.metaKey) {
+            const candidateKeys = [
+                entry.metaKey,
+                normalizeKey(entry.compositeKey),
+                normKey,
+                'stores' + normKey,
+                'stores_' + normKey
+            ].filter(Boolean);
+
+            for (const k of candidateKeys) {
+                if (storeMenuMetadataMap[k] && storeMenuMetadataMap[k].pageCount > 0) {
+                    entry.metaKey = k;
+                    entry.pageCount = storeMenuMetadataMap[k].pageCount;
+                    if (storeMenuMetadataMap[k].updatedAt) entry.updatedAt = storeMenuMetadataMap[k].updatedAt;
+                    break;
+                }
+            }
         }
     });
 
@@ -1662,72 +1989,220 @@ export async function renderChatStoreMenuPicker(searchQuery = "") {
     const storesWithMenu = [];
     const storesWithoutMenu = [];
 
-    storeList.forEach(s => {
-        const name = (s.name || "").trim();
-        if (!name) return;
+    storeMap.forEach((s) => {
+        const name = s.name;
         if (q && !name.toLowerCase().includes(q)) return;
 
-        const keyByComposite = (s.compositeKey || "").toLowerCase().replace(/[^a-z0-9]/g, '');
-        const keyByName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const meta = (keyByComposite && storeMenuMetadataMap[keyByComposite])
-            || (keyByName && storeMenuMetadataMap[keyByName])
-            || null;
-
-        const pageCount = meta?.pageCount || 0;
-        const entry = { ...s, name, pageCount, updatedAt: meta?.updatedAt };
-
-        if (pageCount > 0) {
-            storesWithMenu.push(entry);
+        if (s.pageCount > 0) {
+            storesWithMenu.push(s);
         } else {
-            storesWithoutMenu.push(entry);
+            storesWithoutMenu.push(s);
         }
     });
 
-    storesWithMenu.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' }));
-    storesWithoutMenu.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'en', { sensitivity: 'base' }));
+    storesWithMenu.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+    storesWithoutMenu.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
 
     const combined = [...storesWithMenu, ...storesWithoutMenu];
 
     if (combined.length === 0) {
-        container.innerHTML = `<div class="text-center text-gray-400 text-xs py-8 italic">Walang nahanap na store.</div>`;
+        container.innerHTML = `<div class="text-center text-gray-400 text-xs py-8 italic">No stores found.</div>`;
         return;
     }
 
     container.innerHTML = combined.map(s => {
         const safeName = escapeHtml(s.name);
         const safeCompositeKey = escapeHtml(s.compositeKey || s.name);
+        const safeMetaKey = escapeHtml(s.metaKey || '');
         const hasMenu = s.pageCount > 0;
 
         return `
-        <div onclick="window.handleSelectStoreFromChatPicker && window.handleSelectStoreFromChatPicker('${safeName}', '${safeCompositeKey}')" class="p-2.5 rounded-2xl border ${hasMenu ? 'bg-orange-50/60 dark:bg-orange-950/20 border-orange-200 dark:border-orange-500/30' : 'bg-gray-50 hover:bg-gray-100 dark:bg-zinc-800/60 dark:hover:bg-zinc-800 border-gray-200 dark:border-zinc-700/60'} flex items-center justify-between gap-2 cursor-pointer transition active:scale-[0.98]">
-            <div class="flex items-center gap-2.5 min-w-0">
-                <div class="w-8 h-8 rounded-xl ${hasMenu ? 'bg-orange-500 text-white' : 'bg-gray-200 dark:bg-zinc-700 text-gray-500 dark:text-gray-300'} flex items-center justify-center font-bold text-xs shrink-0">
+        <div class="p-2.5 rounded-2xl border ${hasMenu ? 'bg-orange-50/50 dark:bg-orange-950/20 border-orange-200/80 dark:border-orange-500/30' : 'bg-gray-50/70 hover:bg-gray-100 dark:bg-zinc-800/40 dark:hover:bg-zinc-800 border-gray-200/70 dark:border-zinc-700/50'} flex items-center justify-between gap-2 transition">
+            <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                <div class="w-8 h-8 rounded-xl ${hasMenu ? 'bg-orange-500 text-white shadow-2xs' : 'bg-gray-200 dark:bg-zinc-700 text-gray-500 dark:text-gray-300'} flex items-center justify-center font-bold text-xs shrink-0">
                     <i class="fa-solid fa-store"></i>
                 </div>
-                <div class="min-w-0">
-                    <div class="font-bold text-xs text-gray-900 dark:text-white truncate">${safeName}</div>
-                    <div class="text-[9.5px] mt-0.5">
+                <div class="min-w-0 flex-1">
+                    <div class="font-black text-xs text-gray-900 dark:text-white truncate">${safeName}</div>
+                    <div class="text-[10px] mt-0.5">
                         ${hasMenu 
-                            ? `<span class="text-emerald-600 dark:text-emerald-400 font-bold"><i class="fa-solid fa-camera"></i> ${s.pageCount} ${s.pageCount === 1 ? 'Page' : 'Pages'}</span>` 
-                            : `<span class="text-gray-400">No photos yet</span>`}
+                            ? `<span class="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-images text-[9px]"></i> ${s.pageCount} ${s.pageCount === 1 ? 'Page' : 'Pages'} available</span>` 
+                            : `<span class="text-gray-400 italic">No menu photos saved</span>`}
                     </div>
                 </div>
             </div>
-            <button type="button" class="shrink-0 ${hasMenu ? 'bg-orange-600 hover:bg-orange-500 text-white' : 'bg-gray-200 dark:bg-zinc-700 text-gray-600 dark:text-gray-300'} text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 cursor-pointer">
-                <i class="fa-solid fa-book-open text-[9px]"></i> View & Send
-            </button>
+            <div class="flex items-center gap-1.5 shrink-0">
+                ${hasMenu ? `
+                <button type="button" 
+                    data-store-name="${safeName}" 
+                    data-composite-key="${safeCompositeKey}" 
+                    data-meta-key="${safeMetaKey}" 
+                    onclick="window.handleChatStoreMenuQuickSendClick && window.handleChatStoreMenuQuickSendClick(this)" 
+                    class="bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white text-[10.5px] font-black px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Send all menu pages to customer instantly">
+                    <i class="fa-solid fa-paper-plane text-[9px]"></i> Send All (${s.pageCount})
+                </button>
+                <button type="button" 
+                    data-store-name="${safeName}" 
+                    data-composite-key="${safeCompositeKey}" 
+                    data-meta-key="${safeMetaKey}" 
+                    onclick="window.handleChatStoreMenuViewClick && window.handleChatStoreMenuViewClick(this)" 
+                    class="bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-zinc-700 text-[10.5px] font-bold px-2 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Preview or select specific pages to send">
+                    <i class="fa-solid fa-eye text-[9px]"></i> View
+                </button>` : `
+                <button type="button" 
+                    data-store-name="${safeName}" 
+                    data-composite-key="${safeCompositeKey}" 
+                    data-meta-key="${safeMetaKey}" 
+                    onclick="window.handleChatStoreMenuViewClick && window.handleChatStoreMenuViewClick(this)" 
+                    class="bg-gray-100 hover:bg-gray-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-zinc-700 text-[10px] font-bold px-2 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Open gallery to add photos">
+                    <i class="fa-solid fa-camera text-[9px]"></i> Add Photo
+                </button>`}
+            </div>
         </div>`;
     }).join('');
 }
 
-export function handleSelectStoreFromChatPicker(storeName, compositeKey) {
+export function handleChatStoreMenuQuickSendClick(btn) {
+    if (!btn) return;
+    const storeName = btn.getAttribute('data-store-name') || '';
+    const compositeKey = btn.getAttribute('data-composite-key') || '';
+    const metaKey = btn.getAttribute('data-meta-key') || '';
+    quickSendStoreMenuToActiveChat(storeName, compositeKey, metaKey);
+}
+
+export function handleChatStoreMenuViewClick(btn) {
+    if (!btn) return;
+    const storeName = btn.getAttribute('data-store-name') || '';
+    const compositeKey = btn.getAttribute('data-composite-key') || '';
+    const metaKey = btn.getAttribute('data-meta-key') || '';
+    handleSelectStoreFromChatPicker(storeName, compositeKey, metaKey);
+}
+
+export function handleSelectStoreFromChatPicker(storeName, compositeKey, metaKey = '') {
     closeStoreMenuPickerFromChat();
-    openStoreMenuGalleryModal(storeName, compositeKey);
+    openStoreMenuGalleryModal(storeName, metaKey || compositeKey);
+}
+
+export async function quickSendStoreMenuToActiveChat(storeName, compositeKey, metadataKey = '') {
+    const cleanName = (storeName || "Store").trim();
+
+    const chatModal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
+    const isChatOpen = chatModal && !chatModal.classList.contains('hidden');
+    const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') 
+        ? window.getActiveRiderChatCustId() 
+        : window.activeRiderChatCustId;
+    const validActiveCustId = (activeCustId && activeCustId !== 'undefined' && activeCustId !== 'null') ? String(activeCustId).trim() : null;
+    const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
+
+    if (!isChatOpen || !validActiveCustId) {
+        showToast("⚠️ Chat is not active. Please open a customer chat first.");
+        return;
+    }
+
+    showToast(`⏳ Loading ${cleanName} menu photos...`);
+
+    let pages = [];
+
+    // Check if current active gallery store is already loaded for this store
+    if (activeGalleryStore && activeGalleryStore.name === cleanName && Array.isArray(currentGalleryPages) && currentGalleryPages.length > 0) {
+        pages = [...currentGalleryPages];
+    }
+
+    const normName = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normComposite = (compositeKey || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // Try candidate keys
+    if (pages.length === 0) {
+        const candidateKeys = Array.from(new Set([
+            metadataKey,
+            'stores' + normName,
+            'stores_' + normName,
+            normName,
+            normComposite,
+            compositeKey,
+            (compositeKey || '').replace(/^[a-z0-9]+_stores_?/, ''),
+            (compositeKey || '').replace(/^[a-z0-9]+_/, '')
+        ])).map(k => (k || '').trim()).filter(Boolean);
+
+        // 1. Check IndexedDB across all candidate keys
+        for (const k of candidateKeys) {
+            try {
+                const cached = await idbGet('storeMenuGalleries', k);
+                if (cached) {
+                    if (Array.isArray(cached) && cached.length > 0) {
+                        pages = cached;
+                        break;
+                    } else if (cached.pages && Array.isArray(cached.pages) && cached.pages.length > 0) {
+                        pages = cached.pages;
+                        break;
+                    }
+                }
+            } catch(e) {}
+        }
+
+        // 2. If not found in IndexedDB, fetch from Firebase RTDB
+        if (pages.length === 0 && db) {
+            for (const k of candidateKeys) {
+                try {
+                    const snap = await db.ref(`directory/storeMenuGalleries/${k}/pages`).once('value');
+                    const data = snap.val();
+                    if (data && typeof data === 'object') {
+                        pages = Object.entries(data).map(([id, item]) => ({
+                            id,
+                            ...(item || {})
+                        }));
+                        if (pages.length > 0) break;
+                    }
+
+                    // Fallback: check root gallery object
+                    const fullSnap = await db.ref(`directory/storeMenuGalleries/${k}`).once('value');
+                    const fullData = fullSnap.val();
+                    if (fullData && fullData.pages && typeof fullData.pages === 'object') {
+                        pages = Object.entries(fullData.pages).map(([id, item]) => ({
+                            id,
+                            ...(item || {})
+                        }));
+                        if (pages.length > 0) break;
+                    }
+                } catch(e) {
+                    console.error('[QuickSendMenu] Error loading pages from Firebase for key ' + k + ':', e);
+                }
+            }
+        }
+    }
+
+    pages.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+
+    // Filter valid image URLs
+    const validPages = pages.filter(p => p && (p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image));
+
+    if (validPages.length === 0) {
+        showToast(`⚠️ No saved menu photos found for ${cleanName}.`);
+        return;
+    }
+
+    const confirmed = await askMenuSendConfirmation({
+        storeName: cleanName,
+        pageCount: validPages.length,
+        custName: custName
+    });
+
+    if (!confirmed) {
+        return;
+    }
+
+    const pagesToSend = validPages.map((p, idx) => ({
+        imageUrl: p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image,
+        caption: p.caption || `${cleanName} Menu • Page ${idx + 1}`
+    }));
+
+    closeStoreMenuPickerFromChat();
+    executeSendMenuPages(validActiveCustId, pagesToSend, custName, cleanName);
 }
 
 export async function deleteMenuGalleryPage(pageId) {
     if (!activeGalleryStore || !pageId || !db) return;
-    if (!confirm("Sigurado ka bang nais burahin ang page na ito?")) return;
+    if (!confirm("Are you sure you want to delete this page?")) return;
 
     try {
         await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages/${pageId}`).remove();
@@ -1745,9 +2220,9 @@ export async function deleteMenuGalleryPage(pageId) {
             } catch(e) {}
         }
 
-        showToast("🗑️ Nabura ang page sa gallery.");
+        showToast("🗑️ Deleted page from gallery.");
     } catch(e) {
-        showToast("❌ Hindi nabura ang page.");
+        showToast("❌ Failed to delete page.");
     }
 }
 

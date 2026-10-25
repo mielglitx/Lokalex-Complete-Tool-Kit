@@ -133,7 +133,7 @@ if (typeof window !== 'undefined') {
                             const myName = (appState.riderName || localStorage.getItem('riderName') || "Rider").trim();
                             const limitCheck = canRiderTakeMoreBookings(myId, myName);
                             if (!limitCheck.allowed) {
-                                return showToast(`⚠️ Naabot mo na ang limit na ${limitCheck.maxAllowed} active booking(s).`);
+                                return showToast(`⚠️ You have reached the limit of ${limitCheck.maxAllowed} active booking(s).`);
                             }
                             return originalFn.apply(this, args);
                         };

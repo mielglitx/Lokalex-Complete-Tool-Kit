@@ -14,18 +14,18 @@ export function claimCustomerFromRider(fromRiderId, fromRiderName, custName) {
 
     if (!myId) return showToast("⚠️ Rider ID missing.");
     if (fromRiderId.toString().trim() === myId || fromRiderName.toLowerCase().trim() === myName.toLowerCase()) {
-        return showToast("⚠️ Iyo na ang customer na ito.");
+        return showToast("⚠️ This customer is already assigned to you.");
     }
 
     const limitCheck = canRiderTakeMoreBookings(myId, myName);
     if (!limitCheck.allowed) {
         const modeLabel = limitCheck.isAuto ? " (Auto Income Tier)" : "";
-        return showToast(`⚠️ Hindi mo ma-claim: Naabot mo na ang limit na ${limitCheck.maxAllowed} active booking(s)${modeLabel}.`);
+        return showToast(`⚠️ Cannot claim: You have reached the limit of ${limitCheck.maxAllowed} active booking(s)${modeLabel}.`);
     }
 
     openSlideDeleteModal(
         `Request Customer: ${custName}?`,
-        `Hihingin mo ba si ${custName} mula kay ${fromRiderName}?\nMagpapadala ng request para sa kanyang pag-apruba.`,
+        `Do you want to request ${custName} from ${fromRiderName}?\nA request will be sent for approval.`,
         () => {
             requestClaimCustomer(fromRiderId, fromRiderName, custName);
         }

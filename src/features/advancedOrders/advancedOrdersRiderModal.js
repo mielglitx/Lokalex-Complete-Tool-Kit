@@ -108,7 +108,7 @@ export function promptRiderNameInModal({ title, subtitle, defaultValue, riderLis
             <div class="flex justify-between items-center border-b border-gray-100 dark:border-gray-800 pb-2.5">
                 <div>
                     <h3 id="adv-prompt-modal-title" class="text-sm font-black text-gray-900 dark:text-white">${escapeHtml(title || "Assign Rider")}</h3>
-                    <p id="adv-prompt-modal-sub" class="text-[11px] text-gray-500 dark:text-gray-400">${escapeHtml(subtitle || "Pangalan ng Rider")}</p>
+                    <p id="adv-prompt-modal-sub" class="text-[11px] text-gray-500 dark:text-gray-400">${escapeHtml(subtitle || "Rider Name")}</p>
                 </div>
                 <button type="button" id="adv-prompt-close-x" class="text-gray-400 hover:text-gray-700 dark:hover:text-white p-1 text-sm transition">
                     <i class="fa-solid fa-xmark"></i>
@@ -150,7 +150,7 @@ export function promptRiderNameInModal({ title, subtitle, defaultValue, riderLis
     const handleConfirm = () => {
         const val = selectEl ? selectEl.value.trim() : "";
         if (!val) {
-            return showToast("⚠️ Paki-pili ang Rider!");
+            return showToast("⚠️ Please select a rider!");
         }
         closeModal();
         if (onConfirm) onConfirm(val);

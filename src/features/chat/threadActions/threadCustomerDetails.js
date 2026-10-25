@@ -866,7 +866,7 @@ export async function openNewDirectoryCustomerFromChat() {
     }
 
     // Auto-capture rider's exact current GPS location
-    showToast("📍 Kinukuha ang eksaktong GPS location mo...");
+    showToast("📍 Getting your exact GPS location...");
 
     let capturedLat = appState.lat || null;
     let capturedLon = appState.lon || null;
@@ -909,7 +909,7 @@ export async function openNewDirectoryCustomerFromChat() {
             type: 'customers' 
         });
         if (mapPinLink) {
-            showToast(`📍 Na-capture ang eksaktong GPS location mo para sa customer profile!`);
+            showToast(`📍 Your exact GPS location has been captured for the customer profile!`);
         } else {
             showToast(`📝 Adding new customer: ${fallbackName || 'New Customer'}`);
         }
@@ -933,16 +933,16 @@ export async function handleCustomerPhotoUpload(event) {
 
     const custId = currentChatDetailsCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null);
     if (!custId) {
-        showToast("⚠️ Walang aktibong customer na napili.");
+        showToast("⚠️ No active customer selected.");
         return;
     }
 
     if (!file.type || !file.type.startsWith('image/')) {
-        showToast("⚠️ Mangyaring pumili ng image file (JPG, PNG, WebP).");
+        showToast("⚠️ Please select an image file (JPG, PNG, WebP).");
         return;
     }
 
-    showToast("⏳ Sinusuri at sine-save ang customer photo...");
+    showToast("⏳ Processing and saving customer photo...");
 
     try {
         const compressedBase64 = await compressAndResizeImage(file, 320, 320, 0.85);
@@ -998,6 +998,6 @@ export async function handleCustomerPhotoUpload(event) {
         showToast("✅ Customer profile picture updated!");
     } catch (err) {
         console.error("Failed to upload customer avatar:", err);
-        showToast("❌ Hindi na-save ang larawan: " + (err.message || "Error"));
+        showToast("❌ Failed to save photo: " + (err.message || "Error"));
     }
 }

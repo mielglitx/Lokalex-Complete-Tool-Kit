@@ -72,10 +72,10 @@ export async function promptStartLiveGpsSession() {
 }
 
 export function copyLiveGpsLink(custName = "Customer", sessionKey = activeSessionKey) {
-    if (!sessionKey) return showToast("Walang active na live GPS session.");
+    if (!sessionKey) return showToast("No active live GPS session.");
 
     const fullUrl = `${window.location.origin}${window.location.pathname}?livegps=${sessionKey}`;
-    const message = `Magandang araw po ${custName}! 👋\n\nNagsimula na po ang ating Mutual Live GPS Tracking! Pwede niyo pong subaybayan ang aking lokasyon habang papalapit sa inyo at makikita rin natin ang isa't isa sa mapa sa pamamagitan ng link na ito:\n\n${fullUrl}\n\n⚠️ PAALALA:\nKung binuksan nyo po sa Messenger, paki-pindot ang 3 dots (...) at piliin ang "Open in Chrome" o "Open in Safari". Paki-allow din po ang Location Access. Maraming salamat po! 🛵💙`;
+    const message = `Good day ${custName}! 👋\n\nOur Mutual Live GPS Tracking has started! You can track my location as I approach your address and we can see each other on the map using this link:\n\n${fullUrl}\n\n⚠️ REMINDER:\nIf opened in Messenger, please tap the 3 dots (...) and select "Open in Chrome" or "Open in Safari". Please also allow Location Access. Thank you very much! 🛵💙`;
 
     copyText(message);
     notifyUser("LIVE GPS LINK", `Message & link copied for ${custName}`, { icon: "fa-link", textColor: "text-blue-400" });
@@ -236,13 +236,13 @@ export function startMutualCustomerLocationSharing() {
 
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Kumukuha ng GPS...`;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Getting GPS location...`;
     }
 
     if (!navigator.geolocation) {
         if (statusEl) {
             statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
-            statusEl.innerText = "❌ Hindi suportado ang GPS sa browser na ito.";
+            statusEl.innerText = "❌ GPS is not supported in this browser.";
         }
         return;
     }
@@ -275,7 +275,7 @@ export function startMutualCustomerLocationSharing() {
         (err) => {
             if (statusEl) {
                 statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
-                statusEl.innerText = "⚠️ Paki-allow ang GPS Location permission sa iyong browser.";
+                statusEl.innerText = "⚠️ Please allow GPS Location permission in your browser.";
             }
             if (btn) {
                 btn.disabled = false;
@@ -397,7 +397,7 @@ function renderMutualLiveMap(usersData) {
 }
 
 export function promptEndLiveGpsSession() {
-    openSlideDeleteModal("I-end na ba ang Live GPS Tracking session?", () => {
+    openSlideDeleteModal("End Live GPS Tracking session?", () => {
         endLiveGpsSession();
     });
 }

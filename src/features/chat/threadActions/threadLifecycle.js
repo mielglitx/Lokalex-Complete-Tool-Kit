@@ -218,7 +218,7 @@ export function openConfirmDoneModal(targetCustId = null, targetCustName = "") {
 
     // Rule: "if the chat thread is in catering then just close the window."
     if (!isCateredByMe && isThreadInCatering) {
-        showToast("🛵 Ang customer na ito ay nasa Catering ng ibang rider. Isinara ang chat window.");
+        showToast("🛵 This customer is being catered by another rider. Chat window closed.");
         if (typeof window.closeRiderCustomerChatModal === 'function') {
             window.closeRiderCustomerChatModal();
         }
@@ -265,7 +265,7 @@ export function openConfirmDoneModal(targetCustId = null, targetCustName = "") {
             badgeEl.textContent = "Catering";
         }
         if (msgBoxEl) {
-            msgBoxEl.innerHTML = `Sigurado ka bang tapos na ang delivery para kay <strong>${escapeHtml(finalDisplayName)}</strong>?<br class="hidden sm:inline"> Ima-mark ito bilang <strong>Done</strong> sa catering roster, ire-record ang service fees, at ililipat ang chat sa Done folder.`;
+            msgBoxEl.innerHTML = `Are you sure delivery is completed for <strong>${escapeHtml(finalDisplayName)}</strong>?<br class="hidden sm:inline"> This will mark it as <strong>Done</strong> on the catering roster, record service fees, and move the chat to the Done folder.`;
         }
 
         // Receipt verification preview check
@@ -278,7 +278,7 @@ export function openConfirmDoneModal(targetCustId = null, targetCustName = "") {
             if (!hasReceipt) {
                 receiptNoticeEl.classList.remove('hidden');
                 if (receiptTextEl) {
-                    receiptTextEl.innerHTML = `⚠️ <strong>Walang nahanap na resibo.</strong> Kung wala pang resibo, ire-redirect ka sa Cart para gumawa bago i-mark as Done.`;
+                    receiptTextEl.innerHTML = `⚠️ <strong>No receipt found.</strong> If there is no receipt yet, you will be redirected to the Cart to create one before marking as Done.`;
                 }
             } else {
                 receiptNoticeEl.classList.add('hidden');
@@ -292,7 +292,7 @@ export function openConfirmDoneModal(targetCustId = null, targetCustName = "") {
             badgeEl.textContent = (meta.folder || "Inbox").toUpperCase();
         }
         if (msgBoxEl) {
-            msgBoxEl.innerHTML = `Nais mo bang ilipat ang conversation ni <strong>${escapeHtml(finalDisplayName)}</strong> sa <strong>Done</strong> folder?`;
+            msgBoxEl.innerHTML = `Do you want to move the conversation of <strong>${escapeHtml(finalDisplayName)}</strong> to the <strong>Done</strong> folder?`;
         }
         if (receiptNoticeEl) receiptNoticeEl.classList.add('hidden');
     }
@@ -326,7 +326,7 @@ export async function confirmAndExecuteDone() {
             : hasReceiptForActiveSession(matchingCustNameOnRoster || custName);
 
         if (!hasReceipt) {
-            showToast(`⚠️ Paki-gawaan muna ng resibo si ${matchingCustNameOnRoster || custName} bago i-mark as Done!`);
+            showToast(`⚠️ Please make a receipt for ${matchingCustNameOnRoster || custName} before marking as Done!`);
             if (typeof window.syncSmartCartsWithCateringCustomers === 'function') {
                 window.syncSmartCartsWithCateringCustomers();
             }
@@ -376,7 +376,7 @@ export async function confirmAndExecuteDone() {
         Boolean(meta?.cateredBy && meta.cateredBy.toString().trim() !== "");
 
     if (isThreadInCatering) {
-        showToast("🛵 Ang customer na ito ay nasa Catering ng ibang rider. Isinara ang chat window.");
+        showToast("🛵 This customer is being catered by another rider. Chat window closed.");
         if (typeof window.closeRiderCustomerChatModal === 'function') {
             window.closeRiderCustomerChatModal();
         }
@@ -466,7 +466,7 @@ export async function executeThreadDone(targetCustId = null, targetCustName = ""
 export async function toggleThreadApplicant(targetCustId = null) {
     const rawId = targetCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null);
     if (!rawId) {
-        showToast("⚠️ Walang aktibong chat na napili.");
+        showToast("⚠️ No active chat selected.");
         return;
     }
 
@@ -687,14 +687,14 @@ export function cancelCustomerThread() {
                 ? checkCustomerReceiptExists(custName, targetRiderName, targetRiderId)
                 : false;
             if (receiptExists) {
-                return showToast("⚠️ Hindi maaaring i-cancel ang order na may nagawa nang resibo. Makipag-ugnayan sa Admin o TL para mag-void.");
+                return showToast("⚠️ Cannot cancel an order that already has an existing receipt. Please contact Admin or TL to void it.");
             }
         }
     }
 
     openSlideDeleteModal(
         `Cancel & Void Customer?`,
-        `Sigurado ka bang nais i-void si [${custName || 'Customer'}]?\nKung may iba ka pang dalang customer, mananatili ka sa Catering.`,
+        `Are you sure you want to void [${custName || 'Customer'}]?\nIf you have other catered customers, you will remain in Catering.`,
         async () => {
             if (db && custId) {
                 const cancelPayload = {
@@ -733,11 +733,11 @@ export async function caterCurrentChatCustomer() {
     }
 
     if (!custName || custName.toLowerCase() === 'customer' || custName.toLowerCase() === 'customer name') {
-        return showToast("⚠️ Pakilagay o i-update muna ang totoong pangalan ng customer bago i-cater.");
+        return showToast("⚠️ Please enter or update the real customer name before catering.");
     }
 
     if (!custId || custId.toString().toLowerCase() === 'customer') {
-        return showToast("⚠️ Walang aktibong valid customer chat para i-cater.");
+        return showToast("⚠️ No active valid customer chat to cater.");
     }
 
     const activeRole = localStorage.getItem('lokalex_active_role');
@@ -748,7 +748,7 @@ export async function caterCurrentChatCustomer() {
     const canManage = typeof window.canManageRoster === 'function' ? window.canManageRoster() : (typeof canManageRoster === 'function' ? canManageRoster() : false);
 
     if ((!currentId || !currentName || activeRole !== 'rider') && !isAdminUser && !canManage) {
-        showToast("⚠️ Hindi ka naka-login bilang rider. Mag-login muna bago mag-cater.");
+        showToast("⚠️ You are not logged in as a rider. Please log in before catering.");
         if (typeof window.switchView === 'function') window.switchView('view-login');
         else if (typeof window.renderViewUI === 'function') window.renderViewUI('view-login');
         return;
@@ -763,7 +763,7 @@ export async function caterCurrentChatCustomer() {
 
     if (!isAdminUser && !canManage) {
         if (!myRecord || myRecord.status === 'End' || !myRecord.status) {
-            return showToast("⚠️ Naka-End Shift ka. Pindutin muna ang Available sa roster bago mag-cater.");
+            return showToast("⚠️ You are on End Shift. Please set your status to Available on the roster before catering.");
         }
     }
 
@@ -771,11 +771,11 @@ export async function caterCurrentChatCustomer() {
     const cateredRiderName = (meta.cateredByRiderName || meta.cateredBy || "").toString().trim().toLowerCase();
 
     if ((cateredRiderId && cateredRiderId === currentId) || (cateredRiderName && currentName && cateredRiderName === currentName.toLowerCase())) {
-        return showToast("🛵 Kasalukuyan mo nang kinacater ang customer na ito!");
+        return showToast("🛵 You are already catering to this customer!");
     }
 
     if ((cateredRiderId || cateredRiderName) && !isAdminUser && !canManage) {
-        return showToast(`⚠️ Ang customer na ito ay kinacater na ni ${meta.cateredByRiderName || meta.cateredBy}.`);
+        return showToast(`⚠️ This customer is already being catered by ${meta.cateredByRiderName || meta.cateredBy}.`);
     }
 
     if (typeof window.confirmCateringStatus === 'function') {
@@ -824,13 +824,13 @@ export function clearAllInboxThreads() {
     }
 
     if (inboxThreads.length === 0) {
-        showToast("ℹ️ Walang chats sa Inbox na ililipat sa Done.");
+        showToast("ℹ️ No chats in Inbox to move to Done.");
         return;
     }
 
     openSlideDeleteModal(
         `Clear All Inbox Chats?`,
-        `Ililipat sa [Done] folder ang lahat ng ${inboxThreads.length} active chat(s) sa Inbox.\nSigurado ka ba?`,
+        `All ${inboxThreads.length} active chat(s) in Inbox will be moved to [Done] folder.\nAre you sure?`,
         async () => {
             const now = Date.now();
             const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString();

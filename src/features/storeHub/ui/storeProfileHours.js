@@ -172,7 +172,7 @@ export function updateStoreProfileUI(storeData) {
     }
 
     if (addrEl) {
-        addrEl.innerText = storeData.address || "Walang nakatakdang address";
+        addrEl.innerText = storeData.address || "No set address";
     }
 
     if (imgEl && iconEl) {
@@ -253,7 +253,7 @@ export async function submitSaveStoreProfile() {
     const newName = document.getElementById('store-edit-name')?.value.trim();
     const newAddress = document.getElementById('store-edit-address')?.value.trim();
 
-    if (!newName) return showToast("⚠️ I-enter ang pangalan ng Store!");
+    if (!newName) return showToast("⚠️ Please enter the Store name!");
 
     const saveBtn = document.getElementById('store-profile-save-btn');
     if (saveBtn) {
@@ -332,7 +332,7 @@ export async function handleStoreIconFileSelected(event) {
         updateIconModalPreview(storeHubState.stagedLogoData);
         showToast("✅ Image selected and compressed!");
     } catch (err) {
-        showToast("❌ Hindi ma-load ang image file. Subukan muli.");
+        showToast("❌ Failed to load image file. Please try again.");
     }
 }
 

@@ -337,7 +337,7 @@ export function deleteAdminFbApi(apiId, apiName) {
 
     openSlideDeleteModal(
         `Delete Facebook API?`,
-        `Sigurado ka bang nais mong tanggalin ang "${apiName || 'FB API'}"?\nHindi na makakatanggap ng messages ang mga rider mula sa channel na ito.`,
+        `Are you sure you want to delete "${apiName || 'FB API'}"?\nRiders will no longer receive messages from this channel.`,
         async () => {
             try {
                 await Promise.all([

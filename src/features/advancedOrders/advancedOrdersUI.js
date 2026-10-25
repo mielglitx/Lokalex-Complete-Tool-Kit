@@ -131,7 +131,7 @@ function updateBulkSelectionToolbarUI() {
 export function promptDeleteSingleAdvancedOrder(orderId, custName) {
     openSlideDeleteModal(
         `Delete Scheduled Order?`,
-        `Sigurado ka bang nais burahin ang scheduled order ni [${custName || 'Customer'}]?`,
+        `Are you sure you want to delete the scheduled order for [${custName || 'Customer'}]?`,
         async () => {
             await executeDeleteSingleAdvancedOrder(orderId, custName);
         }
@@ -157,18 +157,18 @@ export async function executeDeleteSingleAdvancedOrder(orderId, custName = "") {
     selectedOrderIds.delete(targetId);
     renderAdvancedOrdersList();
     checkScheduledDeliveryAlerts();
-    showToast(`🗑️ Nabura na ang scheduled order ni ${custName || 'Customer'}.`);
+    showToast(`🗑️ Scheduled order for ${custName || 'Customer'} has been deleted.`);
 }
 
 export function promptDeleteSelectedAdvancedOrders() {
     if (selectedOrderIds.size === 0) {
-        return showToast("⚠️ Pumili muna ng order na nais burahin.");
+        return showToast("⚠️ Please select an order to delete first.");
     }
 
     const count = selectedOrderIds.size;
     openSlideDeleteModal(
         `Delete ${count} Scheduled Orders?`,
-        `Sigurado ka bang nais burahin ang ${count} napiling scheduled order(s)? Hindi na ito maibabalik.`,
+        `Are you sure you want to delete ${count} selected scheduled order(s)? This action cannot be undone.`,
         async () => {
             await executeDeleteSelectedAdvancedOrders();
         }
@@ -209,7 +209,7 @@ export async function executeDeleteSelectedAdvancedOrders() {
     selectedOrderIds.clear();
     renderAdvancedOrdersList();
     checkScheduledDeliveryAlerts();
-    showToast(`🗑️ Matagumpay na nabura ang ${count} scheduled order(s).`);
+    showToast(`🗑️ Successfully deleted ${count} scheduled order(s).`);
 }
 
 function attachSwipeGesturesToCards(container) {

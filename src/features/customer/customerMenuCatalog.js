@@ -52,7 +52,7 @@ export async function shareCustomerMenuCatalogLink() {
 
     const shareData = {
         title: "Lokalex Restaurant Menus",
-        text: "Tingnan ang kumpletong restaurant photo menus at mag-order sa Lokalex:",
+        text: "View complete restaurant photo menus and order on Lokalex:",
         url: customerUrl
     };
 
@@ -128,7 +128,7 @@ export function renderCustomerMenuFeed(stores) {
         feed.innerHTML = `
             <div class="col-span-full text-center text-gray-500 dark:text-gray-400 py-16 text-xs italic flex flex-col items-center gap-2">
                 <i class="fa-solid fa-store-slash text-3xl text-gray-400"></i>
-                <span>Walang available na menu photos sa ngayon.</span>
+                <span>No menu photos available at the moment.</span>
             </div>
         `;
         return;

@@ -73,20 +73,20 @@ export async function handleChatVideoSelected(inputEl) {
     // Check MIME type or extension
     const isVideo = file.type?.startsWith('video/') || /\.(mp4|webm|mov|m4v|3gp|mkv)$/i.test(file.name);
     if (!isVideo) {
-        showToast("⚠️ Paki-pili ang wastong video file (MP4, WebM, MOV).");
+        showToast("⚠️ Please select a valid video file (MP4, WebM, MOV).");
         if (inputEl) inputEl.value = "";
         return;
     }
 
     // Safety check for size (> 50 MB)
     if (file.size > 52428800) {
-        showToast("⚠️ Masyadong malaki ang video (>50MB). Pumili ng mas maikling clip.");
+        showToast("⚠️ Video is too large (>50MB). Please select a shorter clip.");
         if (inputEl) inputEl.value = "";
         return;
     }
 
     pendingVideoFile = file;
-    showToast("⏳ Hinahanda ang video preview...");
+    showToast("⏳ Preparing video preview...");
 
     try {
         const meta = await generateVideoThumbnail(file);
@@ -102,7 +102,7 @@ export async function handleChatVideoSelected(inputEl) {
         openVideoPreviewModal(file, pendingVideoMeta);
     } catch (err) {
         console.error("Video processing error:", err);
-        showToast("❌ Nabigo ang pag-proseso ng video.");
+        showToast("❌ Failed to process video.");
     } finally {
         if (inputEl) inputEl.value = "";
     }
@@ -150,7 +150,7 @@ export function openVideoPreviewModal(file, meta) {
  */
 export function closeVideoPreviewModal() {
     if (isUploadingVideo) {
-        if (!confirm("Kasalukuyang nag-a-upload ang video. Nais mo bang kanselahin?")) {
+        if (!confirm("Video is currently uploading. Do you want to cancel?")) {
             return;
         }
     }
@@ -250,7 +250,7 @@ export async function confirmSendChatVideo() {
         closeVideoPreviewModal();
     } catch (err) {
         console.error("Video send error:", err);
-        showToast("❌ Nabigo ang pag-send ng video. Pakisubukang muli.");
+        showToast("❌ Failed to send video. Please try again.");
         isUploadingVideo = false;
         if (sendBtn) {
             sendBtn.disabled = false;

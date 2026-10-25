@@ -253,13 +253,13 @@ export function autoResolvePendingFacebookThreads(threadsList) {
 export async function syncAllFacebookCustomerNames() {
     if (!db) return;
     try {
-        showToast("🔄 Sinusuri ang mga customer names sa Facebook...");
+        showToast("🔄 Checking customer names on Facebook...");
 
         const apiSnap = await db.ref('adminSettings/facebookApis').once('value');
         const apis = apiSnap.val() || {};
         const apiList = Object.values(apis).filter(a => a && a.pageAccessToken);
         if (apiList.length === 0) {
-            return showToast("⚠️ Walang Facebook API na may Page Access Token.");
+            return showToast("⚠️ No Facebook API found with Page Access Token.");
         }
 
         const metaSnap = await db.ref('customerChatMeta').once('value');
@@ -347,16 +347,16 @@ export async function syncAllFacebookCustomerNames() {
         }
 
         if (updatedCount > 0) {
-            showToast(`✅ Na-update ang ${updatedCount} Facebook profile(s)!`);
+            showToast(`✅ Updated ${updatedCount} Facebook profile(s)!`);
         } else {
-            showToast("ℹ️ Lahat ng Facebook customer profiles ay up-to-date na.");
+            showToast("ℹ️ All Facebook customer profiles are already up-to-date.");
         }
 
         // Also sync folder status (inbox vs done vs spam)
         await syncFacebookPageFolderStatus(false);
     } catch (err) {
         console.error("syncAllFacebookCustomerNames error:", err);
-        showToast("⚠️ Bigo mag-sync ng FB names: " + (err.message || err));
+        showToast("⚠️ Failed to sync FB names: " + (err.message || err));
     }
 }
 
@@ -509,13 +509,13 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
         if (updatedFoldersCount > 0) {
             console.log(`[FB Sync] Synchronized ${updatedFoldersCount} Facebook thread(s) with Page folders.`);
             if (showFeedback) {
-                showToast(`✅ Na-sync ang ${updatedFoldersCount} Facebook chat(s) sa Page folders!`);
+                showToast(`✅ Synced ${updatedFoldersCount} Facebook chat(s) with Page folders!`);
             }
             if (typeof window.renderRiderCustomerChatFeed === 'function') {
                 window.renderRiderCustomerChatFeed();
             }
         } else if (showFeedback) {
-            showToast("ℹ️ Lahat ng Facebook chat folders ay tugma na sa Page.");
+            showToast("ℹ️ All Facebook chat folders are already in sync with the Page.");
         }
     } catch (err) {
         console.error("syncFacebookPageFolderStatus error:", err);

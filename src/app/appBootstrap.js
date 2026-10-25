@@ -124,7 +124,7 @@ if (typeof window !== 'undefined') {
         localStorage.removeItem('lokalex_merchant_account_id');
         localStorage.removeItem('lokalex_merchant_store_id');
         syncRiderSession('', '');
-        showToast("ℹ️ Auto-login cancelled. Pwede ka nang mag-login gamit ang ibang account.");
+        showToast("ℹ️ Auto-login cancelled. You can now log in using another account.");
     };
 }
 
@@ -220,7 +220,7 @@ export async function bootApp() {
                         syncRiderSession('', '');
                         history.replaceState({ view: 'view-login' }, '', '#view-login');
                         router.renderViewUI('view-login');
-                        showToast("⚠️ Ang iyong account ay tinanggal na o hindi na umiiral.");
+                        showToast("⚠️ Your account has been removed or no longer exists.");
                     }
                 }).catch(() => {});
             }
@@ -249,7 +249,7 @@ export async function bootApp() {
                         localStorage.clear();
                         history.replaceState({ view: 'view-login' }, '', '#view-login');
                         router.renderViewUI('view-login');
-                        showToast("⚠️ Ang iyong Store Merchant account ay tinanggal na.");
+                        showToast("⚠️ Your Store Merchant account has been removed.");
                     }
                 }).catch(() => {});
             }
@@ -287,7 +287,7 @@ export async function bootApp() {
                         localStorage.clear();
                         history.replaceState({ view: 'view-login' }, '', '#view-login');
                         router.renderViewUI('view-login');
-                        showToast("⚠️ Ang iyong Customer account ay tinanggal na.");
+                        showToast("⚠️ Your Customer account has been removed.");
                     }
                 }).catch(() => {});
             }

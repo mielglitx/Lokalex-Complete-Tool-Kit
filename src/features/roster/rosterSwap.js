@@ -65,7 +65,7 @@ export function renderSwapRidersAccordion() {
     });
 
     if (otherRiders.length === 0) {
-        container.innerHTML = `<div class="text-center text-gray-500 italic py-6 text-xs">Walang ibang active na rider na pwedeng pag-swappan.</div>`;
+        container.innerHTML = `<div class="text-center text-gray-500 italic py-6 text-xs">No other active riders available to swap with.</div>`;
         return;
     }
 
@@ -98,20 +98,20 @@ export function renderSwapRidersAccordion() {
             if (isTargetAtLimit) {
                 expandableItemsHtml = `
                     <div class="flex items-center justify-between bg-black/40 p-2 rounded-xl border border-gray-800 text-xs">
-                        <span class="text-red-400 text-[11px]">Naabot na ni ${escapeHtml(targetName)} ang limitasyon (${limitCheck.maxAllowed} bookings).</span>
+                        <span class="text-red-400 text-[11px]">${escapeHtml(targetName)} has reached the limit (${limitCheck.maxAllowed} bookings).</span>
                         <span class="bg-red-500/10 text-red-400 border border-red-500/30 text-[9px] font-bold px-2 py-0.5 rounded">Max Limit Reached</span>
                     </div>`;
             } else {
                 expandableItemsHtml = `
                     <div class="flex items-center justify-between bg-black/40 p-2 rounded-xl border border-gray-800 text-xs">
-                        <span class="text-emerald-400 text-[11px]">Ipasasa ang order kay ${escapeHtml(targetName)} (Available)</span>
+                        <span class="text-emerald-400 text-[11px]">Transfer order to ${escapeHtml(targetName)} (Available)</span>
                         <button onclick="window.requestCustomerSwap && window.requestCustomerSwap('${targetId}', '${escapeHtml(targetName)}', '')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shadow">
                             <i class="fa-solid fa-share"></i> Request Transfer
                         </button>
                     </div>`;
             }
         } else {
-            expandableItemsHtml = `<div class="text-gray-500 italic text-[10px] p-2 text-center">Naka-${escapeHtml(rStatus)} ang rider na ito.</div>`;
+            expandableItemsHtml = `<div class="text-gray-500 italic text-[10px] p-2 text-center">This rider is currently ${escapeHtml(rStatus)}.</div>`;
         }
 
         const accordionId = `swap-accordion-${idx}`;
@@ -150,7 +150,7 @@ export async function requestCustomerSwap(targetRiderId, targetRiderName, target
     if (!targetCustomerName) {
         const limitCheck = canRiderTakeMoreBookings(targetRiderId, targetRiderName);
         if (!limitCheck.allowed) {
-            return showToast(`⚠️ Hindi maaring i-transfer: Naabot na ni ${targetRiderName} ang limit na ${limitCheck.maxAllowed} active booking(s).`);
+            return showToast(`⚠️ Cannot transfer: ${targetRiderName} has reached the limit of ${limitCheck.maxAllowed} active booking(s).`);
         }
     }
 
@@ -190,12 +190,12 @@ export async function requestClaimCustomer(targetRiderId, targetRiderName, targe
     const myName = (appState.riderName || localStorage.getItem('riderName') || "Rider").trim();
 
     if (!myId) return showToast("⚠️ Rider ID missing.");
-    if (targetRiderId.toString().trim() === myId) return showToast("⚠️ Iyo na ang customer na ito.");
+    if (targetRiderId.toString().trim() === myId) return showToast("⚠️ This customer is already assigned to you.");
 
     // ENFORCE BOOKING LIMIT ON CLAIMER
     const limitCheck = canRiderTakeMoreBookings(myId, myName);
     if (!limitCheck.allowed) {
-        return showToast(`⚠️ Hindi mo ma-claim: Naabot mo na ang limit na ${limitCheck.maxAllowed} active booking(s).`);
+        return showToast(`⚠️ Cannot claim: You have reached the limit of ${limitCheck.maxAllowed} active booking(s).`);
     }
 
     if (!db) return;
@@ -217,7 +217,7 @@ export async function requestClaimCustomer(targetRiderId, targetRiderName, targe
 
         await db.ref('swapRequests/' + requestId).set(requestObj);
 
-        showToast(`⏳ Humihingi ng pahintulot kay ${targetRiderName} upang kunin si ${targetCustomerName}...`);
+        showToast(`⏳ Requesting permission from ${targetRiderName} to claim ${targetCustomerName}...`);
         showSideNotification("REQUEST SENT", `Waiting for ${targetRiderName} to approve transfer of ${targetCustomerName}`, "fa-paper-plane", "text-blue-400", "border-blue-500");
     } catch(e) {
         showToast("❌ Failed to send claim request.");
@@ -265,13 +265,13 @@ export function listenToSwapRequests() {
             currentPendingSwapRequest = incomingPending;
             if (msgEl) {
                 if (incomingPending.type === 'claim' || (!incomingPending.sourceCustomerName && incomingPending.targetCustomerName)) {
-                    msgEl.innerHTML = `Nais <strong>KUNIN / I-CLAIM</strong> ni <strong>${escapeHtml(incomingPending.sourceRiderName)}</strong> ang customer mo na si <strong>${escapeHtml(incomingPending.targetCustomerName)}</strong>.<br><br>Papayag ka bang ibigay ito sa kanya?`;
-                    if (acceptBtn) acceptBtn.innerHTML = `<i class="fa-solid fa-hand-holding-hand mr-1"></i> Ibigay ang Customer`;
+                    msgEl.innerHTML = `<strong>${escapeHtml(incomingPending.sourceRiderName)}</strong> wants to <strong>CLAIM</strong> your customer <strong>${escapeHtml(incomingPending.targetCustomerName)}</strong>.<br><br>Do you agree to transfer this customer to them?`;
+                    if (acceptBtn) acceptBtn.innerHTML = `<i class="fa-solid fa-hand-holding-hand mr-1"></i> Give Customer`;
                 } else if (incomingPending.targetCustomerName) {
-                    msgEl.innerHTML = `Nais makipag-<strong>SWAP</strong> si <strong>${escapeHtml(incomingPending.sourceRiderName)}</strong>:<br><br>• Ibibigay sayo: <strong>${escapeHtml(incomingPending.sourceCustomerName)}</strong><br>• Kukunin ang sayo: <strong>${escapeHtml(incomingPending.targetCustomerName)}</strong>`;
+                    msgEl.innerHTML = `<strong>${escapeHtml(incomingPending.sourceRiderName)}</strong> wants to <strong>SWAP</strong> customers:<br><br>• Offering: <strong>${escapeHtml(incomingPending.sourceCustomerName)}</strong><br>• Requesting: <strong>${escapeHtml(incomingPending.targetCustomerName)}</strong>`;
                     if (acceptBtn) acceptBtn.innerHTML = `<i class="fa-solid fa-arrows-rotate mr-1"></i> Accept Swap`;
                 } else {
-                    msgEl.innerHTML = `Nais i-<strong>TRANSFER</strong> ni <strong>${escapeHtml(incomingPending.sourceRiderName)}</strong> ang customer na si <strong>${escapeHtml(incomingPending.sourceCustomerName)}</strong> sa iyo.`;
+                    msgEl.innerHTML = `<strong>${escapeHtml(incomingPending.sourceRiderName)}</strong> wants to <strong>TRANSFER</strong> customer <strong>${escapeHtml(incomingPending.sourceCustomerName)}</strong> to you.`;
                     if (acceptBtn) acceptBtn.innerHTML = `<i class="fa-solid fa-check mr-1"></i> Accept Transfer`;
                 }
             }
@@ -289,11 +289,11 @@ export function listenToSwapRequests() {
 
             if (isSourceMe && r.status === 'accepted') {
                 const targetCust = r.targetCustomerName || r.sourceCustomerName || "Customer";
-                showToast(`✅ Inaprubahan ni ${r.targetRiderName}! Na-transfer na si ${targetCust} sa iyo.`);
+                showToast(`✅ Approved by ${r.targetRiderName}! ${targetCust} has been transferred to you.`);
                 db.ref(`swapRequests/${r.id}`).remove();
             } else if (isSourceMe && r.status === 'rejected') {
                 const targetCust = r.targetCustomerName || r.sourceCustomerName || "Customer";
-                showToast(`❌ Tinanggihan ni ${r.targetRiderName} ang iyong request para kay ${targetCust}.`);
+                showToast(`❌ ${r.targetRiderName} declined your request for ${targetCust}.`);
                 db.ref(`swapRequests/${r.id}`).remove();
             }
         });
@@ -371,12 +371,12 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
         if (isClaim) {
             const limitCheck = canRiderTakeMoreBookings(sourceRiderId, sourceRiderName);
             if (!limitCheck.allowed && !sourceCusts.some(c => c.toLowerCase() === targetCustomerName.toLowerCase())) {
-                return showToast(`⚠️ Hindi ma-claim: Naabot na ni ${sourceRiderName} ang max limit na ${limitCheck.maxAllowed} bookings.`);
+                return showToast(`⚠️ Cannot claim: ${sourceRiderName} has reached the max limit of ${limitCheck.maxAllowed} bookings.`);
             }
         } else if (!targetCustomerName) {
             const limitCheck = canRiderTakeMoreBookings(targetRiderId, targetRiderName);
             if (!limitCheck.allowed && !targetCusts.some(c => c.toLowerCase() === sourceCustomerName.toLowerCase())) {
-                return showToast(`⚠️ Hindi ma-transfer: Naabot na ni ${targetRiderName} ang max limit na ${limitCheck.maxAllowed} bookings.`);
+                return showToast(`⚠️ Cannot transfer: ${targetRiderName} has reached the max limit of ${limitCheck.maxAllowed} bookings.`);
             }
         }
 
@@ -385,7 +385,7 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
         if (isClaim) {
             const tgtIdx = targetCusts.findIndex(c => c.toLowerCase() === targetCustomerName.toLowerCase());
             if (tgtIdx === -1) {
-                return showToast(`⚠️ Hindi na available si ${targetCustomerName} kay ${targetRiderName}.`);
+                return showToast(`⚠️ ${targetCustomerName} is no longer available under ${targetRiderName}.`);
             }
 
             const extractedTime = targetTimes[tgtIdx] || nowTimeStr;
@@ -438,7 +438,7 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
 
             await db.ref().update(atomicUpdates);
             showSideNotification("CUSTOMER CLAIMED", `Transferred ${targetCustomerName} to ${sourceRiderName}`, "fa-hand-holding-hand", "text-emerald-400", "border-emerald-500");
-            showToast(`✅ Naibigay na si ${targetCustomerName} kay ${sourceRiderName}!`);
+            showToast(`✅ ${targetCustomerName} transferred to ${sourceRiderName}!`);
             return;
         }
 

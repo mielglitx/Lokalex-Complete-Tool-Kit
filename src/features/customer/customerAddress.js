@@ -225,21 +225,21 @@ export async function submitSaveNewAddress() {
     let label = (labelInput?.value || '').trim();
     if (!label) {
         if (activeAddressPreset === 'Others') {
-            return showToast("⚠️ Paki-lagay ang pangalan ng custom address (hal. Mom's House)!");
+            return showToast("⚠️ Please enter a name for the custom address (e.g. Mom's House)!");
         }
         label = activeAddressPreset;
     }
 
     const address = (textInput?.value || '').trim();
     if (!address) {
-        return showToast("⚠️ Paki-lagay ang Street / Barangay / Municipality!");
+        return showToast("⚠️ Please enter Street / Barangay / Municipality!");
     }
 
     const landmark = (landmarkInput?.value || '').trim();
     const custId = getCleanCustomerId();
 
     if (!custId) {
-        return showToast("⚠️ Mangyaring mag-log in muna bilang customer!");
+        return showToast("⚠️ Please log in as a customer first!");
     }
 
     if (saveBtn) {
@@ -317,7 +317,7 @@ export function deleteSavedAddress(addrId) {
 
     openSlideDeleteModal(
         "Delete Delivery Address?",
-        `Sigurado ka bang nais mong burahin ang [${addr.label || 'Saved Address'}]?`,
+        `Are you sure you want to delete [${addr.label || 'Saved Address'}]?`,
         async () => {
             const custId = getCleanCustomerId();
             delete savedAddressesCache[addrId];

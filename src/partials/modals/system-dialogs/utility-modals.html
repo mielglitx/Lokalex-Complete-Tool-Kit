@@ -44,7 +44,7 @@
         <div>
             <h3 class="font-black text-base text-gray-900 dark:text-white">Install Lokalex App</h3>
             <p class="text-xs text-gray-600 dark:text-gray-300 mt-1 leading-relaxed">
-                I-add ang Lokalex Hub shortcut sa iyong Phone Home Screen para sa mabilis na access!
+                Add the Lokalex Hub shortcut to your Phone Home Screen for quick access!
             </p>
         </div>
 
@@ -53,8 +53,8 @@
                 <i class="fa-brands fa-apple text-sm"></i> For iPhone / iOS (Safari):
             </div>
             <ol class="list-decimal list-inside text-[11px] text-gray-700 dark:text-gray-300 flex flex-col gap-1 pl-1">
-                <li>Pindutin ang <strong>Share button</strong> (<i class="fa-solid fa-arrow-up-from-bracket text-blue-500"></i>) sa Safari.</li>
-                <li>Piliin ang <strong>"Add to Home Screen"</strong> (<i class="fa-regular fa-square-plus text-blue-500"></i>).</li>
+                <li>Tap the <strong>Share button</strong> (<i class="fa-solid fa-arrow-up-from-bracket text-blue-500"></i>) in Safari.</li>
+                <li>Select <strong>"Add to Home Screen"</strong> (<i class="fa-regular fa-square-plus text-blue-500"></i>).</li>
             </ol>
 
             <div class="border-t border-gray-200 dark:border-gray-800 pt-2 mt-1">
@@ -62,14 +62,14 @@
                     <i class="fa-brands fa-android text-sm"></i> For Android (Chrome):
                 </div>
                 <ol class="list-decimal list-inside text-[11px] text-gray-700 dark:text-gray-300 flex flex-col gap-1 pl-1">
-                    <li>Pindutin ang <strong>3 dots menu</strong> (<i class="fa-solid fa-ellipsis-vertical text-emerald-500"></i>) sa Chrome.</li>
-                    <li>Piliin ang <strong>"Install app"</strong> o <strong>"Add to Home screen"</strong>.</li>
+                    <li>Tap the <strong>3 dots menu</strong> (<i class="fa-solid fa-ellipsis-vertical text-emerald-500"></i>) in Chrome.</li>
+                    <li>Select <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.</li>
                 </ol>
             </div>
         </div>
 
         <button onclick="window.closePwaInstallModal && window.closePwaInstallModal()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-2xl text-xs transition active:scale-95 shadow">
-            Naintindihan Ko
+            Got it
         </button>
     </div>
 </div>
@@ -82,10 +82,10 @@
         </div>
         <h3 class="font-bold text-base text-red-600 dark:text-red-400">GPS Location Required</h3>
         <p class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
-            Kailangan mong i-turn on ang iyong <strong>GPS Location</strong> sa telepono bago mag-Available sa roster.
+            You need to turn on your phone's <strong>GPS Location</strong> before setting yourself as Available in the roster.
         </p>
         <button onclick="window.closeGpsModal && window.closeGpsModal()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95 mt-2">
-            OK, Naintindihan Ko
+            OK, Understood
         </button>
     </div>
 </div>
@@ -102,7 +102,7 @@
                 <i class="fa-solid fa-shield-halved"></i>
             </div>
             <h3 class="text-lg font-black text-gray-900 dark:text-white">Password Recovery</h3>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Pumili ng paraan para ma-reset ang iyong password</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Choose a method to reset your password</p>
         </div>
 
         <div id="fp-step-method" class="flex flex-col gap-3 mt-1">
@@ -112,7 +112,7 @@
                 </div>
                 <div class="flex flex-col flex-1">
                     <span class="text-xs font-bold text-gray-900 dark:text-white group-hover:text-blue-500 transition">SMS OTP Code</span>
-                    <span class="text-[10px] text-gray-500 dark:text-gray-400">Magpapadala ng 6-digit code sa iyong phone</span>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400">Sends a 6-digit code to your phone</span>
                 </div>
                 <i class="fa-solid fa-chevron-right text-xs text-gray-400 dark:text-gray-600"></i>
             </button>
@@ -123,7 +123,7 @@
                 </div>
                 <div class="flex flex-col flex-1">
                     <span class="text-xs font-bold text-gray-900 dark:text-white group-hover:text-blue-500 transition">Email Reset Link</span>
-                    <span class="text-[10px] text-gray-500 dark:text-gray-400">Magpapadala ng reset link sa iyong email</span>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400">Sends a reset link to your email</span>
                 </div>
                 <i class="fa-solid fa-chevron-right text-xs text-gray-400 dark:text-gray-600"></i>
             </button>
@@ -138,7 +138,7 @@
                 <i class="fa-solid fa-paper-plane"></i> SEND OTP CODE
             </button>
             <button onclick="window.backToResetMethod && window.backToResetMethod()" class="text-[10px] text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
-                ← Bumalik sa pagpipilian
+                ← Back to options
             </button>
         </div>
 
@@ -151,7 +151,7 @@
                 <i class="fa-solid fa-paper-plane"></i> SEND RESET LINK
             </button>
             <button onclick="window.backToResetMethod && window.backToResetMethod()" class="text-[10px] text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
-                ← Bumalik sa pagpipilian
+                ← Back to options
             </button>
         </div>
 
@@ -167,7 +167,7 @@
 
         <div id="fp-step-newpass" class="hidden flex flex-col gap-3 mt-1 text-left">
             <div>
-                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Bagong Password</label>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">New Password</label>
                 <div class="relative mt-1">
                     <input type="password" id="fp-new-pass" autocomplete="new-password" placeholder="At least 6 characters" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold">
                     <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('fp-new-pass', 'fp-pass-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-gray-700 dark:hover:text-white transition">
@@ -176,9 +176,9 @@
                 </div>
             </div>
             <div>
-                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Ulitin ang Bagong Password</label>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Confirm New Password</label>
                 <div class="relative mt-1">
-                    <input type="password" id="fp-confirm-pass" autocomplete="new-password" placeholder="Ulitin ang bagong password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold">
+                    <input type="password" id="fp-confirm-pass" autocomplete="new-password" placeholder="Re-type new password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold">
                     <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('fp-confirm-pass', 'fp-confirm-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-gray-700 dark:hover:text-white transition">
                         <i id="fp-confirm-eye" class="fa-solid fa-eye"></i>
                     </button>
@@ -199,7 +199,7 @@
         </div>
         <div class="flex flex-col gap-1">
             <h3 id="slide-delete-title" class="font-bold text-base text-white tracking-tight">Confirm Action</h3>
-            <p id="slide-delete-sub" class="text-xs text-gray-400 whitespace-pre-line leading-relaxed">I-type ang "confirm" upang kumpirmahin.</p>
+            <p id="slide-delete-sub" class="text-xs text-gray-400 whitespace-pre-line leading-relaxed">Type "confirm" to confirm.</p>
         </div>
         
         <div class="flex flex-col gap-1.5 text-left bg-black/40 border border-white/10 rounded-2xl p-3">

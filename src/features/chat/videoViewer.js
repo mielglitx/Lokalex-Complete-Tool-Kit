@@ -29,7 +29,7 @@ const SPEED_STEPS = [1.0, 1.25, 1.5, 2.0, 0.75];
  */
 export function openVideoViewerModal(videoUrl, title = 'Video', senderName = '', caption = '') {
     if (!videoUrl) {
-        showToast("⚠️ Walang video URL na ma-play.");
+        showToast("⚠️ No video URL to play.");
         return;
     }
 
@@ -128,7 +128,7 @@ export function cycleVideoPlaybackSpeed() {
  */
 export async function downloadCurrentViewerVideo() {
     if (!currentViewerVideoUrl) {
-        showToast("⚠️ Walang video na mase-save.");
+        showToast("⚠️ No video to save.");
         return;
     }
 
@@ -148,7 +148,7 @@ export async function downloadCurrentViewerVideo() {
         showToast("✅ Download started!");
     } catch (e) {
         console.error("Video download error:", e);
-        showToast("❌ Nabigo ang pag-download ng video.");
+        showToast("❌ Failed to download video.");
     }
 }
 

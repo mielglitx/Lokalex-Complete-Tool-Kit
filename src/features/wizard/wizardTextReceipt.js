@@ -36,7 +36,7 @@ export function renderFinalReceiptText() {
             }
             return `🔸 ${cleanName} - ₱${Math.max(0, parseFloat(i.price) || 0).toFixed(2)}`;
         }).join("\n")
-        : "🔸 (Walang items)";
+        : "🔸 (No items)";
 
     let feesTxt = "";
     if (finalHFee > 0) feesTxt += `🔹 Handling Fee: ₱${finalHFee.toFixed(2)}\n`;
@@ -51,7 +51,7 @@ export function renderFinalReceiptText() {
         }
     }
 
-    if (!feesTxt) feesTxt = "🔹 Wala pong karagdagang fees.\n";
+    if (!feesTxt) feesTxt = "🔹 No additional fees.\n";
 
     const gcashName = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || "";
     const gcashNo = appState.gcashNo || localStorage.getItem('lokalex_gcash_no') || "";
@@ -62,7 +62,7 @@ export function renderFinalReceiptText() {
 `\n📱 **ePAYMENT / GCASH DETAILS:**
 👤 **GCash Name: ${gcashName || 'N/A'}**
 📱 **GCash Number: \`${gcashNo || 'N/A'}\`**
-📷 **Note:** Ang QR Code ay GCash account (Scan via GCash App).
+📷 **Note:** The QR Code is a GCash account (Scan via GCash App).
 ➖➖➖➖➖➖➖➖➖➖➖➖\n`;
     }
 
@@ -89,7 +89,7 @@ ${feesTxt}➖➖➖➖➖➖➖➖➖➖➖➖
 💰 **COD TOTAL (Cash): ₱${codTotal.toFixed(2)}**
 📱 **ePAYMENT TOTAL (+₱${epayFee.toFixed(2)} Fee): ₱${gcashTotal.toFixed(2)}**
 ➖➖➖➖➖➖➖➖➖➖➖➖${gcashTxt}
-💙 Salamat sa pagtitiwala sa Lokalex!`;
+💙 Thank you for trusting Lokalex!`;
     }
 }
 

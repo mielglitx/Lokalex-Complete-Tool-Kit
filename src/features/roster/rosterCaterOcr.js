@@ -217,7 +217,7 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
     const selectEl = document.getElementById(targetSelectId);
 
     if (statusEl) statusEl.classList.remove('hidden');
-    showToast("⏳ Sinusuri ang Messenger header (English, Japanese, Arabic)...");
+    showToast("⏳ Analyzing Messenger header (English, Japanese, Arabic)...");
 
     try {
         await ensureTesseractLoaded();
@@ -341,11 +341,11 @@ export async function handleCaterScreenshotSelected(event, targetInputId = 'cate
             showToast(`✅ Customer detected: ${detectedName}`);
             showSideNotification("NAME DETECTED", `Customer: ${detectedName}`, "fa-user-check", "text-emerald-400", "border-emerald-500");
         } else {
-            showToast("⚠️ Hindi matukoy ang buong pangalan. Paki-type nang manual.");
+            showToast("⚠️ Could not detect the full name. Please type it manually.");
         }
     } catch (err) {
         console.error("Catering screenshot OCR failed:", err);
-        showToast("❌ Bigo ang OCR scan. Paki-type nang manual.");
+        showToast("❌ OCR scan failed. Please type it manually.");
     } finally {
         if (statusEl) statusEl.classList.add('hidden');
         event.target.value = '';

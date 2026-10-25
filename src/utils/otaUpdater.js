@@ -102,7 +102,7 @@ export async function initOtaUpdater() {
  */
 export async function checkForOtaUpdate(isManual = false) {
     if (!navigator.onLine) {
-        if (isManual) showToast("⚠️ Walang internet connection.");
+        if (isManual) showToast("⚠️ No internet connection.");
         return;
     }
 
@@ -110,7 +110,7 @@ export async function checkForOtaUpdate(isManual = false) {
     isCheckingUpdate = true;
 
     if (isManual) {
-        showToast("🔍 Sinusuri ang updates mula sa GitHub...");
+        showToast("🔍 Checking for updates from GitHub...");
     }
 
     try {
@@ -136,16 +136,16 @@ export async function checkForOtaUpdate(isManual = false) {
         }
 
         if (!manifest) {
-            if (isManual) showToast("ℹ️ Hindi ma-access ang OTA update repository.");
+            if (isManual) showToast("ℹ️ Unable to access the OTA update repository.");
             return;
         }
         const remoteVersion = manifest.version;
         const downloadUrl = manifest.url;
         const checksum = manifest.checksum;
-        const releaseNotes = manifest.notes || "Bug fixes at performance improvements";
+        const releaseNotes = manifest.notes || "Bug fixes and performance improvements";
 
         if (!remoteVersion || !downloadUrl) {
-            if (isManual) showToast("ℹ️ Walang bagong bersyon sa kasalukuyan.");
+            if (isManual) showToast("ℹ️ No new version currently available.");
             return;
         }
 
@@ -154,7 +154,7 @@ export async function checkForOtaUpdate(isManual = false) {
 
         if (!hasUpdate) {
             if (isManual) {
-                const force = confirm(`✅ Lokalex Hub is up to date (v${currentVersion}).\n\nNais mo bang i-force re-download at i-apply muli ang update mula sa server?`);
+                const force = confirm(`✅ Lokalex Hub is up to date (v${currentVersion}).\n\nWould you like to force re-download and re-apply the update from the server?`);
                 if (!force) return;
             } else {
                 return;
@@ -162,12 +162,12 @@ export async function checkForOtaUpdate(isManual = false) {
         } else {
             // Update is available!
             if (isManual) {
-                const proceed = confirm(`🚀 May bagong update na available!\n\nBersyon: v${remoteVersion}\nKasalukuyan: v${currentVersion}\n\nUpdates:\n${releaseNotes}\n\nI-download at i-apply na ba ngayon?`);
+                const proceed = confirm(`🚀 New update available!\n\nVersion: v${remoteVersion}\nCurrent: v${currentVersion}\n\nUpdates:\n${releaseNotes}\n\nDownload and apply now?`);
                 if (!proceed) return;
             }
         }
 
-        showToast(`⏳ Dina-download ang v${remoteVersion} update...`);
+        showToast(`⏳ Downloading v${remoteVersion} update...`);
 
         if (isNativePlatform()) {
             console.log(`[OTA] Initiating download from ${downloadUrl} (version ${remoteVersion}, checksum ${checksum || 'none'})...`);
@@ -185,7 +185,7 @@ export async function checkForOtaUpdate(isManual = false) {
 
             if (bundle && bundle.id) {
                 localStorage.setItem('lokalex_ota_version', remoteVersion);
-                showToast(`🎉 Na-download ang v${remoteVersion}! Inilalapat ang update...`);
+                showToast(`🎉 Downloaded v${remoteVersion}! Applying update...`);
 
                 try {
                     await CapacitorUpdater.set({ id: bundle.id });
@@ -201,12 +201,12 @@ export async function checkForOtaUpdate(isManual = false) {
                     const chatOpen = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
                     const isChatting = chatOpen && !chatOpen.classList.contains('hidden');
                     if (!isChatting) {
-                        showToast(`✨ Handa na ang v${remoteVersion}. Inilalapat ang update...`);
+                        showToast(`✨ v${remoteVersion} is ready. Applying update...`);
                         setTimeout(() => {
                             window.location.reload();
                         }, 1200);
                     } else {
-                        showToast(`✨ Handa na ang v${remoteVersion}. Ilalapat sa susunod na pagbukas.`);
+                        showToast(`✨ v${remoteVersion} is ready. Will apply on next restart.`);
                     }
                 } else {
                     console.log(`[OTA] v${remoteVersion} staged. App is minimized in background, will apply on next restart.`);
@@ -217,12 +217,12 @@ export async function checkForOtaUpdate(isManual = false) {
         } else {
             // In web browser mode, service worker handles assets, but we still store version
             localStorage.setItem('lokalex_ota_version', remoteVersion);
-            showToast(`✅ Bagong bersyon v${remoteVersion} na-detect! Nagre-refresh...`);
+            showToast(`✅ New version v${remoteVersion} detected! Refreshing...`);
             setTimeout(() => window.location.reload(), 1500);
         }
     } catch (err) {
         console.error("[OTA] Update check error:", err);
-        showToast(`⚠️ Hindi ma-update: ${err.message || 'Subukan muli mamaya'}`);
+        showToast(`⚠️ Unable to update: ${err.message || 'Try again later'}`);
     } finally {
         isCheckingUpdate = false;
     }
@@ -304,14 +304,14 @@ export async function installSpecificOtaVersion(version, customUrl = null, custo
     const isRollback = compareVersions(cleanVer, currentVersion) < 0;
     const isSame = compareVersions(cleanVer, currentVersion) === 0;
 
-    const actionName = isRollback ? "I-rollback" : (isSame ? "I-reinstall" : "I-update");
-    const confirmMsg = `${actionName} ang app sa bersyon v${cleanVer}?\n\nKasalukuyang bersyon: v${currentVersion}\n\nI-da-download at ilalapat ang bundle mula sa GitHub.`;
+    const actionName = isRollback ? "Rollback" : (isSame ? "Reinstall" : "Update");
+    const confirmMsg = `${actionName} the app to version v${cleanVer}?\n\nCurrent version: v${currentVersion}\n\nThe bundle will be downloaded and applied from GitHub.`;
 
     if (!confirm(confirmMsg)) return;
 
     const downloadUrl = customUrl || `https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist-v${cleanVer}.zip`;
 
-    showToast(`⏳ Dina-download ang v${cleanVer}...`);
+    showToast(`⏳ Downloading v${cleanVer}...`);
 
     try {
         if (isNativePlatform()) {
@@ -340,7 +340,7 @@ export async function installSpecificOtaVersion(version, customUrl = null, custo
 
             if (bundle && bundle.id) {
                 localStorage.setItem('lokalex_ota_version', cleanVer);
-                showToast(`🎉 Na-download ang v${cleanVer}! Inilalapat ang bundle...`);
+                showToast(`🎉 Downloaded v${cleanVer}! Applying bundle...`);
 
                 try {
                     await CapacitorUpdater.set({ id: bundle.id });
@@ -356,12 +356,12 @@ export async function installSpecificOtaVersion(version, customUrl = null, custo
             }
         } else {
             localStorage.setItem('lokalex_ota_version', cleanVer);
-            showToast(`✅ Na-set ang v${cleanVer}! Nagre-reload...`);
+            showToast(`✅ Set to v${cleanVer}! Reloading...`);
             setTimeout(() => window.location.reload(), 1200);
         }
     } catch (err) {
         console.error(`[OTA] Failed to install version ${cleanVer}:`, err);
-        showToast(`⚠️ Hindi ma-install ang v${cleanVer}: ${err.message || 'Error'}`);
+        showToast(`⚠️ Unable to install v${cleanVer}: ${err.message || 'Error'}`);
     }
 }
 
@@ -369,18 +369,18 @@ export async function installSpecificOtaVersion(version, customUrl = null, custo
  * Resets the app back to the built-in factory APK version.
  */
 export async function resetToBuiltinVersion() {
-    if (!confirm(`⚠️ I-reset ang app pabalik sa factory APK bundle (v${CURRENT_BUILT_IN_VERSION})?\n\nLahat ng na-download na live updates ay aalisin.`)) {
+    if (!confirm(`⚠️ Reset the app back to the factory APK bundle (v${CURRENT_BUILT_IN_VERSION})?\n\nAll downloaded live updates will be removed.`)) {
         return;
     }
 
-    showToast("⏳ Nililinis ang live updates...");
+    showToast("⏳ Clearing live updates...");
 
     try {
         if (isNativePlatform()) {
             await CapacitorUpdater.reset();
         }
         localStorage.setItem('lokalex_ota_version', CURRENT_BUILT_IN_VERSION);
-        showToast("✨ Na-reset sa factory APK! Nagre-reload...");
+        showToast("✨ Reset to factory APK! Reloading...");
         setTimeout(() => {
             window.location.reload();
         }, 800);
@@ -409,7 +409,7 @@ export async function openOtaUpdateSelectorModal() {
         listEl.innerHTML = `
             <div class="text-center text-gray-500 italic py-10 flex flex-col items-center gap-2 text-xs">
                 <i class="fa-solid fa-spinner fa-spin text-emerald-500 text-lg"></i>
-                <span>Kinukuha ang available updates mula sa GitHub...</span>
+                <span>Fetching available updates from GitHub...</span>
             </div>
         `;
     }
@@ -419,7 +419,7 @@ export async function openOtaUpdateSelectorModal() {
         renderOtaVersionsList(versions, currentVersion);
     } catch (e) {
         if (listEl) {
-            listEl.innerHTML = `<div class="text-center text-red-500 py-8 text-xs">Failed to load versions from GitHub. Subukan muli.</div>`;
+            listEl.innerHTML = `<div class="text-center text-red-500 py-8 text-xs">Failed to load versions from GitHub. Please try again.</div>`;
         }
     }
 }
@@ -433,12 +433,12 @@ export function applyCustomOtaInput() {
     const input = document.getElementById('ota-custom-version-input');
     const val = input ? input.value.trim() : "";
     if (!val) {
-        showToast("⚠️ Paki-lagay ang version (hal. 1.0.28) o zip URL.");
+        showToast("⚠️ Please enter the version (e.g. 1.0.28) or zip URL.");
         return;
     }
 
     if (val.startsWith('http://') || val.startsWith('https://')) {
-        const verName = prompt("Ilagay ang label/version name para sa custom bundle (hal. 1.0.28-custom):", "custom");
+        const verName = prompt("Enter the label/version name for the custom bundle (e.g. 1.0.28-custom):", "custom");
         if (!verName) return;
         installSpecificOtaVersion(verName, val);
     } else {
@@ -452,7 +452,7 @@ function renderOtaVersionsList(versions, currentVersion) {
     if (!listEl) return;
 
     if (!versions || versions.length === 0) {
-        listEl.innerHTML = `<div class="text-center text-gray-500 py-8 text-xs italic">Walang available updates na nahanap.</div>`;
+        listEl.innerHTML = `<div class="text-center text-gray-500 py-8 text-xs italic">No available updates found.</div>`;
         return;
     }
 

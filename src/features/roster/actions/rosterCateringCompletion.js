@@ -187,7 +187,7 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         !!matchReceipt;
 
     if (!hasReceipt) {
-        showToast(`⚠️ Paki-gawaan muna ng resibo si ${custNameToComplete} bago i-mark as Done!`);
+        showToast(`⚠️ Please create a receipt for ${custNameToComplete} before marking as Done!`);
         const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
         if (resolvedTargetId === myId) {
             if (typeof window.syncSmartCartsWithCateringCustomers === 'function') {
@@ -619,7 +619,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
     const hasTlVoidPower = hasTlPermission('canVoidCustomer') || hasTlPermission('canVoid') || hasTlPermission('canForceCater');
 
     if (!isMe && !hasAdminPower && !hasTlVoidPower) {
-        showToast("🚫 Wala kang pahintulot na mag-void ng customer ng ibang rider.");
+        showToast("🚫 You do not have permission to void another rider's customer.");
         return false;
     }
 
@@ -691,7 +691,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         if (!isAlreadyCancelled) {
             const hasReceipt = checkCustomerReceiptExists(custNameToVoid, resolvedTargetName, resolvedTargetId);
             if (hasReceipt) {
-                showToast("⚠️ Hindi maaaring i-cancel ang order na may nagawa nang resibo. Makipag-ugnayan sa Admin o TL para mag-void.");
+                showToast("⚠️ Cannot cancel an order that already has a receipt created. Please contact an Admin or Team Lead to void.");
                 return false;
             }
         }
@@ -956,7 +956,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
                 lastVoidedCust: custNameToVoid
             }
         );
-        showToast(`🚫 Na-void si [${custNameToVoid}]. ${remainingCusts.length} active customer(s) natitira kay ${resolvedTargetName}.`);
+        showToast(`🚫 Order voided for [${custNameToVoid}]. ${remainingCusts.length} active customer(s) remaining for ${resolvedTargetName}.`);
         showSideNotification("ORDER VOIDED", `${custNameToVoid} was cancelled`, "fa-ban", "text-red-400", "border-red-500");
     } else {
         const topQueueTime = getTopQueueTime();
@@ -1004,7 +1004,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
                 lastVoidedCust: custNameToVoid
             }
         );
-        showToast(`🚫 Na-void si [${custNameToVoid}]. Inilipat si [${resolvedTargetName}] sa Available queue!`);
+        showToast(`🚫 Order voided for [${custNameToVoid}]. [${resolvedTargetName}] moved to the Available queue!`);
         showSideNotification("ROTATION UPDATED", `${resolvedTargetName} is now Available`, "fa-motorcycle", "text-blue-400", "border-blue-500");
     }
 
@@ -1040,7 +1040,7 @@ export function adminVoidSpecificCustomer(targetId, targetName, custName) {
 
     openSlideDeleteModal(
         `Void Order: ${custName}?`,
-        `Sigurado ka bang nais mong i-void ang delivery ni ${custName} para kay ${targetName || 'Rider'}?\nIto ay magkakansela sa order at mag-a-update sa kanyang rotation.`,
+        `Are you sure you want to void the delivery for ${custName} assigned to ${targetName || 'Rider'}?\nThis will cancel the order and update their rotation.`,
         async () => {
             await voidSingleCateringCustomer(targetId, targetName, custName);
         }

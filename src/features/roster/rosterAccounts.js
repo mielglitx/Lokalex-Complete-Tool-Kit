@@ -208,7 +208,7 @@ export async function submitCustomCreditDelta(isAdd) {
     if (!adjustingCreditsTarget || !adjustingCreditsTarget.id) return;
     const input = document.getElementById('adjust-credits-input-amount');
     const amt = input ? Math.abs(parseInt(input.value, 10) || 0) : 0;
-    if (amt <= 0) return showToast("⚠️ Maglagay ng halaga na mas mataas sa 0.");
+    if (amt <= 0) return showToast("⚠️ Please enter an amount greater than 0.");
     await applyRiderCreditDelta(isAdd ? amt : -amt);
 }
 
@@ -915,7 +915,7 @@ export function promptDeleteRiderAccount(riderId, riderName) {
 
     openSlideDeleteModal(
         `Delete Rider Account?`,
-        `Sigurado ka bang nais mong burahin ang account ni [${riderName}] (ID: ${riderId})?`,
+        `Are you sure you want to delete the account of [${riderName}] (ID: ${riderId})?`,
         () => {
             executeDeleteRiderAccount(riderId, riderName);
         }

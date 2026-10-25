@@ -53,7 +53,7 @@
                 <h3 class="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center justify-center gap-1.5">
                     <i class="fa-solid fa-right-to-bracket"></i> Account Login
                 </h3>
-                <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">I-enter ang Rider ID, Mobile No. (09...), o Store Username</p>
+                <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Enter Rider ID, Mobile No. (09...), or Store Username</p>
             </div>
 
             <div class="flex flex-col gap-2.5 text-left mt-1">
@@ -87,10 +87,10 @@
             <!-- Action Links -->
             <div class="flex flex-col items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800 text-[11px] mt-1">
                 <button type="button" onclick="window.toggleCustomerRegisterSection && window.toggleCustomerRegisterSection(true)" class="text-emerald-600 dark:text-emerald-400 hover:underline font-bold flex items-center gap-1.5 cursor-pointer">
-                    <i class="fa-solid fa-user-plus text-xs"></i> Bagong Customer? Mag-Register Dito
+                    <i class="fa-solid fa-user-plus text-xs"></i> New Customer? Register Here
                 </button>
                 <button type="button" onclick="window.triggerForgotPassword && window.triggerForgotPassword()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition text-[10px] cursor-pointer">
-                    Nakalimutan ang Password?
+                    Forgot Password?
                 </button>
             </div>
         </div>
@@ -108,7 +108,7 @@
 
             <!-- STEP 1: Phone Verification via SMS OTP -->
             <div id="reg-step-1" class="flex flex-col gap-3">
-                <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed text-left">I-enter ang iyong 10-digit mobile number para sa OTP verification.</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed text-left">Enter your 10-digit mobile number for OTP verification.</p>
                 <div class="flex items-center bg-inputBg rounded-xl border border-gray-300 dark:border-gray-700 overflow-hidden focus-within:border-emerald-500 transition">
                     <span class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold px-3 py-3 text-xs font-mono select-none border-r border-gray-300 dark:border-gray-700 flex items-center gap-1 shrink-0">
                         🇵🇭 +63
@@ -132,18 +132,18 @@
 
             <!-- STEP 2: Customer Profile Details & GPS Capture -->
             <div id="reg-step-2" class="hidden flex flex-col gap-2.5 border-t border-gray-200 dark:border-gray-800 pt-3 text-left">
-                <div class="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold uppercase text-center mb-1">Kumpletuhin ang Iyong Detalye</div>
+                <div class="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold uppercase text-center mb-1">Complete Your Details</div>
 
                 <!-- Full Name (Required) -->
                 <div>
-                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Buong Pangalan *</label>
-                    <input type="text" id="reg-fullname" autocomplete="name" placeholder="Buong Pangalan (Full Name)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold mt-1">
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Full Name *</label>
+                    <input type="text" id="reg-fullname" autocomplete="name" placeholder="Full Name" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold mt-1">
                 </div>
 
                 <!-- Delivery Address (Required) -->
                 <div>
-                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Kumpletong Address *</label>
-                    <input type="text" id="reg-address" autocomplete="street-address" placeholder="Kumpletong Address (Delivery Address)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1">
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Complete Delivery Address *</label>
+                    <input type="text" id="reg-address" autocomplete="street-address" placeholder="Complete Delivery Address" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1">
                 </div>
 
                 <!-- GPS Location Pin (Required) -->
@@ -178,9 +178,9 @@
 
                 <!-- Confirm Password (Required) -->
                 <div>
-                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Ulitin ang Password *</label>
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Confirm Password *</label>
                     <div class="relative mt-1">
-                        <input type="password" id="reg-confirm-password" autocomplete="new-password" placeholder="Ulitin ang Password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold">
+                        <input type="password" id="reg-confirm-password" autocomplete="new-password" placeholder="Confirm Password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold">
                         <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('reg-confirm-password', 'reg-confirm-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-gray-600 dark:hover:text-white transition cursor-pointer">
                             <i id="reg-confirm-eye" class="fa-solid fa-eye text-xs"></i>
                         </button>

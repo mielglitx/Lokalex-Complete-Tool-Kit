@@ -418,7 +418,7 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
         }
 
         // 5. Success notifications and UI updates
-        showToast(`✅ Resibo matagumpay na naipadala kay ${recipientName || 'customer'}!`);
+        showToast(`✅ Receipt successfully sent to ${recipientName || 'customer'}!`);
         showSideNotification("RECEIPT SENT", `Delivered to ${recipientName || 'customer'}`, "fa-paper-plane", "text-blue-400", "border-blue-500");
 
         if (btn) {
@@ -428,7 +428,7 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
         }
     } catch (e) {
         console.error("Failed to send receipt to customer:", e);
-        showToast(`❌ Hindi naipadala ang resibo: ${e.message || 'Network error'}`);
+        showToast(`❌ Failed to send receipt: ${e.message || 'Network error'}`);
         if (btn) {
             btn.disabled = false;
             btn.innerHTML = oldBtnHtml || `<i class="fa-solid fa-paper-plane text-xs shrink-0"></i><span class="text-[11px] leading-tight">Send to Customer</span>`;

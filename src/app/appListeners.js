@@ -28,7 +28,7 @@ import * as maps from '../features/maps.js';
 import { endLiveGpsSession } from '../features/liveTracker.js';
 import { updateNetworkStatus } from './appMonitors.js';
 
-export function forceRevokeSession(reason = "⚠️ Ang iyong account ay tinanggal na.") {
+export function forceRevokeSession(reason = "⚠️ Your account has been removed.") {
     console.warn("Session revoked:", reason);
     if (typeof window !== 'undefined' && typeof window.syncRiderSession === 'function') {
         try { window.syncRiderSession('', ''); } catch (_) {}
@@ -72,12 +72,12 @@ export function initAccountRevocationListener() {
             if (isInitial) {
                 isInitial = false;
                 if (!snap.exists()) {
-                    forceRevokeSession("⚠️ Ang iyong Rider account ay tinanggal na ng Admin.");
+                    forceRevokeSession("⚠️ Your Rider account has been removed by Admin.");
                 }
                 return;
             }
             if (!snap.exists()) {
-                forceRevokeSession("⚠️ Ang iyong Rider account ay tinanggal na ng Admin.");
+                forceRevokeSession("⚠️ Your Rider account has been removed by Admin.");
             }
         });
     } else if (activeCustomerFbId && activeRole === 'customer') {
@@ -86,12 +86,12 @@ export function initAccountRevocationListener() {
             if (isInitial) {
                 isInitial = false;
                 if (!snap.exists()) {
-                    forceRevokeSession("⚠️ Ang iyong Customer account ay tinanggal na.");
+                    forceRevokeSession("⚠️ Your Customer account has been removed.");
                 }
                 return;
             }
             if (!snap.exists()) {
-                forceRevokeSession("⚠️ Ang iyong Customer account ay tinanggal na.");
+                forceRevokeSession("⚠️ Your Customer account has been removed.");
             }
         });
     } else if (activeMerchantId && activeRole === 'merchant') {
@@ -100,12 +100,12 @@ export function initAccountRevocationListener() {
             if (isInitial) {
                 isInitial = false;
                 if (!snap.exists()) {
-                    forceRevokeSession("⚠️ Ang iyong Merchant account ay tinanggal na.");
+                    forceRevokeSession("⚠️ Your Merchant account has been removed.");
                 }
                 return;
             }
             if (!snap.exists()) {
-                forceRevokeSession("⚠️ Ang iyong Merchant account ay tinanggal na.");
+                forceRevokeSession("⚠️ Your Merchant account has been removed.");
             }
         });
     }
@@ -253,7 +253,7 @@ export function initRealtimeFirebaseListeners() {
                                     roster.purgeCartSlotForCustomer(cust);
                                 }
                             });
-                            showToast(`🚫 Na-void ang order: [${removedCusts.join(', ')}]. Na-update ang iyong cart.`);
+                            showToast(`🚫 Order voided: [${removedCusts.join(', ')}]. Your cart has been updated.`);
                         }
 
                         // If transitioned from Catering to Available or other non-catering status
@@ -331,7 +331,7 @@ export function initRealtimeFirebaseListeners() {
                             const date = item.dateToReceive || '';
                             const sched = [date, time].filter(Boolean).join(' ') || 'Scheduled';
                             showNativeNotification(
-                                `📅 Bagong Advance Booking!`,
+                                `📅 New Advance Booking!`,
                                 `${custName} • ${sched}${item.address ? ` • ${item.address}` : ''}`,
                                 `adv_new_${id}`,
                                 `adv_${id}`

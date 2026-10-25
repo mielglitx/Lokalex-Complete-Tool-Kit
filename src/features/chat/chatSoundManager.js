@@ -460,7 +460,7 @@ export function renderCustomChimesListUI() {
     if (!customList || customList.length === 0) {
         container.innerHTML = `
             <div class="text-[10px] text-gray-400 italic text-center py-2 bg-white/40 dark:bg-black/20 rounded-xl border border-dashed border-gray-300 dark:border-gray-700">
-                Walang custom audio chimes. I-click ang "+ Pick Audio File" para magdagdag.
+                No custom audio chimes. Click "+ Pick Audio File" to add one.
             </div>
         `;
         return;

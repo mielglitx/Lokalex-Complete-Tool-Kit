@@ -639,11 +639,11 @@ export function updateRosterUI() {
     const elCooldown = document.getElementById('home-roster-cooldown');
     const elDayoff = document.getElementById('home-roster-dayoff');
 
-    if (elAvail) elAvail.innerHTML = availHtml.length ? availHtml.join('') : '(Walang naka-duty)';
-    if (elBusy) elBusy.innerHTML = busyHtml.length ? busyHtml.join('') : '(Walang bumibiyahe)';
-    if (elBreak) elBreak.innerHTML = brkHtml.length ? brkHtml.join('') : '(Walang naka-break)';
-    if (elCooldown) elCooldown.innerHTML = cdHtml.length ? cdHtml.join('') : '(Walang naka-cooldown)';
-    if (elDayoff) elDayoff.innerHTML = dayOffHtml.length ? dayOffHtml.join('') : '(Walang naka-day off)';
+    if (elAvail) elAvail.innerHTML = availHtml.length ? availHtml.join('') : '(No riders on duty)';
+    if (elBusy) elBusy.innerHTML = busyHtml.length ? busyHtml.join('') : '(No active deliveries)';
+    if (elBreak) elBreak.innerHTML = brkHtml.length ? brkHtml.join('') : '(No riders on break)';
+    if (elCooldown) elCooldown.innerHTML = cdHtml.length ? cdHtml.join('') : '(No riders on cooldown)';
+    if (elDayoff) elDayoff.innerHTML = dayOffHtml.length ? dayOffHtml.join('') : '(No riders on day off)';
 
     // Decoupled: loadGlobalCateredList() is no longer called here on high-frequency timers.
 }

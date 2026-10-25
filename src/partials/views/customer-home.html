@@ -69,7 +69,7 @@
 
         <!-- FULL-EXPANDED CHAT STREAM -->
         <div id="cust-rider-chat-messages" class="flex-1 min-h-0 overflow-y-auto p-3 bg-gray-50 dark:bg-black/40 rounded-2xl border border-gray-200 dark:border-gray-800/80 flex flex-col gap-2.5 text-xs">
-            <div class="text-center text-gray-400 dark:text-gray-500 italic py-12">Pumili o mag-type ng mensahe para sa mga riders...</div>
+            <div class="text-center text-gray-400 dark:text-gray-500 italic py-12">Select or type a message for the riders...</div>
         </div>
 
         <!-- ACTIVE QUOTED REPLY PREVIEW BANNER -->
@@ -96,7 +96,7 @@
                 <i class="fa-solid fa-location-dot"></i>
             </button>
 
-            <input type="text" id="cust-rider-chat-input" name="cust_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" onkeydown="if(event.key==='Enter') window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" placeholder="Mag-type ng mensahe para sa rider..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-300 dark:border-gray-700 focus:border-blue-500 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500">
+            <input type="text" id="cust-rider-chat-input" name="cust_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" onkeydown="if(event.key==='Enter') window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" placeholder="Type a message for the rider..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-300 dark:border-gray-700 focus:border-blue-500 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500">
             <button onclick="window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0">
                 <i class="fa-solid fa-paper-plane"></i>
             </button>

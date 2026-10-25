@@ -99,7 +99,7 @@ export function removeAdminPenalty(riderName, targetDate) {
     const cleanName = (riderName || "").toLowerCase().trim();
     const penaltyKey = `${cleanName}_${targetDate}`;
 
-    openSlideDeleteModal(`Tanggalin ang Date Penalty?`, `Sigurado ka bang tanggalin ang +commission penalty para kay ${riderName} sa ${targetDate}?`, () => {
+    openSlideDeleteModal(`Remove Date Penalty?`, `Are you sure you want to remove the +commission penalty for ${riderName} on ${targetDate}?`, () => {
         if (db) {
             db.ref(`commissionPenalties/${penaltyKey}`).remove();
             
@@ -137,7 +137,7 @@ export async function waiveEarlyShiftPenalty(riderName, riderId, targetDate) {
 
     openSlideDeleteModal(
         `Waive Early Shift Penalty?`,
-        `Sigurado ka bang nais mong tanggalin ang early shift penalty ni [${riderName}] para sa ${targetDate}?`,
+        `Are you sure you want to waive the early shift penalty for [${riderName}] on ${targetDate}?`,
         async () => {
             const cleanRider = (riderName || "").toLowerCase().trim();
             const rId = (riderId || "").toString().trim();
@@ -273,7 +273,7 @@ export function promptAdminDeleteCommissionRecord(riderName, customerName, dateV
 
     openSlideDeleteModal(
         `Delete Commission Record?`,
-        `Sigurado ka bang nais mong burahin ang record ni [${customerName}] (${riderName}) sa ${dateVal}?`,
+        `Are you sure you want to delete the record for [${customerName}] (${riderName}) on ${dateVal}?`,
         () => {
             executeDeleteCommissionRecord(riderName, customerName, dateVal, txId);
         }

@@ -172,7 +172,7 @@ async function executeProfileUpdate(uid, profileData) {
 
 export async function sendCustomerRegisterOTP() {
     const phoneInput = document.getElementById('reg-phone-num')?.value.trim();
-    if (!phoneInput) return showToast("⚠️ Paki-lagay ang iyong Mobile Number!");
+    if (!phoneInput) return showToast("⚠️ Please enter your Mobile Number!");
 
     const phoneCheck = validatePhilippineMobile(phoneInput);
     if (!phoneCheck.isValid) {
@@ -192,7 +192,7 @@ export async function sendCustomerRegisterOTP() {
         if (db) {
             const phoneSnap = await db.ref(`phones/${cleanPhoneKey}`).once('value');
             if (phoneSnap.exists()) {
-                throw new Error("🚫 Ang Mobile Number na ito ay nakarehistro na! Paki-login na lamang.");
+                throw new Error("🚫 This Mobile Number is already registered! Please log in instead.");
             }
         }
 
@@ -220,8 +220,8 @@ export async function sendCustomerRegisterOTP() {
 
 export function verifyCustomerRegisterOTP() {
     const codeInput = document.getElementById('reg-otp-code')?.value.trim();
-    if (!codeInput || codeInput.length < 6) return showToast("⚠️ Paki-lagay ang 6-digit OTP code!");
-    if (!confirmationResultObj) return showToast("⚠️ Session expired. Paki-resend ng OTP.");
+    if (!codeInput || codeInput.length < 6) return showToast("⚠️ Please enter the 6-digit OTP code!");
+    if (!confirmationResultObj) return showToast("⚠️ Session expired. Please resend the OTP.");
 
     const verifyBtn = document.getElementById('reg-verify-otp-btn');
     if (verifyBtn) {
@@ -232,13 +232,13 @@ export function verifyCustomerRegisterOTP() {
     confirmationResultObj.confirm(codeInput)
         .then((result) => {
             pendingRegUser = result.user;
-            showToast("✅ OTP Verified! Kumpletuhin ang iyong detalye sa ibaba.");
+            showToast("✅ OTP Verified! Please complete your details below.");
             document.getElementById('reg-step-1')?.classList.add('hidden');
             document.getElementById('reg-step-2')?.classList.remove('hidden');
         })
         .catch((error) => {
             console.error("Verify OTP error:", error);
-            showToast("❌ Mali ang OTP code. Subukan muli.");
+            showToast("❌ Incorrect OTP code. Please try again.");
             if (verifyBtn) {
                 verifyBtn.disabled = false;
                 verifyBtn.innerHTML = `<i class="fa-solid fa-check-double"></i> VERIFY OTP CODE`;
@@ -256,17 +256,17 @@ export async function completeCustomerRegistration() {
     const regLat = parseFloat(document.getElementById('reg-lat')?.value) || 0;
     const regLon = parseFloat(document.getElementById('reg-lon')?.value) || 0;
 
-    if (!fullName) return showToast("⚠️ Paki-lagay ang iyong Buong Pangalan!");
-    if (!address) return showToast("⚠️ Paki-lagay ang iyong Delivery Address!");
-    if (!gpsLink) return showToast("⚠️ Paki-pin ang iyong Exact GPS Location!");
-    if (!password) return showToast("⚠️ Paki-lagay ang iyong Password!");
-    if (password.length < 6) return showToast("⚠️ Ang Password ay dapat may 6 o higit pang characters!");
-    if (password !== confirmPassword) return showToast("⚠️ Hindi nagtutugma ang Password at Ulitin ang Password!");
+    if (!fullName) return showToast("⚠️ Please enter your Full Name!");
+    if (!address) return showToast("⚠️ Please enter your Delivery Address!");
+    if (!gpsLink) return showToast("⚠️ Please pin your exact GPS location!");
+    if (!password) return showToast("⚠️ Please enter your Password!");
+    if (password.length < 6) return showToast("⚠️ Password must be at least 6 characters long!");
+    if (password !== confirmPassword) return showToast("⚠️ Passwords do not match!");
 
     if (!pendingRegUser) {
         const currentUser = auth.currentUser;
         if (currentUser) pendingRegUser = currentUser;
-        else return showToast("⚠️ Phone verification session missing. Paki-subukan muli.");
+        else return showToast("⚠️ Phone verification session missing. Please try again.");
     }
 
     const completeBtn = document.getElementById('reg-complete-btn');
@@ -280,7 +280,7 @@ export async function completeCustomerRegistration() {
             const cleanEmailKey = email.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
             const emailSnap = await db.ref(`emails/${cleanEmailKey}`).once('value');
             if (emailSnap.exists()) {
-                throw new Error("🚫 Ang Email Address na ito ay nakarehistro na! Gamitin ang ibang Email.");
+                throw new Error("🚫 This Email Address is already registered! Please use another Email.");
             }
         }
 
@@ -325,7 +325,7 @@ export async function completeCustomerRegistration() {
         }
 
         finalizeCustomerSession(uid, fullName, phone, avatarUrl);
-        showToast("🎉 Registration Successful! Maligayang pagdating!");
+        showToast("🎉 Registration Successful! Welcome!");
 
     } catch (err) {
         console.error("Failed to complete registration:", err);
@@ -343,7 +343,7 @@ export async function processCustomerLogin() {
     const password = document.getElementById('cust-login-pass')?.value;
 
     if (!phoneInput || !password) {
-        return showToast("⚠️ I-enter ang iyong Mobile Number at Password!");
+        return showToast("⚠️ Please enter your Mobile Number and Password!");
     }
 
     const phoneCheck = validatePhilippineMobile(phoneInput);
@@ -382,7 +382,7 @@ export async function processCustomerLogin() {
         }
 
         if (!custData) {
-            throw new Error("🚫 Hindi nakarehistro ang mobile number na ito. Paki-register muna.");
+            throw new Error("🚫 This mobile number is not registered. Please register first.");
         }
 
         const loginEmail = custData.loginEmail || custData.email || `${cleanPhoneKey}@lokalex.app`;
@@ -394,7 +394,7 @@ export async function processCustomerLogin() {
 
     } catch (err) {
         console.error("Login Error:", err);
-        showToast(`❌ Login Failed: Mali ang Password o Mobile Number.`);
+        showToast(`❌ Login Failed: Incorrect Password or Mobile Number.`);
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -435,7 +435,7 @@ export function selectResetMethod(method) {
 
 export function sendResetSMS() {
     const phoneInput = document.getElementById('fp-phone-input')?.value.trim();
-    if (!phoneInput) return showToast("⚠️ Paki-lagay ang iyong Mobile Number!");
+    if (!phoneInput) return showToast("⚠️ Please enter your Mobile Number!");
 
     const phoneCheck = validatePhilippineMobile(phoneInput);
     if (!phoneCheck.isValid) {
@@ -499,7 +499,7 @@ export function sendResetEmailLink() {
 
 export function verifyResetOTP() {
     const code = document.getElementById('fp-otp-input')?.value.trim();
-    if (!code || code.length < 6) return showToast("⚠️ Paki-lagay ang 6-digit OTP code!");
+    if (!code || code.length < 6) return showToast("⚠️ Please enter the 6-digit OTP code!");
 
     const verifyBtn = document.getElementById('fp-verify-otp-btn');
     if (verifyBtn) {
@@ -507,7 +507,7 @@ export function verifyResetOTP() {
         verifyBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Verifying...`;
     }
 
-    if (!fpConfirmationResult) return showToast("⚠️ Session expired. Subukan muli.");
+    if (!fpConfirmationResult) return showToast("⚠️ Session expired. Please try again.");
 
     fpConfirmationResult.confirm(code)
         .then((result) => {
@@ -517,7 +517,7 @@ export function verifyResetOTP() {
             document.getElementById('fp-step-newpass')?.classList.remove('hidden');
         })
         .catch((error) => {
-            showToast("❌ Mali ang OTP code.");
+            showToast("❌ Incorrect OTP code.");
         })
         .finally(() => {
             if (verifyBtn) {
@@ -531,10 +531,10 @@ export async function completePasswordReset() {
     const newPass = document.getElementById('fp-new-pass')?.value;
     const confirmPass = document.getElementById('fp-confirm-pass')?.value;
 
-    if (!newPass || newPass.length < 6) return showToast("⚠️ Ang password ay dapat min 6 characters!");
-    if (newPass !== confirmPass) return showToast("⚠️ Hindi nagtutugma ang password!");
+    if (!newPass || newPass.length < 6) return showToast("⚠️ Password must be at least 6 characters long!");
+    if (newPass !== confirmPass) return showToast("⚠️ Passwords do not match!");
 
-    if (!fpUserRef) return showToast("⚠️ Session expired. Paki-subukan muli.");
+    if (!fpUserRef) return showToast("⚠️ Session expired. Please try again.");
 
     const saveBtn = document.getElementById('fp-save-pass-btn');
     if (saveBtn) {
@@ -544,7 +544,7 @@ export async function completePasswordReset() {
 
     try {
         await fpUserRef.updatePassword(newPass);
-        showToast("✅ Password updated successfully! Subukang mag-login.");
+        showToast("✅ Password updated successfully! You can now log in.");
         closeForgotPasswordModal();
     } catch (err) {
         showToast(`❌ Error: ${err.message}`);

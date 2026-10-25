@@ -48,7 +48,7 @@
                 </div>
                 <div>
                     <h3 class="font-bold text-xs text-white">My Weekly Day-Off</h3>
-                    <p id="rider-dayoff-subtitle" class="text-[9px] text-teal-400 font-mono">Pumili ng iyong lingguhang araw ng pahinga</p>
+                    <p id="rider-dayoff-subtitle" class="text-[9px] text-teal-400 font-mono">Select your weekly day-off</p>
                 </div>
             </div>
             <button type="button" onclick="window.closeRiderDayOffModal && window.closeRiderDayOffModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
@@ -59,8 +59,8 @@
         <div class="flex flex-col gap-2.5 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
             <div class="bg-darkBg p-3 rounded-2xl border border-teal-500/30 flex items-center justify-between">
                 <div>
-                    <span class="text-[10px] text-gray-400 font-bold uppercase">Kasalukuyang Day-Off:</span>
-                    <div id="rider-current-dayoff-display" class="font-black text-sm text-teal-400 mt-0.5">Walang Napili</div>
+                    <span class="text-[10px] text-gray-400 font-bold uppercase">Current Day-Off:</span>
+                    <div id="rider-current-dayoff-display" class="font-black text-sm text-teal-400 mt-0.5">None Selected</div>
                 </div>
                 <div id="rider-dayoff-changes-badge" class="text-right text-[10px] font-bold text-gray-400 font-mono">
                     Changes: <span class="text-white">0/2</span> this month
@@ -340,14 +340,14 @@
                         <div class="font-bold text-purple-300 text-xs flex items-center gap-1.5">
                             <i class="fa-solid fa-calendar-week text-purple-400"></i> Recurring Day Promo Less
                         </div>
-                        <div class="text-[10px] text-gray-400">Bawas komisyon sa araw na ito</div>
+                        <div class="text-[10px] text-gray-400">Commission discount on this day</div>
                     </div>
                     <input type="checkbox" id="admin-recurring-discount-enabled" class="w-4 h-4 accent-purple-500 cursor-pointer">
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 pt-1">
                     <div>
-                        <label class="text-[9px] text-gray-400 font-bold uppercase">Piliin ang Araw</label>
+                        <label class="text-[9px] text-gray-400 font-bold uppercase">Select Day</label>
                         <select id="admin-recurring-discount-day" class="w-full bg-inputBg text-xs font-bold text-white rounded-xl p-2 border border-gray-700 outline-none mt-0.5">
                             <option value="0" selected>Every Sunday</option>
                             <option value="1">Every Monday</option>
@@ -384,7 +384,7 @@
                 </div>
 
                 <div id="admin-special-dates-list" class="flex flex-col gap-1.5 mt-1 max-h-28 overflow-y-auto">
-                    <div class="text-gray-500 italic text-[10px] text-center py-1">Walang active na specific promo dates.</div>
+                    <div class="text-gray-500 italic text-[10px] text-center py-1">No active specific promo dates.</div>
                 </div>
             </div>
 
@@ -441,7 +441,7 @@
                     <input type="time" id="auto-endshift-time" value="03:00" class="w-full bg-inputBg text-sm font-mono font-bold rounded-xl p-3 border border-gray-700 outline-none text-white focus:border-purple-500">
                 </div>
                 <p class="text-[10px] text-gray-400 mt-1 leading-relaxed">
-                    Halimbawa: Kung <strong>03:00 AM</strong>, kusa nitong i-e-end shift ang lahat ng riders sa roster kapag sumapit ang oras na ito.
+                    Example: If set to <strong>03:00 AM</strong>, it will automatically end shifts for all riders on the roster once this time is reached.
                 </p>
             </div>
         </div>
@@ -1020,7 +1020,7 @@
 
         <p class="text-[9.5px] text-gray-400 leading-tight">
             <i class="fa-solid fa-circle-info text-amber-400 mr-0.5"></i>
-            Ang mga <strong>Admin</strong> ay palaging <strong>Exempt (Unlimited)</strong> at hindi kailanman nababawasan ng credits.
+            <strong>Admins</strong> are always <strong>Exempt (Unlimited)</strong> and will never have credits deducted.
         </p>
 
         <div class="pt-2 border-t border-gray-800">

@@ -48,7 +48,7 @@ export async function executeGenerateFinalReceipt(customerName) {
     const deliveryVal = document.getElementById('wiz-delivery')?.value.trim() || "";
 
     if (!isFree && (deliveryVal === "" || isNaN(parseFloat(deliveryVal)) || parseFloat(deliveryVal) <= 0)) {
-        showToast("⚠️ Paki-lagay ang Rider Delivery Fee bago mag-generate ng resibo!");
+        showToast("⚠️ Please enter Rider Delivery Fee before generating receipt!");
         const deliveryInput = document.getElementById('wiz-delivery');
         if (deliveryInput) deliveryInput.focus();
         return;
@@ -217,7 +217,7 @@ export function completeReceiptDone() {
     renderCartTabs();
     renderCartItems();
 
-    showToast("✅ Resibo naisumite na! Naka-lock ang Cart barrier protection.");
+    showToast("✅ Receipt submitted! Cart barrier protection is locked.");
 
     wizState.subtotal = 0;
     wizState.storeCount = 1;

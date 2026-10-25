@@ -352,7 +352,7 @@ export function handleChatPhoneClick(phoneNumber) {
     if (modal) {
         modal.classList.remove('hidden');
     } else {
-        const choice = confirm(`Gusto mo bang tawagan o i-text si ${phoneNumber}?\n\nOK = Tawag\nCancel = Text`);
+        const choice = confirm(`Do you want to call or text ${phoneNumber}?\n\nOK = Call\nCancel = Text`);
         if (choice) {
             window.location.href = `tel:${phoneNumber}`;
         } else {
@@ -393,8 +393,8 @@ export function saveChatPhoneToCustomerDetails(phone) {
     const slideModal = (typeof openSlideDeleteModal === 'function') ? openSlideDeleteModal : window.openSlideDeleteModal;
     if (typeof slideModal === 'function') {
         slideModal(
-            `I-save sa Customer Details?`,
-            `I-save ang number na [${phone}] para kay [${custName}]?\nI-drag pakanan para kumpirmahin.`,
+            `Save to Customer Details?`,
+            `Save the number [${phone}] for [${custName}]?\nDrag right to confirm.`,
             async () => {
                 await commitChatPhoneToDetails(phone, custId, custName);
             }
@@ -451,7 +451,7 @@ async function commitChatPhoneToDetails(phone, custId, custName) {
         }
     }
 
-    showToast(`✅ Na-save ang contact number [${phone}] para kay ${custName}!`);
+    showToast(`✅ Contact number [${phone}] saved for ${custName}!`);
 }
 
 let longPressTimer = null;
@@ -997,81 +997,133 @@ export function updateRiderChatSeenAvatar(container, activeCustData = null, msgs
         }
     }
 
-    // Find the latest message to anchor the seen indicators
-    const lastMsg = msgs[msgs.length - 1];
-    if (!lastMsg || !lastMsg.id) return;
+    // 1. CUSTOMER SEEN BADGE:
+    // Only stay on the LAST message sent by the rider that the customer has actually seen!
+    // (Never forced to the bottom if newer messages have not been seen)
+    let lastCustomerSeenMsg = null;
+    let lastCustomerSeenTs = null;
 
-    // 1. Check if customer saw the message
-    let customerSawIt = false;
-    let customerSeenTs = null;
-    const isRiderLastMsg = Boolean(lastMsg.isRider || lastMsg.senderType === 'rider');
-    const lastMsgTs = getMessageTimestamp(lastMsg);
+    for (const m of msgs) {
+        const isRiderMsg = Boolean(m.isRider || m.senderType === 'rider');
+        if (!isRiderMsg || m.failed || m.status === 'failed') continue;
 
-    if (isRiderLastMsg) {
-        const isExplicitSeen = lastMsg.status === 'seen' || Boolean(lastMsg.seenAt);
-        const isSeenByCustomerTs = customerLastSeenTs > 0 && lastMsgTs > 0 && lastMsgTs <= customerLastSeenTs;
-        const isSeenByReply = latestCustomerReplyTs > 0 && lastMsgTs > 0 && lastMsgTs <= latestCustomerReplyTs;
+        const msgTs = getMessageTimestamp(m);
+        const isExplicitSeen = m.status === 'seen' || Boolean(m.seenAt);
+        const isSeenByTs = customerLastSeenTs > 0 && msgTs > 0 && msgTs <= customerLastSeenTs;
+        const isSeenByReply = latestCustomerReplyTs > 0 && msgTs > 0 && msgTs <= latestCustomerReplyTs;
 
-        if (isExplicitSeen || isSeenByCustomerTs || isSeenByReply) {
-            customerSawIt = true;
-            customerSeenTs = lastMsg.seenAt 
-                || (customerLastSeenTs >= lastMsgTs ? customerLastSeenTs : null) 
-                || (latestCustomerReplyTs >= lastMsgTs ? latestCustomerReplyTs : null)
-                || lastMsg.timestamp;
+        if (isExplicitSeen || isSeenByTs || isSeenByReply) {
+            lastCustomerSeenMsg = m;
+            lastCustomerSeenTs = m.seenAt 
+                || (customerLastSeenTs >= msgTs ? customerLastSeenTs : null) 
+                || (latestCustomerReplyTs >= msgTs ? latestCustomerReplyTs : null)
+                || msgTs;
         }
     }
 
-    // 2. Check which riders have seen the chat thread
+    if (lastCustomerSeenMsg) {
+        const targetBubble = document.getElementById(`msg-bubble-${lastCustomerSeenMsg.id}`);
+        if (targetBubble) {
+            const finalCustSeenTime = lastCustomerSeenTs 
+                ? new Date(lastCustomerSeenTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                : "";
+
+            const custWrapper = document.createElement('div');
+            custWrapper.className = 'chat-seen-avatar-wrapper customer-seen-badge flex items-center justify-end gap-1.5 mt-0.5 mr-2.5 select-none transition-all duration-200';
+            custWrapper.title = `Seen by ${custName}${finalCustSeenTime ? ` at ${finalCustSeenTime}` : ''}`;
+            custWrapper.innerHTML = `
+                <span class="text-[9.5px] text-gray-500 dark:text-gray-400 font-bold flex items-center gap-1">
+                    <i class="fa-solid fa-eye text-cyan-600 dark:text-cyan-400 text-[9px]"></i> Seen by ${escapeHtml(custName)}${finalCustSeenTime ? ` • ${finalCustSeenTime}` : ''}
+                </span>
+                <div class="flex items-center -space-x-1">
+                    <img src="${custAvatar}" alt="${escapeHtml(custName)}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff'" class="w-3.5 h-3.5 rounded-full border border-white dark:border-gray-800 shadow-xs object-cover pointer-events-none ring-1 ring-cyan-500/40">
+                </div>
+            `;
+            targetBubble.appendChild(custWrapper);
+        }
+    }
+
+    // 2. RIDER SEEN BADGE:
+    // Only stay on the message where the rider last seen message!
+    // (Never forced to the bottom if newer messages have not been seen)
     const threadSeenBy = meta?.threadSeenBy || activeCustData?.threadSeenBy || window.activeThreadSeenMap || {};
     let myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
     if (!myId) {
         const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
         myId = myName ? myName.replace(/[^a-zA-Z0-9_-]/g, '_') : "";
     }
-    const otherRidersSeen = [];
 
+    const ridersList = [];
     if (threadSeenBy && typeof threadSeenBy === 'object') {
         Object.values(threadSeenBy).forEach(s => {
-            if (s && s.riderId && (!myId || s.riderId.toString() !== myId)) {
-                otherRidersSeen.push({
+            if (s && s.seenAt) {
+                const rId = (s.riderId || "").toString().trim();
+                const isMe = Boolean(myId && rId && rId.toLowerCase() === myId.toLowerCase());
+                ridersList.push({
+                    id: rId,
                     name: s.riderName || "Rider",
-                    time: s.seenAt ? new Date(s.seenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""
+                    seenAt: Number(s.seenAt) || 0,
+                    isMe
                 });
             }
         });
     }
 
-    if (!customerSawIt && otherRidersSeen.length === 0) return;
+    // Determine which riders to display: if other riders exist, show other riders; if only self is recorded, show self
+    const otherRiders = ridersList.filter(r => !r.isMe);
+    const ridersToRender = otherRiders.length > 0 ? otherRiders : ridersList;
 
-    const targetBubble = document.getElementById(`msg-bubble-${lastMsg.id}`) || container.lastElementChild;
-    if (!targetBubble) return;
+    // Group riders by the exact last message they saw
+    const riderTargetMsgMap = new Map();
 
-    const seenNames = [];
-    if (customerSawIt) seenNames.push(custName);
-    otherRidersSeen.forEach(r => seenNames.push(r.name));
+    ridersToRender.forEach(r => {
+        const rTs = r.seenAt;
+        if (rTs <= 0) return;
 
-    const finalSeenTime = customerSeenTs 
-        ? new Date(customerSeenTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-        : (otherRidersSeen[0]?.time || "");
+        // Find the last message in thread where msgTs <= rTs
+        let lastSeenMsg = null;
+        for (const m of msgs) {
+            const mTs = getMessageTimestamp(m);
+            if (mTs > 0 && mTs <= rTs) {
+                lastSeenMsg = m;
+            }
+        }
 
-    const seenLabel = seenNames.length <= 2 
-        ? seenNames.join(' & ') 
-        : `${seenNames[0]} & ${seenNames.length - 1} others`;
+        if (lastSeenMsg && lastSeenMsg.id) {
+            const list = riderTargetMsgMap.get(lastSeenMsg.id) || [];
+            list.push(r);
+            riderTargetMsgMap.set(lastSeenMsg.id, list);
+        }
+    });
 
-    const wrapper = document.createElement('div');
-    wrapper.className = 'chat-seen-avatar-wrapper flex items-center justify-end gap-1.5 mt-1 mr-3 select-none transition-all duration-200';
-    wrapper.title = `Seen by ${seenNames.join(', ')}${finalSeenTime ? ` at ${finalSeenTime}` : ''}`;
-    wrapper.innerHTML = `
-        <span class="text-[9.5px] text-gray-500 dark:text-gray-400 font-bold flex items-center gap-1">
-            <i class="fa-solid fa-eye text-cyan-600 dark:text-cyan-400 text-[9px]"></i> Seen by ${escapeHtml(seenLabel)}${finalSeenTime ? ` • ${finalSeenTime}` : ''}
-        </span>
-        <div class="flex items-center -space-x-1">
-            ${customerSawIt ? `<img src="${custAvatar}" alt="${escapeHtml(custName)}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff'" class="w-3.5 h-3.5 rounded-full border border-white dark:border-gray-800 shadow-xs object-cover pointer-events-none ring-1 ring-cyan-500/40">` : ''}
-            ${otherRidersSeen.map(r => `<div class="w-3.5 h-3.5 rounded-full bg-amber-500 text-white font-bold text-[7px] flex items-center justify-center border border-white dark:border-gray-800 shadow-xs ring-1 ring-amber-500/40" title="Seen by ${escapeHtml(r.name)}">${escapeHtml(r.name.charAt(0))}</div>`).join('')}
-        </div>
-    `;
+    // Render Rider Seen Badges under their exact last seen message bubble
+    riderTargetMsgMap.forEach((ridersForMsg, msgId) => {
+        const targetBubble = document.getElementById(`msg-bubble-${msgId}`);
+        if (!targetBubble) return;
 
-    targetBubble.appendChild(wrapper);
+        const seenNames = ridersForMsg.map(r => r.name);
+        const latestRiderTs = Math.max(...ridersForMsg.map(r => r.seenAt));
+        const finalRiderSeenTime = latestRiderTs ? new Date(latestRiderTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+        const seenLabel = seenNames.length <= 2 
+            ? seenNames.join(' & ') 
+            : `${seenNames[0]} & ${seenNames.length - 1} others`;
+
+        const targetMsg = sourceMap.get(msgId);
+        const isRiderMsg = targetMsg ? Boolean(targetMsg.isRider || targetMsg.senderType === 'rider') : false;
+
+        const riderWrapper = document.createElement('div');
+        riderWrapper.className = `chat-seen-avatar-wrapper rider-seen-badge flex items-center ${isRiderMsg ? 'justify-end mr-2.5' : 'justify-start ml-2.5'} gap-1.5 mt-0.5 select-none transition-all duration-200`;
+        riderWrapper.title = `Seen by ${seenNames.join(', ')}${finalRiderSeenTime ? ` at ${finalRiderSeenTime}` : ''}`;
+        riderWrapper.innerHTML = `
+            <div class="flex items-center -space-x-1">
+                ${ridersForMsg.map(r => `<div class="w-3.5 h-3.5 rounded-full bg-amber-500 text-white font-bold text-[7px] flex items-center justify-center border border-white dark:border-gray-800 shadow-xs ring-1 ring-amber-500/40" title="Seen by ${escapeHtml(r.name)}">${escapeHtml(r.name.charAt(0).toUpperCase())}</div>`).join('')}
+            </div>
+            <span class="text-[9.5px] text-amber-700 dark:text-amber-400 font-bold flex items-center gap-1">
+                <i class="fa-solid fa-eye text-amber-600 dark:text-amber-400 text-[9px]"></i> Seen by ${escapeHtml(seenLabel)}${finalRiderSeenTime ? ` • ${finalRiderSeenTime}` : ''}
+            </span>
+        `;
+        targetBubble.appendChild(riderWrapper);
+    });
 }
 
 export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, isInitialLoad = false, oldScrollHeight = 0, activeCustData = null) {

@@ -146,7 +146,7 @@ export function renderSpecialPromoDatesList() {
 
     const entries = Object.entries(specialDateDiscounts || {});
     if (entries.length === 0) {
-        container.innerHTML = `<div class="text-gray-500 italic text-[10px] text-center py-2">Walang active na specific promo dates.</div>`;
+        container.innerHTML = `<div class="text-gray-500 italic text-[10px] text-center py-2">No active specific promo dates.</div>`;
         return;
     }
 
@@ -171,8 +171,8 @@ export function addSpecialPromoDate() {
     const dateVal = dateInput ? dateInput.value.trim() : "";
     const discVal = discountInput ? parseFloat(discountInput.value) : 0;
 
-    if (!dateVal) return showToast("⚠️ Pumili ng date para sa promo!");
-    if (isNaN(discVal) || discVal <= 0 || discVal > 100) return showToast("⚠️ Maglagay ng tamang discount percentage (1 - 100%)!");
+    if (!dateVal) return showToast("⚠️ Please select a date for the promo!");
+    if (isNaN(discVal) || discVal <= 0 || discVal > 100) return showToast("⚠️ Please enter a valid discount percentage (1 - 100%)!");
 
     specialDateDiscounts[dateVal] = discVal;
 
@@ -180,14 +180,14 @@ export function addSpecialPromoDate() {
     if (discountInput) discountInput.value = "5";
 
     renderSpecialPromoDatesList();
-    showToast(`🎉 Naidagdag ang promo discount sa ${dateVal} (-${discVal}%)!`);
+    showToast(`🎉 Added promo discount on ${dateVal} (-${discVal}%)!`);
 }
 
 export function removeSpecialPromoDate(dateKey) {
     if (specialDateDiscounts && specialDateDiscounts[dateKey] !== undefined) {
         delete specialDateDiscounts[dateKey];
         renderSpecialPromoDatesList();
-        showToast(`🗑️ Tinanggal ang promo sa ${dateKey}.`);
+        showToast(`🗑️ Removed promo on ${dateKey}.`);
     }
 }
 
@@ -247,7 +247,7 @@ export async function saveAdminCommissionSettings() {
         saveCommissionSettingsCache();
 
         closeAdminCommissionSettingsModal();
-        showToast(`✅ Na-save ang Commission Settings (${newDefaultRate}% default)!`);
+        showToast(`✅ Commission Settings saved (${newDefaultRate}% default)!`);
         showSideNotification("COMMISSION UPDATED", `Daily commission overrides and promo settings saved!`, "fa-percent", "text-amber-400", "border-amber-500");
         refreshCommissionView();
     } catch(e) {

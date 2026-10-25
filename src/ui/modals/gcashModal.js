@@ -407,7 +407,7 @@ export async function handleGcashQrFileSelected(event) {
     const file = event.target?.files?.[0];
     if (!file) return;
 
-    showToast("⏳ Kinukuha at sinusuri ang GCash QR Code...");
+    showToast("⏳ Scanning and analyzing GCash QR Code...");
 
     try {
         const img = await fileToImage(file);
@@ -445,13 +445,13 @@ export async function handleGcashQrFileSelected(event) {
         updateGcashQrModalPreview(stagedGcashQrPreviewUrl, !!stagedGcashQrPayload && previewUrl !== cleanCrop);
         
         if (stagedGcashQrPayload) {
-            showToast("✅ Matagumpay na na-extract ang InstaPay QR Data!");
+            showToast("✅ Successfully extracted InstaPay QR data!");
         } else {
-            showToast("✅ Na-crop ang QR matrix! Handa na para sa resibo.");
+            showToast("✅ QR matrix cropped! Ready for receipt.");
         }
     } catch (err) {
         console.error("QR processing error:", err);
-        showToast("❌ Hindi ma-process ang QR Code photo.");
+        showToast("❌ Failed to process QR Code photo.");
     } finally {
         event.target.value = '';
     }
@@ -513,7 +513,7 @@ export function saveGCashDetails() {
     const gNo = noInput ? noInput.value.trim() : "";
 
     if (!gName || !gNo) {
-        showToast("⚠️ Paki-kumpleto ang GCash Name at Number!");
+        showToast("⚠️ Please enter both GCash Name and Number!");
         return;
     }
 
@@ -521,7 +521,7 @@ export function saveGCashDetails() {
 
     openSlideDeleteModal(
         "Confirm GCash Details?",
-        `I-drag pakanan para kumpirmahin ang pag-update ng iyong GCash details:\n👤 Name: ${gName}\n📱 Number: ${gNo}${hasQrAttached ? '\n📷 QR Code Active & Attached' : ''}`,
+        `Confirm updating your GCash details:\n👤 Name: ${gName}\n📱 Number: ${gNo}${hasQrAttached ? '\n📷 QR Code Active & Attached' : ''}`,
         () => {
             executeSaveGCashDetails(gName, gNo, stagedGcashQrPayload, stagedGcashQrImg);
         }
@@ -595,7 +595,7 @@ export function executeSaveGCashDetails(gName, gNo, qrPayload = "", qrImg = "") 
     } catch(e) {}
 
     closeGCashModal();
-    showToast("✅ Na-save na ang iyong GCash Details & QR Code!");
+    showToast("✅ GCash Details & QR Code saved successfully!");
 }
 
 if (typeof window !== 'undefined') {

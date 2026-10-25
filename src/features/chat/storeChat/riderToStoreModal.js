@@ -24,7 +24,7 @@ export function copyMerchantPortalLink() {
     if (!storeId) return showToast("⚠️ Store ID not found.");
 
     const portalUrl = getMerchantPortalShareUrl(storeId, orderId, custId);
-    const message = `Magandang araw po ${storeName}! 👋\n\nIto po ang inyong Lokalex Merchant Portal para sa Order #${orderId}.\nPindutin ang link na ito para makausap ang rider at customer in real-time:\n\n${portalUrl}\n\n⚠️ PAALALA:\nKung binuksan sa Messenger, paki-pindot ang 3 dots (...) sa itaas at piliin ang "Open in Chrome". Maraming salamat po! 🛵🏬`;
+    const message = `Good day, ${storeName}! 👋\n\nHere is your Lokalex Merchant Portal for Order #${orderId}.\nClick this link to chat with the rider and customer in real-time:\n\n${portalUrl}\n\n⚠️ REMINDER:\nIf opened in Messenger, please tap the 3 dots (...) at the top and select "Open in Chrome". Thank you very much! 🛵🏬`;
 
     copyText(message);
     showToast(`🔗 Merchant link & message copied for ${storeName}!`);
@@ -262,14 +262,14 @@ export function openRiderToStoreChatModal(orderId, storeId, storeName) {
 
                 <!-- PRESET QUICK MESSAGES TOOLBAR -->
                 <div class="bg-gray-50 dark:bg-black/30 border-b border-gray-200 dark:border-gray-800 p-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
-                    <button onclick="window.sendRiderToStoreQuickPreset('🛵 Papunta na po ako sa store para kunin ang order.')" class="bg-white dark:bg-cardBg hover:bg-blue-50 dark:hover:bg-blue-600/20 border border-gray-200 dark:border-gray-700 text-blue-600 dark:text-blue-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
-                        🛵 Papunta na sa store
+                    <button onclick="window.sendRiderToStoreQuickPreset('🛵 On my way to the store to pick up the order.')" class="bg-white dark:bg-cardBg hover:bg-blue-50 dark:hover:bg-blue-600/20 border border-gray-200 dark:border-gray-700 text-blue-600 dark:text-blue-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
+                        🛵 On the way to store
                     </button>
-                    <button onclick="window.sendRiderToStoreQuickPreset('📍 Nandito na po ako sa labas ng store.')" class="bg-white dark:bg-cardBg hover:bg-emerald-50 dark:hover:bg-emerald-600/20 border border-gray-200 dark:border-gray-700 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
-                        📍 Nandito na sa labas
+                    <button onclick="window.sendRiderToStoreQuickPreset('📍 I\'m outside the store now.')" class="bg-white dark:bg-cardBg hover:bg-emerald-50 dark:hover:bg-emerald-600/20 border border-gray-200 dark:border-gray-700 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
+                        📍 Outside the store
                     </button>
-                    <button onclick="window.sendRiderToStoreQuickPreset('📦 Nakuha na po ang order, salamat!')" class="bg-white dark:bg-cardBg hover:bg-purple-50 dark:hover:bg-purple-600/20 border border-gray-200 dark:border-gray-700 text-purple-600 dark:text-purple-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
-                        📦 Nakuha na ang order
+                    <button onclick="window.sendRiderToStoreQuickPreset('📦 Order picked up, thank you!')" class="bg-white dark:bg-cardBg hover:bg-purple-50 dark:hover:bg-purple-600/20 border border-gray-200 dark:border-gray-700 text-purple-600 dark:text-purple-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
+                        📦 Order picked up
                     </button>
                 </div>
 

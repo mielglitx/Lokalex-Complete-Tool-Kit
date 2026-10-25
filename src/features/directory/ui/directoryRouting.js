@@ -128,8 +128,8 @@ export function handleOriginHubChange(selectedHub) {
     populateDestinationDropdown();
     renderDirectoryList();
 
-    const hubLabel = selectedHub === "ALL" ? "Lahat ng Starting Hubs" : `${selectedHub} Hub`;
-    showToast(`📍 Na-filter ang mga rates mula sa: ${hubLabel}`);
+    const hubLabel = selectedHub === "ALL" ? "All Starting Hubs" : `${selectedHub} Hub`;
+    showToast(`📍 Filtered rates from: ${hubLabel}`);
 }
 
 export function handleDestinationChange(selectedMun) {
@@ -140,7 +140,7 @@ export function handleDestinationChange(selectedMun) {
 
     renderDirectoryList();
 
-    const destLabel = selectedMun === "ALL" ? "Lahat ng Destinations" : `${selectedMun}`;
+    const destLabel = selectedMun === "ALL" ? "All Destinations" : `${selectedMun}`;
     showToast(`🎯 Destination: ${destLabel}`);
 }
 

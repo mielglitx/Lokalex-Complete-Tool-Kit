@@ -590,7 +590,7 @@ export async function renderReceiptCanvas() {
     ctx.fillStyle = "#111827";
     ctx.textAlign = "center";
     ctx.font = "600 11.5px 'SF Mono', Consolas, 'Courier New', monospace";
-    ctx.fillText("Salamat sa pagtitiwala sa Lokalex!", width / 2, y);
+    ctx.fillText("Thank you for trusting Lokalex!", width / 2, y);
     y += 16;
 
     ctx.font = "500 10.5px 'SF Mono', Consolas, 'Courier New', monospace";
@@ -626,7 +626,7 @@ export async function downloadReceiptImage() {
     const shortRef = formatShortRef(rawTxId);
     const fileName = `Lokalex_Receipt_${shortRef}.jpg`;
 
-    showToast("⏳ Sine-save ang resibo...");
+    showToast("⏳ Saving receipt...");
     await saveImageToDevice(rawData, fileName);
 }
 

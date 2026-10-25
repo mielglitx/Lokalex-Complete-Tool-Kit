@@ -85,7 +85,7 @@ export async function sendProfilePhoneChangeOTP() {
 
     const check = validatePhilippineMobile(phoneInput?.value || '');
     if (!check.isValid) {
-        return showToast("⚠️ Maglagay ng wastong 10-digit mobile number na nagsisimula sa 9!");
+        return showToast("⚠️ Please enter a valid 10-digit mobile number starting with 9!");
     }
 
     if (sendOtpBtn) {
@@ -97,7 +97,7 @@ export async function sendProfilePhoneChangeOTP() {
         const verifier = initRecaptcha('prof-recaptcha-container', () => {});
         profileState.phoneConfirmationResult = await firebaseAuth.signInWithPhoneNumber(check.formatted, verifier);
 
-        showToast(`📲 Naipadala ang OTP code sa ${check.formatted}!`);
+        showToast(`📲 OTP code sent to ${check.formatted}!`);
         if (otpDrawer) otpDrawer.classList.remove('hidden');
 
         const otpInput = document.getElementById('prof-otp-input');
@@ -106,7 +106,7 @@ export async function sendProfilePhoneChangeOTP() {
             otpInput.focus();
         }
     } catch (err) {
-        showToast(`❌ OTP Error: ${err.message || 'Nabigong ipadala ang code'}`);
+        showToast(`❌ OTP Error: ${err.message || 'Failed to send OTP code'}`);
     } finally {
         if (sendOtpBtn) {
             sendOtpBtn.disabled = false;
@@ -126,11 +126,11 @@ export async function verifyProfilePhoneChangeOTP() {
 
     const code = (otpInput?.value || '').trim();
     if (code.length !== 6) {
-        return showToast("⚠️ I-type ang kumpletong 6-digit verification code!");
+        return showToast("⚠️ Please enter the complete 6-digit verification code!");
     }
 
     if (!profileState.phoneConfirmationResult) {
-        return showToast("⚠️ Mangyaring mag-request muna ng OTP bago mag-verify.");
+        return showToast("⚠️ Please request an OTP first before verifying.");
     }
 
     if (verifyBtn) {
@@ -151,7 +151,7 @@ export async function verifyProfilePhoneChangeOTP() {
         if (otpDrawer) otpDrawer.classList.add('hidden');
         if (sendOtpBtn) sendOtpBtn.classList.add('hidden');
     } catch (err) {
-        showToast("❌ Maling OTP code o nag-expire na. Pakisubukang muli.");
+        showToast("❌ Incorrect or expired OTP code. Please try again.");
     } finally {
         if (verifyBtn) {
             verifyBtn.disabled = false;

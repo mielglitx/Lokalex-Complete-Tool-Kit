@@ -334,7 +334,7 @@ export async function adminForceStatus(id, name, actionValue) {
         if (!hasAdminPower && !hasTlVoidPower) {
             return showToast("⚠️ Unauthorized: You do not have permission to Void Active Orders.");
         }
-        openSlideDeleteModal(`Void Order for ${name}?`, `Sigurado ka bang nais i-void ang active order ni ${name}? Malilipat sya sa #1 SPOT ng Available queue.`, async () => {
+        openSlideDeleteModal(`Void Order for ${name}?`, `Are you sure you want to void the active order for ${name}? They will be moved to the #1 spot in the Available queue.`, async () => {
             const rawCusts = targetRecord?.customerName ? targetRecord.customerName.split(/\s*,\s*/).map(c => c.trim()).filter(Boolean) : [];
             if (rawCusts.length > 0) {
                 for (const c of rawCusts) {
@@ -417,7 +417,7 @@ export async function adminVoidSpecificCustomer(targetId, targetName, custNameTo
 
     if (!custNameToVoid) return showToast("⚠️ Missing customer name to void.");
 
-    openSlideDeleteModal(`Void Customer: ${custNameToVoid}?`, `Sigurado ka bang nais i-void si ${custNameToVoid} para kay ${targetName || 'Rider'}?`, async () => {
+    openSlideDeleteModal(`Void Customer: ${custNameToVoid}?`, `Are you sure you want to void ${custNameToVoid} for ${targetName || 'Rider'}?`, async () => {
         await voidSingleCateringCustomer(targetId, targetName, custNameToVoid);
     });
 }
@@ -481,12 +481,12 @@ export async function submitEditCateringCustomerName() {
     const newName = (document.getElementById('edit-cater-new-cust-name')?.value || "").trim();
 
     if (!newName) {
-        return showToast("⚠️ Paki-lagay ang bagong pangalan ng customer.");
+        return showToast("⚠️ Please enter the new customer name.");
     }
 
     if (oldName.toLowerCase() === newName.toLowerCase()) {
         closeEditCateringCustomerModal();
-        return showToast("ℹ️ Walang pagbabago sa pangalan.");
+        return showToast("ℹ️ No change in customer name.");
     }
 
     await executeEditCateringCustomerName(riderId, riderName, oldName, newName);
@@ -505,7 +505,7 @@ export async function executeEditCateringCustomerName(riderId, riderName, oldNam
 
     if (!targetRecord || (targetRecord.status || '').toLowerCase() !== 'catering') {
         closeEditCateringCustomerModal();
-        return showToast("⚠️ Hindi na aktibong nag-ke-cater ang rider na ito.");
+        return showToast("⚠️ This rider is no longer actively catering.");
     }
 
     let currentCusts = (targetRecord.customerName || "").split(/\s*,\s*/).map(c => c.trim()).filter(Boolean);
@@ -726,7 +726,7 @@ export async function executeEditCateringCustomerName(riderId, riderName, oldNam
     }
 
     closeEditCateringCustomerModal();
-    showToast(`✅ Na-update ang customer name ni ${resolvedTargetName} sa [${newName}]!`);
+    showToast(`✅ Updated customer name for ${resolvedTargetName} to [${newName}]!`);
     showSideNotification("CUSTOMER RENAMED", `${oldName} ➔ ${newName} (${resolvedTargetName})`, "fa-pen-to-square", "text-amber-400", "border-amber-500");
 }
 
@@ -735,7 +735,7 @@ export function promptVoidCustomer(riderName, customerName, completedDate = "", 
 
     openSlideDeleteModal(
         `Void Catered Record?`,
-        `Sigurado ka bang nais mong burahin ang record ni [${customerName}] na inihatid ni ${riderName}?`,
+        `Are you sure you want to delete the record for [${customerName}] delivered by ${riderName}?`,
         async () => {
             await executeVoidCateredCustomer(riderName, customerName, completedDate, startTime, transactionId);
         }
@@ -882,7 +882,7 @@ export async function forceAllEndShift() {
         return showToast("⚠️ Unauthorized: You do not have permission to Force End Shift for all riders.");
     }
 
-    openSlideDeleteModal("Sigurado ka bang nais mong i-force end shift ang lahat ng riders?", async () => {
+    openSlideDeleteModal("Are you sure you want to force end shift for all riders?", async () => {
         const rosterMembers = globalState.rosterMembers || [];
         const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const nowTimestamp = Date.now();

@@ -41,7 +41,7 @@ export function listenToCustomerRiderChat() {
     custChatState.custChatListener.on('value', (snapshot) => {
         const data = snapshot.val();
         if (!data || Object.keys(data).length === 0) {
-            container.innerHTML = `<div class="text-center text-gray-400 dark:text-gray-500 italic py-12 text-xs">Pumili o mag-type ng mensahe para sa rider o merchant...</div>`;
+            container.innerHTML = `<div class="text-center text-gray-400 dark:text-gray-500 italic py-12 text-xs">Select or type a message for the rider or merchant...</div>`;
             return;
         }
 

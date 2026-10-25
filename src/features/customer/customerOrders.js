@@ -210,7 +210,7 @@ export function updateCustomerCartItemQty(storeId, itemIdx, delta) {
 export function promptDeleteCartItem(storeId, itemIdx, itemName = "Item") {
     openSlideDeleteModal(
         `Remove ${itemName}?`,
-        `I-type ang "confirm" upang alisin ang [${itemName}] sa iyong Cart.`,
+        `Type "confirm" to remove [${itemName}] from your Cart.`,
         () => {
             removeCustomerCartItem(storeId, itemIdx);
         }
@@ -254,7 +254,7 @@ export async function sendMultiStoreOrderToRiders() {
                 sendBtn.disabled = false;
                 sendBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> SEND ORDER TO RIDERS`;
             }
-            return showToast(`⚠️ Hindi maipadala: Kasalukuyang sarado ang [${store.storeName || store.name || 'Store'}]. Paki-check ang schedule.`);
+            return showToast(`⚠️ Cannot send: [${store.storeName || store.name || 'Store'}] is currently closed. Please check the schedule.`);
         }
     }
 

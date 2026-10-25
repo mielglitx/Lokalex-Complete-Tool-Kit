@@ -6,7 +6,7 @@ import { toggleBodyScroll } from './chatUtils.js';
 import { forwardRiderReplyToMessenger } from './riderChat.js';
 import { isAdmin, isTL, canManageRoster, hasTlPermission } from '../roster/rosterUtils.js';
 
-export const DEFAULT_FULL_BOOKING_MESSAGE = "Paumanhin po, Full Booking na po kami sa ngayon. Mag-a-update po kami kapag available na ulit ang aming delivery service. Maraming salamat po sa pag-unawa! 🛵🙏";
+export const DEFAULT_FULL_BOOKING_MESSAGE = "We are currently fully booked. We will post an update once our delivery service becomes available again. Thank you very much for your understanding! 🛵🙏";
 
 export const fullBookingState = {
     enabled: false,

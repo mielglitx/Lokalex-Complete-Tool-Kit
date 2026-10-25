@@ -28,7 +28,7 @@ export async function processMerchantLogin() {
     const passInput = document.getElementById('merch-login-pass')?.value;
 
     if (!userInput || !passInput) {
-        return showToast("⚠️ I-enter ang iyong Store Username at Password!");
+        return showToast("⚠️ Please enter your Store Username and Password!");
     }
 
     const btn = document.getElementById('merch-login-submit-btn');
@@ -72,15 +72,15 @@ export async function processMerchantLogin() {
         }
 
         if (!targetAccount) {
-            throw new Error("🚫 Hindi nakarehistro ang Store Username na ito.");
+            throw new Error("🚫 This Store Username is not registered.");
         }
 
         if (targetAccount.password !== passInput) {
-            throw new Error("❌ Mali ang Password. Subukan muli.");
+            throw new Error("❌ Incorrect Password. Please try again.");
         }
 
         if (targetAccount.status && targetAccount.status !== 'active') {
-            throw new Error("🚫 Naka-deactivate ang store account na ito. Kontakin ang Admin.");
+            throw new Error("🚫 This store account is deactivated. Please contact the Admin.");
         }
 
         localStorage.setItem('lokalex_merchant_account_id', targetAccount.accountId);
@@ -93,7 +93,7 @@ export async function processMerchantLogin() {
         appState.merchantStoreName = targetAccount.storeName;
         appState.merchantUsername = targetAccount.username;
 
-        showToast(`🎉 Maligayang pagdating, ${targetAccount.storeName}!`);
+        showToast(`🎉 Welcome, ${targetAccount.storeName}!`);
 
         if (window.switchView) {
             window.switchView('view-store-hub');

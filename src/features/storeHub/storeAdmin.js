@@ -255,7 +255,7 @@ export function promptDeleteStoreAccount(accountId, storeId, storeName) {
 
     openSlideDeleteModal(
         `Delete Store Account?`,
-        `Sigurado ka bang nais burahin ang merchant account ni [${storeName}]?`,
+        `Are you sure you want to delete the merchant account for [${storeName}]?`,
         () => {
             executeDeleteStoreAccount(accountId, storeId, storeName);
         }

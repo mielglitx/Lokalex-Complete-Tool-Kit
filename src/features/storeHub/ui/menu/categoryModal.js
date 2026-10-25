@@ -102,7 +102,7 @@ export async function submitAddCategory() {
     const isSingleChoice = isAddon && !!singleCheckbox?.checked;
 
     if (!catName) {
-        return showToast("⚠️ I-enter ang pangalan ng Kategorya!");
+        return showToast("⚠️ Please enter the Category name!");
     }
 
     if (!storeId) {
@@ -135,7 +135,7 @@ export function promptDeleteCategory(catId, catName) {
     const storeId = cleanFirebasePathKey(rawStoreId);
     openSlideDeleteModal(
         `Delete Category?`,
-        `Sigurado ka bang nais burahin ang kategoryang [${catName}]? Ang mga paninda rito ay ililipat sa 'General'.`,
+        `Are you sure you want to delete the category [${catName}]? Items here will be moved to 'General'.`,
         async () => {
             await deleteStoreCategory(storeId, catId, catName);
         }

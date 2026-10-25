@@ -15,12 +15,12 @@ export function handleCartActionBtn() {
 
     const isLocked = globalState.cartLocked && globalState.cartLocked[activeCartSlot - 1];
     if (isLocked) {
-        return showToast("⚠️ I-unlock muna ang cart sa overlay screen upang baguhin ang resibo.");
+        return showToast("⚠️ Please unlock the cart from the overlay screen first to modify the receipt.");
     }
 
     openSlideDeleteModal(
-        `Linisin ang Cart ${activeCartSlot}?`,
-        `Sigurado ka bang nais mong burahin ang lahat ng items sa Cart ${activeCartSlot}?`,
+        `Clear Cart ${activeCartSlot}?`,
+        `Are you sure you want to clear all items in Cart ${activeCartSlot}?`,
         () => {
             multiCarts[activeCartSlot].items = [];
             multiCarts[activeCartSlot].selectedIds.clear();
@@ -105,8 +105,8 @@ export function deleteSelectedCartItems() {
     const count = cartObj.selectedIds.size;
     
     openSlideDeleteModal(
-        `Burahin ang ${count} napiling item(s)?`,
-        `Sigurado ka bang nais mong burahin ang ${count} na napiling item sa Cart ${activeCartSlot}?`,
+        `Delete ${count} selected item(s)?`,
+        `Are you sure you want to delete ${count} selected item(s) in Cart ${activeCartSlot}?`,
         () => {
             cartObj.items = cartObj.items.filter((_, idx) => !cartObj.selectedIds.has(idx));
             cartObj.selectedIds.clear();
@@ -125,8 +125,8 @@ export function deleteSingleCartItem(index) {
     if (!item) return;
 
     openSlideDeleteModal(
-        `Burahin ang item?`,
-        `Sigurado ka bang nais mong burahin ang item na "${item.name}"?`,
+        `Delete item?`,
+        `Are you sure you want to delete the item "${item.name}"?`,
         () => {
             currentCart.splice(index, 1);
             if (multiCarts[activeCartSlot].selectedIds) {
@@ -281,28 +281,28 @@ export function validateAndProceedToWizard() {
 
     const isLocked = globalState.cartLocked && globalState.cartLocked[activeCartSlot - 1];
     if (isLocked) {
-        return showToast("⚠️ I-unlock muna ang cart sa overlay screen upang baguhin ang resibo.");
+        return showToast("⚠️ Please unlock the cart from the overlay screen first to modify the receipt.");
     }
 
     const activeItems = currentCart.filter(i => !i.isUnavailable);
 
     if (activeItems.length === 0) {
-        return showToast("⚠️ Lahat ng item sa cart ay minarkahang Not Available!");
+        return showToast("⚠️ All items in the cart are marked as Not Available!");
     }
 
     const unboughtItems = activeItems.filter(i => !i.isBought);
     if (unboughtItems.length > 0) {
-        return showToast(`⚠️ Paki-mark muna bilang On Hand ang ${unboughtItems.length} active item(s)!`);
+        return showToast(`⚠️ Please mark ${unboughtItems.length} active item(s) as On Hand first!`);
     }
 
     const uncategorizedItems = activeItems.filter(i => !i.isPaid && (!i.category || (i.category !== 'store' && i.category !== 'market')));
     if (uncategorizedItems.length > 0) {
-        return showToast(`⚠️ Paki-pili kung Store o Market ang ${uncategorizedItems.length} item(s)!`);
+        return showToast(`⚠️ Please select Store or Market for ${uncategorizedItems.length} item(s)!`);
     }
 
     const unpricedUnpaidItems = activeItems.filter(i => (parseFloat(i.price) || 0) <= 0 && !i.isPaid);
     if (unpricedUnpaidItems.length > 0) {
-        return showToast(`⚠️ Paki-lagyan ng presyo o i-check ang Paid sa ${unpricedUnpaidItems.length} item na ₱0.00!`);
+        return showToast(`⚠️ Please set a price or mark as Paid for ${unpricedUnpaidItems.length} item(s) with ₱0.00!`);
     }
 
     const paidItems = activeItems.filter(i => i.isPaid);

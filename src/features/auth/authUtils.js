@@ -93,7 +93,7 @@ export function sanitize10DigitPhone(inputEl) {
 
 export function validatePhilippineMobile(phone) {
     if (!phone) {
-        return { isValid: false, message: "Paki-lagay ang iyong 10-digit Mobile Number!" };
+        return { isValid: false, message: "Please enter your 10-digit Mobile Number!" };
     }
 
     let clean = phone.replace(/[^0-9]/g, '').trim();
@@ -119,16 +119,16 @@ export function validatePhilippineMobile(phone) {
 
     // Informative validation feedback
     if (!clean.startsWith('9')) {
-        return { isValid: false, message: "Dapat magsimula sa 9 ang 10-digit mobile number (hal. 9123456789)." };
+        return { isValid: false, message: "The 10-digit mobile number must start with 9 (e.g. 9123456789)." };
     }
     if (clean.length < 10) {
-        return { isValid: false, message: `Kulang ang numero (${clean.length}/10 digits). Paki-kumpleto ang 10 digits.` };
+        return { isValid: false, message: `Incomplete number (${clean.length}/10 digits). Please complete all 10 digits.` };
     }
     if (clean.length > 10) {
-        return { isValid: false, message: `Sobra ang numero (${clean.length}/10 digits). Dapat 10 digits lamang.` };
+        return { isValid: false, message: `Too many digits (${clean.length}/10 digits). Mobile number must be 10 digits only.` };
     }
 
-    return { isValid: false, message: "Maling mobile number format. Dapat 10 digits na nagsisimula sa 9." };
+    return { isValid: false, message: "Invalid mobile number format. Must be 10 digits starting with 9." };
 }
 
 export function formatPhoneNumber(phone) {

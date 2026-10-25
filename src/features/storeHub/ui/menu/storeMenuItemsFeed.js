@@ -197,7 +197,7 @@ export function promptDeleteMenuItem(itemId, itemName) {
     const storeId = cleanFirebasePathKey(rawStoreId);
     openSlideDeleteModal(
         `Delete Menu Item?`,
-        `Sigurado ka bang nais burahin ang panindang [${itemName}]?`,
+        `Are you sure you want to delete the item [${itemName}]?`,
         () => {
             deleteMenuItem(storeId, itemId, itemName);
         }

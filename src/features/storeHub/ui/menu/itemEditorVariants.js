@@ -95,7 +95,7 @@ export function renderAddonGroupsSelection(activeAddonGroups = [], activeItemAdd
 
         let itemsHtml = '';
         if (categoryItems.length === 0) {
-            itemsHtml = `<div class="text-[10px] text-gray-400 italic py-1 px-1">Walang items sa '${escapeHtml(catName)}' category. Magdagdag ng item gamit ang category na ito.</div>`;
+            itemsHtml = `<div class="text-[10px] text-gray-400 italic py-1 px-1">No items in the '${escapeHtml(catName)}' category. Add an item using this category.</div>`;
         } else {
             itemsHtml = categoryItems.map(item => {
                 const aName = item.name || 'Extra';

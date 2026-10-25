@@ -91,10 +91,10 @@ export function handleSkipRiderPasswordSetup() {
         }
     }
 
-    showToast("ℹ️ Na-skip ang password setup.");
+    showToast("ℹ️ Password setup skipped.");
     showSideNotification(
         "MANUAL SETUP GUIDE",
-        "Pindutin ang iyong Profile Picture sa Header anumang oras para mag-set ng password at mobile number.",
+        "Tap your Profile Picture in the Header anytime to set a password and mobile number.",
         "fa-user-gear",
         "text-amber-400",
         "border-amber-500"
@@ -113,7 +113,7 @@ export async function sendRiderSetupOTP() {
     const rawPhone = phoneInput ? phoneInput.value.trim() : '';
 
     if (!rawPhone) {
-        showToast("⚠️ Paki-lagay ang iyong Mobile Number!");
+        showToast("⚠️ Please enter your Mobile Number!");
         if (phoneInput) phoneInput.focus();
         return;
     }
@@ -121,7 +121,7 @@ export async function sendRiderSetupOTP() {
     const formattedPhone = formatPhoneNumber(rawPhone);
 
     if (!/^\+639\d{9}$/.test(formattedPhone)) {
-        showToast("⚠️ Maling mobile number format. Dapat 11 digits (hal. 09123456789).");
+        showToast("⚠️ Invalid mobile number format. Must be 11 digits (e.g. 09123456789).");
         if (phoneInput) phoneInput.focus();
         return;
     }
@@ -160,12 +160,12 @@ export async function sendRiderSetupOTP() {
         }
 
         if (err.code === 'auth/too-many-requests' || (err.message && err.message.includes('blocked all requests'))) {
-            showToast("🚫 Naka-block pansamantala ang device dahil sa sunod-sunod na OTP. Pindutin ang Skip o maghintay bago mag-retry.");
+            showToast("🚫 Device temporarily blocked due to repeated OTP requests. Tap Skip or wait before retrying.");
             showSideNotification("OTP RATE LIMIT", "Device temporarily blocked by Firebase. You can click 'Skip' to continue.", "fa-ban", "text-red-400", "border-red-500");
         } else if (err.code === 'auth/invalid-phone-number') {
-            showToast("⚠️ Maling phone number format. Paki-check (hal. 09123456789).");
+            showToast("⚠️ Invalid phone number format. Please check (e.g. 09123456789).");
         } else if (err.code === 'auth/captcha-check-failed' || err.code === 'auth/invalid-app-credential') {
-            showToast("⚠️ Bigo ang reCAPTCHA check. Paki-pindot muli ang Send OTP.");
+            showToast("⚠️ reCAPTCHA verification failed. Please tap Send OTP again.");
         } else {
             showToast(`❌ ${err.message || "Failed to send SMS OTP"}`);
         }
@@ -182,12 +182,12 @@ export async function verifyRiderSetupOTP() {
     const code = otpCode ? otpCode.value.trim() : '';
 
     if (!code || code.length < 6) {
-        showToast("⚠️ Paki-lagay ang 6-digit OTP code!");
+        showToast("⚠️ Please enter the 6-digit OTP code!");
         return;
     }
 
     if (!riderSetupConfirmationResult) {
-        showToast("⚠️ Session expired. Paki-send muli ang OTP.");
+        showToast("⚠️ Session expired. Please send the OTP again.");
         return;
     }
 
@@ -215,10 +215,10 @@ export async function verifyRiderSetupOTP() {
         if (saveBtn) saveBtn.disabled = false;
         if (p1) p1.focus();
 
-        showToast("✅ Mobile number verified! Paki-lagay ang iyong password.");
+        showToast("✅ Mobile number verified! Please enter your password.");
     } catch(err) {
         console.error("Verify rider OTP error:", err);
-        showToast("❌ Mali ang OTP code. Paki-ulit.");
+        showToast("❌ Incorrect OTP code. Please try again.");
     } finally {
         if (verifyBtn) {
             verifyBtn.disabled = false;
@@ -239,7 +239,7 @@ export async function handleSaveRiderPassword() {
     if (rawPhone) {
         formattedPhone = formatPhoneNumber(rawPhone);
         if (!/^\+639\d{9}$/.test(formattedPhone)) {
-            showToast("⚠️ Maling mobile number format. Dapat 11 digits (hal. 09123456789).");
+            showToast("⚠️ Invalid mobile number format. Must be 11 digits (e.g. 09123456789).");
             if (phoneInput) phoneInput.focus();
             return;
         }
@@ -250,10 +250,10 @@ export async function handleSaveRiderPassword() {
 
     if (!pass1 || pass1.length < 4) {
         if (errBox && errTxt) {
-            errTxt.innerText = "Dapat hindi bababa sa 4 characters ang password.";
+            errTxt.innerText = "Password must be at least 4 characters.";
             errBox.classList.remove('hidden');
         } else {
-            showToast("⚠️ Dapat hindi bababa sa 4 characters ang password.");
+            showToast("⚠️ Password must be at least 4 characters.");
         }
         if (p1) p1.focus();
         return;
@@ -261,10 +261,10 @@ export async function handleSaveRiderPassword() {
 
     if (pass1 !== pass2) {
         if (errBox && errTxt) {
-            errTxt.innerText = "Hindi magkatugma ang dalawang password. Paki-ulit.";
+            errTxt.innerText = "Passwords do not match. Please try again.";
             errBox.classList.remove('hidden');
         } else {
-            showToast("❌ Hindi magkatugma ang dalawang password.");
+            showToast("❌ Passwords do not match.");
         }
         if (p2) p2.focus();
         return;
@@ -309,7 +309,7 @@ export async function handleSaveRiderPassword() {
         localStorage.setItem(`lokalex_pass_${myId}`, pass1);
         localStorage.removeItem(`lokalex_skip_pass_${myId}`);
 
-        showToast("✅ Matagumpay na nai-save ang iyong Password!");
+        showToast("✅ Password saved successfully!");
         showSideNotification("SECURITY SETUP COMPLETE", "Password successfully saved", "fa-shield-check", "text-emerald-400", "border-emerald-500");
 
         const cb = riderPasswordSuccessCallback;
@@ -320,7 +320,7 @@ export async function handleSaveRiderPassword() {
         }
     } catch(e) {
         console.error("Save password error:", e);
-        showToast("❌ Bigo sa pag-save ng password. Subukan muli.");
+        showToast("❌ Failed to save password. Please try again.");
     } finally {
         if (saveBtn) {
             saveBtn.disabled = false;

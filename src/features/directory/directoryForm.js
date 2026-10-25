@@ -428,7 +428,7 @@ export async function handleRateNationalityChange(nationality) {
         if (munSelect) munSelect.classList.remove('hidden');
         if (munCustom) munCustom.classList.add('hidden');
         if (brgyInput) brgyInput.placeholder = "Select or type Barangay name";
-        if (brgyHint) brgyHint.innerText = "Pumili sa opisyal na listahan mula sa PSA PSGC API o mag-type ng sariling lugar.";
+        if (brgyHint) brgyHint.innerText = "Select from the official PSA PSGC API list or type a custom location.";
         await loadPsgcRegions();
     } else {
         if (regSelect) regSelect.classList.add('hidden');
@@ -612,7 +612,7 @@ export function promptDeleteDirectoryRecord(name, compositeKey = "") {
 
     openSlideDeleteModal(
         `Delete Directory Record?`,
-        `Sigurado ka bang nais mong burahin ang record na [${name}]?`,
+        `Are you sure you want to delete the record [${name}]?`,
         () => executeDeleteDirectoryRecord(name, compositeKey)
     );
 }

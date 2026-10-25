@@ -135,7 +135,7 @@ function getOrCreateLocationConfirmModal() {
                 </div>
 
                 <div id="loc-confirm-warning" class="hidden text-[11px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-500/30 p-2.5 rounded-xl text-center">
-                    ⚠️ Hindi sapat ang iyong Directory Credits! Mag-rehistro muna ng customer (+5) o store (+10) para magka-credits.
+                    ⚠️ Insufficient Directory Credits! Register a customer (+5) or store (+10) first to earn credits.
                 </div>
             </div>
 
@@ -162,7 +162,7 @@ export function handleViewCustomerLocationClick(btn) {
 
 export function promptViewCustomerLocation(customerName, mapUrl) {
     if (!mapUrl) {
-        showToast("⚠️ Walang naka-save na GPS link para sa customer na ito.");
+        showToast("⚠️ No saved GPS link for this customer.");
         return;
     }
 
@@ -244,7 +244,7 @@ export async function confirmAndOpenCustomerLocation() {
         }
 
         if (currentCredits < 1) {
-            showToast("⚠️ Kulang ang iyong credits para tingnan ang lokasyon.");
+            showToast("⚠️ Insufficient credits to view location.");
             closeCustomerLocationConfirmModal();
             return;
         }
@@ -478,7 +478,7 @@ export function renderDirectoryList() {
         if (isBarangay) {
             const originLabel = globalState.selectedOriginHub || 'Camiling';
             const destLabel = globalState.selectedDestinationMun || 'ALL';
-            noRecordsMsg = `Walang rates na nakarehistro [From: ${originLabel} ➔ To: ${destLabel}]. I-click ang + para magdagdag.`;
+            noRecordsMsg = `No rates registered [From: ${originLabel} ➔ To: ${destLabel}]. Click + to add.`;
         }
         htmlBuilder += `<div class="text-center text-gray-500 italic py-16 text-xs">${escapeHtml(noRecordsMsg)}</div>`;
         listEl.innerHTML = htmlBuilder;

@@ -13,8 +13,11 @@
                         <h3 id="rider-chat-cust-name" class="font-black text-sm text-gray-900 dark:text-white truncate min-w-0 flex-1">Customer Name</h3>
                         <span id="rider-chat-applicant-pill" class="hidden bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700/50 text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0" title="Rider Applicant"><i class="fa-solid fa-user-tie text-purple-600 dark:text-purple-400"></i> APPLICANT</span>
                         <span id="rider-chat-followup-pill" class="hidden bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/50 text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0" title="Customer Follow-Up"><i class="fa-solid fa-bookmark text-amber-600 dark:text-amber-400"></i> FOLLOW UP</span>
-                        <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-6 h-6 rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-transparent hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-xs shadow-xs shrink-0" title="View Customer Info">
+                        <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-6 h-6 rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-transparent hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-xs shadow-xs shrink-0 cursor-pointer" title="View Customer Info">
                             <i class="fa-solid fa-circle-info"></i>
+                        </button>
+                        <button type="button" onclick="window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat()" class="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 hover:bg-orange-500 hover:text-white transition flex items-center gap-1 text-[10px] font-black shadow-2xs shrink-0 cursor-pointer" title="Send Store Menu">
+                            <i class="fa-solid fa-book-open text-[9px]"></i> Menu
                         </button>
                     </div>
                     <p class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono flex items-center gap-1 font-bold truncate">
@@ -91,6 +94,11 @@
                 <i class="fa-solid fa-motorcycle"></i> Cater
             </button>
 
+            <!-- SEND STORE MENU BUTTON -->
+            <button id="rider-chat-send-menu-btn" type="button" onclick="window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat()" class="min-w-[95px] bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white border border-orange-400/30 py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0" title="Send restaurant menu to customer">
+                <i class="fa-solid fa-book-open"></i> Menu
+            </button>
+
             <!-- GO TO CART BUTTON (CATERING RIDER ONLY) -->
             <button id="rider-chat-go-cart-btn" type="button" onclick="window.goToCustomerCartFromChat && window.goToCustomerCartFromChat()" class="hidden flex-1 min-w-[95px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white border border-blue-400/30 py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0" title="Open this customer's Cart">
                 <i class="fa-solid fa-cart-shopping"></i> Go to Cart
@@ -152,13 +160,17 @@
         <!-- FOOTER INPUT BAR -->
         <div class="p-2.5 sm:p-3 bg-white dark:bg-darkBg/95 border-t border-gray-200 dark:border-gray-800 flex flex-col gap-2 shrink-0">
             <!-- ACTION TOOLBAR: QUICK ACCESS BUTTONS -->
-            <div id="rider-chat-action-toolbar" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 shrink-0">
+            <div id="rider-chat-quick-toolbar" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 shrink-0">
                 <button type="button" id="chat-hd-toggle-btn" onclick="window.toggleHdMode && window.toggleHdMode()" class="px-2.5 py-1 bg-inputBg text-gray-700 dark:text-gray-300 rounded-lg border border-gray-300 dark:border-gray-700 hover:text-gray-900 dark:hover:text-white transition active:scale-95 text-[11px] font-black flex items-center justify-center shrink-0 min-w-[34px]" title="Toggle HD Mode">
                     <span id="chat-hd-label" class="text-[10px] font-black tracking-tight text-gray-700 dark:text-gray-300">HD</span>
                 </button>
                 <button type="button" onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="px-2.5 py-1 bg-inputBg hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Saved Quick Replies">
                     <i class="fa-solid fa-bolt text-[11px]"></i>
                     <span class="text-[10px] font-bold">Quick</span>
+                </button>
+                <button type="button" onclick="window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat()" class="px-2.5 py-1 bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-lg border border-orange-500/30 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer font-bold" title="Browse & Send Restaurant Menu">
+                    <i class="fa-solid fa-book-open text-[11px]"></i>
+                    <span class="text-[10px] font-black">Menu</span>
                 </button>
                 <button type="button" onclick="window.promptImageAttachmentSource && window.promptImageAttachmentSource()" class="px-2.5 py-1 bg-inputBg hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Send Image">
                     <i class="fa-solid fa-image text-[11px]"></i>
@@ -175,10 +187,6 @@
                 <button type="button" onclick="window.sendChatLocationPin && window.sendChatLocationPin()" class="px-2.5 py-1 bg-inputBg hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Pick Rider Location Pin on Map">
                     <i class="fa-solid fa-location-dot text-[11px]"></i>
                     <span class="text-[10px] font-bold">Pin</span>
-                </button>
-                <button type="button" onclick="window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat()" class="px-2.5 py-1 bg-inputBg hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Browse & Send Restaurant Menu">
-                    <i class="fa-solid fa-book-open text-[11px]"></i>
-                    <span class="text-[10px] font-bold">Menu</span>
                 </button>
             </div>
 
@@ -446,7 +454,7 @@
             </div>
             <div class="flex flex-col gap-1">
                 <label for="new-quick-reply-input" class="text-xs font-bold text-gray-700 dark:text-gray-300">Full Message Content:</label>
-                <textarea id="new-quick-reply-input" rows="3" placeholder="e.g. Papunta na po ako sa drop-off location 🛵" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-amber-500 resize-none leading-relaxed"></textarea>
+                <textarea id="new-quick-reply-input" rows="3" placeholder="e.g. On my way to the drop-off location 🛵" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-amber-500 resize-none leading-relaxed"></textarea>
                 <p class="text-[10px] text-gray-500 dark:text-gray-400 italic">This message will be sent to the customer.</p>
             </div>
         </div>
@@ -740,18 +748,18 @@
             </div>
             <div class="min-w-0 flex-1">
                 <h4 id="chat-phone-action-number" class="text-sm font-black text-gray-900 dark:text-white truncate font-mono">+639xxxxxxxxx</h4>
-                <p class="text-[10px] text-gray-500 dark:text-gray-400">Pumili ng aksyon para sa number na ito</p>
+                <p class="text-[10px] text-gray-500 dark:text-gray-400">Choose an action for this number</p>
             </div>
         </div>
         <div class="flex flex-col gap-2 pt-1">
             <button type="button" id="chat-phone-call-btn" onclick="window.executeChatPhoneAction && window.executeChatPhoneAction('call')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 text-xs shadow-sm cursor-pointer">
-                <i class="fa-solid fa-phone text-xs"></i> Tumawag (Call)
+                <i class="fa-solid fa-phone text-xs"></i> Call
             </button>
             <button type="button" id="chat-phone-sms-btn" onclick="window.executeChatPhoneAction && window.executeChatPhoneAction('text')" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 text-xs shadow-sm cursor-pointer">
-                <i class="fa-solid fa-comment-sms text-xs"></i> Mag-text (SMS)
+                <i class="fa-solid fa-comment-sms text-xs"></i> Send SMS
             </button>
             <button type="button" id="chat-phone-save-details-btn" onclick="window.executeChatPhoneAction && window.executeChatPhoneAction('save_details')" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 text-xs shadow-sm cursor-pointer">
-                <i class="fa-solid fa-address-card text-xs"></i> I-save sa Customer Details
+                <i class="fa-solid fa-address-card text-xs"></i> Save to Customer Details
             </button>
             <button type="button" onclick="window.closeChatPhoneModal && window.closeChatPhoneModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-2 px-3 rounded-xl transition active:scale-95 text-xs text-center cursor-pointer mt-0.5">
                 Cancel
@@ -773,7 +781,7 @@
                     <h3 class="text-sm font-black text-gray-900 dark:text-white flex items-center gap-1.5 truncate">
                         Send to Many <span class="text-[10px] bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded-full font-bold">Admin Broadcast</span>
                     </h3>
-                    <p class="text-[10.5px] text-gray-500 dark:text-gray-400 truncate">Ipadala ang mensahe sa multiple recipients nang sabay-sabay</p>
+                    <p class="text-[10.5px] text-gray-500 dark:text-gray-400 truncate">Send a message to multiple recipients at once</p>
                 </div>
             </div>
             <button type="button" onclick="window.closeBroadcastModal && window.closeBroadcastModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg w-7 h-7 flex items-center justify-center rounded-lg transition active:scale-95 cursor-pointer" title="Close">
@@ -786,7 +794,7 @@
             <!-- TARGET AUDIENCE SELECTOR TABS -->
             <div class="flex flex-col gap-1.5">
                 <label class="text-[11px] font-black text-gray-700 dark:text-gray-300 flex items-center justify-between">
-                    <span>1. PUMILI NG AUDIENCE (Target Recipients)</span>
+                    <span>1. SELECT AUDIENCE (Target Recipients)</span>
                     <span id="broadcast-target-count-badge" class="text-indigo-600 dark:text-indigo-400 font-bold font-mono text-[10px]">0 Recipient(s)</span>
                 </label>
                 <div class="flex bg-gray-100 dark:bg-black/40 p-1 rounded-xl border border-gray-200 dark:border-gray-800 gap-1 text-center">
@@ -841,7 +849,7 @@
             <!-- MESSAGE COMPOSER -->
             <div class="flex flex-col gap-1.5 pt-1">
                 <div class="flex items-center justify-between">
-                    <label class="text-[11px] font-black text-gray-700 dark:text-gray-300">2. MENSAHE (Broadcast Message)</label>
+                    <label class="text-[11px] font-black text-gray-700 dark:text-gray-300">2. MESSAGE (Broadcast Message)</label>
                     <span id="broadcast-char-counter" class="text-[10px] text-gray-400 font-mono">0 / 1000</span>
                 </div>
 
@@ -862,12 +870,12 @@
                     </button>
                 </div>
 
-                <textarea id="broadcast-message-input" rows="4" maxlength="1000" placeholder="I-type dito ang anunsyo o mensahe na nais i-send sa mga napiling customer..." class="w-full bg-white dark:bg-black/40 border border-gray-300 dark:border-gray-700 focus:border-indigo-500 dark:focus:border-indigo-400 rounded-xl p-2.5 text-xs text-gray-900 dark:text-white outline-none resize-none placeholder-gray-400 transition" oninput="window.updateBroadcastCharCount && window.updateBroadcastCharCount()"></textarea>
+                <textarea id="broadcast-message-input" rows="4" maxlength="1000" placeholder="Type the announcement or message you want to send to selected customers here..." class="w-full bg-white dark:bg-black/40 border border-gray-300 dark:border-gray-700 focus:border-indigo-500 dark:focus:border-indigo-400 rounded-xl p-2.5 text-xs text-gray-900 dark:text-white outline-none resize-none placeholder-gray-400 transition" oninput="window.updateBroadcastCharCount && window.updateBroadcastCharCount()"></textarea>
 
                 <div class="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 pt-0.5">
                     <label class="flex items-center gap-1.5 cursor-pointer select-none">
                         <input type="checkbox" id="broadcast-include-sig-check" checked class="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer">
-                        <span>Isama ang Dispatch signature ("— Lokalex Dispatch")</span>
+                        <span>Include Dispatch signature ("— Lokalex Dispatch")</span>
                     </label>
                     <span class="text-gray-400 flex items-center gap-1">
                         <i class="fa-solid fa-shield-halved text-[9px] text-emerald-500"></i> FB & Web Direct Sync
@@ -939,13 +947,13 @@
 
             <!-- Description Message -->
             <div id="confirm-done-message-box" class="p-3 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-500/20 text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
-                Sigurado ka bang tapos na ang delivery? Ima-mark ito bilang <strong>Done</strong> sa catering roster, ire-record ang service fees, at ililipat ang chat sa Done folder.
+                Are you sure the delivery is complete? This will mark it as <strong>Done</strong> in the catering roster, record the service fees, and move the chat to the Done folder.
             </div>
 
             <!-- Receipt Notice / Warning -->
             <div id="confirm-done-receipt-notice" class="hidden p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/50 text-[11px] text-amber-800 dark:text-amber-300 flex items-center gap-2">
                 <i class="fa-solid fa-receipt text-amber-600 shrink-0"></i>
-                <span id="confirm-done-receipt-text">Siguraduhing may resibo bago i-confirm.</span>
+                <span id="confirm-done-receipt-text">Please ensure there is a receipt before confirming.</span>
             </div>
         </div>
 

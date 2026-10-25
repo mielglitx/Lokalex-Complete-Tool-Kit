@@ -38,7 +38,7 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     // IDEMPOTENCY GUARD: Do not reset queue time or restart cooldown if already Available
     if (status === 'Available' && targetRecord && targetRecord.status === 'Available') {
-        showToast("ℹ️ Nakapila ka na (Already Available in line).");
+        showToast("ℹ️ You are already in queue (Already Available in line).");
         return;
     }
 

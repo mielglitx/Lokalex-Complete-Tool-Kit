@@ -431,7 +431,11 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
         idbSet('chats', cleanCustId, memCached).catch(() => {});
 
         // 2. If this chat is currently open, dynamically render it immediately
-        if (activeRiderChatCustId === cleanCustId) {
+        const currentActiveCustId = (typeof window.getActiveRiderChatCustId === 'function') 
+            ? window.getActiveRiderChatCustId() 
+            : activeRiderChatCustId;
+
+        if (currentActiveCustId === cleanCustId || activeRiderChatCustId === cleanCustId) {
             loadedRiderMsgsMap.set(fullMsg.id, fullMsg);
             const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
             if (container) {
@@ -458,6 +462,40 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
         console.error("[MenuSend] sendDirectMenuPhotoToCustomer failed:", err);
         return false;
     }
+}
+
+function compressDataUrlForBridge(dataUrl, maxDim = 800, quality = 0.65) {
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) {
+        return Promise.resolve(dataUrl);
+    }
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            try {
+                let w = img.width;
+                let h = img.height;
+                if (w > maxDim || h > maxDim) {
+                    if (w > h) {
+                        h = Math.round((h * maxDim) / w);
+                        w = maxDim;
+                    } else {
+                        w = Math.round((w * maxDim) / h);
+                        h = maxDim;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            } catch (_) {
+                resolve(dataUrl);
+            }
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+    });
 }
 
 /**
@@ -648,7 +686,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                                     if (text && typeof text === 'string' && text.trim()) {
                                         await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey, suppressToast });
                                     }
-                                    if (!suppressToast) showToast("✅ Litrato naipadala sa customer sa Messenger!");
+                                    if (!suppressToast) showToast("✅ Photo sent to customer on Messenger!");
                                     return;
                                 } else {
                                     console.warn("Direct Facebook attachment send returned error:", sendData);
@@ -707,7 +745,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                         if (text && typeof text === 'string' && text.trim()) {
                             await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey, suppressToast });
                         }
-                        if (!suppressToast) showToast("✅ Litrato naipadala sa customer sa Messenger!");
+                        if (!suppressToast) showToast("✅ Photo sent to customer on Messenger!");
                         return;
                     }
                 } catch (e) {
@@ -813,6 +851,9 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                 finalFbImageUrl = await uploadImage(finalFbImageUrl, `chats/${custId}/${Date.now()}.jpg`);
             } catch (err) {
                 console.warn("[RiderChat] uploadImage before Messenger send failed:", err);
+            }
+            if (finalFbImageUrl && finalFbImageUrl.startsWith('data:')) {
+                finalFbImageUrl = await compressDataUrlForBridge(finalFbImageUrl, 800, 0.65);
             }
         }
         const safeFbImageUrl = finalFbImageUrl || null;

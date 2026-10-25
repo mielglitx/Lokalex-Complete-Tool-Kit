@@ -46,7 +46,7 @@ export function openSubstitutionModal(orderId, itemIdx, itemName, customerName, 
 
                     <div>
                         <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Notes for Rider & Customer</label>
-                        <textarea id="sub-notes-input" rows="2" placeholder="e.g. Naubusan po ng brown sugar pearls, pwede po bang nata de coco?" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1"></textarea>
+                        <textarea id="sub-notes-input" rows="2" placeholder="e.g. Ran out of brown sugar pearls, would nata de coco be okay?" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1"></textarea>
                     </div>
 
                     <button id="sub-submit-btn" onclick="window.submitItemSubstitution && window.submitItemSubstitution()" class="w-full bg-red-600 hover:bg-red-500 text-white font-black py-3 rounded-xl shadow-md transition active:scale-95 flex items-center justify-center gap-1.5 mt-1">
@@ -82,7 +82,7 @@ export async function submitItemSubstitution() {
     const notes = document.getElementById('sub-notes-input')?.value.trim();
 
     if (!replacement) {
-        return showToast("⚠️ Paki-lagay ang iminumungkahing kapalit o alternatibo!");
+        return showToast("⚠️ Please enter a suggested replacement or alternative!");
     }
 
     const rawStoreId = appState.merchantStoreId || localStorage.getItem('lokalex_merchant_store_id');
@@ -92,7 +92,7 @@ export async function submitItemSubstitution() {
 
     closeSubstitutionModal();
 
-    const alertMessage = `⚠️ [OUT OF STOCK / SUBSTITUTION REQUIRED]\n• Item: ${itemName}\n• Suggested Replacement: ${replacement}${notes ? `\n• Kitchen Note: "${notes}"` : ''}\n\nPaki-kumpirma po kay customer kung pumapayag sa kapalit. Salamat!`;
+    const alertMessage = `⚠️ [OUT OF STOCK / SUBSTITUTION REQUIRED]\n• Item: ${itemName}\n• Suggested Replacement: ${replacement}${notes ? `\n• Kitchen Note: "${notes}"` : ''}\n\nPlease confirm with the customer if they accept the replacement. Thank you!`;
 
     try {
         if (db && orderId && storeId) {

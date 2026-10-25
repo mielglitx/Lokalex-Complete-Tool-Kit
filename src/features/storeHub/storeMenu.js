@@ -95,7 +95,7 @@ export async function deleteStoreCategory(storeId, categoryId, categoryName) {
         if (isTargetAddon) {
             const totalAddonCats = catList.filter(c => c.isAddonCategory || isAddonCategoryName(c.name));
             if (totalAddonCats.length <= 1) {
-                showToast("⚠️ Hindi maaaring burahin: Dapat mayroong kahit isang Add-ons & Extras category na natitira.");
+                showToast("⚠️ Cannot delete: At least one Add-ons & Extras category must remain.");
                 return false;
             }
         }

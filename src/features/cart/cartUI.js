@@ -141,7 +141,7 @@ export function unlockActiveCart() {
 
 export function promptUnlockCart() {
     if (typeof openSlideDeleteModal === 'function') {
-        openSlideDeleteModal(`Unlock Cart ${activeCartSlot}?`, `Sigurado ka bang nais i-unlock ang Cart ${activeCartSlot} para baguhin ang resibo?`, () => {
+        openSlideDeleteModal(`Unlock Cart ${activeCartSlot}?`, `Are you sure you want to unlock Cart ${activeCartSlot} to edit the receipt?`, () => {
             unlockActiveCart();
         });
     } else {
@@ -227,7 +227,7 @@ export function renderCartItems() {
                 </div>
 
                 <button type="button" onclick="window.openSukliCalculatorModal && window.openSukliCalculatorModal(${activeCartSlot})" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 px-4 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-95 ring-2 ring-emerald-400/40">
-                    <i class="fa-solid fa-calculator text-sm"></i> 💵 SUKLI / CHANGE CALCULATOR
+                    <i class="fa-solid fa-calculator text-sm"></i> 💵 CHANGE CALCULATOR
                 </button>
 
                 <div class="w-full flex flex-col items-center gap-1.5 pt-1.5 border-t border-gray-200 dark:border-gray-800">

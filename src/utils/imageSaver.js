@@ -39,7 +39,7 @@ export function blobToDataUrl(blob) {
  */
 export async function saveImageToDevice(imageSrc, filename = 'lokalex_image.png', showNativeToast = true) {
     if (!imageSrc) {
-        if (showNativeToast) showToast("⚠️ Walang litrato na mase-save.");
+        if (showNativeToast) showToast("⚠️ No photo to save.");
         return false;
     }
 
@@ -104,7 +104,7 @@ export async function saveImageToDevice(imageSrc, filename = 'lokalex_image.png'
                         title: 'Save Image',
                         text: filename
                     });
-                    showToast("✅ Litrato naibahagi / nai-save!");
+                    showToast("✅ Photo shared / saved!");
                     return true;
                 }
             } catch (shareErr) {
@@ -122,11 +122,11 @@ export async function saveImageToDevice(imageSrc, filename = 'lokalex_image.png'
         a.click();
         document.body.removeChild(a);
         if (blob) setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
-        if (showNativeToast) showToast("💾 Na-download ang litrato!");
+        if (showNativeToast) showToast("💾 Photo downloaded!");
         return true;
     } catch (err) {
         console.error("[ImageSaver] Error saving image:", err);
-        if (showNativeToast) showToast("⚠️ Hindi mai-save ang litrato. Subukang i-screenshot.");
+        if (showNativeToast) showToast("⚠️ Unable to save photo. Try taking a screenshot.");
         return false;
     }
 }

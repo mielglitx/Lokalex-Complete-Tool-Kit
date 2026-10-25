@@ -683,7 +683,7 @@
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-Dn7t79r6.js"></script>
+  <script type="module" crossorigin src="./assets/index-DvztDy9t.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
@@ -804,7 +804,7 @@
                 <h3 class="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center justify-center gap-1.5">
                     <i class="fa-solid fa-right-to-bracket"></i> Account Login
                 </h3>
-                <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">I-enter ang Rider ID, Mobile No. (09...), o Store Username</p>
+                <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Enter Rider ID, Mobile No. (09...), or Store Username</p>
             </div>
 
             <div class="flex flex-col gap-2.5 text-left mt-1">
@@ -838,10 +838,10 @@
             <!-- Action Links -->
             <div class="flex flex-col items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800 text-[11px] mt-1">
                 <button type="button" onclick="window.toggleCustomerRegisterSection && window.toggleCustomerRegisterSection(true)" class="text-emerald-600 dark:text-emerald-400 hover:underline font-bold flex items-center gap-1.5 cursor-pointer">
-                    <i class="fa-solid fa-user-plus text-xs"></i> Bagong Customer? Mag-Register Dito
+                    <i class="fa-solid fa-user-plus text-xs"></i> New Customer? Register Here
                 </button>
                 <button type="button" onclick="window.triggerForgotPassword && window.triggerForgotPassword()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition text-[10px] cursor-pointer">
-                    Nakalimutan ang Password?
+                    Forgot Password?
                 </button>
             </div>
         </div>
@@ -859,7 +859,7 @@
 
             <!-- STEP 1: Phone Verification via SMS OTP -->
             <div id="reg-step-1" class="flex flex-col gap-3">
-                <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed text-left">I-enter ang iyong 10-digit mobile number para sa OTP verification.</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed text-left">Enter your 10-digit mobile number for OTP verification.</p>
                 <div class="flex items-center bg-inputBg rounded-xl border border-gray-300 dark:border-gray-700 overflow-hidden focus-within:border-emerald-500 transition">
                     <span class="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold px-3 py-3 text-xs font-mono select-none border-r border-gray-300 dark:border-gray-700 flex items-center gap-1 shrink-0">
                         🇵🇭 +63
@@ -883,18 +883,18 @@
 
             <!-- STEP 2: Customer Profile Details & GPS Capture -->
             <div id="reg-step-2" class="hidden flex flex-col gap-2.5 border-t border-gray-200 dark:border-gray-800 pt-3 text-left">
-                <div class="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold uppercase text-center mb-1">Kumpletuhin ang Iyong Detalye</div>
+                <div class="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold uppercase text-center mb-1">Complete Your Details</div>
 
                 <!-- Full Name (Required) -->
                 <div>
-                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Buong Pangalan *</label>
-                    <input type="text" id="reg-fullname" autocomplete="name" placeholder="Buong Pangalan (Full Name)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold mt-1">
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Full Name *</label>
+                    <input type="text" id="reg-fullname" autocomplete="name" placeholder="Full Name" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold mt-1">
                 </div>
 
                 <!-- Delivery Address (Required) -->
                 <div>
-                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Kumpletong Address *</label>
-                    <input type="text" id="reg-address" autocomplete="street-address" placeholder="Kumpletong Address (Delivery Address)" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1">
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Complete Delivery Address *</label>
+                    <input type="text" id="reg-address" autocomplete="street-address" placeholder="Complete Delivery Address" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1">
                 </div>
 
                 <!-- GPS Location Pin (Required) -->
@@ -929,9 +929,9 @@
 
                 <!-- Confirm Password (Required) -->
                 <div>
-                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Ulitin ang Password *</label>
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Confirm Password *</label>
                     <div class="relative mt-1">
-                        <input type="password" id="reg-confirm-password" autocomplete="new-password" placeholder="Ulitin ang Password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold">
+                        <input type="password" id="reg-confirm-password" autocomplete="new-password" placeholder="Confirm Password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold">
                         <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('reg-confirm-password', 'reg-confirm-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-gray-600 dark:hover:text-white transition cursor-pointer">
                             <i id="reg-confirm-eye" class="fa-solid fa-eye text-xs"></i>
                         </button>
@@ -1075,7 +1075,7 @@
 
         <!-- FULL-EXPANDED CHAT STREAM -->
         <div id="cust-rider-chat-messages" class="flex-1 min-h-0 overflow-y-auto p-3 bg-gray-50 dark:bg-black/40 rounded-2xl border border-gray-200 dark:border-gray-800/80 flex flex-col gap-2.5 text-xs">
-            <div class="text-center text-gray-400 dark:text-gray-500 italic py-12">Pumili o mag-type ng mensahe para sa mga riders...</div>
+            <div class="text-center text-gray-400 dark:text-gray-500 italic py-12">Select or type a message for the riders...</div>
         </div>
 
         <!-- ACTIVE QUOTED REPLY PREVIEW BANNER -->
@@ -1102,7 +1102,7 @@
                 <i class="fa-solid fa-location-dot"></i>
             </button>
 
-            <input type="text" id="cust-rider-chat-input" name="cust_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" onkeydown="if(event.key==='Enter') window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" placeholder="Mag-type ng mensahe para sa rider..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-300 dark:border-gray-700 focus:border-blue-500 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500">
+            <input type="text" id="cust-rider-chat-input" name="cust_chat_input_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" onkeydown="if(event.key==='Enter') window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" placeholder="Type a message for the rider..." class="flex-1 bg-inputBg text-xs rounded-xl px-3 py-2.5 outline-none border border-gray-300 dark:border-gray-700 focus:border-blue-500 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500">
             <button onclick="window.sendCustomerToRiderChat && window.sendCustomerToRiderChat()" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0">
                 <i class="fa-solid fa-paper-plane"></i>
             </button>
@@ -1771,7 +1771,7 @@
                 </div>
 
                 <!-- DEDICATED RIDER DAY-OFF BUTTON -->
-                <button id="btn-rider-dayoff" onclick="window.openRiderDayOffModal && window.openRiderDayOffModal()" class="bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 dark:bg-teal-600/30 dark:hover:bg-teal-600 dark:text-teal-300 dark:border-teal-500/50 text-[9px] px-2 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Piliin ang iyong lingguhang Day-Off">
+                <button id="btn-rider-dayoff" onclick="window.openRiderDayOffModal && window.openRiderDayOffModal()" class="bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 dark:bg-teal-600/30 dark:hover:bg-teal-600 dark:text-teal-300 dark:border-teal-500/50 text-[9px] px-2 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Select your weekly Day-Off">
                     <i class="fa-solid fa-umbrella-beach text-teal-500"></i> Day Off
                 </button>
 
@@ -1877,31 +1877,31 @@
                 <div class="flex items-center gap-1.5 text-emerald-600 dark:text-green-500 font-bold text-xs">
                     <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_#22c55e]"></div> AVAILABLE (Queue):
                 </div>
-                <div class="pl-1 text-xs text-gray-600 dark:text-gray-400 mt-1.5 flex flex-wrap items-center gap-1.5" id="home-roster-avail">(Walang naka-duty)</div>
+                <div class="pl-1 text-xs text-gray-600 dark:text-gray-400 mt-1.5 flex flex-wrap items-center gap-1.5" id="home-roster-avail">(No riders on duty)</div>
             </div>
             
             <div>
                 <div class="flex items-center gap-1.5 text-red-600 dark:text-red-500 font-bold text-xs">
                     <div class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_6px_#ef4444]"></div> CATERING / BUSY:
                 </div>
-                <div class="pl-2 text-xs text-gray-600 dark:text-gray-400 mt-1 flex flex-col gap-1" id="home-roster-busy">(Walang bumibiyahe)</div>
+                <div class="pl-2 text-xs text-gray-600 dark:text-gray-400 mt-1 flex flex-col gap-1" id="home-roster-busy">(No active deliveries)</div>
             </div>
 
             <div>
                 <div class="flex items-center gap-1.5 text-amber-700 dark:text-gray-300 font-bold text-xs">☕ ON BREAK:</div>
-                <div class="pl-2 text-xs text-gray-600 dark:text-gray-400 mt-1 flex flex-col gap-1" id="home-roster-break">(Walang naka-break)</div>
+                <div class="pl-2 text-xs text-gray-600 dark:text-gray-400 mt-1 flex flex-col gap-1" id="home-roster-break">(No riders on break)</div>
             </div>
 
             <div>
                 <div class="flex items-center gap-1.5 text-amber-600 dark:text-yellow-500 font-bold text-xs">⏳ PENALTY COOLDOWN:</div>
-                <div class="pl-2 text-xs text-gray-600 dark:text-gray-400 mt-1 flex flex-col gap-1" id="home-roster-cooldown">(Walang naka-cooldown)</div>
+                <div class="pl-2 text-xs text-gray-600 dark:text-gray-400 mt-1 flex flex-col gap-1" id="home-roster-cooldown">(No riders on cooldown)</div>
             </div>
 
             <div>
                 <div class="flex items-center gap-1.5 text-teal-600 dark:text-teal-400 font-bold text-xs">
                     🏝️ ON DAY OFF (Today):
                 </div>
-                <div class="pl-1 text-xs text-gray-600 dark:text-gray-400 mt-1.5 flex flex-wrap items-center gap-1.5" id="home-roster-dayoff">(Walang naka-day off)</div>
+                <div class="pl-1 text-xs text-gray-600 dark:text-gray-400 mt-1.5 flex flex-wrap items-center gap-1.5" id="home-roster-dayoff">(No riders on day off)</div>
             </div>
         </div>
     </div>
@@ -2386,7 +2386,7 @@
                 </div>
 
                 <p class="text-[10px] text-gray-500 dark:text-gray-400 leading-relaxed">
-                    Kusa nitong bubuksan ang tindahan sa <strong>Opening Time</strong> at isasara kapag sumapit na ang <strong>Closing Time</strong> upang maiwasan ang mga order habang sarado.
+                    It will automatically open the store at <strong>Opening Time</strong> and close it at <strong>Closing Time</strong> to prevent orders while closed.
                 </p>
 
                 <button id="hours-save-btn" onclick="window.saveOperatingHoursSettings && window.saveOperatingHoursSettings()" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 mt-1">
@@ -2579,7 +2579,7 @@
         <!-- DISCOUNT ROW WITH TOGGLE BUTTONS (₱ vs %) -->
         <div class="flex justify-between items-center gap-2">
             <div class="flex items-center gap-1.5 flex-1">
-                <span class="text-gray-900 dark:text-gray-100 font-medium">Discount Bawas</span>
+                <span class="text-gray-900 dark:text-gray-100 font-medium">Discount</span>
                 
                 <!-- TOGGLE SWITCH (AMOUNT ₱ / PERCENT %) -->
                 <div class="flex bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg p-0.5 ml-1">
@@ -2618,8 +2618,8 @@
 
     <label class="bg-cardBg p-3 rounded-xl border border-gray-200 dark:border-gray-800 flex justify-between items-center cursor-pointer">
         <div>
-            <div class="text-sm font-bold text-orange-600 dark:text-orange-400"><i class="fa-solid fa-gift"></i> Libreng Deliberi</div>
-            <div class="text-[10px] text-gray-500 dark:text-gray-400">Walang sasaguting fees ang customer</div>
+            <div class="text-sm font-bold text-orange-600 dark:text-orange-400"><i class="fa-solid fa-gift"></i> Free Delivery</div>
+            <div class="text-[10px] text-gray-500 dark:text-gray-400">Customer pays zero delivery fees</div>
         </div>
         <input type="checkbox" id="wiz-free-delivery" onchange="window.calculateGrandTotal && window.calculateGrandTotal()" class="w-5 h-5 accent-orange-500">
     </label>
@@ -2931,7 +2931,7 @@
                 <option value="Mangatarem">Mangatarem Branch</option>
             </select>
             <span class="text-[9.5px] text-gray-400 leading-tight">
-                Ang pamasahe ay kakalkulahin batay sa distansya mula sa napiling Starting Hub na ito.
+                Fare will be calculated based on the distance from this selected Starting Hub.
             </span>
         </div>
 
@@ -2986,7 +2986,7 @@
             </div>
             <input type="text" id="form-rate-barangay" list="form-rate-barangay-list" autocomplete="off" placeholder="Select or type Barangay / District name" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition">
             <datalist id="form-rate-barangay-list"></datalist>
-            <span id="form-rate-barangay-hint" class="text-[10px] text-gray-500 mt-1 block">Pumili sa opisyal na listahan mula sa PSA PSGC API o mag-type ng sariling lugar.</span>
+            <span id="form-rate-barangay-hint" class="text-[10px] text-gray-500 mt-1 block">Choose from the official list from the PSA PSGC API or type a custom location.</span>
         </div>
 
         <!-- DELIVERY AMOUNT (RATE) -->
@@ -3528,8 +3528,11 @@
                         <h3 id="rider-chat-cust-name" class="font-black text-sm text-gray-900 dark:text-white truncate min-w-0 flex-1">Customer Name</h3>
                         <span id="rider-chat-applicant-pill" class="hidden bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-900/40 dark:text-purple-300 dark:border-purple-700/50 text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0" title="Rider Applicant"><i class="fa-solid fa-user-tie text-purple-600 dark:text-purple-400"></i> APPLICANT</span>
                         <span id="rider-chat-followup-pill" class="hidden bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700/50 text-[9px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0" title="Customer Follow-Up"><i class="fa-solid fa-bookmark text-amber-600 dark:text-amber-400"></i> FOLLOW UP</span>
-                        <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-6 h-6 rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-transparent hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-xs shadow-xs shrink-0" title="View Customer Info">
+                        <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-6 h-6 rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-transparent hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-xs shadow-xs shrink-0 cursor-pointer" title="View Customer Info">
                             <i class="fa-solid fa-circle-info"></i>
+                        </button>
+                        <button type="button" onclick="window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat()" class="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 hover:bg-orange-500 hover:text-white transition flex items-center gap-1 text-[10px] font-black shadow-2xs shrink-0 cursor-pointer" title="Send Store Menu">
+                            <i class="fa-solid fa-book-open text-[9px]"></i> Menu
                         </button>
                     </div>
                     <p class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono flex items-center gap-1 font-bold truncate">
@@ -3606,6 +3609,11 @@
                 <i class="fa-solid fa-motorcycle"></i> Cater
             </button>
 
+            <!-- SEND STORE MENU BUTTON -->
+            <button id="rider-chat-send-menu-btn" type="button" onclick="window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat()" class="min-w-[95px] bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white border border-orange-400/30 py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0" title="Send restaurant menu to customer">
+                <i class="fa-solid fa-book-open"></i> Menu
+            </button>
+
             <!-- GO TO CART BUTTON (CATERING RIDER ONLY) -->
             <button id="rider-chat-go-cart-btn" type="button" onclick="window.goToCustomerCartFromChat && window.goToCustomerCartFromChat()" class="hidden flex-1 min-w-[95px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white border border-blue-400/30 py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0" title="Open this customer's Cart">
                 <i class="fa-solid fa-cart-shopping"></i> Go to Cart
@@ -3667,13 +3675,17 @@
         <!-- FOOTER INPUT BAR -->
         <div class="p-2.5 sm:p-3 bg-white dark:bg-darkBg/95 border-t border-gray-200 dark:border-gray-800 flex flex-col gap-2 shrink-0">
             <!-- ACTION TOOLBAR: QUICK ACCESS BUTTONS -->
-            <div id="rider-chat-action-toolbar" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 shrink-0">
+            <div id="rider-chat-quick-toolbar" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 shrink-0">
                 <button type="button" id="chat-hd-toggle-btn" onclick="window.toggleHdMode && window.toggleHdMode()" class="px-2.5 py-1 bg-inputBg text-gray-700 dark:text-gray-300 rounded-lg border border-gray-300 dark:border-gray-700 hover:text-gray-900 dark:hover:text-white transition active:scale-95 text-[11px] font-black flex items-center justify-center shrink-0 min-w-[34px]" title="Toggle HD Mode">
                     <span id="chat-hd-label" class="text-[10px] font-black tracking-tight text-gray-700 dark:text-gray-300">HD</span>
                 </button>
                 <button type="button" onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="px-2.5 py-1 bg-inputBg hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Saved Quick Replies">
                     <i class="fa-solid fa-bolt text-[11px]"></i>
                     <span class="text-[10px] font-bold">Quick</span>
+                </button>
+                <button type="button" onclick="window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat()" class="px-2.5 py-1 bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-lg border border-orange-500/30 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer font-bold" title="Browse & Send Restaurant Menu">
+                    <i class="fa-solid fa-book-open text-[11px]"></i>
+                    <span class="text-[10px] font-black">Menu</span>
                 </button>
                 <button type="button" onclick="window.promptImageAttachmentSource && window.promptImageAttachmentSource()" class="px-2.5 py-1 bg-inputBg hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Send Image">
                     <i class="fa-solid fa-image text-[11px]"></i>
@@ -3690,10 +3702,6 @@
                 <button type="button" onclick="window.sendChatLocationPin && window.sendChatLocationPin()" class="px-2.5 py-1 bg-inputBg hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Pick Rider Location Pin on Map">
                     <i class="fa-solid fa-location-dot text-[11px]"></i>
                     <span class="text-[10px] font-bold">Pin</span>
-                </button>
-                <button type="button" onclick="window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat()" class="px-2.5 py-1 bg-inputBg hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Browse & Send Restaurant Menu">
-                    <i class="fa-solid fa-book-open text-[11px]"></i>
-                    <span class="text-[10px] font-bold">Menu</span>
                 </button>
             </div>
 
@@ -3961,7 +3969,7 @@
             </div>
             <div class="flex flex-col gap-1">
                 <label for="new-quick-reply-input" class="text-xs font-bold text-gray-700 dark:text-gray-300">Full Message Content:</label>
-                <textarea id="new-quick-reply-input" rows="3" placeholder="e.g. Papunta na po ako sa drop-off location 🛵" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-amber-500 resize-none leading-relaxed"></textarea>
+                <textarea id="new-quick-reply-input" rows="3" placeholder="e.g. On my way to the drop-off location 🛵" class="w-full bg-inputBg text-xs rounded-xl p-3 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-amber-500 resize-none leading-relaxed"></textarea>
                 <p class="text-[10px] text-gray-500 dark:text-gray-400 italic">This message will be sent to the customer.</p>
             </div>
         </div>
@@ -4255,18 +4263,18 @@
             </div>
             <div class="min-w-0 flex-1">
                 <h4 id="chat-phone-action-number" class="text-sm font-black text-gray-900 dark:text-white truncate font-mono">+639xxxxxxxxx</h4>
-                <p class="text-[10px] text-gray-500 dark:text-gray-400">Pumili ng aksyon para sa number na ito</p>
+                <p class="text-[10px] text-gray-500 dark:text-gray-400">Choose an action for this number</p>
             </div>
         </div>
         <div class="flex flex-col gap-2 pt-1">
             <button type="button" id="chat-phone-call-btn" onclick="window.executeChatPhoneAction && window.executeChatPhoneAction('call')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 text-xs shadow-sm cursor-pointer">
-                <i class="fa-solid fa-phone text-xs"></i> Tumawag (Call)
+                <i class="fa-solid fa-phone text-xs"></i> Call
             </button>
             <button type="button" id="chat-phone-sms-btn" onclick="window.executeChatPhoneAction && window.executeChatPhoneAction('text')" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 text-xs shadow-sm cursor-pointer">
-                <i class="fa-solid fa-comment-sms text-xs"></i> Mag-text (SMS)
+                <i class="fa-solid fa-comment-sms text-xs"></i> Send SMS
             </button>
             <button type="button" id="chat-phone-save-details-btn" onclick="window.executeChatPhoneAction && window.executeChatPhoneAction('save_details')" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 flex items-center justify-center gap-2 text-xs shadow-sm cursor-pointer">
-                <i class="fa-solid fa-address-card text-xs"></i> I-save sa Customer Details
+                <i class="fa-solid fa-address-card text-xs"></i> Save to Customer Details
             </button>
             <button type="button" onclick="window.closeChatPhoneModal && window.closeChatPhoneModal()" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-2 px-3 rounded-xl transition active:scale-95 text-xs text-center cursor-pointer mt-0.5">
                 Cancel
@@ -4288,7 +4296,7 @@
                     <h3 class="text-sm font-black text-gray-900 dark:text-white flex items-center gap-1.5 truncate">
                         Send to Many <span class="text-[10px] bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.2 rounded-full font-bold">Admin Broadcast</span>
                     </h3>
-                    <p class="text-[10.5px] text-gray-500 dark:text-gray-400 truncate">Ipadala ang mensahe sa multiple recipients nang sabay-sabay</p>
+                    <p class="text-[10.5px] text-gray-500 dark:text-gray-400 truncate">Send a message to multiple recipients at once</p>
                 </div>
             </div>
             <button type="button" onclick="window.closeBroadcastModal && window.closeBroadcastModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-lg w-7 h-7 flex items-center justify-center rounded-lg transition active:scale-95 cursor-pointer" title="Close">
@@ -4301,7 +4309,7 @@
             <!-- TARGET AUDIENCE SELECTOR TABS -->
             <div class="flex flex-col gap-1.5">
                 <label class="text-[11px] font-black text-gray-700 dark:text-gray-300 flex items-center justify-between">
-                    <span>1. PUMILI NG AUDIENCE (Target Recipients)</span>
+                    <span>1. SELECT AUDIENCE (Target Recipients)</span>
                     <span id="broadcast-target-count-badge" class="text-indigo-600 dark:text-indigo-400 font-bold font-mono text-[10px]">0 Recipient(s)</span>
                 </label>
                 <div class="flex bg-gray-100 dark:bg-black/40 p-1 rounded-xl border border-gray-200 dark:border-gray-800 gap-1 text-center">
@@ -4356,7 +4364,7 @@
             <!-- MESSAGE COMPOSER -->
             <div class="flex flex-col gap-1.5 pt-1">
                 <div class="flex items-center justify-between">
-                    <label class="text-[11px] font-black text-gray-700 dark:text-gray-300">2. MENSAHE (Broadcast Message)</label>
+                    <label class="text-[11px] font-black text-gray-700 dark:text-gray-300">2. MESSAGE (Broadcast Message)</label>
                     <span id="broadcast-char-counter" class="text-[10px] text-gray-400 font-mono">0 / 1000</span>
                 </div>
 
@@ -4377,12 +4385,12 @@
                     </button>
                 </div>
 
-                <textarea id="broadcast-message-input" rows="4" maxlength="1000" placeholder="I-type dito ang anunsyo o mensahe na nais i-send sa mga napiling customer..." class="w-full bg-white dark:bg-black/40 border border-gray-300 dark:border-gray-700 focus:border-indigo-500 dark:focus:border-indigo-400 rounded-xl p-2.5 text-xs text-gray-900 dark:text-white outline-none resize-none placeholder-gray-400 transition" oninput="window.updateBroadcastCharCount && window.updateBroadcastCharCount()"></textarea>
+                <textarea id="broadcast-message-input" rows="4" maxlength="1000" placeholder="Type the announcement or message you want to send to selected customers here..." class="w-full bg-white dark:bg-black/40 border border-gray-300 dark:border-gray-700 focus:border-indigo-500 dark:focus:border-indigo-400 rounded-xl p-2.5 text-xs text-gray-900 dark:text-white outline-none resize-none placeholder-gray-400 transition" oninput="window.updateBroadcastCharCount && window.updateBroadcastCharCount()"></textarea>
 
                 <div class="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 pt-0.5">
                     <label class="flex items-center gap-1.5 cursor-pointer select-none">
                         <input type="checkbox" id="broadcast-include-sig-check" checked class="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer">
-                        <span>Isama ang Dispatch signature ("— Lokalex Dispatch")</span>
+                        <span>Include Dispatch signature ("— Lokalex Dispatch")</span>
                     </label>
                     <span class="text-gray-400 flex items-center gap-1">
                         <i class="fa-solid fa-shield-halved text-[9px] text-emerald-500"></i> FB & Web Direct Sync
@@ -4454,13 +4462,13 @@
 
             <!-- Description Message -->
             <div id="confirm-done-message-box" class="p-3 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-500/20 text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
-                Sigurado ka bang tapos na ang delivery? Ima-mark ito bilang <strong>Done</strong> sa catering roster, ire-record ang service fees, at ililipat ang chat sa Done folder.
+                Are you sure the delivery is complete? This will mark it as <strong>Done</strong> in the catering roster, record the service fees, and move the chat to the Done folder.
             </div>
 
             <!-- Receipt Notice / Warning -->
             <div id="confirm-done-receipt-notice" class="hidden p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700/50 text-[11px] text-amber-800 dark:text-amber-300 flex items-center gap-2">
                 <i class="fa-solid fa-receipt text-amber-600 shrink-0"></i>
-                <span id="confirm-done-receipt-text">Siguraduhing may resibo bago i-confirm.</span>
+                <span id="confirm-done-receipt-text">Please ensure there is a receipt before confirming.</span>
             </div>
         </div>
 
@@ -4490,7 +4498,7 @@
         </div>
 
         <div id="mapcalc-cust-status" class="text-xs font-bold text-amber-400 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
-            Pindutin ang green button sa ibaba para ma-pin ang iyong lokasyon.
+            Press the green button below to pin your location.
         </div>
 
         <button id="mapcalc-cust-btn" onclick="window.startMapCalcLocationSharing && window.startMapCalcLocationSharing()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 text-sm flex justify-center items-center gap-2 ring-2 ring-emerald-400/50">
@@ -4512,7 +4520,7 @@
         </div>
 
         <div id="cust-share-status" class="text-xs font-bold text-amber-400 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
-            Pindutin ang blue button sa ibaba para i-pin ang iyong kinaroroonan.
+            Press the blue button below to pin your location.
         </div>
 
         <button id="cust-share-btn" onclick="window.startCustomerLocationSharing && window.startCustomerLocationSharing()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 text-sm flex justify-center items-center gap-2 ring-2 ring-blue-400/50">
@@ -4555,7 +4563,7 @@
 
         <div id="livegps-customer-controls" class="w-full flex flex-col gap-3 mt-1">
             <div id="livegps-status" class="text-xs font-bold text-amber-400 bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
-                Pindutin ang button sa ibaba upang i-share ang iyong live location.
+                Press the button below to share your live location.
             </div>
             <button id="livegps-share-btn" onclick="window.startMutualCustomerLocationSharing && window.startMutualCustomerLocationSharing()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-2xl shadow-xl transition active:scale-95 text-sm flex justify-center items-center gap-2 ring-2 ring-indigo-400/50">
                 <i class="fa-solid fa-satellite-dish text-base"></i> JOIN LIVE TRACKING
@@ -4573,11 +4581,11 @@
         <div>
             <h3 class="font-black text-lg text-white">Tracking Session Ended</h3>
             <p class="text-xs text-gray-400 mt-2 leading-relaxed">
-                Ang live tracking session na ito ay natapos na o naihatid na ng rider ang inyong order.
+                This live tracking session has ended or your rider has already delivered your order.
             </p>
         </div>
         <button onclick="window.location.href='/'" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-2xl text-xs transition active:scale-95 shadow">
-            Bumalik sa Home
+            Return to Home
         </button>
     </div>
 </div>
@@ -4631,7 +4639,7 @@
                 </div>
                 <div>
                     <h3 class="font-bold text-xs text-white">My Weekly Day-Off</h3>
-                    <p id="rider-dayoff-subtitle" class="text-[9px] text-teal-400 font-mono">Pumili ng iyong lingguhang araw ng pahinga</p>
+                    <p id="rider-dayoff-subtitle" class="text-[9px] text-teal-400 font-mono">Select your weekly day-off</p>
                 </div>
             </div>
             <button type="button" onclick="window.closeRiderDayOffModal && window.closeRiderDayOffModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
@@ -4642,8 +4650,8 @@
         <div class="flex flex-col gap-2.5 text-xs overflow-y-auto flex-1 pr-1 min-h-0">
             <div class="bg-darkBg p-3 rounded-2xl border border-teal-500/30 flex items-center justify-between">
                 <div>
-                    <span class="text-[10px] text-gray-400 font-bold uppercase">Kasalukuyang Day-Off:</span>
-                    <div id="rider-current-dayoff-display" class="font-black text-sm text-teal-400 mt-0.5">Walang Napili</div>
+                    <span class="text-[10px] text-gray-400 font-bold uppercase">Current Day-Off:</span>
+                    <div id="rider-current-dayoff-display" class="font-black text-sm text-teal-400 mt-0.5">None Selected</div>
                 </div>
                 <div id="rider-dayoff-changes-badge" class="text-right text-[10px] font-bold text-gray-400 font-mono">
                     Changes: <span class="text-white">0/2</span> this month
@@ -4923,14 +4931,14 @@
                         <div class="font-bold text-purple-300 text-xs flex items-center gap-1.5">
                             <i class="fa-solid fa-calendar-week text-purple-400"></i> Recurring Day Promo Less
                         </div>
-                        <div class="text-[10px] text-gray-400">Bawas komisyon sa araw na ito</div>
+                        <div class="text-[10px] text-gray-400">Commission discount on this day</div>
                     </div>
                     <input type="checkbox" id="admin-recurring-discount-enabled" class="w-4 h-4 accent-purple-500 cursor-pointer">
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 pt-1">
                     <div>
-                        <label class="text-[9px] text-gray-400 font-bold uppercase">Piliin ang Araw</label>
+                        <label class="text-[9px] text-gray-400 font-bold uppercase">Select Day</label>
                         <select id="admin-recurring-discount-day" class="w-full bg-inputBg text-xs font-bold text-white rounded-xl p-2 border border-gray-700 outline-none mt-0.5">
                             <option value="0" selected>Every Sunday</option>
                             <option value="1">Every Monday</option>
@@ -4967,7 +4975,7 @@
                 </div>
 
                 <div id="admin-special-dates-list" class="flex flex-col gap-1.5 mt-1 max-h-28 overflow-y-auto">
-                    <div class="text-gray-500 italic text-[10px] text-center py-1">Walang active na specific promo dates.</div>
+                    <div class="text-gray-500 italic text-[10px] text-center py-1">No active specific promo dates.</div>
                 </div>
             </div>
 
@@ -5024,7 +5032,7 @@
                     <input type="time" id="auto-endshift-time" value="03:00" class="w-full bg-inputBg text-sm font-mono font-bold rounded-xl p-3 border border-gray-700 outline-none text-white focus:border-purple-500">
                 </div>
                 <p class="text-[10px] text-gray-400 mt-1 leading-relaxed">
-                    Halimbawa: Kung <strong>03:00 AM</strong>, kusa nitong i-e-end shift ang lahat ng riders sa roster kapag sumapit ang oras na ito.
+                    Example: If set to <strong>03:00 AM</strong>, it will automatically end shifts for all riders on the roster once this time is reached.
                 </p>
             </div>
         </div>
@@ -5603,7 +5611,7 @@
 
         <p class="text-[9.5px] text-gray-400 leading-tight">
             <i class="fa-solid fa-circle-info text-amber-400 mr-0.5"></i>
-            Ang mga <strong>Admin</strong> ay palaging <strong>Exempt (Unlimited)</strong> at hindi kailanman nababawasan ng credits.
+            <strong>Admins</strong> are always <strong>Exempt (Unlimited)</strong> and will never have credits deducted.
         </p>
 
         <div class="pt-2 border-t border-gray-800">
@@ -5866,7 +5874,7 @@
         </div>
         <h3 class="font-bold text-base text-center text-blue-600 dark:text-blue-400">Rider GCash Details</h3>
         <p class="text-[11px] text-gray-600 dark:text-gray-300 text-center leading-relaxed">
-            I-register ang iyong GCash details at QR Code. Lalabas ito sa iyong opisyal na image resibo.
+            Register your GCash details and QR Code. This will appear on your official image receipt.
         </p>
 
         <div class="flex flex-col gap-2.5 text-left text-xs">
@@ -5895,7 +5903,7 @@
                     <!-- PLACEHOLDER WHEN EMPTY -->
                     <div id="gcash-qr-placeholder" class="text-center py-5 text-gray-400 text-xs flex flex-col items-center gap-1">
                         <i class="fa-solid fa-qrcode text-4xl opacity-40"></i>
-                        <span class="text-[10px] font-medium">Walang naka-attach na QR Code</span>
+                        <span class="text-[10px] font-medium">No QR Code attached</span>
                     </div>
 
                     <!-- LIVE PREVIEW IMAGE (SHOWN WHEN QR IS ATTACHED) -->
@@ -5921,7 +5929,7 @@
                 </div>
 
                 <p class="text-[9px] text-gray-500 dark:text-gray-400 italic leading-snug text-center">
-                    I-upload ang screenshot ng iyong GCash QR code. Awtomatikong ihihiwalay ang QR code para lumabas nang malinis sa receipt card.
+                    Upload a screenshot of your GCash QR code. The QR code will be automatically cropped to display cleanly on the receipt card.
                 </p>
             </div>
         </div>
@@ -5942,7 +5950,7 @@
                     <i class="fa-solid fa-calculator"></i>
                 </div>
                 <div>
-                    <h3 class="font-black text-xs text-gray-900 dark:text-white">Sukli Calculator</h3>
+                    <h3 class="font-black text-xs text-gray-900 dark:text-white">Change Calculator</h3>
                     <p id="sukli-cart-label" class="text-[9px] text-gray-500 dark:text-gray-400 font-bold">Cart 1</p>
                 </div>
             </div>
@@ -5959,7 +5967,7 @@
 
         <!-- CASH TENDERED INPUT -->
         <div class="flex flex-col gap-1">
-            <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Customer Cash / Bayad (₱):</label>
+            <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Customer Cash Tendered (₱):</label>
             <input type="number" id="sukli-cash-input" inputmode="decimal" placeholder="0.00" oninput="window.calculateSukli && window.calculateSukli()" class="w-full bg-inputBg text-lg font-black text-center rounded-xl p-2.5 outline-none border border-emerald-500/50 text-gray-900 dark:text-white font-mono">
         </div>
 
@@ -5975,9 +5983,9 @@
 
         <!-- COMPUTED CHANGE RESULT -->
         <div id="sukli-result-box" class="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/40 p-3 rounded-2xl flex flex-col items-center justify-center text-center">
-            <span class="text-[9px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Sukli / Change:</span>
+            <span class="text-[9px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Change:</span>
             <span id="sukli-amount-display" class="font-mono text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">₱0.00</span>
-            <span id="sukli-shortage-msg" class="hidden text-[10px] font-bold text-red-500 mt-0.5">Kulang ang bayad!</span>
+            <span id="sukli-shortage-msg" class="hidden text-[10px] font-bold text-red-500 mt-0.5">Insufficient payment!</span>
         </div>
 
         <button type="button" onclick="window.closeSukliCalculatorModal && window.closeSukliCalculatorModal()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition active:scale-95 shadow">
@@ -6055,7 +6063,7 @@
         <div>
             <h3 class="font-black text-base text-gray-900 dark:text-white">Enable GPS Location</h3>
             <p class="text-xs text-gray-600 dark:text-gray-300 mt-2 leading-relaxed">
-                Kailangan ng Lokalex Hub ang iyong <strong>GPS Location</strong> upang mahanap ang tamang delivery pin at ma-track ang biyahe ng rider papunta sa iyo.
+                Lokalex Hub needs your <strong>GPS Location</strong> to find the correct delivery pin and track the rider's trip to you.
             </p>
         </div>
         <div class="flex flex-col gap-2 pt-1">
@@ -6063,7 +6071,7 @@
                 <i class="fa-solid fa-location-arrow"></i> ALLOW GPS LOCATION
             </button>
             <button onclick="window.closeCustomerGpsModal && window.closeCustomerGpsModal()" class="w-full bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-400 font-bold py-2.5 rounded-2xl text-xs transition active:scale-95">
-                Mamaya na
+                Not now
             </button>
         </div>
     </div>
@@ -6275,7 +6283,7 @@
                     <option value="60">60 Minutes Penalty Cooldown</option>
                 </select>
                 <p class="text-[9px] text-gray-500 dark:text-gray-400 mt-1 italic">
-                    Kapag may penalty, awtomatikong mag-co-cooldown ang rider bago muling maging Available pagkatapos ng biyahe.
+                    When a penalty is applied, the rider will automatically go on cooldown before becoming Available again after the delivery.
                 </p>
             </div>
         </div>
@@ -6378,7 +6386,7 @@
                 <input type="text" id="edit-cater-new-cust-name" autocomplete="off" autocorrect="off" onkeydown="if(event.key==='Enter'){event.preventDefault();window.submitEditCateringCustomerName&&window.submitEditCateringCustomerName();}" placeholder="Enter updated customer name..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 outline-none border border-gray-300 dark:border-gray-700 focus:border-amber-500 text-gray-900 dark:text-white font-bold">
             </div>
             <p class="text-[9px] text-gray-500 dark:text-gray-400 italic">
-                I-a-update nito ang pangalan ng customer sa active catering lineup, live tracker, at chat session.
+                This will update the customer's name in the active catering lineup, live tracker, and chat session.
             </p>
         </div>
 
@@ -6396,9 +6404,9 @@
         <div class="w-12 h-12 bg-emerald-500/20 text-emerald-500 rounded-full flex items-center justify-center mx-auto text-2xl">
             <i class="fa-solid fa-hand-holding-dollar"></i>
         </div>
-        <h3 class="font-bold text-base text-emerald-600 dark:text-emerald-400">May Nakamarkang PAID Item</h3>
+        <h3 class="font-bold text-base text-emerald-600 dark:text-emerald-400">Marked as PAID Item</h3>
         <p class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
-            Mayroong item sa cart na nakamarka bilang <strong>PAID (₱0.00)</strong>. Sigurado ka bang nais magpatuloy sa resibo?
+            An item in the cart is marked as <strong>PAID (₱0.00)</strong>. Are you sure you want to proceed to receipt?
         </p>
         <div class="flex gap-2 mt-2">
             <button onclick="window.closePaidItemModal && window.closePaidItemModal()" class="flex-1 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-3 rounded-xl text-xs transition active:scale-95">Go Back & Edit</button>
@@ -6413,12 +6421,12 @@
         <div class="w-12 h-12 bg-amber-500/20 text-amber-500 rounded-full flex items-center justify-center mx-auto text-2xl">
             <i class="fa-solid fa-triangle-exclamation"></i>
         </div>
-        <h3 class="font-bold text-base text-amber-600 dark:text-amber-400">Walang Customer Name</h3>
+        <h3 class="font-bold text-base text-amber-600 dark:text-amber-400">No Customer Name</h3>
         <p class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
-            Wala kang inilagay na pangalan ng customer. Nais mo bang magpatuloy bilang <strong>Sample Receipt</strong>?
+            No customer name was entered. Do you want to proceed as a <strong>Sample Receipt</strong>?
         </p>
         <p class="text-[11px] text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-black/40 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 italic text-left">
-            ⚠️ Ang Sample Receipt ay <strong>HINDI mai-save sa database</strong> at <strong>HINDI mai-re-record sa iyong daily commission</strong>.
+            ⚠️ A Sample Receipt will <strong>NOT be saved to the database</strong> and will <strong>NOT be recorded in your daily commission</strong>.
         </p>
         <div class="flex gap-2 mt-2">
             <button onclick="window.closeSampleReceiptModal && window.closeSampleReceiptModal()" class="flex-1 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-3 rounded-xl text-xs transition active:scale-95">Go Back</button>
@@ -6475,8 +6483,8 @@
 <!-- PASTE LISTAHAN / BULK ADD MODAL -->
 <div id="bulk-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-cardBg border border-gray-200 dark:border-gray-800 p-6 rounded-2xl w-full max-w-md shadow-2xl flex flex-col gap-4 text-gray-900 dark:text-white">
-        <h3 class="font-bold text-base"><i class="fa-solid fa-paste text-blue-600 dark:text-blue-400"></i> Paste Listahan</h3>
-        <textarea id="bulk-input" rows="6" placeholder="Format: Item Name Price&#10;Halimbawa:&#10;1pc chicken 150&#10;Sibuyas&#10;Bigas 60" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-300 dark:border-gray-700 focus:border-blue-500 resize-none font-mono text-gray-900 dark:text-white font-bold"></textarea>
+        <h3 class="font-bold text-base"><i class="fa-solid fa-paste text-blue-600 dark:text-blue-400"></i> Paste Item List</h3>
+        <textarea id="bulk-input" rows="6" placeholder="Format: Item Name Price&#10;Example:&#10;1pc chicken 150&#10;Onion&#10;Rice 60" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-300 dark:border-gray-700 focus:border-blue-500 resize-none font-mono text-gray-900 dark:text-white font-bold"></textarea>
         <div class="flex gap-2">
             <button onclick="window.closeBulkModal && window.closeBulkModal()" class="flex-1 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 py-3 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 transition active:scale-95">Cancel</button>
             <button onclick="window.processBulkAdd && window.processBulkAdd()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-3 rounded-xl text-xs font-bold text-white transition active:scale-95">Add Items</button>
@@ -6552,7 +6560,7 @@
         <div>
             <h3 class="font-black text-base text-gray-900 dark:text-white">Install Lokalex App</h3>
             <p class="text-xs text-gray-600 dark:text-gray-300 mt-1 leading-relaxed">
-                I-add ang Lokalex Hub shortcut sa iyong Phone Home Screen para sa mabilis na access!
+                Add the Lokalex Hub shortcut to your Phone Home Screen for quick access!
             </p>
         </div>
 
@@ -6561,8 +6569,8 @@
                 <i class="fa-brands fa-apple text-sm"></i> For iPhone / iOS (Safari):
             </div>
             <ol class="list-decimal list-inside text-[11px] text-gray-700 dark:text-gray-300 flex flex-col gap-1 pl-1">
-                <li>Pindutin ang <strong>Share button</strong> (<i class="fa-solid fa-arrow-up-from-bracket text-blue-500"></i>) sa Safari.</li>
-                <li>Piliin ang <strong>"Add to Home Screen"</strong> (<i class="fa-regular fa-square-plus text-blue-500"></i>).</li>
+                <li>Tap the <strong>Share button</strong> (<i class="fa-solid fa-arrow-up-from-bracket text-blue-500"></i>) in Safari.</li>
+                <li>Select <strong>"Add to Home Screen"</strong> (<i class="fa-regular fa-square-plus text-blue-500"></i>).</li>
             </ol>
 
             <div class="border-t border-gray-200 dark:border-gray-800 pt-2 mt-1">
@@ -6570,14 +6578,14 @@
                     <i class="fa-brands fa-android text-sm"></i> For Android (Chrome):
                 </div>
                 <ol class="list-decimal list-inside text-[11px] text-gray-700 dark:text-gray-300 flex flex-col gap-1 pl-1">
-                    <li>Pindutin ang <strong>3 dots menu</strong> (<i class="fa-solid fa-ellipsis-vertical text-emerald-500"></i>) sa Chrome.</li>
-                    <li>Piliin ang <strong>"Install app"</strong> o <strong>"Add to Home screen"</strong>.</li>
+                    <li>Tap the <strong>3 dots menu</strong> (<i class="fa-solid fa-ellipsis-vertical text-emerald-500"></i>) in Chrome.</li>
+                    <li>Select <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.</li>
                 </ol>
             </div>
         </div>
 
         <button onclick="window.closePwaInstallModal && window.closePwaInstallModal()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-2xl text-xs transition active:scale-95 shadow">
-            Naintindihan Ko
+            Got it
         </button>
     </div>
 </div>
@@ -6590,10 +6598,10 @@
         </div>
         <h3 class="font-bold text-base text-red-600 dark:text-red-400">GPS Location Required</h3>
         <p class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
-            Kailangan mong i-turn on ang iyong <strong>GPS Location</strong> sa telepono bago mag-Available sa roster.
+            You need to turn on your phone's <strong>GPS Location</strong> before setting yourself as Available in the roster.
         </p>
         <button onclick="window.closeGpsModal && window.closeGpsModal()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl text-xs transition active:scale-95 mt-2">
-            OK, Naintindihan Ko
+            OK, Understood
         </button>
     </div>
 </div>
@@ -6610,7 +6618,7 @@
                 <i class="fa-solid fa-shield-halved"></i>
             </div>
             <h3 class="text-lg font-black text-gray-900 dark:text-white">Password Recovery</h3>
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Pumili ng paraan para ma-reset ang iyong password</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Choose a method to reset your password</p>
         </div>
 
         <div id="fp-step-method" class="flex flex-col gap-3 mt-1">
@@ -6620,7 +6628,7 @@
                 </div>
                 <div class="flex flex-col flex-1">
                     <span class="text-xs font-bold text-gray-900 dark:text-white group-hover:text-blue-500 transition">SMS OTP Code</span>
-                    <span class="text-[10px] text-gray-500 dark:text-gray-400">Magpapadala ng 6-digit code sa iyong phone</span>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400">Sends a 6-digit code to your phone</span>
                 </div>
                 <i class="fa-solid fa-chevron-right text-xs text-gray-400 dark:text-gray-600"></i>
             </button>
@@ -6631,7 +6639,7 @@
                 </div>
                 <div class="flex flex-col flex-1">
                     <span class="text-xs font-bold text-gray-900 dark:text-white group-hover:text-blue-500 transition">Email Reset Link</span>
-                    <span class="text-[10px] text-gray-500 dark:text-gray-400">Magpapadala ng reset link sa iyong email</span>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400">Sends a reset link to your email</span>
                 </div>
                 <i class="fa-solid fa-chevron-right text-xs text-gray-400 dark:text-gray-600"></i>
             </button>
@@ -6646,7 +6654,7 @@
                 <i class="fa-solid fa-paper-plane"></i> SEND OTP CODE
             </button>
             <button onclick="window.backToResetMethod && window.backToResetMethod()" class="text-[10px] text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
-                ← Bumalik sa pagpipilian
+                ← Back to options
             </button>
         </div>
 
@@ -6659,7 +6667,7 @@
                 <i class="fa-solid fa-paper-plane"></i> SEND RESET LINK
             </button>
             <button onclick="window.backToResetMethod && window.backToResetMethod()" class="text-[10px] text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
-                ← Bumalik sa pagpipilian
+                ← Back to options
             </button>
         </div>
 
@@ -6675,7 +6683,7 @@
 
         <div id="fp-step-newpass" class="hidden flex flex-col gap-3 mt-1 text-left">
             <div>
-                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Bagong Password</label>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">New Password</label>
                 <div class="relative mt-1">
                     <input type="password" id="fp-new-pass" autocomplete="new-password" placeholder="At least 6 characters" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold">
                     <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('fp-new-pass', 'fp-pass-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-gray-700 dark:hover:text-white transition">
@@ -6684,9 +6692,9 @@
                 </div>
             </div>
             <div>
-                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Ulitin ang Bagong Password</label>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Confirm New Password</label>
                 <div class="relative mt-1">
-                    <input type="password" id="fp-confirm-pass" autocomplete="new-password" placeholder="Ulitin ang bagong password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold">
+                    <input type="password" id="fp-confirm-pass" autocomplete="new-password" placeholder="Re-type new password" class="w-full bg-inputBg text-xs rounded-xl p-3 pr-10 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold">
                     <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('fp-confirm-pass', 'fp-confirm-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-gray-700 dark:hover:text-white transition">
                         <i id="fp-confirm-eye" class="fa-solid fa-eye"></i>
                     </button>
@@ -6707,7 +6715,7 @@
         </div>
         <div class="flex flex-col gap-1">
             <h3 id="slide-delete-title" class="font-bold text-base text-white tracking-tight">Confirm Action</h3>
-            <p id="slide-delete-sub" class="text-xs text-gray-400 whitespace-pre-line leading-relaxed">I-type ang "confirm" upang kumpirmahin.</p>
+            <p id="slide-delete-sub" class="text-xs text-gray-400 whitespace-pre-line leading-relaxed">Type "confirm" to confirm.</p>
         </div>
         
         <div class="flex flex-col gap-1.5 text-left bg-black/40 border border-white/10 rounded-2xl p-3">
@@ -7209,7 +7217,7 @@
         <div class="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 rounded-2xl p-3 flex items-start gap-2.5">
             <i class="fa-solid fa-circle-info text-blue-500 text-xs mt-0.5 shrink-0"></i>
             <p class="text-[11px] text-blue-900 dark:text-blue-300 font-medium leading-snug">
-                I-rehistro ang iyong Mobile Number at mag-set ng bagong password bago makapag-duty.
+                Register your mobile number and set a new password before going on duty.
             </p>
         </div>
 

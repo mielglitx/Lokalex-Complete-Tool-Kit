@@ -22,7 +22,7 @@ export function installPwaApp() {
         deferredPwaPrompt.prompt();
         deferredPwaPrompt.userChoice.then((choiceResult) => {
             if (choiceResult.outcome === 'accepted') {
-                showToast("🎉 Salamat sa pag-install ng Lokalex App!");
+                showToast("🎉 Thank you for installing the Lokalex App!");
             }
             deferredPwaPrompt = null;
         });
@@ -47,12 +47,12 @@ export async function processUnifiedLogin() {
     const password = passInput?.value || '';
 
     if (!identifier) {
-        showToast("⚠️ Paki-lagay ang iyong Rider ID, Mobile Number, o Store Username.");
+        showToast("⚠️ Please enter your Rider ID, Mobile Number, or Store Username.");
         if (identInput) identInput.focus();
         return;
     }
     if (!password) {
-        showToast("⚠️ Paki-lagay ang iyong Password.");
+        showToast("⚠️ Please enter your Password.");
         if (passInput) passInput.focus();
         return;
     }
@@ -99,7 +99,7 @@ export async function processUnifiedLogin() {
                 }
             } else {
                 if (password !== existingPassword.toString()) {
-                    throw new Error("❌ Mali ang iyong Rider Password. Paki-ulit.");
+                    throw new Error("❌ Incorrect Rider Password. Please try again.");
                 }
             }
 
@@ -156,7 +156,7 @@ export async function processUnifiedLogin() {
             const accId = Object.keys(storeVal)[0];
             const targetAccount = storeVal[accId];
             if (targetAccount.password !== password) {
-                throw new Error("❌ Mali ang Password para sa Store Account.");
+                throw new Error("❌ Incorrect password for Store Account.");
             }
 
             localStorage.setItem('lokalex_merchant_account_id', accId);
@@ -176,9 +176,9 @@ export async function processUnifiedLogin() {
             return;
         }
 
-        throw new Error("🚫 Hindi mahanap ang account na ito. Paki-check ang iyong Rider ID, Mobile No., o Username.");
+        throw new Error("🚫 Account not found. Please check your Rider ID, Mobile No., or Username.");
     } catch (err) {
-        showToast(err.message || "❌ Bigo sa pag-login.");
+        showToast(err.message || "❌ Login failed.");
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -244,11 +244,11 @@ export async function processLogin() {
             }
         } else {
             if (!passInput) {
-                throw new Error("⚠️ Paki-lagay ang iyong Rider Password.");
+                throw new Error("⚠️ Please enter your Rider Password.");
             }
 
             if (passInput !== existingPassword.toString()) {
-                throw new Error("❌ Mali ang iyong Rider Password. Paki-ulit.");
+                throw new Error("❌ Incorrect Rider Password. Please try again.");
             }
         }
 
@@ -365,12 +365,12 @@ export function logout() {
 export function showRiderForgotPassHelp() {
     showSideNotification(
         "RIDER FORGOT PASSWORD",
-        "Makipag-ugnayan sa Admin upang i-clear ang iyong password gamit ang Rider Accounts Manager. Pagkatapos ma-clear, makakapag-login ka agad at makakapag-set ng bagong password.",
+        "Please contact an Admin to clear your password using the Rider Accounts Manager. Once cleared, you can log in immediately and set a new password.",
         "fa-key",
         "text-amber-400",
         "border-amber-500"
     );
-    showToast("ℹ️ Humiling sa Admin na i-clear ang iyong password sa Rider Accounts Manager.");
+    showToast("ℹ️ Please request an Admin to clear your password in Rider Accounts Manager.");
 }
 
 if (typeof window !== 'undefined') {

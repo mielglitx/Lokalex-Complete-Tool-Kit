@@ -70,7 +70,7 @@ export function closeMapCalcNameModal() {
 export async function confirmGenerateMapCalcLink() {
     const inputEl = document.getElementById('mapcalc-cust-name-input');
     const custName = inputEl ? inputEl.value.trim() : "";
-    if (!custName) return showToast("⚠️ Paki-lagay ang Customer Name!");
+    if (!custName) return showToast("⚠️ Please enter Customer Name!");
 
     closeMapCalcNameModal();
 
@@ -110,7 +110,7 @@ export const startMapCalcForCustomer = confirmGenerateMapCalcLink;
 export function copyMapCalcCustomerMessage(custName, calcKey) {
     if (!custName) custName = "Customer";
     const fullUrl = getMapCalcShareUrl(calcKey);
-    const message = `Magandang araw po ${custName}! 👋\n\nIn order for us to calculate your accurate location and delivery fee please click on the link and follow the instructions on the next screen, you can also copy the link below and use google chrome to open the link. please do not use safari:\n\n${fullUrl}\n\n⚠️ PAALALA:\nKung binuksan nyo po sa Messenger, paki-pindot ang 3 dots (...) sa itaas at piliin ang "Open in Chrome". Maraming salamat po! 🛵💙`;
+    const message = `Good day ${custName}! 👋\n\nIn order for us to calculate your accurate location and delivery fee, please click on the link and follow the instructions on the next screen. You can also copy the link below and use Google Chrome to open it. Please do not use Safari:\n\n${fullUrl}\n\n⚠️ REMINDER:\nIf opened in Messenger, please tap the 3 dots (...) at the top and select "Open in Chrome". Thank you very much! 🛵💙`;
     
     copyText(message);
     showToast(`🔗 Distance calc message & link copied for ${custName}!`);
@@ -144,7 +144,7 @@ export async function startMapCalcLocationSharing() {
     if (!navigator.geolocation) {
         if (statusEl) {
             statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
-            statusEl.innerText = "❌ Hindi suportado ang GPS sa browser na ito.";
+            statusEl.innerText = "❌ GPS is not supported in this browser.";
         }
         return;
     }
@@ -175,7 +175,7 @@ export async function startMapCalcLocationSharing() {
                     }).addTo(mapState.custLeafletMapObj);
 
                     mapState.custMarkerObj = window.L.marker([lat, lng], {
-                        title: "Iyong Lokasyon"
+                        title: "Your Location"
                     }).addTo(mapState.custLeafletMapObj);
                     
                     mapState.custGoogleMapObj = mapState.custLeafletMapObj;
@@ -208,13 +208,13 @@ export async function startMapCalcLocationSharing() {
 
             if (statusEl) {
                 statusEl.className = "text-xs font-bold text-emerald-400 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20";
-                statusEl.innerHTML = `📡 Signal Accuracy: ±${accuracy}m (Fix${shareCount})<br><span class="text-gray-300 font-normal">Nasa-save na ang iyong lokasyon...</span>`;
+                statusEl.innerHTML = `📡 Signal Accuracy: ±${accuracy}m (Fix${shareCount})<br><span class="text-gray-300 font-normal">Saving your location...</span>`;
             }
 
             if (accuracy <= 25 || shareCount >= 3) {
                 try { navigator.geolocation.clearWatch(watchId); } catch(e) {}
                 if (statusEl) {
-                    statusEl.innerHTML = `🔒 <strong>Pin Permanently Saved!</strong><br><span class="text-gray-300 font-normal">Nai-save na ang iyong lokasyon (±${accuracy}m). Pwede mo nang isara ang window na ito.</span>`;
+                    statusEl.innerHTML = `🔒 <strong>Pin Permanently Saved!</strong><br><span class="text-gray-300 font-normal">Your location has been saved (±${accuracy}m). You may now close this window.</span>`;
                 }
                 if (btn) {
                     btn.innerHTML = `<i class="fa-solid fa-check-double"></i> DISTANCE PINNED`;
@@ -224,7 +224,7 @@ export async function startMapCalcLocationSharing() {
         (err) => {
             if (statusEl) {
                 statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
-                statusEl.innerText = "⚠️ Paki-allow ang GPS Location permission sa iyong browser.";
+                statusEl.innerText = "⚠️ Please allow GPS Location permission in your browser.";
             }
             if (btn) {
                 btn.disabled = false;
@@ -446,7 +446,7 @@ export function viewMapCalcRoute(id, lat, lng, custName = "Customer") {
 }
 
 export function deleteMapCalcRecord(key, custName) {
-    openSlideDeleteModal(`Sigurado ka bang nais burahin ang Map Calc record para kay [${custName}]?`, () => {
+    openSlideDeleteModal(`Are you sure you want to delete the Map Calc record for [${custName}]?`, () => {
         if (db && key) {
             db.ref('mapCalculations/' + key).remove();
         }

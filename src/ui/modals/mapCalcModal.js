@@ -194,9 +194,9 @@ export function fetchAndRenderMapCalculations() {
 
 export function copyMapCalcLink(id, rawLink = "", customerName = "") {
     const targetLink = getMapCalcShareUrl(id);
-    const nameGreeting = customerName ? `Magandang araw po ${customerName}! 👋` : `Magandang araw po! 👋`;
+    const nameGreeting = customerName ? `Good day ${customerName}! 👋` : `Good day! 👋`;
     
-    const statement = `${nameGreeting}\n\nIn order for us to calculate your accurate location and delivery fee please click on the link and follow the instructions on the next screen, you can also copy the link below and use google chrome to open the link. please do not use safari:\n\n${targetLink}\n\n⚠️ PAALALA:\nKung binuksan nyo po sa Messenger, paki-pindot ang 3 dots (...) sa itaas at piliin ang "Open in Chrome". Maraming salamat po! 🫡💙`;
+    const statement = `${nameGreeting}\n\nIn order for us to calculate your accurate location and delivery fee, please click on the link and follow the instructions on the next screen. You can also copy the link below and use Google Chrome to open it (please do not use Safari):\n\n${targetLink}\n\n⚠️ NOTE:\nIf you opened this in Messenger, please tap the 3 dots (...) at the top and select "Open in Chrome". Thank you! 🫡💙`;
 
     copyText(statement);
     showToast(`🔗 Distance calc message & link copied for ${customerName || 'Customer'}!`);

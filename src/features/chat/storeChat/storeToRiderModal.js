@@ -171,14 +171,14 @@ export function switchMerchantPortalTab(tab = 'rider') {
 
         if (presetsBar) {
             presetsBar.innerHTML = `
-                <button onclick="window.sendMerchantPortalQuickPreset('👨‍🍳 Inihahanda na po ang order.')" class="bg-white dark:bg-cardBg hover:bg-blue-50 dark:hover:bg-blue-900/30 border border-gray-200 dark:border-gray-700 text-blue-600 dark:text-blue-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
-                    👨‍🍳 Inihahanda na
+                <button onclick="window.sendMerchantPortalQuickPreset('👨‍🍳 The order is being prepared.')" class="bg-white dark:bg-cardBg hover:bg-blue-50 dark:hover:bg-blue-900/30 border border-gray-200 dark:border-gray-700 text-blue-600 dark:text-blue-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
+                    👨‍🍳 Preparing order
                 </button>
-                <button onclick="window.sendMerchantPortalQuickPreset('✅ Ready na po for pickup ang order!')" class="bg-white dark:bg-cardBg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 border border-gray-200 dark:border-gray-700 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
+                <button onclick="window.sendMerchantPortalQuickPreset('✅ The order is ready for pickup!')" class="bg-white dark:bg-cardBg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 border border-gray-200 dark:border-gray-700 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
                     ✅ Ready for pickup
                 </button>
-                <button onclick="window.sendMerchantPortalQuickPreset('📍 Paki-claim po sa cashier counter.')" class="bg-white dark:bg-cardBg hover:bg-purple-50 dark:hover:bg-purple-900/30 border border-gray-200 dark:border-gray-700 text-purple-600 dark:text-purple-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
-                    📍 Sa cashier counter
+                <button onclick="window.sendMerchantPortalQuickPreset('📍 Please claim at the cashier counter.')" class="bg-white dark:bg-cardBg hover:bg-purple-50 dark:hover:bg-purple-900/30 border border-gray-200 dark:border-gray-700 text-purple-600 dark:text-purple-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
+                    📍 At cashier counter
                 </button>`;
         }
 
@@ -190,14 +190,14 @@ export function switchMerchantPortalTab(tab = 'rider') {
 
         if (presetsBar) {
             presetsBar.innerHTML = `
-                <button onclick="window.sendMerchantPortalQuickPreset('👋 Magandang araw po! We are now preparing your order.')" class="bg-white dark:bg-cardBg hover:bg-orange-50 dark:hover:bg-orange-900/30 border border-gray-200 dark:border-gray-700 text-orange-600 dark:text-orange-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
-                    👋 Inihahanda na
+                <button onclick="window.sendMerchantPortalQuickPreset('👋 Good day! We are now preparing your order.')" class="bg-white dark:bg-cardBg hover:bg-orange-50 dark:hover:bg-orange-900/30 border border-gray-200 dark:border-gray-700 text-orange-600 dark:text-orange-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
+                    👋 Preparing order
                 </button>
-                <button onclick="window.sendMerchantPortalQuickPreset('⚠️ Out of stock po ang isang item, ano po ang pwedeng pamalit?')" class="bg-white dark:bg-cardBg hover:bg-red-50 dark:hover:bg-red-900/30 border border-gray-200 dark:border-gray-700 text-red-600 dark:text-red-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
-                    ⚠️ Out of stock (Palit item)
+                <button onclick="window.sendMerchantPortalQuickPreset('⚠️ An item is out of stock. What would you like as a replacement?')" class="bg-white dark:bg-cardBg hover:bg-red-50 dark:hover:bg-red-900/30 border border-gray-200 dark:border-gray-700 text-red-600 dark:text-red-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
+                    ⚠️ Item out of stock
                 </button>
-                <button onclick="window.sendMerchantPortalQuickPreset('✅ Nakuha na po ng rider ang order. Papunta na po sa inyo!')" class="bg-white dark:bg-cardBg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 border border-gray-200 dark:border-gray-700 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
-                    ✅ Nakuha na ng rider
+                <button onclick="window.sendMerchantPortalQuickPreset('✅ The rider has picked up your order. It\'s on the way to you!')" class="bg-white dark:bg-cardBg hover:bg-emerald-50 dark:hover:bg-emerald-900/30 border border-gray-200 dark:border-gray-700 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap transition active:scale-95 shadow-xs">
+                    ✅ Picked up by rider
                 </button>`;
         }
 

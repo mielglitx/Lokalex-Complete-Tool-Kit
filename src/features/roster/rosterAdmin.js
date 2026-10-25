@@ -440,7 +440,7 @@ export async function forceAllEndShift() {
         return showToast("⚠️ Unauthorized: You do not have permission to Force End Shift for all riders.");
     }
 
-    openSlideDeleteModal("Sigurado ka bang nais mong i-force end shift ang lahat ng riders?", async () => {
+    openSlideDeleteModal("Are you sure you want to force end shift for all riders?", async () => {
         const rosterMembers = globalState.rosterMembers || [];
         const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const nowTimestamp = Date.now();

@@ -56,7 +56,7 @@ export function copyCustomerTrackingLink(custName, forceRefresh = false) {
     saveTrackingHistory();
 
     const fullUrl = `${window.location.origin}${window.location.pathname}?track=${custData.activeKey}`;
-    const customerMessage = `Magandang araw po! 👋\n\nPara mas mabilis at accurate ang paghatid ng inyong order, paki-pindot lang po ang link na ito para makuha ng ating Lokalex Rider ang inyong eksaktong lokasyon:\n\n${fullUrl}\n\n⚠️ PAALALA:\nKung binuksan nyo po ito sa loob ng Messenger, paki-pindot po ang 3 dots (...) sa itaas at piliin ang "Open in Chrome/Safari". Maraming salamat po! 🛵💙`;
+    const customerMessage = `Good day! 👋\n\nFor faster and more accurate delivery of your order, please click this link so our Lokalex Rider can get your exact location:\n\n${fullUrl}\n\n⚠️ REMINDER:\nIf opened inside Messenger, please tap the 3 dots (...) at the top and select "Open in Chrome/Safari". Thank you very much! 🛵💙`;
 
     copyText(customerMessage);
     showToast(`🔗 Tracking message & link copied for ${custName}!`);
@@ -64,7 +64,7 @@ export function copyCustomerTrackingLink(custName, forceRefresh = false) {
 
 export function refreshCustomerTrackingLink(custName) {
     if (!custName) custName = "Customer";
-    openSlideDeleteModal(`Mag-generate ng bagong GPS tracking link para kay [${custName}]?`, () => {
+    openSlideDeleteModal(`Generate new GPS tracking link for [${custName}]?`, () => {
         copyCustomerTrackingLink(custName, true);
     });
 }
@@ -87,13 +87,13 @@ export async function startCustomerLocationSharing() {
 
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Kumukuha ng GPS...`;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Getting GPS location...`;
     }
 
     if (!navigator.geolocation) {
         if (statusEl) {
             statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
-            statusEl.innerText = "❌ Hindi suportado ang GPS sa browser na ito.";
+            statusEl.innerText = "❌ GPS is not supported in this browser.";
         }
         return;
     }
@@ -122,7 +122,7 @@ export async function startCustomerLocationSharing() {
                     }).addTo(mapState.custLeafletMapObj);
 
                     mapState.custMarkerObj = window.L.marker([lat, lng], {
-                        title: "Iyong Lokasyon"
+                        title: "Your Location"
                     }).addTo(mapState.custLeafletMapObj);
 
                     mapState.custGoogleMapObj = mapState.custLeafletMapObj;
@@ -144,13 +144,13 @@ export async function startCustomerLocationSharing() {
 
             if (statusEl) {
                 statusEl.className = "text-xs font-bold text-blue-400 bg-blue-500/10 p-3 rounded-xl border border-blue-500/20";
-                statusEl.innerHTML = `📡 Signal Accuracy... (${shareCount}/20)<br><span class="text-gray-300 font-normal">Nasa-save na ang iyong lokasyon...</span>`;
+                statusEl.innerHTML = `📡 Signal Accuracy... (${shareCount}/20)<br><span class="text-gray-300 font-normal">Saving your location...</span>`;
             }
 
             if (shareCount >= 20) {
                 try { navigator.geolocation.clearWatch(watchId); } catch(e) {}
                 if (statusEl) {
-                    statusEl.innerHTML = "🔒 <strong>Pin Permanently Saved (100%)!</strong><br><span class=\"text-gray-300 font-normal\">Nai-save na ang iyong lokasyon. Ipaalam na ito sa rider.</span>";
+                    statusEl.innerHTML = "🔒 <strong>Pin Permanently Saved (100%)!</strong><br><span class=\"text-gray-300 font-normal\">Your location has been saved. Please notify the rider.</span>";
                 }
                 if (btn) {
                     btn.innerHTML = `<i class="fa-solid fa-check-double"></i> LOCATION PINNED`;
@@ -160,7 +160,7 @@ export async function startCustomerLocationSharing() {
         (err) => {
             if (statusEl) {
                 statusEl.className = "text-xs font-bold text-red-400 bg-red-500/10 p-3 rounded-xl border border-red-500/20";
-                statusEl.innerText = "⚠️ Paki-allow ang GPS Location permission sa iyong browser.";
+                statusEl.innerText = "⚠️ Please allow GPS Location permission in your browser.";
             }
             if (btn) {
                 btn.disabled = false;

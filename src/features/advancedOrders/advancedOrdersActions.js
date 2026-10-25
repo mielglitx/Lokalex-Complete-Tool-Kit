@@ -154,7 +154,7 @@ export function takeAdvancedOrder(orderId) {
 
     promptRiderNameInModal({
         title: "Being Catered",
-        subtitle: `Sino ang mag-cacater ng order ni ${ord.custName}?`,
+        subtitle: `Who will cater the order for ${ord.custName}?`,
         defaultValue: defaultRider,
         riderList: availableRiders,
         confirmBtnText: "CONFIRM CATERING",
@@ -177,7 +177,7 @@ export function takeAdvancedOrder(orderId) {
 
             renderAdvancedOrdersList();
             checkScheduledDeliveryAlerts();
-            showToast(`🛵 Order ni ${ord.custName} ay kini-cater na ni ${finalName}!`);
+            showToast(`🛵 Order for ${ord.custName} is now being catered by ${finalName}!`);
         }
     });
 }
@@ -193,7 +193,7 @@ export function markAdvancedOrderDone(orderId) {
 
     promptRiderNameInModal({
         title: "Mark as Done",
-        subtitle: `Sino ang nag-cater sa order ni ${ord.custName}?`,
+        subtitle: `Who catered the order for ${ord.custName}?`,
         defaultValue: defaultRider,
         riderList: availableRiders,
         confirmBtnText: "MARK ORDER DONE",
@@ -216,7 +216,7 @@ export function markAdvancedOrderDone(orderId) {
 
             renderAdvancedOrdersList();
             checkScheduledDeliveryAlerts();
-            showToast(`✅ Order ni ${ord.custName} ay minarkahang Done ni ${finalName}!`);
+            showToast(`✅ Order for ${ord.custName} was marked as Done by ${finalName}!`);
         }
     });
 }

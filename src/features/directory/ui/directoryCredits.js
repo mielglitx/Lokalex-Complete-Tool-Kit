@@ -42,7 +42,7 @@ export function updateRosterCreditsDisplay(credits) {
 export function showCreditsInfoToast() {
     const isAdmin = checkAdminAccess();
     if (isAdmin) {
-        showToast("👑 Admin Account: Mayroon kang UNLIMITED Directory Access at hindi ka nababawasan ng credits.");
+        showToast("👑 Admin Account: You have UNLIMITED Directory Access and credits are not deducted.");
         return;
     }
 
@@ -52,7 +52,7 @@ export function showCreditsInfoToast() {
     const storeR = config.rewardStoreRegistration !== undefined ? config.rewardStoreRegistration : 10;
     const status = config.enabled !== false ? 'ACTIVE' : 'DISABLED';
 
-    showToast(`🪙 Directory Credits (${status})\n• Balance: ${cur} credits\n• Libre ang Customer & Store browsing\n• -1 credit bawat Customer Location na titingnan\n• +${custR} credits bawat Customer registration\n• +${storeR} credits bawat Store registration\n• Maaari ring mag-share ng credits sa kapwa rider!`);
+    showToast(`🪙 Directory Credits (${status})\n• Balance: ${cur} credits\n• Free Customer & Store browsing\n• -1 credit per Customer Location viewed\n• +${custR} credits per Customer registration\n• +${storeR} credits per Store registration\n• You can also share credits with fellow riders!`);
 }
 
 export function initRiderCreditsListener() {
@@ -136,7 +136,7 @@ function getOrCreateShareCreditsModal() {
 
                 <div class="text-[10px] text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-black/20 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800 flex items-start gap-1.5 leading-relaxed">
                     <i class="fa-solid fa-shield-halved text-amber-500 mt-0.5 shrink-0 text-xs"></i>
-                    <span>Ang transfer na ito ay <strong>instant</strong> at mababawas agad sa iyong credits bago maidagdag sa piniling rider.</span>
+                    <span>This transfer is <strong>instant</strong> and will be deducted from your credits immediately before being added to the selected rider.</span>
                 </div>
             </div>
 
@@ -199,7 +199,7 @@ export function openShareCreditsModal() {
         });
 
         if (validRecipients.length === 0) {
-            optionsHtml = `<option value="">Walang ibang aktibong riders</option>`;
+            optionsHtml = `<option value="">No other active riders</option>`;
         }
 
         recipientSelect.innerHTML = optionsHtml;
@@ -240,7 +240,7 @@ export async function confirmTransferCredits() {
     const targetName = selectedOption?.dataset?.name || "Rider";
 
     if (!targetId) {
-        showToast("⚠️ Pumili muna ng rider na padadalhan ng credits.");
+        showToast("⚠️ Please select a rider to send credits to first.");
         return;
     }
 
@@ -248,7 +248,7 @@ export async function confirmTransferCredits() {
     const amount = parseInt(amountInput?.value, 10);
 
     if (isNaN(amount) || amount <= 0) {
-        showToast("⚠️ Maglagay ng wastong halaga ng credits (minimum 1).");
+        showToast("⚠️ Please enter a valid credit amount (minimum 1).");
         return;
     }
 
@@ -256,7 +256,7 @@ export async function confirmTransferCredits() {
     if (isNaN(currentCredits)) currentCredits = 0;
 
     if (!isAdmin && currentCredits < amount) {
-        showToast(`⚠️ Hindi sapat ang iyong credits (${currentCredits} available, nagtatangkang mag-transfer ng ${amount}).`);
+        showToast(`⚠️ Insufficient credits (${currentCredits} available, attempting to transfer ${amount}).`);
         return;
     }
 
@@ -305,11 +305,11 @@ export async function confirmTransferCredits() {
         }
 
         closeShareCreditsModal();
-        showToast(`✅ Matagumpay na naipadala ang ${amount} credit(s) kay ${targetName}!`);
+        showToast(`✅ Successfully sent ${amount} credit(s) to ${targetName}!`);
         showSideNotification("CREDITS TRANSFERRED", `${amount} credits to ${targetName}`, "fa-coins", "text-amber-400", "border-amber-500");
     } catch (err) {
         console.error("Credit transfer failed:", err);
-        showToast("❌ Hindi naipadala ang credits: " + (err.message || "Failed"));
+        showToast("❌ Failed to send credits: " + (err.message || "Failed"));
     } finally {
         if (transferBtn) {
             transferBtn.disabled = false;
