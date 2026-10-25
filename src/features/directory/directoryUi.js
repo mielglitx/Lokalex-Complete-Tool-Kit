@@ -80,6 +80,9 @@ import {
     takeMenuCameraSnapshot,
     retakeMenuCameraSnapshot,
     confirmAndUploadMenuSnapshot,
+    setMenuCameraZoomLevel,
+    toggleMenuCameraOrientation,
+    handleNativeMenuCameraCapture,
     openGalleryLightbox,
     closeGalleryLightbox,
     handleMenuPageCheckToggle,
@@ -161,6 +164,9 @@ if (typeof window !== 'undefined') {
     window.takeMenuCameraSnapshot = takeMenuCameraSnapshot;
     window.retakeMenuCameraSnapshot = retakeMenuCameraSnapshot;
     window.confirmAndUploadMenuSnapshot = confirmAndUploadMenuSnapshot;
+    window.setMenuCameraZoomLevel = setMenuCameraZoomLevel;
+    window.toggleMenuCameraOrientation = toggleMenuCameraOrientation;
+    window.handleNativeMenuCameraCapture = handleNativeMenuCameraCapture;
     window.openGalleryLightbox = openGalleryLightbox;
     window.closeGalleryLightbox = closeGalleryLightbox;
 

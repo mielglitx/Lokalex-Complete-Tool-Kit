@@ -19,6 +19,7 @@ import {
     sanitizeForFirebase
 } from './chatState.js';
 import { cancelRiderReply } from './chatListeners.js';
+import { clearMyTypingStatus } from './chatPresence.js';
 
 export async function forwardRiderReactionToMessenger({ custId, msgId, emoji, action = 'react' }) {
     try {
@@ -125,6 +126,7 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
         }
     }
     threadDraftsMap.delete(targetCustId);
+    clearMyTypingStatus();
 
     // Freeze reply target snapshot
     const replyTargetSnapshot = (targetCustId === activeRiderChatCustId && activeRiderReplyTarget)

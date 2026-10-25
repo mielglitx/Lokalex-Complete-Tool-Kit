@@ -997,43 +997,78 @@ export function updateRiderChatSeenAvatar(container, activeCustData = null, msgs
         }
     }
 
-    // Find the last rider message seen by customer
-    let lastSeenMsg = null;
-    for (let i = 0; i < msgs.length; i++) {
-        const m = msgs[i];
-        if (!m) continue;
-        const isRider = Boolean(m.isRider || m.senderType === 'rider');
-        if (!isRider) continue;
-        const isFailed = Boolean(m.status === 'failed' || m.failed === true || m.error);
-        if (isFailed) continue;
+    // Find the latest message to anchor the seen indicators
+    const lastMsg = msgs[msgs.length - 1];
+    if (!lastMsg || !lastMsg.id) return;
 
-        const ts = getMessageTimestamp(m);
-        const isExplicitSeen = m.status === 'seen' || Boolean(m.seenAt);
-        const isSeenByCustomerTs = customerLastSeenTs > 0 && ts > 0 && ts <= customerLastSeenTs;
-        const isSeenByReply = latestCustomerReplyTs > 0 && ts > 0 && ts <= latestCustomerReplyTs;
+    // 1. Check if customer saw the message
+    let customerSawIt = false;
+    let customerSeenTs = null;
+    const isRiderLastMsg = Boolean(lastMsg.isRider || lastMsg.senderType === 'rider');
+    const lastMsgTs = getMessageTimestamp(lastMsg);
+
+    if (isRiderLastMsg) {
+        const isExplicitSeen = lastMsg.status === 'seen' || Boolean(lastMsg.seenAt);
+        const isSeenByCustomerTs = customerLastSeenTs > 0 && lastMsgTs > 0 && lastMsgTs <= customerLastSeenTs;
+        const isSeenByReply = latestCustomerReplyTs > 0 && lastMsgTs > 0 && lastMsgTs <= latestCustomerReplyTs;
 
         if (isExplicitSeen || isSeenByCustomerTs || isSeenByReply) {
-            lastSeenMsg = m;
+            customerSawIt = true;
+            customerSeenTs = lastMsg.seenAt 
+                || (customerLastSeenTs >= lastMsgTs ? customerLastSeenTs : null) 
+                || (latestCustomerReplyTs >= lastMsgTs ? latestCustomerReplyTs : null)
+                || lastMsg.timestamp;
         }
     }
 
-    if (!lastSeenMsg || !lastSeenMsg.id) return;
+    // 2. Check which riders have seen the chat thread
+    const threadSeenBy = meta?.threadSeenBy || activeCustData?.threadSeenBy || window.activeThreadSeenMap || {};
+    let myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    if (!myId) {
+        const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
+        myId = myName ? myName.replace(/[^a-zA-Z0-9_-]/g, '_') : "";
+    }
+    const otherRidersSeen = [];
 
-    const targetBubble = document.getElementById(`msg-bubble-${lastSeenMsg.id}`);
+    if (threadSeenBy && typeof threadSeenBy === 'object') {
+        Object.values(threadSeenBy).forEach(s => {
+            if (s && s.riderId && (!myId || s.riderId.toString() !== myId)) {
+                otherRidersSeen.push({
+                    name: s.riderName || "Rider",
+                    time: s.seenAt ? new Date(s.seenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""
+                });
+            }
+        });
+    }
+
+    if (!customerSawIt && otherRidersSeen.length === 0) return;
+
+    const targetBubble = document.getElementById(`msg-bubble-${lastMsg.id}`) || container.lastElementChild;
     if (!targetBubble) return;
 
-    const seenAtTs = lastSeenMsg.seenAt 
-        || (customerLastSeenTs >= getMessageTimestamp(lastSeenMsg) ? customerLastSeenTs : null) 
-        || (latestCustomerReplyTs >= getMessageTimestamp(lastSeenMsg) ? latestCustomerReplyTs : null)
-        || lastSeenMsg.timestamp;
-    const seenTimeStr = seenAtTs ? new Date(seenAtTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+    const seenNames = [];
+    if (customerSawIt) seenNames.push(custName);
+    otherRidersSeen.forEach(r => seenNames.push(r.name));
+
+    const finalSeenTime = customerSeenTs 
+        ? new Date(customerSeenTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+        : (otherRidersSeen[0]?.time || "");
+
+    const seenLabel = seenNames.length <= 2 
+        ? seenNames.join(' & ') 
+        : `${seenNames[0]} & ${seenNames.length - 1} others`;
 
     const wrapper = document.createElement('div');
-    wrapper.className = 'chat-seen-avatar-wrapper flex items-center justify-end gap-1 mt-0.5 mr-8 select-none transition-all duration-200';
-    wrapper.title = `Seen by ${custName}${seenTimeStr ? ` at ${seenTimeStr}` : ''}`;
+    wrapper.className = 'chat-seen-avatar-wrapper flex items-center justify-end gap-1.5 mt-1 mr-3 select-none transition-all duration-200';
+    wrapper.title = `Seen by ${seenNames.join(', ')}${finalSeenTime ? ` at ${finalSeenTime}` : ''}`;
     wrapper.innerHTML = `
-        <span class="text-[9px] text-gray-400 dark:text-gray-400 font-medium opacity-0 hover:opacity-100 transition-opacity">Seen ${seenTimeStr}</span>
-        <img src="${custAvatar}" alt="${escapeHtml(custName)}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff'" class="w-3.5 h-3.5 rounded-full border border-white dark:border-gray-800 shadow-xs object-cover pointer-events-none ring-1 ring-blue-500/30">
+        <span class="text-[9.5px] text-gray-500 dark:text-gray-400 font-bold flex items-center gap-1">
+            <i class="fa-solid fa-eye text-cyan-600 dark:text-cyan-400 text-[9px]"></i> Seen by ${escapeHtml(seenLabel)}${finalSeenTime ? ` • ${finalSeenTime}` : ''}
+        </span>
+        <div class="flex items-center -space-x-1">
+            ${customerSawIt ? `<img src="${custAvatar}" alt="${escapeHtml(custName)}" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff'" class="w-3.5 h-3.5 rounded-full border border-white dark:border-gray-800 shadow-xs object-cover pointer-events-none ring-1 ring-cyan-500/40">` : ''}
+            ${otherRidersSeen.map(r => `<div class="w-3.5 h-3.5 rounded-full bg-amber-500 text-white font-bold text-[7px] flex items-center justify-center border border-white dark:border-gray-800 shadow-xs ring-1 ring-amber-500/40" title="Seen by ${escapeHtml(r.name)}">${escapeHtml(r.name.charAt(0))}</div>`).join('')}
+        </div>
     `;
 
     targetBubble.appendChild(wrapper);

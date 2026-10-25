@@ -71,8 +71,53 @@ export async function openRiderInfoModal(targetId, targetName = "") {
     const userType = (member?.userType || cloudData?.userType || "rider").toUpperCase();
     const status = (member?.status || "End").toUpperCase();
     const phone = cloudData?.phone || cloudData?.mobile || member?.phone || "";
-    const gcashName = cloudData?.gcashName || member?.gcashName || "";
-    const gcashNo = cloudData?.gcashNo || member?.gcashNo || "";
+    
+    // Resolve GCash credentials with multi-source fallback (Cloud account, Roster, Local State, and Firebase GCash registry)
+    let gcashName = cloudData?.gcashName || member?.gcashName || "";
+    let gcashNo = cloudData?.gcashNo || member?.gcashNo || "";
+
+    // 1. If inspecting own profile and not populated in cloud yet, use active appState / localStorage
+    if (riderId === myId) {
+        if (!gcashName) gcashName = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || "";
+        if (!gcashNo) gcashNo = appState.gcashNo || localStorage.getItem('lokalex_gcash_no') || "";
+    }
+
+    // 2. If still missing, query Firebase 'gcash' registry where rider GCash details are registered
+    if ((!gcashName || !gcashNo) && db) {
+        try {
+            const riderKey = (riderId || riderName).toString().replace(/[^a-zA-Z0-9_-]/g, '_');
+            const gSnap = await db.ref(`gcash/${riderKey}`).once('value');
+            const gVal = gSnap.val();
+            if (gVal) {
+                if (!gcashName && gVal.gcashName) gcashName = gVal.gcashName;
+                if (!gcashNo && gVal.gcashNo) gcashNo = gVal.gcashNo;
+            } else {
+                // Search across gcash registry for matching telegramId or riderName
+                const allGcashSnap = await db.ref('gcash').once('value');
+                const allGcash = allGcashSnap.val() || {};
+                for (const item of Object.values(allGcash)) {
+                    if (!item) continue;
+                    const itemTId = (item.telegramId || "").toString().trim();
+                    const itemRName = (item.riderName || "").toString().trim().toLowerCase();
+                    if ((riderId && itemTId === riderId) || (riderName && itemRName === riderName.toLowerCase())) {
+                        if (!gcashName && item.gcashName) gcashName = item.gcashName;
+                        if (!gcashNo && item.gcashNo) gcashNo = item.gcashNo;
+                        break;
+                    }
+                }
+            }
+
+            // Sync back to riders/$riderId so future profile lookups are instant
+            if (riderId && (gcashName || gcashNo)) {
+                db.ref(`riders/${riderId}`).update({
+                    gcashName: gcashName || null,
+                    gcashNo: gcashNo || null
+                }).catch(() => {});
+            }
+        } catch(e) {
+            console.warn('[RiderModal] GCash registry fetch error:', e);
+        }
+    }
     const dayOffDay = member?.dayOff !== undefined ? member.dayOff : (cloudData?.dayOff !== undefined ? cloudData.dayOff : null);
     const directoryCredits = cloudData?.directoryCredits !== undefined 
         ? parseInt(cloudData.directoryCredits, 10) 

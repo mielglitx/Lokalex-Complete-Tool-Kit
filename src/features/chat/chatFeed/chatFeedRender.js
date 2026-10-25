@@ -1,8 +1,9 @@
 // src/features/chat/chatFeed/chatFeedRender.js
 import { db } from '../../../config/firebase.js';
 import { appState, globalState } from '../../../store/state.js';
-import { escapeHtml } from '../../../utils/helpers.js';
+import { escapeHtml, sanitizeFirebaseKey } from '../../../utils/helpers.js';
 import { showToast } from '../../../ui/notifications.js';
+import { globalThreadTypingMap, globalThreadViewingMap } from '../chatEngine/chatPresence.js';
 import { formatChatDateParts } from '../chatUtils.js';
 import { isAdmin, canManageRoster, hasTlPermission, isCustomerMatch } from '../../roster/rosterUtils.js';
 import { 
@@ -490,6 +491,19 @@ function executeRenderRiderCustomerChatFeed() {
         }
 
         const unreadDot = t.isUnread ? `<span class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>` : "";
+
+        // Presence & Typing Badges for Live Feed Cards
+        let typingBadge = "";
+        let viewingBadge = "";
+        const cleanTKey = sanitizeFirebaseKey(t.custId || t.id);
+        const typers = globalThreadTypingMap.get(cleanTKey);
+        const viewers = globalThreadViewingMap.get(cleanTKey);
+
+        if (typers && typers.length > 0) {
+            typingBadge = `<span class="bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0 animate-pulse"><i class="fa-solid fa-pen-nib text-[8px]"></i> ${escapeHtml(typers[0])} typing</span>`;
+        } else if (viewers && viewers.length > 0) {
+            viewingBadge = `<span class="bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0"><i class="fa-solid fa-eye text-[8px]"></i> ${escapeHtml(viewers[0])}</span>`;
+        }
         
         let cardBorderClass = "border border-gray-200 dark:border-gray-800 bg-white dark:bg-cardBg";
         let avatarBorderClass = "border-blue-500";
@@ -602,6 +616,8 @@ function executeRenderRiderCustomerChatFeed() {
                             <span class="truncate ${nameClass} max-w-[130px] sm:max-w-[220px] font-black">${escapeHtml(t.customerName)}</span>
                             ${applicantBadge}
                             ${statusBadge}
+                            ${typingBadge}
+                            ${viewingBadge}
                             ${unreadDot}
                         </div>
                         <!-- Row 2: Channel Badge + Folder Badge (if searching) + Last Message -->

@@ -38,6 +38,7 @@ import {
     listenToRiderChatMessages,
     syncIncomingMessageFromMeta
 } from './chatListeners.js';
+import { startChatPresence, stopChatPresence, startChatTypingListener } from './chatPresence.js';
 
 export function openRiderChatModal(custId, custName, avatarUrl) {
     openRiderCustomerChatModal(custId, custName, avatarUrl);
@@ -158,6 +159,8 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         else if (window.syncChatHdButtonUI) window.syncChatHdButtonUI();
         if (window.initSharedQuickRepliesListener) window.initSharedQuickRepliesListener();
         renderRiderCateredSwitcher();
+        startChatPresence(custId);
+        startChatTypingListener(custId);
     }
 
     cancelRiderReply();
@@ -583,6 +586,7 @@ export function closeRiderChatModal() {
 }
 
 export function closeRiderCustomerChatModal() {
+    stopChatPresence();
     if (activeRiderChatCustId) {
         saveCurrentThreadDraft(activeRiderChatCustId);
     }

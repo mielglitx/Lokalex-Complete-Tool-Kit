@@ -437,7 +437,7 @@ export function updateRosterUI() {
         
         let controlsHtml = "";
         if (showControls) {
-            controlsHtml += ` <select onchange="const val = this.value; this.value = ''; window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', val)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
+            controlsHtml += ` <select onchange="const sel = this; const val = sel.value; if (val) { sel.selectedIndex = 0; sel.value = ''; setTimeout(() => { try { sel.selectedIndex = 0; sel.value = ''; } catch(_) {} }, 100); window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', val); }" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected>⚡ Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
 
             controlsHtml += `
             <div class="inline-flex gap-1 ml-1.5 text-[10px] align-middle">
@@ -486,7 +486,7 @@ export function updateRosterUI() {
                 </div>`;
 
         if (showControls) {
-            cardHtml += ` <select onchange="const val = this.value; this.value = ''; window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', val)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer shrink-0"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void All Orders</option></select>`;
+            cardHtml += ` <select onchange="const sel = this; const val = sel.value; if (val) { sel.selectedIndex = 0; sel.value = ''; setTimeout(() => { try { sel.selectedIndex = 0; sel.value = ''; } catch(_) {} }, 100); window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', val); }" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer shrink-0"><option value="" selected>⚡ Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option><option value="VoidActive">🚫 Void All Orders</option></select>`;
         }
         cardHtml += `</div>`;
 
@@ -562,7 +562,7 @@ export function updateRosterUI() {
 
         let controlsHtml = "";
         if (showControls) {
-            controlsHtml += ` <select onchange="const val = this.value; this.value = ''; window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', val)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
+            controlsHtml += ` <select onchange="const sel = this; const val = sel.value; if (val) { sel.selectedIndex = 0; sel.value = ''; setTimeout(() => { try { sel.selectedIndex = 0; sel.value = ''; } catch(_) {} }, 100); window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', val); }" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected>⚡ Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
         }
 
         brkHtml.push(`
@@ -593,7 +593,7 @@ export function updateRosterUI() {
         let controlsHtml = ` <span class="text-amber-700 dark:text-yellow-400 font-mono text-[10px] font-bold">(${mins}:${secs} remaining)</span>`;
 
         if (showControls) {
-            controlsHtml += ` <select onchange="const val = this.value; this.value = ''; window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', val)" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected disabled>Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
+            controlsHtml += ` <select onchange="const sel = this.value; const val = sel.value; if (val) { sel.selectedIndex = 0; sel.value = ''; setTimeout(() => { try { sel.selectedIndex = 0; sel.value = ''; } catch(_) {} }, 100); window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', val); }" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected>⚡ Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
         }
 
         cdHtml.push(`

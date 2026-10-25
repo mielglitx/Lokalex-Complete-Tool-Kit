@@ -19,6 +19,7 @@ import { updateRosterUI } from '../rosterUI.js';
 import { canRiderTakeMoreBookings } from '../rosterStatusLimits.js';
 import { updateRosterStatusData } from '../rosterStatusCore.js';
 import { dismissQueueAlarm } from './rosterAlarms.js';
+import { purgeCartSlotForCustomer } from './rosterCateringCompletion.js';
 
 export function promptCateringStatus() {
     if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
@@ -216,6 +217,8 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
         if (!isAlreadyInList) {
             existingCustomers.push(custName);
             existingTimes.push(startTime);
+            // Ensure any previous locked cart from earlier orders for this customer is reset fresh
+            purgeCartSlotForCustomer(custName);
         }
 
         const cleanCustKey = sanitizeFirebaseKey(custName);

@@ -51,10 +51,20 @@ export async function openProfileSettingsModal() {
     const coordsBadge = document.getElementById('prof-coords-badge');
     const passwordInput = document.getElementById('prof-password-input');
     const avatarPreview = document.getElementById('prof-modal-avatar-preview');
+    const gcashSection = document.getElementById('prof-rider-gcash-section');
+    const gcashNameInput = document.getElementById('prof-gcash-name-input');
+    const gcashNoInput = document.getElementById('prof-gcash-no-input');
 
     if (passwordInput) passwordInput.value = '';
     if (sendOtpBtn) sendOtpBtn.classList.add('hidden');
     if (otpDrawer) otpDrawer.classList.add('hidden');
+    if (gcashSection) {
+        if (profileState.activeRole === 'rider') {
+            gcashSection.classList.remove('hidden');
+        } else {
+            gcashSection.classList.add('hidden');
+        }
+    }
 
     let initialName = '';
     let initialUsername = '';
@@ -62,6 +72,8 @@ export async function openProfileSettingsModal() {
     let initialAddress = '';
     let initialLocation = '';
     let initialAvatar = '';
+    let initialGcashName = '';
+    let initialGcashNo = '';
 
     if (profileState.activeRole === 'customer') {
         if (roleIcon) roleIcon.innerHTML = `<i class="fa-solid fa-user text-blue-500"></i>`;
@@ -143,6 +155,8 @@ export async function openProfileSettingsModal() {
         initialUsername = riderId;
         initialPhone = appState.phoneNumber || localStorage.getItem('lokalex_rider_phone') || '';
         initialAvatar = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || `https://ui-avatars.com/api/?name=${encodeURIComponent(initialName)}&background=0284c7&color=fff&bold=true&size=128`;
+        initialGcashName = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || '';
+        initialGcashNo = appState.gcashNo || localStorage.getItem('lokalex_gcash_no') || '';
 
         if (db && riderId) {
             try {
@@ -153,6 +167,8 @@ export async function openProfileSettingsModal() {
                     if (val.phoneNumber || val.phone) initialPhone = val.phoneNumber || val.phone;
                     if (val.address) initialAddress = val.address;
                     if (val.photoUrl) initialAvatar = val.photoUrl;
+                    if (val.gcashName) initialGcashName = val.gcashName;
+                    if (val.gcashNo) initialGcashNo = val.gcashNo;
                 }
             } catch (e) {}
         }
@@ -176,6 +192,8 @@ export async function openProfileSettingsModal() {
     if (locationInput) locationInput.value = initialLocation;
     if (coordsBadge) coordsBadge.innerText = initialLocation ? "GPS Linked" : "Not set";
     if (avatarPreview) avatarPreview.src = initialAvatar;
+    if (gcashNameInput) gcashNameInput.value = initialGcashName;
+    if (gcashNoInput) gcashNoInput.value = initialGcashNo;
 
     if (phoneBadge) {
         const isVerified = (profileState.activeRole === 'rider' && displayPhone.length === 10) || (displayPhone.length === 10);

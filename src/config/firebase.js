@@ -140,6 +140,16 @@ window.addEventListener('offline', () => {
     isSocketConnected = false;
 });
 
+function normalizeFirebasePath(rawPath) {
+    if (!rawPath || typeof rawPath !== 'string') return null;
+    const trimmed = rawPath.trim().replace(/^\/+|\/+$/g, '');
+    if (!trimmed) return null;
+    // Split by slash and filter out empty tokens (preventing // double-slashes from failing in Firebase RTDB)
+    const segments = trimmed.split('/').map(s => s.trim()).filter(Boolean);
+    if (segments.length === 0) return null;
+    return segments.join('/');
+}
+
 function getRelativeRefPath(ref) {
     if (!ref) return '';
     try {
@@ -229,12 +239,13 @@ function createRefWrapper(primaryRef, backupRef) {
             return wrapper;
         },
         child(childPath) {
-            if (!childPath || typeof childPath !== 'string' || !childPath.trim()) {
+            const cleanChild = normalizeFirebasePath(childPath);
+            if (!cleanChild) {
                 return wrapper;
             }
             return createRefWrapper(
-                primaryRef.child(childPath.trim()),
-                backupRef ? backupRef.child(childPath.trim()) : null
+                primaryRef.child(cleanChild),
+                backupRef ? backupRef.child(cleanChild) : null
             );
         },
 
@@ -452,7 +463,7 @@ function createQueryWrapper(primaryQuery, backupRef) {
 
 export const db = fb ? {
     ref(path) {
-        const cleanPath = (typeof path === 'string' && path.trim()) ? path.trim() : null;
+        const cleanPath = normalizeFirebasePath(path);
         const pRef = primaryDb ? (cleanPath ? primaryDb.ref(cleanPath) : primaryDb.ref()) : null;
         const bRef = backupDb ? (cleanPath ? backupDb.ref(cleanPath) : backupDb.ref()) : null;
         return createRefWrapper(pRef, bRef);

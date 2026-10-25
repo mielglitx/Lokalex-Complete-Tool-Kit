@@ -19,6 +19,11 @@ let activeCameraStream = null;
 let activeCameraFacingMode = 'environment';
 let isTorchOn = false;
 let capturedSnapshotBlob = null;
+let activeCameraOrientation = 'portrait';
+let currentCameraZoom = 1;
+let cameraZoomCapabilities = null;
+let touchStartDistance = 0;
+let touchStartZoom = 1;
 
 // Synchronously hydrate menu metadata immediately at module load time to guarantee 0ms instant display
 export let storeMenuMetadataMap = (() => {
@@ -274,18 +279,29 @@ export function getOrCreateMenuCameraModal() {
         modal.style.zIndex = '1000005';
         modal.innerHTML = `
         <!-- Camera Top Bar -->
-        <div class="flex items-center justify-between px-4 py-3 bg-black/85 backdrop-blur-md text-white z-20 border-b border-white/10">
+        <div class="flex items-center justify-between px-3 sm:px-4 py-2.5 bg-black/90 backdrop-blur-md text-white z-20 border-b border-white/10">
             <button type="button" onclick="window.closeMenuCameraScanner && window.closeMenuCameraScanner()" class="p-2 text-white/80 hover:text-white text-base cursor-pointer">
                 <i class="fa-solid fa-arrow-left"></i>
             </button>
-            <div class="text-center min-w-0 flex-1 px-2">
+            <div class="text-center min-w-0 flex-1 px-1 sm:px-2">
                 <h4 id="menu-camera-title" class="text-xs sm:text-sm font-black truncate text-white">Menu Document Scanner</h4>
-                <p class="text-[9px] sm:text-[10px] text-amber-400 font-medium">Text Clarity & 4:3 High-Res Sensor Mode</p>
+                <p id="menu-camera-sub" class="text-[9px] sm:text-[10px] text-amber-400 font-medium truncate">Instant HD Capture • Zoom & Rotate</p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1.5 sm:gap-2">
+                <!-- Native Camera Direct Trigger -->
+                <input type="file" id="menu-camera-native-input" accept="image/*" capture="environment" class="hidden" onchange="window.handleNativeMenuCameraCapture && window.handleNativeMenuCameraCapture(event)">
+                <button type="button" onclick="document.getElementById('menu-camera-native-input').click()" class="px-2 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold flex items-center gap-1 transition cursor-pointer" title="Switch to Native HD Camera App">
+                    <i class="fa-solid fa-camera"></i> <span class="hidden xs:inline">Native</span>
+                </button>
+                <!-- Orientation Toggle -->
+                <button type="button" id="menu-camera-orient-btn" onclick="window.toggleMenuCameraOrientation && window.toggleMenuCameraOrientation()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs transition cursor-pointer" title="Toggle Orientation (Portrait / Landscape)">
+                    <i class="fa-solid fa-mobile-screen-button"></i>
+                </button>
+                <!-- Torch Toggle -->
                 <button type="button" id="menu-camera-torch-btn" onclick="window.toggleMenuCameraTorch && window.toggleMenuCameraTorch()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs transition cursor-pointer hidden" title="Toggle Flash / Torch">
                     <i class="fa-solid fa-bolt"></i>
                 </button>
+                <!-- Flip Camera -->
                 <button type="button" onclick="window.flipMenuCameraFacing && window.flipMenuCameraFacing()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs transition cursor-pointer" title="Flip Camera">
                     <i class="fa-solid fa-camera-rotate"></i>
                 </button>
@@ -293,11 +309,19 @@ export function getOrCreateMenuCameraModal() {
         </div>
 
         <!-- Viewfinder Area -->
-        <div class="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
-            <video id="menu-camera-video" autoplay playsinline muted class="w-full h-full object-cover"></video>
+        <div id="menu-camera-viewfinder" class="relative flex-1 bg-black flex items-center justify-center overflow-hidden touch-none">
+            <video id="menu-camera-video" autoplay playsinline muted class="w-full h-full object-cover transition-transform duration-100 ease-out"></video>
             
+            <!-- Zoom Controls Pills -->
+            <div id="menu-camera-zoom-pills" class="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-2 z-10 pointer-events-auto">
+                <button type="button" onclick="window.setMenuCameraZoomLevel && window.setMenuCameraZoomLevel(1)" class="menu-zoom-pill px-2.5 py-1 rounded-full text-[11px] font-bold backdrop-blur-md transition cursor-pointer bg-amber-400 text-black shadow-md" data-zoom="1">1x</button>
+                <button type="button" onclick="window.setMenuCameraZoomLevel && window.setMenuCameraZoomLevel(1.5)" class="menu-zoom-pill px-2.5 py-1 rounded-full text-[11px] font-bold backdrop-blur-md transition cursor-pointer bg-black/60 text-white/90 border border-white/20 hover:bg-white/20" data-zoom="1.5">1.5x</button>
+                <button type="button" onclick="window.setMenuCameraZoomLevel && window.setMenuCameraZoomLevel(2)" class="menu-zoom-pill px-2.5 py-1 rounded-full text-[11px] font-bold backdrop-blur-md transition cursor-pointer bg-black/60 text-white/90 border border-white/20 hover:bg-white/20" data-zoom="2">2x</button>
+                <button type="button" onclick="window.setMenuCameraZoomLevel && window.setMenuCameraZoomLevel(3)" class="menu-zoom-pill px-2.5 py-1 rounded-full text-[11px] font-bold backdrop-blur-md transition cursor-pointer bg-black/60 text-white/90 border border-white/20 hover:bg-white/20" data-zoom="3">3x</button>
+            </div>
+
             <!-- Framing overlay with document corners -->
-            <div id="menu-camera-framing-box" class="absolute inset-4 sm:inset-8 pointer-events-none flex flex-col items-center justify-between border-2 border-white/20 rounded-2xl p-4 shadow-2xl">
+            <div id="menu-camera-framing-box" class="absolute inset-4 sm:inset-8 pointer-events-none flex flex-col items-center justify-between border-2 border-white/20 rounded-2xl p-4 shadow-2xl transition-all duration-300">
                 <!-- Top corners -->
                 <div class="w-full flex justify-between">
                     <div class="w-6 h-6 border-t-4 border-l-4 border-amber-400 rounded-tl-lg shadow-sm"></div>
@@ -306,7 +330,7 @@ export function getOrCreateMenuCameraModal() {
                 
                 <div class="bg-black/70 backdrop-blur-md px-3.5 py-1.5 rounded-full text-white/95 text-[10px] sm:text-xs font-bold tracking-wide flex items-center gap-1.5 shadow-lg border border-white/10">
                     <i class="fa-solid fa-expand text-amber-400"></i>
-                    <span>Align menu page inside box</span>
+                    <span id="menu-camera-orient-hint">Pinch or tap zoom • Align page</span>
                 </div>
 
                 <!-- Bottom corners -->
@@ -408,25 +432,26 @@ async function startMenuCameraStream() {
     }
 
     isTorchOn = false;
+    currentCameraZoom = 1;
     updateTorchBtnUi(false);
+    updateZoomPillsUi(1);
 
-    // Progressive camera constraints: 4:3 aspect ratio, Ultra-HD / Full-HD ideal resolution
+    // Fast, responsive stream negotiation: 1080p ideal (negotiates in <300ms vs 4K stalls)
     const constraintSets = [
         {
             audio: false,
             video: {
                 facingMode: { ideal: activeCameraFacingMode },
-                width: { ideal: 3840, min: 1920 },
-                height: { ideal: 2160, min: 1080 },
-                aspectRatio: { ideal: 4 / 3 }
+                width: { ideal: 1920, max: 2560 },
+                height: { ideal: 1080, max: 1440 }
             }
         },
         {
             audio: false,
             video: {
                 facingMode: { ideal: activeCameraFacingMode },
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
             }
         },
         {
@@ -441,7 +466,7 @@ async function startMenuCameraStream() {
             stream = await navigator.mediaDevices.getUserMedia(constraints);
             if (stream) break;
         } catch(e) {
-            // Try next constraint set
+            // Fallback to next constraints
         }
     }
 
@@ -459,11 +484,13 @@ async function startMenuCameraStream() {
         await video.play();
     } catch(e) {}
 
-    // Track capabilities: Torch and continuous auto-focus
+    // Track capabilities: Torch, Zoom, and continuous auto-focus
     const track = stream.getVideoTracks()[0];
     if (track) {
         try {
             const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+            cameraZoomCapabilities = capabilities.zoom || null;
+
             const torchBtn = document.getElementById('menu-camera-torch-btn');
             if (torchBtn) {
                 if (capabilities.torch) {
@@ -490,6 +517,273 @@ async function startMenuCameraStream() {
         } catch(err) {
             console.warn('[MenuCamera] Capability configuration warning:', err);
         }
+    }
+
+    // Attach pinch-to-zoom handlers on viewfinder
+    attachViewfinderPinchToZoom();
+
+    // Start real-time auto-orientation sensor & screen detection
+    startAutoOrientationDetection();
+}
+
+function attachViewfinderPinchToZoom() {
+    const viewfinder = document.getElementById('menu-camera-viewfinder');
+    if (!viewfinder || viewfinder.dataset.pinchBound) return;
+    viewfinder.dataset.pinchBound = "true";
+
+    viewfinder.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            touchStartDistance = Math.hypot(dx, dy);
+            touchStartZoom = currentCameraZoom;
+        }
+    }, { passive: true });
+
+    viewfinder.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2 && touchStartDistance > 0) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const currentDist = Math.hypot(dx, dy);
+            const scale = currentDist / touchStartDistance;
+            let targetZoom = Math.min(3, Math.max(1, touchStartZoom * scale));
+            setMenuCameraZoomLevel(targetZoom, false);
+        }
+    }, { passive: true });
+
+    viewfinder.addEventListener('touchend', (e) => {
+        if (e.touches.length < 2) {
+            touchStartDistance = 0;
+        }
+    }, { passive: true });
+}
+
+export async function setMenuCameraZoomLevel(targetZoom, updatePills = true) {
+    currentCameraZoom = Math.max(1, Math.min(3, Number(targetZoom) || 1));
+    const video = document.getElementById('menu-camera-video');
+
+    if (activeCameraStream) {
+        const track = activeCameraStream.getVideoTracks()[0];
+        if (track && cameraZoomCapabilities && track.applyConstraints) {
+            try {
+                const minZ = cameraZoomCapabilities.min || 1;
+                const maxZ = cameraZoomCapabilities.max || 3;
+                const clampedHw = Math.min(maxZ, Math.max(minZ, currentCameraZoom));
+                await track.applyConstraints({ advanced: [{ zoom: clampedHw }] });
+                if (video) video.style.transform = 'scale(1)';
+                if (updatePills) updateZoomPillsUi(currentCameraZoom);
+                return;
+            } catch(e) {}
+        }
+    }
+
+    // Digital CSS zoom fallback
+    if (video) {
+        video.style.transform = `scale(${currentCameraZoom})`;
+    }
+    if (updatePills) updateZoomPillsUi(currentCameraZoom);
+}
+
+function updateZoomPillsUi(zoomLevel) {
+    const pills = document.querySelectorAll('.menu-zoom-pill');
+    pills.forEach(pill => {
+        const pZoom = parseFloat(pill.getAttribute('data-zoom'));
+        if (Math.abs(pZoom - zoomLevel) < 0.25) {
+            pill.className = "menu-zoom-pill px-2.5 py-1 rounded-full text-[11px] font-bold backdrop-blur-md transition cursor-pointer bg-amber-400 text-black shadow-md";
+        } else {
+            pill.className = "menu-zoom-pill px-2.5 py-1 rounded-full text-[11px] font-bold backdrop-blur-md transition cursor-pointer bg-black/60 text-white/90 border border-white/20 hover:bg-white/20";
+        }
+    });
+}
+
+let orientationListenerActive = false;
+let lastDetectedGamma = 0;
+
+function handleDeviceOrientation(e) {
+    if (!e) return;
+    if (typeof e.gamma === 'number') lastDetectedGamma = e.gamma;
+
+    // Check system screen orientation if available
+    if (window.screen?.orientation?.type) {
+        if (window.screen.orientation.type.includes('landscape')) {
+            applyCameraOrientationMode('landscape', true);
+            return;
+        }
+        if (window.screen.orientation.type.includes('portrait')) {
+            applyCameraOrientationMode('portrait', true);
+            return;
+        }
+    }
+
+    // Check window inner aspect ratio
+    if (window.innerWidth > window.innerHeight) {
+        applyCameraOrientationMode('landscape', true);
+        return;
+    }
+
+    // Accelerometer / Gyroscope check (works when screen orientation is locked to portrait)
+    const absGamma = Math.abs(e.gamma || 0);
+    const absBeta = Math.abs(e.beta || 0);
+
+    // When held sideways horizontally:
+    if (absGamma > 45 && absBeta < 65) {
+        applyCameraOrientationMode('landscape', true);
+    } 
+    // When held upright vertically:
+    else if (absBeta > 35 && absGamma < 35) {
+        applyCameraOrientationMode('portrait', true);
+    }
+}
+
+function handleScreenOrientationChange() {
+    const isLandscape = (window.screen?.orientation?.type?.includes('landscape')) || (window.innerWidth > window.innerHeight);
+    applyCameraOrientationMode(isLandscape ? 'landscape' : 'portrait', true);
+}
+
+function startAutoOrientationDetection() {
+    if (orientationListenerActive) return;
+    orientationListenerActive = true;
+    window.addEventListener('deviceorientation', handleDeviceOrientation, { passive: true });
+    window.addEventListener('resize', handleScreenOrientationChange, { passive: true });
+    if (window.screen?.orientation?.addEventListener) {
+        window.screen.orientation.addEventListener('change', handleScreenOrientationChange);
+    }
+    handleScreenOrientationChange();
+}
+
+function stopAutoOrientationDetection() {
+    if (!orientationListenerActive) return;
+    orientationListenerActive = false;
+    window.removeEventListener('deviceorientation', handleDeviceOrientation);
+    window.removeEventListener('resize', handleScreenOrientationChange);
+    if (window.screen?.orientation?.removeEventListener) {
+        window.screen.orientation.removeEventListener('change', handleScreenOrientationChange);
+    }
+}
+
+export function applyCameraOrientationMode(mode, isAuto = false) {
+    if (activeCameraOrientation === mode && document.getElementById('menu-camera-framing-box')?.dataset.orient === mode) {
+        return;
+    }
+    activeCameraOrientation = mode;
+    const framingBox = document.getElementById('menu-camera-framing-box');
+    const orientBtn = document.getElementById('menu-camera-orient-btn');
+    const orientHint = document.getElementById('menu-camera-orient-hint');
+
+    if (activeCameraOrientation === 'landscape') {
+        if (framingBox) {
+            framingBox.dataset.orient = 'landscape';
+            framingBox.className = "absolute inset-x-3 sm:inset-x-8 inset-y-16 sm:inset-y-20 pointer-events-none flex flex-col items-center justify-between border-2 border-amber-400 rounded-2xl p-4 shadow-2xl transition-all duration-300";
+        }
+        if (orientBtn) {
+            orientBtn.className = "w-8 h-8 rounded-full bg-amber-400 text-black flex items-center justify-center text-xs transition cursor-pointer shadow-md";
+            orientBtn.innerHTML = '<i class="fa-solid fa-mobile-screen-button rotate-90"></i>';
+            orientBtn.title = "Orientation: Landscape (Auto-detected)";
+        }
+        if (orientHint) {
+            orientHint.innerHTML = `<span class="text-amber-400 font-bold">🔄 Landscape (Auto)</span> • Fit wide tarpaulin/board`;
+        }
+        if (!isAuto) showToast("🔄 Landscape Mode: I-frame ang malapad na menu");
+    } else {
+        if (framingBox) {
+            framingBox.dataset.orient = 'portrait';
+            framingBox.className = "absolute inset-4 sm:inset-8 pointer-events-none flex flex-col items-center justify-between border-2 border-white/20 rounded-2xl p-4 shadow-2xl transition-all duration-300";
+        }
+        if (orientBtn) {
+            orientBtn.className = "w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs transition cursor-pointer";
+            orientBtn.innerHTML = '<i class="fa-solid fa-mobile-screen-button"></i>';
+            orientBtn.title = "Orientation: Portrait (Auto-detected)";
+        }
+        if (orientHint) {
+            orientHint.innerHTML = `<span class="text-white font-bold">📱 Portrait (Auto)</span> • Standard page framing`;
+        }
+        if (!isAuto) showToast("📱 Portrait Mode: Standard page framing");
+    }
+}
+
+export function toggleMenuCameraOrientation() {
+    const nextMode = activeCameraOrientation === 'portrait' ? 'landscape' : 'portrait';
+    applyCameraOrientationMode(nextMode, false);
+}
+
+async function ensurePhotoOrientation(blob, desiredOrientation, tiltGamma) {
+    if (!blob) return blob;
+    try {
+        let w = 0, h = 0, imgSource = null;
+        if (typeof createImageBitmap === 'function') {
+            try {
+                imgSource = await createImageBitmap(blob);
+                w = imgSource.width;
+                h = imgSource.height;
+            } catch(e) {}
+        }
+        if (!imgSource) {
+            imgSource = await new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = URL.createObjectURL(blob);
+            });
+            w = imgSource.naturalWidth || imgSource.width;
+            h = imgSource.naturalHeight || imgSource.height;
+        }
+
+        const isLandscape = w > h;
+        const needsRotateToLandscape = (desiredOrientation === 'landscape' && !isLandscape);
+        const needsRotateToPortrait = (desiredOrientation === 'portrait' && isLandscape);
+
+        if (!needsRotateToLandscape && !needsRotateToPortrait) {
+            if (imgSource.close) imgSource.close();
+            return blob;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = h;
+        canvas.height = w;
+        const ctx = canvas.getContext('2d', { alpha: false });
+
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+
+        // Rotation angle
+        let angle = 90 * (Math.PI / 180);
+        if (typeof tiltGamma === 'number' && tiltGamma < 0) {
+            angle = -90 * (Math.PI / 180);
+        }
+
+        ctx.rotate(angle);
+        ctx.drawImage(imgSource, -w / 2, -h / 2);
+        ctx.restore();
+        if (imgSource.close) imgSource.close();
+
+        return await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.95));
+    } catch(err) {
+        console.warn('[MenuCamera] Orientation adjustment error:', err);
+        return blob;
+    }
+}
+
+export async function handleNativeMenuCameraCapture(event) {
+    const file = event?.target?.files?.[0];
+    if (!file || !activeGalleryStore) return;
+
+    showToast("📸 Processing native high-res camera photo...");
+    try {
+        const optimizedBlob = await compressImageToBlob(file, 2400, 0.90, false);
+        const pagesSnap = currentGalleryPages || [];
+        const nextIdx = pagesSnap.length + 1;
+        const caption = `Menu Page ${nextIdx}`;
+
+        await uploadSingleMenuBlob(optimizedBlob, caption, activeGalleryStore.key, activeGalleryStore.name);
+        showToast(`✅ High-Res photo na-save para sa ${activeGalleryStore.name}!`);
+        showSideNotification("MENU PAGE ADDED", `${activeGalleryStore.name} (${caption})`, "fa-camera", "text-amber-400", "border-amber-500");
+        closeMenuCameraScanner();
+        openStoreMenuGalleryModal(activeGalleryStore.name, activeGalleryStore.key);
+    } catch(err) {
+        console.error('[MenuCamera] Native camera upload error:', err);
+        showToast("❌ Bigo sa pag-save: " + (err.message || err));
+    } finally {
+        if (event.target) event.target.value = "";
     }
 }
 
@@ -531,6 +825,8 @@ export async function flipMenuCameraFacing() {
 }
 
 export function closeMenuCameraScanner() {
+    stopAutoOrientationDetection();
+
     const modal = document.getElementById('store-menu-camera-modal');
     if (modal) modal.classList.add('hidden');
 
@@ -540,63 +836,85 @@ export function closeMenuCameraScanner() {
     }
 
     const video = document.getElementById('menu-camera-video');
-    if (video) video.srcObject = null;
+    if (video) {
+        video.srcObject = null;
+        video.style.transform = 'scale(1)';
+    }
 
     const reviewContainer = document.getElementById('menu-camera-review-container');
     if (reviewContainer) reviewContainer.classList.add('hidden');
 
     capturedSnapshotBlob = null;
     isTorchOn = false;
+    currentCameraZoom = 1;
     updateTorchBtnUi(false);
 }
 
-export function takeMenuCameraSnapshot() {
+export async function takeMenuCameraSnapshot() {
     const video = document.getElementById('menu-camera-video');
     if (!video || !activeCameraStream) return;
 
-    const vWidth = video.videoWidth || 1920;
-    const vHeight = video.videoHeight || 1080;
+    const track = activeCameraStream.getVideoTracks()[0];
+    let capturedBlob = null;
 
-    const canvas = document.createElement('canvas');
-    canvas.width = vWidth;
-    canvas.height = vHeight;
-    const ctx = canvas.getContext('2d');
-
-    // Document Text Contrast Filter
-    if (ctx.filter !== undefined) {
-        ctx.filter = 'contrast(1.08) brightness(1.02) saturate(1.05)';
+    // 1. Hardware Still Photo Capture (Uncompressed Full-Sensor Capture)
+    if (typeof window.ImageCapture === 'function' && track) {
+        try {
+            const imageCapture = new window.ImageCapture(track);
+            capturedBlob = await imageCapture.takePhoto();
+        } catch(icErr) {
+            console.warn('[MenuCamera] Hardware still capture fallback to canvas:', icErr);
+        }
     }
-    ctx.drawImage(video, 0, 0, vWidth, vHeight);
 
-    canvas.toBlob(async (blob) => {
-        if (!blob) {
-            showToast("❌ Nabigo ang pagkuha ng litrato.");
-            return;
+    // 2. High-Clarity Canvas Fallback (With digital zoom crop if CSS zoom active)
+    if (!capturedBlob) {
+        const vWidth = video.videoWidth || 1920;
+        const vHeight = video.videoHeight || 1080;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = vWidth;
+        canvas.height = vHeight;
+        const ctx = canvas.getContext('2d', { alpha: false });
+
+        if (currentCameraZoom > 1 && (!cameraZoomCapabilities || !track.getCapabilities().zoom)) {
+            // Crop center based on digital zoom factor
+            const cropW = vWidth / currentCameraZoom;
+            const cropH = vHeight / currentCameraZoom;
+            const cropX = (vWidth - cropW) / 2;
+            const cropY = (vHeight - cropH) / 2;
+            ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, vWidth, vHeight);
+        } else {
+            ctx.drawImage(video, 0, 0, vWidth, vHeight);
         }
 
-        capturedSnapshotBlob = blob;
+        capturedBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.95));
+    }
 
-        const previewImg = document.getElementById('menu-camera-preview-img');
-        const reviewContainer = document.getElementById('menu-camera-review-container');
-        const captionInput = document.getElementById('menu-camera-caption-input');
-        const pageLabel = document.getElementById('menu-camera-review-page-label');
+    if (capturedBlob) {
+        // Automatically ensure photo dimensions and orientation match the phone orientation
+        capturedBlob = await ensurePhotoOrientation(capturedBlob, activeCameraOrientation, lastDetectedGamma);
+    }
 
-        if (previewImg) previewImg.src = URL.createObjectURL(blob);
+    if (!capturedBlob) {
+        showToast("❌ Nabigo ang pagkuha ng litrato.");
+        return;
+    }
 
-        let nextIdx = 1;
-        if (activeGalleryStore && db) {
-            try {
-                const snap = await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages`).once('value');
-                if (snap.exists()) {
-                    nextIdx = Object.keys(snap.val()).length + 1;
-                }
-            } catch(e) {}
-        }
+    capturedSnapshotBlob = capturedBlob;
 
-        if (captionInput) captionInput.value = `Menu Page ${nextIdx}`;
-        if (pageLabel) pageLabel.innerText = `Page ${nextIdx} Preview`;
-        if (reviewContainer) reviewContainer.classList.remove('hidden');
-    }, 'image/jpeg', 0.92);
+    // Instantly display preview with ZERO network latency
+    const previewImg = document.getElementById('menu-camera-preview-img');
+    const reviewContainer = document.getElementById('menu-camera-review-container');
+    const captionInput = document.getElementById('menu-camera-caption-input');
+    const pageLabel = document.getElementById('menu-camera-review-page-label');
+
+    if (previewImg) previewImg.src = URL.createObjectURL(capturedBlob);
+
+    const nextIdx = (currentGalleryPages ? currentGalleryPages.length : 0) + 1;
+    if (captionInput) captionInput.value = `Menu Page ${nextIdx}`;
+    if (pageLabel) pageLabel.innerText = `Page ${nextIdx} Preview`;
+    if (reviewContainer) reviewContainer.classList.remove('hidden');
 }
 
 export function retakeMenuCameraSnapshot() {
@@ -618,7 +936,8 @@ export async function confirmAndUploadMenuSnapshot() {
     }
 
     try {
-        const optimizedBlob = await compressImageToBlob(capturedSnapshotBlob, 1800, 0.85, true);
+        // High-Quality Single-Pass Upload (2400px, 0.90 quality - avoids blurry re-compression)
+        const optimizedBlob = await compressImageToBlob(capturedSnapshotBlob, 2400, 0.90, false);
         const result = await uploadSingleMenuBlob(optimizedBlob, captionText, activeGalleryStore.key, activeGalleryStore.name);
 
         showToast(`✅ Na-save ang ${captionText} para sa ${activeGalleryStore.name}!`);

@@ -680,8 +680,8 @@ export function cancelCustomerThread() {
 
     // SAFEGUARD (Ordinary Rider vs Admin/TL):
     if (!hasAdminPower && !hasTlVoidPower) {
-        // If the order or chat is already marked cancelled or done, allow the rider to clear it
-        const isCancelledOrder = meta?.status === 'cancelled' || meta?.status === 'voided' || meta?.isCancelled === true || meta?.folder === 'done';
+        // If the order or chat is already marked cancelled, done, or moved to follow-up, allow the rider to clear it
+        const isCancelledOrder = meta?.status === 'cancelled' || meta?.status === 'voided' || meta?.isCancelled === true || meta?.folder === 'done' || meta?.folder === 'followup';
         if (!isCancelledOrder) {
             const receiptExists = (typeof checkCustomerReceiptExists === 'function')
                 ? checkCustomerReceiptExists(custName, targetRiderName, targetRiderId)

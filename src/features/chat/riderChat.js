@@ -167,6 +167,21 @@ import {
     sendRiderLocation
 } from './chatEngine/chatSending.js';
 
+import {
+    startChatPresence,
+    stopChatPresence,
+    handleChatTyping,
+    clearMyTypingStatus,
+    startChatTypingListener,
+    stopChatTypingListener,
+    markChatThreadSeen,
+    startThreadSeenListener,
+    stopThreadSeenListener,
+    initGlobalChatTypingAndPresenceFeedListener
+} from './chatEngine/chatPresence.js';
+
+export * from './chatEngine/chatPresence.js';
+
 // ============================================================================
 // WINDOW BINDINGS & BACKGROUND LISTENERS
 // ============================================================================
@@ -208,8 +223,18 @@ if (typeof window !== 'undefined') {
     window.handleRiderChatInputDraft = handleRiderChatInputDraft;
     window.renderRiderCateredSwitcher = renderRiderCateredSwitcher;
     window.switchCateredCustomerChat = switchCateredCustomerChat;
+    window.handleChatTyping = handleChatTyping;
+    window.startChatPresence = startChatPresence;
+    window.stopChatPresence = stopChatPresence;
+    window.clearMyTypingStatus = clearMyTypingStatus;
+    window.startChatTypingListener = startChatTypingListener;
+    window.stopChatTypingListener = stopChatTypingListener;
+    window.markChatThreadSeen = markChatThreadSeen;
+    window.startThreadSeenListener = startThreadSeenListener;
+    window.stopThreadSeenListener = stopThreadSeenListener;
 
     listenToGlobalStoreChats();
+    initGlobalChatTypingAndPresenceFeedListener();
 
     window.addEventListener('rosterUpdated', () => {
         if (getActiveRiderChatCustId()) renderRiderCateredSwitcher();

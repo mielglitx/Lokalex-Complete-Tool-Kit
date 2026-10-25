@@ -188,6 +188,26 @@ export function syncSmartCartsWithCateringCustomers() {
             multiCarts[slot].isManual = false;
         }
 
+        // Check if current slot has a stale finalized receipt from a completed or voided delivery
+        if (multiCarts[slot].receiptSummary) {
+            const sumTx = multiCarts[slot].receiptSummary.txId || multiCarts[slot].txId;
+            const completedTxIds = new Set((globalState.globalCateredHistory || []).map(h => (h.transactionId || h.id)));
+            const receipts = globalState.globalDailyReceipts || [];
+            const matchingRc = receipts.find(r => (r.transactionId || r.id) === sumTx);
+            const isFinishedOrVoided = (sumTx && completedTxIds.has(sumTx)) ||
+                                       (matchingRc && (matchingRc.status === 'completed' || matchingRc.status === 'voided' || matchingRc.doneTime));
+            if (isFinishedOrVoided) {
+                if (Array.isArray(multiCarts[slot].items)) multiCarts[slot].items.length = 0;
+                multiCarts[slot].selectedIds = new Set();
+                multiCarts[slot].receiptSummary = null;
+                multiCarts[slot].txId = "";
+                const slotIdx = slot - 1;
+                if (globalState.cartLocked && globalState.cartLocked[slotIdx] !== undefined) {
+                    globalState.cartLocked[slotIdx] = false;
+                }
+            }
+        }
+
         if (multiCarts[slot].customerName) {
             assignedLowerSet.add(multiCarts[slot].customerName.toLowerCase());
         }

@@ -22,6 +22,7 @@ import {
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 import { getTopQueueTime, updateRosterStatus, updateRosterStatusData, voidSingleCateringCustomer, clockOutRider } from './rosterStatus.js';
+import { purgeCartSlotForCustomer } from './actions/rosterCateringCompletion.js';
 
 import {
     openAdminTimeInScheduleModal,
@@ -205,6 +206,7 @@ export async function submitAdminForceCatering() {
     if (!existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase())) {
         existingCustomers.push(custName);
         existingTimes.push(startTime);
+        purgeCartSlotForCustomer(custName);
     }
 
     closeAdminCateringModal();

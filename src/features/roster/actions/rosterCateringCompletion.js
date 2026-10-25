@@ -57,7 +57,7 @@ export function purgeCartSlotForCustomer(customerName) {
         const cart = multiCarts[slotKey];
         if (cart && cart.customerName) {
             const currentCust = cart.customerName.trim().toLowerCase();
-            if (currentCust === cleanTarget) {
+            if (currentCust === cleanTarget || isCustomerMatch(currentCust, cleanTarget)) {
                 cart.items = [];
                 cart.selectedIds = new Set();
                 cart.customerName = "";
@@ -76,7 +76,7 @@ export function purgeCartSlotForCustomer(customerName) {
         }
     });
 
-    if (appState.selectedCateringClient && appState.selectedCateringClient.trim().toLowerCase() === cleanTarget) {
+    if (appState.selectedCateringClient && (appState.selectedCateringClient.trim().toLowerCase() === cleanTarget || isCustomerMatch(appState.selectedCateringClient, cleanTarget))) {
         appState.selectedCateringClient = "";
     }
 
@@ -104,8 +104,15 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         return false;
     });
 
-    const resolvedTargetId = targetRecord ? (targetRecord.telegramId || targetRecord.id || cleanTargetId) : cleanTargetId;
-    const resolvedTargetName = targetRecord ? (targetRecord.riderName || targetRecord.name || targetName) : targetName;
+    let resolvedTargetId = targetRecord ? (targetRecord.telegramId || targetRecord.id || cleanTargetId) : cleanTargetId;
+    let resolvedTargetName = targetRecord ? (targetRecord.riderName || targetRecord.name || targetName) : targetName;
+
+    if (!resolvedTargetId && isMe) {
+        resolvedTargetId = myId;
+    }
+    if (!resolvedTargetId && targetRecord?.key) {
+        resolvedTargetId = targetRecord.key;
+    }
 
     if (!resolvedTargetId && !targetRecord) return false;
 
@@ -544,7 +551,7 @@ export function checkCustomerReceiptExists(custName, riderName = "", riderId = "
             const txId = activeFeeObj.transactionId;
             const rc = (globalState.globalDailyReceipts || []).find(r => (r.transactionId || r.id) === txId);
             const isCompleted = rc && (rc.doneTime || rc.completedTime || rc.status === 'completed' || rc.isCompleted === true);
-            if (!isCompleted && (!rc || (rc.status !== 'voided' && rc.voided !== true && rc.isVoided !== true))) {
+            if (rc && !isCompleted && rc.status !== 'voided' && rc.voided !== true && rc.isVoided !== true) {
                 return true;
             }
         }
@@ -566,6 +573,11 @@ export function checkCustomerReceiptExists(custName, riderName = "", riderId = "
                           (rc.customerName && rc.customerName.trim().toLowerCase() === cleanCust);
         if (!matchCust) return false;
         if (riderName && !matchRider) return false;
+
+        // Verify receipt date is today
+        if (rc.date && !isSameDate(rc.date, todayStr)) {
+            return false;
+        }
 
         // Verify receipt was created AFTER or within the current ongoing catering session
         if (custStartTime && rc.receiptTime) {
@@ -646,8 +658,15 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         } catch(e) {}
     }
 
-    const resolvedTargetId = targetRecord ? (targetRecord.telegramId || targetRecord.id || cleanTargetId) : cleanTargetId;
-    const resolvedTargetName = targetRecord ? (targetRecord.riderName || targetRecord.name || targetName) : targetName;
+    let resolvedTargetId = targetRecord ? (targetRecord.telegramId || targetRecord.id || cleanTargetId) : cleanTargetId;
+    let resolvedTargetName = targetRecord ? (targetRecord.riderName || targetRecord.name || targetName) : targetName;
+
+    if (!resolvedTargetId && isMe) {
+        resolvedTargetId = myId;
+    }
+    if (!resolvedTargetId && targetRecord?.key) {
+        resolvedTargetId = targetRecord.key;
+    }
 
     if (!resolvedTargetId && !targetRecord) return false;
 

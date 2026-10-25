@@ -135,6 +135,9 @@ export async function submitSaveProfileSettings() {
         } else {
             // Rider Profile Save (Direct update without OTP)
             const riderId = appState.telegramId || localStorage.getItem('telegramId');
+            const gcashName = document.getElementById('prof-gcash-name-input')?.value.trim().toUpperCase() || '';
+            const gcashNo = document.getElementById('prof-gcash-no-input')?.value.trim() || '';
+
             const updates = {
                 name,
                 riderName: name,
@@ -145,16 +148,41 @@ export async function submitSaveProfileSettings() {
                 updatedAt: Date.now()
             };
             if (password) updates.password = password;
+            if (gcashName) {
+                updates.gcashName = gcashName;
+                appState.gcashName = gcashName;
+                localStorage.setItem('lokalex_gcash_name', gcashName);
+            }
+            if (gcashNo) {
+                updates.gcashNo = gcashNo;
+                appState.gcashNo = gcashNo;
+                localStorage.setItem('lokalex_gcash_no', gcashNo);
+            }
 
             if (riderId) {
                 await db.ref(`riders/${riderId}`).update(updates);
-                await db.ref(`roster/${riderId}`).update({
+                const rosterUpdates = {
                     name,
                     riderName: name,
                     phoneNumber: formattedPhone,
                     phone: formattedPhone,
                     photoUrl: profileState.currentAvatarUrl
-                }).catch(() => {});
+                };
+                if (gcashName) rosterUpdates.gcashName = gcashName;
+                if (gcashNo) rosterUpdates.gcashNo = gcashNo;
+                await db.ref(`roster/${riderId}`).update(rosterUpdates).catch(() => {});
+
+                if (gcashName || gcashNo) {
+                    const riderKey = (riderId || name).toString().replace(/[^a-zA-Z0-9_-]/g, '_');
+                    const gcashUpdates = {
+                        riderName: name,
+                        telegramId: riderId,
+                        updatedAt: Date.now()
+                    };
+                    if (gcashName) gcashUpdates.gcashName = gcashName;
+                    if (gcashNo) gcashUpdates.gcashNo = gcashNo;
+                    db.ref(`gcash/${riderKey}`).update(gcashUpdates).catch(() => {});
+                }
             }
 
             appState.riderName = name;

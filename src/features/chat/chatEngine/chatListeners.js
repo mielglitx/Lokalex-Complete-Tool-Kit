@@ -13,7 +13,7 @@ import {
     renderRiderMessages,
     appendOrUpdateSingleRiderMessage 
 } from '../riderChatRender.js';
-import { isMyCustomerThread } from '../riderChatFeed.js';
+import { isMyCustomerThread, getActiveRosterCaterer } from '../riderChatFeed.js';
 import { 
     resolveFacebookMessageAttachment,
     resolveFacebookMessageReplyTo
@@ -343,7 +343,9 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
             if (isNew && isFromCustomer) {
                 const rawFolder = (currentRiderChatMeta?.folder || 'inbox').toLowerCase();
                 const isDone = rawFolder === 'done' || currentRiderChatMeta?.status === 'completed' || currentRiderChatMeta?.status === 'done';
-                const isCatered = !isDone && (rawFolder === 'catering' || Boolean(currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredByRiderId || currentRiderChatMeta?.cateredBy));
+                const custDisplayName = activeCustData?.name || currentRiderChatMeta?.customerName || "";
+                const activeCaterer = getActiveRosterCaterer(custDisplayName, custId, currentRiderChatMeta);
+                const isCatered = !isDone && (rawFolder === 'catering' || Boolean(currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredByRiderId || currentRiderChatMeta?.cateredBy) || Boolean(activeCaterer));
                 const isApplicant = !isDone && !isCatered && (rawFolder === 'applicant' || currentRiderChatMeta?.isApplicant === true);
                 const isFollowup = !isDone && !isCatered && !isApplicant && (rawFolder === 'followup');
 
@@ -354,8 +356,15 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 else if (isFollowup) targetFolder = 'followup';
                 else targetFolder = 'inbox';
 
-                if (targetFolder === 'catering') {
-                    const isMine = isMyCustomerThread({ custId, ...(currentRiderChatMeta || {}) });
+                const threadForCheck = { custId, ...(currentRiderChatMeta || {}), customerName: custDisplayName };
+                if (activeCaterer) {
+                    threadForCheck.cateredByRiderId = threadForCheck.cateredByRiderId || (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+                    threadForCheck.cateredByRiderName = threadForCheck.cateredByRiderName || (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
+                    threadForCheck.cateredBy = threadForCheck.cateredBy || threadForCheck.cateredByRiderName;
+                }
+
+                if (isCatered || targetFolder === 'catering') {
+                    const isMine = isMyCustomerThread(threadForCheck);
                     if (isMine) playChatChime('catering');
                 } else {
                     playChatChime(targetFolder);

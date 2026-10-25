@@ -552,17 +552,32 @@ export function executeSaveGCashDetails(gName, gNo, qrPayload = "", qrImg = "") 
         localStorage.removeItem('lokalex_gcash_qr_img');
     }
 
+    const myRiderId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     if (db) {
-        const riderKey = (appState.telegramId || appState.riderName || localStorage.getItem('telegramId') || localStorage.getItem('riderName') || "rider").toString().replace(/[^a-zA-Z0-9_-]/g, '_');
+        const riderKey = (myRiderId || appState.riderName || localStorage.getItem('riderName') || "rider").toString().replace(/[^a-zA-Z0-9_-]/g, '_');
         db.ref('gcash/' + riderKey).set({
-            riderName: appState.riderName || "",
-            telegramId: appState.telegramId || "",
+            riderName: appState.riderName || localStorage.getItem('riderName') || "",
+            telegramId: myRiderId,
             gcashName: gName,
             gcashNo: gNo,
             qrPayload: qrPayload || null,
             qrImg: qrImg || null,
             updatedAt: Date.now()
         });
+
+        // Synchronize to rider's cloud account and roster node so profile inspector loads it instantly
+        if (myRiderId) {
+            db.ref(`riders/${myRiderId}`).update({
+                gcashName: gName,
+                gcashNo: gNo,
+                updatedAt: Date.now()
+            }).catch(() => {});
+
+            db.ref(`roster/${myRiderId}`).update({
+                gcashName: gName,
+                gcashNo: gNo
+            }).catch(() => {});
+        }
     }
 
     try {

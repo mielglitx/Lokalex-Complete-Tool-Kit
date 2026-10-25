@@ -88,6 +88,8 @@ export function openAvatarPickerModal() {
     const phoneBadgeText = document.getElementById('avatar-picker-rider-phone-text');
     const nameInput = document.getElementById('rider-profile-name-input');
     const phoneInput = document.getElementById('rider-profile-phone-input');
+    const gcashNameInput = document.getElementById('rider-profile-gcash-name-input');
+    const gcashNoInput = document.getElementById('rider-profile-gcash-no-input');
     const pass1 = document.getElementById('rider-profile-pass-1');
     const pass2 = document.getElementById('rider-profile-pass-2');
     const errBox = document.getElementById('rider-profile-error-msg');
@@ -108,6 +110,8 @@ export function openAvatarPickerModal() {
     let myName = formatTitleCase(appState.riderName || localStorage.getItem('riderName') || 'Rider');
     let currentAvatar = getRiderAvatarUrl();
     let currentPhone = appState.phoneNumber || localStorage.getItem('lokalex_rider_phone') || localStorage.getItem('phoneNumber') || '';
+    let currentGcashName = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || '';
+    let currentGcashNo = appState.gcashNo || localStorage.getItem('lokalex_gcash_no') || '';
 
     if (globalState.rosterMembers && myId) {
         const rosterRec = globalState.rosterMembers.find(m => (m.telegramId || m.id || '').toString() === myId);
@@ -115,6 +119,8 @@ export function openAvatarPickerModal() {
             if (rosterRec.riderName || rosterRec.name) myName = formatTitleCase(rosterRec.riderName || rosterRec.name);
             if (rosterRec.photoUrl) currentAvatar = rosterRec.photoUrl;
             if (rosterRec.phoneNumber) currentPhone = rosterRec.phoneNumber;
+            if (rosterRec.gcashName) currentGcashName = rosterRec.gcashName;
+            if (rosterRec.gcashNo) currentGcashNo = rosterRec.gcashNo;
         }
     }
 
@@ -126,6 +132,8 @@ export function openAvatarPickerModal() {
     if (phoneBadgeText) phoneBadgeText.innerText = currentPhone || 'No Contact Number';
     if (nameInput) nameInput.value = myName;
     if (phoneInput) phoneInput.value = currentPhone;
+    if (gcashNameInput) gcashNameInput.value = currentGcashName;
+    if (gcashNoInput) gcashNoInput.value = currentGcashNo;
 
     // Real-time synchronization as the user types
     if (nameInput) {
@@ -164,6 +172,12 @@ export function openAvatarPickerModal() {
                     currentAvatar = rData.photoUrl || rData.avatar || rData.profilePic;
                     selectedAvatarUrl = currentAvatar;
                     if (previewImg) previewImg.src = currentAvatar;
+                }
+                if (rData.gcashName && gcashNameInput && gcashNameInput.value === '') {
+                    gcashNameInput.value = rData.gcashName;
+                }
+                if (rData.gcashNo && gcashNoInput && gcashNoInput.value === '') {
+                    gcashNoInput.value = rData.gcashNo;
                 }
             }
         }).catch(() => {});
@@ -208,6 +222,8 @@ export async function handleAvatarFileUpload(event) {
 export async function saveRiderProfileSettings() {
     const nameInput = document.getElementById('rider-profile-name-input');
     const phoneInput = document.getElementById('rider-profile-phone-input');
+    const gcashNameInput = document.getElementById('rider-profile-gcash-name-input');
+    const gcashNoInput = document.getElementById('rider-profile-gcash-no-input');
     const pass1 = document.getElementById('rider-profile-pass-1');
     const pass2 = document.getElementById('rider-profile-pass-2');
     const errBox = document.getElementById('rider-profile-error-msg');
@@ -217,6 +233,8 @@ export async function saveRiderProfileSettings() {
     const rawName = nameInput ? nameInput.value.trim() : '';
     const newName = formatTitleCase(rawName);
     const newPhone = phoneInput ? phoneInput.value.trim() : '';
+    const newGcashName = gcashNameInput ? gcashNameInput.value.trim().toUpperCase() : '';
+    const newGcashNo = gcashNoInput ? gcashNoInput.value.trim() : '';
     const p1 = pass1 ? pass1.value.trim() : '';
     const p2 = pass2 ? pass2.value.trim() : '';
 
@@ -267,6 +285,14 @@ export async function saveRiderProfileSettings() {
         appState.riderName = newName;
         appState.photoUrl = selectedAvatarUrl;
         if (newPhone) appState.phoneNumber = newPhone;
+        if (newGcashName) {
+            appState.gcashName = newGcashName;
+            localStorage.setItem('lokalex_gcash_name', newGcashName);
+        }
+        if (newGcashNo) {
+            appState.gcashNo = newGcashNo;
+            localStorage.setItem('lokalex_gcash_no', newGcashNo);
+        }
 
         localStorage.setItem('riderName', newName);
         localStorage.setItem('lokalex_photo_url', selectedAvatarUrl);
@@ -282,6 +308,8 @@ export async function saveRiderProfileSettings() {
             };
 
             if (newPhone) updates.phoneNumber = newPhone;
+            if (newGcashName) updates.gcashName = newGcashName;
+            if (newGcashNo) updates.gcashNo = newGcashNo;
             if (p1) {
                 updates.password = p1;
                 updates.hasPassword = true;
@@ -293,8 +321,21 @@ export async function saveRiderProfileSettings() {
                 name: newName,
                 riderName: newName,
                 photoUrl: selectedAvatarUrl,
+                ...(newGcashName ? { gcashName: newGcashName } : {}),
+                ...(newGcashNo ? { gcashNo: newGcashNo } : {}),
                 ...(p1 ? { hasPassword: true } : {})
             }).catch(() => {});
+
+            if (newGcashName || newGcashNo) {
+                const riderKey = (myId || newName).toString().replace(/[^a-zA-Z0-9_-]/g, '_');
+                db.ref(`gcash/${riderKey}`).update({
+                    riderName: newName,
+                    telegramId: myId,
+                    ...(newGcashName ? { gcashName: newGcashName } : {}),
+                    ...(newGcashNo ? { gcashNo: newGcashNo } : {}),
+                    updatedAt: Date.now()
+                }).catch(() => {});
+            }
         }
 
         syncHeaderUserProfile();

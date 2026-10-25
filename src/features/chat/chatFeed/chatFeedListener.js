@@ -1,6 +1,6 @@
 // src/features/chat/chatFeed/chatFeedListener.js
 import { db } from '../../../config/firebase.js';
-import { globalState } from '../../../store/state.js';
+import { appState, globalState } from '../../../store/state.js';
 import { showToast, showNativeNotification } from '../../../ui/notifications.js';
 import { isCustomerMatch } from '../../roster/rosterUtils.js';
 import { 
@@ -35,6 +35,7 @@ import {
     persistMetaTimeout,
     setPersistMetaTimeout,
     getThreadDedupKey,
+    getLoggedInRiderInfo,
     isMyCustomerThread,
     getActiveRosterCaterer,
     isMessengerSource,
@@ -42,7 +43,6 @@ import {
     getSourceBadgeName
 } from './chatFeedState.js';
 import { renderRiderCustomerChatFeed } from './chatFeedRender.js';
-import { checkAdminAccess } from '../../directory/directoryPermissions.js';
 import { storeChatState } from '../storeChat/storeChatState.js';
 
 export function schedulePersistMetaCache(data) {
@@ -78,6 +78,10 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
     const newlyArrivedThreadKeys = new Set();
     const arrivedFolders = new Set();
     if (!isInitialCustomerChatMetaLoad && !isFromCache && data) {
+        const loggedInRider = getLoggedInRiderInfo();
+        const activeRole = (localStorage.getItem('lokalex_active_role') || (globalState?.userTypesMap?.[loggedInRider.myId] || appState.userType || '')).toLowerCase();
+        const isRiderRole = activeRole === 'rider' || Boolean(loggedInRider.myId || loggedInRider.myName);
+
         Object.keys(data).forEach(key => {
             const item = data[key] || {};
             const meta = item.metadata || item;
@@ -118,9 +122,29 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                         return;
                     }
 
+                    let displayName = (meta.customerName || meta.name || "").trim();
+                    if (key.startsWith('fb_') && typeof getResolvedFbName === 'function') {
+                        const cached = getResolvedFbName(key);
+                        if (cached && cached.name && (!displayName || displayName.startsWith('FB Customer ('))) {
+                            displayName = cached.name;
+                        }
+                    }
+                    if (!displayName || displayName.toLowerCase() === 'customer' || displayName.toLowerCase() === 'customer name' || displayName.toLowerCase() === 'unknown') {
+                        if (key.startsWith('cust_')) {
+                            const raw = key.replace(/^cust_/, '').replace(/_/g, ' ').trim();
+                            if (raw) {
+                                displayName = raw.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+                            }
+                        }
+                    }
+                    if (!displayName) displayName = "Customer";
+
                     const rawFolder = (meta.folder || 'inbox').toLowerCase();
                     const isDone = rawFolder === 'done' || meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled';
-                    const isCatered = !isDone && (rawFolder === 'catering' || Boolean(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy));
+                    
+                    // Always check live roster catering: active roster catering takes precedence!
+                    const activeCaterer = getActiveRosterCaterer(displayName, key, meta);
+                    const isCatered = !isDone && (rawFolder === 'catering' || Boolean(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy) || Boolean(activeCaterer));
                     const isApplicant = !isDone && !isCatered && (rawFolder === 'applicant' || meta.isApplicant === true);
                     const isFollowup = !isDone && !isCatered && !isApplicant && (rawFolder === 'followup');
 
@@ -131,15 +155,26 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                     else if (isFollowup) targetFolder = 'followup';
                     else targetFolder = 'inbox';
 
+                    const threadForCheck = { custId: key, ...meta, customerName: displayName };
+                    if (activeCaterer) {
+                        threadForCheck.cateredByRiderId = threadForCheck.cateredByRiderId || (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+                        threadForCheck.cateredByRiderName = threadForCheck.cateredByRiderName || (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
+                        threadForCheck.cateredBy = threadForCheck.cateredBy || threadForCheck.cateredByRiderName;
+                    }
+
+                    const isMine = isMyCustomerThread(threadForCheck, loggedInRider);
+
                     let isEligible = false;
-                    if (targetFolder === 'catering') {
-                        const isMine = isMyCustomerThread({ custId: key, ...meta });
-                        const isAdmin = (typeof checkAdminAccess === 'function') ? checkAdminAccess() : false;
-                        if (isMine || isAdmin) {
+                    if (isCatered || targetFolder === 'catering') {
+                        // For any catered customer, ONLY the rider actively catering them receives the chime & notification
+                        if (isMine) {
                             arrivedFolders.add('catering');
                             isEligible = true;
                         }
-                    } else {
+                    } else if (!isRiderRole) {
+                        // For unassigned threads (inbox, applicant, followup, done):
+                        // Only dedicated non-rider dispatchers/admins receive general incoming chimes.
+                        // Riders on duty must NOT receive alarm chimes for customers they are not currently catering.
                         arrivedFolders.add(targetFolder);
                         isEligible = true;
                     }
@@ -150,23 +185,6 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                         const isChatOpenAndVisible = (activeId === key) && !document.hidden;
 
                         if (!isChatOpenAndVisible) {
-                            let displayName = (meta.customerName || meta.name || "").trim();
-                            if (key.startsWith('fb_') && typeof getResolvedFbName === 'function') {
-                                const cached = getResolvedFbName(key);
-                                if (cached && cached.name && (!displayName || displayName.startsWith('FB Customer ('))) {
-                                    displayName = cached.name;
-                                }
-                            }
-                            if (!displayName || displayName.toLowerCase() === 'customer' || displayName.toLowerCase() === 'customer name' || displayName.toLowerCase() === 'unknown') {
-                                if (key.startsWith('cust_')) {
-                                    const raw = key.replace(/^cust_/, '').replace(/_/g, ' ').trim();
-                                    if (raw) {
-                                        displayName = raw.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-                                    }
-                                }
-                            }
-                            if (!displayName) displayName = "Customer";
-
                             const sourceBadge = getSourceBadgeName(meta, key);
                             const notifTitle = `${displayName} • ${sourceBadge}`;
 

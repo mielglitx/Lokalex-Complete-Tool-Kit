@@ -683,7 +683,7 @@
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-B6PS3m4t.js"></script>
+  <script type="module" crossorigin src="./assets/index-Dn7t79r6.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
@@ -3535,6 +3535,8 @@
                     <p class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono flex items-center gap-1 font-bold truncate">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
                         <span class="truncate">Real-time Connected</span>
+                        <span id="rider-chat-viewers-pill" class="hidden text-[10px] font-bold text-amber-500 dark:text-amber-400 ml-1.5 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.2 rounded-full truncate animate-pulse"></span>
+                        <span id="rider-chat-seen-pill" class="hidden text-[10px] font-bold text-cyan-600 dark:text-cyan-400 ml-1.5 bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-0.2 rounded-full truncate"></span>
                     </p>
                 </div>
             </div>
@@ -3545,6 +3547,18 @@
                 <button onclick="window.closeRiderChatModal && window.closeRiderChatModal()" class="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer" title="Close">
                     <i class="fa-solid fa-xmark text-sm"></i>
                 </button>
+            </div>
+        </div>
+
+        <!-- REAL-TIME PRESENCE & THREAD ACTIVITY BANNER (VIEWERS & SEEN) -->
+        <div id="rider-chat-presence-banner" class="hidden px-3.5 py-1.5 bg-amber-500/10 dark:bg-amber-500/15 border-b border-amber-500/20 text-xs font-bold flex items-center justify-between gap-2 shrink-0 animate-in fade-in duration-200">
+            <div id="rider-chat-viewers-bar" class="hidden flex items-center gap-1.5 text-amber-700 dark:text-amber-300 truncate">
+                <i class="fa-solid fa-eye animate-pulse text-amber-500 text-[11px]"></i>
+                <span id="rider-chat-viewers-text" class="truncate"></span>
+            </div>
+            <div id="rider-chat-seen-bar" class="hidden flex items-center gap-1 text-[11px] text-cyan-700 dark:text-cyan-300 shrink-0">
+                <i class="fa-solid fa-check-double text-cyan-500 text-[11px]"></i>
+                <span id="rider-chat-seen-text"></span>
             </div>
         </div>
 
@@ -3683,9 +3697,12 @@
                 </button>
             </div>
 
+            <!-- TYPING STATUS INDICATOR BAR -->
+            <div id="rider-chat-typing-bar" class="hidden px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5 animate-pulse"></div>
+
             <!-- MESSAGE INPUT ROW: MULTI-LINE TEXTAREA + ALWAYS VISIBLE DEDICATED SEND BUTTON -->
             <div class="flex items-end gap-2 w-full">
-                <textarea id="rider-chat-input" rows="1" placeholder="Type reply..." oninput="this.style.height='auto'; this.style.height=Math.min(this.scrollHeight, 120)+'px'; window.handleRiderChatInputDraft && window.handleRiderChatInputDraft(this.value);" onkeydown="if((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.sendRiderChatMessage && window.sendRiderChatMessage(); }" class="flex-1 min-w-0 bg-inputBg text-xs rounded-xl px-3 py-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-blue-500 resize-none max-h-28 overflow-y-auto leading-relaxed"></textarea>
+                <textarea id="rider-chat-input" rows="1" placeholder="Type reply..." oninput="this.style.height='auto'; this.style.height=Math.min(this.scrollHeight, 120)+'px'; window.handleRiderChatInputDraft && window.handleRiderChatInputDraft(this.value); window.handleChatTyping && window.handleChatTyping(window.getActiveRiderChatCustId && window.getActiveRiderChatCustId(), this.value.trim().length > 0);" onblur="window.handleChatTyping && window.handleChatTyping(window.getActiveRiderChatCustId && window.getActiveRiderChatCustId(), false);" onkeydown="if((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.sendRiderChatMessage && window.sendRiderChatMessage(); }" class="flex-1 min-w-0 bg-inputBg text-xs rounded-xl px-3 py-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-blue-500 resize-none max-h-28 overflow-y-auto leading-relaxed"></textarea>
 
                 <button type="button" id="rider-cust-send-btn" onclick="window.sendRiderChatMessage && window.sendRiderChatMessage()" class="w-10 h-10 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-md transition active:scale-90 flex items-center justify-center text-sm shrink-0 cursor-pointer" title="Send Message">
                     <i class="fa-solid fa-paper-plane"></i>
@@ -7103,6 +7120,21 @@
                 </label>
                 <input type="tel" id="rider-profile-phone-input" placeholder="09xxxxxxxxx or +639xxxxxxxxx" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-mono">
             </div>
+
+            <div class="flex flex-col gap-1 pt-1 border-t border-gray-100 dark:border-gray-800">
+                <label class="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center justify-between">
+                    <span class="flex items-center gap-1"><i class="fa-solid fa-wallet text-blue-500"></i> GCash Account Name:</span>
+                    <span class="text-[9px] text-blue-500 font-normal">Official Receipts</span>
+                </label>
+                <input type="text" id="rider-profile-gcash-name-input" placeholder="e.g. JUAN DELA CRUZ" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold uppercase">
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                    <i class="fa-solid fa-mobile-screen-button text-blue-500"></i> GCash Number:
+                </label>
+                <input type="tel" id="rider-profile-gcash-no-input" placeholder="e.g. 09123456789" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-mono font-bold">
+            </div>
         </div>
 
         <!-- SECTION 2: UPLOAD PHOTO / CAMERA -->
@@ -7340,6 +7372,22 @@
                     <button type="button" onclick="window.openProfileMapPicker && window.openProfileMapPicker()" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-600/20 dark:hover:bg-emerald-600/30 dark:text-emerald-300 dark:border-emerald-500/40 text-[11px] font-bold px-3 py-2.5 rounded-xl transition active:scale-95 flex items-center gap-1.5 shrink-0 shadow-xs">
                         <i class="fa-solid fa-location-dot text-red-500"></i> Pin on Map
                     </button>
+                </div>
+            </div>
+
+            <!-- GCASH PAYMENT DETAILS (FOR RIDERS) -->
+            <div id="prof-rider-gcash-section" class="hidden flex flex-col gap-2 pt-1 border-t border-gray-200 dark:border-gray-800">
+                <div class="flex justify-between items-center">
+                    <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase flex items-center gap-1">
+                        <i class="fa-solid fa-wallet text-blue-500"></i> GCash Payment Details
+                    </label>
+                    <span class="text-[9px] text-blue-500 font-bold">Official Receipts</span>
+                </div>
+                <div>
+                    <input type="text" id="prof-gcash-name-input" placeholder="GCash Account Name (e.g. JUAN DELA CRUZ)" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold uppercase">
+                </div>
+                <div>
+                    <input type="tel" id="prof-gcash-no-input" placeholder="GCash Number (e.g. 09123456789)" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-mono font-bold">
                 </div>
             </div>
 
