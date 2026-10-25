@@ -198,7 +198,7 @@ function getOrCreateMenuGalleryModal() {
         </div>
 
         <!-- Lightbox / Preview Layer -->
-        <div id="gallery-lightbox" class="fixed inset-0 z-[1000002] bg-black/95 flex flex-col items-center justify-center p-3 hidden" style="z-index: 1000002 !important;" onclick="window.closeGalleryLightbox && window.closeGalleryLightbox()">
+        <div id="gallery-lightbox" class="fixed inset-0 z-[1000050] bg-black/95 flex flex-col items-center justify-center p-3 hidden" style="z-index: 1000050 !important;" onclick="window.closeGalleryLightbox && window.closeGalleryLightbox()">
             <div class="absolute top-4 right-4 flex items-center gap-2">
                 <a id="lightbox-download-single" href="#" download="menu_page.jpg" onclick="event.stopPropagation()" class="bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 backdrop-blur-md">
                     <i class="fa-solid fa-download"></i> Save Image
@@ -276,8 +276,9 @@ export function getOrCreateMenuCameraModal() {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'store-menu-camera-modal';
-        modal.className = 'fixed inset-0 z-[1000005] bg-black flex flex-col justify-between hidden select-none animate-scaleUp';
-        modal.style.zIndex = '1000005';
+        modal.className = 'fixed inset-0 z-[1000060] bg-black flex flex-col justify-between hidden select-none animate-scaleUp';
+        modal.style.zIndex = '1000060';
+        modal.style.setProperty('z-index', '1000060', 'important');
         modal.innerHTML = `
         <!-- Camera Top Bar -->
         <div class="flex items-center justify-between px-3 sm:px-4 py-2.5 bg-black/90 backdrop-blur-md text-white z-20 border-b border-white/10">
@@ -400,7 +401,8 @@ export async function openMenuCameraScanner() {
     } else {
         document.body.appendChild(modal);
     }
-    modal.style.zIndex = '1000005';
+    modal.style.setProperty('z-index', '1000060', 'important');
+    modal.style.zIndex = '1000060';
 
     const titleEl = document.getElementById('menu-camera-title');
     if (titleEl) titleEl.innerText = `${activeGalleryStore.name} - Camera`;
@@ -1626,8 +1628,8 @@ function getOrCreateMenuCustomerRecipientPickerModal() {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'menu-recipient-picker-modal';
-        modal.className = 'fixed inset-0 z-[1000003] flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 hidden';
-        modal.style.zIndex = '1000003';
+        modal.className = 'fixed inset-0 z-[1000020] flex items-center justify-center bg-black/80 backdrop-blur-xs p-3 hidden';
+        modal.style.zIndex = '1000020';
         modal.innerHTML = `
         <div class="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-3xl max-w-sm w-full max-h-[85vh] shadow-2xl flex flex-col overflow-hidden animate-scaleUp">
             <!-- Header -->
@@ -1672,7 +1674,7 @@ export function openMenuCustomerRecipientPicker(pagesToSend, storeName = "") {
     } else {
         document.body.appendChild(modal);
     }
-    modal.style.zIndex = '1000003';
+    modal.style.zIndex = '1000020';
 
     const sub = document.getElementById('menu-recipient-modal-sub');
     const resolvedStore = storeName || activeGalleryStore?.name || "Store";
@@ -2235,7 +2237,16 @@ export function openGalleryLightbox(url, caption) {
     if (img) img.src = url;
     if (cap) cap.innerText = caption;
     if (dlBtn) dlBtn.href = url;
-    if (lightbox) lightbox.classList.remove('hidden');
+    if (lightbox) {
+        if (lightbox.parentElement !== document.body) {
+            document.body.appendChild(lightbox);
+        } else {
+            document.body.appendChild(lightbox);
+        }
+        lightbox.style.setProperty('z-index', '1000050', 'important');
+        lightbox.style.zIndex = '1000050';
+        lightbox.classList.remove('hidden');
+    }
 }
 
 export function closeGalleryLightbox() {
