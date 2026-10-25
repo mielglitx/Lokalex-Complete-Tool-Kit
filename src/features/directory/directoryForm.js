@@ -240,11 +240,13 @@ export async function loadNationsList(targetSelectedCountry = "") {
 
 /**
  * Loads official Philippine regions dynamically from the PSGC API.
+ * Populates suggestive datalist and preselects target region.
  */
-export async function loadPsgcRegions(targetRegionName = "") {
-    const select = document.getElementById('form-rate-region');
+export async function loadPsgcRegions(targetRegionName = "", targetMunName = "") {
+    const regInput = document.getElementById('form-rate-region');
+    const datalist = document.getElementById('form-rate-region-list');
     const spinner = document.getElementById('rate-geo-loading-regions');
-    if (!select) return;
+    if (!datalist && !regInput) return;
 
     if (spinner) spinner.classList.remove('hidden');
 
@@ -255,50 +257,73 @@ export async function loadPsgcRegions(targetRegionName = "") {
         );
 
         psgcRegionCodeMap.clear();
-        select.innerHTML = `<option value="" disabled selected>Select Region</option>`;
+        if (datalist) datalist.innerHTML = "";
 
         let matchedCode = "";
         let defaultCode = "";
+        let matchedDisplayName = "";
+        let defaultDisplayName = "Region III (Central Luzon)";
 
         regions.forEach(r => {
             const displayName = r.regionName ? `${r.regionName} (${r.name})` : r.name;
+            psgcRegionCodeMap.set(displayName.toLowerCase(), r.code);
             psgcRegionCodeMap.set(displayName, r.code);
+            psgcRegionCodeMap.set(r.name.toLowerCase(), r.code);
             psgcRegionCodeMap.set(r.name, r.code);
-            if (r.regionName) psgcRegionCodeMap.set(r.regionName, r.code);
+            if (r.regionName) {
+                psgcRegionCodeMap.set(r.regionName.toLowerCase(), r.code);
+                psgcRegionCodeMap.set(r.regionName, r.code);
+            }
 
             const isMatch = targetRegionName && (
+                targetRegionName.toLowerCase() === displayName.toLowerCase() ||
                 targetRegionName.toLowerCase().includes(r.name.toLowerCase()) || 
                 (r.regionName && targetRegionName.toLowerCase().includes(r.regionName.toLowerCase()))
             );
 
-            if (isMatch) matchedCode = r.code;
+            if (isMatch) {
+                matchedCode = r.code;
+                matchedDisplayName = displayName;
+            }
             if (r.code === "030000000" || r.name.toLowerCase().includes("central luzon")) {
                 defaultCode = r.code;
+                defaultDisplayName = displayName;
             }
 
-            const opt = document.createElement('option');
-            opt.value = displayName;
-            opt.dataset.code = r.code;
-            opt.innerText = displayName;
-            select.appendChild(opt);
+            if (datalist) {
+                const opt = document.createElement('option');
+                opt.value = displayName;
+                datalist.appendChild(opt);
+            }
         });
 
         const activeCode = matchedCode || defaultCode;
+        const activeName = targetRegionName || matchedDisplayName || defaultDisplayName;
+
+        if (regInput && !regInput.value) {
+            regInput.value = activeName;
+        } else if (regInput && targetRegionName) {
+            regInput.value = targetRegionName;
+        }
+
         if (activeCode) {
-            const targetOpt = Array.from(select.options).find(o => o.dataset.code === activeCode);
-            if (targetOpt) {
-                select.value = targetOpt.value;
-                await loadPsgcCitiesMunicipalities(activeCode);
-            }
+            await loadPsgcCitiesMunicipalities(activeCode, targetMunName);
         }
     } catch(err) {
         console.warn("Could not load dynamic PSGC regions:", err);
-        select.innerHTML = `
-            <option value="Region III (Central Luzon)" data-code="030000000" selected>Region III (Central Luzon)</option>
-            <option value="Region I (Ilocos Region)" data-code="010000000">Region I (Ilocos Region)</option>
-            <option value="NCR (National Capital Region)" data-code="130000000">NCR (National Capital Region)</option>
-        `;
-        await loadPsgcCitiesMunicipalities("030000000");
+        if (datalist) {
+            datalist.innerHTML = `
+                <option value="Region III (Central Luzon)"></option>
+                <option value="Region I (Ilocos Region)"></option>
+                <option value="NCR (National Capital Region)"></option>
+                <option value="Region IV-A (CALABARZON)"></option>
+                <option value="Region II (Cagayan Valley)"></option>
+            `;
+        }
+        if (regInput && !regInput.value) {
+            regInput.value = targetRegionName || "Region III (Central Luzon)";
+        }
+        await loadPsgcCitiesMunicipalities("030000000", targetMunName);
     } finally {
         if (spinner) spinner.classList.add('hidden');
     }
@@ -306,11 +331,13 @@ export async function loadPsgcRegions(targetRegionName = "") {
 
 /**
  * Loads cities and municipalities under the chosen region code from the PSGC API.
+ * Populates suggestive datalist and preselects target municipality.
  */
-export async function loadPsgcCitiesMunicipalities(regionCode, targetMunName = "") {
-    const select = document.getElementById('form-rate-municipality');
+export async function loadPsgcCitiesMunicipalities(regionCode, targetMunName = "", targetBrgyName = "") {
+    const munInput = document.getElementById('form-rate-municipality');
+    const datalist = document.getElementById('form-rate-municipality-list');
     const spinner = document.getElementById('rate-geo-loading-mun');
-    if (!select || !regionCode) return;
+    if (!regionCode) return;
 
     if (spinner) spinner.classList.remove('hidden');
 
@@ -321,44 +348,69 @@ export async function loadPsgcCitiesMunicipalities(regionCode, targetMunName = "
         );
 
         psgcCityMunCodeMap.clear();
-        select.innerHTML = `<option value="" disabled selected>Select Municipality/City</option>`;
+        if (datalist) datalist.innerHTML = "";
 
         list.sort((a, b) => a.name.localeCompare(b.name));
 
         let matchedCode = "";
         let defaultCode = "";
+        let matchedName = "";
 
         list.forEach(item => {
             psgcCityMunCodeMap.set(item.name.toLowerCase(), item.code);
             psgcCityMunCodeMap.set(item.name, item.code);
 
             const isMatch = targetMunName && targetMunName.toLowerCase() === item.name.toLowerCase();
-            if (isMatch) matchedCode = item.code;
+            if (isMatch) {
+                matchedCode = item.code;
+                matchedName = item.name;
+            }
             if (item.name.toLowerCase() === "camiling") defaultCode = item.code;
 
-            const opt = document.createElement('option');
-            opt.value = item.name;
-            opt.dataset.code = item.code;
-            opt.innerText = item.name;
-            select.appendChild(opt);
+            if (datalist) {
+                const opt = document.createElement('option');
+                opt.value = item.name;
+                datalist.appendChild(opt);
+            }
         });
 
+        // Also ensure known serviced municipalities are in map
+        if (targetMunName && !matchedCode) {
+            matchedCode = psgcCityMunCodeMap.get(targetMunName.toLowerCase()) || "";
+        }
+
         const activeCode = matchedCode || defaultCode || (list[0] ? list[0].code : "");
+        const activeName = targetMunName || matchedName || (defaultCode ? "Camiling" : (list[0] ? list[0].name : ""));
+
+        if (munInput && !munInput.value) {
+            munInput.value = activeName;
+        } else if (munInput && targetMunName) {
+            munInput.value = targetMunName;
+        }
+
         if (activeCode) {
-            const targetOpt = Array.from(select.options).find(o => o.dataset.code === activeCode);
-            if (targetOpt) {
-                select.value = targetOpt.value;
-                await loadPsgcBarangays(activeCode);
-            }
+            await loadPsgcBarangays(activeCode, targetBrgyName);
         }
     } catch(err) {
         console.warn("Could not load dynamic PSGC cities/municipalities:", err);
-        select.innerHTML = `
-            <option value="Camiling" data-code="036905000" selected>Camiling</option>
-            <option value="San Clemente" data-code="036912000">San Clemente</option>
-            <option value="Paniqui" data-code="036910000">Paniqui</option>
-        `;
-        await loadPsgcBarangays("036905000");
+        if (datalist) {
+            datalist.innerHTML = `
+                <option value="Camiling"></option>
+                <option value="San Clemente"></option>
+                <option value="Santa Ignacia"></option>
+                <option value="Paniqui"></option>
+                <option value="Mayantoc"></option>
+                <option value="Moncada"></option>
+                <option value="Gerona"></option>
+                <option value="Bayambang"></option>
+                <option value="Mangatarem"></option>
+                <option value="San Manuel"></option>
+            `;
+        }
+        if (munInput && !munInput.value) {
+            munInput.value = targetMunName || "Camiling";
+        }
+        await loadPsgcBarangays("036905000", targetBrgyName);
     } finally {
         if (spinner) spinner.classList.add('hidden');
     }
@@ -412,57 +464,75 @@ export async function loadPsgcBarangays(cityMunCode, targetBrgyName = "") {
 }
 
 export async function handleRateNationalityChange(nationality) {
-    const regSelect = document.getElementById('form-rate-region');
-    const regCustom = document.getElementById('form-rate-region-custom');
-    const munSelect = document.getElementById('form-rate-municipality');
-    const munCustom = document.getElementById('form-rate-municipality-custom');
+    const regInput = document.getElementById('form-rate-region');
+    const munInput = document.getElementById('form-rate-municipality');
     const brgyInput = document.getElementById('form-rate-barangay');
+    const regList = document.getElementById('form-rate-region-list');
+    const munList = document.getElementById('form-rate-municipality-list');
     const brgyList = document.getElementById('form-rate-barangay-list');
     const brgyHint = document.getElementById('form-rate-barangay-hint');
 
     const isPH = (nationality || "").trim().toLowerCase() === "philippines";
 
     if (isPH) {
-        if (regSelect) regSelect.classList.remove('hidden');
-        if (regCustom) regCustom.classList.add('hidden');
-        if (munSelect) munSelect.classList.remove('hidden');
-        if (munCustom) munCustom.classList.add('hidden');
-        if (brgyInput) brgyInput.placeholder = "Select or type Barangay name";
-        if (brgyHint) brgyHint.innerText = "Select from the official PSA PSGC API list or type a custom location.";
-        await loadPsgcRegions();
+        if (regInput) regInput.placeholder = "Select or type Region name";
+        if (munInput) munInput.placeholder = "Select or type Municipality / City name";
+        if (brgyInput) brgyInput.placeholder = "Select or type Barangay / District name";
+        if (brgyHint) brgyHint.innerText = "Choose from the official list from the PSA PSGC API or type a custom location.";
+        await loadPsgcRegions(regInput?.value || "", munInput?.value || "");
     } else {
-        if (regSelect) regSelect.classList.add('hidden');
-        if (regCustom) {
-            regCustom.classList.remove('hidden');
-            regCustom.placeholder = `Enter State / Province (${nationality})`;
-        }
-        if (munSelect) munSelect.classList.add('hidden');
-        if (munCustom) {
-            munCustom.classList.remove('hidden');
-            munCustom.placeholder = `Enter City / Municipality (${nationality})`;
-        }
+        if (regInput) regInput.placeholder = `Enter State / Province (${nationality})`;
+        if (munInput) munInput.placeholder = `Enter City / Municipality (${nationality})`;
         if (brgyInput) brgyInput.placeholder = "Enter District, Street, or Suburb";
+        if (regList) regList.innerHTML = "";
+        if (munList) munList.innerHTML = "";
         if (brgyList) brgyList.innerHTML = "";
         if (brgyHint) brgyHint.innerText = "Enter specific delivery district or sub-locality name.";
     }
 }
 
 export async function handleRateRegionChange(regionDisplayName) {
-    const select = document.getElementById('form-rate-region');
-    const selectedOpt = select ? select.options[select.selectedIndex] : null;
-    let code = selectedOpt ? selectedOpt.dataset.code : psgcRegionCodeMap.get(regionDisplayName);
+    const cleanName = (regionDisplayName || "").trim();
+    if (!cleanName) return;
+
+    let code = psgcRegionCodeMap.get(cleanName) || psgcRegionCodeMap.get(cleanName.toLowerCase());
+
+    if (!code) {
+        for (const [k, v] of psgcRegionCodeMap.entries()) {
+            if (k.toLowerCase().includes(cleanName.toLowerCase()) || cleanName.toLowerCase().includes(k.toLowerCase())) {
+                code = v;
+                break;
+            }
+        }
+    }
 
     if (!code) code = "030000000";
-    await loadPsgcCitiesMunicipalities(code);
+    const currentMun = document.getElementById('form-rate-municipality')?.value || "";
+    await loadPsgcCitiesMunicipalities(code, currentMun);
 }
 
 export async function handleRateMunicipalityChange(municipalityName) {
-    const select = document.getElementById('form-rate-municipality');
-    const selectedOpt = select ? select.options[select.selectedIndex] : null;
-    let code = selectedOpt ? selectedOpt.dataset.code : psgcCityMunCodeMap.get(municipalityName.toLowerCase());
+    const cleanMun = (municipalityName || "").trim();
+    if (!cleanMun) return;
 
-    if (!code && municipalityName.toLowerCase() === "camiling") {
-        code = "036905000";
+    let code = psgcCityMunCodeMap.get(cleanMun.toLowerCase()) || psgcCityMunCodeMap.get(cleanMun);
+
+    if (!code) {
+        // Fallback checks for common municipalities
+        const commonCodes = {
+            "camiling": "036905000",
+            "san clemente": "036912000",
+            "santa ignacia": "036913000",
+            "paniqui": "036910000",
+            "mayantoc": "036908000",
+            "moncada": "036909000",
+            "gerona": "036906000",
+            "san manuel": "036914000",
+            "bayambang": "015511000",
+            "mangatarem": "015529000",
+            "tarlac city": "036916000"
+        };
+        code = commonCodes[cleanMun.toLowerCase()];
     }
 
     if (code) {
@@ -509,6 +579,9 @@ export async function openForm(record = null) {
         if (isRates) {
             const originSelect = document.getElementById('form-rate-origin');
             const amountInput = document.getElementById('form-rate-amount');
+            const regInput = document.getElementById('form-rate-region');
+            const munInput = document.getElementById('form-rate-municipality');
+            const brgyInput = document.getElementById('form-rate-barangay');
 
             // Hydrate Origin Hub
             const resolvedOrigin = record.originMunicipality || globalState.selectedOriginHub || "Camiling";
@@ -524,28 +597,15 @@ export async function openForm(record = null) {
 
             let rateNum = parseFloat((record.rate || record.address || "").replace(/[^0-9.]/g, ''));
             if (amountInput) amountInput.value = !isNaN(rateNum) ? rateNum : "";
+            if (regInput) regInput.value = resolvedRegion;
+            if (munInput) munInput.value = resolvedMunicipality;
+            if (brgyInput) brgyInput.value = resolvedBarangay;
 
             await loadNationsList(resolvedNationality);
             await handleRateNationalityChange(resolvedNationality);
 
             if (resolvedNationality.toLowerCase() === "philippines") {
-                await loadPsgcRegions(resolvedRegion);
-                const munSelect = document.getElementById('form-rate-municipality');
-                if (munSelect) {
-                    const targetMunOpt = Array.from(munSelect.options).find(o => o.value.toLowerCase() === resolvedMunicipality.toLowerCase());
-                    if (targetMunOpt) {
-                        munSelect.value = targetMunOpt.value;
-                        const munCode = targetMunOpt.dataset.code || psgcCityMunCodeMap.get(resolvedMunicipality.toLowerCase());
-                        if (munCode) await loadPsgcBarangays(munCode, resolvedBarangay);
-                    }
-                }
-            } else {
-                const regCustom = document.getElementById('form-rate-region-custom');
-                const munCustom = document.getElementById('form-rate-municipality-custom');
-                const brgyInput = document.getElementById('form-rate-barangay');
-                if (regCustom) regCustom.value = record.region || "";
-                if (munCustom) munCustom.value = record.municipality || "";
-                if (brgyInput) brgyInput.value = resolvedBarangay;
+                await loadPsgcRegions(resolvedRegion, resolvedMunicipality);
             }
         } else {
             const nameInput = document.getElementById('form-name');
@@ -565,6 +625,8 @@ export async function openForm(record = null) {
         if (isRates) {
             const originSelect = document.getElementById('form-rate-origin');
             const amountInput = document.getElementById('form-rate-amount');
+            const regInput = document.getElementById('form-rate-region');
+            const munInput = document.getElementById('form-rate-municipality');
             const brgyInput = document.getElementById('form-rate-barangay');
 
             if (originSelect) {
@@ -577,9 +639,33 @@ export async function openForm(record = null) {
             if (amountInput) amountInput.value = "";
             if (brgyInput) brgyInput.value = "";
 
+            // AUTO-FILL DESTINATION REGION AND MUNICIPALITY BY WHAT DESTINATION IS PRIMARILY SELECTED
+            let primaryDest = "";
+            if (globalState.selectedDestinationMun && globalState.selectedDestinationMun !== "ALL") {
+                primaryDest = globalState.selectedDestinationMun.trim();
+            } else if (globalState.selectedOriginHub && globalState.selectedOriginHub !== "ALL") {
+                primaryDest = globalState.selectedOriginHub.trim();
+            } else {
+                primaryDest = "Camiling";
+            }
+
+            let primaryRegion = "Region III (Central Luzon)";
+            const matchingRecord = (globalState.records || []).find(r => 
+                (r.type || 'customers') === 'barangays' && 
+                (r.municipality || '').trim().toLowerCase() === primaryDest.toLowerCase() &&
+                r.region
+            );
+            if (matchingRecord && matchingRecord.region) {
+                primaryRegion = matchingRecord.region;
+            }
+
+            if (regInput) regInput.value = primaryRegion;
+            if (munInput) munInput.value = primaryDest;
+
             const detectedCountry = await detectUserCountry();
             await loadNationsList(detectedCountry);
             await handleRateNationalityChange(detectedCountry);
+            await loadPsgcRegions(primaryRegion, primaryDest);
         } else {
             const nameInput = document.getElementById('form-name');
             const contactInput = document.getElementById('form-contact');
@@ -664,24 +750,15 @@ export async function submitForm() {
     if (isRates) {
         const originSelect = document.getElementById('form-rate-origin');
         const natSelect = document.getElementById('form-rate-nationality');
-        const regSelect = document.getElementById('form-rate-region');
-        const regCustom = document.getElementById('form-rate-region-custom');
-        const munSelect = document.getElementById('form-rate-municipality');
-        const munCustom = document.getElementById('form-rate-municipality-custom');
+        const regInput = document.getElementById('form-rate-region');
+        const munInput = document.getElementById('form-rate-municipality');
         const brgyInput = document.getElementById('form-rate-barangay');
         const amountInput = document.getElementById('form-rate-amount');
 
         const originMunicipality = originSelect ? originSelect.value.trim() : "Camiling";
         const nationality = natSelect ? natSelect.value.trim() : "Philippines";
-        const isPH = nationality.toLowerCase() === "philippines";
-
-        const region = isPH 
-            ? (regSelect ? regSelect.value.trim() : "Region III (Central Luzon)")
-            : (regCustom ? regCustom.value.trim() : "International");
-
-        const municipality = isPH
-            ? (munSelect ? munSelect.value.trim() : "Camiling")
-            : (munCustom ? munCustom.value.trim() : "International");
+        const region = (regInput && regInput.value.trim()) ? regInput.value.trim() : "Region III (Central Luzon)";
+        const municipality = (munInput && munInput.value.trim()) ? munInput.value.trim() : "Camiling";
 
         const barangay = brgyInput ? brgyInput.value.trim() : "";
         const amountVal = amountInput ? parseFloat(amountInput.value) : NaN;

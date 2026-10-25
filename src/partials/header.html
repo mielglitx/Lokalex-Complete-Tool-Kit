@@ -9,7 +9,7 @@
         <!-- UNIFIED PROFILE BUTTON -->
         <div id="header-user-section" onclick="window.handleHeaderUserClick && window.handleHeaderUserClick()" class="flex items-center gap-2 min-w-0 cursor-pointer group transition active:scale-95" title="Click to view & edit profile settings">
             <div class="relative shrink-0">
-                <img id="header-user-avatar" src="https://ui-avatars.com/api/?name=User&background=0284c7&color=ffffff&bold=true&size=128" alt="Profile" class="w-8 h-8 rounded-full object-cover border-2 border-emerald-500 shadow-sm group-hover:border-emerald-400 transition">
+                <img id="header-user-avatar" src="https://ui-avatars.com/api/?name=User&background=0284c7&color=ffffff&bold=true&size=128" alt="Profile" class="w-8 h-8 rounded-full object-cover border-2 border-emerald-500 shadow-sm group-hover:border-emerald-400 transition" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=' + encodeURIComponent(this.dataset.riderName || 'User') + '&background=0284c7&color=ffffff&bold=true&size=128';">
                 <span id="header-user-badge" class="absolute -bottom-1 -right-1 bg-emerald-600 text-white rounded-full text-[9px] border-2 border-white dark:border-gray-900 shadow-md flex items-center justify-center w-4 h-4">
                     <i id="header-user-badge-icon" class="fa-solid fa-pen"></i>
                 </span>

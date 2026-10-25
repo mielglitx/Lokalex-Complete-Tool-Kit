@@ -77,7 +77,7 @@
             </select>
         </div>
 
-        <!-- DESTINATION REGION -->
+        <!-- DESTINATION REGION (SUGGESTIVE TYPEWRITTEN INPUT) -->
         <div>
             <div class="flex justify-between items-center mb-1">
                 <label id="form-rate-region-label" class="text-xs text-gray-400 font-bold flex items-center gap-1.5">
@@ -85,13 +85,12 @@
                 </label>
                 <span id="rate-geo-loading-regions" class="hidden text-[10px] text-emerald-400"><i class="fa-solid fa-spinner fa-spin"></i> Loading regions...</span>
             </div>
-            <select id="form-rate-region" onchange="window.handleRateRegionChange && window.handleRateRegionChange(this.value)" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition cursor-pointer">
-                <option value="" disabled selected>Select Region</option>
-            </select>
-            <input type="text" id="form-rate-region-custom" placeholder="Enter State / Province / Region" class="hidden w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition mt-1">
+            <input type="text" id="form-rate-region" list="form-rate-region-list" autocomplete="off" placeholder="Select or type Region name" oninput="window.handleRateRegionChange && window.handleRateRegionChange(this.value)" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition">
+            <datalist id="form-rate-region-list"></datalist>
+            <span id="form-rate-region-hint" class="text-[10px] text-gray-500 mt-1 block">Choose from official regions or type a custom region.</span>
         </div>
 
-        <!-- DESTINATION MUNICIPALITY / CITY -->
+        <!-- DESTINATION MUNICIPALITY / CITY (SUGGESTIVE TYPEWRITTEN INPUT) -->
         <div>
             <div class="flex justify-between items-center mb-1">
                 <label id="form-rate-municipality-label" class="text-xs text-gray-400 font-bold flex items-center gap-1.5">
@@ -99,10 +98,9 @@
                 </label>
                 <span id="rate-geo-loading-mun" class="hidden text-[10px] text-amber-400"><i class="fa-solid fa-spinner fa-spin"></i> Loading cities/municipalities...</span>
             </div>
-            <select id="form-rate-municipality" onchange="window.handleRateMunicipalityChange && window.handleRateMunicipalityChange(this.value)" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition cursor-pointer">
-                <option value="" disabled selected>Select Municipality/City</option>
-            </select>
-            <input type="text" id="form-rate-municipality-custom" placeholder="Enter Municipality / City / Town" class="hidden w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition mt-1">
+            <input type="text" id="form-rate-municipality" list="form-rate-municipality-list" autocomplete="off" placeholder="Select or type Municipality / City name" oninput="window.handleRateMunicipalityChange && window.handleRateMunicipalityChange(this.value)" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition">
+            <datalist id="form-rate-municipality-list"></datalist>
+            <span id="form-rate-municipality-hint" class="text-[10px] text-gray-500 mt-1 block">Choose from official municipalities or type a custom town/city.</span>
         </div>
 
         <!-- DESTINATION BARANGAY / DISTRICT -->

@@ -20,7 +20,7 @@
         <!-- CURRENT PREVIEW PANEL -->
         <div class="flex flex-col items-center justify-center py-3 bg-gray-50 dark:bg-black/30 rounded-2xl border border-gray-200 dark:border-gray-800/80 gap-1.5">
             <div class="relative">
-                <img id="avatar-picker-preview" src="https://ui-avatars.com/api/?name=Rider&background=0284c7&color=ffffff&bold=true&size=128" alt="Preview" class="w-20 h-20 rounded-full object-cover border-4 border-emerald-500 shadow-md">
+                <img id="avatar-picker-preview" src="https://ui-avatars.com/api/?name=Rider&background=0284c7&color=ffffff&bold=true&size=128" alt="Preview" class="w-20 h-20 rounded-full object-cover border-4 border-emerald-500 shadow-md" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=Rider&background=0284c7&color=ffffff&bold=true&size=128';">
                 <button type="button" onclick="document.getElementById('avatar-file-input').click()" class="absolute -bottom-1 -right-1 bg-gray-900 text-white rounded-full p-1.5 text-[10px] border border-gray-700 shadow hover:scale-105 transition active:scale-95" title="Upload Photo">
                     <i class="fa-solid fa-camera"></i>
                 </button>

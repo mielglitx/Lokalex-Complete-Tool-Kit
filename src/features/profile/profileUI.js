@@ -154,7 +154,9 @@ export async function openProfileSettingsModal() {
         initialName = appState.riderName || localStorage.getItem('riderName') || 'Rider';
         initialUsername = riderId;
         initialPhone = appState.phoneNumber || localStorage.getItem('lokalex_rider_phone') || '';
-        initialAvatar = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || `https://ui-avatars.com/api/?name=${encodeURIComponent(initialName)}&background=0284c7&color=fff&bold=true&size=128`;
+        const rawSavedPhoto = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || '';
+        const isDead = rawSavedPhoto && (rawSavedPhoto.includes('litterbox.catbox.moe') || rawSavedPhoto.includes('litter.'));
+        initialAvatar = (rawSavedPhoto && !isDead) ? rawSavedPhoto : `https://ui-avatars.com/api/?name=${encodeURIComponent(initialName)}&background=0284c7&color=fff&bold=true&size=128`;
         initialGcashName = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || '';
         initialGcashNo = appState.gcashNo || localStorage.getItem('lokalex_gcash_no') || '';
 
@@ -166,7 +168,9 @@ export async function openProfileSettingsModal() {
                     if (val.riderName || val.name) initialName = val.riderName || val.name;
                     if (val.phoneNumber || val.phone) initialPhone = val.phoneNumber || val.phone;
                     if (val.address) initialAddress = val.address;
-                    if (val.photoUrl) initialAvatar = val.photoUrl;
+                    if (val.photoUrl && !val.photoUrl.includes('litterbox.catbox.moe') && !val.photoUrl.includes('litter.')) {
+                        initialAvatar = val.photoUrl;
+                    }
                     if (val.gcashName) initialGcashName = val.gcashName;
                     if (val.gcashNo) initialGcashNo = val.gcashNo;
                 }
@@ -191,7 +195,13 @@ export async function openProfileSettingsModal() {
     if (addressInput) addressInput.value = initialAddress;
     if (locationInput) locationInput.value = initialLocation;
     if (coordsBadge) coordsBadge.innerText = initialLocation ? "GPS Linked" : "Not set";
-    if (avatarPreview) avatarPreview.src = initialAvatar;
+    if (avatarPreview) {
+        avatarPreview.onerror = function() {
+            this.onerror = null;
+            this.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(initialName || 'User')}&background=0284c7&color=fff&bold=true&size=128`;
+        };
+        avatarPreview.src = initialAvatar;
+    }
     if (gcashNameInput) gcashNameInput.value = initialGcashName;
     if (gcashNoInput) gcashNoInput.value = initialGcashNo;
 

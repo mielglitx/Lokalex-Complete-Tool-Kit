@@ -19,6 +19,9 @@
                         <button type="button" onclick="window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat()" class="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 hover:bg-orange-500 hover:text-white transition flex items-center gap-1 text-[10px] font-black shadow-2xs shrink-0 cursor-pointer" title="Send Store Menu">
                             <i class="fa-solid fa-book-open text-[9px]"></i> Menu
                         </button>
+                        <button type="button" onclick="window.openFareRatePickerFromChat && window.openFareRatePickerFromChat()" class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500 hover:text-white transition flex items-center gap-1 text-[10px] font-black shadow-2xs shrink-0 cursor-pointer" title="Send Delivery Fare Rates">
+                            <i class="fa-solid fa-peso-sign text-[9px]"></i> Rates
+                        </button>
                     </div>
                     <p class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono flex items-center gap-1 font-bold truncate">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
@@ -99,6 +102,11 @@
                 <i class="fa-solid fa-book-open"></i> Menu
             </button>
 
+            <!-- SEND FARE RATES BUTTON -->
+            <button id="rider-chat-send-rates-btn" type="button" onclick="window.openFareRatePickerFromChat && window.openFareRatePickerFromChat()" class="min-w-[95px] bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white border border-emerald-400/30 py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0" title="Send delivery fare rates to customer">
+                <i class="fa-solid fa-peso-sign"></i> Rates
+            </button>
+
             <!-- GO TO CART BUTTON (CATERING RIDER ONLY) -->
             <button id="rider-chat-go-cart-btn" type="button" onclick="window.goToCustomerCartFromChat && window.goToCustomerCartFromChat()" class="hidden flex-1 min-w-[95px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white border border-blue-400/30 py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0" title="Open this customer's Cart">
                 <i class="fa-solid fa-cart-shopping"></i> Go to Cart
@@ -171,6 +179,10 @@
                 <button type="button" onclick="window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat()" class="px-2.5 py-1 bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-lg border border-orange-500/30 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer font-bold" title="Browse & Send Restaurant Menu">
                     <i class="fa-solid fa-book-open text-[11px]"></i>
                     <span class="text-[10px] font-black">Menu</span>
+                </button>
+                <button type="button" onclick="window.openFareRatePickerFromChat && window.openFareRatePickerFromChat()" class="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg border border-emerald-500/30 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer font-bold" title="Browse & Send Delivery Fare Rates">
+                    <i class="fa-solid fa-peso-sign text-[11px]"></i>
+                    <span class="text-[10px] font-black">Rates</span>
                 </button>
                 <button type="button" onclick="window.promptImageAttachmentSource && window.promptImageAttachmentSource()" class="px-2.5 py-1 bg-inputBg hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Send Image">
                     <i class="fa-solid fa-image text-[11px]"></i>

@@ -62,7 +62,14 @@ import {
     detectAndSetGpsDestination,
     handleOriginHubChange,
     handleDestinationChange,
-    copyBarangayRate
+    copyBarangayRate,
+    openFareRatePickerFromChat,
+    closeFareRatePickerFromChat,
+    filterChatFareRatePicker,
+    renderChatFareRatePicker,
+    quickSendFareRateToActiveChat,
+    insertFareRateToChatInput,
+    formatFareRateMessage
 } from './ui/directoryRouting.js';
 
 import {
@@ -202,6 +209,15 @@ if (typeof window !== 'undefined') {
     window.closeMenuSendConfirmModal = closeMenuSendConfirmModal;
     window.showMenuSentConfirmationModal = showMenuSentConfirmationModal;
     window.closeMenuSentConfirmationModal = closeMenuSentConfirmationModal;
+
+    // Chat Fare Rate Picker
+    window.openFareRatePickerFromChat = openFareRatePickerFromChat;
+    window.closeFareRatePickerFromChat = closeFareRatePickerFromChat;
+    window.filterChatFareRatePicker = filterChatFareRatePicker;
+    window.renderChatFareRatePicker = renderChatFareRatePicker;
+    window.quickSendFareRateToActiveChat = quickSendFareRateToActiveChat;
+    window.insertFareRateToChatInput = insertFareRateToChatInput;
+    window.formatFareRateMessage = formatFareRateMessage;
 
     // Navigation & List UI
     window.minimizeDirectorySearch = minimizeDirectorySearch;

@@ -764,13 +764,14 @@ function getMessageSenderAvatar(m, isRider, custAvatar) {
         return custAvatar;
     }
     // Check if the message has an explicit avatar/photo attached
-    if (m.senderAvatar && typeof m.senderAvatar === 'string' && m.senderAvatar.trim()) {
+    const isDead = (url) => !url || typeof url !== 'string' || url.includes('litterbox.catbox.moe') || url.includes('litter.');
+    if (m.senderAvatar && typeof m.senderAvatar === 'string' && !isDead(m.senderAvatar)) {
         return m.senderAvatar.trim();
     }
-    if (m.avatarUrl && typeof m.avatarUrl === 'string' && m.avatarUrl.trim()) {
+    if (m.avatarUrl && typeof m.avatarUrl === 'string' && !isDead(m.avatarUrl)) {
         return m.avatarUrl.trim();
     }
-    if (m.photoUrl && typeof m.photoUrl === 'string' && m.photoUrl.trim()) {
+    if (m.photoUrl && typeof m.photoUrl === 'string' && !isDead(m.photoUrl)) {
         return m.photoUrl.trim();
     }
 
@@ -784,7 +785,7 @@ function getMessageSenderAvatar(m, isRider, custAvatar) {
         });
         if (member) {
             const memberPhoto = member.photoUrl || member.avatar || member.profilePic;
-            if (memberPhoto && typeof memberPhoto === 'string' && memberPhoto.trim()) {
+            if (memberPhoto && typeof memberPhoto === 'string' && !isDead(memberPhoto)) {
                 return memberPhoto.trim();
             }
         }
@@ -902,7 +903,7 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     return `
     <div id="msg-bubble-${m.id}" data-timestamp="${msgTs}" class="flex flex-col ${isRider ? 'items-end' : 'items-start'} my-0.5 w-full">
         <div class="flex items-start gap-1.5 ${isRider ? 'flex-row-reverse' : 'flex-row'} max-w-full">
-            <img src="${senderAvatar}" loading="lazy" decoding="async" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1 pointer-events-none">
+            <img src="${senderAvatar}" loading="lazy" decoding="async" class="w-6 h-6 rounded-full object-cover border border-blue-400/40 shrink-0 mt-1 pointer-events-none" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(senderName || 'User')}&background=${isRider ? '0284c7' : '0084FF'}&color=fff';">
             <div 
                 onpointerdown="window.handleMsgPointerDown(event, '${m.id}', 'rider-cust', '${encodedText}', '${encodedSender}')"
                 onpointermove="window.handleMsgPointerMove(event)"

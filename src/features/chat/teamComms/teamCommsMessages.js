@@ -91,7 +91,9 @@ export function renderBubbleChatMessages(msgs) {
                        (msg.sender && msg.sender.toLowerCase().trim() === myName.toLowerCase().trim());
         const senderName = formatTitleCase(msg.sender || 'Rider');
         const timeStr = msg.time || (msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
-        const avatarUrl = msg.photoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=0284c7&color=ffffff&bold=true&size=128`;
+        const rawAvatar = msg.photoUrl || '';
+        const isDead = rawAvatar && (rawAvatar.includes('litterbox.catbox.moe') || rawAvatar.includes('litter.'));
+        const avatarUrl = (rawAvatar && !isDead) ? rawAvatar : `https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=0284c7&color=ffffff&bold=true&size=128`;
 
         let replyHtml = "";
         if (msg.replyTo) {
@@ -113,7 +115,7 @@ export function renderBubbleChatMessages(msgs) {
         return `
         <div id="msg-bubble-${msg.id}" class="flex gap-2 items-end ${isMine ? 'justify-end' : 'justify-start'} group">
             ${!isMine ? `
-                <img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(senderName)}" class="w-7 h-7 rounded-full object-cover border border-gray-700 shrink-0 mb-0.5">
+                <img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(senderName)}" class="w-7 h-7 rounded-full object-cover border border-gray-700 shrink-0 mb-0.5" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(senderName)}&background=0284c7&color=ffffff&bold=true&size=128';">
             ` : ''}
 
             <div class="flex flex-col max-w-[78%] ${isMine ? 'items-end' : 'items-start'}">

@@ -234,6 +234,17 @@ export function initRealtimeFirebaseListeners() {
                 const currentMyRec = currentMyEntry ? currentMyEntry[1] : null;
 
                 if (currentMyRec) {
+                    const myRosterPhoto = currentMyRec.photoUrl || currentMyRec.avatar || currentMyRec.profilePic || "";
+                    const isDead = myRosterPhoto && (myRosterPhoto.includes('litterbox.catbox.moe') || myRosterPhoto.includes('litter.'));
+                    if (myRosterPhoto && !isDead && appState.photoUrl !== myRosterPhoto) {
+                        appState.photoUrl = myRosterPhoto;
+                        localStorage.setItem('lokalex_photo_url', myRosterPhoto);
+                        localStorage.setItem('riderPhotoUrl', myRosterPhoto);
+                        if (typeof window.syncHeaderUserProfile === 'function') {
+                            window.syncHeaderUserProfile();
+                        }
+                    }
+
                     if (previousMyRosterRec) {
                         const prevCusts = (previousMyRosterRec.customerName || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
                         const currCusts = (currentMyRec.customerName || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);

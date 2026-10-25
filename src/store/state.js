@@ -1,9 +1,19 @@
 // src/store/state.js
+// Safe initial photo resolution: purge any expired/dead Litterbox links
+const rawInitialPhoto = localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || "";
+const isDeadInitialPhoto = rawInitialPhoto && (rawInitialPhoto.includes('litterbox.catbox.moe') || rawInitialPhoto.includes('litter.'));
+if (isDeadInitialPhoto) {
+    try {
+        localStorage.removeItem('lokalex_photo_url');
+        localStorage.removeItem('riderPhotoUrl');
+    } catch (_) {}
+}
+
 export const appState = {
     telegramId: localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "",
     riderName: localStorage.getItem('riderName') || "",
     userType: localStorage.getItem('userType') || "",
-    photoUrl: localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || "",
+    photoUrl: isDeadInitialPhoto ? "" : rawInitialPhoto,
     phoneNumber: localStorage.getItem('lokalex_rider_phone') || "",
     gcashNo: localStorage.getItem('lokalex_gcash_no') || "",
     gcashName: localStorage.getItem('lokalex_gcash_name') || "",

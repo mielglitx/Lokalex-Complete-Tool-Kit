@@ -207,7 +207,7 @@ export async function bootApp() {
             requestWakeLock();
             syncRiderSession(appState.telegramId || savedRiderId, appState.riderName || savedRiderName);
 
-            // Asynchronous non-blocking account validity check
+            // Asynchronous non-blocking account validity check & profile photo sync
             if (savedRiderId && db) {
                 db.ref(`riders/${savedRiderId}`).once('value').then(riderSnap => {
                     if (!riderSnap.exists()) {
@@ -221,6 +221,18 @@ export async function bootApp() {
                         history.replaceState({ view: 'view-login' }, '', '#view-login');
                         router.renderViewUI('view-login');
                         showToast("⚠️ Your account has been removed or no longer exists.");
+                    } else {
+                        const rData = riderSnap.val() || {};
+                        const rPhoto = rData.photoUrl || rData.avatar || rData.profilePic || "";
+                        const isDead = rPhoto && (rPhoto.includes('litterbox.catbox.moe') || rPhoto.includes('litter.'));
+                        if (rPhoto && !isDead) {
+                            appState.photoUrl = rPhoto;
+                            localStorage.setItem('lokalex_photo_url', rPhoto);
+                            localStorage.setItem('riderPhotoUrl', rPhoto);
+                            if (typeof window.syncHeaderUserProfile === 'function') {
+                                window.syncHeaderUserProfile();
+                            }
+                        }
                     }
                 }).catch(() => {});
             }

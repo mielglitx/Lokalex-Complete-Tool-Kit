@@ -22,7 +22,7 @@
         <div class="flex flex-col items-center justify-center gap-2 bg-gray-50 dark:bg-black/30 p-3.5 rounded-2xl border border-gray-200 dark:border-gray-800 shrink-0">
             <div class="relative group">
                 <div class="w-20 h-20 rounded-full bg-blue-600/20 border-2 border-emerald-500 overflow-hidden flex items-center justify-center relative shadow-sm">
-                    <img id="prof-modal-avatar-preview" src="" alt="Profile" class="w-full h-full object-cover">
+                    <img id="prof-modal-avatar-preview" src="" alt="Profile" class="w-full h-full object-cover" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=User&background=0284c7&color=ffffff&bold=true&size=128';">
                 </div>
                 <button type="button" onclick="document.getElementById('prof-avatar-file-input')?.click()" class="absolute -bottom-1 -right-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-[10px] border-2 border-cardBg shadow transition active:scale-90" title="Upload Photo">
                     <i class="fa-solid fa-camera"></i>

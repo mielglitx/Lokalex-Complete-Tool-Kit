@@ -190,8 +190,12 @@ export async function submitSaveProfileSettings() {
             appState.photoUrl = profileState.currentAvatarUrl;
             localStorage.setItem('riderName', name);
             localStorage.setItem('lokalex_photo_url', profileState.currentAvatarUrl);
+            localStorage.setItem('riderPhotoUrl', profileState.currentAvatarUrl);
             localStorage.setItem('lokalex_rider_phone', formattedPhone);
             localStorage.setItem('phoneNumber', formattedPhone);
+            if (typeof window.syncHeaderUserProfile === 'function') {
+                window.syncHeaderUserProfile();
+            }
         }
 
         showToast("✅ Profile settings saved successfully!");

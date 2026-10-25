@@ -3,13 +3,22 @@ import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { escapeHtml, formatTitleCase } from '../../utils/helpers.js';
+import { uploadImage } from '../../utils/imageUpload.js';
 
 let selectedAvatarUrl = "";
+
+function isDeadAvatarUrl(url) {
+    if (!url || typeof url !== 'string') return true;
+    const clean = url.trim();
+    if (!clean) return true;
+    if (clean.includes('litterbox.catbox.moe') || clean.includes('litter.')) return true;
+    return false;
+}
 
 export function getRiderAvatarUrl(rider = null) {
     if (rider) {
         const photo = rider.photoUrl || rider.avatar || rider.profilePic;
-        if (photo && typeof photo === 'string' && photo.trim() !== '') {
+        if (photo && typeof photo === 'string' && !isDeadAvatarUrl(photo)) {
             return photo.trim();
         }
         const name = formatTitleCase(rider.riderName || rider.name || 'Rider');
@@ -17,7 +26,7 @@ export function getRiderAvatarUrl(rider = null) {
     }
 
     const myPhoto = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || null;
-    if (myPhoto && typeof myPhoto === 'string' && myPhoto.trim() !== '') {
+    if (myPhoto && typeof myPhoto === 'string' && !isDeadAvatarUrl(myPhoto)) {
         return myPhoto.trim();
     }
     const myName = formatTitleCase(appState.riderName || localStorage.getItem('riderName') || 'Rider');
@@ -39,7 +48,14 @@ export function syncHeaderUserProfile() {
     const myName = formatTitleCase(appState.riderName || localStorage.getItem('riderName') || 'Rider');
     const myPhoto = getRiderAvatarUrl();
 
-    if (avatarEl) avatarEl.src = myPhoto;
+    if (avatarEl) {
+        avatarEl.dataset.riderName = myName;
+        avatarEl.onerror = function() {
+            this.onerror = null;
+            this.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(myName)}&background=0284c7&color=ffffff&bold=true&size=128`;
+        };
+        avatarEl.src = myPhoto;
+    }
     if (nameEl) nameEl.innerText = myName;
 }
 
@@ -117,7 +133,7 @@ export function openAvatarPickerModal() {
         const rosterRec = globalState.rosterMembers.find(m => (m.telegramId || m.id || '').toString() === myId);
         if (rosterRec) {
             if (rosterRec.riderName || rosterRec.name) myName = formatTitleCase(rosterRec.riderName || rosterRec.name);
-            if (rosterRec.photoUrl) currentAvatar = rosterRec.photoUrl;
+            if (rosterRec.photoUrl && !isDeadAvatarUrl(rosterRec.photoUrl)) currentAvatar = rosterRec.photoUrl;
             if (rosterRec.phoneNumber) currentPhone = rosterRec.phoneNumber;
             if (rosterRec.gcashName) currentGcashName = rosterRec.gcashName;
             if (rosterRec.gcashNo) currentGcashNo = rosterRec.gcashNo;
@@ -126,8 +142,14 @@ export function openAvatarPickerModal() {
 
     selectedAvatarUrl = currentAvatar;
 
-    // Display values immediately
-    if (previewImg) previewImg.src = currentAvatar;
+    // Display values immediately with safe fallback on error
+    if (previewImg) {
+        previewImg.onerror = function() {
+            this.onerror = null;
+            this.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(myName)}&background=0284c7&color=ffffff&bold=true&size=128`;
+        };
+        previewImg.src = currentAvatar;
+    }
     if (nameBadge) nameBadge.innerText = myName;
     if (phoneBadgeText) phoneBadgeText.innerText = currentPhone || 'No Contact Number';
     if (nameInput) nameInput.value = myName;
@@ -168,8 +190,9 @@ export function openAvatarPickerModal() {
                     if (phoneInput && phoneInput.value === '') phoneInput.value = currentPhone;
                     if (phoneBadgeText) phoneBadgeText.innerText = currentPhone;
                 }
-                if (rData.photoUrl || rData.avatar || rData.profilePic) {
-                    currentAvatar = rData.photoUrl || rData.avatar || rData.profilePic;
+                const cloudPhoto = rData.photoUrl || rData.avatar || rData.profilePic;
+                if (cloudPhoto && !isDeadAvatarUrl(cloudPhoto)) {
+                    currentAvatar = cloudPhoto;
                     selectedAvatarUrl = currentAvatar;
                     if (previewImg) previewImg.src = currentAvatar;
                 }
@@ -282,8 +305,20 @@ export async function saveRiderProfileSettings() {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || '').toString().trim();
 
     try {
+        let finalAvatar = selectedAvatarUrl;
+        if (finalAvatar && finalAvatar.startsWith('data:')) {
+            try {
+                const uploaded = await uploadImage(finalAvatar, `avatars/rider_${myId || Date.now()}.jpg`);
+                if (uploaded) {
+                    finalAvatar = uploaded;
+                }
+            } catch (upErr) {
+                console.warn('[RiderProfile] Upload to storage failed, using compressed base64:', upErr);
+            }
+        }
+
         appState.riderName = newName;
-        appState.photoUrl = selectedAvatarUrl;
+        appState.photoUrl = finalAvatar;
         if (newPhone) appState.phoneNumber = newPhone;
         if (newGcashName) {
             appState.gcashName = newGcashName;
@@ -295,15 +330,15 @@ export async function saveRiderProfileSettings() {
         }
 
         localStorage.setItem('riderName', newName);
-        localStorage.setItem('lokalex_photo_url', selectedAvatarUrl);
-        localStorage.setItem('riderPhotoUrl', selectedAvatarUrl);
+        localStorage.setItem('lokalex_photo_url', finalAvatar);
+        localStorage.setItem('riderPhotoUrl', finalAvatar);
         if (newPhone) localStorage.setItem('lokalex_rider_phone', newPhone);
 
         if (myId && db) {
             const updates = {
                 name: newName,
                 riderName: newName,
-                photoUrl: selectedAvatarUrl,
+                photoUrl: finalAvatar,
                 updatedAt: Date.now()
             };
 
@@ -320,7 +355,7 @@ export async function saveRiderProfileSettings() {
             await db.ref(`roster/${myId}`).update({
                 name: newName,
                 riderName: newName,
-                photoUrl: selectedAvatarUrl,
+                photoUrl: finalAvatar,
                 ...(newGcashName ? { gcashName: newGcashName } : {}),
                 ...(newGcashNo ? { gcashNo: newGcashNo } : {}),
                 ...(p1 ? { hasPassword: true } : {})

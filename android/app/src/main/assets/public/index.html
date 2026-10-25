@@ -683,7 +683,7 @@
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-DvztDy9t.js"></script>
+  <script type="module" crossorigin src="./assets/index-BTRQVqsc.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
@@ -708,7 +708,7 @@
         <!-- UNIFIED PROFILE BUTTON -->
         <div id="header-user-section" onclick="window.handleHeaderUserClick && window.handleHeaderUserClick()" class="flex items-center gap-2 min-w-0 cursor-pointer group transition active:scale-95" title="Click to view & edit profile settings">
             <div class="relative shrink-0">
-                <img id="header-user-avatar" src="https://ui-avatars.com/api/?name=User&background=0284c7&color=ffffff&bold=true&size=128" alt="Profile" class="w-8 h-8 rounded-full object-cover border-2 border-emerald-500 shadow-sm group-hover:border-emerald-400 transition">
+                <img id="header-user-avatar" src="https://ui-avatars.com/api/?name=User&background=0284c7&color=ffffff&bold=true&size=128" alt="Profile" class="w-8 h-8 rounded-full object-cover border-2 border-emerald-500 shadow-sm group-hover:border-emerald-400 transition" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=' + encodeURIComponent(this.dataset.riderName || 'User') + '&background=0284c7&color=ffffff&bold=true&size=128';">
                 <span id="header-user-badge" class="absolute -bottom-1 -right-1 bg-emerald-600 text-white rounded-full text-[9px] border-2 border-white dark:border-gray-900 shadow-md flex items-center justify-center w-4 h-4">
                     <i id="header-user-badge-icon" class="fa-solid fa-pen"></i>
                 </span>
@@ -2948,7 +2948,7 @@
             </select>
         </div>
 
-        <!-- DESTINATION REGION -->
+        <!-- DESTINATION REGION (SUGGESTIVE TYPEWRITTEN INPUT) -->
         <div>
             <div class="flex justify-between items-center mb-1">
                 <label id="form-rate-region-label" class="text-xs text-gray-400 font-bold flex items-center gap-1.5">
@@ -2956,13 +2956,12 @@
                 </label>
                 <span id="rate-geo-loading-regions" class="hidden text-[10px] text-emerald-400"><i class="fa-solid fa-spinner fa-spin"></i> Loading regions...</span>
             </div>
-            <select id="form-rate-region" onchange="window.handleRateRegionChange && window.handleRateRegionChange(this.value)" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition cursor-pointer">
-                <option value="" disabled selected>Select Region</option>
-            </select>
-            <input type="text" id="form-rate-region-custom" placeholder="Enter State / Province / Region" class="hidden w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition mt-1">
+            <input type="text" id="form-rate-region" list="form-rate-region-list" autocomplete="off" placeholder="Select or type Region name" oninput="window.handleRateRegionChange && window.handleRateRegionChange(this.value)" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition">
+            <datalist id="form-rate-region-list"></datalist>
+            <span id="form-rate-region-hint" class="text-[10px] text-gray-500 mt-1 block">Choose from official regions or type a custom region.</span>
         </div>
 
-        <!-- DESTINATION MUNICIPALITY / CITY -->
+        <!-- DESTINATION MUNICIPALITY / CITY (SUGGESTIVE TYPEWRITTEN INPUT) -->
         <div>
             <div class="flex justify-between items-center mb-1">
                 <label id="form-rate-municipality-label" class="text-xs text-gray-400 font-bold flex items-center gap-1.5">
@@ -2970,10 +2969,9 @@
                 </label>
                 <span id="rate-geo-loading-mun" class="hidden text-[10px] text-amber-400"><i class="fa-solid fa-spinner fa-spin"></i> Loading cities/municipalities...</span>
             </div>
-            <select id="form-rate-municipality" onchange="window.handleRateMunicipalityChange && window.handleRateMunicipalityChange(this.value)" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition cursor-pointer">
-                <option value="" disabled selected>Select Municipality/City</option>
-            </select>
-            <input type="text" id="form-rate-municipality-custom" placeholder="Enter Municipality / City / Town" class="hidden w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition mt-1">
+            <input type="text" id="form-rate-municipality" list="form-rate-municipality-list" autocomplete="off" placeholder="Select or type Municipality / City name" oninput="window.handleRateMunicipalityChange && window.handleRateMunicipalityChange(this.value)" class="w-full bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white font-bold focus:border-emerald-500 transition">
+            <datalist id="form-rate-municipality-list"></datalist>
+            <span id="form-rate-municipality-hint" class="text-[10px] text-gray-500 mt-1 block">Choose from official municipalities or type a custom town/city.</span>
         </div>
 
         <!-- DESTINATION BARANGAY / DISTRICT -->
@@ -3534,6 +3532,9 @@
                         <button type="button" onclick="window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat()" class="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 hover:bg-orange-500 hover:text-white transition flex items-center gap-1 text-[10px] font-black shadow-2xs shrink-0 cursor-pointer" title="Send Store Menu">
                             <i class="fa-solid fa-book-open text-[9px]"></i> Menu
                         </button>
+                        <button type="button" onclick="window.openFareRatePickerFromChat && window.openFareRatePickerFromChat()" class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500 hover:text-white transition flex items-center gap-1 text-[10px] font-black shadow-2xs shrink-0 cursor-pointer" title="Send Delivery Fare Rates">
+                            <i class="fa-solid fa-peso-sign text-[9px]"></i> Rates
+                        </button>
                     </div>
                     <p class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono flex items-center gap-1 font-bold truncate">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
@@ -3614,6 +3615,11 @@
                 <i class="fa-solid fa-book-open"></i> Menu
             </button>
 
+            <!-- SEND FARE RATES BUTTON -->
+            <button id="rider-chat-send-rates-btn" type="button" onclick="window.openFareRatePickerFromChat && window.openFareRatePickerFromChat()" class="min-w-[95px] bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white border border-emerald-400/30 py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0" title="Send delivery fare rates to customer">
+                <i class="fa-solid fa-peso-sign"></i> Rates
+            </button>
+
             <!-- GO TO CART BUTTON (CATERING RIDER ONLY) -->
             <button id="rider-chat-go-cart-btn" type="button" onclick="window.goToCustomerCartFromChat && window.goToCustomerCartFromChat()" class="hidden flex-1 min-w-[95px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white border border-blue-400/30 py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0" title="Open this customer's Cart">
                 <i class="fa-solid fa-cart-shopping"></i> Go to Cart
@@ -3686,6 +3692,10 @@
                 <button type="button" onclick="window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat()" class="px-2.5 py-1 bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-lg border border-orange-500/30 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer font-bold" title="Browse & Send Restaurant Menu">
                     <i class="fa-solid fa-book-open text-[11px]"></i>
                     <span class="text-[10px] font-black">Menu</span>
+                </button>
+                <button type="button" onclick="window.openFareRatePickerFromChat && window.openFareRatePickerFromChat()" class="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg border border-emerald-500/30 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer font-bold" title="Browse & Send Delivery Fare Rates">
+                    <i class="fa-solid fa-peso-sign text-[11px]"></i>
+                    <span class="text-[10px] font-black">Rates</span>
                 </button>
                 <button type="button" onclick="window.promptImageAttachmentSource && window.promptImageAttachmentSource()" class="px-2.5 py-1 bg-inputBg hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Send Image">
                     <i class="fa-solid fa-image text-[11px]"></i>
@@ -5469,7 +5479,7 @@
         </div>
 
         <div class="flex flex-col items-center justify-center py-3 bg-gray-50 dark:bg-black/30 rounded-2xl border border-gray-200 dark:border-gray-800/80 gap-1.5">
-            <img id="rider-info-avatar" src="https://ui-avatars.com/api/?name=Rider&background=0284c7&color=ffffff&bold=true&size=128" alt="Rider Avatar" class="w-18 h-18 rounded-full object-cover border-3 border-emerald-500 shadow-md">
+            <img id="rider-info-avatar" src="https://ui-avatars.com/api/?name=Rider&background=0284c7&color=ffffff&bold=true&size=128" alt="Rider Avatar" class="w-18 h-18 rounded-full object-cover border-3 border-emerald-500 shadow-md" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=Rider&background=0284c7&color=ffffff&bold=true&size=128';">
             <span id="rider-info-name" class="font-black text-sm text-gray-900 dark:text-white mt-1">Rider Name</span>
             <div class="flex items-center gap-1.5 mt-0.5">
                 <span id="rider-info-role" class="px-2 py-0.5 rounded-full font-bold text-[9px] bg-blue-500/20 text-blue-400 border border-blue-500/40 uppercase">RIDER</span>
@@ -7101,7 +7111,7 @@
         <!-- CURRENT PREVIEW PANEL -->
         <div class="flex flex-col items-center justify-center py-3 bg-gray-50 dark:bg-black/30 rounded-2xl border border-gray-200 dark:border-gray-800/80 gap-1.5">
             <div class="relative">
-                <img id="avatar-picker-preview" src="https://ui-avatars.com/api/?name=Rider&background=0284c7&color=ffffff&bold=true&size=128" alt="Preview" class="w-20 h-20 rounded-full object-cover border-4 border-emerald-500 shadow-md">
+                <img id="avatar-picker-preview" src="https://ui-avatars.com/api/?name=Rider&background=0284c7&color=ffffff&bold=true&size=128" alt="Preview" class="w-20 h-20 rounded-full object-cover border-4 border-emerald-500 shadow-md" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=Rider&background=0284c7&color=ffffff&bold=true&size=128';">
                 <button type="button" onclick="document.getElementById('avatar-file-input').click()" class="absolute -bottom-1 -right-1 bg-gray-900 text-white rounded-full p-1.5 text-[10px] border border-gray-700 shadow hover:scale-105 transition active:scale-95" title="Upload Photo">
                     <i class="fa-solid fa-camera"></i>
                 </button>
@@ -7298,7 +7308,7 @@
         <div class="flex flex-col items-center justify-center gap-2 bg-gray-50 dark:bg-black/30 p-3.5 rounded-2xl border border-gray-200 dark:border-gray-800 shrink-0">
             <div class="relative group">
                 <div class="w-20 h-20 rounded-full bg-blue-600/20 border-2 border-emerald-500 overflow-hidden flex items-center justify-center relative shadow-sm">
-                    <img id="prof-modal-avatar-preview" src="" alt="Profile" class="w-full h-full object-cover">
+                    <img id="prof-modal-avatar-preview" src="" alt="Profile" class="w-full h-full object-cover" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=User&background=0284c7&color=ffffff&bold=true&size=128';">
                 </div>
                 <button type="button" onclick="document.getElementById('prof-avatar-file-input')?.click()" class="absolute -bottom-1 -right-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-[10px] border-2 border-cardBg shadow transition active:scale-90" title="Upload Photo">
                     <i class="fa-solid fa-camera"></i>

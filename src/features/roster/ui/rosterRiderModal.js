@@ -67,6 +67,10 @@ export async function openRiderInfoModal(targetId, targetName = "") {
         resolvedPhoto = myPhoto;
     }
 
+    if (resolvedPhoto && (resolvedPhoto.includes('litterbox.catbox.moe') || resolvedPhoto.includes('litter.'))) {
+        resolvedPhoto = "";
+    }
+
     const photoUrl = resolvedPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=0284c7&color=ffffff&bold=true&size=128`;
     const userType = (member?.userType || cloudData?.userType || "rider").toUpperCase();
     const status = (member?.status || "End").toUpperCase();
@@ -301,7 +305,13 @@ export async function openRiderInfoModal(targetId, targetName = "") {
     const cateringWrapper = document.getElementById('rider-info-active-catering-wrapper');
     const cateringText = document.getElementById('rider-info-active-catering');
 
-    if (avatarEl) avatarEl.src = photoUrl;
+    if (avatarEl) {
+        avatarEl.onerror = function() {
+            this.onerror = null;
+            this.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=0284c7&color=ffffff&bold=true&size=128`;
+        };
+        avatarEl.src = photoUrl;
+    }
     if (nameEl) nameEl.innerText = riderName;
 
     if (roleEl) {

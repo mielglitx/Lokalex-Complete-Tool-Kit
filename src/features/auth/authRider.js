@@ -273,10 +273,16 @@ export async function executeRiderLoginSequence(idInput, cleanName, cleanUserTyp
         appState.riderName = cleanName;
         appState.telegramId = idInput;
         appState.userType = cleanUserType;
-        if (riderRecord.photoUrl) {
-            appState.photoUrl = riderRecord.photoUrl;
-            localStorage.setItem('lokalex_photo_url', riderRecord.photoUrl);
-            localStorage.setItem('riderPhotoUrl', riderRecord.photoUrl);
+        const rawLoginPhoto = riderRecord.photoUrl || riderRecord.avatar || riderRecord.profilePic || "";
+        const isDeadLoginPhoto = rawLoginPhoto && (rawLoginPhoto.includes('litterbox.catbox.moe') || rawLoginPhoto.includes('litter.'));
+        if (rawLoginPhoto && !isDeadLoginPhoto) {
+            appState.photoUrl = rawLoginPhoto;
+            localStorage.setItem('lokalex_photo_url', rawLoginPhoto);
+            localStorage.setItem('riderPhotoUrl', rawLoginPhoto);
+        } else {
+            appState.photoUrl = "";
+            localStorage.removeItem('lokalex_photo_url');
+            localStorage.removeItem('riderPhotoUrl');
         }
         if (riderRecord.phoneNumber) {
             appState.phoneNumber = riderRecord.phoneNumber;

@@ -316,9 +316,19 @@ export function syncHeaderAndWidgets(targetViewId) {
     // 3. RIDER VIEW / ROLE
     else {
         const riderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
-        const riderAvatar = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=0284c7&color=ffffff&bold=true&size=128`;
+        let riderAvatar = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || "";
+        if (!riderAvatar || riderAvatar.includes('litterbox.catbox.moe') || riderAvatar.includes('litter.')) {
+            riderAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=0284c7&color=ffffff&bold=true&size=128`;
+        }
 
-        if (avatarEl) avatarEl.src = riderAvatar;
+        if (avatarEl) {
+            avatarEl.dataset.riderName = riderName;
+            avatarEl.onerror = function() {
+                this.onerror = null;
+                this.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=0284c7&color=ffffff&bold=true&size=128`;
+            };
+            avatarEl.src = riderAvatar;
+        }
         if (nameEl) nameEl.innerText = riderName;
         if (roleEl) roleEl.innerText = "Welcome!";
         if (badgeIcon) badgeIcon.className = "fa-solid fa-camera";
