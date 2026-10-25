@@ -284,6 +284,37 @@ export function setCommissionPeriod(period) {
     refreshCommissionView();
 }
 
+export function checkRiderFilterMatch(targetFilter, rName, rId) {
+    if (!targetFilter) return true;
+    const target = targetFilter.toString().trim();
+    if (!target || target.toUpperCase() === 'ALL' || target.toLowerCase().includes('all riders')) return true;
+
+    const rNameClean = (rName || "").toString().trim();
+    const rIdClean = (rId || "").toString().trim();
+
+    // 1. Direct case-insensitive match on ID or Name
+    if (rIdClean && target.toLowerCase() === rIdClean.toLowerCase()) return true;
+    if (rNameClean && target.toLowerCase() === rNameClean.toLowerCase()) return true;
+
+    // 2. Token/word name match via isRiderMatch
+    if (isRiderMatch(target, rNameClean)) return true;
+
+    // 3. Match against roster member
+    const targetRoster = (globalState.rosterMembers || []).find(m => {
+        const mName = (m.riderName || m.name || "").toString().trim();
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        return (mId && mId.toLowerCase() === target.toLowerCase()) || (mName && isRiderMatch(target, mName));
+    });
+    if (targetRoster) {
+        const rosterId = (targetRoster.telegramId || targetRoster.id || "").toString().trim();
+        const rosterName = (targetRoster.riderName || targetRoster.name || "").toString().trim();
+        if (rosterId && rIdClean && rosterId.toLowerCase() === rIdClean.toLowerCase()) return true;
+        if (rosterName && isRiderMatch(rosterName, rNameClean)) return true;
+    }
+
+    return false;
+}
+
 export function refreshCommissionView() {
     const isUserAdmin = checkIsAdmin();
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
@@ -379,11 +410,7 @@ export function refreshCommissionView() {
         if (riderTotals[rId].gross <= 0 || riderTotals[rId].customers.length === 0) continue;
 
         if (targetRiderFilter) {
-            const cleanTarget = targetRiderFilter.toString().trim();
-            const rIdClean = rId.toString().trim();
-            const rNameClean = (riderTotals[rId].name || "").toString().trim();
-
-            const isMatch = isRiderMatch(cleanTarget, rNameClean, cleanTarget, rIdClean);
+            const isMatch = checkRiderFilterMatch(targetRiderFilter, riderTotals[rId].name, rId);
             if (!isMatch) continue;
             selectedRiderRates = riderTotals[rId].lastRates;
         }
@@ -395,9 +422,10 @@ export function refreshCommissionView() {
     }
 
     if (targetRiderFilter && !selectedRiderRates) {
-        const myRoster = globalState.rosterMembers?.find(m => isRiderMatch(targetRiderFilter, m.riderName || m.name || "", targetRiderFilter, m.telegramId));
+        const myRoster = globalState.rosterMembers?.find(m => checkRiderFilterMatch(targetRiderFilter, m.riderName || m.name || "", m.telegramId));
         const rName = myRoster ? (myRoster.riderName || myRoster.name || "") : (appState.riderName || myName);
-        selectedRiderRates = getCommissionRates(viewSettings.dateValue, rName, targetRiderFilter);
+        const rTelegramId = myRoster?.telegramId ? myRoster.telegramId.toString() : (/^\d+$/.test(targetRiderFilter) ? targetRiderFilter : "");
+        selectedRiderRates = getCommissionRates(viewSettings.dateValue, rName, rTelegramId);
     }
 
     const mainWrapperEl = document.getElementById('comm-main-wrapper');
@@ -487,6 +515,10 @@ export function checkSettlementStatus(riderId, period, dateVal, isAdmin) {
 export function toggleSettlementStatus() {
     const select = document.getElementById('admin-rider-select');
     const riderId = select ? select.value : (appState.telegramId || appState.riderName);
+    if (!riderId || riderId.toUpperCase() === 'ALL' || riderId.toLowerCase().includes('all riders')) {
+        showToast("⚠️ Please select a specific rider from the dropdown first.");
+        return;
+    }
     const dateVal = viewSettings.dateValue || getLocalTodayStr();
     const settlementKey = `${riderId}_${viewSettings.period}_${dateVal}`;
     
@@ -696,11 +728,7 @@ export function generateDailyReportText() {
         if (riderTotals[rId].gross <= 0) continue;
 
         if (targetRiderFilter) {
-            const cleanTarget = targetRiderFilter.toString().trim();
-            const rIdClean = rId.toString().trim();
-            const rNameClean = (riderTotals[rId].name || "").toString().trim();
-
-            const isMatch = isRiderMatch(cleanTarget, rNameClean, cleanTarget, rIdClean);
+            const isMatch = checkRiderFilterMatch(targetRiderFilter, riderTotals[rId].name, rId);
             if (!isMatch) continue;
         }
 

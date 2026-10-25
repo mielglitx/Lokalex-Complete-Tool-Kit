@@ -7,6 +7,20 @@
             <i class="fa-solid fa-route animate-pulse"></i>
         </div>
         <h2 class="text-xl font-black text-white">L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Distance Calc</h2>
+
+        <!-- In-App Browser Warning Banner for Messenger -->
+        <div id="mapcalc-iab-chrome-banner" class="hidden w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-3 rounded-2xl shadow-lg flex flex-col gap-2 text-left border border-blue-400/40">
+            <div class="flex items-center gap-2">
+                <i class="fa-brands fa-chrome text-lg"></i>
+                <span class="font-black text-xs">Open in Google Chrome</span>
+            </div>
+            <p class="text-[10.5px] text-blue-100 leading-tight">
+                Messenger blocks location permission. Tap below to switch to Google Chrome, or tap <strong>⋯</strong> at the top right and select <strong>"Open in Chrome"</strong>.
+            </p>
+            <button type="button" onclick="window.forceOpenExternalBrowser && window.forceOpenExternalBrowser()" class="bg-white hover:bg-blue-50 text-blue-800 font-black text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow transition active:scale-95 cursor-pointer">
+                <i class="fa-brands fa-chrome text-sm"></i> Switch to Chrome Browser
+            </button>
+        </div>
         
         <div id="mapcalc-cust-map-box" class="hidden w-full h-40 rounded-2xl overflow-hidden border border-emerald-500/50 relative my-1 shadow-inner">
             <div id="mapcalc-cust-google-map" class="w-full h-full"></div>
@@ -29,6 +43,20 @@
             <i class="fa-solid fa-location-crosshairs animate-pulse"></i>
         </div>
         <h2 class="text-xl font-black text-white">L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Delivery Tracking</h2>
+
+        <!-- In-App Browser Warning Banner for Messenger -->
+        <div id="track-iab-chrome-banner" class="hidden w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-3 rounded-2xl shadow-lg flex flex-col gap-2 text-left border border-blue-400/40">
+            <div class="flex items-center gap-2">
+                <i class="fa-brands fa-chrome text-lg"></i>
+                <span class="font-black text-xs">Open in Google Chrome</span>
+            </div>
+            <p class="text-[10.5px] text-blue-100 leading-tight">
+                Messenger blocks location permission. Tap below to switch to Google Chrome, or tap <strong>⋯</strong> at the top right and select <strong>"Open in Chrome"</strong>.
+            </p>
+            <button type="button" onclick="window.forceOpenExternalBrowser && window.forceOpenExternalBrowser()" class="bg-white hover:bg-blue-50 text-blue-800 font-black text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow transition active:scale-95 cursor-pointer">
+                <i class="fa-brands fa-chrome text-sm"></i> Switch to Chrome Browser
+            </button>
+        </div>
 
         <div id="cust-map-container-box" class="hidden w-full h-40 rounded-2xl overflow-hidden border border-blue-500/50 relative my-1 shadow-inner">
             <div id="cust-google-map" class="w-full h-full"></div>
@@ -57,6 +85,20 @@
             <i class="fa-solid fa-satellite-dish animate-pulse"></i>
         </div>
         <h2 class="text-xl font-black text-white">L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Live Tracker</h2>
+
+        <!-- In-App Browser Warning Banner for Messenger -->
+        <div id="livegps-iab-chrome-banner" class="hidden w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-3 rounded-2xl shadow-lg flex flex-col gap-2 text-left border border-blue-400/40">
+            <div class="flex items-center gap-2">
+                <i class="fa-brands fa-chrome text-lg"></i>
+                <span class="font-black text-xs">Open in Google Chrome</span>
+            </div>
+            <p class="text-[10.5px] text-blue-100 leading-tight">
+                Messenger blocks location permission. Tap below to switch to Google Chrome, or tap <strong>⋯</strong> at the top right and select <strong>"Open in Chrome"</strong>.
+            </p>
+            <button type="button" onclick="window.forceOpenExternalBrowser && window.forceOpenExternalBrowser()" class="bg-white hover:bg-blue-50 text-blue-800 font-black text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow transition active:scale-95 cursor-pointer">
+                <i class="fa-brands fa-chrome text-sm"></i> Switch to Chrome Browser
+            </button>
+        </div>
 
         <!-- REAL-TIME ROUTE & LIVE ETA HUD OVERLAY -->
         <div id="livegps-eta-hud" class="hidden bg-gradient-to-r from-blue-900/90 to-indigo-900/90 border border-blue-400/50 rounded-2xl p-2.5 flex items-center justify-between text-xs shadow-lg backdrop-blur-md">

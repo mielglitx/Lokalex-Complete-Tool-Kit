@@ -1,5 +1,6 @@
 // src/features/liveTracker.js
 import { db } from '../config/firebase.js';
+import { getPublicShareBaseUrl } from '../config/constants.js';
 import { appState, globalState } from '../store/state.js';
 import { 
     showToast, 
@@ -10,7 +11,7 @@ import {
     startBackgroundAudioPulse, 
     stopBackgroundAudioPulse 
 } from '../ui/notifications.js';
-import { copyText, escapeHtml } from '../utils/helpers.js';
+import { copyText, escapeHtml, isInAppBrowser, forceOpenExternalBrowser } from '../utils/helpers.js';
 import { openSlideDeleteModal } from '../ui/modals.js';
 
 let activeSessionKey = localStorage.getItem('lokalex_active_live_session') || "";
@@ -74,7 +75,8 @@ export async function promptStartLiveGpsSession() {
 export function copyLiveGpsLink(custName = "Customer", sessionKey = activeSessionKey) {
     if (!sessionKey) return showToast("No active live GPS session.");
 
-    const fullUrl = `${window.location.origin}${window.location.pathname}?livegps=${sessionKey}`;
+    const baseUrl = getPublicShareBaseUrl();
+    const fullUrl = `${baseUrl}?livegps=${encodeURIComponent(sessionKey)}`;
     const message = `Good day ${custName}! 👋\n\nOur Mutual Live GPS Tracking has started! You can track my location as I approach your address and we can see each other on the map using this link:\n\n${fullUrl}\n\n⚠️ REMINDER:\nIf opened in Messenger, please tap the 3 dots (...) and select "Open in Chrome" or "Open in Safari". Please also allow Location Access. Thank you very much! 🛵💙`;
 
     copyText(message);
@@ -197,7 +199,27 @@ export function checkAndInitLiveGpsPortal() {
     if (riderBtn) riderBtn.classList.add('hidden');
     if (custControls) custControls.classList.remove('hidden');
 
+    // In-app browser handling (Messenger, Instagram, etc.)
+    const iabBanner = document.getElementById('livegps-iab-chrome-banner');
+    if (isInAppBrowser()) {
+        if (iabBanner) iabBanner.classList.remove('hidden');
+        try {
+            forceOpenExternalBrowser();
+        } catch(e) {}
+    } else if (iabBanner) {
+        iabBanner.classList.add('hidden');
+    }
+
     startMutualMapSync(sessionKey);
+
+    // Automatically prompt location permission on portal load
+    setTimeout(() => {
+        try {
+            startMutualCustomerLocationSharing();
+        } catch(e) {
+            console.warn('[LiveGps] Auto location request error:', e);
+        }
+    }, 400);
 }
 
 // --- SHARED MAP SYNC LOGIC ---

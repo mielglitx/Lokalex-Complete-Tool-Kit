@@ -22,13 +22,18 @@
 
 import { appState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
-import { HUB_LOCATION } from '../../config/constants.js';
+import { HUB_LOCATION, getPublicShareBaseUrl } from '../../config/constants.js';
 import { showToast } from '../../ui/notifications.js';
 import { switchView } from '../../ui/router.js';
-import { copyText, getLocalTodayStr, sanitizeFirebaseKey } from '../../utils/helpers.js';
+import { copyText, getLocalTodayStr, sanitizeFirebaseKey, isInAppBrowser, forceOpenExternalBrowser } from '../../utils/helpers.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
 import { getDeviceLocation } from '../auth/index.js';
 import { mapState, saveTrackingHistory, ensureLeafletLoaded, fetchOsrmDrivingRoute } from './mapState.js';
+
+export function getCustomerTrackingShareUrl(activeKey) {
+    const baseUrl = getPublicShareBaseUrl();
+    return `${baseUrl}?track=${encodeURIComponent(activeKey)}`;
+}
 
 export function copyCustomerTrackingLink(custName, forceRefresh = false) {
     if (!custName) custName = "Customer";
@@ -55,7 +60,7 @@ export function copyCustomerTrackingLink(custName, forceRefresh = false) {
 
     saveTrackingHistory();
 
-    const fullUrl = `${window.location.origin}${window.location.pathname}?track=${custData.activeKey}`;
+    const fullUrl = getCustomerTrackingShareUrl(custData.activeKey);
     const customerMessage = `Good day! 👋\n\nFor faster and more accurate delivery of your order, please click this link so our Lokalex Rider can get your exact location:\n\n${fullUrl}\n\n⚠️ REMINDER:\nIf opened inside Messenger, please tap the 3 dots (...) at the top and select "Open in Chrome/Safari". Thank you very much! 🛵💙`;
 
     copyText(customerMessage);
@@ -74,6 +79,27 @@ export function checkAndInitTrackPortal() {
     if (!urlParams.has('track')) return;
     const portal = document.getElementById('customer-tracking-portal');
     if (portal) portal.classList.remove('hidden');
+
+    // In-app browser handling (Messenger, Instagram, etc.)
+    const iabBanner = document.getElementById('track-iab-chrome-banner');
+    if (isInAppBrowser()) {
+        if (iabBanner) iabBanner.classList.remove('hidden');
+        // Automatically attempt to break out into Google Chrome on Android
+        try {
+            forceOpenExternalBrowser();
+        } catch(e) {}
+    } else if (iabBanner) {
+        iabBanner.classList.add('hidden');
+    }
+
+    // Automatically ask for location permission immediately on portal load
+    setTimeout(() => {
+        try {
+            startCustomerLocationSharing();
+        } catch(e) {
+            console.warn('[TrackPortal] Auto location request error:', e);
+        }
+    }, 400);
 }
 
 export async function startCustomerLocationSharing() {

@@ -22,10 +22,10 @@
 
 import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
-import { HUB_LOCATION, API_URL } from '../../config/constants.js';
+import { HUB_LOCATION, API_URL, getPublicShareBaseUrl } from '../../config/constants.js';
 import { showToast } from '../../ui/notifications.js';
 import { switchView } from '../../ui/router.js';
-import { escapeHtml, copyText } from '../../utils/helpers.js';
+import { escapeHtml, copyText, isInAppBrowser, forceOpenExternalBrowser } from '../../utils/helpers.js';
 import { openSlideDeleteModal } from '../../ui/modals.js';
 import { mapState, ensureLeafletLoaded, fetchOsrmDrivingRoute } from './mapState.js';
 
@@ -37,9 +37,8 @@ export function calculateMapDeliveryFee(distanceKm) {
 }
 
 export function getMapCalcShareUrl(calcKey) {
-    const origin = window.location.origin;
-    const pathname = window.location.pathname;
-    return `${origin}${pathname}?mapcalc=${calcKey}`;
+    const baseUrl = getPublicShareBaseUrl();
+    return `${baseUrl}?mapcalc=${encodeURIComponent(calcKey)}`;
 }
 
 export function openMapCalcBoardModal() {
@@ -125,6 +124,27 @@ export function checkAndInitMapCalcPortal() {
     if (!urlParams.has('mapcalc')) return;
     const portal = document.getElementById('mapcalc-customer-portal');
     if (portal) portal.classList.remove('hidden');
+
+    // In-app browser handling (Messenger, Instagram, etc.)
+    const iabBanner = document.getElementById('mapcalc-iab-chrome-banner');
+    if (isInAppBrowser()) {
+        if (iabBanner) iabBanner.classList.remove('hidden');
+        // Automatically attempt to break out into Google Chrome on Android
+        try {
+            forceOpenExternalBrowser();
+        } catch(e) {}
+    } else if (iabBanner) {
+        iabBanner.classList.add('hidden');
+    }
+
+    // Automatically ask for location permission immediately on portal load
+    setTimeout(() => {
+        try {
+            startMapCalcLocationSharing();
+        } catch(e) {
+            console.warn('[MapCalc] Auto location request error:', e);
+        }
+    }, 400);
 }
 
 export async function startMapCalcLocationSharing() {

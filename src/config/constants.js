@@ -17,6 +17,34 @@
 export const API_URL = "https://script.google.com/macros/s/AKfycbyIz6OEd7dZh2gx1T5oT3G6xo7i4D3Lq8jPre4ke26tcqqq3v0pollbGtRcTr8JATnvtQ/exec"; 
 export const HUB_LOCATION = { lat: 15.6881, lng: 120.4144, mapUrl: "https://maps.app.goo.gl/sCBrMSjP9FEjB43C7" };
 
+// Canonical public web URL for external sharing (bypasses Android localhost/webview loopback)
+export const PUBLIC_WEB_URL = "https://mielglitx.github.io/Lokalex-Complete-Tool-Kit/";
+
+/**
+ * Resolves the public share base URL.
+ * Guarantees links sent to customers use the hosted public domain instead of http://localhost.
+ */
+export function getPublicShareBaseUrl() {
+    try {
+        const origin = window.location.origin || "";
+        const isLocal = origin.includes("localhost") || 
+                        origin.includes("127.0.0.1") || 
+                        origin.includes("capacitor://") ||
+                        window.location.protocol === "file:" ||
+                        window.location.protocol === "capacitor:";
+        if (isLocal) {
+            return PUBLIC_WEB_URL;
+        }
+        let base = origin + (window.location.pathname || "/");
+        if (!base.endsWith("/")) {
+            base = base.replace(/\/index\.html$/i, "") + "/";
+        }
+        return base;
+    } catch(e) {
+        return PUBLIC_WEB_URL;
+    }
+}
+
 // Only keep the primary Admin ID (Amiel) here. If Allan was 5548562 or 4547425,
 // keeping only the true owner ID prevents ordinary riders from inheriting 0% fee exemptions.
 export const ADMIN_IDS = ["4547425", "amiel"];

@@ -20,6 +20,7 @@
  */
 
 import { db } from '../../config/firebase.js';
+import { getPublicShareBaseUrl } from '../../config/constants.js';
 import { showToast } from '../../ui/notifications.js';
 import { escapeHtml, copyText } from '../../utils/helpers.js';
 
@@ -47,7 +48,7 @@ function formatMenuUpdatedAt(timestamp) {
  * Generates and shares/copies the public Customer Menu Link.
  */
 export async function shareCustomerMenuCatalogLink() {
-    const baseUrl = window.location.origin + window.location.pathname;
+    const baseUrl = getPublicShareBaseUrl();
     const customerUrl = `${baseUrl.replace(/\/$/, '')}#view-customer-menus`;
 
     const shareData = {

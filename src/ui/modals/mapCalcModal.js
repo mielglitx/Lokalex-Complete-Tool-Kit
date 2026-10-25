@@ -18,10 +18,11 @@ export function formatMapCalcDate(ts) {
     });
 }
 
+import { getPublicShareBaseUrl } from '../../config/constants.js';
+
 export function getMapCalcShareUrl(calcId) {
-    const origin = window.location.origin;
-    const pathname = window.location.pathname;
-    return `${origin}${pathname}?mapcalc=${calcId}`;
+    const baseUrl = getPublicShareBaseUrl();
+    return `${baseUrl}?mapcalc=${encodeURIComponent(calcId)}`;
 }
 
 export function openMapCalcBoardModal() {

@@ -136,6 +136,46 @@ export function getDevicePlatform() {
     return 'pc';
 }
 
+/**
+ * Detects if the current webpage is loaded inside an In-App Browser
+ * (Facebook Messenger, Facebook Feed, Instagram, TikTok, Line, etc.)
+ */
+export function isInAppBrowser() {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent || navigator.vendor || window.opera || '';
+    return /FBAN|FBAV|FB_IAB|Messenger|Instagram|TikTok|Line|WhatsApp/i.test(ua);
+}
+
+/**
+ * Builds an Android Chrome Intent URL to break out of WebView into standalone Google Chrome.
+ */
+export function getChromeIntentUrl(targetUrl = window.location.href) {
+    const cleanUrl = (targetUrl || window.location.href).replace(/^https?:\/\//i, '');
+    return `intent://${cleanUrl}#Intent;scheme=https;package=com.android.chrome;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url=${encodeURIComponent(targetUrl)};end`;
+}
+
+/**
+ * Forces the device to launch the link in standalone Google Chrome or external browser.
+ */
+export function forceOpenExternalBrowser(targetUrl = window.location.href) {
+    if (typeof window === 'undefined') return;
+    const platform = getDevicePlatform();
+    const cleanUrl = targetUrl.replace(/^https?:\/\//i, '');
+
+    if (platform === 'android') {
+        const intentUrl = getChromeIntentUrl(targetUrl);
+        window.location.href = intentUrl;
+    } else if (platform === 'ios') {
+        // iOS Google Chrome custom scheme
+        window.location.href = `googlechromes://${cleanUrl}`;
+        setTimeout(() => {
+            window.location.href = targetUrl;
+        }, 1200);
+    } else {
+        window.open(targetUrl, '_blank');
+    }
+}
+
 // -------------------------------------------------------------
 // DYNAMIC COLOR SCHEME / THEME CONTROLLER (LIGHT / DARK / SYSTEM)
 // -------------------------------------------------------------
@@ -227,6 +267,9 @@ if (typeof window !== 'undefined') {
     window.sanitizeFirebaseKey = sanitizeFirebaseKey;
     window.cleanCustomerForMatch = cleanCustomerForMatch;
     window.getDevicePlatform = getDevicePlatform;
+    window.isInAppBrowser = isInAppBrowser;
+    window.getChromeIntentUrl = getChromeIntentUrl;
+    window.forceOpenExternalBrowser = forceOpenExternalBrowser;
     window.initTheme = initTheme;
     window.setTheme = setTheme;
     window.applyTheme = applyTheme;
