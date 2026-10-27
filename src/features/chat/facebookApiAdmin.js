@@ -64,7 +64,11 @@ export {
     renderRiderSourcesUI,
     renderFbChannelSelector,
     openRiderChatSourcesModal,
-    closeRiderChatSourcesModal
+    closeRiderChatSourcesModal,
+    isChannelBarLocked,
+    toggleRiderChannelBarLock,
+    onChannelBarLockedClick,
+    syncChannelBarLockUI
 } from './fbAdmin/fbChannels.js';
 
 // Re-export Admin CRUD & Configuration Modals
@@ -111,7 +115,11 @@ import {
     renderRiderSourcesUI,
     renderFbChannelSelector,
     openRiderChatSourcesModal,
-    closeRiderChatSourcesModal
+    closeRiderChatSourcesModal,
+    isChannelBarLocked,
+    toggleRiderChannelBarLock,
+    onChannelBarLockedClick,
+    syncChannelBarLockUI
 } from './fbAdmin/fbChannels.js';
 
 import {
@@ -166,6 +174,10 @@ if (typeof window !== 'undefined') {
     window.isAllSourcesSelected = isAllSourcesSelected;
     window.hasAnyFbSourceSelected = hasAnyFbSourceSelected;
     window.renderRiderSourcesUI = renderRiderSourcesUI;
+    window.isChannelBarLocked = isChannelBarLocked;
+    window.toggleRiderChannelBarLock = toggleRiderChannelBarLock;
+    window.onChannelBarLockedClick = onChannelBarLockedClick;
+    window.syncChannelBarLockUI = syncChannelBarLockUI;
     
     // Legacy single channel compatibility
     window.selectRiderFbChannel = selectRiderFbChannel;

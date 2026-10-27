@@ -16,12 +16,6 @@
                         <button type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="w-6 h-6 rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/20 dark:text-blue-400 dark:border-transparent hover:bg-blue-500 hover:text-white transition flex items-center justify-center text-xs shadow-xs shrink-0 cursor-pointer" title="View Customer Info">
                             <i class="fa-solid fa-circle-info"></i>
                         </button>
-                        <button type="button" onclick="window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat()" class="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 hover:bg-orange-500 hover:text-white transition flex items-center gap-1 text-[10px] font-black shadow-2xs shrink-0 cursor-pointer" title="Send Store Menu">
-                            <i class="fa-solid fa-book-open text-[9px]"></i> Menu
-                        </button>
-                        <button type="button" onclick="window.openFareRatePickerFromChat && window.openFareRatePickerFromChat()" class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500 hover:text-white transition flex items-center gap-1 text-[10px] font-black shadow-2xs shrink-0 cursor-pointer" title="Send Delivery Fare Rates">
-                            <i class="fa-solid fa-peso-sign text-[9px]"></i> Rates
-                        </button>
                     </div>
                     <p class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono flex items-center gap-1 font-bold truncate">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
@@ -34,9 +28,6 @@
             <div class="flex items-center gap-0.5 sm:gap-1 shrink-0">
                 <button id="rider-chat-sync-fb-btn" type="button" onclick="window.syncCurrentThreadFromMetaGraph && window.syncCurrentThreadFromMetaGraph(null, true)" class="hidden text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 p-2 text-sm transition shrink-0 active:scale-95 cursor-pointer" title="Instant Sync with Facebook Page">
                     <i class="fa-solid fa-arrows-rotate"></i>
-                </button>
-                <button type="button" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" class="text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 p-2 text-sm transition shrink-0" title="Float Chat over Other Apps (PiP)">
-                    <i class="fa-solid fa-up-right-from-square"></i>
                 </button>
                 <button type="button" onclick="window.openChatSoundSettingsModal && window.openChatSoundSettingsModal()" class="text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 p-2 text-sm transition shrink-0" title="Message Chimes & Ringtones">
                     <i class="fa-solid fa-bell"></i>
@@ -101,16 +92,6 @@
             <!-- CATER BUTTON -->
             <button id="rider-chat-cater-btn" onclick="window.caterCurrentChatCustomer && window.caterCurrentChatCustomer()" class="flex-1 min-w-[75px] bg-teal-600 hover:bg-teal-500 text-white border border-teal-500/30 py-2 px-3 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm" title="Cater this customer">
                 <i class="fa-solid fa-motorcycle"></i> Cater
-            </button>
-
-            <!-- SEND STORE MENU BUTTON -->
-            <button id="rider-chat-send-menu-btn" type="button" onclick="window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat()" class="min-w-[95px] bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white border border-orange-400/30 py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0" title="Send restaurant menu to customer">
-                <i class="fa-solid fa-book-open"></i> Menu
-            </button>
-
-            <!-- SEND FARE RATES BUTTON -->
-            <button id="rider-chat-send-rates-btn" type="button" onclick="window.openFareRatePickerFromChat && window.openFareRatePickerFromChat()" class="min-w-[95px] bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white border border-emerald-400/30 py-2 px-3 rounded-xl text-xs font-black transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer shrink-0" title="Send delivery fare rates to customer">
-                <i class="fa-solid fa-peso-sign"></i> Rates
             </button>
 
             <!-- GO TO CART BUTTON (CATERING RIDER ONLY) -->

@@ -219,6 +219,11 @@ export function selectRiderFbChannel(channelId) {
  * If user selects all available sources, it automatically simplifies back to 'all'.
  */
 export function toggleRiderSource(sourceId) {
+    if (isChannelBarLocked()) {
+        onChannelBarLockedClick();
+        return;
+    }
+
     if (sourceId === '__manage_apis__') {
         closeRiderChatSourcesModal();
         if (typeof window.openAdminFbApiModal === 'function') {
@@ -263,6 +268,10 @@ export function toggleRiderSource(sourceId) {
 }
 
 export function selectAllRiderSources() {
+    if (isChannelBarLocked()) {
+        onChannelBarLockedClick();
+        return;
+    }
     activeRiderSources = new Set(['all']);
     saveAndSyncRiderSources();
     showToast(`🌐 Showing all chat sources`);
@@ -549,6 +558,96 @@ export function renderRiderSourcesUI() {
         });
         legacySelectEl.innerHTML = optHtml;
     }
+
+    // 7. Sync channel bar lock state UI
+    syncChannelBarLockUI();
+}
+
+export function isChannelBarLocked() {
+    if (typeof localStorage === 'undefined') return true;
+    return localStorage.getItem('lokalex_channel_bar_locked') !== 'false';
+}
+
+export function toggleRiderChannelBarLock(event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    const currentlyLocked = isChannelBarLocked();
+    const newLocked = !currentlyLocked;
+    try {
+        localStorage.setItem('lokalex_channel_bar_locked', newLocked ? 'true' : 'false');
+    } catch (_) {}
+    
+    syncChannelBarLockUI();
+
+    if (newLocked) {
+        showToast("🔒 Live feed filter locked (misclick protection ON).");
+        if (typeof window.triggerNativeHaptic === 'function') window.triggerNativeHaptic('light');
+    } else {
+        showToast("🔓 Live feed filter unlocked. You can now tap sources or full booking.");
+        if (typeof window.triggerNativeHaptic === 'function') window.triggerNativeHaptic('success');
+    }
+}
+
+export function onChannelBarLockedClick(event) {
+    if (event) {
+        if (event.target && (event.target.closest('#rider-sources-lock-btn') || event.target.id === 'rider-sources-lock-btn')) {
+            return;
+        }
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    showToast("🔒 Feed filters are locked to prevent misclicks. Tap 🔓 on the right to edit.");
+    if (typeof window.triggerNativeHaptic === 'function') window.triggerNativeHaptic('warning');
+}
+
+export function syncChannelBarLockUI() {
+    const locked = isChannelBarLocked();
+    const lockBtn = document.getElementById('rider-sources-lock-btn');
+    const lockIcon = document.getElementById('rider-sources-lock-icon');
+    const lockText = document.getElementById('rider-sources-lock-text');
+    const overlay = document.getElementById('rider-channel-bar-lock-overlay');
+    const filterWrapper = document.getElementById('rider-sources-filter-wrapper');
+    const chipsContainer = document.getElementById('rider-sources-chips-container');
+    const fullBookingBtn = document.getElementById('btn-full-booking-trigger');
+
+    if (lockBtn) {
+        lockBtn.style.position = 'relative';
+        lockBtn.style.zIndex = '50';
+        lockBtn.style.pointerEvents = 'auto';
+
+        if (locked) {
+            lockBtn.className = "relative z-50 pointer-events-auto bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-lg font-black flex items-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer shrink-0";
+            lockBtn.title = "Feed filters are LOCKED. Tap to unlock.";
+            if (lockIcon) lockIcon.className = "fa-solid fa-lock text-[8.5px]";
+            if (lockText) lockText.innerText = "Locked";
+        } else {
+            lockBtn.className = "relative z-50 pointer-events-auto bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-lg font-black flex items-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer shrink-0";
+            lockBtn.title = "Feed filters are UNLOCKED. Tap to lock.";
+            if (lockIcon) lockIcon.className = "fa-solid fa-lock-open text-[8.5px]";
+            if (lockText) lockText.innerText = "Unlocked";
+        }
+    }
+
+    if (overlay) {
+        if (locked) overlay.classList.remove('hidden');
+        else overlay.classList.add('hidden');
+    }
+
+    if (filterWrapper) {
+        if (locked) filterWrapper.classList.add('opacity-60');
+        else filterWrapper.classList.remove('opacity-60');
+    }
+
+    if (chipsContainer) {
+        if (locked) chipsContainer.classList.add('opacity-60');
+        else chipsContainer.classList.remove('opacity-60');
+    }
+
+    if (fullBookingBtn) {
+        if (locked) fullBookingBtn.classList.add('opacity-60');
+        else fullBookingBtn.classList.remove('opacity-60');
+    }
 }
 
 /**
@@ -559,6 +658,11 @@ export function renderFbChannelSelector() {
 }
 
 export function openRiderChatSourcesModal() {
+    if (isChannelBarLocked()) {
+        showToast("🔒 Live feed filters are locked. Tap 🔓 to unlock first.");
+        if (typeof window.triggerNativeHaptic === 'function') window.triggerNativeHaptic('warning');
+        return;
+    }
     const modal = document.getElementById('rider-chat-sources-modal');
     if (modal) {
         modal.classList.remove('hidden');
@@ -572,5 +676,22 @@ export function closeRiderChatSourcesModal() {
     if (modal) {
         modal.classList.add('hidden');
         toggleBodyScroll(false);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.isChannelBarLocked = isChannelBarLocked;
+    window.toggleRiderChannelBarLock = toggleRiderChannelBarLock;
+    window.onChannelBarLockedClick = onChannelBarLockedClick;
+    window.syncChannelBarLockUI = syncChannelBarLockUI;
+}
+
+if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            syncChannelBarLockUI();
+        });
+    } else {
+        setTimeout(syncChannelBarLockUI, 50);
     }
 }

@@ -240,7 +240,7 @@
         border: none !important;
     }
 
-    /* Stashed / Edge-Docked Floating Window Mode (Badge View) */
+    /* Stashed / Edge-Docked Floating Window Mode (Badge View) - Only when native system reports stashed state */
     html.pip-stashed body > *:not(#pip-stashed-badge),
     html.in-floating-mode.pip-stashed body > *:not(#pip-stashed-badge) {
         display: none !important;
@@ -248,15 +248,6 @@
     html.pip-stashed #pip-stashed-badge,
     html.in-floating-mode.pip-stashed #pip-stashed-badge {
         display: flex !important;
-    }
-
-    @media (max-width: 170px) {
-        html.in-floating-mode body > *:not(#pip-stashed-badge) {
-            display: none !important;
-        }
-        html.in-floating-mode #pip-stashed-badge {
-            display: flex !important;
-        }
     }
 
     /* High-Performance Smart Cart Momentum Touch Scrolling */

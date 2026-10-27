@@ -430,17 +430,37 @@ export async function openExternalLink(rawUrl) {
     window.open(url, '_blank', 'noopener,noreferrer');
 }
 
+let isTransitioningToFloating = false;
+
 /**
  * Enters native Android Picture-in-Picture / Floating Window mode.
  * Keeps the app visible and live on screen on top of other apps (Maps, Waze, Messenger).
  */
 export function enterFloatingWindowMode() {
-    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.enterFloatingWindowMode === 'function') {
-        const result = window.NativePermissionsBridge.enterFloatingWindowMode();
-        if (result) {
-            triggerNativeHaptic('success');
+    if (typeof window === 'undefined') return false;
+
+    // Guard: already in PiP or transition in flight
+    if (isInFloatingWindowMode() || isTransitioningToFloating) {
+        return true;
+    }
+
+    if (window.NativePermissionsBridge && typeof window.NativePermissionsBridge.enterFloatingWindowMode === 'function') {
+        isTransitioningToFloating = true;
+        try {
+            triggerNativeHaptic('light');
+        } catch (_) {}
+
+        try {
+            const result = window.NativePermissionsBridge.enterFloatingWindowMode();
+            setTimeout(() => {
+                isTransitioningToFloating = false;
+            }, 1200);
+            return Boolean(result);
+        } catch (e) {
+            isTransitioningToFloating = false;
+            console.error("enterFloatingWindowMode error:", e);
+            return false;
         }
-        return result;
     } else {
         showToast("ℹ️ Floating Window mode is available in the Android mobile app.");
         return false;
@@ -452,6 +472,13 @@ export function isFloatingWindowSupported() {
         return window.NativePermissionsBridge.isFloatingWindowSupported();
     }
     return false;
+}
+
+export function isFloatingWindowAllowed() {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.isFloatingWindowAllowed === 'function') {
+        return window.NativePermissionsBridge.isFloatingWindowAllowed();
+    }
+    return true;
 }
 
 export function isInFloatingWindowMode() {
@@ -471,10 +498,12 @@ export function isFloatingWindowStashed() {
 if (typeof window !== 'undefined') {
     window.enterFloatingWindowMode = enterFloatingWindowMode;
     window.isFloatingWindowSupported = isFloatingWindowSupported;
+    window.isFloatingWindowAllowed = isFloatingWindowAllowed;
     window.isInFloatingWindowMode = isInFloatingWindowMode;
     window.isFloatingWindowStashed = isFloatingWindowStashed;
 
     window.onFloatingWindowModeChanged = function(isInPip) {
+        isTransitioningToFloating = false;
         if (isInPip) {
             document.documentElement.classList.add('in-floating-mode');
             document.body.classList.add('in-floating-mode');

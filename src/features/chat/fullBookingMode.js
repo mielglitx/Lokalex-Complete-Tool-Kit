@@ -237,7 +237,16 @@ export function updateFullBookingUI() {
     }
 }
 
-export function openFullBookingModal() {
+export function openFullBookingModal(fromSource) {
+    if (fromSource === 'channelBar' && typeof window.isChannelBarLocked === 'function' && window.isChannelBarLocked()) {
+        if (typeof window.onChannelBarLockedClick === 'function') {
+            window.onChannelBarLockedClick();
+        } else {
+            showToast("🔒 Feed filters are locked to prevent misclicks. Tap 🔓 on the right to edit.");
+        }
+        return;
+    }
+
     if (!canManageFullBooking()) {
         showToast("⚠️ Unauthorized: Only Admins can manage Full Booking Mode.");
         return;

@@ -222,16 +222,17 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
         if (lat && lng) {
             const mapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
             const staticMapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=16&size=400x200&maptype=roadmap&markers=color:red%7C${lat},${lng}&key=${MAPS_API_KEY}`;
+            const encodedMapUrl = encodeURIComponent(mapUrl).replace(/'/g, '%27');
 
             locationHtml = `
-            <div class="mt-1.5 flex flex-col gap-1 rounded-xl overflow-hidden border border-emerald-500/40 bg-gray-50 dark:bg-black/40 p-1">
-                <a href="${mapUrl}" target="_blank" onclick="event.stopPropagation()" class="block relative group overflow-hidden rounded-lg">
+            <div class="mt-1.5 flex flex-col gap-1 rounded-xl overflow-hidden border border-emerald-500/40 bg-gray-50 dark:bg-black/40 p-1" onclick="event.stopPropagation()">
+                <a href="${mapUrl}" target="_blank" onclick="event.preventDefault(); event.stopPropagation(); window.handleChatLinkClick && window.handleChatLinkClick(event, '${encodedMapUrl}')" class="block relative group overflow-hidden rounded-lg cursor-pointer">
                     <img src="${staticMapUrl}" alt="Map Location Preview" class="w-full h-32 object-cover rounded-lg group-hover:scale-105 transition-transform duration-200">
                     <div class="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                         <span class="bg-black/80 text-white text-[10px] font-bold px-2 py-1 rounded-md"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open in Maps</span>
                     </div>
                 </a>
-                <a href="${mapUrl}" target="_blank" onclick="event.stopPropagation()" class="bg-emerald-600/20 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-bold px-2.5 py-1.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 active:scale-95 transition">
+                <a href="${mapUrl}" target="_blank" onclick="event.preventDefault(); event.stopPropagation(); window.handleChatLinkClick && window.handleChatLinkClick(event, '${encodedMapUrl}')" class="bg-emerald-600/20 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 font-bold px-2.5 py-1.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 active:scale-95 transition cursor-pointer">
                     <i class="fa-solid fa-map-location-dot text-red-500"></i> View Shared Location
                 </a>
             </div>`;

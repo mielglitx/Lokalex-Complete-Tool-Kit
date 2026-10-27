@@ -1,7 +1,7 @@
 <section id="view-map" class="hidden fixed inset-0 bg-white dark:bg-darkBg text-gray-900 dark:text-white z-[999999] flex flex-col w-full h-full overflow-hidden" style="z-index: 999999 !important;">
     <!-- HEADER -->
     <header class="bg-cardBg px-4 py-3 flex items-center justify-between shadow-md shrink-0 border-b border-gray-200 dark:border-gray-800 gap-2">
-        <button onclick="window.goBack && window.goBack()" class="text-red-500 dark:text-red-400 font-semibold flex items-center gap-1.5 transition active:opacity-50 text-xs shrink-0">
+        <button onclick="window.closeMapPicker ? window.closeMapPicker() : (window.goBack && window.goBack())" class="text-red-500 dark:text-red-400 font-semibold flex items-center gap-1.5 transition active:opacity-50 text-xs shrink-0 cursor-pointer">
             <i class="fa-solid fa-xmark text-sm"></i> Cancel
         </button>
         <h1 id="map-view-title" class="text-sm font-bold truncate text-gray-900 dark:text-white">Pick Location Pin</h1>

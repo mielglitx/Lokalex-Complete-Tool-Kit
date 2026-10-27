@@ -315,7 +315,13 @@ export async function openMapPicker(context = 'form') {
     // Reset manual pin state for clean session calibration
     clearManualPin();
 
-    switchView('view-map');
+    const mapView = document.getElementById('view-map');
+    if (context === 'rider-chat' || context === 'chat') {
+        // Overlay directly without touching router history so chat modal and background view remain undisturbed
+        if (mapView) mapView.classList.remove('hidden');
+    } else {
+        switchView('view-map');
+    }
     
     const searchBarContainer = document.getElementById('map-search-bar-container');
     const confirmBtn = document.getElementById('map-confirm-btn');
@@ -483,13 +489,15 @@ export function confirmGoogleMapPin() {
     const captureLabel = isManualCapture ? "Placed Pin" : "Center Reticle";
 
     if (mapState.mapPickerContext === 'chat') {
-        goBack();
+        const mapView = document.getElementById('view-map');
+        if (mapView) mapView.classList.add('hidden');
         if (typeof sendCustomerToRiderChat === 'function') {
             sendCustomerToRiderChat("", null, { lat: targetLat, lng: targetLng });
         }
         showToast(`📍 ${captureLabel} location sent to chat!`);
     } else if (mapState.mapPickerContext === 'rider-chat') {
-        goBack();
+        const mapView = document.getElementById('view-map');
+        if (mapView) mapView.classList.add('hidden');
         if (typeof sendRiderToCustomerChat === 'function') {
             sendRiderToCustomerChat("Shared Rider Location", null, { lat: targetLat, lng: targetLng }, mapState.mapPickerTargetCustId);
         }
@@ -514,12 +522,21 @@ export function confirmGoogleMapPin() {
     }
 }
 
+export function closeMapPicker() {
+    const mapView = document.getElementById('view-map');
+    if (mapView) mapView.classList.add('hidden');
+    if (mapState.mapPickerContext !== 'rider-chat' && mapState.mapPickerContext !== 'chat') {
+        goBack();
+    }
+}
+
 // Global window attachments
 if (typeof window !== 'undefined') {
     window.placeManualPin = placeManualPin;
     window.clearManualPin = clearManualPin;
     window.confirmGoogleMapPin = confirmGoogleMapPin;
     window.openMapPicker = openMapPicker;
+    window.closeMapPicker = closeMapPicker;
 }
 
 // REMARKS: MAP_PICKER_CLICKABLE_CLEAR_PIN_AND_LEAFLET_EVENT_ISOLATION_V3_COMPLETE

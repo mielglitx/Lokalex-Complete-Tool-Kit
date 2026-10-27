@@ -187,9 +187,6 @@
                     <button id="btn-force-refresh-chat-feed" type="button" onclick="window.forceRefreshLiveChatsFeed && window.forceRefreshLiveChatsFeed(this)" class="bg-white dark:bg-cardBg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-gray-300 dark:border-gray-700 text-[9.5px] font-bold px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer" title="Force Refresh Live Chats Feed">
                         <i class="fa-solid fa-arrows-rotate text-blue-500 text-[9px]"></i> Refresh
                     </button>
-                    <button id="dashboard-float-window-btn" type="button" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" class="bg-white dark:bg-cardBg hover:bg-sky-50 dark:hover:bg-sky-950/30 text-sky-700 dark:text-sky-400 border border-gray-300 dark:border-gray-700 text-[9.5px] font-bold px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer" title="Float App as Mini Window over Other Apps (PiP)">
-                        <i class="fa-solid fa-up-right-from-square text-sky-500 text-[9px]"></i> Float Window
-                    </button>
                     <button id="admin-fb-settings-btn" onclick="window.openAdminFbApiModal && window.openAdminFbApiModal()" class="bg-blue-600 hover:bg-blue-500 text-white text-[9.5px] font-black px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Configure Facebook Messenger APIs">
                         <i class="fa-brands fa-facebook-messenger"></i> FB APIs
                     </button>
@@ -219,10 +216,13 @@
             </div>
 
             <!-- RIDER MULTI-SOURCE CHANNEL SELECTOR (Zero API Link Exposure) -->
-            <div id="rider-chat-channel-bar" class="flex flex-col gap-1.5 bg-gray-200/60 dark:bg-black/30 p-2 rounded-xl border border-gray-200/80 dark:border-gray-800/80 text-[10px]">
+            <div id="rider-chat-channel-bar" class="relative flex flex-col gap-1.5 bg-gray-200/60 dark:bg-black/30 p-2 rounded-xl border border-gray-200/80 dark:border-gray-800/80 text-[10px] overflow-hidden">
+                <!-- LOCK OVERLAY (INTERCEPTS MISCLICKS WHEN LOCKED, z-20) -->
+                <div id="rider-channel-bar-lock-overlay" onclick="window.onChannelBarLockedClick && window.onChannelBarLockedClick(event)" class="hidden absolute inset-0 z-20 bg-black/5 dark:bg-black/20 cursor-pointer pointer-events-auto" title="Feed filters are locked. Tap the lock icon to unlock."></div>
+
                 <div class="flex items-center justify-between gap-1.5 flex-wrap">
-                    <!-- SOURCE FILTER BUTTON & SUMMARY -->
-                    <div class="flex items-center gap-1.5 min-w-0">
+                    <!-- SOURCE FILTER BUTTON & SUMMARY (z-10, UNDER OVERLAY WHEN LOCKED) -->
+                    <div id="rider-sources-filter-wrapper" class="flex items-center gap-1.5 min-w-0 transition-opacity duration-150 relative z-10">
                         <button id="rider-sources-filter-btn" type="button" onclick="window.openRiderChatSourcesModal && window.openRiderChatSourcesModal()" class="bg-white dark:bg-cardBg hover:bg-gray-100 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-800 dark:text-white px-2 py-0.5 rounded-lg font-black flex items-center gap-1.5 shadow-2xs transition active:scale-95 cursor-pointer truncate max-w-[170px]" title="Pick chat sources (Web & FB Messenger Pages)">
                             <i class="fa-solid fa-sliders text-blue-500 text-[9px] shrink-0"></i>
                             <span id="rider-sources-summary-text" class="truncate">🌐 All Sources</span>
@@ -231,19 +231,29 @@
                         <span id="rider-sources-count-badge" class="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700/50 text-[9px] font-black px-1.5 py-0.2 rounded-full shrink-0">All</span>
                     </div>
 
-                    <!-- ACTION BUTTONS: RESET TO ALL & FULL BOOKING -->
-                    <div class="flex items-center gap-1 shrink-0">
-                        <button type="button" onclick="window.selectAllRiderSources && window.selectAllRiderSources()" id="rider-sources-reset-all-btn" class="hidden text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 text-[9px] font-bold px-1 py-0.5 transition cursor-pointer" title="Reset filter to show all sources">
-                            Show All
-                        </button>
-                        <button type="button" id="btn-full-booking-trigger" onclick="window.openFullBookingModal && window.openFullBookingModal()" class="hidden bg-white dark:bg-cardBg hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-700 dark:text-rose-400 border border-gray-300 dark:border-gray-700 text-[9px] font-bold px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs" title="Full Booking Auto-Reply Mode">
-                            <i class="fa-solid fa-ban text-rose-500 text-[8px]"></i> Full Booking
-                        </button>
+                    <!-- ACTION BUTTONS: RESET TO ALL, FULL BOOKING & LOCK TOGGLE -->
+                    <div class="flex items-center gap-1 shrink-0 ml-auto">
+                        <!-- Guarded Action Buttons (z-10, UNDER OVERLAY) -->
+                        <div class="flex items-center gap-1 relative z-10">
+                            <button type="button" onclick="window.selectAllRiderSources && window.selectAllRiderSources()" id="rider-sources-reset-all-btn" class="hidden text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 text-[9px] font-bold px-1 py-0.5 transition cursor-pointer" title="Reset filter to show all sources">
+                                Show All
+                            </button>
+                            <button type="button" id="btn-full-booking-trigger" onclick="window.openFullBookingModal && window.openFullBookingModal('channelBar')" class="hidden bg-white dark:bg-cardBg hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-700 dark:text-rose-400 border border-gray-300 dark:border-gray-700 text-[9px] font-bold px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs" title="Full Booking Auto-Reply Mode">
+                                <i class="fa-solid fa-ban text-rose-500 text-[8px]"></i> Full Booking
+                            </button>
+                        </div>
+                        <!-- LOCK / UNLOCK TOGGLE BUTTON (z-50, ALWAYS ABOVE OVERLAY & CLICKABLE) -->
+                        <div class="relative z-50 shrink-0">
+                            <button id="rider-sources-lock-btn" type="button" onclick="window.toggleRiderChannelBarLock && window.toggleRiderChannelBarLock(event)" style="position: relative; z-index: 50; pointer-events: auto !important;" class="bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-lg font-black flex items-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer shrink-0" title="Source Filters & Full Booking are Locked. Tap to Unlock">
+                                <i id="rider-sources-lock-icon" class="fa-solid fa-lock text-[8.5px]"></i>
+                                <span id="rider-sources-lock-text" class="text-[9px]">Locked</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <!-- HORIZONTAL QUICK-TOGGLE SOURCE PILLS -->
-                <div id="rider-sources-chips-container" class="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+                <!-- HORIZONTAL QUICK-TOGGLE SOURCE PILLS (z-10, UNDER OVERLAY) -->
+                <div id="rider-sources-chips-container" class="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 relative z-10 transition-opacity duration-150">
                     <!-- Populated dynamically by renderRiderSourcesUI() -->
                 </div>
 

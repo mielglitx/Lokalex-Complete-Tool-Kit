@@ -51,11 +51,6 @@ export async function processUnifiedLogin() {
         if (identInput) identInput.focus();
         return;
     }
-    if (!password) {
-        showToast("⚠️ Please enter your Password.");
-        if (passInput) passInput.focus();
-        return;
-    }
 
     if (btn) {
         btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Checking Account...`;
@@ -86,6 +81,7 @@ export async function processUnifiedLogin() {
             const existingPassword = riderRecord.password || riderRecord.pass || null;
             const isSkipped = localStorage.getItem(`lokalex_skip_pass_${identifier}`) === 'true' || riderRecord.skipPasswordSetup === true;
 
+            // If admin removed the password or no password is set yet:
             if (!existingPassword) {
                 if (!isSkipped) {
                     if (btn) {
@@ -98,12 +94,32 @@ export async function processUnifiedLogin() {
                     return;
                 }
             } else {
+                if (!password) {
+                    showToast("⚠️ Please enter your Password.");
+                    if (passInput) passInput.focus();
+                    if (btn) {
+                        btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> LOGIN`;
+                        btn.disabled = false;
+                    }
+                    return;
+                }
                 if (password !== existingPassword.toString()) {
                     throw new Error("❌ Incorrect Rider Password. Please try again.");
                 }
             }
 
             await executeRiderLoginSequence(identifier, cleanName, cleanUserType, riderRecord);
+            return;
+        }
+
+        // Non-rider accounts (Customers & Stores) strictly require a password
+        if (!password) {
+            showToast("⚠️ Please enter your Password.");
+            if (passInput) passInput.focus();
+            if (btn) {
+                btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> LOGIN`;
+                btn.disabled = false;
+            }
             return;
         }
 
