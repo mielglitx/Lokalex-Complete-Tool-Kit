@@ -484,8 +484,8 @@ export async function openExternalLink(rawUrl) {
 let isTransitioningToFloating = false;
 
 /**
- * Enters native Android Floating Window / Overlay Badge mode.
- * Shows a draggable edge-docked floating badge over other apps (Google Maps, Waze, Messenger).
+ * Enters native Android Picture-in-Picture (PiP) Floating Window mode.
+ * Keeps the app live, visible, and updating on top of other apps (Maps, Waze, Messenger).
  */
 export function enterFloatingWindowMode() {
     if (typeof window === 'undefined') return false;
@@ -502,23 +502,18 @@ export function enterFloatingWindowMode() {
 
         try {
             const result = window.NativePermissionsBridge.enterFloatingWindowMode();
-            if (!result) {
-                isTransitioningToFloating = false;
-                showToast("⚠️ Please enable 'Display over other apps' in Android settings.");
-                return false;
-            }
             setTimeout(() => {
                 isTransitioningToFloating = false;
-            }, 600);
-            return true;
+            }, 1000);
+            return Boolean(result);
         } catch (e) {
             isTransitioningToFloating = false;
             console.error("enterFloatingWindowMode error:", e);
-            showToast("⚠️ Floating window error: " + (e?.message || e));
+            showToast("⚠️ Picture-in-Picture error: " + (e?.message || e));
             return false;
         }
     } else {
-        showToast("ℹ️ Floating Window mode requires an updated Android APK install.");
+        showToast("ℹ️ Picture-in-Picture mode is available in the Android mobile app.");
         return false;
     }
 }
@@ -593,6 +588,53 @@ export function playNativeChatChime(folder = 'inbox') {
     return false;
 }
 
+export function canInstallApk() {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.canInstallApk === 'function') {
+        try {
+            return window.NativePermissionsBridge.canInstallApk();
+        } catch (_) {}
+    }
+    return false;
+}
+
+export function openInstallPermissionSettings() {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.openInstallPermissionSettings === 'function') {
+        try {
+            window.NativePermissionsBridge.openInstallPermissionSettings();
+        } catch (_) {}
+    }
+}
+
+export function downloadAndInstallApk(url) {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.downloadAndInstallApk === 'function') {
+        try {
+            window.NativePermissionsBridge.downloadAndInstallApk(url);
+            return true;
+        } catch (e) {
+            console.error("downloadAndInstallApk error:", e);
+        }
+    }
+    return false;
+}
+
+export function getNativeVersionName() {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.getNativeVersionName === 'function') {
+        try {
+            return window.NativePermissionsBridge.getNativeVersionName();
+        } catch (_) {}
+    }
+    return null;
+}
+
+export function getNativeVersionCode() {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.getNativeVersionCode === 'function') {
+        try {
+            return window.NativePermissionsBridge.getNativeVersionCode();
+        } catch (_) {}
+    }
+    return null;
+}
+
 if (typeof window !== 'undefined') {
     window.enterFloatingWindowMode = enterFloatingWindowMode;
     window.isFloatingWindowSupported = isFloatingWindowSupported;
@@ -603,6 +645,11 @@ if (typeof window !== 'undefined') {
     window.updateFloatingBadgeUnread = updateFloatingBadgeUnread;
     window.clearFloatingBadge = clearFloatingBadge;
     window.playNativeChatChime = playNativeChatChime;
+    window.canInstallApk = canInstallApk;
+    window.openInstallPermissionSettings = openInstallPermissionSettings;
+    window.downloadAndInstallApk = downloadAndInstallApk;
+    window.getNativeVersionName = getNativeVersionName;
+    window.getNativeVersionCode = getNativeVersionCode;
 
     window.onFloatingWindowModeChanged = function(isInPip) {
         isTransitioningToFloating = false;

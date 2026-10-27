@@ -30,14 +30,15 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.AppOpsManager;
+import android.app.PictureInPictureParams;
+import android.app.PictureInPictureUiState;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.content.res.Configuration;
 import android.content.res.Configuration;
 import android.media.AudioAttributes;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
+import android.util.Rational;
 import android.view.WindowManager;
 import androidx.core.app.NotificationCompat;
 import java.io.File;
@@ -54,6 +55,7 @@ public class MainActivity extends BridgeActivity {
     public static final String MESSAGES_CHANNEL_ID = "lokalex_messages_channel_v3";
     private static MainActivity instance = null;
     private Ringtone activeSystemRingtone = null;
+    private boolean isPipStashed = false;
 
     public static MainActivity getInstance() {
         return instance;
@@ -404,54 +406,60 @@ public class MainActivity extends BridgeActivity {
 
                 @JavascriptInterface
                 public boolean enterFloatingWindowMode() {
-                    return MainActivity.this.enterFloatingMode();
+                    return MainActivity.this.enterPipMode();
                 }
 
                 @JavascriptInterface
                 public boolean isFloatingWindowSupported() {
-                    return true;
+                    return MainActivity.this.isPipSupported();
                 }
 
                 @JavascriptInterface
                 public boolean isFloatingWindowAllowed() {
-                    return FloatingBadgeManager.getInstance(MainActivity.this).canDrawOverlays();
-                }
-
-                @JavascriptInterface
-                public void requestFloatingWindowPermission() {
-                    new Handler(Looper.getMainLooper()).post(() -> {
-                        FloatingBadgeManager.getInstance(MainActivity.this).requestOverlayPermission(MainActivity.this);
-                    });
+                    return true;
                 }
 
                 @JavascriptInterface
                 public boolean isInFloatingWindowMode() {
-                    return FloatingBadgeManager.getInstance(MainActivity.this).isShowing();
-                }
-
-                @JavascriptInterface
-                public boolean isFloatingWindowStashed() {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        return MainActivity.this.isInPictureInPictureMode();
+                    }
                     return false;
                 }
 
                 @JavascriptInterface
-                public void notifyIncomingChatMessage(String folder, int count, String senderName, String messagePreview) {
-                    FloatingBadgeManager.getInstance(MainActivity.this).onIncomingChatMessage(folder, count, senderName, messagePreview);
-                }
-
-                @JavascriptInterface
-                public void updateFloatingBadgeUnread(String folder, int count) {
-                    FloatingBadgeManager.getInstance(MainActivity.this).updateCategoryBadge(folder, count);
-                }
-
-                @JavascriptInterface
-                public void clearFloatingBadge() {
-                    FloatingBadgeManager.getInstance(MainActivity.this).clearCategoryBadge();
+                public boolean isFloatingWindowStashed() {
+                    return isPipStashed;
                 }
 
                 @JavascriptInterface
                 public void playNativeChatChime(String folder) {
                     MainActivity.this.playNativeChime(folder);
+                }
+
+                @JavascriptInterface
+                public String getNativeVersionName() {
+                    return MainActivity.this.getNativeVersionName();
+                }
+
+                @JavascriptInterface
+                public int getNativeVersionCode() {
+                    return MainActivity.this.getNativeVersionCode();
+                }
+
+                @JavascriptInterface
+                public boolean canInstallApk() {
+                    return MainActivity.this.canInstallApk();
+                }
+
+                @JavascriptInterface
+                public void openInstallPermissionSettings() {
+                    new Handler(Looper.getMainLooper()).post(MainActivity.this::openInstallPermissionSettings);
+                }
+
+                @JavascriptInterface
+                public void downloadAndInstallApk(String url) {
+                    MainActivity.this.downloadAndInstallApk(url);
                 }
             }, "NativePermissionsBridge");
         } catch (Exception e) {
@@ -503,9 +511,22 @@ public class MainActivity extends BridgeActivity {
                 getBridge().getWebView().resumeTimers();
             }
         } catch (Exception ignored) {}
+        updatePipParams();
+    }
 
-        // Hide floating badge when app is in active foreground
-        FloatingBadgeManager.getInstance(this).hideBadge();
+    public void updatePipParams() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isPipSupported()) {
+            try {
+                Rational aspectRatio = new Rational(9, 16);
+                PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder();
+                builder.setAspectRatio(aspectRatio);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    builder.setAutoEnterEnabled(true);
+                    builder.setSeamlessResizeEnabled(true);
+                }
+                setPictureInPictureParams(builder.build());
+            } catch (Exception ignored) {}
+        }
     }
 
     @Override
@@ -530,35 +551,94 @@ public class MainActivity extends BridgeActivity {
                 getBridge().getWebView().resumeTimers();
             }
         } catch (Exception ignored) {}
+    }
 
-        // Automatically show floating badge on the side of the screen when app goes to background
-        FloatingBadgeManager badgeMgr = FloatingBadgeManager.getInstance(this);
-        if (badgeMgr.isAutoFloatEnabled() && badgeMgr.canDrawOverlays()) {
-            badgeMgr.showBadge();
+    public boolean isPipSupported() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            return getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE);
+        }
+        return false;
+    }
+
+    public boolean enterPipMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!isPipSupported()) {
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    Toast.makeText(this, "⚠️ Picture-in-Picture mode is not supported on this device.", Toast.LENGTH_SHORT).show();
+                });
+                return false;
+            }
+            new Handler(Looper.getMainLooper()).post(() -> {
+                try {
+                    // 9:16 aspect ratio (standard smartphone portrait mini-window)
+                    Rational aspectRatio = new Rational(9, 16);
+                    PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder();
+                    builder.setAspectRatio(aspectRatio);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        builder.setAutoEnterEnabled(true);
+                        builder.setSeamlessResizeEnabled(true);
+                    }
+                    setPictureInPictureParams(builder.build());
+                    enterPictureInPictureMode(builder.build());
+                } catch (Exception e) {
+                    Log.e(TAG, "enterPipMode error: " + e.getMessage());
+                    try {
+                        enterPictureInPictureMode();
+                    } catch (Exception ignored) {}
+                }
+            });
+            return true;
+        } else {
+            new Handler(Looper.getMainLooper()).post(() -> {
+                Toast.makeText(this, "⚠️ Picture-in-Picture requires Android 8.0 or newer.", Toast.LENGTH_SHORT).show();
+            });
+            return false;
         }
     }
 
     @Override
-    public void onConfigurationChanged(Configuration newConfig) {
-        super.onConfigurationChanged(newConfig);
-        FloatingBadgeManager.getInstance(this).onOrientationOrScreenSizeChanged();
+    public void onPictureInPictureUiStateChanged(PictureInPictureUiState pipState) {
+        super.onPictureInPictureUiStateChanged(pipState);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                isPipStashed = pipState.isStashed();
+                if (getBridge() != null && getBridge().getWebView() != null) {
+                    getBridge().getWebView().evaluateJavascript(
+                            "if (typeof window.onFloatingWindowStashChanged === 'function') { window.onFloatingWindowStashChanged(" + isPipStashed + "); }",
+                            null
+                    );
+                }
+            }
+        } catch (Exception ignored) {}
     }
 
-    public boolean enterFloatingMode() {
-        FloatingBadgeManager badgeMgr = FloatingBadgeManager.getInstance(this);
-        if (!badgeMgr.canDrawOverlays()) {
-            new Handler(Looper.getMainLooper()).post(() -> {
-                Toast.makeText(this, "⚠️ Please allow 'Display over other apps' to enable Floating Window mode.", Toast.LENGTH_LONG).show();
-                badgeMgr.requestOverlayPermission(this);
-            });
-            return false;
-        }
+    @Override
+    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        try {
+            if (!isInPictureInPictureMode) {
+                isPipStashed = false;
+            }
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                getBridge().getWebView().onResume();
+                getBridge().getWebView().resumeTimers();
+                getBridge().getWebView().evaluateJavascript(
+                        "if (typeof window.onFloatingWindowModeChanged === 'function') { window.onFloatingWindowModeChanged(" + isInPictureInPictureMode + "); }" +
+                        (!isInPictureInPictureMode ? "if (typeof window.onFloatingWindowStashChanged === 'function') { window.onFloatingWindowStashChanged(false); }" : ""),
+                        null
+                );
+            }
+        } catch (Exception ignored) {}
+    }
 
-        new Handler(Looper.getMainLooper()).post(() -> {
-            badgeMgr.showBadge();
-            moveTaskToBack(true);
-        });
-        return true;
+    @Override
+    public void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        try {
+            if (isPipSupported() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isInPictureInPictureMode()) {
+                enterPipMode();
+            }
+        } catch (Exception ignored) {}
     }
 
     public void playNativeChime(String folder) {
@@ -880,6 +960,212 @@ public class MainActivity extends BridgeActivity {
                     getBridge().getWebView().evaluateJavascript(
                             "if (typeof window.keepAlivePulse === 'function') { window.keepAlivePulse(); }",
                             null
+                    );
+                }
+            } catch (Exception ignored) {}
+        });
+    }
+
+    public String getNativeVersionName() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return "1.0.0";
+        }
+    }
+
+    public int getNativeVersionCode() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                return (int) getPackageManager().getPackageInfo(getPackageName(), 0).getLongVersionCode();
+            } else {
+                return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+            }
+        } catch (Exception e) {
+            return 1;
+        }
+    }
+
+    public boolean canInstallApk() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            return getPackageManager().canRequestPackageInstalls();
+        }
+        return true;
+    }
+
+    public void openInstallPermissionSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
+                intent.setData(Uri.parse("package:" + getPackageName()));
+                startActivity(intent);
+            } catch (Exception e) {
+                try {
+                    Intent intent = new Intent(Settings.ACTION_SECURITY_SETTINGS);
+                    startActivity(intent);
+                } catch (Exception ignored) {}
+            }
+        }
+    }
+
+    public void downloadAndInstallApk(final String apkUrl) {
+        if (apkUrl == null || apkUrl.trim().isEmpty()) {
+            postInstallError("Invalid APK download URL");
+            return;
+        }
+
+        new Thread(() -> {
+            java.net.HttpURLConnection conn = null;
+            java.io.InputStream in = null;
+            java.io.FileOutputStream out = null;
+            try {
+                postInstallProgress(0, "Connecting to download server...");
+                java.net.URL url = new java.net.URL(apkUrl.trim());
+                conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setInstanceFollowRedirects(true);
+                conn.setConnectTimeout(25000);
+                conn.setReadTimeout(30000);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android " + Build.VERSION.RELEASE + "; " + Build.MODEL + ")");
+                conn.connect();
+
+                int code = conn.getResponseCode();
+                if (code >= 300 && code < 400) {
+                    String redirectUrl = conn.getHeaderField("Location");
+                    if (redirectUrl != null && !redirectUrl.isEmpty()) {
+                        conn.disconnect();
+                        url = new java.net.URL(redirectUrl);
+                        conn = (java.net.HttpURLConnection) url.openConnection();
+                        conn.setInstanceFollowRedirects(true);
+                        conn.setConnectTimeout(25000);
+                        conn.setReadTimeout(30000);
+                        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android " + Build.VERSION.RELEASE + "; " + Build.MODEL + ")");
+                        conn.connect();
+                        code = conn.getResponseCode();
+                    }
+                }
+
+                if (code != java.net.HttpURLConnection.HTTP_OK) {
+                    throw new Exception("Server returned HTTP " + code);
+                }
+
+                int fileLength = conn.getContentLength();
+
+                File updateDir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                if (updateDir == null) {
+                    updateDir = getCacheDir();
+                }
+                if (!updateDir.exists()) {
+                    updateDir.mkdirs();
+                }
+
+                File apkFile = new File(updateDir, "Lokalex_Update.apk");
+                if (apkFile.exists()) {
+                    apkFile.delete();
+                }
+
+                in = new java.io.BufferedInputStream(conn.getInputStream());
+                out = new java.io.FileOutputStream(apkFile);
+
+                byte[] data = new byte[16384];
+                long total = 0;
+                int count;
+                long lastProgressReportTime = 0;
+
+                while ((count = in.read(data)) != -1) {
+                    total += count;
+                    out.write(data, 0, count);
+
+                    long now = System.currentTimeMillis();
+                    if (now - lastProgressReportTime > 250 || (fileLength > 0 && total >= fileLength)) {
+                        lastProgressReportTime = now;
+                        int percent = fileLength > 0 ? (int) ((total * 100) / fileLength) : -1;
+                        String statusMsg = fileLength > 0 
+                            ? String.format(java.util.Locale.US, "Downloading update: %.1f MB / %.1f MB (%d%%)", 
+                                total / (1024.0 * 1024.0), fileLength / (1024.0 * 1024.0), percent)
+                            : String.format(java.util.Locale.US, "Downloading update: %.1f MB", total / (1024.0 * 1024.0));
+                        postInstallProgress(percent, statusMsg);
+                    }
+                }
+
+                out.flush();
+                out.close();
+                out = null;
+                in.close();
+                in = null;
+                conn.disconnect();
+                conn = null;
+
+                postInstallProgress(100, "Download complete! Opening package installer...");
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    installDownloadedApk(apkFile);
+                });
+
+            } catch (Exception e) {
+                Log.e(TAG, "downloadAndInstallApk failed", e);
+                postInstallError("Download failed: " + e.getMessage());
+            } finally {
+                try { if (out != null) out.close(); } catch (Exception ignored) {}
+                try { if (in != null) in.close(); } catch (Exception ignored) {}
+                try { if (conn != null) conn.disconnect(); } catch (Exception ignored) {}
+            }
+        }).start();
+    }
+
+    public void installDownloadedApk(File apkFile) {
+        if (apkFile == null || !apkFile.exists()) {
+            postInstallError("APK file not found");
+            return;
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (!getPackageManager().canRequestPackageInstalls()) {
+                    Toast.makeText(this, "Please allow Lokalex to install updates", Toast.LENGTH_LONG).show();
+                    openInstallPermissionSettings();
+                    return;
+                }
+            }
+
+            Uri apkUri = androidx.core.content.FileProvider.getUriForFile(
+                    this,
+                    getPackageName() + ".fileprovider",
+                    apkFile
+            );
+
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+
+        } catch (Exception e) {
+            Log.e(TAG, "installDownloadedApk failed", e);
+            postInstallError("Installer error: " + e.getMessage());
+        }
+    }
+
+    private void postInstallProgress(int percent, String message) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                if (getBridge() != null && getBridge().getWebView() != null) {
+                    String safeMsg = message != null ? message.replace("'", "\\'").replace("\n", " ") : "";
+                    getBridge().getWebView().evaluateJavascript(
+                        "if (typeof window.onApkInstallProgress === 'function') { window.onApkInstallProgress(" + percent + ", '" + safeMsg + "'); }",
+                        null
+                    );
+                }
+            } catch (Exception ignored) {}
+        });
+    }
+
+    private void postInstallError(String error) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                if (getBridge() != null && getBridge().getWebView() != null) {
+                    String safeErr = error != null ? error.replace("'", "\\'").replace("\n", " ") : "";
+                    getBridge().getWebView().evaluateJavascript(
+                        "if (typeof window.onApkInstallError === 'function') { window.onApkInstallError('" + safeErr + "'); }",
+                        null
                     );
                 }
             } catch (Exception ignored) {}

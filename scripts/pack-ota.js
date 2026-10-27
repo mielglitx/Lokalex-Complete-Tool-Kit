@@ -67,13 +67,25 @@ if (fs.existsSync(checksumsPath)) {
 checksumsMap[targetVersion] = checksum;
 fs.writeFileSync(checksumsPath, JSON.stringify(checksumsMap, null, 2), 'utf-8');
 
+// 5. Check and copy release APK into ota-release directory
+const releaseApkSource = path.join(rootDir, 'android', 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk');
+const releaseApkDest = path.join(outDir, 'app-release.apk');
+let apkCopied = false;
+if (fs.existsSync(releaseApkSource)) {
+    console.log('📦 Copying release APK into ota-release/app-release.apk...');
+    fs.copyFileSync(releaseApkSource, releaseApkDest);
+    apkCopied = true;
+}
+
 const manifest = {
     version: targetVersion,
     url: `https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist-v${targetVersion}.zip`,
     fallbackUrl: "https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist.zip",
     checksum: checksum,
     updatedAt: new Date().toISOString(),
-    notes: process.argv[3] || "Bug fixes, performance improvements, and Messenger integration enhancements"
+    notes: process.argv[3] || "Restored native Picture-in-Picture mode and in-app OTA APK self-updater",
+    nativeVersion: targetVersion,
+    apkUrl: "https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/app-release.apk"
 };
 
 const manifestPath = path.join(outDir, 'version.json');

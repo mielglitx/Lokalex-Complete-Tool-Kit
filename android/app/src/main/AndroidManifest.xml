@@ -29,7 +29,7 @@
 <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application
         android:hardwareAccelerated="true"
         android:largeHeap="true"
@@ -49,8 +49,8 @@
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
+            android:supportsPictureInPicture="true"
             android:resizeableActivity="true"
-            android:enableOnBackInvokedCallback="false"
             android:exported="true">
 
             <intent-filter>

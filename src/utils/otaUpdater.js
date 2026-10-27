@@ -1,6 +1,13 @@
 // src/utils/otaUpdater.js
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
-import { isNativePlatform } from '../native/nativeBridge.js';
+import { 
+    isNativePlatform, 
+    getNativeVersionName, 
+    getNativeVersionCode,
+    downloadAndInstallApk, 
+    canInstallApk, 
+    openInstallPermissionSettings 
+} from '../native/nativeBridge.js';
 import { showToast } from '../ui/notifications.js';
 
 /**
@@ -41,6 +48,88 @@ function compareVersions(v1, v2) {
         if (num1 < num2) return -1;
     }
     return 0;
+}
+
+/**
+ * Renders a full-screen progress modal when downloading a base APK update.
+ */
+export function showApkInstallProgress(percent, message) {
+    let modal = document.getElementById('apk-install-progress-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'apk-install-progress-modal';
+        modal.className = 'fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4';
+        modal.innerHTML = `
+            <div class="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center space-y-4">
+                <div class="w-14 h-14 mx-auto rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-2xl font-bold animate-pulse">
+                    📦
+                </div>
+                <h3 class="text-lg font-bold text-white">Lokalex Base App Update</h3>
+                <p id="apk-install-status-text" class="text-xs text-slate-300">Nagda-download ng bagong APK update...</p>
+                <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden border border-slate-700">
+                    <div id="apk-install-progress-bar" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-200 rounded-full" style="width: 0%"></div>
+                </div>
+                <div id="apk-install-percent-text" class="text-xs font-mono font-semibold text-emerald-400">0%</div>
+                <p class="text-[10px] text-slate-400 leading-relaxed">Huwag isara ang app habang nagda-download. Kusang lilitaw ang system installer prompt para i-tap ang 'Update'.</p>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    modal.classList.remove('hidden');
+    const statusText = document.getElementById('apk-install-status-text');
+    const progressBar = document.getElementById('apk-install-progress-bar');
+    const percentText = document.getElementById('apk-install-percent-text');
+    if (statusText && message) statusText.textContent = message;
+    if (progressBar && percent >= 0) progressBar.style.width = `${Math.min(100, percent)}%`;
+    if (percentText && percent >= 0) percentText.textContent = `${percent}%`;
+    if (percent >= 100) {
+        setTimeout(() => {
+            if (modal) modal.classList.add('hidden');
+        }, 6000);
+    }
+}
+
+export function hideApkInstallProgress() {
+    const modal = document.getElementById('apk-install-progress-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+/**
+ * Triggers the native APK download & package installation.
+ */
+export function installBaseApk(apkUrl, version = 'latest') {
+    if (!isNativePlatform()) {
+        showToast("ℹ️ Ang Base APK download ay para lamang sa Android app.");
+        return;
+    }
+    const targetUrl = apkUrl || "https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/app-release.apk";
+
+    if (canInstallApk && !canInstallApk()) {
+        const allow = confirm("⚠️ Kailangan ng pahintulot upang mag-install ng updates.\n\nBuksan ang Android Settings upang i-allow ang 'Install unknown apps' para sa Lokalex?");
+        if (allow) {
+            openInstallPermissionSettings();
+            return;
+        }
+    }
+
+    showApkInstallProgress(0, "Sinisimulan ang pag-download ng Lokalex Base APK...");
+    const ok = downloadAndInstallApk(targetUrl);
+    if (!ok) {
+        hideApkInstallProgress();
+        showToast("⚠️ Hindi masimulan ang APK download. Subukan muli.");
+    }
+}
+
+// Hook global callbacks invoked by Android MainActivity.java
+if (typeof window !== 'undefined') {
+    window.onApkInstallProgress = function(percent, message) {
+        showApkInstallProgress(percent, message);
+    };
+    window.onApkInstallError = function(error) {
+        hideApkInstallProgress();
+        showToast(`⚠️ Hindi ma-install ang APK: ${error}`);
+    };
+    window.installBaseApk = installBaseApk;
 }
 
 /**
@@ -147,6 +236,28 @@ export async function checkForOtaUpdate(isManual = false) {
         if (!remoteVersion || !downloadUrl) {
             if (isManual) showToast("ℹ️ No new version currently available.");
             return;
+        }
+
+        // Check if a newer native Base APK is available (for native Android features like Picture-in-Picture)
+        const nativeVersion = manifest.nativeVersion;
+        const apkUrl = manifest.apkUrl;
+        const currentNativeVersion = getNativeVersionName();
+
+        if (isNativePlatform() && nativeVersion && apkUrl && currentNativeVersion) {
+            const hasNativeUpdate = compareVersions(nativeVersion, currentNativeVersion) > 0;
+            if (hasNativeUpdate) {
+                const proceedApk = confirm(
+                    `🚀 May Mahalagang Base App Update (APK)!\n\n` +
+                    `Bagong Bersyon: v${nativeVersion}\n` +
+                    `Kasalukuyang APK: v${currentNativeVersion}\n\n` +
+                    `Mga Pagbabago:\n${releaseNotes}\n\n` +
+                    `I-download at i-install ang APK ngayon?\n(Hindi mawawala ang iyong login at data)`
+                );
+                if (proceedApk) {
+                    installBaseApk(apkUrl, nativeVersion);
+                    return;
+                }
+            }
         }
 
         const currentVersion = await getCurrentAppVersion();
@@ -456,9 +567,37 @@ function renderOtaVersionsList(versions, currentVersion) {
         return;
     }
 
+    const nativeVer = getNativeVersionName();
+    let nativeCardHtml = '';
+    if (isNativePlatform() && nativeVer) {
+        nativeCardHtml = `
+            <div class="bg-gradient-to-r from-emerald-950/40 to-teal-950/40 border border-emerald-500/50 rounded-2xl p-3 flex items-center justify-between gap-3 mb-2">
+                <div class="flex items-center gap-3 min-w-0 flex-1">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shrink-0 text-base">
+                        <i class="fa-solid fa-mobile-screen"></i>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-bold text-xs sm:text-sm text-white">Lokalex Base APK</span>
+                            <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full">v${nativeVer}</span>
+                        </div>
+                        <p class="text-[10px] text-slate-300 truncate mt-0.5">
+                            Native Android app (Picture-in-Picture & Auto-Updater)
+                        </p>
+                    </div>
+                </div>
+                <div class="shrink-0">
+                    <button type="button" onclick="window.installBaseApk && window.installBaseApk()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer">
+                        <i class="fa-solid fa-download text-xs"></i> Update APK
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
     const latestVer = versions[0]?.version;
 
-    listEl.innerHTML = versions.map((item) => {
+    listEl.innerHTML = nativeCardHtml + versions.map((item) => {
         const isCurrent = compareVersions(item.version, currentVersion) === 0;
         const isLatest = item.version === latestVer;
         const isRollback = compareVersions(item.version, currentVersion) < 0;
@@ -528,6 +667,7 @@ if (typeof window !== 'undefined') {
     window.openOtaUpdateSelectorModal = openOtaUpdateSelectorModal;
     window.closeOtaUpdateSelectorModal = closeOtaUpdateSelectorModal;
     window.applyCustomOtaInput = applyCustomOtaInput;
+    window.installBaseApk = installBaseApk;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => { syncVersionTrackerElements(); });

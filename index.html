@@ -500,6 +500,14 @@
 </head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
+    <!-- PIP / FLOATING WINDOW STASHED BADGE (SHOWN WHEN DOCKED TO SIDE) -->
+    <div id="pip-stashed-badge" class="hidden fixed inset-0 z-[999999] bg-[#0c1421] flex items-center justify-center select-none overflow-hidden cursor-pointer" onclick="if (window.onFloatingWindowStashChanged) window.onFloatingWindowStashChanged(false);" title="Lokalex - Tap to expand">
+        <div class="relative w-14 h-14 rounded-full bg-slate-900 border-2 border-emerald-500 shadow-xl shadow-emerald-500/40 flex items-center justify-center transition active:scale-90">
+            <span class="absolute inset-0 rounded-full border border-emerald-400 animate-ping opacity-35 pointer-events-none"></span>
+            <img src="./Logo.png" alt="Lokalex" class="w-10 h-10 object-contain rounded-full pointer-events-none select-none">
+        </div>
+    </div>
+
     <div id="golden-first-line-border" class="hidden pointer-events-none fixed inset-0 border-[6px] border-yellow-400 shadow-[inset_0_0_30px_rgba(250,204,21,0.8)] z-[9999]"></div>
 
     <!-- UI NOTIFICATION & HEADER PARTIALS -->

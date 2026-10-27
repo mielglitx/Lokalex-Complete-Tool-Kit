@@ -230,20 +230,6 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                 playChatChime(chosenFolder);
             }
         }
-
-        // Notify Floating Badge Manager in Float Window mode with category color!
-        if (newlyArrivedThreadKeys.size > 0 && latestIncomingFolder) {
-            try {
-                if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.notifyIncomingChatMessage === 'function') {
-                    window.NativePermissionsBridge.notifyIncomingChatMessage(
-                        latestIncomingFolder,
-                        newlyArrivedThreadKeys.size,
-                        latestIncomingSender || 'Customer',
-                        latestIncomingPreview || 'New message'
-                    );
-                }
-            } catch (_) {}
-        }
     }
 
     // Cache last seen timestamps & message contents
@@ -744,16 +730,6 @@ export function updateAllChatFolderBadges() {
             }
         });
     });
-
-    // Synchronize with Native Floating Badge in Float Window mode
-    try {
-        if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.updateFloatingBadgeUnread === 'function') {
-            const priority = ['catering', 'inbox', 'followup', 'applicant', 'stores'];
-            const activeFolder = priority.find(f => (counts[f] || 0) > 0) || null;
-            const topCount = activeFolder ? counts[activeFolder] : 0;
-            window.NativePermissionsBridge.updateFloatingBadgeUnread(activeFolder, topCount);
-        }
-    } catch (_) {}
 
     return counts;
 }

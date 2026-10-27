@@ -287,6 +287,45 @@
         }
     }
 
+    /* Floating Window / Picture-in-Picture (PiP) Adaptation */
+    html.in-floating-mode #app-header {
+        padding: 4px 6px !important;
+    }
+    html.in-floating-mode #header-clock-pill,
+    html.in-floating-mode #header-battery-pill,
+    html.in-floating-mode #network-status-pill {
+        display: none !important;
+    }
+    html.in-floating-mode #rider-chat-modal {
+        padding: 0 !important;
+        background: transparent !important;
+    }
+    html.in-floating-mode #rider-chat-modal > div {
+        max-height: 100vh !important;
+        height: 100vh !important;
+        border-radius: 0 !important;
+        border: none !important;
+    }
+
+    /* Stashed / Edge-Docked Floating Window Mode (Badge View) */
+    html.pip-stashed body > *:not(#pip-stashed-badge),
+    html.in-floating-mode.pip-stashed body > *:not(#pip-stashed-badge) {
+        display: none !important;
+    }
+    html.pip-stashed #pip-stashed-badge,
+    html.in-floating-mode.pip-stashed #pip-stashed-badge {
+        display: flex !important;
+    }
+
+    @media (max-width: 170px) {
+        html.in-floating-mode body > *:not(#pip-stashed-badge) {
+            display: none !important;
+        }
+        html.in-floating-mode #pip-stashed-badge {
+            display: flex !important;
+        }
+    }
+
     /* High-Performance Smart Cart Momentum Touch Scrolling */
     #cart-items-list {
         touch-action: pan-y !important;
@@ -733,9 +772,17 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-BjBdpvKI.js"></script>
+  <script type="module" crossorigin src="./assets/index-CLmP_0Ab.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
+
+    <!-- PIP / FLOATING WINDOW STASHED BADGE (SHOWN WHEN DOCKED TO SIDE) -->
+    <div id="pip-stashed-badge" class="hidden fixed inset-0 z-[999999] bg-[#0c1421] flex items-center justify-center select-none overflow-hidden cursor-pointer" onclick="if (window.onFloatingWindowStashChanged) window.onFloatingWindowStashChanged(false);" title="Lokalex - Tap to expand">
+        <div class="relative w-14 h-14 rounded-full bg-slate-900 border-2 border-emerald-500 shadow-xl shadow-emerald-500/40 flex items-center justify-center transition active:scale-90">
+            <span class="absolute inset-0 rounded-full border border-emerald-400 animate-ping opacity-35 pointer-events-none"></span>
+            <img src="./Logo.png" alt="Lokalex" class="w-10 h-10 object-contain rounded-full pointer-events-none select-none">
+        </div>
+    </div>
 
     <div id="golden-first-line-border" class="hidden pointer-events-none fixed inset-0 border-[6px] border-yellow-400 shadow-[inset_0_0_30px_rgba(250,204,21,0.8)] z-[9999]"></div>
 
@@ -772,9 +819,9 @@
 
     <!-- RIGHT: LIVE DIGITAL CLOCK, BATTERY INDICATOR, THEME TOGGLE & NETWORK STATUS PILL -->
     <div class="flex items-center gap-1.5 shrink-0">
-        <!-- FLOATING WINDOW / OVERLAY BADGE BUTTON -->
-        <button id="header-floating-window-btn" type="button" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" class="flex items-center justify-center w-7 h-7 rounded-xl bg-gray-100 dark:bg-black/40 hover:bg-sky-50 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700/60 text-sky-600 dark:text-sky-400 transition active:scale-95 shadow-2xs cursor-pointer" title="Float Window / Edge Badge over Other Apps">
-            <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
+        <!-- FLOATING WINDOW (PIP) MODE BUTTON -->
+        <button id="header-floating-window-btn" type="button" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" class="flex items-center justify-center w-7 h-7 rounded-xl bg-gray-100 dark:bg-black/40 hover:bg-sky-50 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700/60 text-sky-600 dark:text-sky-400 transition active:scale-95 shadow-2xs cursor-pointer" title="Float App as Mini Window over Other Apps (PiP)">
+            <i class="fa-solid fa-up-right-from-square text-xs"></i>
         </button>
 
         <!-- QUICK THEME TOGGLE BUTTON -->
