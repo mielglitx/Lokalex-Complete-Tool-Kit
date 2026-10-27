@@ -34,6 +34,7 @@ import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
+import android.content.res.Configuration;
 import android.media.AudioAttributes;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
@@ -71,7 +72,7 @@ public class MainActivity extends BridgeActivity {
 
         // Hardware & Rendering Performance Optimization for smooth 60fps operation
         try {
-            WebView.setWebContentsDebuggingEnabled(true);
+            WebView.setWebContentsDebuggingEnabled(false);
             if (getBridge() != null && getBridge().getWebView() != null) {
                 WebView webView = getBridge().getWebView();
                 
@@ -535,6 +536,12 @@ public class MainActivity extends BridgeActivity {
         if (badgeMgr.isAutoFloatEnabled() && badgeMgr.canDrawOverlays()) {
             badgeMgr.showBadge();
         }
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        FloatingBadgeManager.getInstance(this).onOrientationOrScreenSizeChanged();
     }
 
     public boolean enterFloatingMode() {

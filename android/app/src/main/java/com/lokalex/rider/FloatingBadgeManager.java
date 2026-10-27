@@ -3,9 +3,11 @@ package com.lokalex.rider;
 import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
@@ -16,9 +18,9 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.OrientationEventListener;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
@@ -27,20 +29,15 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 /**
- * High-performance native Floating Badge / Overlay Window Manager.
- * Replaces Picture-in-Picture (PiP) with an edge-docked floating head (similar to Messenger/Grab).
- * Displays distinct color-coded notification badges when messages arrive:
- * - Green for Inbox
- * - Orange for Catering
- * - Red for Followup
- * - Purple for Applicant
- * - White for Stores
+ * Native Floating Badge / Overlay Window Manager.
+ * Replaces Picture-in-Picture (PiP) with an edge-docked floating head.
+ * Stays permanently pinned / stuck to the side of the screen in both portrait and landscape orientations.
+ * Color-codes badges on incoming chat messages (Green=Inbox, Orange=Catering, Red=Followup, Purple=Applicant, White=Stores).
  */
 public class FloatingBadgeManager {
-    private static final String TAG = "FloatingBadgeManager";
     private static final String PREFS_NAME = "lokalex_floating_badge_prefs";
-    private static final String KEY_BADGE_X = "badge_x";
-    private static final String KEY_BADGE_Y = "badge_y";
+    private static final String KEY_IS_DOCKED_ON_RIGHT = "is_docked_on_right";
+    private static final String KEY_RELATIVE_Y_RATIO = "relative_y_ratio";
     private static final String KEY_AUTO_FLOAT = "auto_float_on_background";
 
     private static volatile FloatingBadgeManager instance = null;
@@ -56,8 +53,14 @@ public class FloatingBadgeManager {
     private TextView unreadBadgeTextView = null;
     private boolean isShowing = false;
 
+    private boolean isDockedOnRight = true;
+    private float relativeYRatio = 0.35f;
+
     private String currentBadgeFolder = null;
     private int currentUnreadCount = 0;
+
+    private OrientationEventListener orientationListener = null;
+    private ComponentCallbacks2 componentCallbacks = null;
 
     public static FloatingBadgeManager getInstance(Context context) {
         if (instance == null) {
@@ -73,10 +76,56 @@ public class FloatingBadgeManager {
     private FloatingBadgeManager(Context context) {
         this.appContext = context;
         this.windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+
+        // Hydrate persisted docking edge and relative Y position
+        SharedPreferences prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        this.isDockedOnRight = prefs.getBoolean(KEY_IS_DOCKED_ON_RIGHT, true);
+        this.relativeYRatio = prefs.getFloat(KEY_RELATIVE_Y_RATIO, 0.35f);
+
+        initOrientationWatchers();
+    }
+
+    private void initOrientationWatchers() {
+        // 1. ComponentCallbacks to watch for configuration / orientation / screen size changes
+        try {
+            componentCallbacks = new ComponentCallbacks2() {
+                @Override
+                public void onConfigurationChanged(Configuration newConfig) {
+                    onOrientationOrScreenSizeChanged();
+                }
+
+                @Override
+                public void onLowMemory() {}
+
+                @Override
+                public void onTrimMemory(int level) {}
+            };
+            appContext.registerComponentCallbacks(componentCallbacks);
+        } catch (Exception ignored) {}
+
+        // 2. Hardware OrientationEventListener for instant rotation detection
+        try {
+            orientationListener = new OrientationEventListener(appContext) {
+                private int lastConfigOrientation = -1;
+
+                @Override
+                public void onOrientationChanged(int orientation) {
+                    if (orientation == ORIENTATION_UNKNOWN) return;
+                    int currentConfigOrientation = appContext.getResources().getConfiguration().orientation;
+                    if (currentConfigOrientation != lastConfigOrientation) {
+                        lastConfigOrientation = currentConfigOrientation;
+                        onOrientationOrScreenSizeChanged();
+                    }
+                }
+            };
+            if (orientationListener.canDetectOrientation()) {
+                orientationListener.enable();
+            }
+        } catch (Exception ignored) {}
     }
 
     public static int getFolderColor(String folder) {
-        if (folder == null) return Color.parseColor("#10B981"); // Default green
+        if (folder == null) return Color.parseColor("#10B981");
         switch (folder.toLowerCase().trim()) {
             case "inbox":
                 return Color.parseColor("#10B981"); // Green
@@ -112,9 +161,7 @@ public class FloatingBadgeManager {
                 );
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 activity.startActivity(intent);
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to open overlay settings: " + e.getMessage());
-            }
+            } catch (Exception ignored) {}
         }
     }
 
@@ -135,12 +182,11 @@ public class FloatingBadgeManager {
     @SuppressLint("ClickableViewAccessibility")
     public void showBadge() {
         new Handler(Looper.getMainLooper()).post(() -> {
-            if (!canDrawOverlays()) {
-                Log.w(TAG, "Cannot show floating badge: SYSTEM_ALERT_WINDOW permission not granted");
-                return;
-            }
+            if (!canDrawOverlays()) return;
 
             if (isShowing && badgeRootView != null) {
+                // Ensure properly docked to edge if already showing
+                repositionToActiveEdge(false);
                 return;
             }
 
@@ -148,7 +194,6 @@ public class FloatingBadgeManager {
                 DisplayMetrics metrics = appContext.getResources().getDisplayMetrics();
                 int screenWidth = metrics.widthPixels;
                 int screenHeight = metrics.heightPixels;
-
                 int badgeSizePx = dpToPx(66);
 
                 int layoutType;
@@ -167,21 +212,16 @@ public class FloatingBadgeManager {
                 );
                 layoutParams.gravity = Gravity.TOP | Gravity.START;
 
-                SharedPreferences prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-                int savedX = prefs.getInt(KEY_BADGE_X, screenWidth - badgeSizePx - dpToPx(8));
-                int savedY = prefs.getInt(KEY_BADGE_Y, screenHeight / 3);
-
-                layoutParams.x = Math.max(0, Math.min(savedX, screenWidth - badgeSizePx));
-                layoutParams.y = Math.max(dpToPx(60), Math.min(savedY, screenHeight - badgeSizePx - dpToPx(80)));
+                // Always stick firmly to the saved side (left or right)
+                layoutParams.x = isDockedOnRight ? (screenWidth - badgeSizePx - dpToPx(6)) : dpToPx(6);
+                layoutParams.y = Math.max(dpToPx(50), Math.min((int) (screenHeight * relativeYRatio), screenHeight - badgeSizePx - dpToPx(60)));
 
                 badgeRootView = createBadgeView(badgeSizePx);
-                setupTouchListener(badgeRootView, layoutParams, screenWidth, screenHeight, badgeSizePx);
+                setupTouchListener(badgeRootView, layoutParams, badgeSizePx);
 
                 windowManager.addView(badgeRootView, layoutParams);
                 isShowing = true;
-                Log.i(TAG, "Floating badge displayed successfully at (" + layoutParams.x + ", " + layoutParams.y + ")");
             } catch (Exception e) {
-                Log.e(TAG, "Failed to show floating badge: " + e.getMessage(), e);
                 badgeRootView = null;
                 isShowing = false;
             }
@@ -193,10 +233,7 @@ public class FloatingBadgeManager {
             if (badgeRootView != null && isShowing) {
                 try {
                     windowManager.removeView(badgeRootView);
-                    Log.i(TAG, "Floating badge removed");
-                } catch (Exception e) {
-                    Log.w(TAG, "Error removing floating badge view: " + e.getMessage());
-                }
+                } catch (Exception ignored) {}
                 badgeRootView = null;
                 cardView = null;
                 cardBgShape = null;
@@ -206,6 +243,37 @@ public class FloatingBadgeManager {
                 isShowing = false;
             }
         });
+    }
+
+    /**
+     * Called whenever screen orientation or resolution changes (Portrait <-> Landscape).
+     * Smoothly re-docks the floating badge against the side of the screen.
+     */
+    public void onOrientationOrScreenSizeChanged() {
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            repositionToActiveEdge(true);
+        }, 120);
+    }
+
+    private void repositionToActiveEdge(boolean animate) {
+        if (badgeRootView == null || !isShowing || layoutParams == null) return;
+        try {
+            DisplayMetrics metrics = appContext.getResources().getDisplayMetrics();
+            int screenWidth = metrics.widthPixels;
+            int screenHeight = metrics.heightPixels;
+            int badgeSizePx = dpToPx(66);
+
+            int targetX = isDockedOnRight ? (screenWidth - badgeSizePx - dpToPx(6)) : dpToPx(6);
+            int targetY = Math.max(dpToPx(50), Math.min((int) (screenHeight * relativeYRatio), screenHeight - badgeSizePx - dpToPx(60)));
+
+            if (animate) {
+                animateToPosition(layoutParams.x, layoutParams.y, targetX, targetY);
+            } else {
+                layoutParams.x = targetX;
+                layoutParams.y = targetY;
+                windowManager.updateViewLayout(badgeRootView, layoutParams);
+            }
+        } catch (Exception ignored) {}
     }
 
     /**
@@ -223,7 +291,7 @@ public class FloatingBadgeManager {
                 applyFolderBadgeTheme(currentBadgeFolder, currentUnreadCount);
             }
 
-            // Smooth bounce animation on card to alert the rider
+            // Smooth attention bounce
             if (cardView != null) {
                 cardView.animate()
                         .scaleX(1.18f)
@@ -304,7 +372,7 @@ public class FloatingBadgeManager {
         FrameLayout container = new FrameLayout(appContext);
         container.setLayoutParams(new FrameLayout.LayoutParams(sizePx, sizePx));
 
-        // 1. Circular Outer Badge Container with Dynamic Category Border & Dark Base
+        // 1. Circular Outer Badge Container
         cardView = new FrameLayout(appContext);
         FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(
                 sizePx - dpToPx(10),
@@ -337,7 +405,7 @@ public class FloatingBadgeManager {
 
         container.addView(cardView);
 
-        // 3. Pulsing Active Indicator (Top Right Dot)
+        // 3. Status Dot (Top Left)
         pulseDotView = new View(appContext);
         FrameLayout.LayoutParams dotParams = new FrameLayout.LayoutParams(dpToPx(13), dpToPx(13));
         dotParams.gravity = Gravity.TOP | Gravity.START;
@@ -351,7 +419,7 @@ public class FloatingBadgeManager {
         pulseDotView.setBackground(pulseDotShape);
         container.addView(pulseDotView);
 
-        // 4. Color-Coded Category / Unread Notification Counter Badge (Bottom Right Pill)
+        // 4. Color-Coded Category / Unread Counter Badge (Bottom Right Pill)
         unreadBadgeTextView = new TextView(appContext);
         FrameLayout.LayoutParams countParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -376,7 +444,6 @@ public class FloatingBadgeManager {
         unreadBadgeTextView.setVisibility(View.GONE);
         container.addView(unreadBadgeTextView);
 
-        // Apply any pending folder badge state
         applyFolderBadgeTheme(currentBadgeFolder, currentUnreadCount);
 
         return container;
@@ -386,8 +453,6 @@ public class FloatingBadgeManager {
     private void setupTouchListener(
             final View view,
             final WindowManager.LayoutParams params,
-            final int screenWidth,
-            final int screenHeight,
             final int badgeSizePx
     ) {
         view.setOnTouchListener(new View.OnTouchListener() {
@@ -424,11 +489,11 @@ public class FloatingBadgeManager {
                         float diffY = Math.abs(event.getRawY() - initialTouchY);
 
                         if (duration < 250 && diffX < dpToPx(10) && diffY < dpToPx(10)) {
-                            // Tap event: Bring Lokalex Rider back to foreground
+                            // Tap: Bring Lokalex Rider to foreground
                             openApp();
                         } else {
-                            // Drag event: Snap to nearest edge
-                            snapToNearestEdge(params, screenWidth, badgeSizePx);
+                            // Drag: Snap and stick firmly to nearest side (left or right)
+                            snapToNearestEdge(params, badgeSizePx);
                         }
                         return true;
                 }
@@ -437,26 +502,46 @@ public class FloatingBadgeManager {
         });
     }
 
-    private void snapToNearestEdge(final WindowManager.LayoutParams params, int screenWidth, int badgeSizePx) {
-        int targetX = (params.x + badgeSizePx / 2 < screenWidth / 2) ? dpToPx(6) : (screenWidth - badgeSizePx - dpToPx(6));
-        int startX = params.x;
+    private void snapToNearestEdge(final WindowManager.LayoutParams params, int badgeSizePx) {
+        DisplayMetrics metrics = appContext.getResources().getDisplayMetrics();
+        int screenWidth = metrics.widthPixels;
+        int screenHeight = metrics.heightPixels;
 
-        ValueAnimator animator = ValueAnimator.ofInt(startX, targetX);
+        // Determine nearest side
+        boolean snapToRight = (params.x + badgeSizePx / 2) >= (screenWidth / 2);
+        int targetX = snapToRight ? (screenWidth - badgeSizePx - dpToPx(6)) : dpToPx(6);
+        int clampedY = Math.max(dpToPx(50), Math.min(params.y, screenHeight - badgeSizePx - dpToPx(60)));
+
+        isDockedOnRight = snapToRight;
+        relativeYRatio = Math.max(0.05f, Math.min(0.90f, (float) clampedY / (float) screenHeight));
+
+        // Persist preferences
+        SharedPreferences prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit()
+                .putBoolean(KEY_IS_DOCKED_ON_RIGHT, isDockedOnRight)
+                .putFloat(KEY_RELATIVE_Y_RATIO, relativeYRatio)
+                .apply();
+
+        animateToPosition(params.x, params.y, targetX, clampedY);
+    }
+
+    private void animateToPosition(int startX, int startY, int targetX, int targetY) {
+        if (badgeRootView == null || layoutParams == null) return;
+
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(220);
         animator.setInterpolator(new DecelerateInterpolator());
         animator.addUpdateListener(animation -> {
-            params.x = (int) animation.getAnimatedValue();
+            float fraction = (float) animation.getAnimatedValue();
+            layoutParams.x = (int) (startX + (targetX - startX) * fraction);
+            layoutParams.y = (int) (startY + (targetY - startY) * fraction);
             if (badgeRootView != null) {
                 try {
-                    windowManager.updateViewLayout(badgeRootView, params);
+                    windowManager.updateViewLayout(badgeRootView, layoutParams);
                 } catch (Exception ignored) {}
             }
         });
         animator.start();
-
-        // Save position
-        SharedPreferences prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        prefs.edit().putInt(KEY_BADGE_X, targetX).putInt(KEY_BADGE_Y, params.y).apply();
     }
 
     private void openApp() {
@@ -464,9 +549,7 @@ public class FloatingBadgeManager {
             Intent launchIntent = new Intent(appContext, MainActivity.class);
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             appContext.startActivity(launchIntent);
-        } catch (Exception e) {
-            Log.e(TAG, "Error bringing app to front: " + e.getMessage());
-        }
+        } catch (Exception ignored) {}
     }
 
     private int dpToPx(float dp) {
