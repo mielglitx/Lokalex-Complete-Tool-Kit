@@ -95,35 +95,59 @@ export function initCommissionLiveListeners() {
 
 initCommissionLiveListeners();
 
-export async function fetchCommissionData() {
+export async function fetchCommissionData(specificDate = null) {
     if (!db) return;
     try {
-        // Fetch full sets without alphabetical limitToLast truncations
-        const [rcptSnap, catSnap] = await Promise.all([
-            db.ref('receipts').once('value'),
-            db.ref('cateredHistory').once('value')
-        ]);
+        const period = viewSettings.period || 'daily';
+        const dateVal = specificDate || viewSettings.dateValue || getLocalTodayStr();
+
+        let rcptPromise, catPromise;
+
+        if (period === 'monthly') {
+            const prefix = String(dateVal).substring(0, 7);
+            const startStr = `${prefix}-01`;
+            const endStr = `${prefix}-31`;
+            rcptPromise = db.ref('receipts').orderByChild('date').startAt(startStr).endAt(endStr).once('value');
+            catPromise = db.ref('cateredHistory').orderByChild('completedDate').startAt(startStr).endAt(endStr).once('value');
+        } else if (period === 'weekly') {
+            rcptPromise = db.ref('receipts').limitToLast(250).once('value');
+            catPromise = db.ref('cateredHistory').limitToLast(250).once('value');
+        } else {
+            // Daily (default)
+            const todayStr = getLocalTodayStr();
+            const targetDate = (dateVal && dateVal.length === 10) ? dateVal : todayStr;
+            rcptPromise = db.ref('receipts').orderByChild('date').equalTo(targetDate).once('value');
+            catPromise = db.ref('cateredHistory').orderByChild('completedDate').equalTo(targetDate).once('value');
+        }
+
+        const [rcptSnap, catSnap] = await Promise.all([rcptPromise, catPromise]);
 
         const rcptVal = rcptSnap.val();
         if (rcptVal) {
-            globalState.globalDailyReceipts = Object.entries(rcptVal).map(([k, v]) => ({
+            const newReceipts = Object.entries(rcptVal).map(([k, v]) => ({
                 id: k,
                 transactionId: v.transactionId || k,
                 ...v
             })).filter(r => r.status !== 'voided' && !r.voided && !r.isVoided);
-        } else {
-            globalState.globalDailyReceipts = [];
+
+            const map = new Map();
+            (globalState.globalDailyReceipts || []).forEach(r => map.set(r.transactionId || r.id, r));
+            newReceipts.forEach(r => map.set(r.transactionId || r.id, r));
+            globalState.globalDailyReceipts = Array.from(map.values());
         }
 
         const catVal = catSnap.val();
         if (catVal) {
-            globalState.globalCateredHistory = Object.entries(catVal).map(([k, v]) => ({
+            const newCatered = Object.entries(catVal).map(([k, v]) => ({
                 id: k,
                 transactionId: v.transactionId || k,
                 ...v
             })).filter(h => h.status !== 'voided' && !h.voided && !h.isVoided);
-        } else {
-            globalState.globalCateredHistory = [];
+
+            const map = new Map();
+            (globalState.globalCateredHistory || []).forEach(h => map.set(h.transactionId || h.id, h));
+            newCatered.forEach(h => map.set(h.transactionId || h.id, h));
+            globalState.globalCateredHistory = Array.from(map.values());
         }
 
         invalidateRosterGrossCache();
@@ -282,6 +306,7 @@ export function setCommissionPeriod(period) {
     });
 
     refreshCommissionView();
+    fetchCommissionData().then(() => refreshCommissionView()).catch(() => {});
 }
 
 export function checkRiderFilterMatch(targetFilter, rName, rId) {
@@ -781,21 +806,21 @@ export async function openCommissionScreen() {
         if (!dailyInput.value) dailyInput.value = todayStr;
         dailyInput.onchange = () => {
             viewSettings.dateValue = dailyInput.value;
-            refreshCommissionView();
+            fetchCommissionData(dailyInput.value).then(() => refreshCommissionView()).catch(() => {});
         };
     }
     if (weeklyInput) {
         if (!weeklyInput.value) weeklyInput.value = getWeekString(today.getTime());
         weeklyInput.onchange = () => {
             viewSettings.dateValue = weeklyInput.value;
-            refreshCommissionView();
+            fetchCommissionData().then(() => refreshCommissionView()).catch(() => {});
         };
     }
     if (monthlyInput) {
         if (!monthlyInput.value) monthlyInput.value = getMonthString(today.getTime());
         monthlyInput.onchange = () => {
             viewSettings.dateValue = monthlyInput.value;
-            refreshCommissionView();
+            fetchCommissionData().then(() => refreshCommissionView()).catch(() => {});
         };
     }
 

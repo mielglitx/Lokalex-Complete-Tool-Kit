@@ -792,8 +792,8 @@ export async function archiveRiderCateringIfNeeded(targetRecord) {
     if (db && custs.length > 0) {
         custs.forEach(cName => {
             const cleanC = cName.trim();
-            db.ref('customerChats')
-                .orderByChild('metadata/customerName')
+            db.ref('customerChatMeta')
+                .orderByChild('customerName')
                 .equalTo(cleanC)
                 .once('value', (snap) => {
                     const chats = snap.val();

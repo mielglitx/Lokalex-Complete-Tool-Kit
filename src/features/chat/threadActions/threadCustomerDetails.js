@@ -110,8 +110,8 @@ export async function getDirectoryCustomersList() {
         }
     } catch(e) {}
 
-    // 4. Ingest from Firebase (strictly directory/customers)
-    if (db) {
+    // 4. Ingest from Firebase strictly if local caches (memory, localStorage, IDB) were completely empty
+    if (db && customerMap.size === 0) {
         try {
             const dirSnap = await db.ref('directory/customers').once('value');
             if (dirSnap && dirSnap.val()) {
@@ -392,6 +392,17 @@ export async function showCustomerDetails() {
             (linkedKey && r.name && cleanCustomerForMatch(r.name) === cleanCustomerForMatch(linkedKey)) ||
             (linkedName && r.name && cleanCustomerForMatch(r.name) === cleanCustomerForMatch(linkedName))
         );
+        // If linkedKey not found in local dirList, fetch only this single record from Firebase
+        if (!linkedRecord && linkedKey && db) {
+            try {
+                const singleSnap = await db.ref(`directory/customers/${cleanFirebasePathKey(linkedKey)}`).once('value');
+                if (singleSnap && singleSnap.exists()) {
+                    const singleData = singleSnap.val();
+                    linkedRecord = { ...singleData, compositeKey: linkedKey };
+                }
+            } catch(e) {}
+        }
+
         // If not in local dirList but stored in custData, synthesize record
         if (!linkedRecord && (custData.phoneNumber || custData.address)) {
             linkedRecord = {

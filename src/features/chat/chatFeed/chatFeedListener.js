@@ -602,23 +602,10 @@ export function listenToAllCustomerChatsForRider() {
         }
     } catch (_) {}
 
-    // 2. FAST PARALLEL DIRECT REST FETCH (<150ms guaranteed on mobile cellular networks)
-    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?t=${Date.now()}`;
-    fetch(directRestUrl, { cache: 'no-store' })
-        .then(res => res.json())
-        .then(data => {
-            if (data && typeof data === 'object') {
-                processCustomerChatMetaData(data, false);
-            }
-        })
-        .catch(err => {
-            console.warn('[CustomerChatMeta] Direct REST fast-fetch fallback:', err);
-        });
-
     if (!db || isCustomerChatMetaListening) return;
     setIsCustomerChatMetaListening(true);
 
-    // 3. REALTIME WEBSOCKET LISTENER FOR INCOMING LIVE MESSAGES
+    // 2. REALTIME WEBSOCKET LISTENER FOR INCOMING LIVE MESSAGES
     let metaRafId = null;
     db.ref('customerChatMeta').on('value', (snapshot) => {
         const data = snapshot.val();

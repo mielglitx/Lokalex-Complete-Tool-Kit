@@ -411,7 +411,7 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
             atomicUpdates[`roster/${sourceRiderId}/startTime`] = sourceTimes.join(', ');
             atomicUpdates[`roster/${sourceRiderId}/lastUpdated`] = nowTimeStr;
 
-            const chatsSnap = await db.ref('customerChats').once('value');
+            const chatsSnap = await db.ref('customerChatMeta').once('value');
             const chats = chatsSnap.val() || {};
             const cleanTargetCust = targetCustomerName.toLowerCase().trim();
 
@@ -495,7 +495,7 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
         atomicUpdates[`roster/${targetRiderId}/startTime`] = targetTimes.join(', ');
         atomicUpdates[`roster/${targetRiderId}/lastUpdated`] = nowTimeStr;
 
-        const chatsSnap = await db.ref('customerChats').once('value');
+        const chatsSnap = await db.ref('customerChatMeta').once('value');
         const chats = chatsSnap.val() || {};
         const cleanSrc = sourceCustomerName.toLowerCase().trim();
         const cleanTgt = targetCustomerName ? targetCustomerName.toLowerCase().trim() : '';

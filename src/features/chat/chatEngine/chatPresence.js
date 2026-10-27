@@ -412,67 +412,11 @@ function updateChatTypingBarUi(activeTypers = []) {
 }
 
 /**
- * Global feed listener that tracks typing and viewing across threads for live cards in Live Chats.
+ * Global feed listener stub. Root-level wildcard listeners on chatTyping and chatPresence
+ * have been decommissioned to prevent massive multi-megabyte keystroke egress.
+ * Thread-level typing and presence remain 100% active inside individual chats via
+ * startChatTypingListener(custId) and startChatPresence(custId).
  */
 export function initGlobalChatTypingAndPresenceFeedListener() {
-    if (isGlobalPresenceFeedListenerActive || !db) return;
-    isGlobalPresenceFeedListenerActive = true;
-
-    const { riderId } = getMyRiderInfo();
-
-    // Listen to all typing activity across all threads
-    db.ref('chatTyping').on('value', (snap) => {
-        const val = snap.val() || {};
-        const now = Date.now();
-        globalThreadTypingMap.clear();
-
-        Object.entries(val).forEach(([tKey, riders]) => {
-            if (riders && typeof riders === 'object') {
-                const names = [];
-                Object.values(riders).forEach(r => {
-                    if (r && r.riderId && r.riderId.toString() !== riderId.toString()) {
-                        if (now - (r.timestamp || 0) < 5000) {
-                            names.push(r.riderName || "Rider");
-                        }
-                    }
-                });
-                if (names.length > 0) {
-                    globalThreadTypingMap.set(tKey, names);
-                }
-            }
-        });
-
-        // Trigger feed re-render if visible
-        if (typeof window.renderRiderCustomerChatFeed === 'function') {
-            window.renderRiderCustomerChatFeed();
-        }
-    });
-
-    // Listen to all viewing presence across all threads
-    db.ref('chatPresence').on('value', (snap) => {
-        const val = snap.val() || {};
-        const now = Date.now();
-        globalThreadViewingMap.clear();
-
-        Object.entries(val).forEach(([tKey, riders]) => {
-            if (riders && typeof riders === 'object') {
-                const names = [];
-                Object.values(riders).forEach(r => {
-                    if (r && r.riderId && r.riderId.toString() !== riderId.toString()) {
-                        if (now - (r.lastActive || r.openedAt || 0) < 45000) {
-                            names.push(r.riderName || "Rider");
-                        }
-                    }
-                });
-                if (names.length > 0) {
-                    globalThreadViewingMap.set(tKey, names);
-                }
-            }
-        });
-
-        // Trigger feed re-render if visible
-        if (typeof window.renderRiderCustomerChatFeed === 'function') {
-            window.renderRiderCustomerChatFeed();
-        }
-    });
+    // Intentionally scoped to individual open chats to prevent network flood
 }
