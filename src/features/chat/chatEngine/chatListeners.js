@@ -194,6 +194,59 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
 
             if (!text && imageUrl) text = '📷 Photo';
 
+            const normText = (text || '').replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim().toLowerCase();
+
+            // Comprehensive deduplication: check if this message already exists in memory or loaded messages
+            const isMatch = (existing) => {
+                if (!existing) return false;
+                if (existing.id === safeMid || existing.id === rawMid || existing.metaMid === rawMid || existing.mid === safeMid) {
+                    return true;
+                }
+                const sameDirection = Boolean(existing.isRider) === Boolean(isRider);
+                if (sameDirection) {
+                    const exNorm = (existing.text || '').replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim().toLowerCase();
+                    if (exNorm && normText && (exNorm === normText || exNorm.startsWith(normText.slice(0, 40)) || normText.startsWith(exNorm.slice(0, 40)))) {
+                        const diff = Math.abs(getMessageTimestamp(existing) - ts);
+                        if (diff < 300000) { // within 5 minutes
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+
+            const existingInLoaded = Array.from(loadedRiderMsgsMap.values()).find(isMatch);
+            let memCached = riderChatMemoryCache.get(targetCustId) || [];
+            const existingInMem = memCached.find(isMatch);
+            const existingMatch = existingInLoaded || existingInMem;
+
+            if (existingMatch) {
+                // Link mid on existing message so future lookups are instant
+                existingMatch.metaMid = rawMid;
+                existingMatch.mid = safeMid;
+
+                // Clean up any stale duplicate message from Firebase if one was previously stored under safeMid
+                if (db && existingMatch.id !== safeMid) {
+                    db.ref(`customerChats/${targetCustId}/messages/${safeMid}`).remove().catch(() => {});
+                }
+                // Also remove any duplicate echo bubble from DOM if present
+                if (existingMatch.id !== safeMid) {
+                    document.getElementById(`msg-bubble-${safeMid}`)?.remove();
+                    loadedRiderMsgsMap.delete(safeMid);
+                }
+                continue; // Do NOT insert duplicate!
+            }
+
+            // If it's an outbound message from the Page, check if sent from app (midIndex in RTDB)
+            if (isRider && db) {
+                try {
+                    const midSnap = await db.ref(`customerChats/${targetCustId}/midIndex/${safeMid}`).once('value');
+                    if (midSnap.exists()) {
+                        continue; // Already exists under rider's app push key!
+                    }
+                } catch (_) {}
+            }
+
             const senderName = isRider ? (m.from?.name || 'Rider') : (m.from?.name || activeCustData?.customerName || 'Customer');
 
             const formattedMsg = {
@@ -214,7 +267,7 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
             loadedRiderMsgsMap.set(safeMid, formattedMsg);
 
             // Update RAM cache & IndexedDB
-            let memCached = riderChatMemoryCache.get(targetCustId) || [];
+            memCached = riderChatMemoryCache.get(targetCustId) || [];
             if (!memCached.some(existing => existing.id === safeMid || existing.metaMid === rawMid)) {
                 memCached.push(formattedMsg);
                 memCached.sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
@@ -302,11 +355,9 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
 
     setupRiderScrollPagination(container, custId);
 
-    // Fast-sync directly with Facebook Page in parallel with local and Firebase loading
     const syncFbBtn = document.getElementById('rider-chat-sync-fb-btn');
     if (String(custId).startsWith('fb_')) {
         if (syncFbBtn) syncFbBtn.classList.remove('hidden');
-        syncCurrentThreadFromMetaGraph(custId, false).catch(() => {});
     } else {
         if (syncFbBtn) syncFbBtn.classList.add('hidden');
     }
@@ -363,6 +414,11 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 <div class="h-6 rounded-2xl rounded-bl-none bg-gray-200 dark:bg-gray-800 flex-1"></div>
             </div>
         </div>`;
+    }
+
+    // Fast-sync directly with Facebook Page after local memory and DOM are initialized
+    if (String(custId).startsWith('fb_')) {
+        syncCurrentThreadFromMetaGraph(custId, false).catch(() => {});
     }
 
     // Realtime Firebase connection: strictly load only the last 10 messages for lightning-fast startup ordered by timestamp
@@ -454,6 +510,37 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 triggerInstantFbAttachmentResolution(custId, fullMsg, container, activeCustData);
             }
             return;
+        }
+
+        // Guard against duplicate page echo arriving from Firebase (e.g. m_... duplicate of rider message)
+        const isMsgRider = Boolean(fullMsg.isRider || fullMsg.senderType === 'rider');
+        const isMsgPageSender = (fullMsg.sender || '').toLowerCase().includes('camiling delivery') || (fullMsg.sender || '').toLowerCase().includes('lokalex') || (fullMsg.sender || '').toLowerCase().includes('lolalex') || key.startsWith('m_');
+
+        if (isMsgRider) {
+            const incomingNorm = (fullMsg.text || '').replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim().toLowerCase();
+            const existingRiderMatch = Array.from(loadedRiderMsgsMap.values()).find(prev => {
+                if (prev.id === key) return false;
+                const isPrevRider = Boolean(prev.isRider || prev.senderType === 'rider');
+                if (!isPrevRider) return false;
+                const prevNorm = (prev.text || '').replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim().toLowerCase();
+                const sameMid = (fullMsg.metaMid && prev.metaMid && fullMsg.metaMid === prev.metaMid)
+                             || (fullMsg.mid && prev.mid && fullMsg.mid === prev.mid)
+                             || (fullMsg.mid && prev.id === fullMsg.mid)
+                             || (prev.mid && key === prev.mid);
+                const sameText = incomingNorm && prevNorm && (incomingNorm === prevNorm || incomingNorm.startsWith(prevNorm.slice(0, 40)) || prevNorm.startsWith(incomingNorm.slice(0, 40)));
+                const timeDiff = Math.abs(getMessageTimestamp(prev) - msgTs);
+                return sameMid || (sameText && timeDiff < 300000);
+            });
+
+            if (existingRiderMatch) {
+                if (isMsgPageSender) {
+                    // Drop page echo and delete stale key from Firebase
+                    if (db && key.startsWith('m_')) {
+                        db.ref(`customerChats/${custId}/messages/${key}`).remove().catch(() => {});
+                    }
+                    return;
+                }
+            }
         }
 
         // If initial 10-message slice is already rendered, ignore any older historical message

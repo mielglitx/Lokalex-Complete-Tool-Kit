@@ -942,6 +942,54 @@ export function appendOrUpdateSingleRiderMessage(container, msg, activeCustData 
     if (emptyNote && container.children.length === 1) emptyNote.remove();
 
     const existingBubble = document.getElementById(`msg-bubble-${msg.id}`);
+    
+    // Guard against duplicate page echo bubbles
+    if (!existingBubble) {
+        const isMsgRider = Boolean(msg.isRider || msg.senderType === 'rider');
+        const isMsgPageSender = (msg.sender || '').toLowerCase().includes('camiling delivery') || (msg.sender || '').toLowerCase().includes('lokalex') || (msg.sender || '').toLowerCase().includes('lolalex') || String(msg.id).startsWith('m_');
+        const normMsgText = (msg.text || '').replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim().toLowerCase();
+        const newTs = getMessageTimestamp(msg);
+
+        // Case 1: If incoming msg is a page echo, check if there is an existing rider message bubble
+        if (isMsgRider && isMsgPageSender) {
+            const isEchoDuplicate = Array.from(container.querySelectorAll('[data-timestamp]')).some(b => {
+                const bTs = Number(b.dataset.timestamp) || 0;
+                const bMsgId = b.id ? b.id.replace(/^msg-bubble-/, '') : null;
+                const bNorm = (b.innerText || '').toLowerCase();
+                const diff = Math.abs(bTs - newTs);
+                const sameText = normMsgText && bNorm && (bNorm.includes(normMsgText.slice(0, 40)) || normMsgText.includes(bNorm.slice(0, 40)));
+                return sameText && diff < 300000;
+            });
+            if (isEchoDuplicate) {
+                // Stale page echo duplicate! Drop and purge from Firebase
+                if (db && String(msg.id).startsWith('m_')) {
+                    const custId = activeCustData?.id || (typeof window !== 'undefined' ? window.activeRiderChatCustId : null);
+                    if (custId) db.ref(`customerChats/${custId}/messages/${msg.id}`).remove().catch(() => {});
+                }
+                return;
+            }
+        }
+
+        // Case 2: If incoming msg is an authentic rider message, remove any pre-existing page echo bubble with matching text
+        if (isMsgRider && !isMsgPageSender && normMsgText) {
+            Array.from(container.querySelectorAll('[data-timestamp]')).forEach(b => {
+                const bMsgId = b.id ? b.id.replace(/^msg-bubble-/, '') : null;
+                const bText = (b.innerText || '').toLowerCase();
+                const isBPage = bText.includes('camiling delivery') || (bMsgId && bMsgId.startsWith('m_'));
+                if (isBPage) {
+                    const diff = Math.abs((Number(b.dataset.timestamp) || 0) - newTs);
+                    if (diff < 300000 && (bText.includes(normMsgText.slice(0, 40)) || normMsgText.includes(bText.slice(0, 40)))) {
+                        b.remove();
+                        if (bMsgId && db && bMsgId.startsWith('m_')) {
+                            const custId = activeCustData?.id || (typeof window !== 'undefined' ? window.activeRiderChatCustId : null);
+                            if (custId) db.ref(`customerChats/${custId}/messages/${bMsgId}`).remove().catch(() => {});
+                        }
+                    }
+                }
+            });
+        }
+    }
+
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = buildSingleMessageHtml(msg, activeCustData).trim();
     const newBubble = tempDiv.firstElementChild;
@@ -1128,12 +1176,86 @@ export function updateRiderChatSeenAvatar(container, activeCustData = null, msgs
 }
 
 export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, isInitialLoad = false, oldScrollHeight = 0, activeCustData = null) {
-    const msgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => {
+    const rawMsgs = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => {
         const tA = getMessageTimestamp(a);
         const tB = getMessageTimestamp(b);
         if (tA !== tB) return tA - tB;
         return String(a.id || '').localeCompare(String(b.id || ''));
     });
+
+    // Deduplicate any page echo duplicates where a rider sent from app and page echoed it
+    const isPageSender = (msg) => {
+        const s = (msg.sender || '').toLowerCase();
+        return s.includes('camiling delivery') || s.includes('lokalex') || s.includes('lolalex') || String(msg.id || '').startsWith('m_');
+    };
+
+    const normalizeText = (t) => String(t || '').replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim().toLowerCase();
+
+    const msgs = [];
+    const staleKeysToDelete = [];
+
+    for (const m of rawMsgs) {
+        const mNorm = normalizeText(m.text);
+        const mTs = getMessageTimestamp(m);
+        const isMRider = Boolean(m.isRider || m.senderType === 'rider');
+
+        let isDup = false;
+        for (let i = 0; i < msgs.length; i++) {
+            const prev = msgs[i];
+            const prevNorm = normalizeText(prev.text);
+            const prevTs = getMessageTimestamp(prev);
+            const isPrevRider = Boolean(prev.isRider || prev.senderType === 'rider');
+
+            if (prev.id === m.id) {
+                isDup = true;
+                break;
+            }
+
+            const sameMid = (m.metaMid && prev.metaMid && m.metaMid === prev.metaMid)
+                         || (m.mid && prev.mid && m.mid === prev.mid)
+                         || (m.id && (m.id === prev.mid || m.id === prev.metaMid))
+                         || (prev.id && (prev.id === m.mid || prev.id === m.metaMid));
+
+            const sameText = mNorm && prevNorm && (mNorm === prevNorm || mNorm.startsWith(prevNorm.slice(0, 40)) || prevNorm.startsWith(mNorm.slice(0, 40)));
+            const timeDiff = Math.abs(prevTs - mTs);
+
+            if (isMRider && isPrevRider && (sameMid || (sameText && timeDiff < 300000))) {
+                // Duplicate detected! Prioritize the authentic rider over generic page echo
+                if (isPageSender(prev) && !isPageSender(m)) {
+                    // Replace generic page echo with the named rider message!
+                    if (String(prev.id).startsWith('m_')) staleKeysToDelete.push(prev.id);
+                    msgs[i] = m;
+                    isDup = true;
+                    break;
+                } else {
+                    // Keep prev, discard m
+                    if (String(m.id).startsWith('m_')) staleKeysToDelete.push(m.id);
+                    isDup = true;
+                    break;
+                }
+            }
+        }
+
+        if (!isDup) {
+            msgs.push(m);
+        }
+    }
+
+    // Silently purge stale duplicate keys from Firebase RTDB and loaded map
+    if (staleKeysToDelete.length > 0) {
+        staleKeysToDelete.forEach(k => {
+            loadedRiderMsgsMap.delete(k);
+        });
+        if (db) {
+            const custId = activeCustData?.id || (typeof window !== 'undefined' ? window.activeRiderChatCustId : null);
+            if (custId) {
+                staleKeysToDelete.forEach(k => {
+                    db.ref(`customerChats/${custId}/messages/${k}`).remove().catch(() => {});
+                });
+            }
+        }
+    }
+
     const messagesHtml = msgs.map(m => buildSingleMessageHtml(m, activeCustData)).join('');
 
     let topHeader = '';
