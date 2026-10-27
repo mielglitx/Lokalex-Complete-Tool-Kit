@@ -121,12 +121,27 @@ export async function initNativeBridge() {
             }
         });
 
-        // 4. Floating Window & PiP Global Handlers
+        // 4. Floating Window & Overlay Badge Global Handlers
         window.enterFloatingWindowMode = enterFloatingWindowMode;
         window.isFloatingWindowSupported = isFloatingWindowSupported;
         window.isFloatingWindowAllowed = isFloatingWindowAllowed;
         window.isInFloatingWindowMode = isInFloatingWindowMode;
         window.isFloatingWindowStashed = isFloatingWindowStashed;
+
+        const wireFloatingBtn = () => {
+            const btn = document.getElementById('header-floating-window-btn');
+            if (btn && !btn.dataset.wired) {
+                btn.dataset.wired = 'true';
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    enterFloatingWindowMode();
+                });
+            }
+        };
+        wireFloatingBtn();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', wireFloatingBtn);
+        }
 
         window.onFloatingWindowModeChanged = function(isInPip) {
             isTransitioningToFloating = false;
@@ -377,6 +392,10 @@ if (typeof window !== 'undefined') {
     };
 
     window.isNativePlatform = isNativePlatform;
+    window.enterFloatingWindowMode = enterFloatingWindowMode;
+    window.isFloatingWindowSupported = isFloatingWindowSupported;
+    window.isFloatingWindowAllowed = isFloatingWindowAllowed;
+    window.isInFloatingWindowMode = isInFloatingWindowMode;
     window.triggerNativeHaptic = triggerNativeHaptic;
     window.requestNativePermissions = requestNativePermissions;
     window.areNativePermissionsGranted = areNativePermissionsGranted;
@@ -465,13 +484,12 @@ export async function openExternalLink(rawUrl) {
 let isTransitioningToFloating = false;
 
 /**
- * Enters native Android Picture-in-Picture / Floating Window mode.
- * Keeps the app visible and live on screen on top of other apps (Maps, Waze, Messenger).
+ * Enters native Android Floating Window / Overlay Badge mode.
+ * Shows a draggable edge-docked floating badge over other apps (Google Maps, Waze, Messenger).
  */
 export function enterFloatingWindowMode() {
     if (typeof window === 'undefined') return false;
 
-    // Guard: already in PiP or transition in flight
     if (isInFloatingWindowMode() || isTransitioningToFloating) {
         return true;
     }
@@ -486,12 +504,12 @@ export function enterFloatingWindowMode() {
             const result = window.NativePermissionsBridge.enterFloatingWindowMode();
             if (!result) {
                 isTransitioningToFloating = false;
-                showToast("⚠️ Could not enter floating mode. Please check app permissions.");
+                showToast("⚠️ Please enable 'Display over other apps' in Android settings.");
                 return false;
             }
             setTimeout(() => {
                 isTransitioningToFloating = false;
-            }, 1200);
+            }, 600);
             return true;
         } catch (e) {
             isTransitioningToFloating = false;

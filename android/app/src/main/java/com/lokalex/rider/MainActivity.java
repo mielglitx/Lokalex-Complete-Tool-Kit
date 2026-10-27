@@ -30,15 +30,13 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.PictureInPictureParams;
-import android.app.PictureInPictureUiState;
+import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.media.AudioAttributes;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
-import android.util.Rational;
 import android.view.WindowManager;
 import androidx.core.app.NotificationCompat;
 import java.io.File;
@@ -55,7 +53,6 @@ public class MainActivity extends BridgeActivity {
     public static final String MESSAGES_CHANNEL_ID = "lokalex_messages_channel_v3";
     private static MainActivity instance = null;
     private Ringtone activeSystemRingtone = null;
-    private boolean isPipStashed = false;
 
     public static MainActivity getInstance() {
         return instance;
@@ -406,25 +403,34 @@ public class MainActivity extends BridgeActivity {
 
                 @JavascriptInterface
                 public boolean enterFloatingWindowMode() {
-                    return MainActivity.this.enterPipMode();
+                    return MainActivity.this.enterFloatingMode();
                 }
 
                 @JavascriptInterface
                 public boolean isFloatingWindowSupported() {
-                    return MainActivity.this.isPipSupported();
+                    return true;
+                }
+
+                @JavascriptInterface
+                public boolean isFloatingWindowAllowed() {
+                    return FloatingBadgeManager.getInstance(MainActivity.this).canDrawOverlays();
+                }
+
+                @JavascriptInterface
+                public void requestFloatingWindowPermission() {
+                    new Handler(Looper.getMainLooper()).post(() -> {
+                        FloatingBadgeManager.getInstance(MainActivity.this).requestOverlayPermission(MainActivity.this);
+                    });
                 }
 
                 @JavascriptInterface
                 public boolean isInFloatingWindowMode() {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        return MainActivity.this.isInPictureInPictureMode();
-                    }
-                    return false;
+                    return FloatingBadgeManager.getInstance(MainActivity.this).isShowing();
                 }
 
                 @JavascriptInterface
                 public boolean isFloatingWindowStashed() {
-                    return isPipStashed;
+                    return false;
                 }
             }, "NativePermissionsBridge");
         } catch (Exception e) {
@@ -476,6 +482,9 @@ public class MainActivity extends BridgeActivity {
                 getBridge().getWebView().resumeTimers();
             }
         } catch (Exception ignored) {}
+
+        // Hide floating badge when app is in active foreground
+        FloatingBadgeManager.getInstance(this).hideBadge();
     }
 
     @Override
@@ -500,94 +509,29 @@ public class MainActivity extends BridgeActivity {
                 getBridge().getWebView().resumeTimers();
             }
         } catch (Exception ignored) {}
-    }
 
-    public boolean isPipSupported() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            return getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE);
+        // Automatically show floating badge on the side of the screen when app goes to background
+        FloatingBadgeManager badgeMgr = FloatingBadgeManager.getInstance(this);
+        if (badgeMgr.isAutoFloatEnabled() && badgeMgr.canDrawOverlays()) {
+            badgeMgr.showBadge();
         }
-        return false;
     }
 
-    public boolean enterPipMode() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (!isPipSupported()) {
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    Toast.makeText(this, "⚠️ Floating window mode is not supported on this device.", Toast.LENGTH_SHORT).show();
-                });
-                return false;
-            }
-            try {
-                // 9:16 aspect ratio (standard smartphone portrait mini-window)
-                Rational aspectRatio = new Rational(9, 16);
-                PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder();
-                builder.setAspectRatio(aspectRatio);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    builder.setAutoEnterEnabled(true);
-                    builder.setSeamlessResizeEnabled(true);
-                }
-                setPictureInPictureParams(builder.build());
-                return enterPictureInPictureMode(builder.build());
-            } catch (Exception e) {
-                Log.e(TAG, "enterPipMode error: " + e.getMessage());
-                try {
-                    enterPictureInPictureMode();
-                    return true;
-                } catch (Exception ex) {
-                    return false;
-                }
-            }
-        } else {
+    public boolean enterFloatingMode() {
+        FloatingBadgeManager badgeMgr = FloatingBadgeManager.getInstance(this);
+        if (!badgeMgr.canDrawOverlays()) {
             new Handler(Looper.getMainLooper()).post(() -> {
-                Toast.makeText(this, "⚠️ Floating window requires Android 8.0 or newer.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "⚠️ Please allow 'Display over other apps' to enable Floating Window mode.", Toast.LENGTH_LONG).show();
+                badgeMgr.requestOverlayPermission(this);
             });
             return false;
         }
-    }
 
-    @Override
-    public void onPictureInPictureUiStateChanged(PictureInPictureUiState pipState) {
-        super.onPictureInPictureUiStateChanged(pipState);
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                isPipStashed = pipState.isStashed();
-                if (getBridge() != null && getBridge().getWebView() != null) {
-                    getBridge().getWebView().evaluateJavascript(
-                            "if (typeof window.onFloatingWindowStashChanged === 'function') { window.onFloatingWindowStashChanged(" + isPipStashed + "); }",
-                            null
-                    );
-                }
-            }
-        } catch (Exception ignored) {}
-    }
-
-    @Override
-    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
-        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
-        try {
-            if (!isInPictureInPictureMode) {
-                isPipStashed = false;
-            }
-            if (getBridge() != null && getBridge().getWebView() != null) {
-                getBridge().getWebView().evaluateJavascript(
-                        "if (typeof window.onFloatingWindowModeChanged === 'function') { window.onFloatingWindowModeChanged(" + isInPictureInPictureMode + "); }" +
-                        (!isInPictureInPictureMode ? "if (typeof window.onFloatingWindowStashChanged === 'function') { window.onFloatingWindowStashChanged(false); }" : ""),
-                        null
-                );
-            }
-        } catch (Exception ignored) {}
-    }
-
-    @Override
-    public void onUserLeaveHint() {
-        super.onUserLeaveHint();
-        try {
-            SharedPreferences prefs = getSharedPreferences("lokalex_prefs", Context.MODE_PRIVATE);
-            boolean autoPip = prefs.getBoolean("auto_pip_on_leave", false);
-            if (autoPip && isPipSupported() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isInPictureInPictureMode()) {
-                enterPipMode();
-            }
-        } catch (Exception ignored) {}
+        new Handler(Looper.getMainLooper()).post(() -> {
+            badgeMgr.showBadge();
+            moveTaskToBack(true);
+        });
+        return true;
     }
 
     public boolean isIgnoringBatteryOptimizations() {
