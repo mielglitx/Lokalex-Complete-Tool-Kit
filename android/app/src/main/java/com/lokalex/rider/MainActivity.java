@@ -432,6 +432,26 @@ public class MainActivity extends BridgeActivity {
                 public boolean isFloatingWindowStashed() {
                     return false;
                 }
+
+                @JavascriptInterface
+                public void notifyIncomingChatMessage(String folder, int count, String senderName, String messagePreview) {
+                    FloatingBadgeManager.getInstance(MainActivity.this).onIncomingChatMessage(folder, count, senderName, messagePreview);
+                }
+
+                @JavascriptInterface
+                public void updateFloatingBadgeUnread(String folder, int count) {
+                    FloatingBadgeManager.getInstance(MainActivity.this).updateCategoryBadge(folder, count);
+                }
+
+                @JavascriptInterface
+                public void clearFloatingBadge() {
+                    FloatingBadgeManager.getInstance(MainActivity.this).clearCategoryBadge();
+                }
+
+                @JavascriptInterface
+                public void playNativeChatChime(String folder) {
+                    MainActivity.this.playNativeChime(folder);
+                }
             }, "NativePermissionsBridge");
         } catch (Exception e) {
             // Log fallback
@@ -532,6 +552,30 @@ public class MainActivity extends BridgeActivity {
             moveTaskToBack(true);
         });
         return true;
+    }
+
+    public void playNativeChime(String folder) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                if (activeSystemRingtone != null && activeSystemRingtone.isPlaying()) {
+                    activeSystemRingtone.stop();
+                }
+                Uri soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+                activeSystemRingtone = RingtoneManager.getRingtone(getApplicationContext(), soundUri);
+                if (activeSystemRingtone != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        AudioAttributes aa = new AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build();
+                        activeSystemRingtone.setAudioAttributes(aa);
+                    }
+                    activeSystemRingtone.play();
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "playNativeChime error: " + e.getMessage());
+            }
+        });
     }
 
     public boolean isIgnoringBatteryOptimizations() {

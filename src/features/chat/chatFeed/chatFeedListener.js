@@ -77,10 +77,12 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
     // Acoustic notification chimes & Native Notification Bar alerts for incoming messages
     const newlyArrivedThreadKeys = new Set();
     const arrivedFolders = new Set();
+    let latestIncomingSender = '';
+    let latestIncomingPreview = '';
+
     if (!isInitialCustomerChatMetaLoad && !isFromCache && data) {
         const loggedInRider = getLoggedInRiderInfo();
         const activeRole = (localStorage.getItem('lokalex_active_role') || (globalState?.userTypesMap?.[loggedInRider.myId] || appState.userType || '')).toLowerCase();
-        const isRiderRole = activeRole === 'rider' || Boolean(loggedInRider.myId || loggedInRider.myName);
 
         Object.keys(data).forEach(key => {
             const item = data[key] || {};
@@ -93,7 +95,7 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
             if (prev) {
                 const isNewer = curLastUpdated > prev.lastUpdated;
                 const isDifferent = curLastMsg !== prev.lastMessage;
-                if (isNewer && isDifferent) {
+                if (isNewer || (isDifferent && curLastMsg)) {
                     isIncomingNew = true;
                 }
             } else {
@@ -166,20 +168,23 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
 
                     let isEligible = false;
                     if (isCatered || targetFolder === 'catering') {
-                        // For any catered customer, ONLY the rider actively catering them receives the chime & notification
-                        if (isMine) {
+                        // For catered orders: catering rider or admin receives alerts
+                        const isAdmin = (typeof window.checkAdminAccess === 'function') ? window.checkAdminAccess() : false;
+                        if (isMine || isAdmin) {
                             arrivedFolders.add('catering');
                             isEligible = true;
                         }
-                    } else if (!isRiderRole) {
-                        // For unassigned threads (inbox, applicant, followup, done):
-                        // Only dedicated non-rider dispatchers/admins receive general incoming chimes.
-                        // Riders on duty must NOT receive alarm chimes for customers they are not currently catering.
+                    } else {
+                        // Unassigned customer threads: inbox, applicant, followup, done
+                        // Available to all duty riders & team members!
                         arrivedFolders.add(targetFolder);
                         isEligible = true;
                     }
 
                     if (isEligible) {
+                        latestIncomingSender = displayName;
+                        latestIncomingPreview = curLastMsg;
+
                         // Check if the chat modal for this customer is currently open and visible
                         const activeId = (typeof getActiveRiderChatCustId === 'function' ? getActiveRiderChatCustId() : null) || (typeof window !== 'undefined' ? window.activeRiderChatCustId : null);
                         const isChatOpenAndVisible = (activeId === key) && !document.hidden;
@@ -207,6 +212,18 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
             const chosenFolder = priority.find(f => arrivedFolders.has(f)) || Array.from(arrivedFolders)[0];
             if (chosenFolder) {
                 playChatChime(chosenFolder);
+
+                // Notify Floating Badge Manager in Float Window mode!
+                try {
+                    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.notifyIncomingChatMessage === 'function') {
+                        window.NativePermissionsBridge.notifyIncomingChatMessage(
+                            chosenFolder,
+                            newlyArrivedThreadKeys.size,
+                            latestIncomingSender || 'Customer',
+                            latestIncomingPreview || 'New message'
+                        );
+                    }
+                } catch (_) {}
             }
         }
     }
@@ -709,6 +726,16 @@ export function updateAllChatFolderBadges() {
             }
         });
     });
+
+    // Synchronize with Native Floating Badge in Float Window mode
+    try {
+        if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.updateFloatingBadgeUnread === 'function') {
+            const priority = ['catering', 'inbox', 'followup', 'applicant', 'stores'];
+            const activeFolder = priority.find(f => (counts[f] || 0) > 0) || null;
+            const topCount = activeFolder ? counts[activeFolder] : 0;
+            window.NativePermissionsBridge.updateFloatingBadgeUnread(activeFolder, topCount);
+        }
+    } catch (_) {}
 
     return counts;
 }

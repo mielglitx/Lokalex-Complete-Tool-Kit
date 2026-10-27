@@ -589,16 +589,6 @@ export function playChime(chimeId, volumeMultiplier = 0.85) {
             osc.start(startTime);
             osc.stop(endTime + 0.05);
         });
-
-        // Auto-suspend AudioContext after note decay so Android audio focus is promptly released
-        const maxDuration = preset.notes.reduce((max, n) => Math.max(max, (n.start || 0) + (n.dur || 0.2)), 0);
-        setTimeout(() => {
-            try {
-                if (sharedAudioCtx && sharedAudioCtx.state === 'running') {
-                    sharedAudioCtx.suspend().catch(() => {});
-                }
-            } catch (_) {}
-        }, (maxDuration + 0.3) * 1000);
     } catch (e) {
         console.warn("Chime playback error:", e);
     }
@@ -611,8 +601,8 @@ export function playChime(chimeId, volumeMultiplier = 0.85) {
 export function playChatChime(category = 'inbox') {
     const folder = (category || 'inbox').toLowerCase();
     const now = Date.now();
-    // Debounce guard: Prevent double chime bursts within 900ms for the same folder
-    if (now - lastChimePlayedTimestamp < 900 && lastChimeCategory === folder) {
+    // Debounce guard: Prevent double chime bursts within 700ms for the same folder
+    if (now - lastChimePlayedTimestamp < 700 && lastChimeCategory === folder) {
         return;
     }
 
@@ -626,7 +616,15 @@ export function playChatChime(category = 'inbox') {
     lastChimePlayedTimestamp = now;
     lastChimeCategory = folder;
 
+    // 1. Synthesize Web Audio chime
     playChime(targetChimeId, settings.volume);
+
+    // 2. Play native Android sound if running inside native app (guaranteed to ring in Float Window / Background!)
+    try {
+        if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.playNativeChatChime === 'function') {
+            window.NativePermissionsBridge.playNativeChatChime(folder);
+        }
+    } catch (_) {}
 
     // Haptic vibration feedback on supported mobile devices
     try {

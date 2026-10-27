@@ -1,7 +1,7 @@
 // src/features/chat/storeChat/storeChatFeed.js
 import { db } from '../../../config/firebase.js';
 import { appState } from '../../../store/state.js';
-import { showToast } from '../../../ui/notifications.js';
+import { showToast, showNativeNotification } from '../../../ui/notifications.js';
 import { escapeHtml } from '../../../utils/helpers.js';
 import { storeChatState, cleanFirebasePathKey } from './storeChatState.js';
 import { formatChatDateParts } from '../chatUtils.js';
@@ -108,6 +108,12 @@ export function listenToGlobalStoreChats() {
                 const isModalOpen = modal && !modal.classList.contains('hidden');
                 if (!isModalOpen) {
                     playChatChime('stores');
+                    try {
+                        if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.notifyIncomingChatMessage === 'function') {
+                            window.NativePermissionsBridge.notifyIncomingChatMessage('stores', 1, 'Store Chat', 'New store update');
+                        }
+                    } catch (_) {}
+                    showNativeNotification('Store Message', 'New merchant message received', 'store_chat_incoming', 'stores');
                 }
             }
             isInitialStoreMetaLoad = false;

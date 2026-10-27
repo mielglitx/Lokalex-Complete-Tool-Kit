@@ -551,12 +551,58 @@ export function isFloatingWindowStashed() {
     return false;
 }
 
+export function notifyFloatingBadgeMessage(folder, count = 1, senderName = '', messagePreview = '') {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.notifyIncomingChatMessage === 'function') {
+        try {
+            window.NativePermissionsBridge.notifyIncomingChatMessage(folder || 'inbox', count || 1, senderName || '', messagePreview || '');
+            return true;
+        } catch (e) {
+            console.warn("notifyFloatingBadgeMessage error:", e);
+        }
+    }
+    return false;
+}
+
+export function updateFloatingBadgeUnread(folder, count = 0) {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.updateFloatingBadgeUnread === 'function') {
+        try {
+            window.NativePermissionsBridge.updateFloatingBadgeUnread(folder, count);
+            return true;
+        } catch (_) {}
+    }
+    return false;
+}
+
+export function clearFloatingBadge() {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.clearFloatingBadge === 'function') {
+        try {
+            window.NativePermissionsBridge.clearFloatingBadge();
+            return true;
+        } catch (_) {}
+    }
+    return false;
+}
+
+export function playNativeChatChime(folder = 'inbox') {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.playNativeChatChime === 'function') {
+        try {
+            window.NativePermissionsBridge.playNativeChatChime(folder);
+            return true;
+        } catch (_) {}
+    }
+    return false;
+}
+
 if (typeof window !== 'undefined') {
     window.enterFloatingWindowMode = enterFloatingWindowMode;
     window.isFloatingWindowSupported = isFloatingWindowSupported;
     window.isFloatingWindowAllowed = isFloatingWindowAllowed;
     window.isInFloatingWindowMode = isInFloatingWindowMode;
     window.isFloatingWindowStashed = isFloatingWindowStashed;
+    window.notifyFloatingBadgeMessage = notifyFloatingBadgeMessage;
+    window.updateFloatingBadgeUnread = updateFloatingBadgeUnread;
+    window.clearFloatingBadge = clearFloatingBadge;
+    window.playNativeChatChime = playNativeChatChime;
 
     window.onFloatingWindowModeChanged = function(isInPip) {
         isTransitioningToFloating = false;

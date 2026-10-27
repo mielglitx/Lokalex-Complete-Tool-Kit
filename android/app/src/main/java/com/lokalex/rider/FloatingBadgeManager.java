@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -28,7 +29,12 @@ import android.widget.TextView;
 /**
  * High-performance native Floating Badge / Overlay Window Manager.
  * Replaces Picture-in-Picture (PiP) with an edge-docked floating head (similar to Messenger/Grab).
- * Keeps the rider in touch with Lokalex while using Google Maps, Waze, or background tasks.
+ * Displays distinct color-coded notification badges when messages arrive:
+ * - Green for Inbox
+ * - Orange for Catering
+ * - Red for Followup
+ * - Purple for Applicant
+ * - White for Stores
  */
 public class FloatingBadgeManager {
     private static final String TAG = "FloatingBadgeManager";
@@ -43,8 +49,15 @@ public class FloatingBadgeManager {
     private final WindowManager windowManager;
     private View badgeRootView = null;
     private WindowManager.LayoutParams layoutParams = null;
+    private FrameLayout cardView = null;
+    private GradientDrawable cardBgShape = null;
+    private View pulseDotView = null;
+    private GradientDrawable pulseDotShape = null;
     private TextView unreadBadgeTextView = null;
     private boolean isShowing = false;
+
+    private String currentBadgeFolder = null;
+    private int currentUnreadCount = 0;
 
     public static FloatingBadgeManager getInstance(Context context) {
         if (instance == null) {
@@ -60,6 +73,27 @@ public class FloatingBadgeManager {
     private FloatingBadgeManager(Context context) {
         this.appContext = context;
         this.windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+    }
+
+    public static int getFolderColor(String folder) {
+        if (folder == null) return Color.parseColor("#10B981"); // Default green
+        switch (folder.toLowerCase().trim()) {
+            case "inbox":
+                return Color.parseColor("#10B981"); // Green
+            case "catering":
+                return Color.parseColor("#F97316"); // Orange
+            case "followup":
+            case "follow_up":
+            case "follow-up":
+                return Color.parseColor("#EF4444"); // Red
+            case "applicant":
+                return Color.parseColor("#A855F7"); // Purple
+            case "stores":
+            case "store":
+                return Color.parseColor("#FFFFFF"); // White
+            default:
+                return Color.parseColor("#10B981"); // Default Green
+        }
     }
 
     public boolean canDrawOverlays() {
@@ -86,7 +120,7 @@ public class FloatingBadgeManager {
 
     public boolean isAutoFloatEnabled() {
         SharedPreferences prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        return prefs.getBoolean(KEY_AUTO_FLOAT, true); // Enabled by default
+        return prefs.getBoolean(KEY_AUTO_FLOAT, true);
     }
 
     public void setAutoFloatEnabled(boolean enabled) {
@@ -115,7 +149,7 @@ public class FloatingBadgeManager {
                 int screenWidth = metrics.widthPixels;
                 int screenHeight = metrics.heightPixels;
 
-                int badgeSizePx = dpToPx(62);
+                int badgeSizePx = dpToPx(66);
 
                 int layoutType;
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -164,44 +198,128 @@ public class FloatingBadgeManager {
                     Log.w(TAG, "Error removing floating badge view: " + e.getMessage());
                 }
                 badgeRootView = null;
+                cardView = null;
+                cardBgShape = null;
+                pulseDotView = null;
+                pulseDotShape = null;
+                unreadBadgeTextView = null;
                 isShowing = false;
             }
         });
     }
 
-    public void updateUnreadCount(int unreadCount) {
+    /**
+     * Called when a new incoming chat message arrives.
+     * Color-codes the floating badge and pulses to catch the rider's attention.
+     */
+    public void onIncomingChatMessage(String folder, int unreadCount, String senderName, String messagePreview) {
         new Handler(Looper.getMainLooper()).post(() -> {
-            if (unreadBadgeTextView != null) {
-                if (unreadCount > 0) {
-                    unreadBadgeTextView.setVisibility(View.VISIBLE);
-                    unreadBadgeTextView.setText(unreadCount > 99 ? "99+" : String.valueOf(unreadCount));
-                } else {
-                    unreadBadgeTextView.setVisibility(View.GONE);
-                }
+            currentBadgeFolder = folder;
+            currentUnreadCount = unreadCount > 0 ? unreadCount : 1;
+
+            if (!isShowing) {
+                showBadge();
+            } else {
+                applyFolderBadgeTheme(currentBadgeFolder, currentUnreadCount);
+            }
+
+            // Smooth bounce animation on card to alert the rider
+            if (cardView != null) {
+                cardView.animate()
+                        .scaleX(1.18f)
+                        .scaleY(1.18f)
+                        .setDuration(160)
+                        .withEndAction(() -> {
+                            if (cardView != null) {
+                                cardView.animate().scaleX(1.0f).scaleY(1.0f).setDuration(160).start();
+                            }
+                        })
+                        .start();
             }
         });
+    }
+
+    public void updateCategoryBadge(String folder, int count) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            currentBadgeFolder = folder;
+            currentUnreadCount = count;
+            applyFolderBadgeTheme(folder, count);
+        });
+    }
+
+    public void clearCategoryBadge() {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            currentBadgeFolder = null;
+            currentUnreadCount = 0;
+            applyFolderBadgeTheme(null, 0);
+        });
+    }
+
+    public void updateUnreadCount(int unreadCount) {
+        updateCategoryBadge(currentBadgeFolder, unreadCount);
+    }
+
+    private void applyFolderBadgeTheme(String folder, int count) {
+        int folderColor = getFolderColor(folder);
+        boolean hasUnread = count > 0 && folder != null;
+
+        // 1. Update Card Border Stroke
+        if (cardBgShape != null) {
+            int strokeColor = hasUnread ? folderColor : Color.parseColor("#10B981");
+            cardBgShape.setStroke(dpToPx(hasUnread ? 3f : 2.5f), strokeColor);
+        }
+
+        // 2. Update Pulse Dot
+        if (pulseDotShape != null) {
+            int dotColor = hasUnread ? folderColor : Color.parseColor("#10B981");
+            pulseDotShape.setColor(dotColor);
+        }
+
+        // 3. Update Unread Counter Pill Badge
+        if (unreadBadgeTextView != null) {
+            if (hasUnread) {
+                unreadBadgeTextView.setVisibility(View.VISIBLE);
+                unreadBadgeTextView.setText(count > 99 ? "99+" : String.valueOf(count));
+
+                GradientDrawable countShape = new GradientDrawable();
+                countShape.setShape(GradientDrawable.RECTANGLE);
+                countShape.setCornerRadius(dpToPx(9));
+                countShape.setColor(folderColor);
+                countShape.setStroke(dpToPx(1.5f), Color.parseColor("#0C1814"));
+                unreadBadgeTextView.setBackground(countShape);
+
+                // White badge (stores) uses dark text for contrast
+                if (folderColor == Color.WHITE || (folder != null && "stores".equalsIgnoreCase(folder))) {
+                    unreadBadgeTextView.setTextColor(Color.parseColor("#0F172A"));
+                } else {
+                    unreadBadgeTextView.setTextColor(Color.WHITE);
+                }
+            } else {
+                unreadBadgeTextView.setVisibility(View.GONE);
+            }
+        }
     }
 
     private View createBadgeView(int sizePx) {
         FrameLayout container = new FrameLayout(appContext);
         container.setLayoutParams(new FrameLayout.LayoutParams(sizePx, sizePx));
 
-        // 1. Circular Outer Badge Container with Emerald Border & Dark Base
-        FrameLayout card = new FrameLayout(appContext);
+        // 1. Circular Outer Badge Container with Dynamic Category Border & Dark Base
+        cardView = new FrameLayout(appContext);
         FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(
-                sizePx - dpToPx(6),
-                sizePx - dpToPx(6)
+                sizePx - dpToPx(10),
+                sizePx - dpToPx(10)
         );
         cardParams.gravity = Gravity.CENTER;
-        card.setLayoutParams(cardParams);
+        cardView.setLayoutParams(cardParams);
 
-        GradientDrawable bgShape = new GradientDrawable();
-        bgShape.setShape(GradientDrawable.OVAL);
-        bgShape.setColor(Color.parseColor("#0C1814"));
-        bgShape.setStroke(dpToPx(2.5f), Color.parseColor("#10B981")); // Emerald border
-        card.setBackground(bgShape);
+        cardBgShape = new GradientDrawable();
+        cardBgShape.setShape(GradientDrawable.OVAL);
+        cardBgShape.setColor(Color.parseColor("#0C1814"));
+        cardBgShape.setStroke(dpToPx(2.5f), Color.parseColor("#10B981"));
+        cardView.setBackground(cardBgShape);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            card.setElevation(dpToPx(8));
+            cardView.setElevation(dpToPx(8));
         }
 
         // 2. Logo Icon Inside
@@ -215,46 +333,51 @@ public class FloatingBadgeManager {
         logoView.setLayoutParams(logoParams);
         logoView.setImageResource(R.mipmap.ic_launcher_round);
         logoView.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        card.addView(logoView);
+        cardView.addView(logoView);
 
-        container.addView(card);
+        container.addView(cardView);
 
-        // 3. Pulsing Active Indicator (Green Dot)
-        View pulseDot = new View(appContext);
+        // 3. Pulsing Active Indicator (Top Right Dot)
+        pulseDotView = new View(appContext);
         FrameLayout.LayoutParams dotParams = new FrameLayout.LayoutParams(dpToPx(13), dpToPx(13));
-        dotParams.gravity = Gravity.TOP | Gravity.END;
-        dotParams.setMargins(0, dpToPx(2), dpToPx(2), 0);
-        pulseDot.setLayoutParams(dotParams);
+        dotParams.gravity = Gravity.TOP | Gravity.START;
+        dotParams.setMargins(dpToPx(2), dpToPx(2), 0, 0);
+        pulseDotView.setLayoutParams(dotParams);
 
-        GradientDrawable dotShape = new GradientDrawable();
-        dotShape.setShape(GradientDrawable.OVAL);
-        dotShape.setColor(Color.parseColor("#10B981"));
-        dotShape.setStroke(dpToPx(1.5f), Color.parseColor("#0C1814"));
-        pulseDot.setBackground(dotShape);
-        container.addView(pulseDot);
+        pulseDotShape = new GradientDrawable();
+        pulseDotShape.setShape(GradientDrawable.OVAL);
+        pulseDotShape.setColor(Color.parseColor("#10B981"));
+        pulseDotShape.setStroke(dpToPx(1.5f), Color.parseColor("#0C1814"));
+        pulseDotView.setBackground(pulseDotShape);
+        container.addView(pulseDotView);
 
-        // 4. Unread Notification Counter Badge (Red Pill)
+        // 4. Color-Coded Category / Unread Notification Counter Badge (Bottom Right Pill)
         unreadBadgeTextView = new TextView(appContext);
         FrameLayout.LayoutParams countParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
-                dpToPx(16)
+                dpToPx(18)
         );
         countParams.gravity = Gravity.BOTTOM | Gravity.END;
-        countParams.setMargins(0, 0, dpToPx(2), dpToPx(2));
+        countParams.setMargins(0, 0, dpToPx(1), dpToPx(1));
         unreadBadgeTextView.setLayoutParams(countParams);
-        unreadBadgeTextView.setPadding(dpToPx(4), 0, dpToPx(4), 0);
-        unreadBadgeTextView.setTextSize(9f);
+        unreadBadgeTextView.setMinimumWidth(dpToPx(18));
+        unreadBadgeTextView.setPadding(dpToPx(5), 0, dpToPx(5), 0);
+        unreadBadgeTextView.setTextSize(9.5f);
+        unreadBadgeTextView.setTypeface(Typeface.DEFAULT_BOLD);
         unreadBadgeTextView.setTextColor(Color.WHITE);
         unreadBadgeTextView.setGravity(Gravity.CENTER);
 
         GradientDrawable countShape = new GradientDrawable();
         countShape.setShape(GradientDrawable.RECTANGLE);
-        countShape.setCornerRadius(dpToPx(8));
-        countShape.setColor(Color.parseColor("#EF4444")); // Red-500
+        countShape.setCornerRadius(dpToPx(9));
+        countShape.setColor(Color.parseColor("#10B981"));
         countShape.setStroke(dpToPx(1.5f), Color.parseColor("#0C1814"));
         unreadBadgeTextView.setBackground(countShape);
         unreadBadgeTextView.setVisibility(View.GONE);
         container.addView(unreadBadgeTextView);
+
+        // Apply any pending folder badge state
+        applyFolderBadgeTheme(currentBadgeFolder, currentUnreadCount);
 
         return container;
     }
