@@ -777,6 +777,9 @@ function getMessageSenderAvatar(m, isRider, custAvatar) {
 
     const senderName = (m.sender || m.senderName || "").trim();
     if (senderName) {
+        if (m.senderType === 'admin' || senderName.toLowerCase().includes('page admin') || senderName.toLowerCase().includes('camiling delivery') || senderName.toLowerCase().includes('lokalex')) {
+            return `https://ui-avatars.com/api/?name=Admin&background=0284c7&color=fff`;
+        }
         // Look up sender in global roster to see if they have an uploaded profile photo
         const roster = globalState.rosterMembers || [];
         const member = roster.find(r => {
@@ -824,7 +827,17 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
                   || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName)}&background=0084FF&color=fff`;
     }
 
-    const senderName = m.sender || (isRider ? (m.senderName || riderName) : custName);
+    const isSenderAdmin = m.senderType === 'admin' || (m.sender || '').toLowerCase().includes('page admin') || (m.sender || '').toLowerCase().includes('camiling delivery') || (m.sender || '').toLowerCase().includes('lokalex') || (m.sender || '').toLowerCase().includes('lolalex');
+    let cleanSenderName = m.sender || (isRider ? (m.senderName || riderName) : custName);
+    if (isSenderAdmin && (cleanSenderName.toLowerCase().includes('camiling delivery') || cleanSenderName.toLowerCase().includes('lokalex') || cleanSenderName.toLowerCase().includes('lolalex') || cleanSenderName === 'Rider')) {
+        cleanSenderName = 'Page Admin';
+    }
+
+    const adminBadgeHtml = isSenderAdmin
+        ? `<span class="bg-blue-400/25 text-blue-200 text-[8px] font-bold px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5 ml-1"><i class="fa-solid fa-shield-halved text-[7.5px] text-amber-300"></i> Admin</span>`
+        : '';
+
+    const senderName = cleanSenderName;
     const senderAvatar = getMessageSenderAvatar(m, isRider, custAvatar);
     const customerLastSeenTs = Number(meta?.customerLastSeenTimestamp || activeCustData?.customerLastSeenTimestamp || meta?.watermark || 0) || 0;
     const msgTs = getMessageTimestamp(m);
@@ -912,7 +925,7 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
                 oncontextmenu="window.handleMsgContextMenu(event, '${m.id}', 'rider-cust', '${encodedText}', '${encodedSender}')"
                 class="max-w-[85%] p-2.5 rounded-2xl flex flex-col gap-0.5 text-xs ${alignClass} cursor-pointer transition active:scale-[0.98] select-none">
                 <div class="text-[9px] ${isRider ? 'text-emerald-100' : 'text-teal-700 dark:text-teal-400'} font-bold flex justify-between gap-3 pointer-events-none">
-                    <span>${escapeHtml(senderName)}</span>
+                    <span class="inline-flex items-center">${escapeHtml(senderName)}${adminBadgeHtml}</span>
                     <div class="flex items-center gap-1 opacity-80 font-mono shrink-0">
                         <span>${timeStr}</span>
                         ${statusIndicator}

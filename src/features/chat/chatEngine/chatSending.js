@@ -20,6 +20,7 @@ import {
 } from './chatState.js';
 import { cancelRiderReply } from './chatListeners.js';
 import { clearMyTypingStatus } from './chatPresence.js';
+import { isAdmin } from '../../roster/rosterUtils.js';
 
 export async function forwardRiderReactionToMessenger({ custId, msgId, emoji, action = 'react' }) {
     try {
@@ -173,11 +174,15 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
     const targetChannel = targetMeta?.channel || (isFb ? 'messenger' : 'web');
     const targetApiId = targetMeta?.apiId || targetMeta?.channelId || null;
     const myPhoto = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || null;
+    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
+                        (typeof window !== 'undefined' && typeof window.isAdmin === 'function' && window.isAdmin()) ||
+                        Boolean(globalState.adminControlsEnabled);
+    const senderRole = isUserAdmin ? 'admin' : 'rider';
 
     const newMsg = {
         sender: riderName,
-        senderType: 'rider',
-        senderAvatar: myPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=3B82F6&color=fff`,
+        senderType: senderRole,
+        senderAvatar: myPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=${isUserAdmin ? '0284c7' : '3B82F6'}&color=fff`,
         avatarUrl: myPhoto || null,
         text: text,
         timestamp: now,
@@ -369,10 +374,15 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
 
     const textPayload = captionText ? `📋 Menu: ${captionText}` : "📋 Restaurant Menu";
 
+    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
+                        (typeof window !== 'undefined' && typeof window.isAdmin === 'function' && window.isAdmin()) ||
+                        Boolean(globalState.adminControlsEnabled);
+    const senderRole = isUserAdmin ? 'admin' : 'rider';
+
     const newMsg = {
         sender: riderName,
-        senderType: 'rider',
-        senderAvatar: myPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=3B82F6&color=fff`,
+        senderType: senderRole,
+        senderAvatar: myPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(riderName)}&background=${isUserAdmin ? '0284c7' : '3B82F6'}&color=fff`,
         avatarUrl: myPhoto || null,
         text: textPayload,
         imageUrl: imageUrl,

@@ -247,7 +247,8 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                 } catch (_) {}
             }
 
-            const senderName = isRider ? (m.from?.name || 'Rider') : (m.from?.name || activeCustData?.customerName || 'Customer');
+            const isPageOutbound = Boolean(isRider);
+            const senderName = isPageOutbound ? 'Page Admin' : (m.from?.name || activeCustData?.customerName || 'Customer');
 
             const formattedMsg = {
                 id: safeMid,
@@ -257,7 +258,8 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                 timestamp: ts,
                 isRider: Boolean(isRider),
                 sender: senderName,
-                senderType: isRider ? 'rider' : 'customer',
+                senderType: isPageOutbound ? 'admin' : 'customer',
+                senderAvatar: isPageOutbound ? 'https://ui-avatars.com/api/?name=Page+Admin&background=0284c7&color=fff' : null,
                 status: 'delivered',
                 channel: 'messenger',
                 imageUrl: imageUrl,
