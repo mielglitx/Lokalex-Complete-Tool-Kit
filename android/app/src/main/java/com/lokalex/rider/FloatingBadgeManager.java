@@ -10,6 +10,8 @@ import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
+import android.graphics.Point;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -18,11 +20,13 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
+import android.view.Display;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.OrientationEventListener;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.WindowMetrics;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -124,6 +128,53 @@ public class FloatingBadgeManager {
         } catch (Exception ignored) {}
     }
 
+    /**
+     * Accurately determines the real physical screen dimensions in the current display orientation.
+     * Prevents ApplicationContext from returning stale portrait dimensions in landscape mode.
+     */
+    public Point getRealScreenSize() {
+        Point size = new Point();
+
+        // 1. Android 11+ (API 30+) WindowMetrics
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                WindowMetrics windowMetrics = windowManager.getCurrentWindowMetrics();
+                Rect bounds = windowMetrics.getBounds();
+                size.x = bounds.width();
+                size.y = bounds.height();
+                if (size.x > 0 && size.y > 0) {
+                    return size;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        // 2. Android Display.getRealMetrics()
+        try {
+            Display display = windowManager.getDefaultDisplay();
+            DisplayMetrics realMetrics = new DisplayMetrics();
+            display.getRealMetrics(realMetrics);
+            size.x = realMetrics.widthPixels;
+            size.y = realMetrics.heightPixels;
+            if (size.x > 0 && size.y > 0) {
+                return size;
+            }
+        } catch (Exception ignored) {}
+
+        // 3. Robust fallback using configuration orientation
+        DisplayMetrics dm = appContext.getResources().getDisplayMetrics();
+        int w = dm.widthPixels;
+        int h = dm.heightPixels;
+        int orientation = appContext.getResources().getConfiguration().orientation;
+        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            size.x = Math.max(w, h);
+            size.y = Math.min(w, h);
+        } else {
+            size.x = Math.min(w, h);
+            size.y = Math.max(w, h);
+        }
+        return size;
+    }
+
     public static int getFolderColor(String folder) {
         if (folder == null) return Color.parseColor("#10B981");
         switch (folder.toLowerCase().trim()) {
@@ -191,9 +242,9 @@ public class FloatingBadgeManager {
             }
 
             try {
-                DisplayMetrics metrics = appContext.getResources().getDisplayMetrics();
-                int screenWidth = metrics.widthPixels;
-                int screenHeight = metrics.heightPixels;
+                Point screen = getRealScreenSize();
+                int screenWidth = screen.x;
+                int screenHeight = screen.y;
                 int badgeSizePx = dpToPx(66);
 
                 int layoutType;
@@ -252,15 +303,15 @@ public class FloatingBadgeManager {
     public void onOrientationOrScreenSizeChanged() {
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             repositionToActiveEdge(true);
-        }, 120);
+        }, 150);
     }
 
     private void repositionToActiveEdge(boolean animate) {
         if (badgeRootView == null || !isShowing || layoutParams == null) return;
         try {
-            DisplayMetrics metrics = appContext.getResources().getDisplayMetrics();
-            int screenWidth = metrics.widthPixels;
-            int screenHeight = metrics.heightPixels;
+            Point screen = getRealScreenSize();
+            int screenWidth = screen.x;
+            int screenHeight = screen.y;
             int badgeSizePx = dpToPx(66);
 
             int targetX = isDockedOnRight ? (screenWidth - badgeSizePx - dpToPx(6)) : dpToPx(6);
@@ -474,8 +525,12 @@ public class FloatingBadgeManager {
                         return true;
 
                     case MotionEvent.ACTION_MOVE:
-                        params.x = initialX + (int) (event.getRawX() - initialTouchX);
-                        params.y = initialY + (int) (event.getRawY() - initialTouchY);
+                        Point screen = getRealScreenSize();
+                        int newX = initialX + (int) (event.getRawX() - initialTouchX);
+                        int newY = initialY + (int) (event.getRawY() - initialTouchY);
+                        // Allow dragging across the full physical screen width and height
+                        params.x = Math.max(0, Math.min(newX, screen.x - badgeSizePx));
+                        params.y = Math.max(dpToPx(30), Math.min(newY, screen.y - badgeSizePx - dpToPx(30)));
                         if (badgeRootView != null) {
                             try {
                                 windowManager.updateViewLayout(badgeRootView, params);
@@ -503,11 +558,11 @@ public class FloatingBadgeManager {
     }
 
     private void snapToNearestEdge(final WindowManager.LayoutParams params, int badgeSizePx) {
-        DisplayMetrics metrics = appContext.getResources().getDisplayMetrics();
-        int screenWidth = metrics.widthPixels;
-        int screenHeight = metrics.heightPixels;
+        Point screen = getRealScreenSize();
+        int screenWidth = screen.x;
+        int screenHeight = screen.y;
 
-        // Determine nearest side
+        // Determine nearest side across the true screen width
         boolean snapToRight = (params.x + badgeSizePx / 2) >= (screenWidth / 2);
         int targetX = snapToRight ? (screenWidth - badgeSizePx - dpToPx(6)) : dpToPx(6);
         int clampedY = Math.max(dpToPx(50), Math.min(params.y, screenHeight - badgeSizePx - dpToPx(60)));

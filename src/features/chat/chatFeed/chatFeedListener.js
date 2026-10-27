@@ -77,12 +77,14 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
     // Acoustic notification chimes & Native Notification Bar alerts for incoming messages
     const newlyArrivedThreadKeys = new Set();
     const arrivedFolders = new Set();
+    let latestIncomingFolder = '';
     let latestIncomingSender = '';
     let latestIncomingPreview = '';
 
     if (!isInitialCustomerChatMetaLoad && !isFromCache && data) {
         const loggedInRider = getLoggedInRiderInfo();
         const activeRole = (localStorage.getItem('lokalex_active_role') || (globalState?.userTypesMap?.[loggedInRider.myId] || appState.userType || '')).toLowerCase();
+        const isRiderRole = activeRole === 'rider' || Boolean(loggedInRider.myId || loggedInRider.myName);
 
         Object.keys(data).forEach(key => {
             const item = data[key] || {};
@@ -118,7 +120,6 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                 // Check if from customer (not outgoing rider message)
                 const isFromCustomer = !curLastMsg.startsWith('You:') && meta.unreadForRider !== false;
                 if (isFromCustomer) {
-                    newlyArrivedThreadKeys.add(key);
                     // Check if thread belongs to currently selected chat sources
                     if (!isThreadFromSelectedSource(meta, key)) {
                         return;
@@ -146,7 +147,17 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                     
                     // Always check live roster catering: active roster catering takes precedence!
                     const activeCaterer = getActiveRosterCaterer(displayName, key, meta);
-                    const isCatered = !isDone && (rawFolder === 'catering' || Boolean(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy) || Boolean(activeCaterer));
+                    const hasCaterer = Boolean(
+                        rawFolder === 'catering' ||
+                        meta.cateredByRiderName ||
+                        meta.cateredByRiderId ||
+                        meta.cateredBy ||
+                        meta.caterer ||
+                        meta.riderName ||
+                        meta.riderId ||
+                        activeCaterer
+                    );
+                    const isCatered = !isDone && hasCaterer;
                     const isApplicant = !isDone && !isCatered && (rawFolder === 'applicant' || meta.isApplicant === true);
                     const isFollowup = !isDone && !isCatered && !isApplicant && (rawFolder === 'followup');
 
@@ -168,20 +179,25 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
 
                     let isEligible = false;
                     if (isCatered || targetFolder === 'catering') {
-                        // For catered orders: catering rider or admin receives alerts
-                        const isAdmin = (typeof window.checkAdminAccess === 'function') ? window.checkAdminAccess() : false;
-                        if (isMine || isAdmin) {
+                        // Strictly only the rider actively catering this customer receives alerts!
+                        // Never leak other riders' catered orders to anyone.
+                        if (isMine) {
                             arrivedFolders.add('catering');
                             isEligible = true;
                         }
                     } else {
                         // Unassigned customer threads: inbox, applicant, followup, done
-                        // Available to all duty riders & team members!
-                        arrivedFolders.add(targetFolder);
                         isEligible = true;
+                        // Audio chime: only non-rider dispatchers receive general unassigned chimes
+                        // Riders on duty must NOT receive alarm chimes for customers that are not their cater
+                        if (!isRiderRole) {
+                            arrivedFolders.add(targetFolder);
+                        }
                     }
 
                     if (isEligible) {
+                        newlyArrivedThreadKeys.add(key);
+                        latestIncomingFolder = targetFolder;
                         latestIncomingSender = displayName;
                         latestIncomingPreview = curLastMsg;
 
@@ -212,19 +228,21 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
             const chosenFolder = priority.find(f => arrivedFolders.has(f)) || Array.from(arrivedFolders)[0];
             if (chosenFolder) {
                 playChatChime(chosenFolder);
-
-                // Notify Floating Badge Manager in Float Window mode!
-                try {
-                    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.notifyIncomingChatMessage === 'function') {
-                        window.NativePermissionsBridge.notifyIncomingChatMessage(
-                            chosenFolder,
-                            newlyArrivedThreadKeys.size,
-                            latestIncomingSender || 'Customer',
-                            latestIncomingPreview || 'New message'
-                        );
-                    }
-                } catch (_) {}
             }
+        }
+
+        // Notify Floating Badge Manager in Float Window mode with category color!
+        if (newlyArrivedThreadKeys.size > 0 && latestIncomingFolder) {
+            try {
+                if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.notifyIncomingChatMessage === 'function') {
+                    window.NativePermissionsBridge.notifyIncomingChatMessage(
+                        latestIncomingFolder,
+                        newlyArrivedThreadKeys.size,
+                        latestIncomingSender || 'Customer',
+                        latestIncomingPreview || 'New message'
+                    );
+                }
+            } catch (_) {}
         }
     }
 
