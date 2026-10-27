@@ -120,6 +120,38 @@ export async function initNativeBridge() {
                 keepAlivePulse();
             }
         });
+
+        // 4. Floating Window & PiP Global Handlers
+        window.enterFloatingWindowMode = enterFloatingWindowMode;
+        window.isFloatingWindowSupported = isFloatingWindowSupported;
+        window.isFloatingWindowAllowed = isFloatingWindowAllowed;
+        window.isInFloatingWindowMode = isInFloatingWindowMode;
+        window.isFloatingWindowStashed = isFloatingWindowStashed;
+
+        window.onFloatingWindowModeChanged = function(isInPip) {
+            isTransitioningToFloating = false;
+            if (isInPip) {
+                document.documentElement.classList.add('in-floating-mode');
+                document.body.classList.add('in-floating-mode');
+            } else {
+                document.documentElement.classList.remove('in-floating-mode');
+                document.body.classList.remove('in-floating-mode');
+                document.documentElement.classList.remove('pip-stashed');
+                document.body.classList.remove('pip-stashed');
+            }
+            window.dispatchEvent(new CustomEvent('floatingWindowModeChanged', { detail: { isInPip } }));
+        };
+
+        window.onFloatingWindowStashChanged = function(isStashed) {
+            if (isStashed) {
+                document.documentElement.classList.add('pip-stashed');
+                document.body.classList.add('pip-stashed');
+            } else {
+                document.documentElement.classList.remove('pip-stashed');
+                document.body.classList.remove('pip-stashed');
+            }
+            window.dispatchEvent(new CustomEvent('floatingWindowStashChanged', { detail: { isStashed } }));
+        };
     } catch (e) {
         console.warn("App state listener note:", e);
     }
@@ -452,17 +484,23 @@ export function enterFloatingWindowMode() {
 
         try {
             const result = window.NativePermissionsBridge.enterFloatingWindowMode();
+            if (!result) {
+                isTransitioningToFloating = false;
+                showToast("⚠️ Could not enter floating mode. Please check app permissions.");
+                return false;
+            }
             setTimeout(() => {
                 isTransitioningToFloating = false;
             }, 1200);
-            return Boolean(result);
+            return true;
         } catch (e) {
             isTransitioningToFloating = false;
             console.error("enterFloatingWindowMode error:", e);
+            showToast("⚠️ Floating window error: " + (e?.message || e));
             return false;
         }
     } else {
-        showToast("ℹ️ Floating Window mode is available in the Android mobile app.");
+        showToast("ℹ️ Floating Window mode requires an updated Android APK install.");
         return false;
     }
 }
