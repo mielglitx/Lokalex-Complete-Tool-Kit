@@ -6,7 +6,8 @@ import {
     getNativeVersionCode,
     downloadAndInstallApk, 
     canInstallApk, 
-    openInstallPermissionSettings 
+    openInstallPermissionSettings,
+    openExternalLink
 } from '../native/nativeBridge.js';
 import { showToast } from '../ui/notifications.js';
 
@@ -104,20 +105,25 @@ export function installBaseApk(apkUrl, version = 'latest') {
     }
     const targetUrl = apkUrl || "https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/app-release.apk";
 
-    if (canInstallApk && !canInstallApk()) {
-        const allow = confirm("⚠️ Kailangan ng pahintulot upang mag-install ng updates.\n\nBuksan ang Android Settings upang i-allow ang 'Install unknown apps' para sa Lokalex?");
-        if (allow) {
-            openInstallPermissionSettings();
-            return;
+    // 1. If native Java bridge is available in current APK (v1.0.77+)
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.downloadAndInstallApk === 'function') {
+        if (canInstallApk && !canInstallApk()) {
+            const allow = confirm("⚠️ Kailangan ng pahintulot upang mag-install ng updates.\n\nBuksan ang Android Settings upang i-allow ang 'Install unknown apps' para sa Lokalex?");
+            if (allow) {
+                openInstallPermissionSettings();
+                return;
+            }
         }
+
+        showApkInstallProgress(0, "Sinisimulan ang pag-download ng Lokalex Base APK...");
+        const ok = downloadAndInstallApk(targetUrl);
+        if (ok) return;
+        hideApkInstallProgress();
     }
 
-    showApkInstallProgress(0, "Sinisimulan ang pag-download ng Lokalex Base APK...");
-    const ok = downloadAndInstallApk(targetUrl);
-    if (!ok) {
-        hideApkInstallProgress();
-        showToast("⚠️ Hindi masimulan ang APK download. Subukan muli.");
-    }
+    // 2. Fallback for older APKs (v1.0.50): Open browser download directly
+    showToast("📥 Binubuksan ang APK download link sa browser...");
+    openExternalLink(targetUrl);
 }
 
 // Hook global callbacks invoked by Android MainActivity.java
@@ -241,7 +247,7 @@ export async function checkForOtaUpdate(isManual = false) {
         // Check if a newer native Base APK is available (for native Android features like Picture-in-Picture)
         const nativeVersion = manifest.nativeVersion;
         const apkUrl = manifest.apkUrl;
-        const currentNativeVersion = getNativeVersionName();
+        const currentNativeVersion = getNativeVersionName() || (isNativePlatform() ? "1.0.50" : null);
 
         if (isNativePlatform() && nativeVersion && apkUrl && currentNativeVersion) {
             const hasNativeUpdate = compareVersions(nativeVersion, currentNativeVersion) > 0;
@@ -567,28 +573,29 @@ function renderOtaVersionsList(versions, currentVersion) {
         return;
     }
 
-    const nativeVer = getNativeVersionName();
+    const nativeVer = getNativeVersionName() || (isNativePlatform() ? "1.0.50 (Legacy)" : null);
     let nativeCardHtml = '';
     if (isNativePlatform() && nativeVer) {
+        const isLegacy = nativeVer.includes("Legacy");
         nativeCardHtml = `
-            <div class="bg-gradient-to-r from-emerald-950/40 to-teal-950/40 border border-emerald-500/50 rounded-2xl p-3 flex items-center justify-between gap-3 mb-2">
+            <div class="${isLegacy ? 'bg-gradient-to-r from-amber-950/40 to-orange-950/40 border-amber-500/50' : 'bg-gradient-to-r from-emerald-950/40 to-teal-950/40 border-emerald-500/50'} border rounded-2xl p-3 flex items-center justify-between gap-3 mb-2">
                 <div class="flex items-center gap-3 min-w-0 flex-1">
-                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shrink-0 text-base">
+                    <div class="w-10 h-10 rounded-xl ${isLegacy ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'} flex items-center justify-center shrink-0 text-base">
                         <i class="fa-solid fa-mobile-screen"></i>
                     </div>
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2 flex-wrap">
                             <span class="font-bold text-xs sm:text-sm text-white">Lokalex Base APK</span>
-                            <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full">v${nativeVer}</span>
+                            <span class="${isLegacy ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'} border text-[9px] font-mono font-bold px-2 py-0.5 rounded-full">v${nativeVer}</span>
                         </div>
                         <p class="text-[10px] text-slate-300 truncate mt-0.5">
-                            Native Android app (Picture-in-Picture & Auto-Updater)
+                            ${isLegacy ? 'Kailangang i-update ang Base APK para sa Picture-in-Picture' : 'Native Android app (Picture-in-Picture & Auto-Updater)'}
                         </p>
                     </div>
                 </div>
                 <div class="shrink-0">
-                    <button type="button" onclick="window.installBaseApk && window.installBaseApk()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer">
-                        <i class="fa-solid fa-download text-xs"></i> Update APK
+                    <button type="button" onclick="window.installBaseApk && window.installBaseApk()" class="${isLegacy ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-600 hover:bg-emerald-500'} text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer">
+                        <i class="fa-solid fa-download text-xs"></i> ${isLegacy ? 'Upgrade APK' : 'Update APK'}
                     </button>
                 </div>
             </div>
