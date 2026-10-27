@@ -332,12 +332,20 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
 /**
  * Directly sends a menu photo to a specific customer thread (Firebase RTDB + Messenger)
  */
-export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, captionText = "") {
+export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, captionText = "", options = {}) {
     const cleanCustId = String(targetCustId || '').trim();
     if (!cleanCustId || cleanCustId === 'undefined' || cleanCustId === 'null' || !imageUrl || !db) {
         console.warn("[MenuSend] Aborted: Invalid targetCustId or imageUrl:", { targetCustId, imageUrl });
         return false;
     }
+
+    const {
+        prefetchedMeta = null,
+        attachmentId = null,
+        storeKey = null,
+        pageId = null,
+        skipSeparateCaption = true
+    } = (typeof options === 'object' && options) ? options : {};
 
     const riderName = appState.riderName || localStorage.getItem('riderName') || "Lokalex Rider";
     const now = Date.now();
@@ -346,16 +354,19 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
     const isFb = cleanCustId.startsWith('fb_');
     const targetChannel = isFb ? 'messenger' : 'web';
 
-    let targetApiId = null;
-    let custName = null;
-    try {
-        const metaSnap = await db.ref(`customerChatMeta/${cleanCustId}`).once('value');
-        if (metaSnap.exists()) {
-            const m = metaSnap.val();
-            targetApiId = m.apiId || m.channelId || null;
-            custName = m.customerName || m.name || null;
-        }
-    } catch(e) {}
+    let targetApiId = prefetchedMeta?.targetApiId || null;
+    let custName = prefetchedMeta?.custName || null;
+
+    if (!targetApiId) {
+        try {
+            const metaSnap = await db.ref(`customerChatMeta/${cleanCustId}`).once('value');
+            if (metaSnap.exists()) {
+                const m = metaSnap.val();
+                targetApiId = m.apiId || m.channelId || null;
+                custName = m.customerName || m.name || null;
+            }
+        } catch(e) {}
+    }
 
     if (!targetApiId) {
         try {
@@ -400,8 +411,9 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
     try {
         const pushRef = db.ref(`customerChats/${cleanCustId}/messages`).push();
         newMsgKey = pushRef ? pushRef.key : null;
+        const writePromises = [];
         if (pushRef) {
-            await pushRef.set(sanitizeForFirebase(newMsg));
+            writePromises.push(pushRef.set(sanitizeForFirebase(newMsg)));
         }
 
         const metaUpdate = sanitizeForFirebase({
@@ -413,10 +425,9 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
             metaUpdate.customerName = custName;
         }
 
-        await Promise.all([
-            db.ref(`customerChats/${cleanCustId}/metadata`).update(metaUpdate),
-            db.ref(`customerChatMeta/${cleanCustId}`).update(metaUpdate)
-        ]).catch(() => {});
+        writePromises.push(db.ref(`customerChats/${cleanCustId}/metadata`).update(metaUpdate));
+        writePromises.push(db.ref(`customerChatMeta/${cleanCustId}`).update(metaUpdate));
+        await Promise.all(writePromises).catch(() => {});
 
         const fullMsg = { id: newMsgKey || `MENU_${now}`, ...newMsg };
 
@@ -455,19 +466,29 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
         }
 
         // Forward to Messenger if thread is from Facebook
+        let fbSendResult = null;
         if (isFb) {
-            await forwardRiderReplyToMessenger({
+            fbSendResult = await forwardRiderReplyToMessenger({
                 custId: cleanCustId,
                 apiId: targetApiId,
                 text: textPayload,
                 imageUrl: imageUrl,
+                attachmentId: attachmentId,
+                skipSeparateCaption: skipSeparateCaption,
                 riderName: riderName,
                 newMsgKey: newMsgKey,
                 suppressToast: true
-            }).catch(err => console.warn("[MenuSend] forwardRiderReplyToMessenger error:", err));
+            }).catch(err => {
+                console.warn("[MenuSend] forwardRiderReplyToMessenger error:", err);
+                return null;
+            });
+
+            if (fbSendResult && fbSendResult.attachmentId && storeKey && pageId && db) {
+                db.ref(`directory/storeMenuGalleries/${storeKey}/pages/${pageId}/metaAttachmentId`).set(fbSendResult.attachmentId).catch(() => {});
+            }
         }
 
-        return true;
+        return fbSendResult || true;
     } catch(err) {
         console.error("[MenuSend] sendDirectMenuPhotoToCustomer failed:", err);
         return false;
@@ -511,7 +532,7 @@ function compressDataUrlForBridge(dataUrl, maxDim = 800, quality = 0.65) {
 /**
  * Forwards outbound rider chat message directly to Facebook Messenger via the webhook bridge
  */
-export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, fileUrl, fileName, locationCoords, riderName, replyToMid, replyToText, newMsgKey, suppressToast = false }) {
+export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, attachmentId = null, fileUrl, fileName, locationCoords, riderName, replyToMid, replyToText, newMsgKey, skipSeparateCaption = false, suppressToast = false }) {
     try {
         const cleanPsid = String(custId || '').replace(/^fb_/, '');
         if (!cleanPsid) return;
@@ -627,6 +648,56 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
             }
         }
 
+        // 0.5 INSTANT DELIVERY FROM META CDN CACHE VIA ATTACHMENT_ID
+        if (attachmentId && token) {
+            try {
+                let sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messaging_type: 'RESPONSE',
+                        recipient: { id: cleanPsid },
+                        message: {
+                            attachment: {
+                                type: 'image',
+                                payload: { attachment_id: attachmentId }
+                            }
+                        }
+                    })
+                });
+                let sendData = await sendResp.json().catch(() => ({}));
+                if (!sendResp.ok && sendData?.error?.code === 10) {
+                    sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            messaging_type: 'MESSAGE_TAG',
+                            tag: 'CONFIRMED_EVENT_UPDATE',
+                            recipient: { id: cleanPsid },
+                            message: {
+                                attachment: {
+                                    type: 'image',
+                                    payload: { attachment_id: attachmentId }
+                                }
+                            }
+                        })
+                    });
+                    sendData = await sendResp.json().catch(() => ({}));
+                }
+                if (sendResp.ok) {
+                    recordFbMid(sendData?.message_id || null);
+                    console.log("⚡ Photo delivered instantly from Meta CDN cache via attachment_id!");
+                    if (text && typeof text === 'string' && text.trim() && !skipSeparateCaption) {
+                        await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey, suppressToast });
+                    }
+                    if (!suppressToast) showToast("✅ Delivered to customer on Messenger!");
+                    return { success: true, attachmentId: attachmentId, messageId: sendData?.message_id };
+                }
+            } catch (attErr) {
+                console.warn("[MetaSend] AttachmentId delivery failed, falling back to URL upload:", attErr);
+            }
+        }
+
         // 1. DIRECT ATTACHMENT UPLOAD TO META GRAPH API (Instant, bypasses size limits, 100% reliable)
         if (imageUrl) {
             // Case A: Base64 data URL (Photo upload, canvas screenshot, receipt)
@@ -693,11 +764,11 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                                 if (sendResp.ok) {
                                     recordFbMid(sendData?.message_id || null);
                                     console.log("✅ Photo delivered directly to Facebook Messenger via attachment_id!");
-                                    if (text && typeof text === 'string' && text.trim()) {
+                                    if (text && typeof text === 'string' && text.trim() && !skipSeparateCaption) {
                                         await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey, suppressToast });
                                     }
                                     if (!suppressToast) showToast("✅ Photo sent to customer on Messenger!");
-                                    return;
+                                    return { success: true, attachmentId: attachmentId, messageId: sendData?.message_id };
                                 } else {
                                     console.warn("Direct Facebook attachment send returned error:", sendData);
                                 }
@@ -751,12 +822,13 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
 
                     if (sendResp.ok) {
                         recordFbMid(sendData?.message_id || null);
+                        const returnedAttachmentId = sendData?.attachment_id || null;
                         console.log("✅ HTTPS Photo delivered directly to Facebook Messenger!");
-                        if (text && typeof text === 'string' && text.trim()) {
+                        if (text && typeof text === 'string' && text.trim() && !skipSeparateCaption) {
                             await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey, suppressToast });
                         }
                         if (!suppressToast) showToast("✅ Photo sent to customer on Messenger!");
-                        return;
+                        return { success: true, attachmentId: returnedAttachmentId, messageId: sendData?.message_id };
                     }
                 } catch (e) {
                     console.warn("Direct HTTPS photo send threw:", e);

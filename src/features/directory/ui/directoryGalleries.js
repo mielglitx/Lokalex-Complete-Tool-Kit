@@ -819,7 +819,7 @@ export async function handleNativeMenuCameraCapture(event) {
 
     showToast("📸 Processing native high-res camera photo...");
     try {
-        const optimizedBlob = await compressImageToBlob(file, 2400, 0.90, false);
+        const optimizedBlob = await compressImageToBlob(file, 2048, 0.88, true);
         const pagesSnap = currentGalleryPages || [];
         const nextIdx = pagesSnap.length + 1;
         const caption = `Menu Page ${nextIdx}`;
@@ -1024,8 +1024,8 @@ export async function confirmAndUploadMenuSnapshot() {
     }
 
     try {
-        // High-Quality Single-Pass Upload (2400px, 0.90 quality - avoids blurry re-compression)
-        const optimizedBlob = await compressImageToBlob(capturedSnapshotBlob, 2400, 0.90, false);
+        // High-Density Document Clarity (2048px, 0.88 quality with edge contrast enhancement)
+        const optimizedBlob = await compressImageToBlob(capturedSnapshotBlob, 2048, 0.88, true);
         const result = await uploadSingleMenuBlob(optimizedBlob, captionText, activeGalleryStore.key, activeGalleryStore.name);
 
         showToast(`✅ Saved ${captionText} for ${activeGalleryStore.name}!`);
@@ -1462,7 +1462,37 @@ export async function executeSendMenuPages(targetCustId, pages, custDisplayName 
     const total = pages.length;
     showToast(`📤 Starting to send ${total} menu picture(s) to ${custDisplayName}...`);
 
+    // 1. High-Performance Pre-fetch: query customer channel details ONCE for the entire batch
+    let prefetchedMeta = null;
+    if (db) {
+        try {
+            const metaSnap = await db.ref(`customerChatMeta/${cleanCustId}`).once('value');
+            if (metaSnap.exists()) {
+                const m = metaSnap.val();
+                prefetchedMeta = {
+                    targetApiId: m.apiId || m.channelId || null,
+                    custName: m.customerName || m.name || custDisplayName
+                };
+            }
+        } catch (_) {}
+
+        if (!prefetchedMeta?.targetApiId) {
+            try {
+                const chatSnap = await db.ref(`customerChats/${cleanCustId}/metadata`).once('value');
+                if (chatSnap.exists()) {
+                    const cm = chatSnap.val();
+                    prefetchedMeta = {
+                        targetApiId: cm.apiId || cm.channelId || null,
+                        custName: cm.customerName || cm.name || custDisplayName
+                    };
+                }
+            } catch (_) {}
+        }
+    }
+
     let sent = 0;
+    const storeKey = activeGalleryStore?.key || null;
+
     for (let i = 0; i < total; i++) {
         const p = pages[i];
         const pageNum = i + 1;
@@ -1487,7 +1517,18 @@ export async function executeSendMenuPages(targetCustId, pages, custDisplayName 
                 ? sendDirectMenuPhotoToCustomer 
                 : window.sendDirectMenuPhotoToCustomer;
             if (typeof sendFn === 'function') {
-                ok = await sendFn(cleanCustId, imgUrl, caption);
+                const res = await sendFn(cleanCustId, imgUrl, caption, {
+                    prefetchedMeta,
+                    attachmentId: p.metaAttachmentId || p.attachmentId || null,
+                    storeKey: storeKey,
+                    pageId: p.id || null,
+                    skipSeparateCaption: true
+                });
+                ok = !!res;
+                if (res && res.attachmentId && storeKey && p.id && db) {
+                    p.metaAttachmentId = res.attachmentId;
+                    db.ref(`directory/storeMenuGalleries/${storeKey}/pages/${p.id}/metaAttachmentId`).set(res.attachmentId).catch(() => {});
+                }
             } else if (db) {
                 // Direct RTDB fallback
                 const riderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
@@ -1522,7 +1563,8 @@ export async function executeSendMenuPages(targetCustId, pages, custDisplayName 
         }
 
         if (i < total - 1) {
-            await new Promise(r => setTimeout(r, 800));
+            // Ultra-fast pipeline yield (60ms) avoids network thrashing while maintaining strict chronological order
+            await new Promise(r => setTimeout(r, 60));
         }
     }
 
