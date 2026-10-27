@@ -14,7 +14,8 @@ import {
 import { copyText, escapeHtml, isInAppBrowser, forceOpenExternalBrowser } from '../utils/helpers.js';
 import { openSlideDeleteModal } from '../ui/modals.js';
 
-let activeSessionKey = localStorage.getItem('lokalex_active_live_session') || "";
+try { localStorage.removeItem('lokalex_active_live_session'); } catch (_) {}
+let activeSessionKey = "";
 let riderGpsWatchId = null;
 let customerGpsWatchId = null;
 let liveMapObj = null;
@@ -28,39 +29,10 @@ let lastPushTime = 0;
 const PUSH_TICK_INTERVAL_MS = 15000; // 15 seconds throttled tick for both Rider & Customer[cite: 24]
 const ROUTE_THROTTLE_MS = 10000;     // 10 seconds throttle for Directions Service API[cite: 24]
 
-// --- AUTOMATED BACKGROUND LIVE GPS INITIATOR ---
+// --- AUTOMATED BACKGROUND LIVE GPS INITIATOR (DISABLED) ---
 export async function autoStartLiveGpsSession(custName = "Customer") {
-    let existingKey = localStorage.getItem('lokalex_active_live_session');
-    
-    await requestWakeLock();
-    startBackgroundAudioPulse();
-
-    if (existingKey) {
-        activeSessionKey = existingKey;
-        startRiderGpsTracking(existingKey);
-        return existingKey;
-    }
-
-    const sessionKey = `LIVE_${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).substring(2,6).toUpperCase()}`;
-    activeSessionKey = sessionKey;
-    localStorage.setItem('lokalex_active_live_session', sessionKey);
-
-    const initialData = {
-        status: "active",
-        riderName: appState.riderName || "Rider",
-        customerName: custName,
-        createdAt: Date.now(),
-        users: {}
-    };
-
-    try {
-        await db.ref('liveSessions/' + sessionKey).set(initialData);
-        startRiderGpsTracking(sessionKey);
-    } catch(e) {
-        console.error("Auto Live GPS initialization error:", e);
-    }
-
-    return sessionKey;
+    // Disabled: GPS session in roster is no longer needed
+    return null;
 }
 
 export async function promptStartLiveGpsSession() {

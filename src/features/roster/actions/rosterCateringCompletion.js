@@ -20,7 +20,6 @@ import { appState, globalState, multiCarts, activeCartSlot, wizState } from '../
 import { showToast, showSideNotification } from '../../../ui/notifications.js';
 import { switchView } from '../../../ui/router.js';
 import { openSlideDeleteModal } from '../../../ui/modals.js';
-import { endLiveGpsSession } from '../../liveTracker.js';
 import { getLocalTodayStr } from '../../../utils/helpers.js';
 import { idbSet } from '../../../utils/storageEngine.js';
 import { 
@@ -451,10 +450,6 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     } else {
         const topQueueTime = getTopQueueTime();
         const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString();
-
-        if (resolvedTargetId === myId) {
-            endLiveGpsSession();
-        }
 
         const availableTimestamp = Date.now();
         const availableTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -985,10 +980,6 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             targetRecord.queueTime = availableTimestamp;
             targetRecord.lastVoidedAt = voidTimestamp;
             targetRecord.lastVoidedCust = custNameToVoid;
-        }
-
-        if (resolvedTargetId === myId) {
-            endLiveGpsSession();
         }
 
         await updateRosterStatusData(

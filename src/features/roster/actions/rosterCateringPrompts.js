@@ -3,7 +3,6 @@ import { db } from '../../../config/firebase.js';
 import { appState, globalState } from '../../../store/state.js';
 import { showToast } from '../../../ui/notifications.js';
 import { closeCateringModal } from '../../../ui/modals.js';
-import { autoStartLiveGpsSession } from '../../liveTracker.js';
 import { populateCateringCustomerDropdown } from '../../chat/index.js';
 import { 
     loadRosterCache,
@@ -381,12 +380,6 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
         } else {
             showToast(`🛵 Catering: ${custName}`);
         }
-
-        try {
-            if (typeof autoStartLiveGpsSession === 'function') {
-                autoStartLiveGpsSession(custName);
-            }
-        } catch(e) {}
 
         return true;
     } catch (err) {

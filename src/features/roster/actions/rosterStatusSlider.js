@@ -21,7 +21,6 @@ import { appState, globalState, multiCarts, activeCartSlot } from '../../../stor
 import { showToast, showSideNotification } from '../../../ui/notifications.js';
 import { openSlideDeleteModal, openRiderPasswordSetupModal } from '../../../ui/modals.js';
 import { switchView } from '../../../ui/router.js';
-import { endLiveGpsSession } from '../../liveTracker.js';
 import { getLocalTodayStr } from '../../../utils/helpers.js';
 import { 
     parseQueueTime, 
@@ -299,7 +298,6 @@ export async function triggerStatusWithSlide(targetStatus) {
         });
         const lockedQueueTime = maxTime + 1000;
 
-        endLiveGpsSession();
         dismissQueueAlarm();
 
         if (db && myId) {
@@ -373,7 +371,6 @@ export async function triggerStatusWithSlide(targetStatus) {
 
         openSlideDeleteModal(promptTitle, promptDesc, async () => {
             dismissQueueAlarm();
-            endLiveGpsSession();
 
             if (db && myId) {
                 db.ref(`roster/${myId}/forcedCaters`).remove().catch(() => {});
@@ -426,7 +423,6 @@ export async function triggerStatusWithSlide(targetStatus) {
     } else {
         openSlideDeleteModal(`Are you sure you want to change status to [${targetStatus}]?`, async () => {
             dismissQueueAlarm();
-            if (targetStatus === 'Break') endLiveGpsSession();
             await updateRosterStatus(targetStatus, myId, myName);
         });
     }

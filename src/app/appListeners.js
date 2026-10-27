@@ -25,7 +25,6 @@ import * as chat from '../features/chat/index.js';
 import * as commission from '../features/commission/index.js';
 import * as advancedOrders from '../features/advancedOrders.js';
 import * as maps from '../features/maps.js';
-import { endLiveGpsSession } from '../features/liveTracker.js';
 import { updateNetworkStatus } from './appMonitors.js';
 
 export function forceRevokeSession(reason = "⚠️ Your account has been removed.") {
@@ -273,7 +272,6 @@ export function initRealtimeFirebaseListeners() {
 
                         // If transitioned from Catering to Available or other non-catering status
                         if (previousMyRosterRec.status === 'Catering' && currentMyRec.status !== 'Catering') {
-                            try { endLiveGpsSession(); } catch (_) {}
                             if (roster && typeof roster.purgeCartSlotForCustomer === 'function') {
                                 prevCusts.forEach(c => roster.purgeCartSlotForCustomer(c));
                             }
@@ -284,9 +282,6 @@ export function initRealtimeFirebaseListeners() {
                     }
                     previousMyRosterRec = { ...currentMyRec };
                 } else if (previousMyRosterRec) {
-                    if (previousMyRosterRec.status === 'Catering') {
-                        try { endLiveGpsSession(); } catch (_) {}
-                    }
                     previousMyRosterRec = null;
                 }
             }

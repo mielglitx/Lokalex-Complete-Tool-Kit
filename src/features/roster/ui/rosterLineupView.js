@@ -45,7 +45,6 @@ import {
     openAdminQueueSettingsModal 
 } from '../rosterQueueSettings.js';
 import { syncHeaderUserProfile } from '../rosterAvatar.js';
-import { autoStartLiveGpsSession, endLiveGpsSession } from '../../liveTracker.js';
 import { openMapPicker } from '../../maps.js';
 import { getForcedCaterBadgeHtml } from './rosterBadge.js';
 import { loadGlobalCateredList, requestCateredFeedRefresh } from './rosterFeeds.js';
@@ -379,16 +378,6 @@ export function updateRosterUI() {
         const rName = (m.riderName || m.name || "").toString().trim().toLowerCase();
         return (myId && rId === myId) || (myName && rName === myName);
     });
-
-    if (myRecord) {
-        if (myRecord.status === 'Catering') {
-            try { autoStartLiveGpsSession(myRecord.customerName || "Customer"); } catch(e) {}
-        } else {
-            if (localStorage.getItem('lokalex_active_live_session')) {
-                endLiveGpsSession();
-            }
-        }
-    }
 
     const isEnded = myRecord && myRecord.status === 'End';
     const isOnBreak = myRecord && myRecord.status === 'Break';
