@@ -32,6 +32,9 @@
                 </div>
             </div>
             <div class="flex items-center gap-0.5 sm:gap-1 shrink-0">
+                <button id="rider-chat-sync-fb-btn" type="button" onclick="window.syncCurrentThreadFromMetaGraph && window.syncCurrentThreadFromMetaGraph(null, true)" class="hidden text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 p-2 text-sm transition shrink-0 active:scale-95 cursor-pointer" title="Instant Sync with Facebook Page">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
                 <button type="button" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" class="text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 p-2 text-sm transition shrink-0" title="Float Chat over Other Apps (PiP)">
                     <i class="fa-solid fa-up-right-from-square"></i>
                 </button>

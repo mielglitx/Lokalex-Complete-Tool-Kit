@@ -86,6 +86,7 @@ export {
 export {
     reloadRiderChatFromFirebase,
     listenToRiderChatMessages,
+    syncCurrentThreadFromMetaGraph,
     syncIncomingMessageFromMeta,
     loadOlderRiderMessages,
     setRiderReply,

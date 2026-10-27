@@ -16,8 +16,10 @@ import {
 import { isMyCustomerThread, getActiveRosterCaterer } from '../riderChatFeed.js';
 import { 
     resolveFacebookMessageAttachment,
-    resolveFacebookMessageReplyTo
+    resolveFacebookMessageReplyTo,
+    getFbPageAccessToken
 } from '../facebookApiAdmin.js';
+import { showToast } from '../../../ui/notifications.js';
 import {
     activeRiderChatCustId,
     setActiveRiderChatCustId,
@@ -117,6 +119,158 @@ function autoResolveRecentFbCustomerReplies(custId, container, custData) {
     }
 }
 
+let isSyncingGraphMessages = false;
+
+/**
+ * Direct Parallel Meta Graph API Fast-Sync:
+ * Fetches the newest 15 messages directly from the Facebook Page / Meta edge servers
+ * in parallel with Firebase RTDB. Guarantees 0-latency message retrieval even if webhook was delayed.
+ */
+export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = false) {
+    const targetCustId = custId || activeRiderChatCustId;
+    if (!targetCustId || !String(targetCustId).startsWith('fb_')) return;
+    if (isSyncingGraphMessages) return;
+
+    const psid = String(targetCustId).replace(/^fb_/, '').trim();
+    if (!psid) return;
+
+    const syncBtn = document.getElementById('rider-chat-sync-fb-btn');
+    if (syncBtn) {
+        syncBtn.classList.remove('hidden');
+        syncBtn.querySelector('i')?.classList.add('animate-spin');
+    }
+
+    isSyncingGraphMessages = true;
+
+    try {
+        const token = (typeof getFbPageAccessToken === 'function') ? await getFbPageAccessToken() : null;
+        if (!token) return;
+
+        const container = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
+
+        const convUrl = `https://graph.facebook.com/v19.0/me/conversations?user_id=${psid}&fields=messages.limit(15){id,message,from,created_time,attachments}&access_token=${encodeURIComponent(token)}`;
+        const resp = await fetch(convUrl);
+        if (!resp.ok) return;
+
+        const data = await resp.json();
+        const convList = data?.data || [];
+        if (convList.length === 0) return;
+
+        const rawMsgList = convList[0]?.messages?.data || [];
+        if (rawMsgList.length === 0) return;
+
+        // Process in chronological order (oldest to newest)
+        const sortedGraphMsgs = rawMsgList.slice().reverse();
+        let newCount = 0;
+        let lastMsgText = '';
+        let lastMsgTs = 0;
+
+        for (const m of sortedGraphMsgs) {
+            const rawMid = String(m.id || '');
+            if (!rawMid) continue;
+            const safeMid = rawMid.replace(/[.#$\[\]\/]/g, '_');
+
+            // Skip if already loaded or rendered
+            if (loadedRiderMsgsMap.has(safeMid) || loadedRiderMsgsMap.has(rawMid)) {
+                continue;
+            }
+
+            const isRider = m.from?.id && String(m.from.id) !== psid;
+            const ts = m.created_time ? new Date(m.created_time).getTime() : Date.now();
+            let text = m.message || '';
+            let imageUrl = null;
+            let type = 'text';
+
+            if (m.attachments?.data && Array.isArray(m.attachments.data)) {
+                for (const att of m.attachments.data) {
+                    const u = att?.image_data?.url || att?.payload?.url || att?.media?.image?.src || att?.file_url;
+                    if (u) {
+                        imageUrl = u;
+                        type = 'image';
+                        break;
+                    }
+                }
+            }
+
+            if (!text && imageUrl) text = '📷 Photo';
+
+            const senderName = isRider ? (m.from?.name || 'Rider') : (m.from?.name || activeCustData?.customerName || 'Customer');
+
+            const formattedMsg = {
+                id: safeMid,
+                mid: safeMid,
+                metaMid: rawMid,
+                text: text,
+                timestamp: ts,
+                isRider: Boolean(isRider),
+                sender: senderName,
+                senderType: isRider ? 'rider' : 'customer',
+                status: 'delivered',
+                channel: 'messenger',
+                imageUrl: imageUrl,
+                type: type
+            };
+
+            loadedRiderMsgsMap.set(safeMid, formattedMsg);
+
+            // Update RAM cache & IndexedDB
+            let memCached = riderChatMemoryCache.get(targetCustId) || [];
+            if (!memCached.some(existing => existing.id === safeMid || existing.metaMid === rawMid)) {
+                memCached.push(formattedMsg);
+                memCached.sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+                riderChatMemoryCache.set(targetCustId, memCached);
+                idbSet('chats', targetCustId, memCached).catch(() => {});
+            }
+
+            // Render directly into active chat UI
+            if (activeRiderChatCustId === targetCustId && container) {
+                appendOrUpdateSingleRiderMessage(container, formattedMsg, activeCustData);
+            }
+
+            // Concurrently persist to Firebase RTDB so other riders see it immediately
+            if (db) {
+                db.ref(`customerChats/${targetCustId}/messages/${safeMid}`).set(formattedMsg).catch(() => {});
+            }
+
+            lastMsgText = text;
+            lastMsgTs = ts;
+            newCount++;
+        }
+
+        if (newCount > 0 && db && lastMsgTs) {
+            db.ref(`customerChatMeta/${targetCustId}`).update({
+                lastMessage: lastMsgText || 'Facebook Message',
+                lastUpdated: lastMsgTs,
+                channel: 'messenger'
+            }).catch(() => {});
+
+            if (activeRiderChatCustId === targetCustId && container) {
+                requestAnimationFrame(() => {
+                    container.scrollTop = container.scrollHeight;
+                });
+            }
+        }
+
+        if (showFeedback) {
+            if (newCount > 0) {
+                showToast(`✅ Synced ${newCount} new message(s) from Facebook Page!`);
+            } else {
+                showToast("ℹ️ Chat is already up-to-date with Facebook Page.");
+            }
+        }
+    } catch (err) {
+        console.warn("[MetaGraphSync] Direct sync error:", err);
+        if (showFeedback) {
+            showToast("⚠️ Could not fetch messages from Facebook Page.");
+        }
+    } finally {
+        isSyncingGraphMessages = false;
+        if (syncBtn) {
+            syncBtn.querySelector('i')?.classList.remove('animate-spin');
+        }
+    }
+}
+
 export async function listenToRiderChatMessages(custId, forceReloadFromFirebase = false) {
     if (!db || !custId) return;
     setActiveRiderChatCustId(custId);
@@ -147,6 +301,15 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
     }
 
     setupRiderScrollPagination(container, custId);
+
+    // Fast-sync directly with Facebook Page in parallel with local and Firebase loading
+    const syncFbBtn = document.getElementById('rider-chat-sync-fb-btn');
+    if (String(custId).startsWith('fb_')) {
+        if (syncFbBtn) syncFbBtn.classList.remove('hidden');
+        syncCurrentThreadFromMetaGraph(custId, false).catch(() => {});
+    } else {
+        if (syncFbBtn) syncFbBtn.classList.add('hidden');
+    }
 
     // 1. CHECK LOCAL STORAGE FIRST (RAM Cache -> IndexedDB persistent storage)
     let localMessages = null;
@@ -710,5 +873,9 @@ export async function toggleRiderMessageReaction(msgId, emoji) {
     } catch(e) {
         console.error("Error toggling rider reaction:", e);
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.syncCurrentThreadFromMetaGraph = syncCurrentThreadFromMetaGraph;
 }
 

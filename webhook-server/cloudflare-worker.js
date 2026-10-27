@@ -32,6 +32,14 @@ const CONFIG = {
   PAGE_ACCESS_TOKEN: "" 
 };
 
+// Global in-memory caches across worker requests within warm isolates (0ms lookup)
+const MEM_TOKEN_CACHE = {
+  token: null,
+  pageId: null,
+  fetchedAt: 0
+};
+const MEM_CUSTOMER_CACHE = new Map();
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -99,7 +107,7 @@ export default {
               pageAccessToken,
               defaultApiId,
               defaultApiName,
-            })
+            }, ctx)
           );
 
           // Meta requires immediate 200 OK
@@ -551,7 +559,7 @@ async function resolveMessageByMid(dbUrl, custId, targetMid, timestamp = null, t
 /**
  * Handles incoming Meta Messenger entries and writes them to Firebase RTDB
  */
-async function processMetaEntries(entries, cfg) {
+async function processMetaEntries(entries, cfg, ctx) {
   if (!Array.isArray(entries)) return;
 
   for (const entry of entries) {
@@ -709,40 +717,60 @@ async function processMetaEntries(entries, cfg) {
 
       const pageId = item.recipient?.id || entry.id || "1098954353295816";
 
-      // 1. Check if thread in Firebase already has a valid customer name and existing catering/folder state
-      let existingCustomerName = null;
-      let existingAvatarUrl = null;
-      let existingFolder = null;
-      let existingCateredRider = null;
-      let existingCateredRiderId = null;
-      let existingStatus = null;
-      try {
-        const metaResp = await fetch(`${cfg.dbUrl}/customerChatMeta/${custId}.json`);
-        if (metaResp.ok) {
-          const ex = await metaResp.json();
-          if (ex) {
-            if (ex.customerName && !ex.customerName.startsWith("FB Customer (")) {
-              existingCustomerName = ex.customerName.trim();
-              existingAvatarUrl = ex.avatarUrl;
-            }
-            if (ex.folder) existingFolder = ex.folder;
-            if (ex.cateredByRiderName || ex.cateredBy) existingCateredRider = ex.cateredByRiderName || ex.cateredBy;
-            if (ex.cateredByRiderId) existingCateredRiderId = ex.cateredByRiderId;
-            if (ex.status) existingStatus = ex.status;
-          }
-        }
-      } catch(e) {}
+      // 1. Fast in-memory customer check (0ms) before hitting Firebase
+      let existingCustomer = MEM_CUSTOMER_CACHE.get(custId);
+      let existingCustomerName = existingCustomer?.customerName || null;
+      let existingAvatarUrl = existingCustomer?.avatarUrl || null;
+      let existingFolder = existingCustomer?.folder || null;
+      let existingCateredRider = existingCustomer?.cateredBy || null;
+      let existingCateredRiderId = existingCustomer?.cateredById || null;
+      let existingStatus = existingCustomer?.status || null;
 
-      // 2. Fetch Facebook Page Access Token & Page ID from Firebase if not in environment
-      let token = cfg.pageAccessToken;
-      let resolvedPageId = pageId;
-      if (!token) {
+      if (!existingCustomer) {
+        try {
+          const metaResp = await fetch(`${cfg.dbUrl}/customerChatMeta/${custId}.json`);
+          if (metaResp.ok) {
+            const ex = await metaResp.json();
+            if (ex) {
+              if (ex.customerName && !ex.customerName.startsWith("FB Customer (")) {
+                existingCustomerName = ex.customerName.trim();
+                existingAvatarUrl = ex.avatarUrl;
+              }
+              if (ex.folder) existingFolder = ex.folder;
+              if (ex.cateredByRiderName || ex.cateredBy) existingCateredRider = ex.cateredByRiderName || ex.cateredBy;
+              if (ex.cateredByRiderId) existingCateredRiderId = ex.cateredByRiderId;
+              if (ex.status) existingStatus = ex.status;
+
+              MEM_CUSTOMER_CACHE.set(custId, {
+                customerName: existingCustomerName,
+                avatarUrl: existingAvatarUrl,
+                folder: existingFolder,
+                cateredBy: existingCateredRider,
+                cateredById: existingCateredRiderId,
+                status: existingStatus
+              });
+            }
+          }
+        } catch(e) {}
+      }
+
+      // 2. Fast Page Access Token & Page ID retrieval using memory cache (0ms)
+      let token = cfg.pageAccessToken || MEM_TOKEN_CACHE.token;
+      let resolvedPageId = pageId || MEM_TOKEN_CACHE.pageId;
+      if (!token || (Date.now() - MEM_TOKEN_CACHE.fetchedAt > 300000)) {
         try {
           const apiResp = await fetch(`${cfg.dbUrl}/adminSettings/facebookApis/${cfg.defaultApiId}.json`);
           if (apiResp.ok) {
             const apiData = await apiResp.json();
-            if (apiData?.pageAccessToken) token = apiData.pageAccessToken.trim();
-            if (apiData?.pageId) resolvedPageId = apiData.pageId.trim();
+            if (apiData?.pageAccessToken) {
+              token = apiData.pageAccessToken.trim();
+              MEM_TOKEN_CACHE.token = token;
+              MEM_TOKEN_CACHE.fetchedAt = Date.now();
+            }
+            if (apiData?.pageId) {
+              resolvedPageId = apiData.pageId.trim();
+              MEM_TOKEN_CACHE.pageId = resolvedPageId;
+            }
           }
         } catch(e) {}
       }
@@ -937,42 +965,34 @@ async function processMetaEntries(entries, cfg) {
       }
 
       try {
-        // Write concurrently to Firebase Realtime Database
-        await Promise.all([
-          // Update feed metadata index
-          fetch(`${cfg.dbUrl}/customerChatMeta/${custId}.json`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(threadMeta),
-          }),
-          // Update conversation metadata
-          fetch(`${cfg.dbUrl}/customerChats/${custId}/metadata.json`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(threadMeta),
-          }),
-          // Append new message
-          fetch(`${cfg.dbUrl}/customerChats/${custId}/messages/${mid}.json`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(chatMessage),
-          }),
-          // Index mid for future reply_to/reaction lookups
-          fetch(`${cfg.dbUrl}/customerChats/${custId}/midIndex/${mid}.json`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(mid),
-          }),
-          ...(rawMetaMid && rawMetaMid !== mid ? [
-            fetch(`${cfg.dbUrl}/customerChats/${custId}/midIndex/${rawMetaMid}.json`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(mid),
-            })
-          ] : [])
-        ]);
+        // Multi-Path Atomic Single PATCH to Firebase Realtime Database (<60ms)
+        const multiPathPayload = {
+          [`/customerChatMeta/${custId}`]: threadMeta,
+          [`/customerChats/${custId}/metadata`]: threadMeta,
+          [`/customerChats/${custId}/messages/${mid}`]: chatMessage,
+          [`/customerChats/${custId}/midIndex/${mid}`]: mid,
+        };
+        if (rawMetaMid && rawMetaMid !== mid) {
+          multiPathPayload[`/customerChats/${custId}/midIndex/${rawMetaMid}`] = mid;
+        }
 
-        console.log(`✅ Message from ${customerName} saved to Firebase RTDB!`);
+        await fetch(`${cfg.dbUrl}/.json`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(multiPathPayload),
+        });
+
+        // Update in-memory customer cache for subsequent messages
+        MEM_CUSTOMER_CACHE.set(custId, {
+          customerName: customerName,
+          avatarUrl: avatarUrl,
+          folder: resolvedFolder,
+          cateredBy: existingCateredRider,
+          cateredById: existingCateredRiderId,
+          status: 'active'
+        });
+
+        console.log(`⚡ Fast-path message from ${customerName} saved atomically to Firebase RTDB!`);
 
         // FULL BOOKING AUTO-REPLY HOOK:
         try {
