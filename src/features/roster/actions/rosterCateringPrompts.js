@@ -334,6 +334,9 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
 
             if (targetChatId) {
                 applyChatCaterUpdate(targetChatId);
+                if (typeof window.triggerAutoMessageOnCater === 'function') {
+                    window.triggerAutoMessageOnCater(targetChatId, custName, myName);
+                }
             } else {
                 db.ref('customerChatMeta').once('value', (snapshot) => {
                     const chats = snapshot.val();
@@ -356,6 +359,9 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
 
                             if (matchesFb || matchesMeta) {
                                 applyChatCaterUpdate(custId);
+                                if (typeof window.triggerAutoMessageOnCater === 'function') {
+                                    window.triggerAutoMessageOnCater(custId, custName, myName);
+                                }
                             }
                         });
                     }

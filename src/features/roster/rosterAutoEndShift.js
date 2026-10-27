@@ -112,10 +112,12 @@ export function listenToAutoEndShift() {
         if (cached) globalState.autoEndShift = JSON.parse(cached);
     } catch(e) {}
 
-    // Execute single-pass sweep on startup once database connection is ready
+    // Execute single-pass sweep on startup once database connection is ready (deferred to keep boot window fluid)
     if (!hasSweptPriorDaysOnStartup) {
         hasSweptPriorDaysOnStartup = true;
-        sweepStaleShiftsFromPriorDays();
+        setTimeout(() => {
+            sweepStaleShiftsFromPriorDays();
+        }, 20000);
     }
 
     db.ref('settings/autoEndShift').on('value', (snap) => {

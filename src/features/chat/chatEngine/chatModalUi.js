@@ -158,6 +158,7 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         if (typeof syncChatHdButtonUI === 'function') syncChatHdButtonUI();
         else if (window.syncChatHdButtonUI) window.syncChatHdButtonUI();
         if (window.initSharedQuickRepliesListener) window.initSharedQuickRepliesListener();
+        if (window.updateAutoMessageUI) window.updateAutoMessageUI();
         renderRiderCateredSwitcher();
         startChatPresence(custId);
         startChatTypingListener(custId);

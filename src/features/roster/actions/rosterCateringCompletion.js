@@ -325,6 +325,8 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
                 markChatCompleted(cleanCustKey);
             }
 
+            let doneAutoMsgSent = false;
+
             // Immediately synchronize in-memory live chat threads and move matching thread to Done folder
             if (typeof window.getCachedCustomerThreadsMap === 'function') {
                 const threadMap = window.getCachedCustomerThreadsMap();
@@ -347,9 +349,17 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
                             t.cateredByRiderName = null;
                             t.cateredBy = null;
                             markChatCompleted(tId);
+                            if (!doneAutoMsgSent && typeof window.triggerAutoMessageOnDone === 'function') {
+                                doneAutoMsgSent = true;
+                                window.triggerAutoMessageOnDone(tId, custNameToComplete, resolvedTargetName, resolvedTargetId, matchReceipt || cFeeObj);
+                            }
                         }
                     }
                 }
+            }
+
+            if (!doneAutoMsgSent && cleanCustKey && typeof window.triggerAutoMessageOnDone === 'function') {
+                window.triggerAutoMessageOnDone(cleanCustKey, custNameToComplete, resolvedTargetName, resolvedTargetId, matchReceipt || cFeeObj);
             }
 
             if (typeof window.renderRiderCustomerChatFeed === 'function') {

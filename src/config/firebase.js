@@ -54,7 +54,18 @@ let isSocketConnected = navigator.onLine;
 
 function getOutbox() {
     try {
-        return JSON.parse(localStorage.getItem(OUTBOX_STORAGE_KEY) || '[]');
+        const raw = JSON.parse(localStorage.getItem(OUTBOX_STORAGE_KEY) || '[]');
+        if (Array.isArray(raw)) {
+            // Discard ephemeral presence mutations or stale entries older than 15 minutes
+            const now = Date.now();
+            return raw.filter(item => {
+                if (!item || !item.path) return false;
+                if (item.path.startsWith('chatPresence/') || item.path.includes('typing')) return false;
+                if (item.timestamp && (now - item.timestamp > 15 * 60 * 1000)) return false;
+                return true;
+            });
+        }
+        return [];
     } catch {
         return [];
     }
@@ -74,6 +85,9 @@ function saveOutbox(queue) {
 export function queueOfflineMutation(path, method, value) {
     if (!path) return;
     const cleanPath = path.replace(/^\/+/, '');
+    // Never persist ephemeral presence or typing pulses into offline storage
+    if (cleanPath.startsWith('chatPresence/') || cleanPath.includes('typing')) return;
+
     const queue = getOutbox();
     queue.push({
         id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -92,8 +106,13 @@ export async function drainOfflineOutbox() {
 
     isSyncInProgress = true;
     const remaining = [];
+    const now = Date.now();
 
     for (const item of queue) {
+        // Discard stale or ephemeral mutations
+        if (item.timestamp && (now - item.timestamp > 15 * 60 * 1000)) continue;
+        if (item.path && (item.path.startsWith('chatPresence/') || item.path.includes('typing'))) continue;
+
         try {
             const pRef = primaryDb.ref(item.path);
             const bRef = backupDb ? backupDb.ref(item.path) : null;
@@ -109,8 +128,15 @@ export async function drainOfflineOutbox() {
                 if (bRef) bRef.remove().catch(() => {});
             }
         } catch (err) {
-            console.warn(`[Offline Outbox] Failed to replay mutation for ${item.path}:`, err);
-            remaining.push(item);
+            const errMsg = String(err && err.message ? err.message : err).toLowerCase();
+            // Discard unauthorized mutations permanently to prevent infinite replay loops
+            if (errMsg.includes('permission_denied') || errMsg.includes('permission denied')) {
+                continue;
+            }
+            item.retryCount = (item.retryCount || 0) + 1;
+            if (item.retryCount <= 2) {
+                remaining.push(item);
+            }
         }
     }
 

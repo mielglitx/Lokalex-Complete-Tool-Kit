@@ -2,7 +2,7 @@
 import { db } from '../../../config/firebase.js';
 import { appState, globalState } from '../../../store/state.js';
 import { showToast, showNativeNotification } from '../../../ui/notifications.js';
-import { isCustomerMatch } from '../../roster/rosterUtils.js';
+import { isCustomerMatch, cleanCustomerForMatch } from '../../roster/rosterUtils.js';
 import { 
     isAllSourcesSelected,
     isSourceSelected,
@@ -228,6 +228,33 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
 
     const threadsMap = new Map();
 
+    // Pre-index Facebook customer names to eliminate O(N^2) quadratic regex loops on mobile devices
+    const fbCustomerExactSet = new Set();
+    const fbCustomerCleanSet = new Set();
+    const fbCustomerNamesList = [];
+
+    Object.keys(data).forEach(k => {
+        if (k.startsWith('fb_') || k.startsWith('messenger_')) {
+            const m = data[k]?.metadata || data[k] || {};
+            let n = (m.customerName || m.name || '').trim();
+            if (k.startsWith('fb_') && (!m.linkedDirectoryKey && !m.linkedDirectoryName)) {
+                const cached = (typeof getResolvedFbName === 'function') ? getResolvedFbName(k) : null;
+                if (cached && cached.name && (!n || n.startsWith('FB Customer (') || n.toLowerCase() === 'customer')) {
+                    n = cached.name;
+                }
+            }
+            if (n && n.toLowerCase() !== 'customer' && n.toLowerCase() !== 'customer name' && n.toLowerCase() !== 'unknown') {
+                const lower = n.toLowerCase();
+                fbCustomerExactSet.add(lower);
+                if (typeof cleanCustomerForMatch === 'function') {
+                    const clean = cleanCustomerForMatch(n);
+                    if (clean) fbCustomerCleanSet.add(clean);
+                }
+                fbCustomerNamesList.push(n);
+            }
+        }
+    });
+
     Object.keys(data).forEach(key => {
         const cleanKey = (key || '').trim().toLowerCase();
         // Automatically purge invalid/ghost customer IDs
@@ -325,13 +352,13 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
         }
 
         // If this is a non-FB thread (e.g. cust_... or name), check if a real fb_ thread exists for this customer
-        if (!key.startsWith('fb_') && !key.startsWith('messenger_')) {
-            const hasRealFbThread = Object.keys(data).some(otherKey => {
-                if (!otherKey.startsWith('fb_') && !otherKey.startsWith('messenger_')) return false;
-                const otherMeta = (data[otherKey]?.metadata || data[otherKey] || {});
-                const otherName = (otherMeta.customerName || otherMeta.name || '').trim();
-                return otherName && isCustomerMatch(otherName, displayName);
-            });
+        if (!key.startsWith('fb_') && !key.startsWith('messenger_') && fbCustomerNamesList.length > 0) {
+            const lowerDisplay = (displayName || '').toLowerCase().trim();
+            const cleanDisplay = (typeof cleanCustomerForMatch === 'function') ? cleanCustomerForMatch(displayName) : '';
+            let hasRealFbThread = fbCustomerExactSet.has(lowerDisplay) || (cleanDisplay && fbCustomerCleanSet.has(cleanDisplay));
+            if (!hasRealFbThread && displayName && !isPlaceholderName) {
+                hasRealFbThread = fbCustomerNamesList.some(otherName => isCustomerMatch(otherName, displayName));
+            }
             if (hasRealFbThread) {
                 // Real Facebook Messenger thread already exists! Suppress the duplicate orphaned card
                 return;
@@ -511,12 +538,14 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
         const now = Date.now();
         if (now - lastAutoResolveFbTime > 180000) {
             setLastAutoResolveFbTime(now);
-            if (typeof syncFacebookPageFolderStatus === 'function') {
-                syncFacebookPageFolderStatus(false).catch(() => {});
-            }
-            if (typeof autoResolvePendingFacebookThreads === 'function') {
-                autoResolvePendingFacebookThreads(allThreads);
-            }
+            setTimeout(() => {
+                if (typeof syncFacebookPageFolderStatus === 'function') {
+                    syncFacebookPageFolderStatus(false).catch(() => {});
+                }
+                if (typeof autoResolvePendingFacebookThreads === 'function') {
+                    autoResolvePendingFacebookThreads(allThreads);
+                }
+            }, 25000);
         }
     }
 

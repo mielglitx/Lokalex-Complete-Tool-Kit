@@ -4,6 +4,7 @@ import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { initOtaUpdater } from '../utils/otaUpdater.js';
 import { startKeepAlive, keepAlivePulse } from '../utils/backgroundKeepAlive.js';
+import { showToast } from '../ui/notifications.js';
 
 /**
  * ============================================================================
@@ -62,9 +63,11 @@ export async function initNativeBridge() {
                     if (el) el.classList.add('hidden');
                 }},
                 { id: 'chat-sound-settings-modal', closeFn: window.closeChatSoundSettingsModal },
+                { id: 'auto-message-settings-modal', closeFn: window.closeAutoMessageSettingsModal },
                 { id: 'quick-replies-edit-modal', closeFn: window.closeQuickReplyEditModal },
                 { id: 'rider-sources-filter-modal', closeFn: window.closeRiderChatSourcesModal },
                 { id: 'admin-fb-api-modal', closeFn: window.closeAdminFbApiModal },
+                { id: 'changelog-modal', closeFn: window.closeChangelogModal },
                 { id: 'ota-update-selector-modal', closeFn: window.closeOtaUpdateSelectorModal },
                 { id: 'slide-delete-modal', closeFn: window.closeSlideDeleteModal },
                 { id: 'slide-delete-confirm-modal', closeFn: window.closeSlideDeleteModal },
@@ -426,4 +429,74 @@ export async function openExternalLink(rawUrl) {
     }
     window.open(url, '_blank', 'noopener,noreferrer');
 }
+
+/**
+ * Enters native Android Picture-in-Picture / Floating Window mode.
+ * Keeps the app visible and live on screen on top of other apps (Maps, Waze, Messenger).
+ */
+export function enterFloatingWindowMode() {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.enterFloatingWindowMode === 'function') {
+        const result = window.NativePermissionsBridge.enterFloatingWindowMode();
+        if (result) {
+            triggerNativeHaptic('success');
+        }
+        return result;
+    } else {
+        showToast("ℹ️ Floating Window mode is available in the Android mobile app.");
+        return false;
+    }
+}
+
+export function isFloatingWindowSupported() {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.isFloatingWindowSupported === 'function') {
+        return window.NativePermissionsBridge.isFloatingWindowSupported();
+    }
+    return false;
+}
+
+export function isInFloatingWindowMode() {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.isInFloatingWindowMode === 'function') {
+        return window.NativePermissionsBridge.isInFloatingWindowMode();
+    }
+    return false;
+}
+
+export function isFloatingWindowStashed() {
+    if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.isFloatingWindowStashed === 'function') {
+        return window.NativePermissionsBridge.isFloatingWindowStashed();
+    }
+    return false;
+}
+
+if (typeof window !== 'undefined') {
+    window.enterFloatingWindowMode = enterFloatingWindowMode;
+    window.isFloatingWindowSupported = isFloatingWindowSupported;
+    window.isInFloatingWindowMode = isInFloatingWindowMode;
+    window.isFloatingWindowStashed = isFloatingWindowStashed;
+
+    window.onFloatingWindowModeChanged = function(isInPip) {
+        if (isInPip) {
+            document.documentElement.classList.add('in-floating-mode');
+            document.body.classList.add('in-floating-mode');
+        } else {
+            document.documentElement.classList.remove('in-floating-mode');
+            document.body.classList.remove('in-floating-mode');
+            document.documentElement.classList.remove('pip-stashed');
+            document.body.classList.remove('pip-stashed');
+        }
+        window.dispatchEvent(new CustomEvent('floatingWindowModeChanged', { detail: { isInPip } }));
+    };
+
+    window.onFloatingWindowStashChanged = function(isStashed) {
+        if (isStashed) {
+            document.documentElement.classList.add('pip-stashed');
+            document.body.classList.add('pip-stashed');
+        } else {
+            document.documentElement.classList.remove('pip-stashed');
+            document.body.classList.remove('pip-stashed');
+        }
+        window.dispatchEvent(new CustomEvent('floatingWindowStashChanged', { detail: { isStashed } }));
+    };
+}
+
 

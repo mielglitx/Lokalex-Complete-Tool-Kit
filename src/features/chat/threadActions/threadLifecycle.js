@@ -9,6 +9,7 @@ import { escapeHtml } from '../../../utils/helpers.js';
 import { isCustomerMatch, isAdmin, canManageRoster, hasTlPermission, hasReceiptForActiveSession } from '../../roster/rosterUtils.js';
 import { completeSingleCateringCustomer, checkCustomerReceiptExists } from '../../roster/actions/rosterCateringCompletion.js';
 import { updateOrderMilestone } from './threadMilestonesPod.js';
+import { triggerAutoMessageOnCater } from '../autoMessageManager.js';
 
 let pendingDoneData = null;
 
@@ -783,6 +784,8 @@ export async function caterCurrentChatCustomer() {
         if (res && typeof window.setRiderChatFilter === 'function') {
             window.setRiderChatFilter('catering');
         }
+        // Trigger Being Catered Auto-Message
+        triggerAutoMessageOnCater(custId, custName, currentName).catch(() => {});
     } else {
         showToast("⚠️ Catering system unavailable.");
     }

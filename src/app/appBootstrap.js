@@ -325,11 +325,13 @@ export async function bootApp() {
         initRealtimeFirebaseListeners();
 
         if (commission && commission.fetchCommissionSettings) commission.fetchCommissionSettings();
-        if (directory && directory.silentSyncDirectory) directory.silentSyncDirectory();
 
+        // Defer heavy non-critical background synchronization to 25 seconds after boot,
+        // ensuring the main JS UI thread remains completely responsive for the first 30 seconds.
         setTimeout(() => {
+            if (directory && directory.silentSyncDirectory) directory.silentSyncDirectory();
             runBackgroundPersistenceSync();
-        }, 1200);
+        }, 25000);
 
         if (roster && roster.startAutoEndShiftScheduler) {
             roster.startAutoEndShiftScheduler();

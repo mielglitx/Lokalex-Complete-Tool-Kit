@@ -32,6 +32,9 @@
                 </div>
             </div>
             <div class="flex items-center gap-0.5 sm:gap-1 shrink-0">
+                <button type="button" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" class="text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 p-2 text-sm transition shrink-0" title="Float Chat over Other Apps (PiP)">
+                    <i class="fa-solid fa-up-right-from-square"></i>
+                </button>
                 <button type="button" onclick="window.openChatSoundSettingsModal && window.openChatSoundSettingsModal()" class="text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 p-2 text-sm transition shrink-0" title="Message Chimes & Ringtones">
                     <i class="fa-solid fa-bell"></i>
                 </button>
@@ -183,6 +186,10 @@
                 <button type="button" onclick="window.openFareRatePickerFromChat && window.openFareRatePickerFromChat()" class="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg border border-emerald-500/30 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer font-bold" title="Browse & Send Delivery Fare Rates">
                     <i class="fa-solid fa-peso-sign text-[11px]"></i>
                     <span class="text-[10px] font-black">Rates</span>
+                </button>
+                <button id="chat-automsg-admin-btn" type="button" onclick="window.openAutoMessageSettingsModal && window.openAutoMessageSettingsModal()" class="hidden px-2.5 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 rounded-lg border border-purple-500/30 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer font-bold" title="Admin Auto-Messages Configuration">
+                    <i class="fa-solid fa-robot text-[11px]"></i>
+                    <span class="text-[10px] font-black">Auto-Msg</span>
                 </button>
                 <button type="button" onclick="window.promptImageAttachmentSource && window.promptImageAttachmentSource()" class="px-2.5 py-1 bg-inputBg hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Send Image">
                     <i class="fa-solid fa-image text-[11px]"></i>

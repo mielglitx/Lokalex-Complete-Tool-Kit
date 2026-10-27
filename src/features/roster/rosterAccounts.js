@@ -137,6 +137,10 @@ export async function saveAdminDirectoryCreditsSettings() {
         }
     }
 
+    if (typeof window.updateRosterCreditsDisplay === 'function') {
+        window.updateRosterCreditsDisplay();
+    }
+
     closeAdminDirectoryCreditsModal();
 }
 
@@ -153,6 +157,9 @@ export function listenToDirectoryCreditsSettings() {
             const data = snap.val();
             globalState.directoryCreditsConfig = data;
             localStorage.setItem('lokalex_directory_credits_config', JSON.stringify(data));
+            if (typeof window.updateRosterCreditsDisplay === 'function') {
+                window.updateRosterCreditsDisplay();
+            }
         }
     });
 }

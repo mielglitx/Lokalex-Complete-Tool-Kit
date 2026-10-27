@@ -167,6 +167,10 @@ export function initRealtimeFirebaseListeners() {
             chat.initFullBookingListener();
         }
 
+        if (chat && chat.initAutoMessageListener) {
+            chat.initAutoMessageListener();
+        }
+
         if (chat && chat.listenToPublicFbChannels) {
             chat.listenToPublicFbChannels();
         }

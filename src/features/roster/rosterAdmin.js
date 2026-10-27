@@ -328,6 +328,8 @@ export function toggleAdminControls(enabled) {
         'admin-force-all-btn': 'canEndAllShifts',
         'admin-fb-settings-btn': 'canManageFbApis',
         'admin-fb-settings-roster-btn': 'canManageFbApis',
+        'admin-automsg-settings-btn': null,
+        'admin-automsg-toolbar-btn': null,
         'admin-clear-inbox-btn': 'canClearInbox',
         'admin-send-many-btn': 'canManageBroadcast',
         'admin-full-booking-btn': 'canManageFullBooking'

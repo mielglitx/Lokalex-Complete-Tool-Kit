@@ -20,6 +20,33 @@ import { saveRosterCache, invalidateRosterGrossCache } from './rosterUtils.js';
 let isCateredSyncListening = false;
 let isReceiptsSyncListening = false;
 let persistDebounceTimer = null;
+let updateBatchTimer = null;
+let pendingCatered = false;
+let pendingReceipts = false;
+let pendingRoster = false;
+
+function scheduleBatchedSyncEvents({ catered = false, receipts = false, roster = false }) {
+    if (catered) pendingCatered = true;
+    if (receipts) pendingReceipts = true;
+    if (roster) pendingRoster = true;
+
+    if (updateBatchTimer) return;
+    updateBatchTimer = setTimeout(() => {
+        updateBatchTimer = null;
+        if (pendingCatered) {
+            window.dispatchEvent(new Event('cateredUpdated'));
+            pendingCatered = false;
+        }
+        if (pendingReceipts) {
+            window.dispatchEvent(new Event('receiptsUpdated'));
+            pendingReceipts = false;
+        }
+        if (pendingRoster) {
+            window.dispatchEvent(new Event('rosterUpdated'));
+            pendingRoster = false;
+        }
+    }, 120);
+}
 
 const CATERED_IDB_KEY = 'all_catered_history';
 const RECEIPTS_IDB_KEY = 'all_daily_receipts';
@@ -114,8 +141,7 @@ export function initCateredDeltaSync() {
         invalidateRosterGrossCache();
         debouncedPersistToIndexedDB();
 
-        window.dispatchEvent(new Event('cateredUpdated'));
-        window.dispatchEvent(new Event('rosterUpdated'));
+        scheduleBatchedSyncEvents({ catered: true, roster: true });
     });
 
     // 2. Child Changed: Order updated or tombstoned (e.g. status: 'voided')
@@ -150,8 +176,7 @@ export function initCateredDeltaSync() {
         invalidateRosterGrossCache();
         debouncedPersistToIndexedDB();
 
-        window.dispatchEvent(new Event('cateredUpdated'));
-        window.dispatchEvent(new Event('rosterUpdated'));
+        scheduleBatchedSyncEvents({ catered: true, roster: true });
     });
 
     // 3. Child Removed: Record purged from cloud database
@@ -163,8 +188,7 @@ export function initCateredDeltaSync() {
         invalidateRosterGrossCache();
         debouncedPersistToIndexedDB();
 
-        window.dispatchEvent(new Event('cateredUpdated'));
-        window.dispatchEvent(new Event('rosterUpdated'));
+        scheduleBatchedSyncEvents({ catered: true, roster: true });
     });
 }
 
@@ -201,8 +225,7 @@ export function initReceiptsDeltaSync() {
         invalidateRosterGrossCache();
         debouncedPersistToIndexedDB();
 
-        window.dispatchEvent(new Event('receiptsUpdated'));
-        window.dispatchEvent(new Event('rosterUpdated'));
+        scheduleBatchedSyncEvents({ receipts: true, roster: true });
     });
 
     receiptsRef.on('child_changed', (snapshot) => {
@@ -229,8 +252,7 @@ export function initReceiptsDeltaSync() {
         invalidateRosterGrossCache();
         debouncedPersistToIndexedDB();
 
-        window.dispatchEvent(new Event('receiptsUpdated'));
-        window.dispatchEvent(new Event('rosterUpdated'));
+        scheduleBatchedSyncEvents({ receipts: true, roster: true });
     });
 
     receiptsRef.on('child_removed', (snapshot) => {
@@ -241,8 +263,7 @@ export function initReceiptsDeltaSync() {
         invalidateRosterGrossCache();
         debouncedPersistToIndexedDB();
 
-        window.dispatchEvent(new Event('receiptsUpdated'));
-        window.dispatchEvent(new Event('rosterUpdated'));
+        scheduleBatchedSyncEvents({ receipts: true, roster: true });
     });
 }
 

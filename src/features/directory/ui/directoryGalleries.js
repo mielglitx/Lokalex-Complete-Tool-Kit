@@ -245,6 +245,8 @@ function compressImageToBlob(fileOrBlob, maxWidth = 1800, quality = 0.85, enhanc
             canvas.height = height;
 
             const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
 
             if (enhanceDocument && ctx.filter !== undefined) {
                 // Subtle document enhancement: darker text, sharper price readability in dim lighting
@@ -314,32 +316,17 @@ export function getOrCreateMenuCameraModal() {
         <div id="menu-camera-viewfinder" class="relative flex-1 bg-black flex items-center justify-center overflow-hidden touch-none">
             <video id="menu-camera-video" autoplay playsinline muted class="w-full h-full object-cover transition-transform duration-100 ease-out"></video>
             
+            <!-- Shutter flash animation -->
+            <div id="menu-camera-shutter-flash" class="absolute inset-0 bg-white pointer-events-none opacity-0 transition-opacity duration-150 z-20"></div>
+            <!-- Focus ring animation -->
+            <div id="menu-camera-focus-ring" class="absolute z-20 w-16 h-16 border-2 border-amber-400 rounded-lg pointer-events-none opacity-0 transition-all duration-300"></div>
+
             <!-- Zoom Controls Pills -->
             <div id="menu-camera-zoom-pills" class="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-2 z-10 pointer-events-auto">
                 <button type="button" onclick="window.setMenuCameraZoomLevel && window.setMenuCameraZoomLevel(1)" class="menu-zoom-pill px-2.5 py-1 rounded-full text-[11px] font-bold backdrop-blur-md transition cursor-pointer bg-amber-400 text-black shadow-md" data-zoom="1">1x</button>
                 <button type="button" onclick="window.setMenuCameraZoomLevel && window.setMenuCameraZoomLevel(1.5)" class="menu-zoom-pill px-2.5 py-1 rounded-full text-[11px] font-bold backdrop-blur-md transition cursor-pointer bg-black/60 text-white/90 border border-white/20 hover:bg-white/20" data-zoom="1.5">1.5x</button>
                 <button type="button" onclick="window.setMenuCameraZoomLevel && window.setMenuCameraZoomLevel(2)" class="menu-zoom-pill px-2.5 py-1 rounded-full text-[11px] font-bold backdrop-blur-md transition cursor-pointer bg-black/60 text-white/90 border border-white/20 hover:bg-white/20" data-zoom="2">2x</button>
                 <button type="button" onclick="window.setMenuCameraZoomLevel && window.setMenuCameraZoomLevel(3)" class="menu-zoom-pill px-2.5 py-1 rounded-full text-[11px] font-bold backdrop-blur-md transition cursor-pointer bg-black/60 text-white/90 border border-white/20 hover:bg-white/20" data-zoom="3">3x</button>
-            </div>
-
-            <!-- Framing overlay with document corners -->
-            <div id="menu-camera-framing-box" class="absolute inset-4 sm:inset-8 pointer-events-none flex flex-col items-center justify-between border-2 border-white/20 rounded-2xl p-4 shadow-2xl transition-all duration-300">
-                <!-- Top corners -->
-                <div class="w-full flex justify-between">
-                    <div class="w-6 h-6 border-t-4 border-l-4 border-amber-400 rounded-tl-lg shadow-sm"></div>
-                    <div class="w-6 h-6 border-t-4 border-r-4 border-amber-400 rounded-tr-lg shadow-sm"></div>
-                </div>
-                
-                <div class="bg-black/70 backdrop-blur-md px-3.5 py-1.5 rounded-full text-white/95 text-[10px] sm:text-xs font-bold tracking-wide flex items-center gap-1.5 shadow-lg border border-white/10">
-                    <i class="fa-solid fa-expand text-amber-400"></i>
-                    <span id="menu-camera-orient-hint">Pinch or tap zoom • Align page</span>
-                </div>
-
-                <!-- Bottom corners -->
-                <div class="w-full flex justify-between">
-                    <div class="w-6 h-6 border-b-4 border-l-4 border-amber-400 rounded-bl-lg shadow-sm"></div>
-                    <div class="w-6 h-6 border-b-4 border-r-4 border-amber-400 rounded-br-lg shadow-sm"></div>
-                </div>
             </div>
 
             <!-- Snap review preview container (hidden until snapshot taken) -->
@@ -413,6 +400,14 @@ export async function openMenuCameraScanner() {
     if (bottomBar) bottomBar.classList.remove('hidden');
 
     modal.classList.remove('hidden');
+
+    // Request motion/orientation permission if required by device (e.g. iOS 13+)
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        try { DeviceMotionEvent.requestPermission().catch(() => {}); } catch(e) {}
+    }
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try { DeviceOrientationEvent.requestPermission().catch(() => {}); } catch(e) {}
+    }
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         showToast("⚠️ In-app camera is not supported in this browser. Opening camera...");
@@ -522,11 +517,49 @@ async function startMenuCameraStream() {
         }
     }
 
-    // Attach pinch-to-zoom handlers on viewfinder
+    // Attach pinch-to-zoom & tap-to-focus handlers on viewfinder
     attachViewfinderPinchToZoom();
+    attachViewfinderTapToFocus();
 
     // Start real-time auto-orientation sensor & screen detection
     startAutoOrientationDetection();
+}
+
+function attachViewfinderTapToFocus() {
+    const viewfinder = document.getElementById('menu-camera-viewfinder');
+    if (!viewfinder || viewfinder.dataset.tapFocusBound) return;
+    viewfinder.dataset.tapFocusBound = "true";
+
+    viewfinder.addEventListener('click', async (e) => {
+        if (e.target.closest('button') || e.target.closest('#menu-camera-zoom-pills')) return;
+
+        const rect = viewfinder.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const clickY = e.clientY - rect.top;
+
+        const ring = document.getElementById('menu-camera-focus-ring');
+        if (ring) {
+            ring.style.left = `${clickX}px`;
+            ring.style.top = `${clickY}px`;
+            ring.style.transform = 'translate(-50%, -50%) scale(1.25)';
+            ring.style.opacity = '1';
+            ring.style.transition = 'transform 0.15s ease-out, opacity 0.3s ease-in';
+            setTimeout(() => { if (ring) ring.style.transform = 'translate(-50%, -50%) scale(1)'; }, 150);
+            setTimeout(() => { if (ring) ring.style.opacity = '0'; }, 900);
+        }
+
+        if (activeCameraStream) {
+            const track = activeCameraStream.getVideoTracks()[0];
+            if (track && track.applyConstraints) {
+                try {
+                    const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+                    if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+                        await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+                    }
+                } catch(err) {}
+            }
+        }
+    });
 }
 
 function attachViewfinderPinchToZoom() {
@@ -601,51 +634,69 @@ function updateZoomPillsUi(zoomLevel) {
 
 let orientationListenerActive = false;
 let lastDetectedGamma = 0;
+let lastDetectedAccX = 0;
+
+function handleDeviceMotion(e) {
+    if (!e || !e.accelerationIncludingGravity) return;
+    const acc = e.accelerationIncludingGravity;
+    const ax = acc.x || 0;
+    const ay = acc.y || 0;
+    const az = acc.z || 0;
+    lastDetectedAccX = ax;
+
+    // Ignore when laying nearly flat on a table (gravity vector along Z)
+    if (Math.abs(az) > 8.2 && Math.abs(ax) < 3.5 && Math.abs(ay) < 3.5) {
+        return;
+    }
+
+    const absX = Math.abs(ax);
+    const absY = Math.abs(ay);
+
+    // Dominant X-axis gravity indicates physical landscape orientation
+    if (absX > absY + 1.8) {
+        applyCameraOrientationMode('landscape', true);
+    } 
+    // Dominant Y-axis gravity indicates physical portrait orientation
+    else if (absY > absX + 1.8) {
+        applyCameraOrientationMode('portrait', true);
+    }
+}
 
 function handleDeviceOrientation(e) {
     if (!e) return;
     if (typeof e.gamma === 'number') lastDetectedGamma = e.gamma;
 
-    // Check system screen orientation if available
-    if (window.screen?.orientation?.type) {
-        if (window.screen.orientation.type.includes('landscape')) {
-            applyCameraOrientationMode('landscape', true);
-            return;
-        }
-        if (window.screen.orientation.type.includes('portrait')) {
-            applyCameraOrientationMode('portrait', true);
-            return;
-        }
-    }
-
-    // Check window inner aspect ratio
-    if (window.innerWidth > window.innerHeight) {
+    // Check if system screen orientation or viewport actually switched to landscape
+    if (window.screen?.orientation?.type?.includes('landscape') || window.innerWidth > window.innerHeight) {
         applyCameraOrientationMode('landscape', true);
         return;
     }
 
-    // Accelerometer / Gyroscope check (works when screen orientation is locked to portrait)
+    // Accelerometer / Gyroscope tilt check (works when screen orientation is locked to portrait)
     const absGamma = Math.abs(e.gamma || 0);
     const absBeta = Math.abs(e.beta || 0);
 
     // When held sideways horizontally:
-    if (absGamma > 45 && absBeta < 65) {
+    if (absGamma > 40 && absBeta < 70) {
         applyCameraOrientationMode('landscape', true);
     } 
     // When held upright vertically:
-    else if (absBeta > 35 && absGamma < 35) {
+    else if (absBeta > 40 && absGamma < 30) {
         applyCameraOrientationMode('portrait', true);
     }
 }
 
 function handleScreenOrientationChange() {
     const isLandscape = (window.screen?.orientation?.type?.includes('landscape')) || (window.innerWidth > window.innerHeight);
-    applyCameraOrientationMode(isLandscape ? 'landscape' : 'portrait', true);
+    if (isLandscape) {
+        applyCameraOrientationMode('landscape', true);
+    }
 }
 
 function startAutoOrientationDetection() {
     if (orientationListenerActive) return;
     orientationListenerActive = true;
+    window.addEventListener('devicemotion', handleDeviceMotion, { passive: true });
     window.addEventListener('deviceorientation', handleDeviceOrientation, { passive: true });
     window.addEventListener('resize', handleScreenOrientationChange, { passive: true });
     if (window.screen?.orientation?.addEventListener) {
@@ -657,6 +708,7 @@ function startAutoOrientationDetection() {
 function stopAutoOrientationDetection() {
     if (!orientationListenerActive) return;
     orientationListenerActive = false;
+    window.removeEventListener('devicemotion', handleDeviceMotion);
     window.removeEventListener('deviceorientation', handleDeviceOrientation);
     window.removeEventListener('resize', handleScreenOrientationChange);
     if (window.screen?.orientation?.removeEventListener) {
@@ -665,42 +717,33 @@ function stopAutoOrientationDetection() {
 }
 
 export function applyCameraOrientationMode(mode, isAuto = false) {
-    if (activeCameraOrientation === mode && document.getElementById('menu-camera-framing-box')?.dataset.orient === mode) {
+    if (activeCameraOrientation === mode) {
         return;
     }
     activeCameraOrientation = mode;
-    const framingBox = document.getElementById('menu-camera-framing-box');
     const orientBtn = document.getElementById('menu-camera-orient-btn');
-    const orientHint = document.getElementById('menu-camera-orient-hint');
+    const subText = document.getElementById('menu-camera-sub');
 
     if (activeCameraOrientation === 'landscape') {
-        if (framingBox) {
-            framingBox.dataset.orient = 'landscape';
-            framingBox.className = "absolute inset-x-3 sm:inset-x-8 inset-y-16 sm:inset-y-20 pointer-events-none flex flex-col items-center justify-between border-2 border-amber-400 rounded-2xl p-4 shadow-2xl transition-all duration-300";
-        }
         if (orientBtn) {
             orientBtn.className = "w-8 h-8 rounded-full bg-amber-400 text-black flex items-center justify-center text-xs transition cursor-pointer shadow-md";
             orientBtn.innerHTML = '<i class="fa-solid fa-mobile-screen-button rotate-90"></i>';
-            orientBtn.title = "Orientation: Landscape (Auto-detected)";
+            orientBtn.title = "Orientation: Landscape (Wide capture)";
         }
-        if (orientHint) {
-            orientHint.innerHTML = `<span class="text-amber-400 font-bold">🔄 Landscape (Auto)</span> • Fit wide tarpaulin/board`;
+        if (subText) {
+            subText.innerHTML = '<span class="text-amber-400 font-bold">🔄 Landscape Mode</span> • Wide capture';
         }
-        if (!isAuto) showToast("🔄 Landscape Mode: Frame the wide menu");
+        if (!isAuto) showToast("🔄 Landscape Mode: Wide page capture");
     } else {
-        if (framingBox) {
-            framingBox.dataset.orient = 'portrait';
-            framingBox.className = "absolute inset-4 sm:inset-8 pointer-events-none flex flex-col items-center justify-between border-2 border-white/20 rounded-2xl p-4 shadow-2xl transition-all duration-300";
-        }
         if (orientBtn) {
             orientBtn.className = "w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs transition cursor-pointer";
             orientBtn.innerHTML = '<i class="fa-solid fa-mobile-screen-button"></i>';
-            orientBtn.title = "Orientation: Portrait (Auto-detected)";
+            orientBtn.title = "Orientation: Portrait (Standard Page)";
         }
-        if (orientHint) {
-            orientHint.innerHTML = `<span class="text-white font-bold">📱 Portrait (Auto)</span> • Standard page framing`;
+        if (subText) {
+            subText.innerHTML = '<span class="text-white font-medium">📱 Portrait Mode</span> • Standard page';
         }
-        if (!isAuto) showToast("📱 Portrait Mode: Standard page framing");
+        if (!isAuto) showToast("📱 Portrait Mode: Standard page capture");
     }
 }
 
@@ -709,7 +752,7 @@ export function toggleMenuCameraOrientation() {
     applyCameraOrientationMode(nextMode, false);
 }
 
-async function ensurePhotoOrientation(blob, desiredOrientation, tiltGamma) {
+async function ensurePhotoOrientation(blob, desiredOrientation, tiltGamma, tiltAccX) {
     if (!blob) return blob;
     try {
         let w = 0, h = 0, imgSource = null;
@@ -744,13 +787,17 @@ async function ensurePhotoOrientation(blob, desiredOrientation, tiltGamma) {
         canvas.width = h;
         canvas.height = w;
         const ctx = canvas.getContext('2d', { alpha: false });
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
 
         ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2);
 
-        // Rotation angle
+        // Rotation angle based on physical gravity / tilt direction
         let angle = 90 * (Math.PI / 180);
-        if (typeof tiltGamma === 'number' && tiltGamma < 0) {
+        if (typeof tiltAccX === 'number' && tiltAccX < -1) {
+            angle = -90 * (Math.PI / 180);
+        } else if (typeof tiltGamma === 'number' && tiltGamma < 0) {
             angle = -90 * (Math.PI / 180);
         }
 
@@ -855,48 +902,86 @@ export function closeMenuCameraScanner() {
 
 export async function takeMenuCameraSnapshot() {
     const video = document.getElementById('menu-camera-video');
+    const viewfinder = document.getElementById('menu-camera-viewfinder');
     if (!video || !activeCameraStream) return;
 
-    const track = activeCameraStream.getVideoTracks()[0];
-    let capturedBlob = null;
-
-    // 1. Hardware Still Photo Capture (Uncompressed Full-Sensor Capture)
-    if (typeof window.ImageCapture === 'function' && track) {
-        try {
-            const imageCapture = new window.ImageCapture(track);
-            capturedBlob = await imageCapture.takePhoto();
-        } catch(icErr) {
-            console.warn('[MenuCamera] Hardware still capture fallback to canvas:', icErr);
-        }
+    // Trigger instant visual shutter flash feedback
+    const flash = document.getElementById('menu-camera-shutter-flash');
+    if (flash) {
+        flash.style.opacity = '0.75';
+        setTimeout(() => { if (flash) flash.style.opacity = '0'; }, 90);
     }
 
-    // 2. High-Clarity Canvas Fallback (With digital zoom crop if CSS zoom active)
-    if (!capturedBlob) {
-        const vWidth = video.videoWidth || 1920;
-        const vHeight = video.videoHeight || 1080;
+    const vWidth = video.videoWidth || 1920;
+    const vHeight = video.videoHeight || 1080;
 
-        const canvas = document.createElement('canvas');
-        canvas.width = vWidth;
-        canvas.height = vHeight;
-        const ctx = canvas.getContext('2d', { alpha: false });
+    const boxW = (viewfinder && viewfinder.clientWidth > 0) ? viewfinder.clientWidth : window.innerWidth;
+    const boxH = (viewfinder && viewfinder.clientHeight > 0) ? viewfinder.clientHeight : window.innerHeight;
 
-        if (currentCameraZoom > 1 && (!cameraZoomCapabilities || !track.getCapabilities().zoom)) {
-            // Crop center based on digital zoom factor
-            const cropW = vWidth / currentCameraZoom;
-            const cropH = vHeight / currentCameraZoom;
-            const cropX = (vWidth - cropW) / 2;
-            const cropY = (vHeight - cropH) / 2;
-            ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, vWidth, vHeight);
-        } else {
-            ctx.drawImage(video, 0, 0, vWidth, vHeight);
+    // Viewfinder object-cover math:
+    // Scale factor that fits the video inside the viewfinder box with object-cover:
+    const coverScale = Math.max(boxW / vWidth, boxH / vHeight);
+    
+    // Exact portion of the video (in native video pixels) visible in the viewfinder:
+    let visibleW = boxW / coverScale;
+    let visibleH = boxH / coverScale;
+
+    // Viewfinder center crop coordinates:
+    let sx = Math.max(0, (vWidth - visibleW) / 2);
+    let sy = Math.max(0, (vHeight - visibleH) / 2);
+
+    // Account for digital / CSS zoom level:
+    let appliedZoom = 1;
+    if (video.style.transform && video.style.transform.includes('scale')) {
+        const match = video.style.transform.match(/scale\(([^)]+)\)/);
+        if (match) {
+            const parsed = parseFloat(match[1]);
+            if (!isNaN(parsed) && parsed > 1) appliedZoom = parsed;
         }
-
-        capturedBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.95));
+    } else if (currentCameraZoom > 1 && (!cameraZoomCapabilities || !activeCameraStream.getVideoTracks()[0]?.getCapabilities?.()?.zoom)) {
+        appliedZoom = currentCameraZoom;
     }
+
+    if (appliedZoom > 1) {
+        const zoomedW = visibleW / appliedZoom;
+        const zoomedH = visibleH / appliedZoom;
+        sx += (visibleW - zoomedW) / 2;
+        sy += (visibleH - zoomedH) / 2;
+        visibleW = zoomedW;
+        visibleH = zoomedH;
+    }
+
+    // Clamp bounds safely within video dimensions
+    sx = Math.max(0, Math.min(sx, vWidth - 10));
+    sy = Math.max(0, Math.min(sy, vHeight - 10));
+    visibleW = Math.max(10, Math.min(visibleW, vWidth - sx));
+    visibleH = Math.max(10, Math.min(visibleH, vHeight - sy));
+
+    // High-Clarity Direct Stream Capture:
+    // We capture directly from the live, focused, sharp HTML5 video stream onto an HD canvas.
+    // This avoids ImageCapture.takePhoto() HAL bugs on Android multi-camera phones (which caused
+    // blurry autofocus resets and wide/0.6x sensor distortion).
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(visibleW);
+    canvas.height = Math.round(visibleH);
+    const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: false });
+
+    // Enable high-quality bicubic image smoothing
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // Draw the exact viewfinder crop
+    ctx.drawImage(
+        video,
+        sx, sy, visibleW, visibleH,
+        0, 0, canvas.width, canvas.height
+    );
+
+    let capturedBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.96));
 
     if (capturedBlob) {
         // Automatically ensure photo dimensions and orientation match the phone orientation
-        capturedBlob = await ensurePhotoOrientation(capturedBlob, activeCameraOrientation, lastDetectedGamma);
+        capturedBlob = await ensurePhotoOrientation(capturedBlob, activeCameraOrientation, lastDetectedGamma, lastDetectedAccX);
     }
 
     if (!capturedBlob) {

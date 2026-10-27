@@ -277,6 +277,9 @@
                     <div id="ota-current-version-badge" class="font-black text-base sm:text-lg font-mono">v1.0.28</div>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onclick="window.openChangelogModal && window.openChangelogModal()" class="bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 cursor-pointer" title="View Release Notes / Changelog">
+                        <i class="fa-solid fa-scroll"></i> Change Log
+                    </button>
                     <button type="button" onclick="window.openOtaUpdateSelectorModal && window.openOtaUpdateSelectorModal()" class="bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Refresh available versions from GitHub">
                         <i class="fa-solid fa-arrows-rotate"></i> Refresh
                     </button>

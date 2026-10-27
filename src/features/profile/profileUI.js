@@ -217,6 +217,15 @@ export async function openProfileSettingsModal() {
         window.syncFontSettingsUI();
     }
 
+    const autoMsgCard = document.getElementById('profile-automsg-settings-card');
+    if (autoMsgCard) {
+        if (typeof window.canManageAutoMessage === 'function' && window.canManageAutoMessage()) {
+            autoMsgCard.classList.remove('hidden');
+        } else {
+            autoMsgCard.classList.add('hidden');
+        }
+    }
+
     modal.classList.remove('hidden');
 }
 

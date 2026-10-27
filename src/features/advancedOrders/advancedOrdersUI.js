@@ -221,6 +221,7 @@ function attachSwipeGesturesToCards(container) {
         const orderId = item.dataset.id;
         const custName = item.dataset.custName || 'Customer';
         if (!card) return;
+        card.style.touchAction = 'pan-y';
 
         let startX = 0;
         let startY = 0;

@@ -362,6 +362,18 @@ export function updateRosterUI() {
         else fullBookingBtn.classList.add('hidden');
     }
 
+    const automsgSettingsBtn = document.getElementById('admin-automsg-settings-btn');
+    if (automsgSettingsBtn) {
+        if (isAdmin() || showControls) automsgSettingsBtn.classList.remove('hidden');
+        else automsgSettingsBtn.classList.add('hidden');
+    }
+
+    const automsgToolbarBtn = document.getElementById('admin-automsg-toolbar-btn');
+    if (automsgToolbarBtn) {
+        if (showControls && isAdmin()) automsgToolbarBtn.classList.remove('hidden');
+        else automsgToolbarBtn.classList.add('hidden');
+    }
+
     const myRecord = rosterMembers.find(m => {
         const rId = (m.telegramId || m.id || "").toString().trim();
         const rName = (m.riderName || m.name || "").toString().trim().toLowerCase();

@@ -8,7 +8,7 @@ let wakeLockInstance = null;
 let backgroundAudioInterval = null;
 
 // ============================================================================
-// AUDIO CONTEXT & BACKGROUND AUDITORY PULSE
+// AUDIO CONTEXT & BACKGROUND KEEP-ALIVE
 // ============================================================================
 export function unlockAudioContext() {
     try {
@@ -22,25 +22,22 @@ export function unlockAudioContext() {
     } catch(e) {}
 }
 
-// Background audio pulse keeps mobile browsers from killing background JS execution
+// Ensure audio context does not hold Android audio focus when idle
+export function suspendAudioContextIfIdle() {
+    try {
+        if (audioCtxInstance && audioCtxInstance.state === 'running') {
+            audioCtxInstance.suspend().catch(() => {});
+        }
+    } catch (_) {}
+}
+
+// Native foreground service & Web Worker handle background execution without ducking other apps
 export function startBackgroundAudioPulse() {
     startKeepAlive();
-    if (backgroundAudioInterval) return;
-    unlockAudioContext();
-
-    backgroundAudioInterval = setInterval(() => {
-        try {
-            if (audioCtxInstance && audioCtxInstance.state === 'running') {
-                const osc = audioCtxInstance.createOscillator();
-                const gain = audioCtxInstance.createGain();
-                gain.gain.setValueAtTime(0.0001, audioCtxInstance.currentTime);
-                osc.connect(gain);
-                gain.connect(audioCtxInstance.destination);
-                osc.start();
-                osc.stop(audioCtxInstance.currentTime + 0.05);
-            }
-        } catch(e) {}
-    }, 25000);
+    if (backgroundAudioInterval) {
+        clearInterval(backgroundAudioInterval);
+        backgroundAudioInterval = null;
+    }
 }
 
 export function stopBackgroundAudioPulse() {
@@ -49,6 +46,7 @@ export function stopBackgroundAudioPulse() {
         clearInterval(backgroundAudioInterval);
         backgroundAudioInterval = null;
     }
+    suspendAudioContextIfIdle();
 }
 
 // ============================================================================
@@ -193,6 +191,7 @@ if (typeof window !== 'undefined') {
     window.showSideNotification = showSideNotification;
     window.notifyUser = notifyUser;
     window.unlockAudioContext = unlockAudioContext;
+    window.suspendAudioContextIfIdle = suspendAudioContextIfIdle;
     window.requestWakeLock = requestWakeLock;
     window.releaseWakeLock = releaseWakeLock;
     window.startBackgroundAudioPulse = startBackgroundAudioPulse;

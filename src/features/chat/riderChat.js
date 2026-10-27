@@ -123,6 +123,9 @@ export {
     confirmSendChatVideo
 } from './videoSender.js';
 
+// Re-export Customizable Automated Messages
+export * from './autoMessageManager.js';
+
 import {
     getActiveRiderChatCustId,
     getCurrentRiderChatMeta,

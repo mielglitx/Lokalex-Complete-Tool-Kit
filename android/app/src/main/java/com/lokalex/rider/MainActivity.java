@@ -15,7 +15,12 @@ import android.os.PowerManager;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Base64;
+import android.util.Log;
+import android.view.View;
+import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
 import android.widget.Toast;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -25,10 +30,16 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.PictureInPictureParams;
+import android.app.PictureInPictureUiState;
 import android.content.Context;
+import android.content.SharedPreferences;
+import android.content.res.Configuration;
 import android.media.AudioAttributes;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
+import android.util.Rational;
+import android.view.WindowManager;
 import androidx.core.app.NotificationCompat;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -44,6 +55,7 @@ public class MainActivity extends BridgeActivity {
     public static final String MESSAGES_CHANNEL_ID = "lokalex_messages_channel_v3";
     private static MainActivity instance = null;
     private Ringtone activeSystemRingtone = null;
+    private boolean isPipStashed = false;
 
     public static MainActivity getInstance() {
         return instance;
@@ -57,6 +69,33 @@ public class MainActivity extends BridgeActivity {
         // Reserve space for native status bar so web content is not blocked by clock/icons
         try {
             WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } catch (Exception e) {}
+
+        // Hardware & Rendering Performance Optimization for smooth 60fps operation
+        try {
+            WebView.setWebContentsDebuggingEnabled(true);
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                WebView webView = getBridge().getWebView();
+                
+                // Hardware layer acceleration on the view surface
+                webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+                webView.setVerticalScrollBarEnabled(false);
+                webView.setHorizontalScrollBarEnabled(false);
+                
+                WebSettings settings = webView.getSettings();
+                settings.setRenderPriority(WebSettings.RenderPriority.HIGH);
+                settings.setEnableSmoothTransition(true);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    settings.setOffscreenPreRaster(true);
+                }
+                settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+                settings.setDomStorageEnabled(true);
+                settings.setDatabaseEnabled(true);
+                
+                CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+            }
         } catch (Exception e) {}
 
         // Expose NativePermissionsBridge to JavaScript web layer
@@ -364,6 +403,29 @@ public class MainActivity extends BridgeActivity {
                 public void requestIgnoreBatteryOptimizations() {
                     new Handler(Looper.getMainLooper()).post(MainActivity.this::requestIgnoreBatteryOptimizations);
                 }
+
+                @JavascriptInterface
+                public boolean enterFloatingWindowMode() {
+                    return MainActivity.this.enterPipMode();
+                }
+
+                @JavascriptInterface
+                public boolean isFloatingWindowSupported() {
+                    return MainActivity.this.isPipSupported();
+                }
+
+                @JavascriptInterface
+                public boolean isInFloatingWindowMode() {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        return MainActivity.this.isInPictureInPictureMode();
+                    }
+                    return false;
+                }
+
+                @JavascriptInterface
+                public boolean isFloatingWindowStashed() {
+                    return isPipStashed;
+                }
             }, "NativePermissionsBridge");
         } catch (Exception e) {
             // Log fallback
@@ -436,6 +498,94 @@ public class MainActivity extends BridgeActivity {
             if (getBridge() != null && getBridge().getWebView() != null) {
                 getBridge().getWebView().onResume();
                 getBridge().getWebView().resumeTimers();
+            }
+        } catch (Exception ignored) {}
+    }
+
+    public boolean isPipSupported() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            return getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE);
+        }
+        return false;
+    }
+
+    public boolean enterPipMode() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!isPipSupported()) {
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    Toast.makeText(this, "⚠️ Floating window mode is not supported on this device.", Toast.LENGTH_SHORT).show();
+                });
+                return false;
+            }
+            try {
+                // 9:16 aspect ratio (standard smartphone portrait mini-window)
+                Rational aspectRatio = new Rational(9, 16);
+                PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder();
+                builder.setAspectRatio(aspectRatio);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    builder.setAutoEnterEnabled(true);
+                    builder.setSeamlessResizeEnabled(true);
+                }
+                setPictureInPictureParams(builder.build());
+                return enterPictureInPictureMode(builder.build());
+            } catch (Exception e) {
+                Log.e(TAG, "enterPipMode error: " + e.getMessage());
+                try {
+                    enterPictureInPictureMode();
+                    return true;
+                } catch (Exception ex) {
+                    return false;
+                }
+            }
+        } else {
+            new Handler(Looper.getMainLooper()).post(() -> {
+                Toast.makeText(this, "⚠️ Floating window requires Android 8.0 or newer.", Toast.LENGTH_SHORT).show();
+            });
+            return false;
+        }
+    }
+
+    @Override
+    public void onPictureInPictureUiStateChanged(PictureInPictureUiState pipState) {
+        super.onPictureInPictureUiStateChanged(pipState);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                isPipStashed = pipState.isStashed();
+                if (getBridge() != null && getBridge().getWebView() != null) {
+                    getBridge().getWebView().evaluateJavascript(
+                            "if (typeof window.onFloatingWindowStashChanged === 'function') { window.onFloatingWindowStashChanged(" + isPipStashed + "); }",
+                            null
+                    );
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        try {
+            if (!isInPictureInPictureMode) {
+                isPipStashed = false;
+            }
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                getBridge().getWebView().evaluateJavascript(
+                        "if (typeof window.onFloatingWindowModeChanged === 'function') { window.onFloatingWindowModeChanged(" + isInPictureInPictureMode + "); }" +
+                        (!isInPictureInPictureMode ? "if (typeof window.onFloatingWindowStashChanged === 'function') { window.onFloatingWindowStashChanged(false); }" : ""),
+                        null
+                );
+            }
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    public void onUserLeaveHint() {
+        super.onUserLeaveHint();
+        try {
+            SharedPreferences prefs = getSharedPreferences("lokalex_prefs", Context.MODE_PRIVATE);
+            boolean autoPip = prefs.getBoolean("auto_pip_on_leave", false);
+            if (autoPip && isPipSupported() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isInPictureInPictureMode()) {
+                enterPipMode();
             }
         } catch (Exception ignored) {}
     }

@@ -1,6 +1,7 @@
 package com.lokalex.rider;
 
 import android.Manifest;
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -45,6 +46,7 @@ public class LokalexForegroundService extends Service {
             "https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?orderBy=%22lastUpdated%22&limitToLast=35";
 
     private static volatile boolean isRunning = false;
+    private static LokalexForegroundService instance = null;
     private static Bitmap cachedLargeIcon = null;
 
     private PowerManager.WakeLock wakeLock = null;
@@ -58,9 +60,14 @@ public class LokalexForegroundService extends Service {
         return isRunning;
     }
 
+    public static LokalexForegroundService getInstance() {
+        return instance;
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
+        instance = this;
         isRunning = true;
         isInitialCheck = true;
         lastKnownMsgTimestamp = System.currentTimeMillis();
@@ -68,18 +75,22 @@ public class LokalexForegroundService extends Service {
         createNotificationChannel();
         acquireWakeLock();
         startForegroundSafely();
+        scheduleNextAlarm();
     }
 
     private void startForegroundSafely() {
         Notification notification = buildNotification();
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                int serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
+                int serviceType = 0;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    serviceType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING;
+                }
                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                     serviceType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
                 }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    serviceType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING;
+                if (serviceType == 0) {
+                    serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
                 }
                 startForeground(NOTIFICATION_ID, notification, serviceType);
             } else {
@@ -95,6 +106,7 @@ public class LokalexForegroundService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         acquireWakeLock();
+        scheduleNextAlarm();
 
         if (lastKnownMsgTimestamp == 0) {
             lastKnownMsgTimestamp = System.currentTimeMillis();
@@ -109,10 +121,11 @@ public class LokalexForegroundService extends Service {
         return START_STICKY;
     }
 
-    private void performBackgroundCheck() {
+    public void performBackgroundCheck() {
         try {
             // Keep CPU alive during network processing
             acquireWakeLock();
+            scheduleNextAlarm();
 
             // 1. Wake up WebView event loop and JS timers if MainActivity is alive
             MainActivity activity = MainActivity.getInstance();
@@ -353,9 +366,63 @@ public class LokalexForegroundService extends Service {
         } catch (Exception ignored) {}
     }
 
+    public void scheduleNextAlarm() {
+        try {
+            AlarmManager am = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            if (am == null) return;
+
+            Intent intent = new Intent(this, BackgroundWatchdogReceiver.class);
+            intent.setAction("com.lokalex.rider.ACTION_WATCHDOG_PING");
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                flags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            PendingIntent pi = PendingIntent.getBroadcast(this, 9944, intent, flags);
+            long triggerAt = System.currentTimeMillis() + 25000L; // 25s hardware alarm
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi);
+            } else {
+                am.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pi);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "scheduleNextAlarm notice: " + e.getMessage());
+        }
+    }
+
+    public static void handleWatchdogPing(Context context) {
+        if (context == null) return;
+        LokalexForegroundService current = instance;
+        if (current != null && isRunning) {
+            new Thread(current::performBackgroundCheck).start();
+        } else {
+            Log.i(TAG, "Watchdog ping: restarting LokalexForegroundService");
+            try {
+                Intent serviceIntent = new Intent(context, LokalexForegroundService.class);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    ContextCompat.startForegroundService(context, serviceIntent);
+                } else {
+                    context.startService(serviceIntent);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to start service from watchdog: " + e.getMessage());
+            }
+        }
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        Log.i(TAG, "onTaskRemoved: Activity removed, arming watchdog alarm");
+        scheduleNextAlarm();
+    }
+
     @Override
     public void onDestroy() {
         isRunning = false;
+        if (instance == this) {
+            instance = null;
+        }
         if (scheduler != null && !scheduler.isShutdown()) {
             scheduler.shutdownNow();
             scheduler = null;

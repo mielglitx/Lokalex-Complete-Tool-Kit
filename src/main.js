@@ -44,6 +44,7 @@ import { initRealtimeFirebaseListeners } from './app/appListeners.js';
 import { initGlobalWindowBridge, bootApp, initAppLifecycleEvents } from './app/appBootstrap.js';
 import { initNativeBridge } from './native/nativeBridge.js';
 import { initOtaUpdater, syncVersionTrackerElements } from './utils/otaUpdater.js';
+import './utils/changelogViewer.js';
 import { registerSW } from 'virtual:pwa-register';
 
 const updateSW = registerSW({

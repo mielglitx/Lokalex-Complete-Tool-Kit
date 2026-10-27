@@ -187,8 +187,14 @@
                     <button id="btn-force-refresh-chat-feed" type="button" onclick="window.forceRefreshLiveChatsFeed && window.forceRefreshLiveChatsFeed(this)" class="bg-white dark:bg-cardBg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-gray-300 dark:border-gray-700 text-[9.5px] font-bold px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer" title="Force Refresh Live Chats Feed">
                         <i class="fa-solid fa-arrows-rotate text-blue-500 text-[9px]"></i> Refresh
                     </button>
+                    <button id="dashboard-float-window-btn" type="button" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" class="bg-white dark:bg-cardBg hover:bg-sky-50 dark:hover:bg-sky-950/30 text-sky-700 dark:text-sky-400 border border-gray-300 dark:border-gray-700 text-[9.5px] font-bold px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer" title="Float App as Mini Window over Other Apps (PiP)">
+                        <i class="fa-solid fa-up-right-from-square text-sky-500 text-[9px]"></i> Float Window
+                    </button>
                     <button id="admin-fb-settings-btn" onclick="window.openAdminFbApiModal && window.openAdminFbApiModal()" class="bg-blue-600 hover:bg-blue-500 text-white text-[9.5px] font-black px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Configure Facebook Messenger APIs">
                         <i class="fa-brands fa-facebook-messenger"></i> FB APIs
+                    </button>
+                    <button id="admin-automsg-settings-btn" onclick="window.openAutoMessageSettingsModal && window.openAutoMessageSettingsModal()" class="hidden bg-purple-600 hover:bg-purple-500 text-white text-[9.5px] font-black px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Configure Automated Messages for Catering & Done">
+                        <i class="fa-solid fa-robot text-[9px]"></i> Auto-Msg
                     </button>
                     <button id="chat-chimes-settings-btn" type="button" onclick="window.openChatSoundSettingsModal && window.openChatSoundSettingsModal()" class="bg-white dark:bg-cardBg hover:bg-amber-50 dark:hover:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-gray-300 dark:border-gray-700 text-[9.5px] font-bold px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer" title="Configure Message Chimes & Ringtones">
                         <i class="fa-solid fa-bell text-amber-500 text-[9px]"></i> Chimes
@@ -369,6 +375,11 @@
                     <i class="fa-solid fa-ban"></i> Full Booking
                 </button>
 
+                <!-- ADMIN AUTO-MESSAGES BUTTON -->
+                <button id="admin-automsg-toolbar-btn" onclick="window.openAutoMessageSettingsModal && window.openAutoMessageSettingsModal()" class="hidden bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-purple-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Configure Automated Messages for Catering & Done">
+                    <i class="fa-solid fa-robot"></i> Auto-Msg
+                </button>
+
                 <!-- ADMIN COMMISSION SETTINGS BUTTON -->
                 <button id="admin-commission-settings-btn" onclick="window.openAdminCommissionSettingsModal && window.openAdminCommissionSettingsModal()" class="hidden bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-600/30 dark:hover:bg-amber-600 dark:text-amber-300 dark:border-amber-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer">
                     <i class="fa-solid fa-percent"></i> Commission
@@ -489,14 +500,32 @@
     
     <button onclick="window.logout && window.logout()" class="text-xs text-red-500 hover:text-red-700 dark:text-red-400/60 dark:hover:text-red-400 py-1.5 mt-1 font-bold transition cursor-pointer">Log out of device</button>
 
-    <!-- VERSION TRACKER -->
-    <div class="flex flex-col items-center justify-center gap-1 mt-1 mb-6">
+    <!-- VERSION TRACKER & CHANGE LOG -->
+    <div class="flex flex-col items-center justify-center gap-1.5 mt-1 mb-6 w-full max-w-sm mx-auto px-2">
         <button type="button" onclick="window.checkForOtaUpdate && window.checkForOtaUpdate(true)" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition hover:bg-gray-100 dark:hover:bg-gray-800/60 cursor-pointer" title="Tap to check for updates">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>Lokalex Hub</span>
             <span class="app-version-tracker font-mono font-bold text-gray-600 dark:text-gray-300">v1.0.4</span>
             <span class="text-[9px] px-1.5 py-0.2 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 rounded-md font-mono font-semibold">OTA Live</span>
         </button>
+
+        <!-- Change Log Below Version -->
+        <div class="flex items-center gap-2">
+            <button type="button" onclick="window.openChangelogModal && window.openChangelogModal()" class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 py-0.5 px-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition cursor-pointer" title="View release notes from CHANGELOG.md">
+                <i class="fa-solid fa-scroll text-[11px]"></i>
+                <span>Change Log</span>
+            </button>
+            <span class="text-gray-300 dark:text-zinc-700 text-[10px]">•</span>
+            <button type="button" onclick="window.toggleInlineChangelog && window.toggleInlineChangelog()" class="inline-flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 py-0.5 px-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition cursor-pointer" title="Expand inline release notes">
+                <span>Details</span>
+                <i id="inline-changelog-chevron" class="fa-solid fa-chevron-down text-[9px] transition-transform"></i>
+            </button>
+        </div>
+
+        <!-- Expandable Inline Change Log Container -->
+        <div id="inline-changelog-container" class="hidden w-full mt-2 text-left bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-3 shadow-md max-h-72 overflow-y-auto overscroll-contain">
+            <!-- Populated dynamically from CHANGELOG.md -->
+        </div>
     </div>
 
     <!-- AVAILABLE QUEUE INFO MODAL -->

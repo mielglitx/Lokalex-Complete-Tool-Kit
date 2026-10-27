@@ -7,6 +7,23 @@ import { checkAdminAccess } from '../directoryPermissions.js';
 
 let creditsListenerActive = false;
 
+/**
+ * Checks if the Directory Credits system is currently enabled by Admin.
+ */
+export function isDirectoryCreditsEnabled() {
+    if (globalState.directoryCreditsConfig && typeof globalState.directoryCreditsConfig.enabled === 'boolean') {
+        return globalState.directoryCreditsConfig.enabled;
+    }
+    try {
+        const cached = localStorage.getItem('lokalex_directory_credits_config');
+        if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && typeof parsed.enabled === 'boolean') return parsed.enabled;
+        }
+    } catch (_) {}
+    return true;
+}
+
 export function updateRosterCreditsDisplay(credits) {
     const countEl = document.getElementById('rider-credits-count');
     const pillEl = document.getElementById('rider-credits-pill');
@@ -17,7 +34,19 @@ export function updateRosterCreditsDisplay(credits) {
         if (countEl) countEl.innerText = "∞ (Admin)";
         if (pillEl) {
             pillEl.className = "bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-500/40 text-amber-800 dark:text-amber-300 text-[10px] px-2.5 py-0.5 rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition select-none cursor-pointer";
+            pillEl.title = "Admin: Unlimited Directory Access";
             pillEl.onclick = () => openShareCreditsModal();
+        }
+        return;
+    }
+
+    const creditsEnabled = isDirectoryCreditsEnabled();
+    if (!creditsEnabled) {
+        if (countEl) countEl.innerText = "OFF";
+        if (pillEl) {
+            pillEl.className = "bg-gray-100 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 text-gray-500 dark:text-gray-400 text-[10px] px-2.5 py-0.5 rounded-lg font-bold flex items-center gap-1.5 shadow-xs transition select-none cursor-pointer";
+            pillEl.title = "Directory Credits System is disabled by Admin (Free Access)";
+            pillEl.onclick = () => showToast("ℹ️ Directory Credits System is currently turned OFF by Admin. Directory access is free.");
         }
         return;
     }
@@ -316,4 +345,14 @@ export async function confirmTransferCredits() {
             transferBtn.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Send Credits`;
         }
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.isDirectoryCreditsEnabled = isDirectoryCreditsEnabled;
+    window.updateRosterCreditsDisplay = updateRosterCreditsDisplay;
+    window.showCreditsInfoToast = showCreditsInfoToast;
+    window.initRiderCreditsListener = initRiderCreditsListener;
+    window.openShareCreditsModal = openShareCreditsModal;
+    window.closeShareCreditsModal = closeShareCreditsModal;
+    window.confirmTransferCredits = confirmTransferCredits;
 }

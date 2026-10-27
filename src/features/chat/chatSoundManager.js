@@ -382,6 +382,9 @@ export function playCustomChimeAudio(chimeId, volumeMultiplier = 0.85) {
         }
         activeCustomAudio = new Audio(found.dataUrl);
         activeCustomAudio.volume = Math.max(0.01, Math.min(1.0, volumeMultiplier));
+        activeCustomAudio.onended = () => {
+            activeCustomAudio = null;
+        };
         activeCustomAudio.play().catch(err => {
             console.warn("Custom audio playback failed:", err);
         });
@@ -586,6 +589,16 @@ export function playChime(chimeId, volumeMultiplier = 0.85) {
             osc.start(startTime);
             osc.stop(endTime + 0.05);
         });
+
+        // Auto-suspend AudioContext after note decay so Android audio focus is promptly released
+        const maxDuration = preset.notes.reduce((max, n) => Math.max(max, (n.start || 0) + (n.dur || 0.2)), 0);
+        setTimeout(() => {
+            try {
+                if (sharedAudioCtx && sharedAudioCtx.state === 'running') {
+                    sharedAudioCtx.suspend().catch(() => {});
+                }
+            } catch (_) {}
+        }, (maxDuration + 0.3) * 1000);
     } catch (e) {
         console.warn("Chime playback error:", e);
     }

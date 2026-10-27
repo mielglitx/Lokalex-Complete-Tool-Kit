@@ -80,6 +80,8 @@ export function parseScheduledDateTime(dateStr, timeStr) {
     return isNaN(target.getTime()) ? null : target;
 }
 
+let reminderAudioCtx = null;
+
 /**
  * Triggers dual-tone Web Audio API chime notifications for upcoming deliveries.
  */
@@ -89,16 +91,17 @@ export function playReminderAlarm() {
 
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) return;
-    const audioCtx = new AudioContext();
+    reminderAudioCtx = new AudioContext();
 
     alarmInterval = setInterval(() => {
         try {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            const now = audioCtx.currentTime;
+            if (reminderAudioCtx && reminderAudioCtx.state === 'suspended') reminderAudioCtx.resume();
+            if (!reminderAudioCtx) return;
+            const now = reminderAudioCtx.currentTime;
 
             [659.25, 880].forEach((freq, i) => {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
+                const osc = reminderAudioCtx.createOscillator();
+                const gain = reminderAudioCtx.createGain();
 
                 osc.type = 'triangle';
                 osc.frequency.setValueAtTime(freq, now + (i * 0.15));
@@ -107,7 +110,7 @@ export function playReminderAlarm() {
                 gain.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.15) + 0.3);
 
                 osc.connect(gain);
-                gain.connect(audioCtx.destination);
+                gain.connect(reminderAudioCtx.destination);
 
                 osc.start(now + (i * 0.15));
                 osc.stop(now + (i * 0.15) + 0.3);
@@ -128,6 +131,12 @@ export function stopReminderAlarm() {
     if (alarmTimeout) {
         clearTimeout(alarmTimeout);
         alarmTimeout = null;
+    }
+    if (reminderAudioCtx) {
+        try {
+            reminderAudioCtx.close();
+        } catch (_) {}
+        reminderAudioCtx = null;
     }
 }
 

@@ -234,6 +234,11 @@ export function switchView(targetViewId, isBackwards = false, replace = false) {
         return;
     }
 
+    // Release any lingering body scroll locks from previous modals
+    if (typeof document !== 'undefined' && document.body) {
+        document.body.classList.remove('overflow-hidden', 'touch-none');
+    }
+
     if (replace) {
         history.replaceState({ view: targetViewId }, '', '#' + targetViewId);
     } else if (!isBackwards) {
@@ -439,6 +444,7 @@ window.addEventListener('popstate', function(event) {
             if (el) el.classList.add('hidden');
         }},
         { id: 'chat-sound-settings-modal', closeFn: window.closeChatSoundSettingsModal },
+        { id: 'auto-message-settings-modal', closeFn: window.closeAutoMessageSettingsModal },
         { id: 'quick-replies-edit-modal', closeFn: window.closeQuickReplyEditModal },
         { id: 'rider-sources-filter-modal', closeFn: window.closeRiderChatSourcesModal },
         { id: 'admin-fb-api-modal', closeFn: window.closeAdminFbApiModal },

@@ -6,7 +6,7 @@ import { showToast } from '../../../ui/notifications.js';
 import { escapeHtml, copyText } from '../../../utils/helpers.js';
 import { loadDirectoryCache } from '../directoryStorage.js';
 import { checkAdminAccess } from '../directoryPermissions.js';
-import { updateRosterCreditsDisplay } from './directoryCredits.js';
+import { updateRosterCreditsDisplay, isDirectoryCreditsEnabled } from './directoryCredits.js';
 import { populateDestinationDropdown, detectAndSetGpsDestination, copyBarangayRate } from './directoryRouting.js';
 import { storeMenuMetadataMap, initStoreMenuGalleriesListener, formatMenuUpdatedAt } from './directoryGalleries.js';
 
@@ -166,6 +166,16 @@ export function promptViewCustomerLocation(customerName, mapUrl) {
         return;
     }
 
+    const isAdmin = checkAdminAccess();
+    const creditsEnabled = typeof isDirectoryCreditsEnabled === 'function' ? isDirectoryCreditsEnabled() : true;
+
+    // If Credit System is turned OFF by Admin, or user is Admin:
+    // Location lookup is 100% free; open map directly without deduction!
+    if (!creditsEnabled || isAdmin) {
+        window.open(mapUrl, '_blank');
+        return;
+    }
+
     const modal = getOrCreateLocationConfirmModal();
     const nameEl = document.getElementById('loc-confirm-customer-name');
     const balanceEl = document.getElementById('loc-confirm-current-balance');
@@ -175,39 +185,27 @@ export function promptViewCustomerLocation(customerName, mapUrl) {
 
     if (nameEl) nameEl.innerText = customerName || "Customer";
 
-    const isAdmin = checkAdminAccess();
     let currentBalance = parseInt(localStorage.getItem('lokalex_rider_credits') || "0", 10);
     if (isNaN(currentBalance)) currentBalance = 0;
 
     pendingMapUnlock = { customerName, mapUrl };
 
-    if (isAdmin) {
-        if (costLabel) costLabel.innerText = "0 Credits (Admin Free)";
-        if (balanceEl) balanceEl.innerText = "Unlimited (Admin)";
+    if (costLabel) costLabel.innerText = "-1 Directory Credit";
+    if (balanceEl) balanceEl.innerText = `${currentBalance} credit(s)`;
+
+    if (currentBalance < 1) {
+        if (warningEl) warningEl.classList.remove('hidden');
+        if (proceedBtn) {
+            proceedBtn.disabled = true;
+            proceedBtn.classList.add('opacity-40', 'cursor-not-allowed');
+            proceedBtn.innerHTML = `⚠️ Insufficient Credits`;
+        }
+    } else {
         if (warningEl) warningEl.classList.add('hidden');
         if (proceedBtn) {
             proceedBtn.disabled = false;
             proceedBtn.classList.remove('opacity-40', 'cursor-not-allowed');
-            proceedBtn.innerHTML = `<i class="fa-solid fa-arrow-up-right-from-square"></i> Open Map`;
-        }
-    } else {
-        if (costLabel) costLabel.innerText = "-1 Directory Credit";
-        if (balanceEl) balanceEl.innerText = `${currentBalance} credit(s)`;
-
-        if (currentBalance < 1) {
-            if (warningEl) warningEl.classList.remove('hidden');
-            if (proceedBtn) {
-                proceedBtn.disabled = true;
-                proceedBtn.classList.add('opacity-40', 'cursor-not-allowed');
-                proceedBtn.innerHTML = `⚠️ Insufficient Credits`;
-            }
-        } else {
-            if (warningEl) warningEl.classList.add('hidden');
-            if (proceedBtn) {
-                proceedBtn.disabled = false;
-                proceedBtn.classList.remove('opacity-40', 'cursor-not-allowed');
-                proceedBtn.innerHTML = `<i class="fa-solid fa-unlock"></i> Proceed & Open (-1)`;
-            }
+            proceedBtn.innerHTML = `<i class="fa-solid fa-unlock"></i> Proceed & Open (-1)`;
         }
     }
 
@@ -228,9 +226,11 @@ export async function confirmAndOpenCustomerLocation() {
 
     const { customerName, mapUrl } = pendingMapUnlock;
     const isAdmin = checkAdminAccess();
+    const creditsEnabled = typeof isDirectoryCreditsEnabled === 'function' ? isDirectoryCreditsEnabled() : true;
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
 
-    if (!isAdmin && myId) {
+    // STRICT GUARD: Only deduct credits if Credit System is ACTUALLY enabled and user is not admin
+    if (creditsEnabled && !isAdmin && myId) {
         let currentCredits = parseInt(localStorage.getItem('lokalex_rider_credits') || "0", 10);
         if (isNaN(currentCredits)) currentCredits = 0;
 
@@ -309,6 +309,9 @@ export async function openDirectory(type) {
     if (minIndicator) minIndicator.classList.add('hidden');
 
     restoreDirectorySearch();
+    if (typeof document !== 'undefined' && document.body) {
+        document.body.classList.remove('overflow-hidden', 'touch-none');
+    }
     switchView('view-directory');
 
     window.scrollTo({ top: 0 });

@@ -434,6 +434,8 @@
             box-shadow: 0 0 14px rgba(245, 158, 11, 0.7), 0 0 28px rgba(245, 158, 11, 0.35) !important;
             background-color: #FFFBEB !important;
             animation: cateringGlowGold 2.2s infinite ease-in-out !important;
+            will-change: transform, box-shadow;
+            transform: translateZ(0);
         }
         html.dark #rider-cust-chats-feed > div.catering-glow-gold,
         html.dark #rider-cust-chats-feed > div.catering-glow-my,
@@ -448,15 +450,68 @@
         .avatar-glow-gold {
             border-color: #f59e0b !important;
             box-shadow: 0 0 10px rgba(245, 158, 11, 0.8) !important;
+            transform: translateZ(0);
         }
 
         .avatar-glow-my {
             border-color: #10b981 !important;
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
+            transform: translateZ(0);
+        }
+
+        /* ========================================================================== */
+        /* HIGH-PERFORMANCE MOBILE WEBVIEW ACCELERATION (60FPS TUNING)               */
+        /* ========================================================================== */
+        * {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .overflow-y-auto, .overflow-x-auto {
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Content visibility optimization for long customer / directory lists */
+        #rider-cust-chats-feed > div,
+        #directory-cards-container > div,
+        #catered-customers-feed > div,
+        #all-stores-feed > div {
+            content-visibility: auto;
+            contain-intrinsic-size: 0 85px;
+        }
+
+        img {
+            decoding: async;
+        }
+
+        /* Bypass heavy multi-pass blur shaders on mobile GPU to eliminate frame drops */
+        @media (max-width: 1024px) {
+            .backdrop-blur-md,
+            .backdrop-blur-sm,
+            .backdrop-blur-lg,
+            .backdrop-blur-xs,
+            [class*="backdrop-blur"] {
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+            }
+            .bg-black\/80, .bg-black\/75, .bg-black\/85, .bg-black\/90, .bg-black\/95 {
+                background-color: rgba(10, 10, 12, 0.94) !important;
+            }
+            .bg-white\/80, .bg-white\/85, .bg-white\/90, .bg-white\/95 {
+                background-color: rgba(255, 255, 255, 0.97) !important;
+            }
         }
     </style>
 </head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
+
+    <!-- PIP / FLOATING WINDOW STASHED BADGE (SHOWN WHEN DOCKED TO SIDE) -->
+    <div id="pip-stashed-badge" class="hidden fixed inset-0 z-[999999] bg-[#0c1421] flex items-center justify-center select-none overflow-hidden cursor-pointer" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" title="Lokalex - Tap to expand">
+        <div class="relative w-14 h-14 rounded-full bg-slate-900 border-2 border-emerald-500 shadow-xl shadow-emerald-500/40 flex items-center justify-center transition active:scale-90">
+            <span class="absolute inset-0 rounded-full border border-emerald-400 animate-ping opacity-35 pointer-events-none"></span>
+            <img src="./Logo.png" alt="Lokalex" class="w-10 h-10 object-contain rounded-full pointer-events-none select-none">
+            <span id="pip-badge-pulse-dot" class="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-900 rounded-full shadow-xs"></span>
+        </div>
+    </div>
 
     <div id="golden-first-line-border" class="hidden pointer-events-none fixed inset-0 border-[6px] border-yellow-400 shadow-[inset_0_0_30px_rgba(250,204,21,0.8)] z-[9999]"></div>
 

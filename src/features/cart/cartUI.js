@@ -351,7 +351,7 @@ export function renderCartItems() {
             : '';
 
         return `
-        <div ontouchstart="handleCardTouchStart(event, this)" ontouchmove="handleCardTouchMove(event, this)" ontouchend="handleCardTouchEnd(event, ${index})" class="${cardStyleClass} border p-3 rounded-xl flex flex-col gap-2.5 transition-transform duration-75 relative select-none shadow-xs">
+        <div ontouchstart="handleCardTouchStart(event, this)" ontouchmove="handleCardTouchMove(event, this)" ontouchend="handleCardTouchEnd(event, ${index})" style="touch-action: pan-y; content-visibility: auto; contain-intrinsic-size: 0 115px;" class="${cardStyleClass} border p-3 rounded-xl flex flex-col gap-2.5 transition-transform duration-75 relative select-none shadow-xs">
             <div class="flex items-start justify-between gap-2">
                 <div class="flex items-start gap-1.5 flex-1 min-w-0">
                     <input type="checkbox" onchange="toggleItemSelect(${index})" ${isSelected ? "checked" : ""} class="w-4 h-4 accent-blue-500 rounded cursor-pointer shrink-0 mt-0.5">

@@ -286,6 +286,53 @@
             max-height: 92vh !important;
         }
     }
+
+    /* Floating Window / Picture-in-Picture (PiP) Adaptation */
+    html.in-floating-mode #app-header {
+        padding: 4px 6px !important;
+    }
+    html.in-floating-mode #header-clock-pill,
+    html.in-floating-mode #header-battery-pill,
+    html.in-floating-mode #network-status-pill {
+        display: none !important;
+    }
+    html.in-floating-mode #rider-chat-modal {
+        padding: 0 !important;
+        background: transparent !important;
+    }
+    html.in-floating-mode #rider-chat-modal > div {
+        max-height: 100vh !important;
+        height: 100vh !important;
+        border-radius: 0 !important;
+        border: none !important;
+    }
+
+    /* Stashed / Edge-Docked Floating Window Mode (Badge View) */
+    html.pip-stashed body > *:not(#pip-stashed-badge),
+    html.in-floating-mode.pip-stashed body > *:not(#pip-stashed-badge) {
+        display: none !important;
+    }
+    html.pip-stashed #pip-stashed-badge,
+    html.in-floating-mode.pip-stashed #pip-stashed-badge {
+        display: flex !important;
+    }
+
+    @media (max-width: 170px) {
+        html.in-floating-mode body > *:not(#pip-stashed-badge) {
+            display: none !important;
+        }
+        html.in-floating-mode #pip-stashed-badge {
+            display: flex !important;
+        }
+    }
+
+    /* High-Performance Smart Cart Momentum Touch Scrolling */
+    #cart-items-list {
+        touch-action: pan-y !important;
+        -webkit-overflow-scrolling: touch !important;
+        overscroll-behavior-y: contain !important;
+        will-change: scroll-position;
+    }
 </style>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -662,6 +709,8 @@
             box-shadow: 0 0 14px rgba(245, 158, 11, 0.7), 0 0 28px rgba(245, 158, 11, 0.35) !important;
             background-color: #FFFBEB !important;
             animation: cateringGlowGold 2.2s infinite ease-in-out !important;
+            will-change: transform, box-shadow;
+            transform: translateZ(0);
         }
         html.dark #rider-cust-chats-feed > div.catering-glow-gold,
         html.dark #rider-cust-chats-feed > div.catering-glow-my,
@@ -676,16 +725,69 @@
         .avatar-glow-gold {
             border-color: #f59e0b !important;
             box-shadow: 0 0 10px rgba(245, 158, 11, 0.8) !important;
+            transform: translateZ(0);
         }
 
         .avatar-glow-my {
             border-color: #10b981 !important;
             box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
+            transform: translateZ(0);
+        }
+
+        /* ========================================================================== */
+        /* HIGH-PERFORMANCE MOBILE WEBVIEW ACCELERATION (60FPS TUNING)               */
+        /* ========================================================================== */
+        * {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .overflow-y-auto, .overflow-x-auto {
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Content visibility optimization for long customer / directory lists */
+        #rider-cust-chats-feed > div,
+        #directory-cards-container > div,
+        #catered-customers-feed > div,
+        #all-stores-feed > div {
+            content-visibility: auto;
+            contain-intrinsic-size: 0 85px;
+        }
+
+        img {
+            decoding: async;
+        }
+
+        /* Bypass heavy multi-pass blur shaders on mobile GPU to eliminate frame drops */
+        @media (max-width: 1024px) {
+            .backdrop-blur-md,
+            .backdrop-blur-sm,
+            .backdrop-blur-lg,
+            .backdrop-blur-xs,
+            [class*="backdrop-blur"] {
+                backdrop-filter: none !important;
+                -webkit-backdrop-filter: none !important;
+            }
+            .bg-black\/80, .bg-black\/75, .bg-black\/85, .bg-black\/90, .bg-black\/95 {
+                background-color: rgba(10, 10, 12, 0.94) !important;
+            }
+            .bg-white\/80, .bg-white\/85, .bg-white\/90, .bg-white\/95 {
+                background-color: rgba(255, 255, 255, 0.97) !important;
+            }
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-Bvf8Vf0t.js"></script>
+  <script type="module" crossorigin src="./assets/index-vY70Qu7P.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
+
+    <!-- PIP / FLOATING WINDOW STASHED BADGE (SHOWN WHEN DOCKED TO SIDE) -->
+    <div id="pip-stashed-badge" class="hidden fixed inset-0 z-[999999] bg-[#0c1421] flex items-center justify-center select-none overflow-hidden cursor-pointer" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" title="Lokalex - Tap to expand">
+        <div class="relative w-14 h-14 rounded-full bg-slate-900 border-2 border-emerald-500 shadow-xl shadow-emerald-500/40 flex items-center justify-center transition active:scale-90">
+            <span class="absolute inset-0 rounded-full border border-emerald-400 animate-ping opacity-35 pointer-events-none"></span>
+            <img src="./Logo.png" alt="Lokalex" class="w-10 h-10 object-contain rounded-full pointer-events-none select-none">
+            <span id="pip-badge-pulse-dot" class="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-900 rounded-full shadow-xs"></span>
+        </div>
+    </div>
 
     <div id="golden-first-line-border" class="hidden pointer-events-none fixed inset-0 border-[6px] border-yellow-400 shadow-[inset_0_0_30px_rgba(250,204,21,0.8)] z-[9999]"></div>
 
@@ -722,6 +824,11 @@
 
     <!-- RIGHT: LIVE DIGITAL CLOCK, BATTERY INDICATOR, THEME TOGGLE & NETWORK STATUS PILL -->
     <div class="flex items-center gap-1.5 shrink-0">
+        <!-- FLOATING WINDOW (PIP) MODE BUTTON -->
+        <button id="header-floating-window-btn" type="button" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" class="flex items-center justify-center w-7 h-7 rounded-xl bg-gray-100 dark:bg-black/40 hover:bg-sky-50 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700/60 text-sky-600 dark:text-sky-400 transition active:scale-95 shadow-2xs cursor-pointer" title="Float App as Mini Window over Other Apps (PiP)">
+            <i class="fa-solid fa-up-right-from-square text-xs"></i>
+        </button>
+
         <!-- QUICK THEME TOGGLE BUTTON -->
         <button type="button" onclick="window.toggleAppTheme && window.toggleAppTheme()" class="flex items-center justify-center w-7 h-7 rounded-xl bg-gray-100 dark:bg-black/40 hover:bg-emerald-50 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700/60 text-amber-500 dark:text-amber-400 transition active:scale-95 shadow-2xs cursor-pointer" title="Toggle Light / Dark Theme">
             <i class="fa-solid fa-sun text-xs dark:hidden"></i>
@@ -1628,8 +1735,14 @@
                     <button id="btn-force-refresh-chat-feed" type="button" onclick="window.forceRefreshLiveChatsFeed && window.forceRefreshLiveChatsFeed(this)" class="bg-white dark:bg-cardBg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-700 dark:text-blue-400 border border-gray-300 dark:border-gray-700 text-[9.5px] font-bold px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer" title="Force Refresh Live Chats Feed">
                         <i class="fa-solid fa-arrows-rotate text-blue-500 text-[9px]"></i> Refresh
                     </button>
+                    <button id="dashboard-float-window-btn" type="button" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" class="bg-white dark:bg-cardBg hover:bg-sky-50 dark:hover:bg-sky-950/30 text-sky-700 dark:text-sky-400 border border-gray-300 dark:border-gray-700 text-[9.5px] font-bold px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer" title="Float App as Mini Window over Other Apps (PiP)">
+                        <i class="fa-solid fa-up-right-from-square text-sky-500 text-[9px]"></i> Float Window
+                    </button>
                     <button id="admin-fb-settings-btn" onclick="window.openAdminFbApiModal && window.openAdminFbApiModal()" class="bg-blue-600 hover:bg-blue-500 text-white text-[9.5px] font-black px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Configure Facebook Messenger APIs">
                         <i class="fa-brands fa-facebook-messenger"></i> FB APIs
+                    </button>
+                    <button id="admin-automsg-settings-btn" onclick="window.openAutoMessageSettingsModal && window.openAutoMessageSettingsModal()" class="hidden bg-purple-600 hover:bg-purple-500 text-white text-[9.5px] font-black px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Configure Automated Messages for Catering & Done">
+                        <i class="fa-solid fa-robot text-[9px]"></i> Auto-Msg
                     </button>
                     <button id="chat-chimes-settings-btn" type="button" onclick="window.openChatSoundSettingsModal && window.openChatSoundSettingsModal()" class="bg-white dark:bg-cardBg hover:bg-amber-50 dark:hover:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-gray-300 dark:border-gray-700 text-[9.5px] font-bold px-2 py-0.5 rounded-lg transition active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer" title="Configure Message Chimes & Ringtones">
                         <i class="fa-solid fa-bell text-amber-500 text-[9px]"></i> Chimes
@@ -1810,6 +1923,11 @@
                     <i class="fa-solid fa-ban"></i> Full Booking
                 </button>
 
+                <!-- ADMIN AUTO-MESSAGES BUTTON -->
+                <button id="admin-automsg-toolbar-btn" onclick="window.openAutoMessageSettingsModal && window.openAutoMessageSettingsModal()" class="hidden bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-600/30 dark:hover:bg-purple-600 dark:text-purple-300 dark:border-purple-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Configure Automated Messages for Catering & Done">
+                    <i class="fa-solid fa-robot"></i> Auto-Msg
+                </button>
+
                 <!-- ADMIN COMMISSION SETTINGS BUTTON -->
                 <button id="admin-commission-settings-btn" onclick="window.openAdminCommissionSettingsModal && window.openAdminCommissionSettingsModal()" class="hidden bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-600/30 dark:hover:bg-amber-600 dark:text-amber-300 dark:border-amber-500/50 text-[9px] px-1.5 py-0.5 rounded-lg font-bold transition active:scale-95 flex items-center gap-1 cursor-pointer">
                     <i class="fa-solid fa-percent"></i> Commission
@@ -1930,14 +2048,32 @@
     
     <button onclick="window.logout && window.logout()" class="text-xs text-red-500 hover:text-red-700 dark:text-red-400/60 dark:hover:text-red-400 py-1.5 mt-1 font-bold transition cursor-pointer">Log out of device</button>
 
-    <!-- VERSION TRACKER -->
-    <div class="flex flex-col items-center justify-center gap-1 mt-1 mb-6">
+    <!-- VERSION TRACKER & CHANGE LOG -->
+    <div class="flex flex-col items-center justify-center gap-1.5 mt-1 mb-6 w-full max-w-sm mx-auto px-2">
         <button type="button" onclick="window.checkForOtaUpdate && window.checkForOtaUpdate(true)" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition hover:bg-gray-100 dark:hover:bg-gray-800/60 cursor-pointer" title="Tap to check for updates">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>Lokalex Hub</span>
             <span class="app-version-tracker font-mono font-bold text-gray-600 dark:text-gray-300">v1.0.4</span>
             <span class="text-[9px] px-1.5 py-0.2 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 rounded-md font-mono font-semibold">OTA Live</span>
         </button>
+
+        <!-- Change Log Below Version -->
+        <div class="flex items-center gap-2">
+            <button type="button" onclick="window.openChangelogModal && window.openChangelogModal()" class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 py-0.5 px-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition cursor-pointer" title="View release notes from CHANGELOG.md">
+                <i class="fa-solid fa-scroll text-[11px]"></i>
+                <span>Change Log</span>
+            </button>
+            <span class="text-gray-300 dark:text-zinc-700 text-[10px]">•</span>
+            <button type="button" onclick="window.toggleInlineChangelog && window.toggleInlineChangelog()" class="inline-flex items-center gap-1 text-[10px] text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 py-0.5 px-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition cursor-pointer" title="Expand inline release notes">
+                <span>Details</span>
+                <i id="inline-changelog-chevron" class="fa-solid fa-chevron-down text-[9px] transition-transform"></i>
+            </button>
+        </div>
+
+        <!-- Expandable Inline Change Log Container -->
+        <div id="inline-changelog-container" class="hidden w-full mt-2 text-left bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-3 shadow-md max-h-72 overflow-y-auto overscroll-contain">
+            <!-- Populated dynamically from CHANGELOG.md -->
+        </div>
     </div>
 
     <!-- AVAILABLE QUEUE INFO MODAL -->
@@ -2465,7 +2601,7 @@
         </button>
     </div>
 
-    <div id="cart-items-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 pb-20"></div>
+    <div id="cart-items-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 pb-24" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; will-change: scroll-position;"></div>
 
     <div class="p-4 bg-gray-50 dark:bg-darkBg border-t border-gray-200 dark:border-gray-800 shrink-0">
         <button onclick="window.validateAndProceedToWizard && window.validateAndProceedToWizard()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black p-3.5 rounded-2xl shadow-lg transition active:scale-95 text-xs flex items-center justify-center gap-2">
@@ -2858,7 +2994,7 @@
     </div>
     
     <!-- DIRECTORY RECORD LIST -->
-    <div id="record-list" class="flex-1 flex flex-col gap-3 pb-20 pr-8 overflow-y-auto"></div>
+    <div id="record-list" class="flex-1 flex flex-col gap-3 pb-20 pr-8 overflow-y-auto overscroll-y-auto" style="touch-action: pan-y; -webkit-overflow-scrolling: touch;"></div>
     
     <!-- ALPHABET SCRUBBER -->
     <div id="alphabet-scrubber" class="fixed right-2 top-1/2 -translate-y-1/2 flex flex-col text-[10px] text-gray-400 font-bold z-30 touch-none select-none"></div>
@@ -3545,6 +3681,9 @@
                 </div>
             </div>
             <div class="flex items-center gap-0.5 sm:gap-1 shrink-0">
+                <button type="button" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" class="text-sky-500 hover:text-sky-600 dark:hover:text-sky-400 p-2 text-sm transition shrink-0" title="Float Chat over Other Apps (PiP)">
+                    <i class="fa-solid fa-up-right-from-square"></i>
+                </button>
                 <button type="button" onclick="window.openChatSoundSettingsModal && window.openChatSoundSettingsModal()" class="text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 p-2 text-sm transition shrink-0" title="Message Chimes & Ringtones">
                     <i class="fa-solid fa-bell"></i>
                 </button>
@@ -3696,6 +3835,10 @@
                 <button type="button" onclick="window.openFareRatePickerFromChat && window.openFareRatePickerFromChat()" class="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg border border-emerald-500/30 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer font-bold" title="Browse & Send Delivery Fare Rates">
                     <i class="fa-solid fa-peso-sign text-[11px]"></i>
                     <span class="text-[10px] font-black">Rates</span>
+                </button>
+                <button id="chat-automsg-admin-btn" type="button" onclick="window.openAutoMessageSettingsModal && window.openAutoMessageSettingsModal()" class="hidden px-2.5 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 rounded-lg border border-purple-500/30 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer font-bold" title="Admin Auto-Messages Configuration">
+                    <i class="fa-solid fa-robot text-[11px]"></i>
+                    <span class="text-[10px] font-black">Auto-Msg</span>
                 </button>
                 <button type="button" onclick="window.promptImageAttachmentSource && window.promptImageAttachmentSource()" class="px-2.5 py-1 bg-inputBg hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-lg border border-gray-300 dark:border-gray-700 transition active:scale-95 text-xs flex items-center gap-1 shrink-0 cursor-pointer" title="Send Image">
                     <i class="fa-solid fa-image text-[11px]"></i>
@@ -6845,6 +6988,9 @@
                     <div id="ota-current-version-badge" class="font-black text-base sm:text-lg font-mono">v1.0.28</div>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onclick="window.openChangelogModal && window.openChangelogModal()" class="bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 cursor-pointer" title="View Release Notes / Changelog">
+                        <i class="fa-solid fa-scroll"></i> Change Log
+                    </button>
                     <button type="button" onclick="window.openOtaUpdateSelectorModal && window.openOtaUpdateSelectorModal()" class="bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Refresh available versions from GitHub">
                         <i class="fa-solid fa-arrows-rotate"></i> Refresh
                     </button>
@@ -7552,6 +7698,27 @@
                 </div>
             </div>
 
+            <!-- AUTO-MESSAGES CONFIGURATION ENTRY (ADMIN ONLY) -->
+            <div id="profile-automsg-settings-card" class="hidden pt-2 border-t border-gray-200 dark:border-gray-800">
+                <div class="bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/40 p-3 rounded-2xl flex items-center justify-between gap-2 shadow-xs">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-robot text-sm"></i>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-bold text-xs text-gray-900 dark:text-white truncate">Auto-Messages</span>
+                                <span class="text-[8.5px] font-black uppercase tracking-wider px-1 py-0.2 rounded bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800">Admin</span>
+                            </div>
+                            <div class="text-[10px] text-gray-500 dark:text-gray-400 truncate">Auto responses for Catering & Done</div>
+                        </div>
+                    </div>
+                    <button type="button" onclick="window.openAutoMessageSettingsModal && window.openAutoMessageSettingsModal()" class="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition active:scale-95 shadow-xs flex items-center gap-1.5 shrink-0 cursor-pointer">
+                        <i class="fa-solid fa-sliders text-[10px]"></i> Configure
+                    </button>
+                </div>
+            </div>
+
             <!-- OVER-THE-AIR (OTA) LIVE UPDATE CONTROLS -->
             <div class="pt-2 border-t border-gray-200 dark:border-gray-800">
                 <div class="flex items-center justify-between gap-2">
@@ -7585,12 +7752,16 @@
                 <button type="button" id="prof-logout-btn" onclick="window.executeUniversalLogout && window.executeUniversalLogout()" class="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 dark:bg-red-950/30 dark:hover:bg-red-900/40 dark:text-red-400 dark:border-red-800/50 py-2.5 rounded-xl text-xs font-bold transition active:scale-95 flex items-center justify-center gap-2 shadow-xs">
                     <i class="fa-solid fa-arrow-right-from-bracket"></i> Log Out of Account
                 </button>
-                <div class="mt-2 text-center">
+                <div class="mt-2 text-center flex flex-col items-center gap-1">
                     <button type="button" onclick="window.openOtaUpdateSelectorModal && window.openOtaUpdateSelectorModal()" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition hover:bg-gray-100 dark:hover:bg-gray-800/60 cursor-pointer" title="Tap to select version or rollback">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                         <span>Lokalex Hub</span>
                         <span class="app-version-tracker font-mono font-bold text-gray-600 dark:text-gray-300">v1.0.4</span>
                         <span class="text-[9px] px-1.5 py-0.2 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 rounded-md font-mono font-semibold">OTA Live</span>
+                    </button>
+                    <button type="button" onclick="window.openChangelogModal && window.openChangelogModal()" class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer py-0.5">
+                        <i class="fa-solid fa-scroll text-[10px]"></i>
+                        <span>View Change Log</span>
                     </button>
                 </div>
             </div>
