@@ -320,10 +320,8 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
                 } catch (_) {}
             };
 
-            if (cleanCustKey) {
-                markChatCompleted(cleanCustKey);
-            }
-
+            // Note: Only real chat thread IDs (from threadMap or customerChatMeta) should be marked completed.
+            // Do NOT call markChatCompleted on raw customer name strings as that creates ghost metadata entries.
             let doneAutoMsgSent = false;
 
             // Immediately synchronize in-memory live chat threads and move matching thread to Done folder

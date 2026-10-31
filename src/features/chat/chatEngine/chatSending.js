@@ -20,7 +20,8 @@ import {
 } from './chatState.js';
 import { cancelRiderReply } from './chatListeners.js';
 import { clearMyTypingStatus } from './chatPresence.js';
-import { isAdmin } from '../../roster/rosterUtils.js';
+import { isAdmin, canManageRoster, isCustomerMatch } from '../../roster/rosterUtils.js';
+import { getActiveRosterCaterer } from '../chatFeed/chatFeedState.js';
 
 export async function forwardRiderReactionToMessenger({ custId, msgId, emoji, action = 'react' }) {
     try {
@@ -152,6 +153,41 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
         } catch (_) {}
     }
 
+    // Strict Guard: Prevent riders from sending messages to customers in catering who are catered by someone else
+    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
+                        (typeof canManageRoster === 'function' && canManageRoster()) ||
+                        (typeof window !== 'undefined' && typeof window.isAdmin === 'function' && window.isAdmin()) ||
+                        (typeof window !== 'undefined' && typeof window.canManageRoster === 'function' && window.canManageRoster()) ||
+                        Boolean(globalState.adminControlsEnabled);
+
+    if (!isUserAdmin && targetMeta) {
+        const isCateringFolder = (targetMeta.folder || '').toLowerCase() === 'catering';
+        const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+        const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+        const custDisplayName = (targetMeta.customerName || targetMeta.name || '').trim();
+
+        const activeCaterer = (typeof getActiveRosterCaterer === 'function')
+            ? getActiveRosterCaterer(custDisplayName, targetCustId, targetMeta)
+            : null;
+
+        const cateredRiderId = (targetMeta.cateredByRiderId || activeCaterer?.telegramId || "").toString().trim();
+        const cateredRiderName = (targetMeta.cateredByRiderName || targetMeta.cateredBy || activeCaterer?.riderName || activeCaterer?.name || "").toString().trim();
+        const cleanCateredRiderName = cateredRiderName.toLowerCase();
+
+        const myCateringCusts = (typeof window.getMyCateringCustomers === 'function') ? window.getMyCateringCustomers() : [];
+        const isCustomerInMyList = myCateringCusts.some(c => c.toLowerCase() === custDisplayName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(c, custDisplayName)));
+
+        const isCateringRider = (cateredRiderId && cateredRiderId === myId) || 
+                                (cleanCateredRiderName && cleanCateredRiderName === myName) || 
+                                isCustomerInMyList;
+
+        if (isCateringFolder && !isCateringRider) {
+            const displayCaterer = cateredRiderName || "another rider";
+            showToast(`🔒 Cannot send: Customer is being catered by ${displayCaterer}.`);
+            return;
+        }
+    }
+
     const targetCustDataSnapshot = (targetCustId === activeRiderChatCustId && activeCustData)
         ? { ...activeCustData }
         : null;
@@ -174,9 +210,6 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
     const targetChannel = targetMeta?.channel || (isFb ? 'messenger' : 'web');
     const targetApiId = targetMeta?.apiId || targetMeta?.channelId || null;
     const myPhoto = appState.photoUrl || localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || null;
-    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
-                        (typeof window !== 'undefined' && typeof window.isAdmin === 'function' && window.isAdmin()) ||
-                        Boolean(globalState.adminControlsEnabled);
     const senderRole = isUserAdmin ? 'admin' : 'rider';
 
     const newMsg = {
@@ -308,6 +341,7 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
             apiId: targetApiId,
             text: text,
             imageUrl: finalImageUrl,
+            videoUrl: customVideo?.videoUrl || null,
             fileUrl: customDoc?.fileUrl || null,
             fileName: customDoc?.fileName || null,
             locationCoords: customLocationCoords,
@@ -532,7 +566,7 @@ function compressDataUrlForBridge(dataUrl, maxDim = 800, quality = 0.65) {
 /**
  * Forwards outbound rider chat message directly to Facebook Messenger via the webhook bridge
  */
-export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, attachmentId = null, fileUrl, fileName, locationCoords, riderName, replyToMid, replyToText, newMsgKey, skipSeparateCaption = false, suppressToast = false }) {
+export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, videoUrl = null, attachmentId = null, fileUrl, fileName, locationCoords, riderName, replyToMid, replyToText, newMsgKey, skipSeparateCaption = false, suppressToast = false }) {
     try {
         const cleanPsid = String(custId || '').replace(/^fb_/, '');
         if (!cleanPsid) return;
@@ -836,6 +870,58 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
             }
         }
 
+        // 1B. DIRECT VIDEO SENDING TO META GRAPH API
+        if (videoUrl && token) {
+            try {
+                let sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messaging_type: 'RESPONSE',
+                        recipient: { id: cleanPsid },
+                        message: {
+                            attachment: {
+                                type: 'video',
+                                payload: { url: videoUrl, is_reusable: true }
+                            }
+                        }
+                    })
+                });
+
+                let sendData = await sendResp.json().catch(() => ({}));
+
+                if (!sendResp.ok && sendData?.error?.code === 10) {
+                    sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            messaging_type: 'MESSAGE_TAG',
+                            tag: 'CONFIRMED_EVENT_UPDATE',
+                            recipient: { id: cleanPsid },
+                            message: {
+                                attachment: {
+                                    type: 'video',
+                                    payload: { url: videoUrl, is_reusable: true }
+                                }
+                            }
+                        })
+                    });
+                    sendData = await sendResp.json().catch(() => ({}));
+                }
+
+                if (sendResp.ok) {
+                    recordFbMid(sendData?.message_id || null);
+                    if (text && typeof text === 'string' && text.trim() && !skipSeparateCaption) {
+                        await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey, suppressToast });
+                    }
+                    if (!suppressToast) showToast("🎥 Video sent to customer on Messenger!");
+                    return { success: true, messageId: sendData?.message_id };
+                }
+            } catch (e) {
+                console.warn("Direct Meta video send threw:", e);
+            }
+        }
+
         // 2. DIRECT TEXT SENDING WITH NATIVE THREADED QUOTE
         if (text && typeof text === 'string' && text.trim() && token && !imageUrl && !locationCoords) {
             try {
@@ -945,8 +1031,9 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 recipientId: cleanPsid,
-                text: text || (fileUrl ? `📄 ${fileName || 'Document'}: ${fileUrl}` : ""),
+                text: text || (videoUrl ? `🎥 Video: ${videoUrl}` : (fileUrl ? `📄 ${fileName || 'Document'}: ${fileUrl}` : "")),
                 imageUrl: safeFbImageUrl,
+                videoUrl: videoUrl || null,
                 fileUrl: fileUrl || null,
                 fileName: fileName || null,
                 locationCoords: locationCoords,

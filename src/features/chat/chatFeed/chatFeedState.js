@@ -165,22 +165,37 @@ export function setRiderChatFilter(filterMode) {
     }
 }
 
-export function getThreadDedupKey(key, meta) {
+export function getThreadDedupKey(key, meta = {}) {
     // 1. Facebook Messenger threads represent unique 1-on-1 conversations by Meta PSID.
-    // They must NEVER be collapsed into each other!
-    if (typeof key === 'string' && (key.startsWith('fb_') || key.startsWith('messenger_'))) {
-        return key.startsWith('fb_') ? key : `fb_${key}`;
+    // Normalize any numeric PSIDs or fb_ / messenger_ keys to the canonical 'fb_${psid}'
+    if (typeof key === 'string') {
+        const cleanKey = key.trim();
+        if (cleanKey.startsWith('fb_') || cleanKey.startsWith('messenger_')) {
+            const rawPsid = cleanKey.replace(/^(fb_|messenger_)/, '');
+            return `fb_${rawPsid}`;
+        }
+        if (/^\d{12,}$/.test(cleanKey)) {
+            return `fb_${cleanKey}`;
+        }
+    }
+    if (meta && (meta.channel === 'messenger' || meta.apiId || meta.fbApiId)) {
+        const rawPsid = String(meta.psid || meta.fbPsid || key || '').replace(/^(fb_|messenger_)/, '').trim();
+        if (rawPsid && /^\d+$/.test(rawPsid)) {
+            return `fb_${rawPsid}`;
+        }
     }
 
     // 2. For non-FB web threads, dedup by verified phone number if available
-    const rawPhone = meta.phoneNumber || meta.phone || 
+    const rawPhone = meta.phoneNumber || meta.phone || meta.customerPhone || 
                      (typeof key === 'string' && (key.startsWith('+63') || key.startsWith('09') || key.startsWith('63')) ? key : '');
     const cleanPhone = String(rawPhone).replace(/\D/g, '');
     if (cleanPhone.length >= 10) {
         return `phone_${cleanPhone.slice(-10)}`;
     }
 
-    return `id_${key}`;
+    // 3. Fallback: normalize key, stripping extraneous id_ prefixes
+    const cleanId = String(key || '').trim().replace(/^id_/, '');
+    return `id_${cleanId}`;
 }
 
 export function getLoggedInRiderInfo() {

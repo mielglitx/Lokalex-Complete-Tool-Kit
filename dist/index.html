@@ -772,7 +772,7 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-BJFteq0W.js"></script>
+  <script type="module" crossorigin src="./assets/index-BgNk0HuQ.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
@@ -2606,7 +2606,16 @@
         </button>
     </div>
 
-    <div id="cart-items-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 pb-24" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; will-change: scroll-position;"></div>
+    <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div id="cart-items-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 pb-24 no-scrollbar" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; will-change: scroll-position;"></div>
+        
+        <!-- Smart Cart Slider Scroller (Invisible slider track with glowing circular knob for futuristic touch scrolling) -->
+        <div id="cart-slider-track" class="absolute right-1.5 top-3 bottom-6 w-9 pointer-events-none flex justify-center z-30 select-none transition-opacity duration-300 opacity-0">
+            <div id="cart-slider-thumb" class="pointer-events-auto absolute top-0 w-8 h-8 rounded-full bg-blue-600/95 dark:bg-blue-500/95 hover:bg-blue-500 text-white shadow-xl backdrop-blur-md flex items-center justify-center cursor-grab active:cursor-grabbing active:scale-125 hover:scale-105 transition-transform duration-75 border-2 border-white/90 dark:border-cyan-300/90 shadow-blue-500/50">
+                <i class="fa-solid fa-arrows-up-down text-[11px] text-white/90"></i>
+            </div>
+        </div>
+    </div>
 
     <div class="p-4 bg-gray-50 dark:bg-darkBg border-t border-gray-200 dark:border-gray-800 shrink-0">
         <button onclick="window.validateAndProceedToWizard && window.validateAndProceedToWizard()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black p-3.5 rounded-2xl shadow-lg transition active:scale-95 text-xs flex items-center justify-center gap-2">
@@ -3041,12 +3050,27 @@
         <label class="text-xs text-gray-400 font-bold">General Address</label>
         <input type="text" id="form-address" name="form_address_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Street, Barangay, Landmarks" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white focus:border-blue-500 transition">
 
-        <label class="text-xs text-gray-400 font-bold">Map Link (Lat_Lon_Link)</label>
+        <label class="text-xs text-gray-400 font-bold">Main Map Link (Lat_Lon_Link)</label>
         <div class="flex gap-2">
             <input type="text" id="form-latlon" name="form_latlon_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Paste link or get from Map" class="flex-1 bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white text-xs font-mono focus:border-blue-500 transition">
             <button type="button" onclick="window.openMapPicker && window.openMapPicker()" class="bg-blue-600 hover:bg-blue-500 px-4 rounded-xl text-white text-sm font-bold flex items-center gap-2 transition active:scale-95 cursor-pointer shadow-sm">
                 <i class="fa-solid fa-map-location-dot"></i> Map
             </button>
+        </div>
+
+        <!-- ADDITIONAL SAVED LOCATIONS -->
+        <div id="form-additional-locations-section" class="mt-2 pt-2 border-t border-gray-700/60 flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+                <label class="text-xs text-emerald-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-map-location-dot"></i> Additional Saved Locations
+                </label>
+                <button type="button" onclick="window.addDirectoryExtraLocationField && window.addDirectoryExtraLocationField()" class="text-[11px] bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 px-2.5 py-1 rounded-xl font-bold flex items-center gap-1 transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-plus text-[9px]"></i> + Add Location
+                </button>
+            </div>
+            <div id="form-extra-locations-container" class="flex flex-col gap-2.5">
+                <!-- Additional location rows dynamically appended here -->
+            </div>
         </div>
     </div>
 
@@ -6387,24 +6411,62 @@
                 </div>
             </div>
 
-            <!-- ADDRESS CARD -->
-            <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800">
-                <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Delivery Address</span>
-                <span id="cust-modal-address" class="text-gray-800 dark:text-gray-200 mt-0.5 block leading-relaxed font-medium">---</span>
+            <!-- SAVED LOCATIONS HEADER & ACTIONS -->
+            <div class="flex items-center justify-between pt-1">
+                <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <i class="fa-solid fa-map-location-dot text-rose-500"></i> Saved Locations (<span id="cust-modal-locations-count">0</span>)
+                </span>
+                <button type="button" onclick="window.toggleAddLocationForm && window.toggleAddLocationForm()" class="text-[10.5px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-1 rounded-xl transition active:scale-95 flex items-center gap-1 cursor-pointer shadow-xs">
+                    <i class="fa-solid fa-plus text-[9px]"></i> + Add Location
+                </button>
             </div>
 
-            <!-- GPS LOCATION PIN CARD -->
-            <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex flex-col gap-2">
-                <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                    <i class="fa-solid fa-location-crosshairs"></i> Registered GPS Location Pin
-                </span>
-                <a id="cust-modal-map" href="#" target="_blank" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 text-xs flex items-center justify-center gap-2 shadow">
-                    <i class="fa-solid fa-map-location-dot text-sm"></i> OPEN GPS PIN IN GOOGLE MAPS
-                </a>
-                <span id="cust-modal-no-map-hint" class="hidden text-[10px] text-amber-600 dark:text-amber-400 text-center italic">
-                    ⚠️ No GPS pin link recorded in directory.
-                </span>
+            <!-- INLINE ADD LOCATION FORM (EXPANDABLE) -->
+            <div id="cust-modal-add-loc-box" class="hidden bg-gray-50 dark:bg-darkBg/95 border border-emerald-500/40 rounded-2xl p-3 flex flex-col gap-2 shadow-xs">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <i class="fa-solid fa-plus-circle"></i> Add New Saved Location
+                    </span>
+                    <button type="button" onclick="window.toggleAddLocationForm(false)" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div>
+                    <label class="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Location Label</label>
+                    <input type="text" id="cust-modal-new-loc-label" placeholder="e.g. Home, Work, Office, Farm" class="w-full bg-inputBg text-xs rounded-xl px-3 py-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-medium">
+                </div>
+                <div>
+                    <label class="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Delivery Address / Landmarks *</label>
+                    <input type="text" id="cust-modal-new-loc-address" placeholder="Street, Barangay, Landmarks" class="w-full bg-inputBg text-xs rounded-xl px-3 py-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-medium">
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider">GPS Map Pin Link</label>
+                        <button type="button" onclick="window.captureCurrentGpsForNewLocation && window.captureCurrentGpsForNewLocation()" class="text-[9.5px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 hover:underline">
+                            <i class="fa-solid fa-crosshairs"></i> Use My GPS
+                        </button>
+                    </div>
+                    <input type="text" id="cust-modal-new-loc-map" placeholder="Paste Google Maps link or coordinates" class="w-full bg-inputBg text-xs rounded-xl px-3 py-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-mono text-[11px]">
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-1">
+                    <button type="button" onclick="window.toggleAddLocationForm(false)" class="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-bold px-3 py-1.5 rounded-xl transition">
+                        Cancel
+                    </button>
+                    <button type="button" onclick="window.saveNewCustomerLocation && window.saveNewCustomerLocation()" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3.5 py-1.5 rounded-xl shadow transition active:scale-95 flex items-center gap-1">
+                        <i class="fa-solid fa-floppy-disk"></i> Save Location
+                    </button>
+                </div>
             </div>
+
+            <!-- DYNAMIC SAVED LOCATIONS LIST -->
+            <div id="cust-modal-locations-list" class="flex flex-col gap-2">
+                <!-- Populated dynamically -->
+            </div>
+
+            <!-- HIDDEN FALLBACK ELEMENTS FOR BACKWARD COMPATIBILITY -->
+            <span id="cust-modal-address" class="hidden">---</span>
+            <a id="cust-modal-map" href="#" target="_blank" class="hidden"></a>
+            <span id="cust-modal-no-map-hint" class="hidden"></span>
         </div>
 
         <!-- FOOTER CLOSE BUTTON -->

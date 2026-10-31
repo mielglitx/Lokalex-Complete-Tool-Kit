@@ -11,6 +11,7 @@ import {
     getEffectiveCartClient,
     syncSmartCartsWithCateringCustomers
 } from './cartState.js';
+import { updateCartScroller } from './cartScroller.js';
 
 export function switchCartTab(slot) {
     setActiveCartSlot(slot);
@@ -425,6 +426,10 @@ export function renderCartItems() {
             deleteBtnContainer.innerHTML = "";
         }
     }
+
+    try {
+        requestAnimationFrame(() => updateCartScroller());
+    } catch (_) {}
 }
 
 if (typeof window !== 'undefined') {

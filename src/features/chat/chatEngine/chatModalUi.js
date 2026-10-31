@@ -5,6 +5,7 @@ import { escapeHtml } from '../../../utils/helpers.js';
 import { toggleBodyScroll } from '../chatUtils.js';
 import { clearNativeNotification } from '../../../ui/notifications.js';
 import { isAdmin, canManageRoster, isCustomerMatch } from '../../roster/rosterUtils.js';
+import { getActiveRosterCaterer } from '../chatFeed/chatFeedState.js';
 import { resolveFacebookCustomerName, getResolvedFbName } from '../facebookApiAdmin.js';
 import { highlightActiveMilestoneUI } from '../riderThreadActions.js';
 import {
@@ -491,21 +492,28 @@ export function evaluateRiderChatLockPermissions() {
     const inputEl = document.getElementById('rider-chat-input') || document.getElementById('rider-cust-chat-input');
     const sendBtn = document.getElementById('rider-cust-send-btn');
     const actionToolbar = document.getElementById('rider-chat-action-toolbar');
+    const quickToolbar = document.getElementById('rider-chat-quick-toolbar');
 
     if (!currentRiderChatMeta) return;
 
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+    const custDisplayName = (currentRiderChatMeta.customerName || currentRiderChatMeta.name || '').trim();
 
-    const cateredRiderId = (currentRiderChatMeta.cateredByRiderId || "").toString().trim();
-    const cateredRiderName = (currentRiderChatMeta.cateredByRiderName || currentRiderChatMeta.cateredBy || "").toString().trim().toLowerCase();
+    // Check active roster catering info
+    const activeCaterer = (typeof getActiveRosterCaterer === 'function') 
+        ? getActiveRosterCaterer(custDisplayName, currentRiderChatMeta.id || currentRiderChatMeta.key || activeRiderChatCustId, currentRiderChatMeta)
+        : null;
+
+    const cateredRiderId = (currentRiderChatMeta.cateredByRiderId || activeCaterer?.telegramId || "").toString().trim();
+    const cateredRiderName = (currentRiderChatMeta.cateredByRiderName || currentRiderChatMeta.cateredBy || activeCaterer?.riderName || activeCaterer?.name || "").toString().trim();
+    const cleanCateredRiderName = cateredRiderName.toLowerCase();
 
     // Check active roster catering list for current rider
     const myCateringCusts = (typeof window.getMyCateringCustomers === 'function') ? window.getMyCateringCustomers() : [];
-    const custDisplayName = (currentRiderChatMeta.customerName || currentRiderChatMeta.name || '').trim();
     const isCustomerInMyList = myCateringCusts.some(c => c.toLowerCase() === custDisplayName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(c, custDisplayName)));
 
-    const isCateringRider = (cateredRiderId && cateredRiderId === myId) || (cateredRiderName && cateredRiderName === myName) || isCustomerInMyList;
+    const isCateringRider = (cateredRiderId && cateredRiderId === myId) || (cleanCateredRiderName && cleanCateredRiderName === myName) || isCustomerInMyList;
     
     const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
                         (typeof canManageRoster === 'function' && canManageRoster()) ||
@@ -513,25 +521,38 @@ export function evaluateRiderChatLockPermissions() {
                         (typeof window.canManageRoster === 'function' && window.canManageRoster()) ||
                         Boolean(globalState.adminControlsEnabled);
 
-    const isLocked = (cateredRiderId || cateredRiderName) && !isCateringRider && !isUserAdmin;
+    const isCateringFolder = (currentRiderChatMeta.folder || '').toLowerCase() === 'catering' || Boolean(cateredRiderId || cleanCateredRiderName);
+    const isLocked = isCateringFolder && !isCateringRider && !isUserAdmin;
 
     const caterBtn = document.getElementById('rider-chat-cater-btn');
     const cancelBtn = document.getElementById('rider-chat-cancel-btn');
     const goCartBtn = document.getElementById('rider-chat-go-cart-btn');
 
     if (isLocked) {
+        const displayCaterer = cateredRiderName || "another rider";
         if (lockBanner) {
             lockBanner.classList.remove('hidden');
             lockBanner.className = "bg-amber-50 dark:bg-amber-500/20 border-b border-amber-200 dark:border-amber-500/40 px-3 py-1.5 text-[11px] text-amber-800 dark:text-amber-300 font-bold text-center shrink-0";
-            lockBanner.innerHTML = `🔒 Being catered by <strong>${escapeHtml(currentRiderChatMeta.cateredByRiderName || currentRiderChatMeta.cateredBy)}</strong>. View only mode.`;
+            lockBanner.innerHTML = `🔒 Being catered by <strong>${escapeHtml(displayCaterer)}</strong>. View only mode.`;
         }
-        if (inputEl) inputEl.disabled = true;
+        if (inputEl) {
+            inputEl.disabled = true;
+            inputEl.placeholder = `🔒 View-only: Being catered by ${displayCaterer}`;
+        }
         if (sendBtn) sendBtn.disabled = true;
         if (actionToolbar) actionToolbar.classList.add('opacity-50', 'pointer-events-none');
+        if (quickToolbar) quickToolbar.classList.add('opacity-50', 'pointer-events-none');
         if (caterBtn) caterBtn.classList.add('hidden');
         if (cancelBtn) cancelBtn.classList.add('hidden');
         if (goCartBtn) goCartBtn.classList.add('hidden');
     } else {
+        if (inputEl) {
+            inputEl.disabled = false;
+            inputEl.placeholder = "Type your reply...";
+        }
+        if (sendBtn) sendBtn.disabled = false;
+        if (actionToolbar) actionToolbar.classList.remove('opacity-50', 'pointer-events-none');
+        if (quickToolbar) quickToolbar.classList.remove('opacity-50', 'pointer-events-none');
         if (lockBanner) {
             if (isCateringRider) {
                 lockBanner.classList.remove('hidden');

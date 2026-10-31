@@ -15,6 +15,7 @@ let currentFilteredDirectoryResults = [];
 let currentActiveDirectoryMatch = null;
 let currentActiveLinkedRecord = null;
 let currentChatDetailsCustId = null;
+let currentChatDetailsLocations = [];
 
 export async function getDirectoryCustomersList() {
     const customerMap = new Map();
@@ -44,6 +45,9 @@ export async function getDirectoryCustomersList() {
         const barangay = String(item.barangay || '').trim();
         const lat_lon_link = String(item.lat_lon_link || item.mapPinLink || item.mapLink || '').trim();
         const compKey = String(item.compositeKey || item.id || fallbackKey || cleanKey).trim();
+        const locations = Array.isArray(item.locations) && item.locations.length > 0 
+            ? item.locations 
+            : (address ? [{ label: 'Main Address', address, lat_lon_link, isPrimary: true }] : []);
 
         if (customerMap.has(cleanKey)) {
             const existing = customerMap.get(cleanKey);
@@ -55,6 +59,7 @@ export async function getDirectoryCustomersList() {
                 address: existing.address || address,
                 barangay: existing.barangay || barangay,
                 lat_lon_link: existing.lat_lon_link || lat_lon_link,
+                locations: (existing.locations && existing.locations.length > 0) ? existing.locations : locations,
                 type: 'customers'
             });
         } else {
@@ -66,6 +71,7 @@ export async function getDirectoryCustomersList() {
                 address,
                 barangay,
                 lat_lon_link,
+                locations,
                 type: 'customers'
             });
         }
@@ -174,7 +180,7 @@ export function renderCustomerDetailsUI(custId, data = {}, meta = {}, dirRecord 
                            (chatHeaderName && !chatHeaderName.startsWith('FB Customer (') && chatHeaderName !== 'Customer' ? chatHeaderName : null) || 
                            data.name || meta.customerName || 'Customer';
 
-    // Resolve effective name, phone, address, map pin
+    // Resolve effective name, phone, address, map pin, and multiple locations
     let effectiveName = actualCustName;
     let effectivePhone = data.phoneNumber || data.phone || data.contact || meta.customerPhone || "";
     let effectiveAddress = data.address || meta.customerAddress || "";
@@ -191,6 +197,34 @@ export function renderCustomerDetailsUI(custId, data = {}, meta = {}, dirRecord 
         isAutoMatched = true;
         // NOTE: Suggested match ONLY - never overwrite the customer's actual identity, phone, or address!
     }
+
+    // Build multiple saved locations array
+    let effectiveLocations = [];
+    if (Array.isArray(dirRecord?.locations) && dirRecord.locations.length > 0) {
+        effectiveLocations = dirRecord.locations.map(l => ({ ...l }));
+    } else if (Array.isArray(data?.locations) && data.locations.length > 0) {
+        effectiveLocations = data.locations.map(l => ({ ...l }));
+    } else if (Array.isArray(meta?.locations) && meta.locations.length > 0) {
+        effectiveLocations = meta.locations.map(l => ({ ...l }));
+    } else if (effectiveAddress || effectiveMapPin) {
+        effectiveLocations = [{
+            id: 'loc_main',
+            label: 'Main Address',
+            address: effectiveAddress,
+            mapPinLink: effectiveMapPin,
+            lat_lon_link: effectiveMapPin,
+            isPrimary: true
+        }];
+    }
+
+    // Keep primary location synchronized
+    const primaryLoc = effectiveLocations.find(l => l.isPrimary) || effectiveLocations[0];
+    if (primaryLoc) {
+        if (primaryLoc.address) effectiveAddress = primaryLoc.address;
+        if (primaryLoc.mapPinLink || primaryLoc.lat_lon_link) effectiveMapPin = primaryLoc.mapPinLink || primaryLoc.lat_lon_link;
+    }
+
+    currentChatDetailsLocations = effectiveLocations;
 
     // Populate Fields
     const avatarImg = document.getElementById('cust-modal-avatar-img');
@@ -260,12 +294,11 @@ export function renderCustomerDetailsUI(custId, data = {}, meta = {}, dirRecord 
         }
     }
 
-    // Address
+    // Address & Map Pin Fallback elements
     if (addrEl) {
         addrEl.innerText = effectiveAddress || "No address provided.";
     }
 
-    // Map Pin
     const mapUrl = formatMapPinUrl(effectiveMapPin);
     if (mapEl) {
         mapEl.href = mapUrl;
@@ -275,6 +308,65 @@ export function renderCustomerDetailsUI(custId, data = {}, meta = {}, dirRecord 
         } else {
             mapEl.classList.remove('opacity-50', 'pointer-events-none');
             if (noMapHint) noMapHint.classList.add('hidden');
+        }
+    }
+
+    // Render Multiple Saved Locations List
+    const locListEl = document.getElementById('cust-modal-locations-list');
+    const locCountEl = document.getElementById('cust-modal-locations-count');
+    if (locCountEl) locCountEl.innerText = effectiveLocations.length;
+
+    if (locListEl) {
+        if (effectiveLocations.length === 0) {
+            locListEl.innerHTML = `
+                <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 text-center py-4">
+                    <span class="text-xs text-gray-400 block font-medium">No saved delivery locations yet.</span>
+                    <button type="button" onclick="window.toggleAddLocationForm(true)" class="mt-2 text-xs bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 font-bold px-3 py-1.5 rounded-xl hover:bg-emerald-600 hover:text-white transition cursor-pointer">
+                        <i class="fa-solid fa-plus text-[10px]"></i> Add First Location
+                    </button>
+                </div>`;
+        } else {
+            locListEl.innerHTML = effectiveLocations.map((loc, idx) => {
+                const locLabel = loc.label || `Location ${idx + 1}`;
+                const locAddr = loc.address || 'No address specified';
+                const locMap = loc.mapPinLink || loc.lat_lon_link || '';
+                const isPrimary = Boolean(loc.isPrimary || idx === 0);
+                const locMapUrl = locMap ? formatMapPinUrl(locMap) : null;
+
+                return `
+                <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border ${isPrimary ? 'border-emerald-500/40 ring-1 ring-emerald-500/20' : 'border-gray-200 dark:border-gray-800'} flex flex-col gap-1.5 transition-all">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isPrimary ? 'bg-emerald-600 text-white' : 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300'} truncate">
+                                ${escapeHtml(locLabel)}
+                            </span>
+                            ${isPrimary ? '<span class="text-[8.5px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Default</span>' : ''}
+                        </div>
+                        <div class="flex items-center gap-1 shrink-0">
+                            ${!isPrimary ? `
+                                <button type="button" onclick="window.setCustomerPrimaryLocation && window.setCustomerPrimaryLocation(${idx})" class="text-[9.5px] text-blue-600 dark:text-blue-400 hover:underline font-bold px-1.5 py-0.5 rounded transition cursor-pointer" title="Make default delivery location">
+                                    Set Default
+                                </button>
+                            ` : ''}
+                            <button type="button" onclick="window.deleteCustomerLocation && window.deleteCustomerLocation(${idx})" class="text-[10px] text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 p-1 rounded transition cursor-pointer" title="Delete Location">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="text-xs text-gray-800 dark:text-gray-200 font-medium leading-relaxed break-words">
+                        ${escapeHtml(locAddr)}
+                    </div>
+                    ${locMapUrl ? `
+                        <div class="pt-1">
+                            <a href="${locMapUrl}" target="_blank" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-1.5 px-2.5 rounded-xl transition active:scale-95 text-[11px] flex items-center justify-center gap-1.5 shadow-xs">
+                                <i class="fa-solid fa-map-location-dot"></i> Open in Google Maps
+                            </a>
+                        </div>
+                    ` : `
+                        <div class="text-[9.5px] text-gray-400 italic">No GPS coordinates attached</div>
+                    `}
+                </div>`;
+            }).join('');
         }
     }
 
@@ -442,10 +534,33 @@ export async function showCustomerDetails() {
                 const rClean = cleanCustomerForMatch(r.name);
                 return rClean && rClean === cleanTarget;
             });
+
+            // Also check contact phone match if available
+            if (!candidate) {
+                const rawPhone = custData.phoneNumber || meta.customerPhone || custData.contact;
+                if (rawPhone) {
+                    const p = String(rawPhone).replace(/\D/g, '').slice(-10);
+                    if (p.length >= 7) {
+                        candidate = dirList.find(r => {
+                            const rp = String(r.contact || '').replace(/\D/g, '').slice(-10);
+                            return rp && rp === p;
+                        });
+                    }
+                }
+            }
+
             if (candidate) {
                 autoMatchCandidate = candidate;
             }
         }
+    }
+
+    // AUTO CONNECT: If the app detected a customer profile saved in the directory when the user checks for his customer if it has a profile, auto connect immediately!
+    if (!linkedRecord && autoMatchCandidate) {
+        await linkChatToDirectoryRecord(custId, autoMatchCandidate);
+        linkedRecord = autoMatchCandidate;
+        autoMatchCandidate = null;
+        showToast(`🔗 Auto-connected to ${linkedRecord.name} in Customer Directory!`);
     }
 
     renderCustomerDetailsUI(custId, custData, meta, linkedRecord, autoMatchCandidate);
@@ -694,6 +809,9 @@ export async function linkChatToDirectoryRecord(custId, dirRecord) {
     const address = dirRecord.address || "";
     const mapPin = dirRecord.lat_lon_link || "";
     const barangay = dirRecord.barangay || "";
+    const locations = Array.isArray(dirRecord.locations) && dirRecord.locations.length > 0 
+        ? dirRecord.locations 
+        : (address ? [{ label: 'Main Address', address: address, mapPinLink: mapPin, lat_lon_link: mapPin, isPrimary: true }] : []);
 
     // Strictly resolve original name for THIS custId specifically to avoid cross-customer contamination
     let originalName = null;
@@ -731,6 +849,7 @@ export async function linkChatToDirectoryRecord(custId, dirRecord) {
         address: address,
         mapPinLink: mapPin,
         barangay: barangay,
+        locations: locations,
         linkedAt: Date.now(),
         linkedBy: appState.riderName || "Rider"
     };
@@ -742,7 +861,8 @@ export async function linkChatToDirectoryRecord(custId, dirRecord) {
         linkedDirectoryName: dirName,
         customerPhone: phone,
         customerAddress: address,
-        customerMapPin: mapPin
+        customerMapPin: mapPin,
+        locations: locations
     };
     if (custId.startsWith('fb_')) {
         chatMetaUpdates.facebookName = originalName;
@@ -1011,4 +1131,269 @@ export async function handleCustomerPhotoUpload(event) {
         console.error("Failed to upload customer avatar:", err);
         showToast("❌ Failed to save photo: " + (err.message || "Error"));
     }
+}
+
+export function toggleAddLocationForm(show) {
+    const box = document.getElementById('cust-modal-add-loc-box');
+    if (!box) return;
+    const willShow = show !== undefined ? Boolean(show) : box.classList.contains('hidden');
+    if (willShow) {
+        box.classList.remove('hidden');
+        document.getElementById('cust-modal-new-loc-address')?.focus();
+    } else {
+        box.classList.add('hidden');
+    }
+}
+
+export async function captureCurrentGpsForNewLocation() {
+    showToast("📍 Calibrating current GPS...");
+    let lat = appState.lat || null;
+    let lon = appState.lon || null;
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        try {
+            const pos = await new Promise((res, rej) => {
+                navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 4500, maximumAge: 5000 });
+            });
+            if (pos && pos.coords) {
+                lat = pos.coords.latitude;
+                lon = pos.coords.longitude;
+                appState.lat = lat;
+                appState.lon = lon;
+            }
+        } catch (_) {}
+    }
+    if (lat && lon) {
+        const link = `https://maps.google.com/?q=${Number(lat).toFixed(6)},${Number(lon).toFixed(6)}`;
+        const input = document.getElementById('cust-modal-new-loc-map');
+        if (input) input.value = link;
+        showToast("📍 Exact GPS coordinates captured!");
+    } else {
+        showToast("⚠️ Could not detect GPS coordinates.");
+    }
+}
+
+export async function saveNewCustomerLocation() {
+    const custId = currentChatDetailsCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null);
+    if (!custId) return showToast("⚠️ No customer selected.");
+
+    const labelInput = document.getElementById('cust-modal-new-loc-label');
+    const addrInput = document.getElementById('cust-modal-new-loc-address');
+    const mapInput = document.getElementById('cust-modal-new-loc-map');
+
+    const label = (labelInput?.value || '').trim() || `Location ${currentChatDetailsLocations.length + 1}`;
+    const address = (addrInput?.value || '').trim();
+    const mapPin = (mapInput?.value || '').trim();
+
+    if (!address && !mapPin) {
+        return showToast("⚠️ Please provide an address or GPS pin link.");
+    }
+
+    const isFirst = currentChatDetailsLocations.length === 0;
+    const newLoc = {
+        id: 'loc_' + Date.now(),
+        label: label,
+        address: address,
+        mapPinLink: mapPin,
+        lat_lon_link: mapPin,
+        isPrimary: isFirst
+    };
+
+    const updatedLocations = [...currentChatDetailsLocations, newLoc];
+    currentChatDetailsLocations = updatedLocations;
+
+    if (db) {
+        try {
+            const locUpdates = {
+                locations: updatedLocations,
+                ...(isFirst ? { address: address, mapPinLink: mapPin } : {})
+            };
+            const metaUpdates = {
+                locations: updatedLocations,
+                ...(isFirst ? { customerAddress: address, customerMapPin: mapPin } : {})
+            };
+
+            await Promise.all([
+                db.ref(`customers/${custId}`).update(locUpdates),
+                db.ref(`customerChats/${custId}/metadata`).update(metaUpdates),
+                db.ref(`customerChatMeta/${custId}`).update(metaUpdates)
+            ]);
+
+            if (currentActiveLinkedRecord?.compositeKey) {
+                const dirKey = currentActiveLinkedRecord.compositeKey;
+                await db.ref(`directory/customers/${dirKey}`).update({
+                    locations: updatedLocations,
+                    ...(isFirst ? { address: address, lat_lon_link: mapPin } : {})
+                });
+
+                if (Array.isArray(globalState.records)) {
+                    const match = globalState.records.find(r => r.compositeKey === dirKey || r.name === currentActiveLinkedRecord.name);
+                    if (match) {
+                        match.locations = updatedLocations;
+                        if (isFirst) {
+                            match.address = address;
+                            match.lat_lon_link = mapPin;
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn("Failed saving customer location:", e);
+        }
+    }
+
+    if (labelInput) labelInput.value = '';
+    if (addrInput) addrInput.value = '';
+    if (mapInput) mapInput.value = '';
+    toggleAddLocationForm(false);
+
+    let custData = (window.activeCustData && typeof window.activeCustData === 'object') ? window.activeCustData : {};
+    let meta = (window.getCurrentRiderChatMeta && window.getCurrentRiderChatMeta()) || {};
+    custData.locations = updatedLocations;
+    meta.locations = updatedLocations;
+
+    renderCustomerDetailsUI(custId, custData, meta, currentActiveLinkedRecord, null);
+    showToast(`✅ Saved new location: ${label}`);
+}
+
+export async function setCustomerPrimaryLocation(index) {
+    const custId = currentChatDetailsCustId;
+    if (!custId || !currentChatDetailsLocations[index]) return;
+
+    currentChatDetailsLocations.forEach((l, idx) => {
+        l.isPrimary = (idx === index);
+    });
+
+    const primaryLoc = currentChatDetailsLocations[index];
+    const newAddr = primaryLoc.address || "";
+    const newMap = primaryLoc.mapPinLink || primaryLoc.lat_lon_link || "";
+
+    if (db) {
+        try {
+            const custUpdates = {
+                locations: currentChatDetailsLocations,
+                address: newAddr,
+                mapPinLink: newMap
+            };
+            const metaUpdates = {
+                locations: currentChatDetailsLocations,
+                customerAddress: newAddr,
+                customerMapPin: newMap
+            };
+
+            await Promise.all([
+                db.ref(`customers/${custId}`).update(custUpdates),
+                db.ref(`customerChats/${custId}/metadata`).update(metaUpdates),
+                db.ref(`customerChatMeta/${custId}`).update(metaUpdates)
+            ]);
+
+            if (currentActiveLinkedRecord?.compositeKey) {
+                const dirKey = currentActiveLinkedRecord.compositeKey;
+                await db.ref(`directory/customers/${dirKey}`).update({
+                    locations: currentChatDetailsLocations,
+                    address: newAddr,
+                    lat_lon_link: newMap
+                });
+                if (Array.isArray(globalState.records)) {
+                    const match = globalState.records.find(r => r.compositeKey === dirKey);
+                    if (match) {
+                        match.locations = currentChatDetailsLocations;
+                        match.address = newAddr;
+                        match.lat_lon_link = newMap;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn("Failed setting primary location:", e);
+        }
+    }
+
+    let custData = (window.activeCustData && typeof window.activeCustData === 'object') ? window.activeCustData : {};
+    let meta = (window.getCurrentRiderChatMeta && window.getCurrentRiderChatMeta()) || {};
+    custData.locations = currentChatDetailsLocations;
+    custData.address = newAddr;
+    custData.mapPinLink = newMap;
+    meta.locations = currentChatDetailsLocations;
+    meta.customerAddress = newAddr;
+    meta.customerMapPin = newMap;
+
+    renderCustomerDetailsUI(custId, custData, meta, currentActiveLinkedRecord, null);
+    showToast(`✅ Default location set to: ${primaryLoc.label || 'Location'}`);
+}
+
+export async function deleteCustomerLocation(index) {
+    const custId = currentChatDetailsCustId;
+    if (!custId || !currentChatDetailsLocations[index]) return;
+
+    const locToDelete = currentChatDetailsLocations[index];
+    const confirmed = confirm(`Delete location [${locToDelete.label || 'Location'}]?`);
+    if (!confirmed) return;
+
+    currentChatDetailsLocations.splice(index, 1);
+    if (currentChatDetailsLocations.length > 0 && !currentChatDetailsLocations.some(l => l.isPrimary)) {
+        currentChatDetailsLocations[0].isPrimary = true;
+    }
+
+    const primaryLoc = currentChatDetailsLocations[0] || null;
+    const newAddr = primaryLoc ? (primaryLoc.address || "") : "";
+    const newMap = primaryLoc ? (primaryLoc.mapPinLink || primaryLoc.lat_lon_link || "") : "";
+
+    if (db) {
+        try {
+            const custUpdates = {
+                locations: currentChatDetailsLocations,
+                address: newAddr,
+                mapPinLink: newMap
+            };
+            const metaUpdates = {
+                locations: currentChatDetailsLocations,
+                customerAddress: newAddr,
+                customerMapPin: newMap
+            };
+
+            await Promise.all([
+                db.ref(`customers/${custId}`).update(custUpdates),
+                db.ref(`customerChats/${custId}/metadata`).update(metaUpdates),
+                db.ref(`customerChatMeta/${custId}`).update(metaUpdates)
+            ]);
+
+            if (currentActiveLinkedRecord?.compositeKey) {
+                const dirKey = currentActiveLinkedRecord.compositeKey;
+                await db.ref(`directory/customers/${dirKey}`).update({
+                    locations: currentChatDetailsLocations,
+                    address: newAddr,
+                    lat_lon_link: newMap
+                });
+                if (Array.isArray(globalState.records)) {
+                    const match = globalState.records.find(r => r.compositeKey === dirKey);
+                    if (match) {
+                        match.locations = currentChatDetailsLocations;
+                        match.address = newAddr;
+                        match.lat_lon_link = newMap;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn("Failed deleting customer location:", e);
+        }
+    }
+
+    let custData = (window.activeCustData && typeof window.activeCustData === 'object') ? window.activeCustData : {};
+    let meta = (window.getCurrentRiderChatMeta && window.getCurrentRiderChatMeta()) || {};
+    custData.locations = currentChatDetailsLocations;
+    custData.address = newAddr;
+    custData.mapPinLink = newMap;
+    meta.locations = currentChatDetailsLocations;
+    meta.customerAddress = newAddr;
+    meta.customerMapPin = newMap;
+
+    renderCustomerDetailsUI(custId, custData, meta, currentActiveLinkedRecord, null);
+    showToast(`🗑️ Location removed.`);
+}
+
+if (typeof window !== 'undefined') {
+    window.toggleAddLocationForm = toggleAddLocationForm;
+    window.captureCurrentGpsForNewLocation = captureCurrentGpsForNewLocation;
+    window.saveNewCustomerLocation = saveNewCustomerLocation;
+    window.setCustomerPrimaryLocation = setCustomerPrimaryLocation;
+    window.deleteCustomerLocation = deleteCustomerLocation;
 }

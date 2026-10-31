@@ -544,11 +544,16 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid) {
 
     // 2. Instant check in localStorage (0ms across app sessions)
     try {
-        const storedUrl = localStorage.getItem(`fb_att_${cleanMid}`) || localStorage.getItem(`fb_att_${msgId}`);
-        if (storedUrl && (storedUrl.startsWith('http://') || storedUrl.startsWith('https://') || storedUrl.startsWith('data:'))) {
-            resolvedAttachmentMemoryCache.set(cacheKey, storedUrl);
-            resolvedAttachmentMemoryCache.set(cleanMid, storedUrl);
-            return storedUrl;
+        const stored = localStorage.getItem(`fb_att_${cleanMid}`) || localStorage.getItem(`fb_att_${msgId}`);
+        if (stored) {
+            let parsed = null;
+            if (stored.startsWith('{')) {
+                try { parsed = JSON.parse(stored); } catch (_) {}
+            }
+            const res = parsed || stored;
+            resolvedAttachmentMemoryCache.set(cacheKey, res);
+            resolvedAttachmentMemoryCache.set(cleanMid, res);
+            return res;
         }
     } catch (_) {}
 
@@ -592,19 +597,59 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid) {
                 if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
                 const data = await resp.json();
                 const attachments = data?.attachments?.data || [];
-                let imgUrl = null;
+                const images = [];
+                let audioUrl = null;
+                let videoUrl = null;
+                let docUrl = null;
+
+                const inspect = (att) => {
+                    if (!att) return;
+                    const attType = (att.type || '').toLowerCase();
+                    const mime = (att.mime_type || '').toLowerCase();
+                    const u = att?.image_data?.url || att?.payload?.url || att?.media?.image?.src || att?.file_url;
+                    
+                    if (attType === 'audio' || attType === 'voice' || mime.includes('audio') || (typeof u === 'string' && (/\.(aac|mp3|m4a|wav|ogg|opus)(\?|$)/i.test(u) || u.includes('audioclip')))) {
+                        if (u && !audioUrl) audioUrl = u;
+                        return;
+                    }
+                    if (attType === 'video' || mime.includes('video') || (typeof u === 'string' && /\.(mp4|mov|webm|3gp|mkv)(\?|$)/i.test(u))) {
+                        if (u && !videoUrl) videoUrl = u;
+                        return;
+                    }
+                    if (attType === 'file' || (typeof u === 'string' && /\.(pdf|docx?|xlsx?|csv|zip|rar|txt)(\?|$)/i.test(u))) {
+                        if (u && !docUrl) docUrl = u;
+                        return;
+                    }
+
+                    // Check subattachments for multiple images sent in a single batch
+                    if (att.subattachments?.data && Array.isArray(att.subattachments.data)) {
+                        for (const sub of att.subattachments.data) {
+                            const subUrl = sub?.image_data?.url || sub?.media?.image?.src || sub?.payload?.url || sub?.file_url;
+                            if (subUrl && !images.includes(subUrl)) images.push(subUrl);
+                        }
+                    }
+
+                    if (u && !images.includes(u)) {
+                        images.push(u);
+                    }
+                };
+
                 for (const att of attachments) {
-                    imgUrl = att?.image_data?.url || 
-                             att?.payload?.url || 
-                             att?.media?.image?.src || 
-                             att?.file_url || 
-                             att?.subattachments?.data?.[0]?.image_data?.url || 
-                             att?.subattachments?.data?.[0]?.media?.image?.src || 
-                             att?.subattachments?.data?.[0]?.payload?.url;
-                    if (imgUrl) break;
+                    inspect(att);
                 }
-                if (!imgUrl) throw new Error("No image found in attachment");
-                return imgUrl;
+
+                if (images.length === 0 && !audioUrl && !videoUrl && !docUrl) {
+                    throw new Error("No attachments found");
+                }
+
+                return {
+                    images: images,
+                    imageUrl: images[0] || null,
+                    audioUrl: audioUrl || null,
+                    videoUrl: videoUrl || null,
+                    fileUrl: docUrl || null,
+                    type: audioUrl ? 'audio' : (videoUrl ? 'video' : (docUrl ? 'file' : 'image'))
+                };
             };
 
             const promises = apiList
@@ -614,36 +659,46 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid) {
 
             if (promises.length === 0) return null;
 
-            let resolvedUrl = null;
+            let resolvedResult = null;
             try {
-                resolvedUrl = await Promise.any(promises);
+                resolvedResult = await Promise.any(promises);
             } catch (_) {
-                resolvedUrl = null;
+                resolvedResult = null;
             }
 
-            if (resolvedUrl) {
+            if (resolvedResult) {
                 // Populate caches immediately
-                resolvedAttachmentMemoryCache.set(cacheKey, resolvedUrl);
-                resolvedAttachmentMemoryCache.set(cleanMid, resolvedUrl);
+                resolvedAttachmentMemoryCache.set(cacheKey, resolvedResult);
+                resolvedAttachmentMemoryCache.set(cleanMid, resolvedResult);
                 try {
-                    localStorage.setItem(`fb_att_${cleanMid}`, resolvedUrl);
-                    localStorage.setItem(`fb_att_${msgId}`, resolvedUrl);
+                    localStorage.setItem(`fb_att_${cleanMid}`, JSON.stringify(resolvedResult));
+                    localStorage.setItem(`fb_att_${msgId}`, JSON.stringify(resolvedResult));
                 } catch (_) {}
 
                 // Pre-warm browser image cache
-                try {
-                    const preloader = new Image();
-                    preloader.src = resolvedUrl;
-                } catch (_) {}
-
-                // Update Firebase RTDB so all clients receive direct URL
-                if (db) {
-                    db.ref(`customerChats/${custId}/messages/${msgId}`).update({
-                        imageUrl: resolvedUrl,
-                        type: 'image'
-                    }).catch(() => {});
+                if (resolvedResult.images && resolvedResult.images.length > 0) {
+                    resolvedResult.images.forEach(imgUrl => {
+                        try {
+                            const preloader = new Image();
+                            preloader.src = imgUrl;
+                        } catch (_) {}
+                    });
                 }
-                return resolvedUrl;
+
+                // Update Firebase RTDB so all clients receive direct URLs
+                if (db) {
+                    const rtdbUpdate = {
+                        type: resolvedResult.type
+                    };
+                    if (resolvedResult.imageUrl) rtdbUpdate.imageUrl = resolvedResult.imageUrl;
+                    if (resolvedResult.images && resolvedResult.images.length > 0) rtdbUpdate.images = resolvedResult.images;
+                    if (resolvedResult.audioUrl) rtdbUpdate.audioUrl = resolvedResult.audioUrl;
+                    if (resolvedResult.videoUrl) rtdbUpdate.videoUrl = resolvedResult.videoUrl;
+                    if (resolvedResult.fileUrl) rtdbUpdate.fileUrl = resolvedResult.fileUrl;
+
+                    db.ref(`customerChats/${custId}/messages/${msgId}`).update(rtdbUpdate).catch(() => {});
+                }
+                return resolvedResult;
             }
         } catch (e) {
             console.warn(`[FB Attachment] Resolution failed for mid ${cleanMid}:`, e);

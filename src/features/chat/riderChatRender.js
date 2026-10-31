@@ -308,6 +308,148 @@ export function renderVideoCardHtml(msg, isRider = false) {
     </div>`;
 }
 
+let currentPlayingChatAudioId = null;
+
+export function isAudioUrlOrType(msg) {
+    if (!msg) return false;
+    if (msg.type === 'audio' || msg.type === 'voice' || msg.audioUrl) return true;
+    const url = msg.audioUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : '');
+    if (typeof url !== 'string') return false;
+    const cleanUrl = url.split('?')[0].split('#')[0].toLowerCase();
+    return /\.(aac|mp3|m4a|wav|ogg|opus)(\?|$)/i.test(cleanUrl) || cleanUrl.includes('audioclip');
+}
+
+export function getAudioDetails(msg) {
+    const rawUrl = msg.audioUrl || (isAudioUrlOrType(msg) ? (msg.fileUrl || msg.imageUrl || msg.text) : null);
+    return {
+        url: rawUrl,
+        durationStr: msg.audioDuration || '0:00'
+    };
+}
+
+export function renderAudioCardHtml(msg, isRider = false) {
+    const details = getAudioDetails(msg);
+    if (!details.url) return '';
+    const safeUrl = escapeHtml(details.url);
+    const safeMid = escapeHtml(String(msg.id || '').replace(/[.#$\[\]\/]/g, '_'));
+
+    const bgClass = isRider
+        ? 'bg-emerald-800/60 border-emerald-500/40 text-white'
+        : 'bg-gray-100 dark:bg-zinc-800 border-gray-200 dark:border-zinc-700 text-gray-900 dark:text-gray-100';
+
+    const barClass = isRider ? 'bg-emerald-300' : 'bg-emerald-500';
+    const trackClass = isRider ? 'bg-emerald-950/40' : 'bg-gray-300 dark:bg-zinc-600';
+
+    return `
+    <div class="flex items-center gap-2.5 p-2 rounded-2xl border ${bgClass} w-60 max-w-full select-none mt-1 shadow-xs" onclick="event.stopPropagation()">
+        <audio id="chat-audio-${safeMid}" src="${safeUrl}" preload="metadata" 
+            onplay="window.handleChatAudioStateChange && window.handleChatAudioStateChange('${safeMid}', true)" 
+            onpause="window.handleChatAudioStateChange && window.handleChatAudioStateChange('${safeMid}', false)" 
+            onended="window.handleChatAudioEnded && window.handleChatAudioEnded('${safeMid}')" 
+            ontimeupdate="window.handleChatAudioTimeUpdate && window.handleChatAudioTimeUpdate('${safeMid}')"></audio>
+        
+        <button type="button" id="chat-audio-btn-${safeMid}" 
+            onclick="event.stopPropagation(); window.toggleChatAudio && window.toggleChatAudio('${safeMid}')" 
+            class="w-9 h-9 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm active:scale-95 transition cursor-pointer">
+            <i id="chat-audio-icon-${safeMid}" class="fa-solid fa-play text-xs ml-0.5"></i>
+        </button>
+
+        <div class="flex-1 flex flex-col justify-center gap-1 min-w-0">
+            <div class="relative w-full h-2 ${trackClass} rounded-full overflow-hidden cursor-pointer" 
+                onclick="event.stopPropagation(); window.seekChatAudio && window.seekChatAudio(event, '${safeMid}')">
+                <div id="chat-audio-bar-${safeMid}" class="absolute left-0 top-0 bottom-0 w-0 ${barClass} rounded-full transition-[width] duration-75"></div>
+            </div>
+            <div class="flex items-center justify-between text-[10px] font-mono opacity-80 px-0.5">
+                <span id="chat-audio-time-${safeMid}">0:00</span>
+                <span class="flex items-center gap-1 font-sans text-[9px]"><i class="fa-solid fa-microphone text-[8px] text-emerald-400"></i> Voice note</span>
+            </div>
+        </div>
+    </div>`;
+}
+
+export function toggleChatAudio(safeMid) {
+    const audio = document.getElementById(`chat-audio-${safeMid}`);
+    if (!audio) return;
+
+    if (currentPlayingChatAudioId && currentPlayingChatAudioId !== safeMid) {
+        const otherAudio = document.getElementById(`chat-audio-${currentPlayingChatAudioId}`);
+        if (otherAudio && !otherAudio.paused) {
+            otherAudio.pause();
+        }
+    }
+
+    if (audio.paused) {
+        audio.play().catch(e => {
+            console.warn("Audio playback error:", e);
+        });
+        currentPlayingChatAudioId = safeMid;
+    } else {
+        audio.pause();
+    }
+}
+
+export function handleChatAudioStateChange(safeMid, isPlaying) {
+    const icon = document.getElementById(`chat-audio-icon-${safeMid}`);
+    if (icon) {
+        if (isPlaying) {
+            icon.className = 'fa-solid fa-pause text-xs';
+        } else {
+            icon.className = 'fa-solid fa-play text-xs ml-0.5';
+        }
+    }
+}
+
+export function handleChatAudioTimeUpdate(safeMid) {
+    const audio = document.getElementById(`chat-audio-${safeMid}`);
+    if (!audio) return;
+    const bar = document.getElementById(`chat-audio-bar-${safeMid}`);
+    const timeEl = document.getElementById(`chat-audio-time-${safeMid}`);
+
+    const cur = audio.currentTime || 0;
+    const dur = audio.duration || 0;
+
+    if (bar && dur > 0) {
+        const pct = Math.min(100, Math.max(0, (cur / dur) * 100));
+        bar.style.width = `${pct}%`;
+    }
+
+    if (timeEl) {
+        const displaySec = Math.floor(cur);
+        const m = Math.floor(displaySec / 60);
+        const s = displaySec % 60;
+        timeEl.innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+}
+
+export function handleChatAudioEnded(safeMid) {
+    const icon = document.getElementById(`chat-audio-icon-${safeMid}`);
+    if (icon) icon.className = 'fa-solid fa-play text-xs ml-0.5';
+    const bar = document.getElementById(`chat-audio-bar-${safeMid}`);
+    if (bar) bar.style.width = '0%';
+    const timeEl = document.getElementById(`chat-audio-time-${safeMid}`);
+    if (timeEl) timeEl.innerText = '0:00';
+    if (currentPlayingChatAudioId === safeMid) {
+        currentPlayingChatAudioId = null;
+    }
+}
+
+export function seekChatAudio(event, safeMid) {
+    const audio = document.getElementById(`chat-audio-${safeMid}`);
+    if (!audio || !audio.duration) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const ratio = Math.min(1, Math.max(0, clickX / rect.width));
+    audio.currentTime = ratio * audio.duration;
+}
+
+if (typeof window !== 'undefined') {
+    window.toggleChatAudio = toggleChatAudio;
+    window.handleChatAudioStateChange = handleChatAudioStateChange;
+    window.handleChatAudioTimeUpdate = handleChatAudioTimeUpdate;
+    window.handleChatAudioEnded = handleChatAudioEnded;
+    window.seekChatAudio = seekChatAudio;
+}
+
 export async function downloadChatDocument(encodedUrl, encodedName) {
     const rawUrl = decodeURIComponent(encodedUrl || '');
     const fileName = decodeURIComponent(encodedName || 'document');
@@ -853,17 +995,41 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const isVid = !isDoc && isVideoUrlOrType(m);
     const videoMarkup = isVid ? renderVideoCardHtml(m, isRider) : '';
 
-    const imgHtml = (!isDoc && !isVid) ? (m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null)) : null;
-    const isResolvingFbImage = !isDoc && !imgHtml && m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]'));
-    const isLikeSticker = !isDoc && Boolean(m.isSticker || m.stickerType === 'like' || (imgHtml && (imgHtml.includes('369239') || imgHtml.includes('sticker') || imgHtml.includes('like'))));
+    const isAud = !isDoc && !isVid && isAudioUrlOrType(m);
+    const audioMarkup = isAud ? renderAudioCardHtml(m, isRider) : '';
+
+    const imageList = (!isDoc && !isVid && !isAud) ? (
+        Array.isArray(m.images) && m.images.length > 0 
+            ? m.images.filter(Boolean)
+            : (m.imageUrl ? [m.imageUrl] : (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? [m.text] : []))
+    ) : [];
+
+    const isResolvingFbImage = !isDoc && !isVid && !isAud && imageList.length === 0 && m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]'));
+    const isLikeSticker = !isDoc && !isVid && !isAud && imageList.length === 1 && Boolean(m.isSticker || m.stickerType === 'like' || (imageList[0].includes('369239') || imageList[0].includes('sticker') || imageList[0].includes('like')));
     
-    const imageMarkup = imgHtml 
-        ? (isLikeSticker 
-            ? `<div class="p-0.5 select-none flex items-center justify-start"><img src="${imgHtml}" alt="👍" class="w-10 h-10 object-contain hover:scale-110 active:scale-90 transition-transform cursor-pointer" onclick="event.stopPropagation()"></div>`
-            : `<img src="${imgHtml}" loading="eager" decoding="async" fetchpriority="high" onerror="window.handleChatImageLoadError && window.handleChatImageLoadError(this, '${m.id}')" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgHtml)}', 'rider')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-95 transition bg-gray-100 dark:bg-gray-800 min-h-[120px] object-cover">`)
-        : (isResolvingFbImage 
-            ? `<div class="flex items-center gap-2 py-2 px-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-600 dark:text-blue-400 text-xs mt-1 font-medium animate-pulse"><i class="fa-solid fa-spinner fa-spin text-blue-500"></i><span>Loading photo...</span></div>` 
-            : '');
+    let imageMarkup = '';
+    if (imageList.length > 1) {
+        const gridCols = imageList.length === 2 ? 'grid-cols-2' : (imageList.length === 3 ? 'grid-cols-3' : 'grid-cols-2');
+        const imgElements = imageList.map(imgUrl => `
+            <div class="relative overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 border border-black/10 dark:border-white/10 aspect-square group/img">
+                <img src="${escapeHtml(imgUrl)}" loading="lazy" decoding="async" 
+                    onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgUrl)}', 'rider')" 
+                    class="w-full h-full object-cover cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200">
+            </div>
+        `).join('');
+
+        imageMarkup = `
+        <div class="grid ${gridCols} gap-1.5 mt-1.5 max-w-full w-64 rounded-xl overflow-hidden" onclick="event.stopPropagation()">
+            ${imgElements}
+        </div>`;
+    } else if (imageList.length === 1) {
+        const imgHtml = imageList[0];
+        imageMarkup = isLikeSticker 
+            ? `<div class="p-0.5 select-none flex items-center justify-start"><img src="${escapeHtml(imgHtml)}" alt="👍" class="w-10 h-10 object-contain hover:scale-110 active:scale-90 transition-transform cursor-pointer" onclick="event.stopPropagation()"></div>`
+            : `<img src="${escapeHtml(imgHtml)}" loading="eager" decoding="async" fetchpriority="high" onerror="window.handleChatImageLoadError && window.handleChatImageLoadError(this, '${m.id}')" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgHtml)}', 'rider')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-95 transition bg-gray-100 dark:bg-gray-800 min-h-[120px] object-cover">`;
+    } else if (isResolvingFbImage) {
+        imageMarkup = `<div class="flex items-center gap-2 py-2 px-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-600 dark:text-blue-400 text-xs mt-1 font-medium animate-pulse"><i class="fa-solid fa-spinner fa-spin text-blue-500"></i><span>Loading photo...</span></div>`;
+    }
     
     let locationHtml = "";
     let lat = null;
@@ -905,7 +1071,9 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const isPlaceholderText = m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]') || m.text === '📷 Photo' || m.text === 'Facebook Message');
     const isDocFilenameText = isDoc && m.text && (m.text === m.fileName || m.text === m.fileUrl || m.text === m.imageUrl || m.text === '📄 Document' || m.text.startsWith('http'));
     const isVideoPlaceholderText = isVid && m.text && (m.text === '🎥 Video' || m.text === m.videoName || m.text === m.videoUrl || m.text.startsWith('http'));
-    const showText = m.text && (!imgHtml || !isPlaceholderText) && !isResolvingFbImage && !locationHtml && !(isLikeSticker && imgHtml) && !isDocFilenameText && !isVideoPlaceholderText;
+    const isAudioPlaceholderText = isAud && m.text && (m.text === '🎤 Voice message' || m.text.includes('[Facebook audio]') || m.text.includes('[Facebook voice]') || m.text.startsWith('http'));
+    const isMultiImagePlaceholderText = imageList.length > 1 && m.text && (m.text.includes('Photos') || m.text.includes('[Facebook image]'));
+    const showText = m.text && (!imageList.length || !isPlaceholderText) && !isMultiImagePlaceholderText && !isResolvingFbImage && !locationHtml && !(isLikeSticker && imageList.length) && !isDocFilenameText && !isVideoPlaceholderText && !isAudioPlaceholderText;
 
     const failedTagHtml = isFailed ? `
         <div class="flex items-center gap-1 text-[9.5px] font-black text-rose-500 dark:text-rose-400 mt-0.5 ${isRider ? 'justify-end mr-8' : 'justify-start ml-8'} select-none">
@@ -936,6 +1104,7 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
                 ${showText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${formatChatTextWithPhoneLinks(m.text)}</div>` : ''}
                 ${documentMarkup}
                 ${videoMarkup}
+                ${audioMarkup}
                 ${imageMarkup}
                 ${locationHtml}
                 ${reactionsHtml}

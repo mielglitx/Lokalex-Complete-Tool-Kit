@@ -617,6 +617,15 @@ export async function openForm(record = null) {
             if (contactInput) contactInput.value = record.contact || "";
             if (addressInput) addressInput.value = record.address || record.rate || "";
             if (latlonInput) latlonInput.value = record.lat_lon_link || "";
+
+            const extraContainer = document.getElementById('form-extra-locations-container');
+            if (extraContainer) extraContainer.innerHTML = '';
+
+            if (Array.isArray(record.locations) && record.locations.length > 1) {
+                record.locations.slice(1).forEach(loc => {
+                    addDirectoryExtraLocationField(loc.label || '', loc.address || '', loc.lat_lon_link || loc.mapPinLink || '');
+                });
+            }
         }
     } else {
         if (warningEl) warningEl.classList.add('hidden');
@@ -676,6 +685,9 @@ export async function openForm(record = null) {
             if (contactInput) contactInput.value = "";
             if (addressInput) addressInput.value = "";
             if (latlonInput) latlonInput.value = "";
+
+            const extraContainer = document.getElementById('form-extra-locations-container');
+            if (extraContainer) extraContainer.innerHTML = '';
         }
     }
 }
@@ -818,8 +830,33 @@ export async function submitForm() {
 
         persistenceKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
 
+        const extraLocElements = document.querySelectorAll('.form-extra-location-row');
+        const locations = [];
+        if (address || lat_lon_link) {
+            locations.push({
+                label: 'Main Address',
+                address: address,
+                lat_lon_link: lat_lon_link,
+                isPrimary: true
+            });
+        }
+        extraLocElements.forEach((row, idx) => {
+            const lLabel = row.querySelector('.form-extra-loc-label')?.value?.trim() || `Location ${idx + 2}`;
+            const lAddr = row.querySelector('.form-extra-loc-address')?.value?.trim() || '';
+            const lMap = row.querySelector('.form-extra-loc-map')?.value?.trim() || '';
+            if (lAddr || lMap) {
+                locations.push({
+                    label: lLabel,
+                    address: lAddr,
+                    lat_lon_link: lMap,
+                    isPrimary: false
+                });
+            }
+        });
+
         recordData = {
             name, contact, address, rate: address, lat_lon_link,
+            ...(locations.length > 0 ? { locations } : {}),
             type: type,
             recorded_by: editingRecord ? (editingRecord.recorded_by || appState.riderName || "Amiel") : (appState.riderName || "Amiel"),
             recorded_at: editingRecord ? (editingRecord.recorded_at || currentDate) : currentDate,
@@ -923,6 +960,44 @@ export async function submitForm() {
     } catch (e) {}
 }
 
+export function addDirectoryExtraLocationField(label = '', address = '', mapLink = '') {
+    const container = document.getElementById('form-extra-locations-container');
+    if (!container) return;
+
+    const rowId = 'extra-loc-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+    const div = document.createElement('div');
+    div.id = rowId;
+    div.className = 'form-extra-location-row bg-black/40 p-3 rounded-2xl border border-gray-700/80 flex flex-col gap-2 relative shadow-xs';
+    div.innerHTML = `
+        <div class="flex items-center justify-between">
+            <span class="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
+                <i class="fa-solid fa-location-dot"></i> Additional Location
+            </span>
+            <button type="button" onclick="window.removeDirectoryExtraLocationField('${rowId}')" class="text-xs text-rose-400 hover:text-rose-300 transition p-1 cursor-pointer" title="Remove Location">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        </div>
+        <div class="flex gap-2">
+            <input type="text" placeholder="Label (e.g. Work, Farm)" value="${escapeHtml(label || '')}" class="form-extra-loc-label w-1/3 bg-inputBg text-xs rounded-xl p-2.5 outline-none border border-gray-700 text-white font-medium focus:border-emerald-500">
+            <input type="text" placeholder="Address / Landmarks" value="${escapeHtml(address || '')}" class="form-extra-loc-address flex-1 bg-inputBg text-xs rounded-xl p-2.5 outline-none border border-gray-700 text-white font-medium focus:border-emerald-500">
+        </div>
+        <div class="flex gap-2">
+            <input type="text" placeholder="Map link (Google Maps link or coords)" value="${escapeHtml(mapLink || '')}" class="form-extra-loc-map flex-1 bg-inputBg text-xs font-mono rounded-xl p-2.5 outline-none border border-gray-700 text-white focus:border-emerald-500">
+        </div>
+    `;
+    container.appendChild(div);
+}
+
+export function removeDirectoryExtraLocationField(rowId) {
+    if (typeof rowId === 'string') {
+        const el = document.getElementById(rowId);
+        if (el) el.remove();
+    } else if (rowId && rowId.closest) {
+        const el = rowId.closest('.form-extra-location-row');
+        if (el) el.remove();
+    }
+}
+
 if (typeof window !== 'undefined') {
     window.openForm = openForm;
     window.editDirectoryRecord = editDirectoryRecord;
@@ -934,5 +1009,7 @@ if (typeof window !== 'undefined') {
     window.handleRateNationalityChange = handleRateNationalityChange;
     window.handleRateRegionChange = handleRateRegionChange;
     window.handleRateMunicipalityChange = handleRateMunicipalityChange;
+    window.addDirectoryExtraLocationField = addDirectoryExtraLocationField;
+    window.removeDirectoryExtraLocationField = removeDirectoryExtraLocationField;
 }
 // REMARKS: DIRECTORY_FORM_COMPOSITE_ORIGIN_KEYING_V5_COMPLETE

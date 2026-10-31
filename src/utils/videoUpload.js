@@ -148,9 +148,9 @@ export async function uploadVideo(fileOrBlob, storagePath, onProgress = null) {
                 });
             }
 
-            // 60-second timeout for video upload
+            // 2.5-second timeout for video storage: if bucket is 404 or disabled, immediately switch to CDN
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Video storage upload timeout')), 60000)
+                setTimeout(() => reject(new Error('Video storage upload timeout')), 2500)
             );
 
             await Promise.race([uploadTask, timeoutPromise]);
@@ -162,32 +162,49 @@ export async function uploadVideo(fileOrBlob, storagePath, onProgress = null) {
         }
     }
 
-    // 2. High-speed Public HTTPS CDN Fallback (Litterbox Catbox supports videos up to 1GB)
+    // 2. High-speed Public HTTPS CDN Fallback (Litterbox Catbox supports videos with progress tracking)
     try {
-        const formData = new FormData();
-        formData.append('reqtype', 'fileupload');
-        formData.append('time', '72h');
-        const filename = (fileOrBlob instanceof File && fileOrBlob.name) ? fileOrBlob.name : 'video.mp4';
-        formData.append('fileToUpload', fileOrBlob, filename);
+        const cdnUrl = await new Promise((resolve, reject) => {
+            const formData = new FormData();
+            formData.append('reqtype', 'fileupload');
+            formData.append('time', '72h');
+            const filename = (fileOrBlob instanceof File && fileOrBlob.name) ? fileOrBlob.name : 'video.mp4';
+            formData.append('fileToUpload', fileOrBlob, filename);
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000);
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', 'https://litterbox.catbox.moe/resources/internals/api.php', true);
 
-        if (typeof onProgress === 'function') onProgress(50);
-
-        const res = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
-            method: 'POST',
-            body: formData,
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        if (res.ok) {
-            const url = (await res.text()).trim();
-            if (url.startsWith('https://')) {
-                if (typeof onProgress === 'function') onProgress(100);
-                return url;
+            if (typeof onProgress === 'function') {
+                xhr.upload.onprogress = (event) => {
+                    if (event.lengthComputable) {
+                        const percent = Math.min(99, Math.round((event.loaded / event.total) * 100));
+                        onProgress(percent);
+                    }
+                };
             }
+
+            xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    const url = xhr.responseText.trim();
+                    if (url.startsWith('https://') || url.startsWith('http://')) {
+                        if (typeof onProgress === 'function') onProgress(100);
+                        resolve(url);
+                    } else {
+                        reject(new Error(url || 'Invalid response from video host'));
+                    }
+                } else {
+                    reject(new Error(`Video upload failed with status ${xhr.status}`));
+                }
+            };
+
+            xhr.onerror = () => reject(new Error('Network error during video upload'));
+            xhr.ontimeout = () => reject(new Error('Video upload timed out'));
+            xhr.timeout = 60000;
+            xhr.send(formData);
+        });
+
+        if (cdnUrl) {
+            return cdnUrl;
         }
     } catch (e) {
         console.warn('[VideoUpload] Public CDN fallback upload failed:', e);

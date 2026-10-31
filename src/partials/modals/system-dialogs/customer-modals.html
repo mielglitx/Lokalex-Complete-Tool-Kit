@@ -208,24 +208,62 @@
                 </div>
             </div>
 
-            <!-- ADDRESS CARD -->
-            <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800">
-                <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Delivery Address</span>
-                <span id="cust-modal-address" class="text-gray-800 dark:text-gray-200 mt-0.5 block leading-relaxed font-medium">---</span>
+            <!-- SAVED LOCATIONS HEADER & ACTIONS -->
+            <div class="flex items-center justify-between pt-1">
+                <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <i class="fa-solid fa-map-location-dot text-rose-500"></i> Saved Locations (<span id="cust-modal-locations-count">0</span>)
+                </span>
+                <button type="button" onclick="window.toggleAddLocationForm && window.toggleAddLocationForm()" class="text-[10.5px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-1 rounded-xl transition active:scale-95 flex items-center gap-1 cursor-pointer shadow-xs">
+                    <i class="fa-solid fa-plus text-[9px]"></i> + Add Location
+                </button>
             </div>
 
-            <!-- GPS LOCATION PIN CARD -->
-            <div class="bg-gray-100 dark:bg-darkBg p-3 rounded-2xl border border-gray-200 dark:border-gray-800 flex flex-col gap-2">
-                <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                    <i class="fa-solid fa-location-crosshairs"></i> Registered GPS Location Pin
-                </span>
-                <a id="cust-modal-map" href="#" target="_blank" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded-xl transition active:scale-95 text-xs flex items-center justify-center gap-2 shadow">
-                    <i class="fa-solid fa-map-location-dot text-sm"></i> OPEN GPS PIN IN GOOGLE MAPS
-                </a>
-                <span id="cust-modal-no-map-hint" class="hidden text-[10px] text-amber-600 dark:text-amber-400 text-center italic">
-                    ⚠️ No GPS pin link recorded in directory.
-                </span>
+            <!-- INLINE ADD LOCATION FORM (EXPANDABLE) -->
+            <div id="cust-modal-add-loc-box" class="hidden bg-gray-50 dark:bg-darkBg/95 border border-emerald-500/40 rounded-2xl p-3 flex flex-col gap-2 shadow-xs">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <i class="fa-solid fa-plus-circle"></i> Add New Saved Location
+                    </span>
+                    <button type="button" onclick="window.toggleAddLocationForm(false)" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div>
+                    <label class="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Location Label</label>
+                    <input type="text" id="cust-modal-new-loc-label" placeholder="e.g. Home, Work, Office, Farm" class="w-full bg-inputBg text-xs rounded-xl px-3 py-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-medium">
+                </div>
+                <div>
+                    <label class="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider block mb-1">Delivery Address / Landmarks *</label>
+                    <input type="text" id="cust-modal-new-loc-address" placeholder="Street, Barangay, Landmarks" class="w-full bg-inputBg text-xs rounded-xl px-3 py-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-medium">
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider">GPS Map Pin Link</label>
+                        <button type="button" onclick="window.captureCurrentGpsForNewLocation && window.captureCurrentGpsForNewLocation()" class="text-[9.5px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 hover:underline">
+                            <i class="fa-solid fa-crosshairs"></i> Use My GPS
+                        </button>
+                    </div>
+                    <input type="text" id="cust-modal-new-loc-map" placeholder="Paste Google Maps link or coordinates" class="w-full bg-inputBg text-xs rounded-xl px-3 py-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-mono text-[11px]">
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-1">
+                    <button type="button" onclick="window.toggleAddLocationForm(false)" class="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-bold px-3 py-1.5 rounded-xl transition">
+                        Cancel
+                    </button>
+                    <button type="button" onclick="window.saveNewCustomerLocation && window.saveNewCustomerLocation()" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3.5 py-1.5 rounded-xl shadow transition active:scale-95 flex items-center gap-1">
+                        <i class="fa-solid fa-floppy-disk"></i> Save Location
+                    </button>
+                </div>
             </div>
+
+            <!-- DYNAMIC SAVED LOCATIONS LIST -->
+            <div id="cust-modal-locations-list" class="flex flex-col gap-2">
+                <!-- Populated dynamically -->
+            </div>
+
+            <!-- HIDDEN FALLBACK ELEMENTS FOR BACKWARD COMPATIBILITY -->
+            <span id="cust-modal-address" class="hidden">---</span>
+            <a id="cust-modal-map" href="#" target="_blank" class="hidden"></a>
+            <span id="cust-modal-no-map-hint" class="hidden"></span>
         </div>
 
         <!-- FOOTER CLOSE BUTTON -->

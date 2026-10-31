@@ -66,7 +66,12 @@ import {
     copyCustomerPhone,
     openNewDirectoryCustomerFromChat,
     closeCustomerDetailsModal,
-    handleCustomerPhotoUpload
+    handleCustomerPhotoUpload,
+    toggleAddLocationForm,
+    captureCurrentGpsForNewLocation,
+    saveNewCustomerLocation,
+    setCustomerPrimaryLocation,
+    deleteCustomerLocation
 } from './threadActions/threadCustomerDetails.js';
 
 import {
@@ -138,6 +143,11 @@ if (typeof window !== 'undefined') {
     window.unlinkCurrentChatDirectory = unlinkCurrentChatDirectory;
     window.copyCustomerPhone = copyCustomerPhone;
     window.openNewDirectoryCustomerFromChat = openNewDirectoryCustomerFromChat;
+    window.toggleAddLocationForm = toggleAddLocationForm;
+    window.captureCurrentGpsForNewLocation = captureCurrentGpsForNewLocation;
+    window.saveNewCustomerLocation = saveNewCustomerLocation;
+    window.setCustomerPrimaryLocation = setCustomerPrimaryLocation;
+    window.deleteCustomerLocation = deleteCustomerLocation;
 
     // Quick Replies
     window.toggleQuickReplies = toggleQuickReplies;

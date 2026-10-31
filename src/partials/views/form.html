@@ -29,12 +29,27 @@
         <label class="text-xs text-gray-400 font-bold">General Address</label>
         <input type="text" id="form-address" name="form_address_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Street, Barangay, Landmarks" class="bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white focus:border-blue-500 transition">
 
-        <label class="text-xs text-gray-400 font-bold">Map Link (Lat_Lon_Link)</label>
+        <label class="text-xs text-gray-400 font-bold">Main Map Link (Lat_Lon_Link)</label>
         <div class="flex gap-2">
             <input type="text" id="form-latlon" name="form_latlon_no_fill" readonly onfocus="this.removeAttribute('readonly');" autocomplete="one-time-code" data-lpignore="true" placeholder="Paste link or get from Map" class="flex-1 bg-inputBg text-sm rounded-xl p-3 outline-none border border-gray-700 text-white text-xs font-mono focus:border-blue-500 transition">
             <button type="button" onclick="window.openMapPicker && window.openMapPicker()" class="bg-blue-600 hover:bg-blue-500 px-4 rounded-xl text-white text-sm font-bold flex items-center gap-2 transition active:scale-95 cursor-pointer shadow-sm">
                 <i class="fa-solid fa-map-location-dot"></i> Map
             </button>
+        </div>
+
+        <!-- ADDITIONAL SAVED LOCATIONS -->
+        <div id="form-additional-locations-section" class="mt-2 pt-2 border-t border-gray-700/60 flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+                <label class="text-xs text-emerald-400 font-bold flex items-center gap-1.5">
+                    <i class="fa-solid fa-map-location-dot"></i> Additional Saved Locations
+                </label>
+                <button type="button" onclick="window.addDirectoryExtraLocationField && window.addDirectoryExtraLocationField()" class="text-[11px] bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 px-2.5 py-1 rounded-xl font-bold flex items-center gap-1 transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-plus text-[9px]"></i> + Add Location
+                </button>
+            </div>
+            <div id="form-extra-locations-container" class="flex flex-col gap-2.5">
+                <!-- Additional location rows dynamically appended here -->
+            </div>
         </div>
     </div>
 

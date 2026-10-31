@@ -74,7 +74,8 @@
             android:name=".LokalexForegroundService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="remoteMessaging|location" />
+            android:stopWithTask="false"
+            android:foregroundServiceType="remoteMessaging|location|dataSync" />
 
         <receiver
             android:name=".BackgroundWatchdogReceiver"

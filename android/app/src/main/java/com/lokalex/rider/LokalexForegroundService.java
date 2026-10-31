@@ -14,6 +14,10 @@ import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.media.AudioAttributes;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -29,8 +33,13 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -54,7 +63,14 @@ public class LokalexForegroundService extends Service {
 
     private boolean isInitialCheck = true;
     private long lastKnownMsgTimestamp = 0;
-    private final Set<String> processedMsgSignatures = new HashSet<>();
+    private final Set<String> processedMsgSignatures = Collections.synchronizedSet(
+            Collections.newSetFromMap(new LinkedHashMap<String, Boolean>(200, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+                    return size() > 600;
+                }
+            })
+    );
 
     public static boolean isRunning() {
         return isRunning;
@@ -137,8 +153,8 @@ public class LokalexForegroundService extends Service {
             URL url = new URL(FIREBASE_META_QUERY_URL);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
-            conn.setConnectTimeout(4500);
-            conn.setReadTimeout(4500);
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(10000);
             conn.setRequestProperty("User-Agent", "LokalexBackgroundMonitor/1.0");
 
             int responseCode = conn.getResponseCode();
@@ -165,19 +181,30 @@ public class LokalexForegroundService extends Service {
         if (jsonStr == null || jsonStr.trim().isEmpty() || jsonStr.equals("null")) return;
         try {
             JSONObject root = new JSONObject(jsonStr);
-            Iterator<String> keys = root.keys();
+            Iterator<String> rawKeys = root.keys();
 
             SharedPreferences prefs = getSharedPreferences("lokalex_prefs", Context.MODE_PRIVATE);
             String myRiderId = prefs.getString("rider_id", "").trim();
             String myRiderName = prefs.getString("rider_name", "").trim().toLowerCase();
 
+            // Collect all chats into a list and sort by lastUpdated descending (newest first)
+            List<JSONObject> chatList = new ArrayList<>();
+            while (rawKeys.hasNext()) {
+                String custId = rawKeys.next();
+                JSONObject meta = root.optJSONObject(custId);
+                if (meta == null) continue;
+                meta.put("__custId", custId);
+                chatList.add(meta);
+            }
+            Collections.sort(chatList, (a, b) -> Long.compare(b.optLong("lastUpdated", 0), a.optLong("lastUpdated", 0)));
+
+            long now = System.currentTimeMillis();
+
             // Handle Initial Startup Snapshot: prime signatures so historical chats do not spam
             if (isInitialCheck) {
                 int primedCount = 0;
-                while (keys.hasNext()) {
-                    String custId = keys.next();
-                    JSONObject meta = root.optJSONObject(custId);
-                    if (meta == null) continue;
+                for (JSONObject meta : chatList) {
+                    String custId = meta.optString("__custId");
                     long lastUpdated = meta.optLong("lastUpdated", 0);
                     processedMsgSignatures.add(custId + "_" + lastUpdated);
                     if (lastUpdated > lastKnownMsgTimestamp) {
@@ -190,11 +217,8 @@ public class LokalexForegroundService extends Service {
                 return;
             }
 
-            while (keys.hasNext()) {
-                String custId = keys.next();
-                JSONObject meta = root.optJSONObject(custId);
-                if (meta == null) continue;
-
+            for (JSONObject meta : chatList) {
+                String custId = meta.optString("__custId");
                 long lastUpdated = meta.optLong("lastUpdated", 0);
                 boolean unreadForRider = meta.optBoolean("unreadForRider", false);
                 String lastMessage = meta.optString("lastMessage", "").trim();
@@ -208,6 +232,11 @@ public class LokalexForegroundService extends Service {
                 if (lastMessage.startsWith("You:") || lastMessage.startsWith("🧾")) continue;
                 if (folder.equals("spam") || folder.equals("other") || status.equals("spam")) continue;
                 if (status.equals("completed") || status.equals("cancelled") || status.equals("done")) continue;
+
+                // Safety Gate: Never alert for historical messages older than 15 minutes
+                if (lastUpdated > 0 && (now - lastUpdated > 15 * 60 * 1000L)) {
+                    continue;
+                }
 
                 // If thread is in catering, only notify if catered by this rider (or unassigned/open)
                 if (folder.equals("catering")) {
@@ -223,12 +252,7 @@ public class LokalexForegroundService extends Service {
 
                 String signature = custId + "_" + lastUpdated;
                 if (processedMsgSignatures.contains(signature)) continue;
-
                 processedMsgSignatures.add(signature);
-                if (processedMsgSignatures.size() > 300) {
-                    processedMsgSignatures.clear();
-                    processedMsgSignatures.add(signature);
-                }
 
                 if (lastUpdated > lastKnownMsgTimestamp) {
                     lastKnownMsgTimestamp = lastUpdated;
@@ -247,12 +271,34 @@ public class LokalexForegroundService extends Service {
                 // Dispatch native Android notification with high priority, sound & vibration
                 MainActivity.dispatchNativeNotification(this, title, body, "chat_" + custId, custId);
 
+                // Play loud audio alert directly so rider hears incoming chime like Meta Business Suite
+                playNotificationChime();
+
                 // Wake up screen briefly so rider sees incoming alert even if phone is on table with screen off
                 wakeScreenBriefly();
             }
         } catch (Exception e) {
             Log.e(TAG, "processIncomingMetaJson error: " + e.getMessage(), e);
         }
+    }
+
+    private void playNotificationChime() {
+        try {
+            Uri soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+            if (soundUri != null) {
+                Ringtone ringtone = RingtoneManager.getRingtone(getApplicationContext(), soundUri);
+                if (ringtone != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        AudioAttributes aa = new AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                                .build();
+                        ringtone.setAudioAttributes(aa);
+                    }
+                    ringtone.play();
+                }
+            }
+        } catch (Exception ignored) {}
     }
 
     private void wakeScreenBriefly() {
@@ -413,8 +459,16 @@ public class LokalexForegroundService extends Service {
     @Override
     public void onTaskRemoved(Intent rootIntent) {
         super.onTaskRemoved(rootIntent);
-        Log.i(TAG, "onTaskRemoved: Activity removed, arming watchdog alarm");
+        Log.i(TAG, "onTaskRemoved: Activity removed, arming watchdog alarm and keeping service alive");
         scheduleNextAlarm();
+        try {
+            Intent restartIntent = new Intent(getApplicationContext(), LokalexForegroundService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(getApplicationContext(), restartIntent);
+            } else {
+                startService(restartIntent);
+            }
+        } catch (Exception ignored) {}
     }
 
     @Override

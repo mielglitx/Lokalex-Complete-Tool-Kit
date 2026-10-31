@@ -635,6 +635,42 @@ export function renderDirectoryList() {
                 }
             }
 
+            let locationsHtml = '';
+            if (isCustomer && Array.isArray(r.locations) && r.locations.length > 1) {
+                locationsHtml = `
+                <div class="mt-1.5 flex flex-col gap-1">
+                    <span class="text-[9.5px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                        <i class="fa-solid fa-map-location-dot text-rose-500"></i> ${r.locations.length} Saved Locations:
+                    </span>
+                    ${r.locations.map((loc, lIdx) => {
+                        const locName = loc.label || `Location ${lIdx + 1}`;
+                        const locAddr = loc.address || '';
+                        const locMap = loc.lat_lon_link || loc.mapPinLink || '';
+                        const locMapBtn = locMap ? `
+                            <button type="button" data-customer-name="${safeRecordName} (${escapeHtml(locName)})" data-map-link="${escapeHtml(locMap)}" onclick="window.handleViewCustomerLocationClick && window.handleViewCustomerLocationClick(this)" class="text-[10px] text-blue-600 dark:text-blue-400 font-bold underline flex items-center gap-1 cursor-pointer hover:text-blue-500 transition active:scale-95 shrink-0">
+                                <i class="fa-solid fa-map-location-dot"></i> View Pin
+                            </button>` : '';
+
+                        return `
+                        <div class="bg-gray-50 dark:bg-black/30 p-2 rounded-xl border border-gray-200 dark:border-gray-800 text-xs flex flex-col gap-0.5">
+                            <div class="flex items-center justify-between gap-1">
+                                <span class="font-bold text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                    <i class="fa-solid fa-location-dot text-rose-500 text-[9px]"></i> ${escapeHtml(locName)}
+                                    ${loc.isPrimary ? '<span class="text-[8px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold px-1 rounded">Default</span>' : ''}
+                                </span>
+                                ${locMapBtn}
+                            </div>
+                            ${locAddr ? `<span class="text-gray-700 dark:text-gray-300 font-medium break-words text-[11px]">${escapeHtml(locAddr)}</span>` : ''}
+                        </div>`;
+                    }).join('')}
+                </div>`;
+            } else {
+                locationsHtml = `
+                    ${r.address ? `<div class="text-xs text-gray-700 dark:text-gray-300 mt-0.5 font-medium break-words"><i class="fa-solid fa-location-dot text-[10px] text-red-500"></i> ${escapeHtml(r.address)}</div>` : ''}
+                    ${mapBtn}
+                `;
+            }
+
             htmlBuilder += `
             <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-3.5 rounded-2xl flex justify-between items-start gap-2 shadow-xs my-1">
                 <div class="flex-1 min-w-0 pr-1">
@@ -644,8 +680,7 @@ export function renderDirectoryList() {
                     </div>
                     ${menuStatusHtml}
                     ${r.contact ? `<div class="text-xs text-gray-700 dark:text-gray-400 mt-1 font-bold font-mono"><i class="fa-solid fa-phone text-[10px] text-blue-500"></i> ${escapeHtml(r.contact)}</div>` : ''}
-                    ${r.address ? `<div class="text-xs text-gray-700 dark:text-gray-300 mt-0.5 font-medium break-words"><i class="fa-solid fa-location-dot text-[10px] text-red-500"></i> ${escapeHtml(r.address)}</div>` : ''}
-                    ${mapBtn}
+                    ${locationsHtml}
                     ${metaInfoHtml}
                 </div>
                 <div class="flex gap-1.5 shrink-0 items-center">

@@ -3,7 +3,15 @@ import { appState } from '../../../store/state.js';
 import { escapeHtml } from '../../../utils/helpers.js';
 import { custChatState, MAPS_API_KEY } from './custChatState.js';
 import { formatChatDateTime } from '../chatUtils.js';
-import { formatChatTextWithPhoneLinks, isDocumentUrlOrType, renderDocumentCardHtml, isVideoUrlOrType, renderVideoCardHtml } from '../riderChatRender.js';
+import { 
+    formatChatTextWithPhoneLinks, 
+    isDocumentUrlOrType, 
+    renderDocumentCardHtml, 
+    isVideoUrlOrType, 
+    renderVideoCardHtml,
+    isAudioUrlOrType,
+    renderAudioCardHtml
+} from '../riderChatRender.js';
 
 export function renderMessageStatusIndicator(msg) {
     const sentTime = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
@@ -181,8 +189,34 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
         const isVid = !isDoc && isVideoUrlOrType(m);
         const videoMarkup = isVid ? renderVideoCardHtml(m, !isCustomer) : '';
 
-        const imageSrc = (!isDoc && !isVid) ? (m.imageUrl || (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? m.text : null)) : null;
-        const imgHtml = imageSrc ? `<img src="${imageSrc}" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imageSrc)}', 'customer')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">` : '';
+        const isAud = !isDoc && !isVid && isAudioUrlOrType(m);
+        const audioMarkup = isAud ? renderAudioCardHtml(m, isCustomer) : '';
+
+        const imageList = (!isDoc && !isVid && !isAud) ? (
+            Array.isArray(m.images) && m.images.length > 0 
+                ? m.images.filter(Boolean)
+                : (m.imageUrl ? [m.imageUrl] : (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? [m.text] : []))
+        ) : [];
+
+        let imageMarkup = '';
+        if (imageList.length > 1) {
+            const gridCols = imageList.length === 2 ? 'grid-cols-2' : (imageList.length === 3 ? 'grid-cols-3' : 'grid-cols-2');
+            const imgElements = imageList.map(imgUrl => `
+                <div class="relative overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 border border-black/10 dark:border-white/10 aspect-square group/img">
+                    <img src="${escapeHtml(imgUrl)}" loading="lazy" decoding="async" 
+                        onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgUrl)}', 'customer')" 
+                        class="w-full h-full object-cover cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200">
+                </div>
+            `).join('');
+
+            imageMarkup = `
+            <div class="grid ${gridCols} gap-1.5 mt-1.5 max-w-full w-64 rounded-xl overflow-hidden" onclick="event.stopPropagation()">
+                ${imgElements}
+            </div>`;
+        } else if (imageList.length === 1) {
+            const imageSrc = imageList[0];
+            imageMarkup = `<img src="${escapeHtml(imageSrc)}" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imageSrc)}', 'customer')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">`;
+        }
         
         let senderName = m.sender || "Lokalex";
         if (isCustomer) senderName = "You";
@@ -243,7 +277,9 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
 
         const isDocFilenameText = isDoc && m.text && (m.text === m.fileName || m.text === m.fileUrl || m.text === m.imageUrl || m.text === '📄 Document' || m.text.startsWith('http'));
         const isVideoPlaceholderText = isVid && m.text && (m.text === '🎥 Video' || m.text === m.videoName || m.text === m.videoUrl || m.text.startsWith('http'));
-        const showText = m.text && (!imgHtml || (!m.text.includes('[Facebook image]') && !m.text.includes('[Facebook attachment]') && m.text !== '📷 Photo' && m.text !== 'Facebook Message')) && !locationHtml && !isDocFilenameText && !isVideoPlaceholderText;
+        const isAudioPlaceholderText = isAud && m.text && (m.text === '🎤 Voice message' || m.text.includes('[Facebook audio]') || m.text.includes('[Facebook voice]') || m.text.startsWith('http'));
+        const isMultiImagePlaceholderText = imageList.length > 1 && m.text && (m.text.includes('Photos') || m.text.includes('[Facebook image]'));
+        const showText = m.text && (!imageList.length || (!m.text.includes('[Facebook image]') && !m.text.includes('[Facebook attachment]') && m.text !== '📷 Photo' && m.text !== 'Facebook Message')) && !isMultiImagePlaceholderText && !locationHtml && !isDocFilenameText && !isVideoPlaceholderText && !isAudioPlaceholderText;
 
         return `
         <div id="msg-bubble-${m.id}" class="flex items-start gap-1.5 ${isCustomer ? 'flex-row-reverse' : 'flex-row'} my-0.5 group/row">
@@ -266,7 +302,8 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
                 ${showText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${formatChatTextWithPhoneLinks(m.text)}</div>` : ''}
                 ${docMarkup}
                 ${videoMarkup}
-                ${imgHtml}
+                ${audioMarkup}
+                ${imageMarkup}
                 ${locationHtml}
                 ${reactionsHtml}
             </div>

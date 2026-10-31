@@ -292,6 +292,14 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
         const rawLastMsg = (meta.lastMessage || '').trim();
         const hasValidLastMsg = rawLastMsg !== '' && rawLastMsg.toLowerCase() !== 'no messages yet';
 
+        // Filter out empty name-based ghost entries with no messages, no channel, and no customer name
+        if (!rawLastMsg && !meta.channel && !meta.customerName && !key.startsWith('fb_') && !key.startsWith('cust_')) {
+            if (db && !isFromCache && (meta.folder === 'done' || meta.status === 'completed')) {
+                db.ref(`customerChatMeta/${key}`).remove().catch(() => {});
+            }
+            return;
+        }
+
         // FULL BOOKING MODE AUTO-REPLY HOOK:
         // Dispatches automated full booking reply ONLY to genuine NEW incoming customer messages in Inbox
         // AND ONLY when ALL riders are unavailable (if an available rider is on roster, skip auto-reply!)
@@ -518,10 +526,23 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
         // 2. Deduplicate matching customer accounts: keep active thread with real messages and latest update
         if (threadsMap.has(dedupKey)) {
             const existing = threadsMap.get(dedupKey);
-            const currentScore = (threadObj.hasRealMessages ? 10000000000000 : 0) + (threadObj.lastUpdated || 0);
-            const existingScore = (existing.hasRealMessages ? 10000000000000 : 0) + (existing.lastUpdated || 0);
+            const currentHasMsg = threadObj.hasRealMessages && threadObj.lastMessage !== 'No messages yet';
+            const existingHasMsg = existing.hasRealMessages && existing.lastMessage !== 'No messages yet';
 
-            if (currentScore > existingScore) {
+            let takeCurrent = false;
+            if (currentHasMsg && !existingHasMsg) {
+                takeCurrent = true;
+            } else if (!currentHasMsg && existingHasMsg) {
+                takeCurrent = false;
+            } else if (threadObj.custId.startsWith('fb_') && !existing.custId.startsWith('fb_')) {
+                takeCurrent = true;
+            } else if (!threadObj.custId.startsWith('fb_') && existing.custId.startsWith('fb_')) {
+                takeCurrent = false;
+            } else {
+                takeCurrent = (threadObj.lastUpdated || 0) >= (existing.lastUpdated || 0);
+            }
+
+            if (takeCurrent) {
                 threadObj.isUnread = threadObj.isUnread || existing.isUnread;
                 threadObj.isApplicant = threadObj.isApplicant || existing.isApplicant;
                 if (threadObj.isApplicant && threadObj.folder !== 'catering') {
@@ -531,6 +552,9 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                     threadObj.cateredByRiderName = existing.cateredByRiderName;
                     threadObj.cateredByRiderId = existing.cateredByRiderId;
                     if (existing.folder === 'catering') threadObj.folder = 'catering';
+                }
+                if (!currentHasMsg && existingHasMsg) {
+                    threadObj.lastMessage = existing.lastMessage;
                 }
                 threadsMap.set(dedupKey, threadObj);
             } else {
@@ -543,6 +567,9 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                     existing.cateredByRiderName = threadObj.cateredByRiderName;
                     existing.cateredByRiderId = threadObj.cateredByRiderId;
                     if (threadObj.folder === 'catering') existing.folder = 'catering';
+                }
+                if (!existingHasMsg && currentHasMsg) {
+                    existing.lastMessage = threadObj.lastMessage;
                 }
             }
         } else {

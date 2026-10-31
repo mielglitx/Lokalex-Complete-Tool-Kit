@@ -525,13 +525,6 @@ export async function toggleThreadApplicant(targetCustId = null) {
                 db.ref(`customerChats/${custId}/metadata`).update(payload),
                 db.ref(`customerChatMeta/${custId}`).update(payload)
             ]);
-            if (custId.startsWith('fb_')) {
-                const plain = custId.replace(/^fb_/, '');
-                await Promise.all([
-                    db.ref(`customerChats/${plain}/metadata`).update(payload).catch(() => {}),
-                    db.ref(`customerChatMeta/${plain}`).update(payload).catch(() => {})
-                ]);
-            }
         } catch (e) {
             console.warn("Failed to update applicant status in RTDB:", e);
         }
@@ -603,13 +596,6 @@ export async function markThreadFollowUp() {
                 db.ref(`customerChats/${custId}/metadata`).update(payload),
                 db.ref(`customerChatMeta/${custId}`).update(payload)
             ]);
-            if (custId.startsWith('fb_')) {
-                const plain = custId.replace(/^fb_/, '');
-                await Promise.all([
-                    db.ref(`customerChats/${plain}/metadata`).update(payload).catch(() => {}),
-                    db.ref(`customerChatMeta/${plain}`).update(payload).catch(() => {})
-                ]);
-            }
         } catch (e) {
             console.warn("Failed to update follow-up status in RTDB:", e);
         }

@@ -651,6 +651,14 @@ if (typeof window !== 'undefined') {
     window.getNativeVersionName = getNativeVersionName;
     window.getNativeVersionCode = getNativeVersionCode;
 
+    window.__lokalexKeepAlivePulse = function() {
+        try {
+            if (typeof window !== 'undefined' && window.firebaseDb && typeof window.firebaseDb.goOnline === 'function') {
+                window.firebaseDb.goOnline();
+            }
+        } catch (_) {}
+    };
+
     window.onFloatingWindowModeChanged = function(isInPip) {
         isTransitioningToFloating = false;
         if (isInPip) {
