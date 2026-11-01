@@ -20,7 +20,7 @@ import {
 } from './chatState.js';
 import { cancelRiderReply } from './chatListeners.js';
 import { clearMyTypingStatus } from './chatPresence.js';
-import { isAdmin, canManageRoster, isCustomerMatch } from '../../roster/rosterUtils.js';
+import { isAdmin, canManageRoster, isCustomerMatch, isRiderMatch } from '../../roster/rosterUtils.js';
 import { getActiveRosterCaterer } from '../chatFeed/chatFeedState.js';
 
 export async function forwardRiderReactionToMessenger({ custId, msgId, emoji, action = 'react' }) {
@@ -161,18 +161,42 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
                         Boolean(globalState.adminControlsEnabled);
 
     if (!isUserAdmin && targetMeta) {
-        const isCateringFolder = (targetMeta.folder || '').toLowerCase() === 'catering';
         const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
         const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
         const custDisplayName = (targetMeta.customerName || targetMeta.name || '').trim();
 
-        const activeCaterer = (typeof getActiveRosterCaterer === 'function')
+        let activeCaterer = (typeof getActiveRosterCaterer === 'function')
             ? getActiveRosterCaterer(custDisplayName, targetCustId, targetMeta)
             : null;
 
-        const cateredRiderId = (targetMeta.cateredByRiderId || activeCaterer?.telegramId || "").toString().trim();
-        const cateredRiderName = (targetMeta.cateredByRiderName || targetMeta.cateredBy || activeCaterer?.riderName || activeCaterer?.name || "").toString().trim();
+        const liveRoster = globalState.rosterMembers || [];
+        const metaRiderId = (targetMeta.cateredByRiderId || "").toString().trim();
+        const metaRiderName = (targetMeta.cateredByRiderName || targetMeta.cateredBy || "").toString().trim();
+        const cleanMetaRiderName = metaRiderName.toLowerCase();
+
+        if (!activeCaterer && (metaRiderId || cleanMetaRiderName) && liveRoster.length > 0) {
+            const matchingMember = liveRoster.find(m => {
+                const mId = (m.telegramId || m.id || "").toString().trim();
+                const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+                return (metaRiderId && mId === metaRiderId) || (cleanMetaRiderName && (mName === cleanMetaRiderName || isRiderMatch(mName, cleanMetaRiderName)));
+            });
+            if (matchingMember && matchingMember.status === 'Catering') {
+                activeCaterer = matchingMember;
+            }
+        }
+
+        let cateredRiderId = "";
+        let cateredRiderName = "";
+        if (activeCaterer) {
+            cateredRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+            cateredRiderName = (activeCaterer.riderName || activeCaterer.name || "").toString().trim();
+        } else if (liveRoster.length === 0) {
+            cateredRiderId = metaRiderId;
+            cateredRiderName = metaRiderName;
+        }
+
         const cleanCateredRiderName = cateredRiderName.toLowerCase();
+        const isCateringFolder = Boolean(activeCaterer) || ((targetMeta.folder || '').toLowerCase() === 'catering' && Boolean(cateredRiderId || cleanCateredRiderName));
 
         const myCateringCusts = (typeof window.getMyCateringCustomers === 'function') ? window.getMyCateringCustomers() : [];
         const isCustomerInMyList = myCateringCusts.some(c => c.toLowerCase() === custDisplayName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(c, custDisplayName)));

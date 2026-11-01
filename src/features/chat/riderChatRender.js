@@ -1024,11 +1024,13 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const isLikeSticker = !isDoc && !isVid && !isAud && imageList.length === 1 && Boolean(m.isSticker || m.stickerType === 'like' || (imageList[0].includes('369239') || imageList[0].includes('sticker') || imageList[0].includes('like')));
     
     let imageMarkup = '';
+    const midArg = m.mid || m.metaMid || (String(m.id).startsWith('m_') ? m.id : '');
     if (imageList.length > 1) {
         const gridCols = imageList.length === 2 ? 'grid-cols-2' : (imageList.length === 3 ? 'grid-cols-3' : 'grid-cols-2');
         const imgElements = imageList.map(imgUrl => `
             <div class="relative overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 border border-black/10 dark:border-white/10 aspect-square group/img">
-                <img src="${escapeHtml(imgUrl)}" loading="lazy" decoding="async" 
+                <img src="${escapeHtml(imgUrl)}" loading="lazy" decoding="async" referrerpolicy="no-referrer"
+                    onerror="window.handleChatImageLoadError && window.handleChatImageLoadError(this, '${escapeHtml(m.id || '')}', '${escapeHtml(midArg)}')"
                     onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgUrl)}', 'rider')" 
                     class="w-full h-full object-cover cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200">
             </div>
@@ -1041,8 +1043,8 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     } else if (imageList.length === 1) {
         const imgHtml = imageList[0];
         imageMarkup = isLikeSticker 
-            ? `<div class="p-0.5 select-none flex items-center justify-start"><img src="${escapeHtml(imgHtml)}" alt="👍" class="w-10 h-10 object-contain hover:scale-110 active:scale-90 transition-transform cursor-pointer" onclick="event.stopPropagation()"></div>`
-            : `<img src="${escapeHtml(imgHtml)}" loading="eager" decoding="async" fetchpriority="high" onerror="window.handleChatImageLoadError && window.handleChatImageLoadError(this, '${m.id}')" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgHtml)}', 'rider')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-95 transition bg-gray-100 dark:bg-gray-800 min-h-[120px] object-cover">`;
+            ? `<div class="p-0.5 select-none flex items-center justify-start"><img src="${escapeHtml(imgHtml)}" alt="👍" referrerpolicy="no-referrer" class="w-10 h-10 object-contain hover:scale-110 active:scale-90 transition-transform cursor-pointer" onclick="event.stopPropagation()"></div>`
+            : `<img src="${escapeHtml(imgHtml)}" loading="eager" decoding="async" fetchpriority="high" referrerpolicy="no-referrer" onerror="window.handleChatImageLoadError && window.handleChatImageLoadError(this, '${escapeHtml(m.id || '')}', '${escapeHtml(midArg)}')" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgHtml)}', 'rider')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-95 transition bg-gray-100 dark:bg-gray-800 min-h-[120px] object-cover">`;
     } else if (isResolvingFbMedia) {
         imageMarkup = `<div class="flex items-center gap-2 py-2 px-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-600 dark:text-blue-400 text-xs mt-1 font-medium animate-pulse"><i class="fa-solid fa-spinner fa-spin text-blue-500"></i><span>Loading attachment...</span></div>`;
     }
@@ -1512,18 +1514,125 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
     }
 }
 
-export function handleChatImageLoadError(imgEl, msgId) {
-    if (!imgEl || !msgId) return;
-    const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') ? window.getActiveRiderChatCustId() : null;
-    if (!activeCustId) return;
+export function handleChatImageLoadError(imgEl, msgId, rawMid = "") {
+    if (!imgEl) return;
+    
+    const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') 
+        ? window.getActiveRiderChatCustId() 
+        : (window.activeRiderChatCustId || null);
 
-    if (typeof window.resolveFacebookMessageAttachment === 'function') {
-        window.resolveFacebookMessageAttachment(activeCustId, msgId, msgId).then(res => {
+    const effectiveMid = rawMid || (msgId && String(msgId).startsWith('m_') ? msgId : "");
+
+    // If already attempted once and failed, render friendly fallback reload UI
+    if (imgEl.dataset.failed === "true") {
+        renderBrokenImageFallback(imgEl, msgId, effectiveMid);
+        return;
+    }
+    imgEl.dataset.failed = "true";
+
+    if (activeCustId && typeof window.resolveFacebookMessageAttachment === 'function') {
+        window.resolveFacebookMessageAttachment(activeCustId, msgId, effectiveMid, true).then(res => {
             const freshUrl = (typeof res === 'string') ? res : (res?.imageUrl || (res?.images && res.images[0]) || null);
             if (freshUrl && freshUrl !== imgEl.src) {
+                imgEl.referrerPolicy = 'no-referrer';
                 imgEl.src = freshUrl;
+                imgEl.removeAttribute('data-failed');
+                if (db && activeCustId && msgId) {
+                    db.ref(`customerChats/${activeCustId}/messages/${msgId}`).update({
+                        imageUrl: freshUrl,
+                        images: (res?.images && res.images.length > 0) ? res.images : null
+                    }).catch(() => {});
+                }
+            } else {
+                renderBrokenImageFallback(imgEl, msgId, effectiveMid);
             }
-        }).catch(() => {});
+        }).catch(() => {
+            renderBrokenImageFallback(imgEl, msgId, effectiveMid);
+        });
+    } else {
+        renderBrokenImageFallback(imgEl, msgId, effectiveMid);
+    }
+}
+
+export function renderBrokenImageFallback(imgEl, msgId, rawMid = "") {
+    if (!imgEl || !imgEl.parentNode) return;
+    const parent = imgEl.parentNode;
+    if (parent.querySelector('.chat-img-fallback-card')) return;
+
+    imgEl.style.display = 'none';
+
+    const fallback = document.createElement('div');
+    fallback.className = 'chat-img-fallback-card flex flex-col items-center justify-center p-3.5 bg-gray-100 dark:bg-black/40 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-center gap-1.5 cursor-pointer hover:bg-gray-200 dark:hover:bg-white/5 transition select-none w-52 max-w-full my-1';
+    fallback.setAttribute('onclick', `event.stopPropagation(); window.retryReloadChatImage && window.retryReloadChatImage(this, '${escapeHtml(msgId || '')}', '${escapeHtml(rawMid || '')}')`);
+    fallback.innerHTML = `
+        <div class="w-8 h-8 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center text-sm">
+            <i class="fa-solid fa-image"></i>
+        </div>
+        <span class="text-xs font-bold text-gray-700 dark:text-gray-300">Photo expired or loading failed</span>
+        <span class="text-[11px] text-blue-600 dark:text-blue-400 font-extrabold flex items-center gap-1">
+            <i class="fa-solid fa-arrows-rotate"></i> Tap to reload
+        </span>
+    `;
+
+    parent.appendChild(fallback);
+}
+
+export async function retryReloadChatImage(fallbackEl, msgId, rawMid = "") {
+    if (!fallbackEl) return;
+    const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') 
+        ? window.getActiveRiderChatCustId() 
+        : (window.activeRiderChatCustId || null);
+
+    const originalContent = fallbackEl.innerHTML;
+    fallbackEl.innerHTML = `
+        <div class="w-8 h-8 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center text-sm">
+            <i class="fa-solid fa-spinner fa-spin"></i>
+        </div>
+        <span class="text-xs font-bold text-blue-600 dark:text-blue-400">Fetching fresh photo...</span>
+    `;
+
+    try {
+        let freshUrl = null;
+        let freshImages = null;
+
+        if (activeCustId && typeof window.resolveFacebookMessageAttachment === 'function') {
+            const res = await window.resolveFacebookMessageAttachment(activeCustId, msgId, rawMid, true);
+            freshUrl = (typeof res === 'string') ? res : (res?.imageUrl || (res?.images && res.images[0]) || null);
+            if (res?.images) freshImages = res.images;
+        }
+
+        if (!freshUrl && activeCustId && typeof window.syncCurrentThreadFromMetaGraph === 'function') {
+            await window.syncCurrentThreadFromMetaGraph(activeCustId, false);
+            const parent = fallbackEl.parentNode;
+            const img = parent ? parent.querySelector('img') : null;
+            if (img && img.src && !img.src.includes('data-failed')) {
+                freshUrl = img.src;
+            }
+        }
+
+        if (freshUrl) {
+            const parent = fallbackEl.parentNode;
+            const img = parent ? parent.querySelector('img') : null;
+            if (img) {
+                img.referrerPolicy = 'no-referrer';
+                img.removeAttribute('data-failed');
+                img.src = freshUrl;
+                img.style.display = '';
+                fallbackEl.remove();
+            }
+            if (db && activeCustId && msgId) {
+                db.ref(`customerChats/${activeCustId}/messages/${msgId}`).update({
+                    imageUrl: freshUrl,
+                    images: (freshImages && freshImages.length > 0) ? freshImages : null
+                }).catch(() => {});
+            }
+        } else {
+            fallbackEl.innerHTML = originalContent;
+            showToast("⚠️ Could not reload photo from Facebook. Tap 🔄 in header to sync.");
+        }
+    } catch (_) {
+        fallbackEl.innerHTML = originalContent;
+        showToast("⚠️ Failed to reload photo.");
     }
 }
 
@@ -1537,6 +1646,8 @@ if (typeof window !== 'undefined') {
     window.executeChatPhoneAction = executeChatPhoneAction;
     window.saveChatPhoneToCustomerDetails = saveChatPhoneToCustomerDetails;
     window.handleChatImageLoadError = handleChatImageLoadError;
+    window.renderBrokenImageFallback = renderBrokenImageFallback;
+    window.retryReloadChatImage = retryReloadChatImage;
     window.handleChatLinkClick = handleChatLinkClick;
     window.downloadChatDocument = downloadChatDocument;
     window.updateRiderChatSeenAvatar = updateRiderChatSeenAvatar;

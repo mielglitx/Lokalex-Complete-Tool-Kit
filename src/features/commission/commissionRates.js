@@ -203,8 +203,42 @@ export function checkRiderIsOvertime(dateStr, riderName = "", telegramId = "", r
         totalBreakMins = parseInt(rosterMem.totalBreakMinutes, 10) || 0;
     }
 
-    let loginTimestamp = loginRec?.loginTimestamp || null;
-    let loginTimeStr = loginRec?.loginTime || rosterMem?.timeIn || "";
+    let loginTimestamp = loginRec?.loginTimestamp || rosterMem?.loginTimestamp || null;
+    let loginTimeStr = loginRec?.loginTime || rosterMem?.loginTime || rosterMem?.startTime || rosterMem?.timeIn || "";
+
+    // Fallback 1: check timeInSchedule if loginTime not explicitly found
+    if (!loginTimeStr && !loginTimestamp) {
+        const sched = globalState.timeInSchedule?.riderSchedules?.[cleanId] || globalState.timeInSchedule?.riderSchedules?.[cleanName];
+        if (sched?.allowedTimeIn) {
+            loginTimeStr = sched.allowedTimeIn;
+        } else if (globalState.timeInSchedule?.defaultTimeIn) {
+            loginTimeStr = globalState.timeInSchedule.defaultTimeIn;
+        }
+    }
+
+    // Fallback 2: check earliest order of the day for this rider
+    if (!loginTimeStr && !loginTimestamp) {
+        const allRiderOrders = (globalState.globalDailyReceipts || [])
+            .concat(globalState.globalCateredHistory || [])
+            .filter(o => isSameDateStr(o.date || o.completedDate, dateFormatted) &&
+                ((cleanId && (o.telegramId || o.riderId || "").toString().trim() === cleanId) ||
+                 (cleanName && (o.riderName || "").trim().toLowerCase() === cleanName)));
+        if (allRiderOrders.length > 0) {
+            let earliestMins = 1440;
+            let earliestTimeStr = "";
+            allRiderOrders.forEach(o => {
+                const t = o.startTime || o.cateringStartTime || o.time || o.receiptTime || o.completedTime;
+                const m = parseTimeToMinutes(t);
+                if (m !== null && m < earliestMins) {
+                    earliestMins = m;
+                    earliestTimeStr = t;
+                }
+            });
+            if (earliestMins < 1440) {
+                loginTimeStr = earliestTimeStr;
+            }
+        }
+    }
 
     if (!loginTimestamp && loginTimeStr) {
         const parsedMins = parseTimeToMinutes(loginTimeStr);
@@ -215,25 +249,55 @@ export function checkRiderIsOvertime(dateStr, riderName = "", telegramId = "", r
         }
     }
 
-    // 1. Specific receipt/order time check
+    // SCENARIO 1: SPECIFIC ORDER EVALUATION (receiptTimeOrItem provided)
+    // The remittance discount strictly applies ONLY to orders that occurred past the scheduled duty threshold!
     if (receiptTimeOrItem !== null && receiptTimeOrItem !== undefined) {
-        if (typeof receiptTimeOrItem === 'string' && receiptTimeOrItem.trim() !== '') {
-            const rMins = parseTimeToMinutes(receiptTimeOrItem);
-            const lMins = loginTimeStr ? parseTimeToMinutes(loginTimeStr) : null;
-            if (rMins !== null && lMins !== null) {
-                let grossMins = rMins - lMins;
+        let orderTimeStr = null;
+        let orderTimestamp = null;
+
+        if (typeof receiptTimeOrItem === 'object') {
+            orderTimeStr = receiptTimeOrItem.completedTime || 
+                           receiptTimeOrItem.doneTime || 
+                           receiptTimeOrItem.receiptTime || 
+                           receiptTimeOrItem.time || 
+                           receiptTimeOrItem.startTime || 
+                           null;
+            orderTimestamp = receiptTimeOrItem.timestamp || 
+                             receiptTimeOrItem.createdAt || 
+                             null;
+        } else if (typeof receiptTimeOrItem === 'string') {
+            orderTimeStr = receiptTimeOrItem;
+        } else if (typeof receiptTimeOrItem === 'number') {
+            orderTimestamp = receiptTimeOrItem;
+        }
+
+        // Check by timestamp difference if available
+        if (orderTimestamp && loginTimestamp) {
+            const grossMins = Math.floor((orderTimestamp - loginTimestamp) / 60000);
+            if (grossMins < 0) return false;
+            const netMins = Math.max(0, grossMins - totalBreakMins);
+            return netMins >= targetMins;
+        }
+
+        // Check by string clock time
+        if (orderTimeStr) {
+            const orderMins = parseTimeToMinutes(orderTimeStr);
+            const loginMins = loginTimeStr ? parseTimeToMinutes(loginTimeStr) : null;
+            if (orderMins !== null && loginMins !== null) {
+                let grossMins = orderMins - loginMins;
                 if (grossMins < 0) grossMins += 1440;
                 const netMins = Math.max(0, grossMins - totalBreakMins);
                 return netMins >= targetMins;
             }
-        } else if (typeof receiptTimeOrItem === 'number' && loginTimestamp) {
-            const grossMins = Math.max(0, Math.floor((receiptTimeOrItem - loginTimestamp) / 60000));
-            const netMins = Math.max(0, grossMins - totalBreakMins);
-            return netMins >= targetMins;
         }
+
+        // If order time was provided but could not be parsed or was within duty:
+        // Strictly return false! Do NOT mark orders within scheduled duty as overtime.
+        return false;
     }
 
-    // 2. Active duty check for live/upcoming orders today
+    // SCENARIO 2: LIVE/UPCOMING ORDER CHECK (receiptTimeOrItem is null/undefined)
+    // Check if the rider is currently exceeding their shift duty right now today.
     const now = Date.now();
     const isToday = isSameDateStr(dateFormatted, getLocalTodayStr());
 
@@ -245,18 +309,6 @@ export function checkRiderIsOvertime(dateStr, riderName = "", telegramId = "", r
         const grossMins = Math.max(0, Math.floor((now - loginTimestamp) / 60000));
         const netMins = Math.max(0, grossMins - activeBreakMins);
         return netMins >= targetMins;
-    }
-
-    // 3. Historical or logged-out record
-    if (loginRec) {
-        if (loginRec.netWorkedMinutes !== undefined) {
-            return parseInt(loginRec.netWorkedMinutes, 10) >= targetMins;
-        }
-        if (loginTimestamp && loginRec.logoutTimestamp) {
-            const grossMins = Math.max(0, Math.floor((loginRec.logoutTimestamp - loginTimestamp) / 60000));
-            const netMins = Math.max(0, grossMins - totalBreakMins);
-            return netMins >= targetMins;
-        }
     }
 
     return false;

@@ -203,7 +203,7 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
             const gridCols = imageList.length === 2 ? 'grid-cols-2' : (imageList.length === 3 ? 'grid-cols-3' : 'grid-cols-2');
             const imgElements = imageList.map(imgUrl => `
                 <div class="relative overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 border border-black/10 dark:border-white/10 aspect-square group/img">
-                    <img src="${escapeHtml(imgUrl)}" loading="lazy" decoding="async" 
+                    <img src="${escapeHtml(imgUrl)}" loading="lazy" decoding="async" referrerpolicy="no-referrer"
                         onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgUrl)}', 'customer')" 
                         class="w-full h-full object-cover cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200">
                 </div>
@@ -215,7 +215,7 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
             </div>`;
         } else if (imageList.length === 1) {
             const imageSrc = imageList[0];
-            imageMarkup = `<img src="${escapeHtml(imageSrc)}" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imageSrc)}', 'customer')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">`;
+            imageMarkup = `<img src="${escapeHtml(imageSrc)}" referrerpolicy="no-referrer" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imageSrc)}', 'customer')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">`;
         }
         
         let senderName = m.sender || "Lokalex";

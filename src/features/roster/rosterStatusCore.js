@@ -25,7 +25,8 @@ import {
     getUserType, 
     saveRosterCache, 
     archiveRiderCateringIfNeeded, 
-    isSameDateStr 
+    isSameDateStr,
+    isRiderMatch 
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 
@@ -469,6 +470,7 @@ export async function clockOutRider(targetId = null) {
 
         await db.ref('roster/' + tId).update({ 
             status: 'End',
+            customerName: '',
             forcedCaters: null,
             forcedBy: null,
             isForcedCater: false,
@@ -484,10 +486,38 @@ export async function clockOutRider(targetId = null) {
             lastActiveTimestamp: nowTimestamp,
             lastUpdated: timeStr
         }).catch(() => {});
+
+        // Clean up any lingering catering chats assigned to this rider so they return to inbox/done
+        try {
+            const rName = rMem ? (rMem.riderName || rMem.name || "").trim().toLowerCase() : (appState.riderName || "").trim().toLowerCase();
+            const snap = await db.ref('customerChatMeta').once('value');
+            const chats = snap.val() || {};
+            const chatUpdates = {};
+            Object.entries(chats).forEach(([cId, meta]) => {
+                const cRiderId = (meta.cateredByRiderId || '').toString();
+                const cRiderName = (meta.cateredByRiderName || meta.cateredBy || '').trim().toLowerCase();
+                if ((tId && cRiderId === tId) || (rName && (cRiderName === rName || isRiderMatch(cRiderName, rName)))) {
+                    const isDone = (meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled');
+                    const targetFolder = isDone ? 'done' : (meta.isApplicant ? 'applicant' : 'inbox');
+                    chatUpdates[`customerChatMeta/${cId}/cateredByRiderId`] = null;
+                    chatUpdates[`customerChatMeta/${cId}/cateredByRiderName`] = null;
+                    chatUpdates[`customerChatMeta/${cId}/cateredBy`] = null;
+                    chatUpdates[`customerChatMeta/${cId}/folder`] = targetFolder;
+                    chatUpdates[`customerChats/${cId}/metadata/cateredByRiderId`] = null;
+                    chatUpdates[`customerChats/${cId}/metadata/cateredByRiderName`] = null;
+                    chatUpdates[`customerChats/${cId}/metadata/cateredBy`] = null;
+                    chatUpdates[`customerChats/${cId}/metadata/folder`] = targetFolder;
+                }
+            });
+            if (Object.keys(chatUpdates).length > 0) {
+                await db.ref().update(chatUpdates);
+            }
+        } catch (_) {}
     }
 
     if (rMem) {
         rMem.status = 'End';
+        rMem.customerName = '';
         rMem.forcedCaters = null;
         rMem.forcedBy = null;
         rMem.isForcedCater = false;

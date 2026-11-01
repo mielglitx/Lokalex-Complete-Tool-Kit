@@ -853,7 +853,7 @@ app.post('/webhook', async (req, res) => {
           }
         }
 
-        const isCurrentlyCatered = (existingCateredRider || existingCateredRiderId || existingFolder === 'catering') && existingStatus !== 'completed' && existingStatus !== 'done' && existingStatus !== 'cancelled';
+        const isCurrentlyCatered = (existingFolder === 'catering') && Boolean(existingCateredRider || existingCateredRiderId) && existingStatus !== 'completed' && existingStatus !== 'done' && existingStatus !== 'cancelled';
         const resolvedFolder = isCurrentlyCatered 
           ? 'catering' 
           : (existingFolder === 'followup' ? 'followup' : 'inbox');
@@ -885,8 +885,15 @@ app.post('/webhook', async (req, res) => {
           apiName: DEFAULT_API_NAME,
           unreadForRider: true
         };
-        if (existingCateredRider) threadMeta.cateredByRiderName = existingCateredRider;
-        if (existingCateredRiderId) threadMeta.cateredByRiderId = existingCateredRiderId;
+        if (isCurrentlyCatered) {
+          if (existingCateredRider) threadMeta.cateredByRiderName = existingCateredRider;
+          if (existingCateredRiderId) threadMeta.cateredByRiderId = existingCateredRiderId;
+          threadMeta.cateredBy = existingCateredRider || null;
+        } else {
+          threadMeta.cateredByRiderName = null;
+          threadMeta.cateredByRiderId = null;
+          threadMeta.cateredBy = null;
+        }
 
         const chatMsg = {
           sender: customerName,
@@ -956,8 +963,8 @@ app.post('/webhook', async (req, res) => {
             customerName: customerName,
             avatarUrl: avatarUrl,
             folder: resolvedFolder,
-            cateredBy: existingCateredRider,
-            cateredById: existingCateredRiderId,
+            cateredBy: isCurrentlyCatered ? existingCateredRider : null,
+            cateredById: isCurrentlyCatered ? existingCateredRiderId : null,
             status: 'active'
           });
 
@@ -968,7 +975,7 @@ app.post('/webhook', async (req, res) => {
             const fbSettingsResp = await fetch(`${FIREBASE_DB_URL}/settings/fullBooking.json`);
             if (fbSettingsResp.ok) {
               const fbSettings = await fbSettingsResp.json();
-              if (fbSettings && fbSettings.enabled && resolvedFolder === 'inbox' && !existingCateredRider && !existingCateredRiderId) {
+              if (fbSettings && fbSettings.enabled && resolvedFolder === 'inbox') {
                 // Availability gate: If there is at least ONE available rider on roster, DO NOT auto-reply!
                 let hasAvailableRider = false;
                 try {

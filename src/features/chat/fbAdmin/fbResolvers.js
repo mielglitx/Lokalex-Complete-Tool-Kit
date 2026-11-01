@@ -529,37 +529,60 @@ const resolvedAttachmentMemoryCache = new Map();
 /**
  * Resolves a missing image attachment URL from Meta Graph API for a Facebook message
  */
-export async function resolveFacebookMessageAttachment(custId, msgId, rawMid) {
+export async function resolveFacebookMessageAttachment(custId, msgId, rawMid, forceFresh = false) {
     if (!custId || !msgId) return null;
     let cleanMid = rawMid || msgId;
+
+    // If cleanMid does not look like a Meta MID, attempt to retrieve the actual Meta MID
+    if (typeof cleanMid === 'string' && !cleanMid.startsWith('m_') && !cleanMid.startsWith('mid.') && !cleanMid.startsWith('m_mid.')) {
+        if (db && custId) {
+            try {
+                const snap = await db.ref(`customerChats/${custId}/messages/${msgId}`).once('value');
+                const val = snap.val();
+                if (val && (val.metaMid || val.mid)) {
+                    cleanMid = val.metaMid || val.mid;
+                }
+            } catch (_) {}
+        }
+    }
+
     if (typeof cleanMid === 'string') {
         if (cleanMid.startsWith('m_mid_')) cleanMid = 'm_mid.' + cleanMid.slice(6);
         else if (cleanMid.startsWith('mid_')) cleanMid = 'mid.' + cleanMid.slice(4);
     }
     const cacheKey = `${custId}_${msgId}`;
 
-    // 1. Instant check in memory cache (0ms)
-    if (resolvedAttachmentMemoryCache.has(cacheKey)) {
-        return resolvedAttachmentMemoryCache.get(cacheKey);
-    }
-    if (resolvedAttachmentMemoryCache.has(cleanMid)) {
-        return resolvedAttachmentMemoryCache.get(cleanMid);
-    }
-
-    // 2. Instant check in localStorage (0ms across app sessions)
-    try {
-        const stored = localStorage.getItem(`fb_att_${cleanMid}`) || localStorage.getItem(`fb_att_${msgId}`);
-        if (stored) {
-            let parsed = null;
-            if (stored.startsWith('{')) {
-                try { parsed = JSON.parse(stored); } catch (_) {}
-            }
-            const res = parsed || stored;
-            resolvedAttachmentMemoryCache.set(cacheKey, res);
-            resolvedAttachmentMemoryCache.set(cleanMid, res);
-            return res;
+    if (forceFresh) {
+        resolvedAttachmentMemoryCache.delete(cacheKey);
+        resolvedAttachmentMemoryCache.delete(cleanMid);
+        try {
+            localStorage.removeItem(`fb_att_${cleanMid}`);
+            localStorage.removeItem(`fb_att_${msgId}`);
+        } catch (_) {}
+    } else {
+        // 1. Instant check in memory cache (0ms)
+        if (resolvedAttachmentMemoryCache.has(cacheKey)) {
+            return resolvedAttachmentMemoryCache.get(cacheKey);
         }
-    } catch (_) {}
+        if (resolvedAttachmentMemoryCache.has(cleanMid)) {
+            return resolvedAttachmentMemoryCache.get(cleanMid);
+        }
+
+        // 2. Instant check in localStorage (0ms across app sessions)
+        try {
+            const stored = localStorage.getItem(`fb_att_${cleanMid}`) || localStorage.getItem(`fb_att_${msgId}`);
+            if (stored) {
+                let parsed = null;
+                if (stored.startsWith('{')) {
+                    try { parsed = JSON.parse(stored); } catch (_) {}
+                }
+                const res = parsed || stored;
+                resolvedAttachmentMemoryCache.set(cacheKey, res);
+                resolvedAttachmentMemoryCache.set(cleanMid, res);
+                return res;
+            }
+        } catch (_) {}
+    }
 
     // 3. Deduplicate in-flight network requests
     if (inFlightAttachmentResolutions.has(cacheKey)) {

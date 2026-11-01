@@ -376,6 +376,36 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                 existingMatch.metaMid = rawMid;
                 existingMatch.mid = safeMid;
 
+                // Refresh image URL if fresh attachment was retrieved from Graph API
+                if (imageUrl && (!existingMatch.imageUrl || existingMatch.imageUrl !== imageUrl)) {
+                    existingMatch.imageUrl = imageUrl;
+                    if (images && images.length > 0) existingMatch.images = images;
+                    if (existingMatch.type === 'text') existingMatch.type = 'image';
+
+                    const bubble = document.getElementById(`msg-bubble-${existingMatch.id}`) || document.getElementById(`msg-bubble-${safeMid}`);
+                    if (bubble) {
+                        const fallbackCard = bubble.querySelector('.chat-img-fallback-card');
+                        if (fallbackCard) fallbackCard.remove();
+                        const img = bubble.querySelector('img');
+                        if (img) {
+                            img.referrerPolicy = 'no-referrer';
+                            img.src = imageUrl;
+                            img.removeAttribute('data-failed');
+                            img.style.display = '';
+                        }
+                    }
+
+                    if (db) {
+                        db.ref(`customerChats/${targetCustId}/messages/${existingMatch.id}`).update({
+                            imageUrl: imageUrl,
+                            images: (images && images.length > 0) ? images : null,
+                            metaMid: rawMid,
+                            mid: safeMid,
+                            type: 'image'
+                        }).catch(() => {});
+                    }
+                }
+
                 // Clean up any stale duplicate message from Firebase if one was previously stored under safeMid
                 if (db && existingMatch.id !== safeMid) {
                     db.ref(`customerChats/${targetCustId}/messages/${safeMid}`).remove().catch(() => {});
@@ -883,7 +913,7 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 const isDone = rawFolder === 'done' || currentRiderChatMeta?.status === 'completed' || currentRiderChatMeta?.status === 'done';
                 const custDisplayName = activeCustData?.name || currentRiderChatMeta?.customerName || "";
                 const activeCaterer = getActiveRosterCaterer(custDisplayName, custId, currentRiderChatMeta);
-                const isCatered = !isDone && (rawFolder === 'catering' || Boolean(currentRiderChatMeta?.cateredByRiderName || currentRiderChatMeta?.cateredByRiderId || currentRiderChatMeta?.cateredBy) || Boolean(activeCaterer));
+                const isCatered = !isDone && Boolean(activeCaterer);
                 const isApplicant = !isDone && !isCatered && (rawFolder === 'applicant' || currentRiderChatMeta?.isApplicant === true);
                 const isFollowup = !isDone && !isCatered && !isApplicant && (rawFolder === 'followup');
 

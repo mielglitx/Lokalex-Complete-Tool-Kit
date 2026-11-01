@@ -268,9 +268,22 @@ export function parseQueueTime(val) {
 }
 
 export function parseTimeToMinutes(timeStr) {
-    if (!timeStr) return null;
-    const clean = timeStr.trim();
-    const match = clean.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+    if (timeStr === null || timeStr === undefined || timeStr === "") return null;
+    if (typeof timeStr === 'number') {
+        const d = new Date(timeStr);
+        if (!isNaN(d.getTime())) return d.getHours() * 60 + d.getMinutes();
+        return null;
+    }
+    const raw = String(timeStr).trim();
+    if (!raw) return null;
+
+    if (/^\d{11,13}$/.test(raw)) {
+        const d = new Date(Number(raw));
+        if (!isNaN(d.getTime())) return d.getHours() * 60 + d.getMinutes();
+    }
+
+    const clean = raw.replace(/[\u202f\u00a0]/g, ' ').trim();
+    const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*([AP]M))?$/i);
     if (!match) return null;
 
     let hours = parseInt(match[1], 10);
@@ -588,6 +601,8 @@ export function getMergedDeduplicatedCommissionList(forceFresh = false) {
                 time: sTime,
                 startTime: sTime,
                 completedTime: cTime,
+                receiptTime: rc.receiptTime || cTime || sTime || "",
+                timestamp: rc.timestamp || rc.createdAt || null,
                 customerCount: count,
                 duration: dur,
                 totalFees: splitGross,
@@ -646,6 +661,8 @@ export function getMergedDeduplicatedCommissionList(forceFresh = false) {
                 time: sTime,
                 startTime: sTime,
                 completedTime: cTime,
+                receiptTime: ch.receiptTime || cTime || sTime || "",
+                timestamp: ch.timestamp || ch.createdAt || null,
                 customerCount: count,
                 duration: dur,
                 totalFees: splitGross,

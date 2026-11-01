@@ -23,7 +23,7 @@ import { appState, globalState } from '../../store/state.js';
 import { API_URL } from '../../config/constants.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { getLocalTodayStr, isSameDate } from '../../utils/helpers.js';
-import { parseTimeToMinutes, isAdmin, hasTlPermission, archiveRiderCateringIfNeeded, saveRosterCache } from './rosterUtils.js';
+import { parseTimeToMinutes, isAdmin, hasTlPermission, archiveRiderCateringIfNeeded, saveRosterCache, isRiderMatch } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 import { sanitizeForFirebase } from './rosterSchedule.js';
 
@@ -179,6 +179,33 @@ export async function sweepStaleShiftsFromPriorDays() {
                     lastUpdated: timeStr,
                     lastActiveTimestamp: nowTimestamp
                 }).catch(() => {});
+
+                // Release lingering customer chats from prior shift
+                try {
+                    const rName = (rider.riderName || rider.name || "").trim().toLowerCase();
+                    const snap = await db.ref('customerChatMeta').once('value');
+                    const chats = snap.val() || {};
+                    const chatUpdates = {};
+                    Object.entries(chats).forEach(([cId, meta]) => {
+                        const cRiderId = (meta.cateredByRiderId || '').toString();
+                        const cRiderName = (meta.cateredByRiderName || meta.cateredBy || '').trim().toLowerCase();
+                        if ((riderId && cRiderId === riderId.toString()) || (rName && (cRiderName === rName || isRiderMatch(cRiderName, rName)))) {
+                            const isDone = (meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled');
+                            const targetFolder = isDone ? 'done' : (meta.isApplicant ? 'applicant' : 'inbox');
+                            chatUpdates[`customerChatMeta/${cId}/cateredByRiderId`] = null;
+                            chatUpdates[`customerChatMeta/${cId}/cateredByRiderName`] = null;
+                            chatUpdates[`customerChatMeta/${cId}/cateredBy`] = null;
+                            chatUpdates[`customerChatMeta/${cId}/folder`] = targetFolder;
+                            chatUpdates[`customerChats/${cId}/metadata/cateredByRiderId`] = null;
+                            chatUpdates[`customerChats/${cId}/metadata/cateredByRiderName`] = null;
+                            chatUpdates[`customerChats/${cId}/metadata/cateredBy`] = null;
+                            chatUpdates[`customerChats/${cId}/metadata/folder`] = targetFolder;
+                        }
+                    });
+                    if (Object.keys(chatUpdates).length > 0) {
+                        await db.ref().update(chatUpdates);
+                    }
+                } catch (_) {}
 
                 try {
                     const loginSnap = await db.ref(`logins/${riderId}`).once('value');

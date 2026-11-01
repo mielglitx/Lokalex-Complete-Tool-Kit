@@ -147,16 +147,8 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                     
                     // Always check live roster catering: active roster catering takes precedence!
                     const activeCaterer = getActiveRosterCaterer(displayName, key, meta);
-                    const hasCaterer = Boolean(
-                        rawFolder === 'catering' ||
-                        meta.cateredByRiderName ||
-                        meta.cateredByRiderId ||
-                        meta.cateredBy ||
-                        meta.caterer ||
-                        meta.riderName ||
-                        meta.riderId ||
-                        activeCaterer
-                    );
+                    const liveRoster = globalState.rosterMembers || [];
+                    const hasCaterer = Boolean(activeCaterer) || (liveRoster.length === 0 && Boolean(rawFolder === 'catering' && (meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy)));
                     const isCatered = !isDone && hasCaterer;
                     const isApplicant = !isDone && !isCatered && (rawFolder === 'applicant' || meta.isApplicant === true);
                     const isFollowup = !isDone && !isCatered && !isApplicant && (rawFolder === 'followup');
@@ -468,6 +460,16 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                 const isFinished = isCompletedStatus || meta.completedAt || meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled';
                 if (wasInCatering) {
                     threadFolder = isFinished ? 'done' : (isApplicant ? 'applicant' : (isFollowUp ? 'followup' : 'inbox'));
+                }
+                if (db && key) {
+                    const purgePayload = {
+                        cateredByRiderId: null,
+                        cateredByRiderName: null,
+                        cateredBy: null,
+                        folder: threadFolder
+                    };
+                    db.ref(`customerChats/${key}/metadata`).update(purgePayload).catch(() => {});
+                    db.ref(`customerChatMeta/${key}`).update(purgePayload).catch(() => {});
                 }
             }
         }
