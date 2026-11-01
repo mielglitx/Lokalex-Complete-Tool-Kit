@@ -9,7 +9,7 @@ import { escapeHtml } from '../../../utils/helpers.js';
 import { isCustomerMatch, isAdmin, canManageRoster, hasTlPermission, hasReceiptForActiveSession } from '../../roster/rosterUtils.js';
 import { completeSingleCateringCustomer, checkCustomerReceiptExists } from '../../roster/actions/rosterCateringCompletion.js';
 import { updateOrderMilestone } from './threadMilestonesPod.js';
-import { triggerAutoMessageOnCater } from '../autoMessageManager.js';
+import { openQueueNoticeModal } from '../../roster/actions/rosterCateringPrompts.js';
 
 let pendingDoneData = null;
 
@@ -752,6 +752,12 @@ export async function caterCurrentChatCustomer() {
         if (!myRecord || myRecord.status === 'End' || !myRecord.status) {
             return showToast("⚠️ You are on End Shift. Please set your status to Available on the roster before catering.");
         }
+        if (myRecord.status === 'Break') {
+            return showToast("⚠️ You are on Break. Please set your status to Available on the roster before catering.");
+        }
+        if (myRecord.status === 'Cooldown') {
+            return showToast("⚠️ You are still on cooldown. Please wait until it ends.");
+        }
     }
 
     const cateredRiderId = (meta.cateredByRiderId || "").toString().trim();
@@ -765,13 +771,66 @@ export async function caterCurrentChatCustomer() {
         return showToast(`⚠️ This customer is already being catered by ${meta.cateredByRiderName || meta.cateredBy}.`);
     }
 
+    let existingCustomers = [];
+    if (myRecord && myRecord.status === 'Catering' && myRecord.customerName) {
+        existingCustomers = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+    }
+    const isAlreadyInList = custName && existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase());
+
+    if (!isAdminUser && !canManage && !isAlreadyInList) {
+        const liveAvailableRiders = typeof window.sortAvailableRidersByGross === 'function'
+            ? window.sortAvailableRidersByGross(liveRoster.filter(m => m.status === 'Available'))
+            : liveRoster.filter(m => m.status === 'Available');
+
+        if (liveAvailableRiders.length > 0) {
+            const firstAvailable = liveAvailableRiders[0];
+            const firstId = (firstAvailable?.telegramId || firstAvailable?.id || "").toString().trim();
+            const isFirstAvailable = firstId === currentId;
+            const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
+
+            if (!isFirstAvailable || amIAlreadyCatering) {
+                const firstGross = typeof window.getRiderTodayGross === 'function'
+                    ? window.getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstId)
+                    : 0;
+                const myGross = typeof window.getRiderTodayGross === 'function'
+                    ? window.getRiderTodayGross(currentName, currentId)
+                    : 0;
+                const myIndex = liveAvailableRiders.findIndex(m => (m.telegramId || m.id || "").toString().trim() === currentId);
+
+                if (typeof openQueueNoticeModal === 'function') {
+                    openQueueNoticeModal({
+                        firstRiderName: firstAvailable.riderName || firstAvailable.name || 'Rider',
+                        firstRiderGross: firstGross,
+                        myRank: myIndex !== -1 ? myIndex + 1 : null,
+                        myGross: myGross,
+                        myPosition: amIAlreadyCatering ? 'Currently Catering (Busy)' : null,
+                        amIAlreadyCatering: amIAlreadyCatering,
+                        reason: amIAlreadyCatering
+                            ? `There is an available rider waiting in queue (${firstAvailable.riderName || 'Rider'}). You cannot cater additional customers while other riders are available.`
+                            : `${firstAvailable.riderName || 'Rider'} is currently 1st in line to cater customer orders. Please wait for your turn.`
+                    });
+                } else if (typeof window.openQueueNoticeModal === 'function') {
+                    window.openQueueNoticeModal({
+                        firstRiderName: firstAvailable.riderName || firstAvailable.name || 'Rider',
+                        firstRiderGross: firstGross,
+                        myRank: myIndex !== -1 ? myIndex + 1 : null,
+                        myGross: myGross,
+                        myPosition: amIAlreadyCatering ? 'Currently Catering (Busy)' : null,
+                        amIAlreadyCatering: amIAlreadyCatering
+                    });
+                } else {
+                    showToast(`🚫 Someone is ahead of you in queue: ${firstAvailable.riderName || 'Rider'} is 1st in line.`);
+                }
+                return;
+            }
+        }
+    }
+
     if (typeof window.confirmCateringStatus === 'function') {
         const res = await window.confirmCateringStatus(custName, custId);
         if (res && typeof window.setRiderChatFilter === 'function') {
             window.setRiderChatFilter('catering');
         }
-        // Trigger Being Catered Auto-Message
-        triggerAutoMessageOnCater(custId, custName, currentName).catch(() => {});
     } else {
         showToast("⚠️ Catering system unavailable.");
     }

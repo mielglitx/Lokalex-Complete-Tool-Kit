@@ -67,12 +67,32 @@ export function promptCateringStatus() {
         const firstAvailable = liveAvailableRiders[0];
         const firstId = (firstAvailable?.telegramId || firstAvailable?.id || "").toString().trim();
         const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
+        const firstRiderName = firstAvailable.riderName || firstAvailable.name || 'Rider';
+
         if (amIAlreadyCatering) {
-            return showToast(`🚫 There is an available rider in queue: ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) is 1st in line. Additional bookings cannot be taken while other riders are available.`);
+            showToast(`🚫 There is an available rider in queue: ${firstRiderName} (₱${firstGross.toFixed(0)}) is 1st in line.`);
+            openQueueNoticeModal({
+                firstRiderName: firstRiderName,
+                firstRiderGross: firstGross,
+                myPosition: 'Currently Catering (Busy)',
+                myGross: getRiderTodayGross(myName, myId),
+                amIAlreadyCatering: true,
+                reason: `There is an available rider in queue: ${firstRiderName} (₱${firstGross.toFixed(0)}) is 1st in line. Additional bookings cannot be taken while other riders are available.`
+            });
+            return;
         }
         if (firstId !== myId) {
             const myGross = getRiderTodayGross(myRecord?.riderName || myRecord?.name, myId);
-            return showToast(`⚠️ 1st in line: ${firstAvailable.riderName || 'Rider'} (Gross: ₱${firstGross.toFixed(0)}) vs Yours (₱${myGross.toFixed(0)}). Please wait for your turn.`);
+            const myIndex = liveAvailableRiders.findIndex(m => (m.telegramId || m.id || "").toString().trim() === myId);
+            showToast(`⚠️ 1st in line: ${firstRiderName} (Gross: ₱${firstGross.toFixed(0)}) vs Yours (₱${myGross.toFixed(0)}).`);
+            openQueueNoticeModal({
+                firstRiderName: firstRiderName,
+                firstRiderGross: firstGross,
+                myRank: myIndex !== -1 ? myIndex + 1 : null,
+                myGross: myGross,
+                reason: `${firstRiderName} is currently 1st in queue to cater customer orders. Please wait for your turn.`
+            });
+            return;
         }
     }
 
@@ -185,14 +205,32 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
             closeCateringModal();
             const firstAvailable = liveAvailableRiders[0];
             const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
+            const firstRiderName = firstAvailable.riderName || firstAvailable.name || 'Rider';
 
             if (amIAlreadyCatering) {
-                showToast(`🚫 There is an available rider in queue: ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) is 1st in line. Additional bookings cannot be taken while other riders are available.`);
+                showToast(`🚫 There is an available rider in queue: ${firstRiderName} (₱${firstGross.toFixed(0)}) is 1st in line. Additional bookings cannot be taken while other riders are available.`);
+                openQueueNoticeModal({
+                    firstRiderName: firstRiderName,
+                    firstRiderGross: firstGross,
+                    myPosition: 'Currently Catering (Busy)',
+                    myGross: getRiderTodayGross(myName, resolvedId),
+                    amIAlreadyCatering: true,
+                    reason: `There is an available rider in queue: ${firstRiderName} (₱${firstGross.toFixed(0)}) is 1st in line. Additional bookings cannot be taken while other riders are available.`
+                });
                 return false;
             }
 
             if (!isFirstAvailable) {
-                showToast(`🚫 Someone is ahead of you in queue: ${firstAvailable.riderName || 'Rider'} (₱${firstGross.toFixed(0)}) is 1st in line.`);
+                const myGross = getRiderTodayGross(myName, resolvedId);
+                const myIndex = liveAvailableRiders.findIndex(m => (m.telegramId || m.id || "").toString().trim() === resolvedId);
+                showToast(`🚫 Someone is ahead of you in queue: ${firstRiderName} (₱${firstGross.toFixed(0)}) is 1st in line.`);
+                openQueueNoticeModal({
+                    firstRiderName: firstRiderName,
+                    firstRiderGross: firstGross,
+                    myRank: myIndex !== -1 ? myIndex + 1 : null,
+                    myGross: myGross,
+                    reason: `${firstRiderName} (₱${firstGross.toFixed(0)}) is currently 1st in line to cater customer orders. Please wait for your turn.`
+                });
                 return false;
             }
         }
@@ -386,4 +424,112 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
         console.error("Error in confirmCateringStatus:", err);
         showToast("❌ Failed to Cater: " + (err.message || err));
     }
+}
+
+/**
+ * ============================================================================
+ * QUEUE POSITION NOTICE MODAL (PREVENTS CATERING QUEUE JUMPS)
+ * ============================================================================
+ * Displays a dedicated notice modal informing the rider that they are not the
+ * designated rider to cater this customer, showing the 1st in line rider's info.
+ */
+export function openQueueNoticeModal(options = {}) {
+    let modal = document.getElementById('not-first-in-queue-modal');
+    if (!modal) return;
+
+    const liveRoster = globalState.rosterMembers || [];
+    const liveAvailableRiders = typeof sortAvailableRidersByGross === 'function'
+        ? sortAvailableRidersByGross(liveRoster.filter(m => m.status === 'Available'))
+        : liveRoster.filter(m => m.status === 'Available');
+
+    const firstAvailable = liveAvailableRiders.length > 0 ? liveAvailableRiders[0] : null;
+    const firstId = (firstAvailable?.telegramId || firstAvailable?.id || "").toString().trim();
+    const firstRiderName = options.firstRiderName || (firstAvailable ? (firstAvailable.riderName || firstAvailable.name || "Rider") : "Another Rider");
+
+    let firstGross = options.firstRiderGross;
+    if (firstGross === undefined || firstGross === null) {
+        firstGross = firstAvailable && typeof getRiderTodayGross === 'function'
+            ? getRiderTodayGross(firstRiderName, firstId)
+            : 0;
+    }
+
+    const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const currentName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
+    const myRecord = liveRoster.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        return (currentId && mId === currentId) || (currentName && mName === currentName.toLowerCase());
+    });
+
+    const myIndex = liveAvailableRiders.findIndex(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        return (currentId && mId === currentId) || (currentName && mName === currentName.toLowerCase());
+    });
+
+    let myPosText = options.myPosition;
+    if (!myPosText) {
+        if (myRecord && myRecord.status === 'Catering') {
+            myPosText = "Currently Catering (Busy)";
+        } else if (myIndex !== -1) {
+            myPosText = `#${myIndex + 1} in Queue`;
+        } else if (myRecord && myRecord.status) {
+            myPosText = `Status: ${myRecord.status}`;
+        } else {
+            myPosText = "Not in Queue";
+        }
+    }
+
+    let myGross = options.myGross;
+    if (myGross === undefined || myGross === null) {
+        myGross = typeof getRiderTodayGross === 'function'
+            ? getRiderTodayGross(currentName, currentId)
+            : 0;
+    }
+
+    const firstRiderEl = document.getElementById('queue-notice-first-rider');
+    const firstGrossEl = document.getElementById('queue-notice-first-gross');
+    const myPosEl = document.getElementById('queue-notice-my-position');
+    const myGrossEl = document.getElementById('queue-notice-my-gross');
+    const reasonEl = document.getElementById('queue-notice-reason');
+    const subtitleEl = document.getElementById('queue-notice-subtitle');
+
+    if (firstRiderEl) firstRiderEl.textContent = firstRiderName;
+    if (firstGrossEl) {
+        firstGrossEl.textContent = typeof firstGross === 'number' ? `₱${firstGross.toFixed(2)}` : firstGross;
+    }
+    if (myPosEl) myPosEl.textContent = myPosText;
+    if (myGrossEl) {
+        myGrossEl.textContent = typeof myGross === 'number' ? `₱${myGross.toFixed(2)}` : myGross;
+    }
+
+    if (reasonEl) {
+        if (options.reason) {
+            reasonEl.textContent = options.reason;
+        } else if (options.amIAlreadyCatering || (myRecord && myRecord.status === 'Catering')) {
+            reasonEl.textContent = `There is an available rider waiting in queue (${firstRiderName}). Additional bookings cannot be taken while other riders are available.`;
+        } else {
+            reasonEl.textContent = `${firstRiderName} is currently 1st in line to cater customer orders. Please wait for your turn in the lineup.`;
+        }
+    }
+
+    if (subtitleEl) {
+        subtitleEl.textContent = `${firstRiderName} is currently designated to cater incoming orders.`;
+    }
+
+    try {
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+    } catch {}
+
+    modal.classList.remove('hidden');
+}
+
+export function closeQueueNoticeModal() {
+    const modal = document.getElementById('not-first-in-queue-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+if (typeof window !== 'undefined') {
+    window.openQueueNoticeModal = openQueueNoticeModal;
+    window.closeQueueNoticeModal = closeQueueNoticeModal;
 }
