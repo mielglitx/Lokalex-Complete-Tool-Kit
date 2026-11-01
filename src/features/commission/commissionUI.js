@@ -425,6 +425,92 @@ export function refreshCommissionView() {
         });
     });
 
+    // 1. Identify Active Date Penalties for Current Period & Render Banner
+    const activePeriodPenalties = [];
+    if (globalState.globalCommissionPenalties) {
+        Object.entries(globalState.globalCommissionPenalties).forEach(([key, rec]) => {
+            if (!rec || !rec.date) return;
+            const rDate = rec.date;
+            let dateMatches = false;
+            if (viewSettings.period === 'daily') {
+                dateMatches = isSameDateStr(rDate, viewSettings.dateValue) || (normalizeDateStr(rDate) === normalizeDateStr(viewSettings.dateValue));
+            } else if (viewSettings.period === 'weekly') {
+                const d = new Date(rDate.includes('-') ? rDate : Number(rDate));
+                dateMatches = getWeekString(d.getTime()) === viewSettings.dateValue;
+            } else if (viewSettings.period === 'monthly') {
+                dateMatches = String(normalizeDateStr(rDate)).substring(0, 7) === String(normalizeDateStr(viewSettings.dateValue)).substring(0, 7);
+            }
+            if (!dateMatches) return;
+
+            // If a specific rider filter is applied, only show their penalty
+            if (targetRiderFilter) {
+                const isMatch = checkRiderFilterMatch(targetRiderFilter, rec.riderName, rec.telegramId);
+                if (!isMatch) return;
+            }
+
+            activePeriodPenalties.push({ key, ...rec });
+
+            // Ensure penalized rider is in riderTotals even with 0 deliveries
+            const rName = rec.riderName || key.split('_')[0];
+            const rosterRec = globalState.rosterMembers?.find(mem => isRiderMatch(rName, mem.riderName || mem.name || "", "", mem.telegramId || mem.id));
+            const rId = (rec.telegramId || (rosterRec && (rosterRec.telegramId || rosterRec.id)) || rName.toLowerCase()).toString().trim();
+
+            if (!riderTotals[rId]) {
+                const rates = getCommissionRates(rDate, rName, rId);
+                riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0, lastRates: rates, customers: [] };
+            }
+        });
+    }
+
+    // Render Active Penalties Banner in UI
+    const penaltiesSection = document.getElementById('commission-active-penalties-section');
+    const penaltiesCountEl = document.getElementById('commission-active-penalties-count');
+    const penaltiesListEl = document.getElementById('commission-active-penalties-list');
+
+    if (penaltiesSection && penaltiesListEl) {
+        if (activePeriodPenalties.length > 0) {
+            penaltiesSection.classList.remove('hidden');
+            penaltiesSection.classList.add('flex');
+            if (penaltiesCountEl) {
+                penaltiesCountEl.innerText = `${activePeriodPenalties.length} active`;
+            }
+            penaltiesListEl.innerHTML = activePeriodPenalties.map(p => {
+                const removeBtn = isUserAdmin ? `
+                    <button type="button" onclick="window.removeAdminPenaltyByKey && window.removeAdminPenaltyByKey('${escapeHtml(p.key)}', '${escapeHtml(p.riderName)}', '${escapeHtml(p.date)}')" class="bg-red-600/20 hover:bg-red-600 text-red-700 dark:text-red-300 hover:text-white px-2 py-1 rounded-lg border border-red-500/30 text-[10px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1 shadow-xs ml-2 shrink-0">
+                        <i class="fa-solid fa-trash-can text-[10px]"></i>
+                        <span>Remove</span>
+                    </button>
+                ` : '';
+
+                return `
+                <div class="bg-white/90 dark:bg-black/40 border border-red-200 dark:border-red-900/50 p-2.5 rounded-xl flex items-center justify-between text-xs shadow-xs">
+                    <div class="flex flex-col gap-0.5 min-w-0 flex-1">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="font-black text-xs text-gray-900 dark:text-white flex items-center gap-1">
+                                <i class="fa-solid fa-motorcycle text-red-500 text-[10px]"></i>
+                                ${escapeHtml(p.riderName)}
+                            </span>
+                            <span class="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-md">
+                                +${p.penaltyPercentage}%
+                            </span>
+                            <span class="text-[10px] font-mono text-gray-500 dark:text-gray-400 font-bold">
+                                ${escapeHtml(p.date)}
+                            </span>
+                        </div>
+                        <span class="text-[10px] text-gray-600 dark:text-gray-300 italic truncate">
+                            ${escapeHtml(p.reason || 'Admin Sanction')}
+                        </span>
+                    </div>
+                    ${removeBtn}
+                </div>`;
+            }).join('');
+        } else {
+            penaltiesSection.classList.add('hidden');
+            penaltiesSection.classList.remove('flex');
+            penaltiesListEl.innerHTML = '';
+        }
+    }
+
     let finalRiderList = [];
     let grandGross = 0;
     let grandEarned = 0;
@@ -432,7 +518,9 @@ export function refreshCommissionView() {
     let selectedRiderRates = null;
 
     for (let rId in riderTotals) {
-        if (riderTotals[rId].gross <= 0 || riderTotals[rId].customers.length === 0) continue;
+        const rates = riderTotals[rId].lastRates || getCommissionRates(viewSettings.dateValue, riderTotals[rId].name, rId);
+        const hasPenalty = rates && (rates.manualPenaltyPerc > 0 || rates.earlyShiftPenaltyPerc > 0);
+        if (!hasPenalty && (riderTotals[rId].gross <= 0 || riderTotals[rId].customers.length === 0)) continue;
 
         if (targetRiderFilter) {
             const isMatch = checkRiderFilterMatch(targetRiderFilter, riderTotals[rId].name, rId);
@@ -645,6 +733,14 @@ export function renderRiderSummaryList(riderListArray) {
 
         const adminBadge = rates.isAdmin ? `<span class="bg-purple-50 dark:bg-purple-600/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30 text-[9px] font-black px-1.5 py-0.5 rounded ml-1">ADMIN</span>` : '';
 
+        const penaltyHeaderBadge = rates.manualPenaltyPerc > 0
+            ? `<span class="bg-red-600/20 text-red-600 dark:text-red-400 border border-red-500/40 text-[9px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-xs"><i class="fa-solid fa-gavel"></i> +${rates.manualPenaltyPerc}% Penalty</span>`
+            : '';
+
+        const earlyShiftHeaderBadge = rates.earlyShiftPenaltyPerc > 0
+            ? `<span class="bg-amber-600/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 text-[9px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-xs"><i class="fa-solid fa-user-clock"></i> +${rates.earlyShiftPenaltyPerc}% Early Out</span>`
+            : '';
+
         const earlyShiftBadge = rates.earlyShiftPenaltyPerc > 0
             ? `<div class="flex items-center justify-between bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-500/40 px-2.5 py-1.5 rounded-xl text-[10px] text-red-700 dark:text-red-300 font-bold my-1 shadow-xs">
                 <span class="flex items-center gap-1.5">
@@ -671,10 +767,12 @@ export function renderRiderSummaryList(riderListArray) {
         return `
             <div class="bg-white dark:bg-cardBg rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xs flex flex-col overflow-hidden">
                 <div onclick="toggleRiderCustomerBreakdown('${uid}')" class="p-3.5 flex justify-between items-center text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition select-none">
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-1.5 flex-wrap">
                         <span class="font-black text-xs text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
                             <i class="fa-solid fa-motorcycle text-gray-500"></i> ${escapeHtml(rider.name)} ${adminBadge}
                         </span>
+                        ${penaltyHeaderBadge}
+                        ${earlyShiftHeaderBadge}
                         <span class="bg-blue-50 dark:bg-blue-600/20 text-blue-700 dark:text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-500/30">
                             ${customerCount} ${customerCount === 1 ? 'customer' : 'customers'}
                         </span>

@@ -529,17 +529,30 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
             const currentHasMsg = threadObj.hasRealMessages && threadObj.lastMessage !== 'No messages yet';
             const existingHasMsg = existing.hasRealMessages && existing.lastMessage !== 'No messages yet';
 
+            const curTs = Number(threadObj.lastUpdated) || 0;
+            const exTs = Number(existing.lastUpdated) || 0;
+            const timeDiff = curTs - exTs;
+
             let takeCurrent = false;
-            if (currentHasMsg && !existingHasMsg) {
+            if (timeDiff > 2000) {
+                // If current thread has a timestamp distinctly newer by >2s, it ALWAYS takes precedence!
                 takeCurrent = true;
-            } else if (!currentHasMsg && existingHasMsg) {
-                takeCurrent = false;
-            } else if (threadObj.custId.startsWith('fb_') && !existing.custId.startsWith('fb_')) {
-                takeCurrent = true;
-            } else if (!threadObj.custId.startsWith('fb_') && existing.custId.startsWith('fb_')) {
+            } else if (timeDiff < -2000) {
+                // Existing thread is distinctly newer by >2s
                 takeCurrent = false;
             } else {
-                takeCurrent = (threadObj.lastUpdated || 0) >= (existing.lastUpdated || 0);
+                // Similar timestamps: decide based on presence of real message content and canonical FB channel
+                if (currentHasMsg && !existingHasMsg) {
+                    takeCurrent = true;
+                } else if (!currentHasMsg && existingHasMsg) {
+                    takeCurrent = false;
+                } else if (threadObj.custId.startsWith('fb_') && !existing.custId.startsWith('fb_')) {
+                    takeCurrent = true;
+                } else if (!threadObj.custId.startsWith('fb_') && existing.custId.startsWith('fb_')) {
+                    takeCurrent = false;
+                } else {
+                    takeCurrent = curTs >= exTs;
+                }
             }
 
             if (takeCurrent) {
@@ -570,6 +583,10 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                 }
                 if (!existingHasMsg && currentHasMsg) {
                     existing.lastMessage = threadObj.lastMessage;
+                }
+                if (curTs > exTs && currentHasMsg) {
+                    existing.lastMessage = threadObj.lastMessage;
+                    existing.lastUpdated = curTs;
                 }
             }
         } else {

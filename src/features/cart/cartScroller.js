@@ -5,15 +5,15 @@
  * SMART CART SLIDER SCROLLER
  * ============================================================================
  * 
- * Provides an invisible vertical slider track with a sleek, futuristic
- * circular knob that allows rapid touch and mouse scrolling through large
- * cart item lists.
+ * Provides a visible vertical slider track with a sleek circular knob
+ * that remains permanently visible whenever the cart items list overflows
+ * (the screen is full), giving users an effortless way to rapidly scroll
+ * through multiple lines of items.
  */
 
 let isDragging = false;
 let startY = 0;
 let startScrollTop = 0;
-let fadeTimeout = null;
 
 export function initCartScroller() {
     const list = document.getElementById('cart-items-list');
@@ -24,51 +24,56 @@ export function initCartScroller() {
     if (list._hasScrollerListeners) return;
     list._hasScrollerListeners = true;
 
-    const updateThumbPosition = (show = true) => {
+    const updateThumbPosition = () => {
         const scrollHeight = list.scrollHeight;
         const clientHeight = list.clientHeight;
         const maxScroll = scrollHeight - clientHeight;
 
-        if (maxScroll <= 20) {
+        // If screen is not full (does not overflow)
+        if (maxScroll <= 15) {
             track.classList.add('opacity-0', 'pointer-events-none');
+            track.classList.remove('opacity-100');
             return;
         }
 
-        track.classList.remove('pointer-events-none');
-        if (show) {
-            track.classList.remove('opacity-0');
-            track.classList.add('opacity-90');
-            if (fadeTimeout) clearTimeout(fadeTimeout);
-            if (!isDragging) {
-                fadeTimeout = setTimeout(() => {
-                    if (!isDragging) {
-                        track.classList.remove('opacity-90');
-                        track.classList.add('opacity-0');
-                    }
-                }, 1800);
-            }
-        }
+        // Screen is full: ALWAYS VISIBLE
+        track.classList.remove('opacity-0', 'pointer-events-none');
+        track.classList.add('opacity-100');
 
         const trackHeight = track.clientHeight - thumb.clientHeight;
+        if (trackHeight <= 0) return;
         const ratio = Math.max(0, Math.min(1, list.scrollTop / maxScroll));
         thumb.style.top = `${ratio * trackHeight}px`;
     };
 
     list.addEventListener('scroll', () => {
         if (!isDragging) {
-            updateThumbPosition(true);
+            updateThumbPosition();
         }
     }, { passive: true });
+
+    // Click anywhere on track rail to jump scroll position
+    track.addEventListener('click', (e) => {
+        if (e.target === thumb || thumb.contains(e.target)) return;
+        const trackRect = track.getBoundingClientRect();
+        const thumbHeight = thumb.clientHeight;
+        const maxThumbTravel = trackRect.height - thumbHeight;
+        if (maxThumbTravel <= 0) return;
+
+        const relY = Math.max(0, Math.min(maxThumbTravel, e.clientY - trackRect.top - (thumbHeight / 2)));
+        const ratio = relY / maxThumbTravel;
+        const maxScroll = list.scrollHeight - list.clientHeight;
+        list.scrollTo({ top: ratio * maxScroll, behavior: 'smooth' });
+    });
 
     // Dragging handlers (Touch & Mouse)
     const onDragStart = (clientY) => {
         isDragging = true;
         startY = clientY;
         startScrollTop = list.scrollTop;
-        thumb.classList.add('scale-115', 'shadow-blue-500/80');
+        thumb.classList.add('scale-125', 'shadow-blue-500/90', 'ring-2', 'ring-white/80');
         track.classList.remove('opacity-0');
         track.classList.add('opacity-100');
-        if (fadeTimeout) clearTimeout(fadeTimeout);
     };
 
     const onDragMove = (clientY) => {
@@ -89,12 +94,8 @@ export function initCartScroller() {
     const onDragEnd = () => {
         if (!isDragging) return;
         isDragging = false;
-        thumb.classList.remove('scale-115', 'shadow-blue-500/80');
-        if (fadeTimeout) clearTimeout(fadeTimeout);
-        fadeTimeout = setTimeout(() => {
-            track.classList.remove('opacity-100', 'opacity-90');
-            track.classList.add('opacity-0');
-        }, 1500);
+        thumb.classList.remove('scale-125', 'shadow-blue-500/90', 'ring-2', 'ring-white/80');
+        updateThumbPosition();
     };
 
     // Touch events on thumb
@@ -131,6 +132,14 @@ export function initCartScroller() {
     });
 
     window.addEventListener('mouseup', onDragEnd);
+
+    // ResizeObserver to automatically update visibility when items list resizes
+    if (typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(() => {
+            updateThumbPosition();
+        });
+        ro.observe(list);
+    }
 }
 
 export function updateCartScroller() {
@@ -141,23 +150,17 @@ export function updateCartScroller() {
     if (!list || !track || !thumb) return;
 
     const maxScroll = list.scrollHeight - list.clientHeight;
-    if (maxScroll <= 20) {
+    if (maxScroll <= 15) {
         track.classList.add('opacity-0', 'pointer-events-none');
+        track.classList.remove('opacity-100');
     } else {
-        track.classList.remove('pointer-events-none');
+        track.classList.remove('opacity-0', 'pointer-events-none');
+        track.classList.add('opacity-100');
         const trackHeight = track.clientHeight - thumb.clientHeight;
-        const ratio = Math.max(0, Math.min(1, list.scrollTop / maxScroll));
-        thumb.style.top = `${ratio * trackHeight}px`;
-        // Briefly show scroller when cart items change
-        track.classList.remove('opacity-0');
-        track.classList.add('opacity-90');
-        if (fadeTimeout) clearTimeout(fadeTimeout);
-        fadeTimeout = setTimeout(() => {
-            if (!isDragging) {
-                track.classList.remove('opacity-90');
-                track.classList.add('opacity-0');
-            }
-        }, 1500);
+        if (trackHeight > 0) {
+            const ratio = Math.max(0, Math.min(1, list.scrollTop / maxScroll));
+            thumb.style.top = `${ratio * trackHeight}px`;
+        }
     }
 }
 
@@ -165,4 +168,3 @@ if (typeof window !== 'undefined') {
     window.initCartScroller = initCartScroller;
     window.updateCartScroller = updateCartScroller;
 }
-

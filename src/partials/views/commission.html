@@ -47,6 +47,17 @@
         <i class="fa-solid fa-file-lines"></i> Generate Text Report
     </button>
 
+    <!-- ACTIVE DATE PENALTIES BANNER (ADMIN & RIDER VISIBILITY) -->
+    <div id="commission-active-penalties-section" class="hidden flex-col gap-2.5 bg-red-50/70 dark:bg-red-950/25 border border-red-200 dark:border-red-900/60 rounded-2xl p-3.5 shadow-xs">
+        <div class="flex items-center justify-between border-b border-red-200 dark:border-red-900/50 pb-2">
+            <span class="text-xs font-black text-red-700 dark:text-red-400 flex items-center gap-1.5 uppercase tracking-wider">
+                <i class="fa-solid fa-gavel"></i> Active Date Penalties
+            </span>
+            <span id="commission-active-penalties-count" class="bg-red-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs">0 active</span>
+        </div>
+        <div id="commission-active-penalties-list" class="flex flex-col gap-1.5"></div>
+    </div>
+
     <div class="text-[10px] text-gray-600 dark:text-gray-400 uppercase tracking-wider font-bold mt-2 border-b border-gray-200 dark:border-gray-800 pb-1">Rider Summary</div>
     <div id="commission-rider-list" class="flex flex-col gap-3 pb-20"></div>
 </section>

@@ -19,7 +19,7 @@ import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { ADMIN_IDS } from '../../config/constants.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
-import { isSameDateStr } from '../roster/rosterUtils.js';
+import { isSameDateStr, isRiderMatch } from '../roster/rosterUtils.js';
 
 export const SETTINGS_CACHE_KEY = 'lokalex_commission_settings_cache_v2';
 export const RECEIPTS_CACHE_KEY = 'lokalex_receipts_cache_v2';
@@ -201,8 +201,20 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         const directKey = `${cleanName}_${dateFormatted}`;
         const idKey = cleanId ? `${cleanId}_${dateFormatted}` : null;
 
-        const directRecord = globalState.globalCommissionPenalties[directKey] || 
+        let directRecord = globalState.globalCommissionPenalties[directKey] || 
                              (idKey ? globalState.globalCommissionPenalties[idKey] : null);
+
+        // Fallback: If cleanName doesn't directly match key, search with isRiderMatch
+        if (!directRecord) {
+            const matchEntry = Object.entries(globalState.globalCommissionPenalties).find(([k, rec]) => {
+                if (!rec) return false;
+                if (!isSameDateStr(rec.date, dateFormatted)) return false;
+                const recRider = (rec.riderName || k.split('_')[0] || "").toLowerCase().trim();
+                const recId = (rec.telegramId || "").toString().trim();
+                return isRiderMatch(cleanName, recRider, cleanId, recId);
+            });
+            if (matchEntry) directRecord = matchEntry[1];
+        }
 
         if (directRecord && directRecord.penaltyPercentage) {
             manualPenaltyPerc = Math.max(0, parseFloat(directRecord.penaltyPercentage) || 0);

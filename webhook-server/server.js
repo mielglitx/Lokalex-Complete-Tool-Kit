@@ -595,27 +595,61 @@ app.post('/webhook', async (req, res) => {
         const mid = rawMetaMid ? rawMetaMid.replace(/[.#$\[\]\/]/g, '_') : `msg_${timestamp}`;
         let messageText = item.message.text || "";
         let hasAttachment = false;
-        let imageUrl = null;
-        let attachmentType = null;
+        const images = [];
+        let videoUrl = null;
+        let audioUrl = null;
+        let docUrl = null;
+        let docName = "Document";
+        let stickerId = item.message.sticker_id || null;
+        let isLikeSticker = Boolean(stickerId);
 
         // Check attachments in webhook payload
         if (Array.isArray(item.message.attachments) && item.message.attachments.length > 0) {
           hasAttachment = true;
           for (const att of item.message.attachments) {
-            if (att.type === "image" && att.payload?.url) {
-              imageUrl = att.payload.url;
-              attachmentType = "image";
-              break;
-            } else if (att.payload?.url && !imageUrl) {
-              imageUrl = att.payload.url;
-              attachmentType = att.type || "attachment";
+            const attType = (att.type || "").toLowerCase();
+            const payload = att.payload || {};
+            const u = payload.url || att.url || null;
+            if (payload.sticker_id) {
+              stickerId = payload.sticker_id;
+              isLikeSticker = true;
+            }
+
+            if (attType === "image") {
+              if (u) {
+                if (u.includes('369239') || u.includes('sticker') || u.includes('like') || Boolean(stickerId)) {
+                  isLikeSticker = true;
+                }
+                if (!images.includes(u)) images.push(u);
+              }
+            } else if (attType === "video") {
+              if (u && !videoUrl) videoUrl = u;
+            } else if (attType === "audio" || attType === "voice") {
+              if (u && !audioUrl) audioUrl = u;
+            } else if (attType === "file") {
+              if (u && !docUrl) {
+                docUrl = u;
+                if (payload.title) docName = payload.title;
+              }
+            } else if (u) {
+              // Fallback categorization based on URL extension
+              const cleanU = u.split('?')[0].split('#')[0].toLowerCase();
+              if (/\.(mp4|mov|webm|3gp|mkv)$/i.test(cleanU) || cleanU.includes('video.xx.fbcdn.net')) {
+                if (!videoUrl) videoUrl = u;
+              } else if (/\.(aac|mp3|m4a|wav|ogg|opus)$/i.test(cleanU) || cleanU.includes('audioclip')) {
+                if (!audioUrl) audioUrl = u;
+              } else if (/\.(pdf|docx?|xlsx?|csv|pptx?|txt|zip|rar|7z|apk)$/i.test(cleanU)) {
+                if (!docUrl) {
+                  docUrl = u;
+                  const parts = cleanU.split('/');
+                  docName = decodeURIComponent(parts[parts.length - 1] || 'Document');
+                }
+              } else {
+                if (!images.includes(u)) images.push(u);
+              }
             }
           }
         }
-
-        // Detect Facebook Messenger thumbs-up like stickers
-        const stickerId = item.message.sticker_id || (Array.isArray(item.message.attachments) && item.message.attachments[0]?.payload?.sticker_id);
-        const isLikeSticker = Boolean(stickerId) || (imageUrl && (imageUrl.includes('369239') || imageUrl.includes('sticker') || imageUrl.includes('like')));
 
         const pageId = item.recipient?.id || entry.id || "1098954353295816";
 
@@ -677,25 +711,39 @@ app.post('/webhook', async (req, res) => {
           } catch(e) {}
         }
 
-        // Fallback: If message has attachments but url wasn't in webhook payload, query Meta Graph API
-        if (hasAttachment && !imageUrl && token && item.message.mid) {
+        // Fallback: If message has attachments but media wasn't in webhook payload, query Meta Graph API
+        if (hasAttachment && images.length === 0 && !videoUrl && !audioUrl && !docUrl && token && item.message.mid) {
           try {
-            const midResp = await fetch(`https://graph.facebook.com/v19.0/${item.message.mid}?fields=attachments&access_token=${token}`);
+            const midResp = await fetch(`https://graph.facebook.com/v19.0/${item.message.mid}?fields=attachments{id,mime_type,name,size,image_data,video_data,file_url,payload,subattachments}&access_token=${token}`);
             if (midResp.ok) {
               const midData = await midResp.json();
               const attachments = midData?.attachments?.data || [];
               for (const att of attachments) {
-                const graphUrl = att?.image_data?.url || 
-                                 att?.payload?.url || 
-                                 att?.media?.image?.src || 
-                                 att?.file_url || 
-                                 att?.subattachments?.data?.[0]?.image_data?.url || 
-                                 att?.subattachments?.data?.[0]?.media?.image?.src || 
-                                 att?.subattachments?.data?.[0]?.payload?.url;
-                if (graphUrl) {
-                  imageUrl = graphUrl;
-                  attachmentType = "image";
-                  break;
+                const attType = (att?.type || "").toLowerCase();
+                const mime = (att?.mime_type || "").toLowerCase();
+                const u = att?.image_data?.url || 
+                          att?.video_data?.url || 
+                          att?.audio_data?.url || 
+                          att?.payload?.url || 
+                          att?.media?.image?.src || 
+                          att?.file_url;
+
+                if (attType === 'audio' || attType === 'voice' || mime.includes('audio') || (u && (/\.(aac|mp3|m4a|wav|ogg|opus)/i.test(u) || u.includes('audioclip')))) {
+                  if (u && !audioUrl) audioUrl = u;
+                } else if (attType === 'video' || mime.includes('video') || (u && (/\.(mp4|mov|webm|3gp|mkv)/i.test(u) || u.includes('video.xx.fbcdn.net')))) {
+                  if (u && !videoUrl) videoUrl = u;
+                } else if (attType === 'file' || (u && /\.(pdf|docx?|xlsx?|csv|zip|rar|txt)/i.test(u))) {
+                  if (u && !docUrl) docUrl = u;
+                } else {
+                  if (Array.isArray(att?.subattachments?.data)) {
+                    for (const sub of att.subattachments.data) {
+                      const subUrl = sub?.image_data?.url || sub?.video_data?.url || sub?.audio_data?.url || sub?.media?.image?.src || sub?.payload?.url || sub?.file_url;
+                      if (subUrl && !images.includes(subUrl)) images.push(subUrl);
+                    }
+                  }
+                  if (u && !images.includes(u)) {
+                    images.push(u);
+                  }
                 }
               }
             }
@@ -704,11 +752,23 @@ app.post('/webhook', async (req, res) => {
           }
         }
 
+        const primaryImageUrl = images.length > 0 ? images[0] : null;
+
         if (!messageText) {
-          if (imageUrl) {
+          if (isLikeSticker) {
+            messageText = "👍";
+          } else if (images.length > 1) {
+            messageText = `📷 ${images.length} Photos`;
+          } else if (images.length === 1) {
             messageText = "📷 Photo";
+          } else if (videoUrl) {
+            messageText = "🎥 Video";
+          } else if (audioUrl) {
+            messageText = "🎤 Voice message";
+          } else if (docUrl) {
+            messageText = `📄 ${docName}`;
           } else if (hasAttachment) {
-            messageText = `📷 [Facebook ${attachmentType || "attachment"}]`;
+            messageText = "[Facebook attachment]";
           } else {
             messageText = "Facebook Message";
           }
@@ -798,19 +858,20 @@ app.post('/webhook', async (req, res) => {
           ? 'catering' 
           : (existingFolder === 'followup' ? 'followup' : 'inbox');
 
-        const isDoc = imageUrl && (attachmentType === 'file' || /\.(pdf|docx?|xlsx?|csv|pptx?|txt|zip|rar|7z|apk)$/i.test(imageUrl.split('?')[0].split('#')[0]));
-        let docName = "Document";
-        if (isDoc && imageUrl) {
-          try {
-            const clean = imageUrl.split('?')[0].split('#')[0];
-            const parts = clean.split('/');
-            docName = decodeURIComponent(parts[parts.length - 1] || 'Document');
-          } catch (_) {}
+        let lastSummary = messageText;
+        if (isLikeSticker) {
+          lastSummary = "👍 Liked";
+        } else if (images.length > 1) {
+          lastSummary = `📷 ${images.length} Photos`;
+        } else if (images.length === 1 && (!item.message.text || !item.message.text.trim())) {
+          lastSummary = "📷 Photo";
+        } else if (videoUrl && (!item.message.text || !item.message.text.trim())) {
+          lastSummary = "🎥 Video";
+        } else if (audioUrl && (!item.message.text || !item.message.text.trim())) {
+          lastSummary = "🎤 Voice message";
+        } else if (docUrl && (!item.message.text || !item.message.text.trim())) {
+          lastSummary = `📄 ${docName}`;
         }
-
-        const lastSummary = isLikeSticker 
-          ? "👍 Liked" 
-          : (isDoc ? `📄 ${docName}` : (imageUrl && (!item.message.text || !item.message.text.trim()) ? "📷 Photo" : messageText));
 
         const threadMeta = {
           customerName,
@@ -850,18 +911,26 @@ app.post('/webhook', async (req, res) => {
           chatMsg.isSticker = true;
           chatMsg.stickerId = stickerId || 369239263222822;
           chatMsg.stickerType = 'like';
-          if (!chatMsg.text) chatMsg.text = "👍";
+          chatMsg.type = 'sticker';
+          chatMsg.imageUrl = primaryImageUrl || 'https://static.xx.fbcdn.net/images/emoji.php/v9/t80/1/16/1f44d.png';
+        } else if (images.length > 0) {
+          chatMsg.images = images;
+          chatMsg.imageUrl = primaryImageUrl;
+          chatMsg.type = 'image';
         }
 
-        if (imageUrl) {
-          if (isDoc) {
-            chatMsg.fileUrl = imageUrl;
-            chatMsg.fileName = docName;
-            chatMsg.type = "file";
-          } else {
-            chatMsg.imageUrl = imageUrl;
-            chatMsg.type = isLikeSticker ? "sticker" : "image";
-          }
+        if (videoUrl) {
+          chatMsg.videoUrl = videoUrl;
+          if (!chatMsg.type || chatMsg.type === 'text') chatMsg.type = 'video';
+        }
+        if (audioUrl) {
+          chatMsg.audioUrl = audioUrl;
+          if (!chatMsg.type || chatMsg.type === 'text') chatMsg.type = 'audio';
+        }
+        if (docUrl) {
+          chatMsg.fileUrl = docUrl;
+          chatMsg.fileName = docName;
+          if (!chatMsg.type || chatMsg.type === 'text') chatMsg.type = 'file';
         }
 
         try {

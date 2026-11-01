@@ -992,13 +992,11 @@ export async function openNewDirectoryCustomerFromChat() {
     const phoneText = phoneEl?.innerText?.trim();
     const cleanPhone = (phoneText && phoneText !== '---' && phoneText !== 'No contact recorded') ? phoneText : '';
     
-    if (window.closeRiderChatModal) {
-        window.closeRiderChatModal();
+    if (activeCustId) {
+        window._pendingLinkCustIdFromChat = activeCustId;
     }
 
     // Auto-capture rider's exact current GPS location
-    showToast("📍 Getting your exact GPS location...");
-
     let capturedLat = appState.lat || null;
     let capturedLon = appState.lon || null;
     let mapPinLink = "";
@@ -1008,7 +1006,7 @@ export async function openNewDirectoryCustomerFromChat() {
             const pos = await new Promise((resolve, reject) => {
                 navigator.geolocation.getCurrentPosition(resolve, reject, {
                     enableHighAccuracy: true,
-                    timeout: 4500,
+                    timeout: 3000,
                     maximumAge: 10000
                 });
             });
@@ -1018,20 +1016,22 @@ export async function openNewDirectoryCustomerFromChat() {
                 appState.lat = capturedLat;
                 appState.lon = capturedLon;
             }
-        } catch (_) {
-            // Keep fallback lat/lon from appState
-        }
+        } catch (_) {}
     }
 
     if (capturedLat && capturedLon) {
         mapPinLink = `https://maps.google.com/?q=${Number(capturedLat).toFixed(6)},${Number(capturedLon).toFixed(6)}`;
     }
 
-    if (typeof window.openForm === 'function') {
+    if (typeof window.openAddCustomerModal === 'function') {
+        window.openAddCustomerModal({
+            name: fallbackName,
+            contact: cleanPhone,
+            lat_lon_link: mapPinLink
+        });
+        showToast(`📝 Adding new customer: ${fallbackName || 'New Customer'}`);
+    } else if (typeof window.openForm === 'function') {
         globalState.currentType = 'customers';
-        if (activeCustId) {
-            window._pendingLinkCustIdFromChat = activeCustId;
-        }
         await window.openForm({ 
             name: fallbackName, 
             contact: cleanPhone,
@@ -1039,13 +1039,8 @@ export async function openNewDirectoryCustomerFromChat() {
             isNew: true,
             type: 'customers' 
         });
-        if (mapPinLink) {
-            showToast(`📍 Your exact GPS location has been captured for the customer profile!`);
-        } else {
-            showToast(`📝 Adding new customer: ${fallbackName || 'New Customer'}`);
-        }
     } else {
-        showToast("⚠️ Directory form unavailable.");
+        showToast("⚠️ Add customer modal unavailable.");
     }
 }
 
@@ -1140,6 +1135,7 @@ export function toggleAddLocationForm(show) {
     if (willShow) {
         box.classList.remove('hidden');
         document.getElementById('cust-modal-new-loc-address')?.focus();
+        captureCurrentGpsForNewLocation();
     } else {
         box.classList.add('hidden');
     }

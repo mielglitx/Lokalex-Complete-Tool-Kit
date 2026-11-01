@@ -84,6 +84,19 @@ export {
     submitForm
 } from './directory/directoryForm.js';
 
+export {
+    openAddCustomerModal,
+    closeAddCustomerModal,
+    openAddCustomerAddressModal,
+    closeAddCustomerAddressModal,
+    calibrateSubmodalGPS,
+    confirmAddCustomerAddress,
+    renderNewCustomerAddressesList,
+    removeNewCustomerAddress,
+    setNewCustomerPrimaryAddress,
+    submitNewCustomerModal
+} from './directory/customerAddModal.js';
+
 // 6. Map Picker
 export {
     openMapPicker,

@@ -531,7 +531,11 @@ const resolvedAttachmentMemoryCache = new Map();
  */
 export async function resolveFacebookMessageAttachment(custId, msgId, rawMid) {
     if (!custId || !msgId) return null;
-    const cleanMid = rawMid || msgId;
+    let cleanMid = rawMid || msgId;
+    if (typeof cleanMid === 'string') {
+        if (cleanMid.startsWith('m_mid_')) cleanMid = 'm_mid.' + cleanMid.slice(6);
+        else if (cleanMid.startsWith('mid_')) cleanMid = 'mid.' + cleanMid.slice(4);
+    }
     const cacheKey = `${custId}_${msgId}`;
 
     // 1. Instant check in memory cache (0ms)
@@ -593,7 +597,7 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid) {
             const fetchAttachmentWithToken = async (token) => {
                 const cleanToken = (token || '').trim();
                 if (!cleanToken) throw new Error("No token");
-                const resp = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(cleanMid)}?fields=id,message,attachments&access_token=${encodeURIComponent(cleanToken)}`);
+                const resp = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(cleanMid)}?fields=id,message,attachments{id,mime_type,name,size,image_data,video_data,file_url,payload,subattachments}&access_token=${encodeURIComponent(cleanToken)}`);
                 if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
                 const data = await resp.json();
                 const attachments = data?.attachments?.data || [];
@@ -606,13 +610,18 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid) {
                     if (!att) return;
                     const attType = (att.type || '').toLowerCase();
                     const mime = (att.mime_type || '').toLowerCase();
-                    const u = att?.image_data?.url || att?.payload?.url || att?.media?.image?.src || att?.file_url;
+                    const u = att?.image_data?.url || 
+                              att?.video_data?.url || 
+                              att?.audio_data?.url || 
+                              att?.payload?.url || 
+                              att?.media?.image?.src || 
+                              att?.file_url;
                     
                     if (attType === 'audio' || attType === 'voice' || mime.includes('audio') || (typeof u === 'string' && (/\.(aac|mp3|m4a|wav|ogg|opus)(\?|$)/i.test(u) || u.includes('audioclip')))) {
                         if (u && !audioUrl) audioUrl = u;
                         return;
                     }
-                    if (attType === 'video' || mime.includes('video') || (typeof u === 'string' && /\.(mp4|mov|webm|3gp|mkv)(\?|$)/i.test(u))) {
+                    if (attType === 'video' || mime.includes('video') || (typeof u === 'string' && (/\.(mp4|mov|webm|3gp|mkv)(\?|$)/i.test(u) || u.includes('video.xx.fbcdn.net') || u.includes('/m483/') || u.includes('/v/t2/')))) {
                         if (u && !videoUrl) videoUrl = u;
                         return;
                     }
@@ -624,7 +633,7 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid) {
                     // Check subattachments for multiple images sent in a single batch
                     if (att.subattachments?.data && Array.isArray(att.subattachments.data)) {
                         for (const sub of att.subattachments.data) {
-                            const subUrl = sub?.image_data?.url || sub?.media?.image?.src || sub?.payload?.url || sub?.file_url;
+                            const subUrl = sub?.image_data?.url || sub?.video_data?.url || sub?.audio_data?.url || sub?.media?.image?.src || sub?.payload?.url || sub?.file_url;
                             if (subUrl && !images.includes(subUrl)) images.push(subUrl);
                         }
                     }

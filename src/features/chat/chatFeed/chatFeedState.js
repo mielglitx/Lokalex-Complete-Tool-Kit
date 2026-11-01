@@ -171,7 +171,7 @@ export function getThreadDedupKey(key, meta = {}) {
     if (typeof key === 'string') {
         const cleanKey = key.trim();
         if (cleanKey.startsWith('fb_') || cleanKey.startsWith('messenger_')) {
-            const rawPsid = cleanKey.replace(/^(fb_|messenger_)/, '');
+            const rawPsid = cleanKey.replace(/^(fb_|messenger_)+/, '');
             return `fb_${rawPsid}`;
         }
         if (/^\d{12,}$/.test(cleanKey)) {
@@ -179,7 +179,7 @@ export function getThreadDedupKey(key, meta = {}) {
         }
     }
     if (meta && (meta.channel === 'messenger' || meta.apiId || meta.fbApiId)) {
-        const rawPsid = String(meta.psid || meta.fbPsid || key || '').replace(/^(fb_|messenger_)/, '').trim();
+        const rawPsid = String(meta.psid || meta.fbPsid || key || '').replace(/^(fb_|messenger_)+/, '').trim();
         if (rawPsid && /^\d+$/.test(rawPsid)) {
             return `fb_${rawPsid}`;
         }

@@ -274,3 +274,130 @@
         </div>
     </div>
 </div>
+
+<!-- DEDICATED SEPARATE ADD CUSTOMER MODAL -->
+<div id="add-customer-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[1000020] flex items-center justify-center p-3 sm:p-4 select-none" style="z-index: 1000020 !important;">
+    <div class="bg-cardBg border border-emerald-500/50 p-4 sm:p-5 rounded-3xl w-full max-w-xs sm:max-w-sm shadow-2xl flex flex-col gap-3 relative animate-in fade-in zoom-in duration-200 text-gray-900 dark:text-white max-h-[92vh] overflow-hidden">
+        
+        <!-- HEADER -->
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5 shrink-0">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm font-bold border border-emerald-500/30">
+                    <i class="fa-solid fa-user-plus"></i>
+                </div>
+                <div>
+                    <h3 class="font-black text-sm text-gray-900 dark:text-white leading-tight">Add Customer</h3>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Directory Profile & Addresses</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeAddCustomerModal && window.closeAddCustomerModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+
+        <!-- SCROLLABLE BODY -->
+        <div class="flex flex-col gap-3 text-xs overflow-y-auto no-scrollbar pr-0.5">
+            <!-- Customer Name Field -->
+            <div>
+                <label for="new-cust-name-input" class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Customer Name: *</label>
+                <input type="text" id="new-cust-name-input" autocomplete="name" placeholder="Enter customer full name..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 font-bold focus:border-emerald-500">
+            </div>
+
+            <!-- Contact# Field -->
+            <div>
+                <label for="new-cust-contact-input" class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Contact#: </label>
+                <input type="tel" id="new-cust-contact-input" autocomplete="tel" inputmode="tel" placeholder="09xxxxxxxxx or mobile number..." class="w-full bg-inputBg text-xs font-mono font-bold rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 focus:border-emerald-500">
+            </div>
+
+            <!-- Saved Addresses Section -->
+            <div class="flex flex-col gap-1.5 pt-1">
+                <div class="flex items-center justify-between">
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <i class="fa-solid fa-map-location-dot text-rose-500"></i> Saved Addresses (<span id="new-cust-addresses-count">0</span>)
+                    </label>
+                </div>
+
+                <!-- List of added addresses -->
+                <div id="new-cust-addresses-list" class="flex flex-col gap-2 min-h-[44px]">
+                    <div id="new-cust-no-address-hint" class="text-center py-3 px-2 bg-gray-50 dark:bg-black/20 rounded-xl border border-dashed border-gray-300 dark:border-gray-800 text-gray-400 text-[11px]">
+                        No address added yet. Tap <strong>Add address</strong> below.
+                    </div>
+                </div>
+
+                <!-- Add address (button) -->
+                <button type="button" onclick="window.openAddCustomerAddressModal && window.openAddCustomerAddressModal()" class="w-full bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-600/40 rounded-xl py-2.5 text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-xs cursor-pointer mt-1">
+                    <i class="fa-solid fa-location-plus"></i> Add address
+                </button>
+            </div>
+        </div>
+
+        <!-- FOOTER SAVE BUTTON -->
+        <div class="pt-2 border-t border-gray-200 dark:border-gray-800 shrink-0">
+            <button type="button" id="new-cust-save-btn" onclick="window.submitNewCustomerModal && window.submitNewCustomerModal()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 rounded-2xl text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-floppy-disk"></i> SAVE CUSTOMER
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ADD ADDRESS (MODAL FORM) SUB-MODAL -->
+<div id="add-customer-address-modal" class="hidden fixed inset-0 bg-black/90 backdrop-blur-md z-[1000040] flex items-center justify-center p-3 sm:p-4 select-none" style="z-index: 1000040 !important;">
+    <div class="bg-cardBg border border-emerald-500/60 p-4 sm:p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3 relative animate-in fade-in zoom-in duration-200 text-gray-900 dark:text-white">
+        
+        <!-- HEADER -->
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5 shrink-0">
+            <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-xl bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs font-bold border border-emerald-500/30">
+                    <i class="fa-solid fa-map-pin"></i>
+                </div>
+                <h3 class="font-black text-xs sm:text-sm text-gray-900 dark:text-white leading-tight">Add Address</h3>
+            </div>
+            <button type="button" onclick="window.closeAddCustomerAddressModal && window.closeAddCustomerAddressModal()" class="w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+
+        <div class="flex flex-col gap-3 text-xs">
+            <!-- Address Label (Optional) -->
+            <div>
+                <label for="new-cust-submodal-label" class="text-[9.5px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Address Label (Optional):</label>
+                <input type="text" id="new-cust-submodal-label" placeholder="e.g. Home, Office, Store, Farm" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 font-medium focus:border-emerald-500">
+            </div>
+
+            <!-- Address Field -->
+            <div>
+                <label for="new-cust-submodal-address" class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Address: *</label>
+                <textarea id="new-cust-submodal-address" rows="2" placeholder="Street, Barangay, Landmarks, House No..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 font-medium focus:border-emerald-500 resize-none"></textarea>
+            </div>
+
+            <!-- GPS Map Location Field (Automatically fills in by the system when the add address modal appears) -->
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <label for="new-cust-submodal-gps" class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                        GPS Map Location:
+                    </label>
+                    <span id="new-cust-gps-status" class="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                        <i class="fa-solid fa-spinner fa-spin"></i> Auto-detecting GPS...
+                    </span>
+                </div>
+                <div class="relative flex items-center">
+                    <input type="text" id="new-cust-submodal-gps" placeholder="Auto-calibrated GPS location link..." class="w-full bg-inputBg text-[10.5px] font-mono rounded-xl pl-2.5 pr-8 py-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold focus:border-emerald-500">
+                    <button type="button" onclick="window.calibrateSubmodalGPS && window.calibrateSubmodalGPS()" class="absolute right-2 text-emerald-600 dark:text-emerald-400 hover:scale-110 active:scale-95 transition cursor-pointer" title="Refresh GPS">
+                        <i class="fa-solid fa-crosshairs text-xs"></i>
+                    </button>
+                </div>
+                <p class="text-[9px] text-gray-400 mt-1 italic">Automatically fills in by the system when modal appears.</p>
+            </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="flex items-center gap-2 pt-1 border-t border-gray-200 dark:border-gray-800">
+            <button type="button" onclick="window.closeAddCustomerAddressModal && window.closeAddCustomerAddressModal()" class="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-xs font-bold text-gray-700 dark:text-gray-300 transition active:scale-95">
+                Cancel
+            </button>
+            <button type="button" onclick="window.confirmAddCustomerAddress && window.confirmAddCustomerAddress()" class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-black text-white shadow-md transition active:scale-95 flex items-center justify-center gap-1">
+                <i class="fa-solid fa-check"></i> Save Address
+            </button>
+        </div>
+    </div>
+</div>

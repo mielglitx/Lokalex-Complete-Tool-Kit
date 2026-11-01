@@ -224,15 +224,15 @@ export function renderDocumentCardHtml(msg, isRider = false) {
 export function isVideoUrlOrType(msg) {
     if (!msg) return false;
     if (msg.type === 'video' || msg.videoUrl) return true;
-    const url = msg.videoUrl || msg.fileUrl || msg.imageUrl || msg.text || '';
+    const url = msg.videoUrl || msg.fileUrl || msg.imageUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : '');
     if (typeof url !== 'string') return false;
     const cleanUrl = url.split('?')[0].split('#')[0].toLowerCase();
     const videoExtensions = /\.(mp4|webm|mov|m4v|3gp|mkv|ogg)$/i;
-    return videoExtensions.test(cleanUrl);
+    return videoExtensions.test(cleanUrl) || cleanUrl.includes('video.xx.fbcdn.net') || cleanUrl.includes('/video-');
 }
 
 export function getVideoDetails(msg) {
-    const rawUrl = msg.videoUrl || msg.fileUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : '');
+    const rawUrl = msg.videoUrl || (isVideoUrlOrType(msg) ? (msg.fileUrl || msg.imageUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : '')) : '');
     let videoName = msg.videoName || msg.fileName || '';
     if (!videoName && rawUrl) {
         try {
@@ -313,14 +313,14 @@ let currentPlayingChatAudioId = null;
 export function isAudioUrlOrType(msg) {
     if (!msg) return false;
     if (msg.type === 'audio' || msg.type === 'voice' || msg.audioUrl) return true;
-    const url = msg.audioUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : '');
+    const url = msg.audioUrl || msg.fileUrl || msg.imageUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : '');
     if (typeof url !== 'string') return false;
     const cleanUrl = url.split('?')[0].split('#')[0].toLowerCase();
     return /\.(aac|mp3|m4a|wav|ogg|opus)(\?|$)/i.test(cleanUrl) || cleanUrl.includes('audioclip');
 }
 
 export function getAudioDetails(msg) {
-    const rawUrl = msg.audioUrl || (isAudioUrlOrType(msg) ? (msg.fileUrl || msg.imageUrl || msg.text) : null);
+    const rawUrl = msg.audioUrl || (isAudioUrlOrType(msg) ? (msg.fileUrl || msg.imageUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : null)) : null);
     return {
         url: rawUrl,
         durationStr: msg.audioDuration || '0:00'
@@ -992,19 +992,26 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const isDoc = isDocumentUrlOrType(m);
     const documentMarkup = isDoc ? renderDocumentCardHtml(m, isRider) : '';
 
-    const isVid = !isDoc && isVideoUrlOrType(m);
+    const isVid = isVideoUrlOrType(m);
     const videoMarkup = isVid ? renderVideoCardHtml(m, isRider) : '';
 
-    const isAud = !isDoc && !isVid && isAudioUrlOrType(m);
+    const isAud = isAudioUrlOrType(m);
     const audioMarkup = isAud ? renderAudioCardHtml(m, isRider) : '';
 
-    const imageList = (!isDoc && !isVid && !isAud) ? (
+    const imageList = (
         Array.isArray(m.images) && m.images.length > 0 
             ? m.images.filter(Boolean)
-            : (m.imageUrl ? [m.imageUrl] : (m.type === 'image' && m.text && !m.text.includes('[Facebook') ? [m.text] : []))
-    ) : [];
+            : (m.imageUrl && !isDoc && !isVideoUrlOrType({ videoUrl: m.imageUrl }) && !isAudioUrlOrType({ audioUrl: m.imageUrl })
+                ? [m.imageUrl] 
+                : (m.type === 'image' && m.text && !m.text.includes('[Facebook') && !m.text.includes('Photo') ? [m.text] : []))
+    );
 
-    const isResolvingFbImage = !isDoc && !isVid && !isAud && imageList.length === 0 && m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]'));
+    const hasMedia = isDoc || isVid || isAud || imageList.length > 0;
+    const isResolvingFbMedia = !hasMedia && (
+        (m.text && (m.text.includes('[Facebook') || m.text === '📷 Photo' || m.text === '🎥 Video' || m.text === '🎤 Voice message' || /^📷 \d+ Photos$/.test(m.text))) ||
+        (m.type && m.type !== 'text') ||
+        (!m.text && (m.mid || (m.id && String(m.id).startsWith('m_'))))
+    );
     const isLikeSticker = !isDoc && !isVid && !isAud && imageList.length === 1 && Boolean(m.isSticker || m.stickerType === 'like' || (imageList[0].includes('369239') || imageList[0].includes('sticker') || imageList[0].includes('like')));
     
     let imageMarkup = '';
@@ -1027,8 +1034,8 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
         imageMarkup = isLikeSticker 
             ? `<div class="p-0.5 select-none flex items-center justify-start"><img src="${escapeHtml(imgHtml)}" alt="👍" class="w-10 h-10 object-contain hover:scale-110 active:scale-90 transition-transform cursor-pointer" onclick="event.stopPropagation()"></div>`
             : `<img src="${escapeHtml(imgHtml)}" loading="eager" decoding="async" fetchpriority="high" onerror="window.handleChatImageLoadError && window.handleChatImageLoadError(this, '${m.id}')" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgHtml)}', 'rider')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-95 transition bg-gray-100 dark:bg-gray-800 min-h-[120px] object-cover">`;
-    } else if (isResolvingFbImage) {
-        imageMarkup = `<div class="flex items-center gap-2 py-2 px-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-600 dark:text-blue-400 text-xs mt-1 font-medium animate-pulse"><i class="fa-solid fa-spinner fa-spin text-blue-500"></i><span>Loading photo...</span></div>`;
+    } else if (isResolvingFbMedia) {
+        imageMarkup = `<div class="flex items-center gap-2 py-2 px-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-600 dark:text-blue-400 text-xs mt-1 font-medium animate-pulse"><i class="fa-solid fa-spinner fa-spin text-blue-500"></i><span>Loading attachment...</span></div>`;
     }
     
     let locationHtml = "";
@@ -1068,12 +1075,32 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const encodedText = encodeURIComponent(m.text || '').replace(/'/g, '%27');
     const encodedSender = encodeURIComponent(senderName).replace(/'/g, '%27');
 
-    const isPlaceholderText = m.text && (m.text.includes('[Facebook image]') || m.text.includes('[Facebook attachment]') || m.text === '📷 Photo' || m.text === 'Facebook Message');
+    const isPlaceholderText = Boolean(
+        m.text && (
+            m.text.includes('[Facebook') || 
+            m.text === '📷 Photo' || 
+            m.text === '🎥 Video' || 
+            m.text === '🎤 Voice message' || 
+            m.text === 'Facebook Message' ||
+            m.text === '📄 Document' ||
+            /^📷 \d+ Photos$/.test(m.text)
+        )
+    );
     const isDocFilenameText = isDoc && m.text && (m.text === m.fileName || m.text === m.fileUrl || m.text === m.imageUrl || m.text === '📄 Document' || m.text.startsWith('http'));
     const isVideoPlaceholderText = isVid && m.text && (m.text === '🎥 Video' || m.text === m.videoName || m.text === m.videoUrl || m.text.startsWith('http'));
-    const isAudioPlaceholderText = isAud && m.text && (m.text === '🎤 Voice message' || m.text.includes('[Facebook audio]') || m.text.includes('[Facebook voice]') || m.text.startsWith('http'));
-    const isMultiImagePlaceholderText = imageList.length > 1 && m.text && (m.text.includes('Photos') || m.text.includes('[Facebook image]'));
-    const showText = m.text && (!imageList.length || !isPlaceholderText) && !isMultiImagePlaceholderText && !isResolvingFbImage && !locationHtml && !(isLikeSticker && imageList.length) && !isDocFilenameText && !isVideoPlaceholderText && !isAudioPlaceholderText;
+    const isAudioPlaceholderText = isAud && m.text && (m.text === '🎤 Voice message' || m.text.includes('[Facebook') || m.text.startsWith('http'));
+    const isMultiImagePlaceholderText = imageList.length > 1 && m.text && (m.text.includes('Photos') || m.text.includes('[Facebook'));
+    const showText = Boolean(
+        m.text && 
+        !isPlaceholderText && 
+        !isDocFilenameText && 
+        !isVideoPlaceholderText && 
+        !isAudioPlaceholderText && 
+        !isMultiImagePlaceholderText && 
+        !isResolvingFbMedia && 
+        !locationHtml && 
+        !(isLikeSticker && imageList.length)
+    );
 
     const failedTagHtml = isFailed ? `
         <div class="flex items-center gap-1 text-[9.5px] font-black text-rose-500 dark:text-rose-400 mt-0.5 ${isRider ? 'justify-end mr-8' : 'justify-start ml-8'} select-none">

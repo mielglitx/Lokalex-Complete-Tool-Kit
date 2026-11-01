@@ -33,6 +33,7 @@ import { getLocalTodayStr } from '../../utils/helpers.js';
 import { checkAdminAccess } from './directoryPermissions.js';
 import { saveDirectoryCache } from './directoryStorage.js';
 import { renderDirectoryList, openDirectory, updateRosterCreditsDisplay } from './directoryUi.js';
+import { openAddCustomerModal } from './customerAddModal.js';
 
 let editingRecord = null;
 
@@ -541,6 +542,11 @@ export async function handleRateMunicipalityChange(municipalityName) {
 }
 
 export async function openForm(record = null) {
+    if (!record && (globalState.currentType || 'customers') === 'customers') {
+        openAddCustomerModal();
+        return;
+    }
+
     const isNewCustomerPrefill = Boolean(record && (record.isNew || (!record.compositeKey && (!globalState.records || !globalState.records.some(r => r.name === record.name && r.type === (record.type || 'customers'))))));
     if (isNewCustomerPrefill) {
         editingRecord = null;

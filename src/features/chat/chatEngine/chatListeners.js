@@ -14,6 +14,7 @@ import {
     appendOrUpdateSingleRiderMessage 
 } from '../riderChatRender.js';
 import { isMyCustomerThread, getActiveRosterCaterer } from '../riderChatFeed.js';
+import { getCachedCustomerThreadsMap, getThreadDedupKey } from '../chatFeed/chatFeedState.js';
 import { 
     resolveFacebookMessageAttachment,
     resolveFacebookMessageReplyTo,
@@ -65,7 +66,11 @@ export async function reloadRiderChatFromFirebase(custId) {
 
 function triggerInstantFbAttachmentResolution(custId, msg, container, custData) {
     if (!custId || !msg || !msg.id) return;
-    const mid = msg.mid || (String(msg.id).startsWith('m_') ? msg.id : null) || msg.id;
+    let mid = msg.metaMid || msg.mid || (String(msg.id).startsWith('m_') ? msg.id : null) || msg.id;
+    if (typeof mid === 'string') {
+        if (mid.startsWith('m_mid_')) mid = 'm_mid.' + mid.slice(6);
+        else if (mid.startsWith('mid_')) mid = 'mid.' + mid.slice(4);
+    }
     resolveFacebookMessageAttachment(custId, msg.id, mid).then(res => {
         if (res && activeRiderChatCustId === custId) {
             const existing = loadedRiderMsgsMap.get(msg.id) || msg;
@@ -80,6 +85,12 @@ function triggerInstantFbAttachmentResolution(custId, msg, container, custData) 
                 if (res.fileUrl) existing.fileUrl = res.fileUrl;
                 if (res.type) existing.type = res.type;
             }
+
+            const mediaPreview = existing.videoUrl ? '🎥 Video' : (existing.audioUrl ? '🎤 Voice message' : (existing.images && existing.images.length > 1 ? `📷 ${existing.images.length} Photos` : (existing.imageUrl ? '📷 Photo' : (existing.fileUrl ? '📄 Document' : existing.text))));
+            if (!existing.text || existing.text === '📷 Photo' || existing.text === 'Facebook Message') {
+                existing.text = mediaPreview;
+            }
+
             loadedRiderMsgsMap.set(msg.id, existing);
 
             const updatedSorted = Array.from(loadedRiderMsgsMap.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
@@ -88,6 +99,45 @@ function triggerInstantFbAttachmentResolution(custId, msg, container, custData) 
 
             if (container) {
                 appendOrUpdateSingleRiderMessage(container, existing, custData || activeCustData);
+            }
+
+            // Sync resolved preview to feed cache & customerChatMeta
+            const msgTs = getMessageTimestamp(existing);
+            const isFromCust = !existing.isRider && existing.senderType !== 'admin';
+            const formattedPreview = isFromCust ? mediaPreview : `You: ${mediaPreview}`;
+            try {
+                if (typeof getCachedCustomerThreadsMap === 'function') {
+                    const threadsMap = getCachedCustomerThreadsMap();
+                    const dedupKey = getThreadDedupKey(custId, currentRiderChatMeta || {});
+                    const t = threadsMap.get(dedupKey) || threadsMap.get(custId);
+                    if (t && msgTs >= (t.lastUpdated || 0)) {
+                        t.lastMessage = formattedPreview;
+                        t.lastUpdated = msgTs;
+                        t.hasRealMessages = true;
+                    }
+                }
+            } catch (_) {}
+
+            // Persist resolved media fields back to Firebase RTDB so they are permanently cached
+            if (db && msg.id) {
+                const patch = {};
+                if (existing.imageUrl) patch.imageUrl = existing.imageUrl;
+                if (existing.images) patch.images = existing.images;
+                if (existing.audioUrl) patch.audioUrl = existing.audioUrl;
+                if (existing.videoUrl) patch.videoUrl = existing.videoUrl;
+                if (existing.fileUrl) patch.fileUrl = existing.fileUrl;
+                if (existing.type) patch.type = existing.type;
+                if (existing.text) patch.text = existing.text;
+                if (Object.keys(patch).length > 0) {
+                    db.ref(`customerChats/${custId}/messages/${msg.id}`).update(patch).catch(() => {});
+                }
+                const currentMetaTs = Number(currentRiderChatMeta?.lastUpdated) || 0;
+                if (msgTs >= currentMetaTs) {
+                    db.ref(`customerChatMeta/${custId}`).update({
+                        lastMessage: formattedPreview,
+                        lastUpdated: msgTs
+                    }).catch(() => {});
+                }
             }
 
             try {
@@ -103,13 +153,17 @@ function triggerInstantFbAttachmentResolution(custId, msg, container, custData) 
 function autoResolveRecentFbCustomerAttachments(custId, container, custData) {
     if (!String(custId).startsWith('fb_')) return;
     const candidates = Array.from(loadedRiderMsgsMap.values())
-        .filter(m => m && !m.imageUrl && (!m.images || m.images.length === 0) && !m.audioUrl && m.text && (
-            m.text.includes('[Facebook image]') || 
-            m.text.includes('[Facebook attachment]') ||
-            m.text.includes('[Facebook audio]') ||
-            m.text.includes('[Facebook voice]') ||
-            m.text.includes('📷 Photo') ||
-            m.text.includes('🎤 Voice')
+        .filter(m => m && !m.imageUrl && (!m.images || m.images.length === 0) && !m.audioUrl && !m.videoUrl && (
+            (m.text && (
+                m.text.includes('[Facebook') || 
+                m.text.includes('📷 Photo') || 
+                m.text.includes('🎥 Video') || 
+                m.text.includes('🎤 Voice')
+            )) ||
+            m.type === 'image' ||
+            m.type === 'video' ||
+            m.type === 'audio' ||
+            (!m.text && (m.mid || (m.id && String(m.id).startsWith('m_'))))
         ));
     for (const m of candidates) {
         triggerInstantFbAttachmentResolution(custId, m, container, custData);
@@ -166,7 +220,7 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
 
         const container = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
 
-        const convUrl = `https://graph.facebook.com/v19.0/me/conversations?user_id=${psid}&fields=messages.limit(15){id,message,from,created_time,attachments}&access_token=${encodeURIComponent(token)}`;
+        const convUrl = `https://graph.facebook.com/v19.0/me/conversations?user_id=${psid}&fields=messages.limit(15){id,message,from,created_time,attachments{id,mime_type,name,size,file_url,image_data,video_data,payload,subattachments}}&access_token=${encodeURIComponent(token)}`;
         const resp = await fetch(convUrl);
         if (!resp.ok) return;
 
@@ -207,14 +261,14 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                 for (const att of m.attachments.data) {
                     const attType = (att.type || '').toLowerCase();
                     const mime = (att.mime_type || '').toLowerCase();
-                    const u = att?.image_data?.url || att?.payload?.url || att?.media?.image?.src || att?.file_url;
+                    const u = att?.image_data?.url || att?.video_data?.url || att?.audio_data?.url || att?.payload?.url || att?.media?.image?.src || att?.file_url;
                     
                     if (attType === 'audio' || attType === 'voice' || mime.includes('audio') || (typeof u === 'string' && (/\.(aac|mp3|m4a|wav|ogg|opus)(\?|$)/i.test(u) || u.includes('audioclip')))) {
                         if (u && !audioUrl) audioUrl = u;
                         type = 'audio';
                         continue;
                     }
-                    if (attType === 'video' || mime.includes('video') || (typeof u === 'string' && /\.(mp4|mov|webm|3gp|mkv)(\?|$)/i.test(u))) {
+                    if (attType === 'video' || mime.includes('video') || (typeof u === 'string' && (/\.(mp4|mov|webm|3gp|mkv)(\?|$)/i.test(u) || u.includes('video.xx.fbcdn.net') || u.includes('/m483/') || u.includes('/v/t2/')))) {
                         if (u && !videoUrl) videoUrl = u;
                         type = 'video';
                         continue;
@@ -227,7 +281,7 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
 
                     if (att.subattachments?.data && Array.isArray(att.subattachments.data)) {
                         for (const sub of att.subattachments.data) {
-                            const subUrl = sub?.image_data?.url || sub?.media?.image?.src || sub?.payload?.url || sub?.file_url;
+                            const subUrl = sub?.image_data?.url || sub?.video_data?.url || sub?.audio_data?.url || sub?.media?.image?.src || sub?.payload?.url || sub?.file_url;
                             if (subUrl && !images.includes(subUrl)) images.push(subUrl);
                         }
                     }
@@ -243,13 +297,51 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
             }
 
             if (!text) {
-                if (type === 'audio') text = '🎤 Voice message';
+                if (type === 'audio' || audioUrl) text = '🎤 Voice message';
+                else if (type === 'video' || videoUrl) text = '🎥 Video';
                 else if (images.length > 1) text = `📷 ${images.length} Photos`;
-                else if (imageUrl) text = '📷 Photo';
-                else if (videoUrl) text = '🎥 Video';
+                else if (imageUrl || type === 'image') text = '📷 Photo';
+                else if (fileUrl || type === 'file') text = '📄 Document';
+                else if (m.attachments?.data && m.attachments.data.length > 0) {
+                    const firstMime = (m.attachments.data[0]?.mime_type || '').toLowerCase();
+                    if (firstMime.includes('video')) {
+                        type = 'video';
+                        text = '🎥 Video';
+                    } else if (firstMime.includes('audio')) {
+                        type = 'audio';
+                        text = '🎤 Voice message';
+                    } else {
+                        type = 'image';
+                        text = '📷 Photo';
+                    }
+                }
             }
 
             const normText = (text || '').replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim().toLowerCase();
+
+            const isGenericMsgPlaceholder = (t) => {
+                if (!t) return true;
+                const clean = String(t).trim().toLowerCase();
+                return clean === '📷 photo' || 
+                       clean === '🎥 video' || 
+                       clean === '🎤 voice message' || 
+                       clean.includes('photos') || 
+                       clean.includes('[facebook') || 
+                       clean === 'facebook message' ||
+                       clean === '📄 document';
+            };
+
+            const hasAnyMediaAttachment = (m) => {
+                if (!m) return false;
+                return Boolean(
+                    m.imageUrl || 
+                    m.videoUrl || 
+                    m.audioUrl || 
+                    m.fileUrl || 
+                    (Array.isArray(m.images) && m.images.length > 0) ||
+                    (m.type && m.type !== 'text')
+                );
+            };
 
             // Comprehensive deduplication: check if this message already exists in memory or loaded messages
             const isMatch = (existing) => {
@@ -260,7 +352,11 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                 const sameDirection = Boolean(existing.isRider) === Boolean(isRider);
                 if (sameDirection) {
                     const exNorm = (existing.text || '').replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim().toLowerCase();
-                    if (exNorm && normText && (exNorm === normText || exNorm.startsWith(normText.slice(0, 40)) || normText.startsWith(exNorm.slice(0, 40)))) {
+                    const isGeneric = isGenericMsgPlaceholder(normText) || isGenericMsgPlaceholder(exNorm);
+                    const eitherHasMedia = hasAnyMediaAttachment(existing) || Boolean(imageUrl || videoUrl || audioUrl || fileUrl || (images && images.length) || (type && type !== 'text'));
+
+                    // NEVER deduplicate separate media items or generic placeholder messages by text alone
+                    if (!isGeneric && !eitherHasMedia && exNorm && normText && (exNorm === normText || exNorm.startsWith(normText.slice(0, 40)) || normText.startsWith(exNorm.slice(0, 40)))) {
                         const diff = Math.abs(getMessageTimestamp(existing) - ts);
                         if (diff < 300000) { // within 5 minutes
                             return true;
@@ -353,9 +449,9 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
 
         if (sortedGraphMsgs.length > 0 && db) {
             const absoluteLatestMsg = sortedGraphMsgs[sortedGraphMsgs.length - 1];
-            const absText = (absoluteLatestMsg?.message || '').trim() || (absoluteLatestMsg?.attachments ? '📷 Facebook Attachment' : 'Facebook Message');
             const absTs = absoluteLatestMsg?.created_time ? new Date(absoluteLatestMsg.created_time).getTime() : 0;
             const isFromPage = Boolean(absoluteLatestMsg?.from && String(absoluteLatestMsg.from.id) !== psid);
+            const absText = lastMsgText || (absoluteLatestMsg?.message || '').trim() || (absoluteLatestMsg?.attachments ? '📷 Facebook Attachment' : 'Facebook Message');
             const formattedLatestPreview = isFromPage ? `You: ${absText}` : absText;
 
             // Only update customerChatMeta if this graph message is newer or equal to current metadata timestamp
@@ -366,6 +462,19 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                     lastUpdated: absTs,
                     channel: 'messenger'
                 }).catch(() => {});
+
+                try {
+                    if (typeof getCachedCustomerThreadsMap === 'function') {
+                        const threadsMap = getCachedCustomerThreadsMap();
+                        const dedupKey = getThreadDedupKey(targetCustId, currentRiderChatMeta || {});
+                        const t = threadsMap.get(dedupKey) || threadsMap.get(targetCustId);
+                        if (t && absTs >= (t.lastUpdated || 0)) {
+                            t.lastMessage = formattedLatestPreview;
+                            t.lastUpdated = absTs;
+                            t.hasRealMessages = true;
+                        }
+                    }
+                } catch (_) {}
             }
 
             if (activeRiderChatCustId === targetCustId && container) {
@@ -577,7 +686,23 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         if (loadedRiderMsgsMap.has(key)) {
             loadedRiderMsgsMap.set(key, fullMsg);
             appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
-            if (String(custId).startsWith('fb_') && !fullMsg.imageUrl && fullMsg.text && (fullMsg.text.includes('[Facebook image]') || fullMsg.text.includes('[Facebook attachment]'))) {
+            const needsRes = String(custId).startsWith('fb_') && 
+                !fullMsg.imageUrl && 
+                (!fullMsg.images || fullMsg.images.length === 0) && 
+                !fullMsg.audioUrl && 
+                !fullMsg.videoUrl && 
+                (
+                    (fullMsg.text && (
+                        fullMsg.text.includes('[Facebook') || 
+                        fullMsg.text.includes('📷 Photo') || 
+                        fullMsg.text.includes('🎥 Video') || 
+                        fullMsg.text.includes('🎤 Voice')
+                    )) || 
+                    fullMsg.type === 'image' || 
+                    fullMsg.type === 'video' || 
+                    fullMsg.type === 'audio'
+                );
+            if (needsRes) {
                 triggerInstantFbAttachmentResolution(custId, fullMsg, container, activeCustData);
             }
             return;
@@ -593,14 +718,26 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 if (prev.id === key) return false;
                 const isPrevRider = Boolean(prev.isRider || prev.senderType === 'rider');
                 if (!isPrevRider) return false;
-                const prevNorm = (prev.text || '').replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim().toLowerCase();
                 const sameMid = (fullMsg.metaMid && prev.metaMid && fullMsg.metaMid === prev.metaMid)
                              || (fullMsg.mid && prev.mid && fullMsg.mid === prev.mid)
                              || (fullMsg.mid && prev.id === fullMsg.mid)
                              || (prev.mid && key === prev.mid);
-                const sameText = incomingNorm && prevNorm && (incomingNorm === prevNorm || incomingNorm.startsWith(prevNorm.slice(0, 40)) || prevNorm.startsWith(incomingNorm.slice(0, 40)));
-                const timeDiff = Math.abs(getMessageTimestamp(prev) - msgTs);
-                return sameMid || (sameText && timeDiff < 300000);
+                if (sameMid) return true;
+
+                const prevNorm = (prev.text || '').replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim().toLowerCase();
+                const isGeneric = (t) => {
+                    if (!t) return true;
+                    const c = t.toLowerCase();
+                    return c === '📷 photo' || c === '🎥 video' || c === '🎤 voice message' || c.includes('photos') || c.includes('[facebook');
+                };
+                const hasMedia = (m) => Boolean(m.imageUrl || m.videoUrl || m.audioUrl || m.fileUrl || (m.images && m.images.length) || (m.type && m.type !== 'text'));
+
+                if (!isGeneric(incomingNorm) && !isGeneric(prevNorm) && !hasMedia(fullMsg) && !hasMedia(prev)) {
+                    const sameText = incomingNorm && prevNorm && (incomingNorm === prevNorm || incomingNorm.startsWith(prevNorm.slice(0, 40)) || prevNorm.startsWith(incomingNorm.slice(0, 40)));
+                    const timeDiff = Math.abs(getMessageTimestamp(prev) - msgTs);
+                    return sameText && timeDiff < 300000;
+                }
+                return false;
             });
 
             if (existingRiderMatch) {
@@ -656,9 +793,58 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         } else {
             appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
 
-            // Proactively resolve incoming Facebook photo attachment immediately
-            if (String(custId).startsWith('fb_') && !fullMsg.imageUrl && fullMsg.text && (fullMsg.text.includes('[Facebook image]') || fullMsg.text.includes('[Facebook attachment]'))) {
+            // Proactively resolve incoming Facebook attachment immediately
+            const needsRes = String(custId).startsWith('fb_') && 
+                !fullMsg.imageUrl && 
+                (!fullMsg.images || fullMsg.images.length === 0) && 
+                !fullMsg.audioUrl && 
+                !fullMsg.videoUrl && 
+                (
+                    (fullMsg.text && (
+                        fullMsg.text.includes('[Facebook') || 
+                        fullMsg.text.includes('📷 Photo') || 
+                        fullMsg.text.includes('🎥 Video') || 
+                        fullMsg.text.includes('🎤 Voice')
+                    )) || 
+                    fullMsg.type === 'image' || 
+                    fullMsg.type === 'video' || 
+                    fullMsg.type === 'audio' ||
+                    (!fullMsg.text && (fullMsg.mid || (fullMsg.id && String(fullMsg.id).startsWith('m_'))))
+                );
+            if (needsRes) {
                 triggerInstantFbAttachmentResolution(custId, fullMsg, container, activeCustData);
+            }
+
+            // Keep in-memory feed thread card & Firebase customerChatMeta in sync immediately
+            const preview = fullMsg.text || (fullMsg.videoUrl ? "🎥 Video" : (fullMsg.imageUrl ? "📷 Photo" : (fullMsg.audioUrl ? "🎤 Voice message" : (fullMsg.locationCoords ? "📍 Location" : "Message"))));
+            const formattedPreview = isFromCustomer ? preview : `You: ${preview}`;
+
+            try {
+                if (typeof getCachedCustomerThreadsMap === 'function') {
+                    const threadsMap = getCachedCustomerThreadsMap();
+                    const dedupKey = getThreadDedupKey(custId, currentRiderChatMeta || {});
+                    const existingThread = threadsMap.get(dedupKey) || threadsMap.get(custId);
+                    if (existingThread && msgTs >= (existingThread.lastUpdated || 0)) {
+                        existingThread.lastMessage = formattedPreview;
+                        existingThread.lastUpdated = msgTs;
+                        existingThread.hasRealMessages = true;
+                        if (isFromCustomer) {
+                            existingThread.isUnread = true;
+                            existingThread.unreadForRider = true;
+                        }
+                    }
+                }
+            } catch (_) {}
+
+            if (db && msgTs >= (Number(currentRiderChatMeta?.lastUpdated) || 0)) {
+                const metaPatch = {
+                    lastMessage: formattedPreview,
+                    lastUpdated: msgTs
+                };
+                if (isFromCustomer) {
+                    metaPatch.unreadForRider = true;
+                }
+                db.ref(`customerChatMeta/${custId}`).update(metaPatch).catch(() => {});
             }
 
             if (isNew && isFromCustomer) {
@@ -735,7 +921,23 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         if (loadedRiderMsgsMap.has(key)) {
             loadedRiderMsgsMap.set(key, fullMsg);
             appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
-            if (String(custId).startsWith('fb_') && !fullMsg.imageUrl && fullMsg.text && (fullMsg.text.includes('[Facebook image]') || fullMsg.text.includes('[Facebook attachment]'))) {
+            const needsRes = String(custId).startsWith('fb_') && 
+                !fullMsg.imageUrl && 
+                (!fullMsg.images || fullMsg.images.length === 0) && 
+                !fullMsg.audioUrl && 
+                !fullMsg.videoUrl && 
+                (
+                    (fullMsg.text && (
+                        fullMsg.text.includes('[Facebook') || 
+                        fullMsg.text.includes('📷 Photo') || 
+                        fullMsg.text.includes('🎥 Video') || 
+                        fullMsg.text.includes('🎤 Voice')
+                    )) || 
+                    fullMsg.type === 'image' || 
+                    fullMsg.type === 'video' || 
+                    fullMsg.type === 'audio'
+                );
+            if (needsRes) {
                 triggerInstantFbAttachmentResolution(custId, fullMsg, container, activeCustData);
             }
         }
@@ -927,7 +1129,18 @@ export async function loadOlderRiderMessages(container, custId) {
         // Auto-resolve missing Facebook image attachment from Graph API for newly loaded history
         if (String(targetCustId).startsWith('fb_')) {
             olderMsgs.forEach(msg => {
-                if (!msg.imageUrl && msg.text && (msg.text.includes('[Facebook image]') || msg.text.includes('[Facebook attachment]'))) {
+                const needsRes = !msg.imageUrl && (!msg.images || msg.images.length === 0) && !msg.audioUrl && !msg.videoUrl && (
+                    (msg.text && (
+                        msg.text.includes('[Facebook') || 
+                        msg.text.includes('📷 Photo') || 
+                        msg.text.includes('🎥 Video') || 
+                        msg.text.includes('🎤 Voice')
+                    )) || 
+                    msg.type === 'image' || 
+                    msg.type === 'video' || 
+                    msg.type === 'audio'
+                );
+                if (needsRes) {
                     triggerInstantFbAttachmentResolution(targetCustId, msg, container, activeCustData);
                 }
             });

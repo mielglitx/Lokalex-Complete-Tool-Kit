@@ -772,7 +772,7 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-BgNk0HuQ.js"></script>
+  <script type="module" crossorigin src="./assets/index-B8Ybs4yV.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 
@@ -2607,12 +2607,15 @@
     </div>
 
     <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden">
-        <div id="cart-items-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 pb-24 no-scrollbar" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; will-change: scroll-position;"></div>
+        <div id="cart-items-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 pb-24" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; will-change: scroll-position;"></div>
         
-        <!-- Smart Cart Slider Scroller (Invisible slider track with glowing circular knob for futuristic touch scrolling) -->
-        <div id="cart-slider-track" class="absolute right-1.5 top-3 bottom-6 w-9 pointer-events-none flex justify-center z-30 select-none transition-opacity duration-300 opacity-0">
-            <div id="cart-slider-thumb" class="pointer-events-auto absolute top-0 w-8 h-8 rounded-full bg-blue-600/95 dark:bg-blue-500/95 hover:bg-blue-500 text-white shadow-xl backdrop-blur-md flex items-center justify-center cursor-grab active:cursor-grabbing active:scale-125 hover:scale-105 transition-transform duration-75 border-2 border-white/90 dark:border-cyan-300/90 shadow-blue-500/50">
-                <i class="fa-solid fa-arrows-up-down text-[11px] text-white/90"></i>
+        <!-- Smart Cart Slider Scroller (Permanently visible rail & circular knob when screen is full) -->
+        <div id="cart-slider-track" class="absolute right-1 top-2 bottom-4 w-8 flex justify-center z-30 select-none cursor-pointer transition-opacity duration-200 opacity-0 pointer-events-none">
+            <!-- Visible sleek rail track -->
+            <div class="w-1.5 h-full bg-gray-300/70 dark:bg-zinc-700/70 rounded-full my-0.5"></div>
+            <!-- Circular thumb knob -->
+            <div id="cart-slider-thumb" class="pointer-events-auto absolute top-0 w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow-xl backdrop-blur-md flex items-center justify-center cursor-grab active:cursor-grabbing active:scale-125 hover:scale-105 transition-transform duration-75 border-2 border-white dark:border-cyan-300 shadow-blue-500/50">
+                <i class="fa-solid fa-arrows-up-down text-[11px] text-white"></i>
             </div>
         </div>
     </div>
@@ -2906,6 +2909,17 @@
     <button onclick="window.generateDailyReportText && window.generateDailyReportText()" class="w-full bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 dark:bg-blue-600/20 dark:border-blue-600/50 dark:hover:bg-blue-600 dark:text-blue-400 dark:hover:text-white font-bold py-3.5 rounded-2xl shadow-xs flex items-center justify-center gap-2 transition active:scale-95 text-xs cursor-pointer">
         <i class="fa-solid fa-file-lines"></i> Generate Text Report
     </button>
+
+    <!-- ACTIVE DATE PENALTIES BANNER (ADMIN & RIDER VISIBILITY) -->
+    <div id="commission-active-penalties-section" class="hidden flex-col gap-2.5 bg-red-50/70 dark:bg-red-950/25 border border-red-200 dark:border-red-900/60 rounded-2xl p-3.5 shadow-xs">
+        <div class="flex items-center justify-between border-b border-red-200 dark:border-red-900/50 pb-2">
+            <span class="text-xs font-black text-red-700 dark:text-red-400 flex items-center gap-1.5 uppercase tracking-wider">
+                <i class="fa-solid fa-gavel"></i> Active Date Penalties
+            </span>
+            <span id="commission-active-penalties-count" class="bg-red-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs">0 active</span>
+        </div>
+        <div id="commission-active-penalties-list" class="flex flex-col gap-1.5"></div>
+    </div>
 
     <div class="text-[10px] text-gray-600 dark:text-gray-400 uppercase tracking-wider font-bold mt-2 border-b border-gray-200 dark:border-gray-800 pb-1">Rider Summary</div>
     <div id="commission-rider-list" class="flex flex-col gap-3 pb-20"></div>
@@ -6477,6 +6491,133 @@
         </div>
     </div>
 </div>
+
+<!-- DEDICATED SEPARATE ADD CUSTOMER MODAL -->
+<div id="add-customer-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[1000020] flex items-center justify-center p-3 sm:p-4 select-none" style="z-index: 1000020 !important;">
+    <div class="bg-cardBg border border-emerald-500/50 p-4 sm:p-5 rounded-3xl w-full max-w-xs sm:max-w-sm shadow-2xl flex flex-col gap-3 relative animate-in fade-in zoom-in duration-200 text-gray-900 dark:text-white max-h-[92vh] overflow-hidden">
+        
+        <!-- HEADER -->
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5 shrink-0">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm font-bold border border-emerald-500/30">
+                    <i class="fa-solid fa-user-plus"></i>
+                </div>
+                <div>
+                    <h3 class="font-black text-sm text-gray-900 dark:text-white leading-tight">Add Customer</h3>
+                    <p class="text-[10px] text-gray-500 dark:text-gray-400">Directory Profile & Addresses</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeAddCustomerModal && window.closeAddCustomerModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+
+        <!-- SCROLLABLE BODY -->
+        <div class="flex flex-col gap-3 text-xs overflow-y-auto no-scrollbar pr-0.5">
+            <!-- Customer Name Field -->
+            <div>
+                <label for="new-cust-name-input" class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Customer Name: *</label>
+                <input type="text" id="new-cust-name-input" autocomplete="name" placeholder="Enter customer full name..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 font-bold focus:border-emerald-500">
+            </div>
+
+            <!-- Contact# Field -->
+            <div>
+                <label for="new-cust-contact-input" class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Contact#: </label>
+                <input type="tel" id="new-cust-contact-input" autocomplete="tel" inputmode="tel" placeholder="09xxxxxxxxx or mobile number..." class="w-full bg-inputBg text-xs font-mono font-bold rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 focus:border-emerald-500">
+            </div>
+
+            <!-- Saved Addresses Section -->
+            <div class="flex flex-col gap-1.5 pt-1">
+                <div class="flex items-center justify-between">
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <i class="fa-solid fa-map-location-dot text-rose-500"></i> Saved Addresses (<span id="new-cust-addresses-count">0</span>)
+                    </label>
+                </div>
+
+                <!-- List of added addresses -->
+                <div id="new-cust-addresses-list" class="flex flex-col gap-2 min-h-[44px]">
+                    <div id="new-cust-no-address-hint" class="text-center py-3 px-2 bg-gray-50 dark:bg-black/20 rounded-xl border border-dashed border-gray-300 dark:border-gray-800 text-gray-400 text-[11px]">
+                        No address added yet. Tap <strong>Add address</strong> below.
+                    </div>
+                </div>
+
+                <!-- Add address (button) -->
+                <button type="button" onclick="window.openAddCustomerAddressModal && window.openAddCustomerAddressModal()" class="w-full bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-600/40 rounded-xl py-2.5 text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-xs cursor-pointer mt-1">
+                    <i class="fa-solid fa-location-plus"></i> Add address
+                </button>
+            </div>
+        </div>
+
+        <!-- FOOTER SAVE BUTTON -->
+        <div class="pt-2 border-t border-gray-200 dark:border-gray-800 shrink-0">
+            <button type="button" id="new-cust-save-btn" onclick="window.submitNewCustomerModal && window.submitNewCustomerModal()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 rounded-2xl text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-floppy-disk"></i> SAVE CUSTOMER
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ADD ADDRESS (MODAL FORM) SUB-MODAL -->
+<div id="add-customer-address-modal" class="hidden fixed inset-0 bg-black/90 backdrop-blur-md z-[1000040] flex items-center justify-center p-3 sm:p-4 select-none" style="z-index: 1000040 !important;">
+    <div class="bg-cardBg border border-emerald-500/60 p-4 sm:p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3 relative animate-in fade-in zoom-in duration-200 text-gray-900 dark:text-white">
+        
+        <!-- HEADER -->
+        <div class="flex justify-between items-center border-b border-gray-200 dark:border-gray-800 pb-2.5 shrink-0">
+            <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-xl bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs font-bold border border-emerald-500/30">
+                    <i class="fa-solid fa-map-pin"></i>
+                </div>
+                <h3 class="font-black text-xs sm:text-sm text-gray-900 dark:text-white leading-tight">Add Address</h3>
+            </div>
+            <button type="button" onclick="window.closeAddCustomerAddressModal && window.closeAddCustomerAddressModal()" class="w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+
+        <div class="flex flex-col gap-3 text-xs">
+            <!-- Address Label (Optional) -->
+            <div>
+                <label for="new-cust-submodal-label" class="text-[9.5px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Address Label (Optional):</label>
+                <input type="text" id="new-cust-submodal-label" placeholder="e.g. Home, Office, Store, Farm" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 font-medium focus:border-emerald-500">
+            </div>
+
+            <!-- Address Field -->
+            <div>
+                <label for="new-cust-submodal-address" class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Address: *</label>
+                <textarea id="new-cust-submodal-address" rows="2" placeholder="Street, Barangay, Landmarks, House No..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 font-medium focus:border-emerald-500 resize-none"></textarea>
+            </div>
+
+            <!-- GPS Map Location Field (Automatically fills in by the system when the add address modal appears) -->
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <label for="new-cust-submodal-gps" class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                        GPS Map Location:
+                    </label>
+                    <span id="new-cust-gps-status" class="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                        <i class="fa-solid fa-spinner fa-spin"></i> Auto-detecting GPS...
+                    </span>
+                </div>
+                <div class="relative flex items-center">
+                    <input type="text" id="new-cust-submodal-gps" placeholder="Auto-calibrated GPS location link..." class="w-full bg-inputBg text-[10.5px] font-mono rounded-xl pl-2.5 pr-8 py-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold focus:border-emerald-500">
+                    <button type="button" onclick="window.calibrateSubmodalGPS && window.calibrateSubmodalGPS()" class="absolute right-2 text-emerald-600 dark:text-emerald-400 hover:scale-110 active:scale-95 transition cursor-pointer" title="Refresh GPS">
+                        <i class="fa-solid fa-crosshairs text-xs"></i>
+                    </button>
+                </div>
+                <p class="text-[9px] text-gray-400 mt-1 italic">Automatically fills in by the system when modal appears.</p>
+            </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div class="flex items-center gap-2 pt-1 border-t border-gray-200 dark:border-gray-800">
+            <button type="button" onclick="window.closeAddCustomerAddressModal && window.closeAddCustomerAddressModal()" class="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-xs font-bold text-gray-700 dark:text-gray-300 transition active:scale-95">
+                Cancel
+            </button>
+            <button type="button" onclick="window.confirmAddCustomerAddress && window.confirmAddCustomerAddress()" class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-black text-white shadow-md transition active:scale-95 flex items-center justify-center gap-1">
+                <i class="fa-solid fa-check"></i> Save Address
+            </button>
+        </div>
+    </div>
+</div>
 <!-- src/partials/modals/system-dialogs/admin-dialogs.html -->
 
 <!-- ADMIN FORCE CATERING MODAL -->
@@ -6541,35 +6682,204 @@
     </div>
 </div>
 
-<!-- ADMIN DATE PENALTY MODAL -->
+<!-- ADMIN DATE PENALTY MODAL (MULTI-RIDER & MULTI-DAY SUPPORT WITH CONFIRMATION REVIEW) -->
 <div id="admin-penalty-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
-    <div class="bg-cardBg border border-red-500/50 p-5 rounded-3xl w-full max-w-xs shadow-2xl flex flex-col gap-3 text-gray-900 dark:text-white">
-        <div class="flex items-center gap-2 border-b border-gray-200 dark:border-gray-800 pb-2">
-            <i class="fa-solid fa-gavel text-red-600 dark:text-red-400"></i>
-            <h3 class="font-bold text-xs text-gray-900 dark:text-white">Add Date Penalty</h3>
+    <div class="bg-cardBg border border-red-500/50 p-5 rounded-3xl w-full max-w-sm sm:max-w-md shadow-2xl flex flex-col gap-3.5 text-gray-900 dark:text-white max-h-[90vh] overflow-hidden">
+        
+        <!-- MODAL HEADER -->
+        <div class="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 pb-2.5">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-gavel text-red-600 dark:text-red-400 text-base"></i>
+                <h3 class="font-bold text-xs text-gray-900 dark:text-white uppercase tracking-wider">Commission Penalty Sanction</h3>
+            </div>
+            <button type="button" onclick="window.closeAdminPenaltyModal && window.closeAdminPenaltyModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 text-sm cursor-pointer">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
         </div>
-        <div>
-            <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Rider</label>
-            <select id="penalty-rider-select" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 font-bold">
-                <option value="">-- Select Rider --</option>
-            </select>
+
+        <!-- STEP 1: FORM CONFIGURATION -->
+        <div id="penalty-modal-step-form" class="flex flex-col gap-3 overflow-y-auto pr-1">
+            
+            <!-- 1. RIDER SELECTION MODE -->
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Target Rider(s)</label>
+                    <span id="penalty-rider-count-badge" class="hidden text-[9px] bg-red-600/20 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-bold">0 Selected</span>
+                </div>
+                
+                <!-- Rider Mode Segmented Tabs -->
+                <div class="grid grid-cols-3 gap-1 bg-gray-100 dark:bg-darkBg rounded-xl p-1 text-[10px] font-bold border border-gray-200 dark:border-gray-800 mb-2">
+                    <button type="button" id="penalty-rider-tab-single" onclick="window.setPenaltyRiderMode('single')" class="py-1.5 rounded-lg bg-red-600 text-white font-bold transition shadow cursor-pointer">Single</button>
+                    <button type="button" id="penalty-rider-tab-multi" onclick="window.setPenaltyRiderMode('multi')" class="py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer">Multiple</button>
+                    <button type="button" id="penalty-rider-tab-all" onclick="window.setPenaltyRiderMode('all')" class="py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer">All Active</button>
+                </div>
+
+                <!-- Single Rider Dropdown -->
+                <div id="penalty-single-rider-container">
+                    <select id="penalty-rider-select" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold focus:border-red-500">
+                        <option value="">-- Select Rider --</option>
+                    </select>
+                </div>
+
+                <!-- Multiple Riders Search & Checkbox List -->
+                <div id="penalty-multi-rider-container" class="hidden flex-col gap-2">
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                        <input type="text" id="penalty-rider-search-input" oninput="window.filterPenaltyRidersList(this.value)" placeholder="Search riders..." class="w-full pl-8 pr-3 py-1.5 bg-inputBg text-xs rounded-xl border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-medium focus:border-red-500">
+                    </div>
+                    <div class="flex items-center justify-between text-[10px] px-1">
+                        <div class="flex gap-2">
+                            <button type="button" onclick="window.selectAllPenaltyRiders(true)" class="text-blue-600 dark:text-blue-400 hover:underline font-bold">Select All</button>
+                            <span class="text-gray-400">|</span>
+                            <button type="button" onclick="window.selectAllPenaltyRiders(false)" class="text-gray-500 hover:underline font-bold">Clear All</button>
+                        </div>
+                        <span id="penalty-multi-status-text" class="text-gray-500 dark:text-gray-400 font-bold">0 selected</span>
+                    </div>
+                    <div id="penalty-riders-checkbox-list" class="max-h-36 overflow-y-auto bg-gray-50 dark:bg-black/30 border border-gray-200 dark:border-gray-800 rounded-xl p-2 flex flex-col gap-1.5">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- All Riders Notice -->
+                <div id="penalty-all-riders-container" class="hidden bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/60 p-2.5 rounded-xl text-[11px] text-amber-800 dark:text-amber-300 font-medium">
+                    <i class="fa-solid fa-triangle-exclamation mr-1 text-amber-500"></i>
+                    This penalty will be applied to <strong>all active roster riders</strong> for the selected date(s).
+                </div>
+            </div>
+
+            <!-- 2. DATE SELECTION MODE -->
+            <div>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block mb-1">Target Date(s)</label>
+                
+                <!-- Date Mode Segmented Tabs -->
+                <div class="grid grid-cols-2 gap-1 bg-gray-100 dark:bg-darkBg rounded-xl p-1 text-[10px] font-bold border border-gray-200 dark:border-gray-800 mb-2">
+                    <button type="button" id="penalty-date-tab-single" onclick="window.setPenaltyDateMode('single')" class="py-1.5 rounded-lg bg-red-600 text-white font-bold transition shadow cursor-pointer">Single Date</button>
+                    <button type="button" id="penalty-date-tab-range" onclick="window.setPenaltyDateMode('range')" class="py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer">Date Range (Multiple Days)</button>
+                </div>
+
+                <!-- Single Date Input -->
+                <div id="penalty-single-date-container">
+                    <input type="date" id="penalty-date-input" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold font-mono focus:border-red-500">
+                </div>
+
+                <!-- Date Range Inputs -->
+                <div id="penalty-date-range-container" class="hidden flex-col gap-1.5">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <span class="text-[9px] text-gray-500 dark:text-gray-400 font-bold uppercase block mb-0.5">Start Date</span>
+                            <input type="date" id="penalty-start-date-input" onchange="window.updatePenaltyDateRangeSummary()" class="w-full bg-inputBg text-xs rounded-xl p-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold font-mono focus:border-red-500">
+                        </div>
+                        <div>
+                            <span class="text-[9px] text-gray-500 dark:text-gray-400 font-bold uppercase block mb-0.5">End Date</span>
+                            <input type="date" id="penalty-end-date-input" onchange="window.updatePenaltyDateRangeSummary()" class="w-full bg-inputBg text-xs rounded-xl p-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold font-mono focus:border-red-500">
+                        </div>
+                    </div>
+                    <div class="bg-gray-100 dark:bg-black/30 px-2 py-1 rounded-lg text-[10px] text-center text-amber-600 dark:text-amber-400 font-mono font-bold" id="penalty-date-range-summary">
+                        1 day selected
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. PENALTY RATE WITH QUICK PRESETS -->
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Penalty Surcharge Rate (%)</label>
+                    <span class="text-[9px] text-red-500 font-bold">Added to Company %</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="relative flex-1">
+                        <span class="absolute left-3 top-2.5 text-red-500 font-bold text-xs">+</span>
+                        <input type="number" id="penalty-rate-input" value="10" placeholder="10" min="1" max="100" class="w-full pl-6 pr-8 py-2.5 bg-inputBg text-xs rounded-xl border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold focus:border-red-500">
+                        <span class="absolute right-3 top-2.5 text-gray-400 font-bold text-xs">%</span>
+                    </div>
+                </div>
+                <!-- Quick Preset Chips -->
+                <div class="flex gap-1.5 mt-1.5">
+                    <button type="button" onclick="window.setPenaltyRatePreset(3)" class="flex-1 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-[10px] font-bold rounded-lg transition active:scale-95 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 cursor-pointer">+3%</button>
+                    <button type="button" onclick="window.setPenaltyRatePreset(5)" class="flex-1 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-[10px] font-bold rounded-lg transition active:scale-95 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 cursor-pointer">+5%</button>
+                    <button type="button" onclick="window.setPenaltyRatePreset(10)" class="flex-1 py-1 bg-red-100 hover:bg-red-200 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-[10px] font-bold rounded-lg transition active:scale-95 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-800 cursor-pointer">+10%</button>
+                    <button type="button" onclick="window.setPenaltyRatePreset(15)" class="flex-1 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-[10px] font-bold rounded-lg transition active:scale-95 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 cursor-pointer">+15%</button>
+                    <button type="button" onclick="window.setPenaltyRatePreset(20)" class="flex-1 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-[10px] font-bold rounded-lg transition active:scale-95 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 cursor-pointer">+20%</button>
+                </div>
+            </div>
+
+            <!-- 4. REASON / VIOLATION WITH COMMON CHIPS -->
+            <div>
+                <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block mb-1">Reason / Violation</label>
+                <input type="text" id="penalty-reason-input" autocomplete="off" placeholder="e.g. Late shift arrival" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-medium focus:border-red-500">
+                <!-- Preset Reason Chips -->
+                <div class="flex flex-wrap gap-1 mt-1.5">
+                    <button type="button" onclick="window.setPenaltyReasonPreset('Late shift arrival')" class="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-[9px] font-medium rounded-md text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 cursor-pointer">Late shift</button>
+                    <button type="button" onclick="window.setPenaltyReasonPreset('Unexcused absence')" class="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-[9px] font-medium rounded-md text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 cursor-pointer">Unexcused absence</button>
+                    <button type="button" onclick="window.setPenaltyReasonPreset('Incomplete uniform')" class="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-[9px] font-medium rounded-md text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 cursor-pointer">Incomplete uniform</button>
+                    <button type="button" onclick="window.setPenaltyReasonPreset('Extended break / AFK')" class="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-[9px] font-medium rounded-md text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 cursor-pointer">Extended break</button>
+                    <button type="button" onclick="window.setPenaltyReasonPreset('Customer complaint / Issue')" class="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-[9px] font-medium rounded-md text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 cursor-pointer">Customer complaint</button>
+                </div>
+            </div>
+
+            <!-- STEP 1 ACTION BUTTONS -->
+            <div class="flex gap-2 mt-2 pt-1 border-t border-gray-200 dark:border-gray-800">
+                <button type="button" onclick="window.closeAdminPenaltyModal && window.closeAdminPenaltyModal()" class="flex-1 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 transition active:scale-95 cursor-pointer">Cancel</button>
+                <button type="button" onclick="window.reviewAdminPenalty && window.reviewAdminPenalty()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer flex items-center justify-center gap-1.5">
+                    <span>Review Penalty</span>
+                    <i class="fa-solid fa-arrow-right text-[11px]"></i>
+                </button>
+            </div>
         </div>
-        <div>
-            <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Target Date</label>
-            <input type="date" id="penalty-date-input" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 font-bold">
+
+        <!-- STEP 2: CONFIRMATION REVIEW SCREEN -->
+        <div id="penalty-modal-step-review" class="hidden flex-col gap-3 overflow-y-auto pr-1">
+            <div class="bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-900/60 p-3 rounded-2xl flex flex-col gap-2">
+                <div class="flex items-center gap-2 text-red-700 dark:text-red-400 font-black text-xs uppercase tracking-wider">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span>Confirm Penalty Application</span>
+                </div>
+                <p class="text-[10px] text-gray-600 dark:text-gray-300">
+                    Please review the penalty details below before applying. This will increase the company commission rate for the selected rider(s).
+                </p>
+            </div>
+
+            <div class="bg-gray-50 dark:bg-black/30 border border-gray-200 dark:border-gray-800 rounded-2xl p-3 flex flex-col gap-2.5 text-xs">
+                <div>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Target Rider(s):</span>
+                    <div id="penalty-review-riders-display" class="font-bold text-gray-900 dark:text-white mt-0.5 text-xs break-words"></div>
+                </div>
+
+                <div class="border-t border-gray-200 dark:border-gray-800/80 pt-2">
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Applicable Date(s):</span>
+                    <div id="penalty-review-dates-display" class="font-bold text-gray-900 dark:text-white mt-0.5 text-xs font-mono"></div>
+                </div>
+
+                <div class="border-t border-gray-200 dark:border-gray-800/80 pt-2 flex justify-between items-center">
+                    <div>
+                        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Penalty Rate:</span>
+                        <div id="penalty-review-rate-display" class="font-black text-red-600 dark:text-red-400 text-sm mt-0.5"></div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Total Records:</span>
+                        <div id="penalty-review-count-display" class="font-black text-gray-900 dark:text-white text-sm mt-0.5 font-mono"></div>
+                    </div>
+                </div>
+
+                <div class="border-t border-gray-200 dark:border-gray-800/80 pt-2">
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider block">Reason / Violation:</span>
+                    <div id="penalty-review-reason-display" class="font-medium text-gray-700 dark:text-gray-300 mt-0.5 italic"></div>
+                </div>
+            </div>
+
+            <!-- STEP 2 ACTION BUTTONS -->
+            <div class="flex gap-2 mt-2 pt-1 border-t border-gray-200 dark:border-gray-800">
+                <button type="button" onclick="window.penaltyBackToForm && window.penaltyBackToForm()" class="flex-1 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-arrow-left text-[11px]"></i>
+                    <span>Back / Edit</span>
+                </button>
+                <button type="button" onclick="window.executeAdminPenaltySubmission && window.executeAdminPenaltySubmission()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-check text-[11px]"></i>
+                    <span>Confirm & Apply</span>
+                </button>
+            </div>
         </div>
-        <div>
-            <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Penalty Rate (%)</label>
-            <input type="number" id="penalty-rate-input" value="10" placeholder="10" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 font-bold">
-        </div>
-        <div>
-            <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Reason</label>
-            <input type="text" id="penalty-reason-input" autocomplete="off" placeholder="e.g. Late shift arrival" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 font-bold">
-        </div>
-        <div class="flex gap-2 mt-2">
-            <button onclick="window.closeAdminPenaltyModal && window.closeAdminPenaltyModal()" class="flex-1 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300">Cancel</button>
-            <button onclick="window.submitAdminPenalty && window.submitAdminPenalty()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white">Add Penalty</button>
-        </div>
+
     </div>
 </div>
 

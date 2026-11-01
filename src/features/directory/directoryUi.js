@@ -45,6 +45,7 @@ export * from './ui/directoryCredits.js';
 export * from './ui/directoryRouting.js';
 export * from './ui/directoryGalleries.js';
 export * from './ui/directoryListRender.js';
+export * from './customerAddModal.js';
 
 // 2. Import functions for window attachment to support inline HTML onclick handlers
 import {
@@ -115,8 +116,27 @@ import {
     askMenuSendConfirmation,
     closeMenuSendConfirmModal,
     showMenuSentConfirmationModal,
-    closeMenuSentConfirmationModal
+    closeMenuSentConfirmationModal,
+    setMenuCameraMode,
+    renderBulkCameraTray,
+    removeBulkCameraQueueItem,
+    clearMenuCameraBulkQueue,
+    uploadAllBulkCameraPages,
+    uploadBatchMenuBlobs
 } from './ui/directoryGalleries.js';
+
+import {
+    openAddCustomerModal,
+    closeAddCustomerModal,
+    openAddCustomerAddressModal,
+    closeAddCustomerAddressModal,
+    calibrateSubmodalGPS,
+    confirmAddCustomerAddress,
+    renderNewCustomerAddressesList,
+    removeNewCustomerAddress,
+    setNewCustomerPrimaryAddress,
+    submitNewCustomerModal
+} from './customerAddModal.js';
 
 import {
     getSectionLetter,
@@ -209,6 +229,26 @@ if (typeof window !== 'undefined') {
     window.closeMenuSendConfirmModal = closeMenuSendConfirmModal;
     window.showMenuSentConfirmationModal = showMenuSentConfirmationModal;
     window.closeMenuSentConfirmationModal = closeMenuSentConfirmationModal;
+
+    // Bulk Camera & Fast Uploads
+    window.setMenuCameraMode = setMenuCameraMode;
+    window.renderBulkCameraTray = renderBulkCameraTray;
+    window.removeBulkCameraQueueItem = removeBulkCameraQueueItem;
+    window.clearMenuCameraBulkQueue = clearMenuCameraBulkQueue;
+    window.uploadAllBulkCameraPages = uploadAllBulkCameraPages;
+    window.uploadBatchMenuBlobs = uploadBatchMenuBlobs;
+
+    // Dedicated Add Customer & Automated GPS Address Sub-Modal
+    window.openAddCustomerModal = openAddCustomerModal;
+    window.closeAddCustomerModal = closeAddCustomerModal;
+    window.openAddCustomerAddressModal = openAddCustomerAddressModal;
+    window.closeAddCustomerAddressModal = closeAddCustomerAddressModal;
+    window.calibrateSubmodalGPS = calibrateSubmodalGPS;
+    window.confirmAddCustomerAddress = confirmAddCustomerAddress;
+    window.renderNewCustomerAddressesList = renderNewCustomerAddressesList;
+    window.removeNewCustomerAddress = removeNewCustomerAddress;
+    window.setNewCustomerPrimaryAddress = setNewCustomerPrimaryAddress;
+    window.submitNewCustomerModal = submitNewCustomerModal;
 
     // Chat Fare Rate Picker
     window.openFareRatePickerFromChat = openFareRatePickerFromChat;

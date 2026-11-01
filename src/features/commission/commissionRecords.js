@@ -23,110 +23,411 @@ import { openSlideDeleteModal } from '../../ui/modals.js';
 import { isAdmin as checkIsAdmin, isCustomerMatch, isSameDateStr, saveRosterCache, isRiderMatch } from '../roster/rosterUtils.js';
 import { getCleanRiderList, refreshCommissionView, viewSettings } from './commissionUI.js';
 
+let penaltyRiderMode = 'single'; // 'single' | 'multi' | 'all'
+let penaltyDateMode = 'single';   // 'single' | 'range'
+let selectedPenaltyRiders = new Set();
+let pendingPenaltyPlan = null;
+
+export function getDatesInRange(startStr, endStr) {
+    const dates = [];
+    if (!startStr) return dates;
+    if (!endStr || endStr < startStr) endStr = startStr;
+    
+    let curr = new Date(startStr + 'T00:00:00');
+    const end = new Date(endStr + 'T00:00:00');
+    
+    let safety = 0;
+    while (curr <= end && safety < 60) {
+        const y = curr.getFullYear();
+        const m = String(curr.getMonth() + 1).padStart(2, '0');
+        const d = String(curr.getDate()).padStart(2, '0');
+        dates.push(`${y}-${m}-${d}`);
+        curr.setDate(curr.getDate() + 1);
+        safety++;
+    }
+    return dates;
+}
+
 export function openAdminPenaltyModal() {
     const modal = document.getElementById('admin-penalty-modal');
-    const riderSelect = document.getElementById('penalty-rider-select');
-    const dateInput = document.getElementById('penalty-date-input');
-    const rateInput = document.getElementById('penalty-rate-input');
-    const reasonInput = document.getElementById('penalty-reason-input');
+    if (!modal) return;
 
-    if (!modal || !riderSelect) return;
+    // Reset to step 1
+    const formStep = document.getElementById('penalty-modal-step-form');
+    const reviewStep = document.getElementById('penalty-modal-step-review');
+    if (formStep) formStep.classList.remove('hidden');
+    if (reviewStep) reviewStep.classList.add('hidden');
 
     const cleanRiders = getCleanRiderList();
-    let optionsHtml = "";
-    cleanRiders.forEach(name => {
-        optionsHtml += `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
-    });
-    riderSelect.innerHTML = optionsHtml;
+    
+    // 1. Populate Single Rider Select
+    const riderSelect = document.getElementById('penalty-rider-select');
+    if (riderSelect) {
+        let optionsHtml = '<option value="">-- Select Rider --</option>';
+        cleanRiders.forEach(name => {
+            optionsHtml += `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
+        });
+        riderSelect.innerHTML = optionsHtml;
+    }
 
-    if (dateInput) dateInput.value = viewSettings.dateValue || getLocalTodayStr();
+    // 2. Populate Multi Rider Checkbox List
+    selectedPenaltyRiders.clear();
+    const checkboxList = document.getElementById('penalty-riders-checkbox-list');
+    if (checkboxList) {
+        checkboxList.innerHTML = cleanRiders.map((name, idx) => {
+            const uid = `penalty-rider-chk-${idx}`;
+            return `
+            <label class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 cursor-pointer text-xs select-none">
+                <input type="checkbox" id="${uid}" value="${escapeHtml(name)}" onchange="window.togglePenaltyRiderCheckbox('${escapeHtml(name)}', this.checked)" class="rounded text-red-600 focus:ring-red-500 w-4 h-4 cursor-pointer">
+                <span class="font-bold text-gray-900 dark:text-gray-200 flex items-center gap-1.5">
+                    <i class="fa-solid fa-motorcycle text-gray-400 text-[10px]"></i>
+                    ${escapeHtml(name)}
+                </span>
+            </label>`;
+        }).join('');
+    }
+
+    // 3. Dates
+    const defaultDate = viewSettings.dateValue || getLocalTodayStr();
+    const dateInput = document.getElementById('penalty-date-input');
+    const startDateInput = document.getElementById('penalty-start-date-input');
+    const endDateInput = document.getElementById('penalty-end-date-input');
+    if (dateInput) dateInput.value = defaultDate;
+    if (startDateInput) startDateInput.value = defaultDate;
+    if (endDateInput) endDateInput.value = defaultDate;
+    updatePenaltyDateRangeSummary();
+
+    // 4. Rate & Reason
+    const rateInput = document.getElementById('penalty-rate-input');
+    const reasonInput = document.getElementById('penalty-reason-input');
     if (rateInput) rateInput.value = "10";
     if (reasonInput) reasonInput.value = "";
 
+    // 5. Reset modes
+    setPenaltyRiderMode('single');
+    setPenaltyDateMode('single');
+
+    pendingPenaltyPlan = null;
     modal.classList.remove('hidden');
 }
 
 export function closeAdminPenaltyModal() {
     const modal = document.getElementById('admin-penalty-modal');
     if (modal) modal.classList.add('hidden');
+    pendingPenaltyPlan = null;
+}
+
+export function setPenaltyRiderMode(mode) {
+    penaltyRiderMode = mode;
+    ['single', 'multi', 'all'].forEach(m => {
+        const tab = document.getElementById(`penalty-rider-tab-${m}`);
+        if (tab) {
+            if (m === mode) {
+                tab.className = "py-1.5 rounded-lg bg-red-600 text-white font-bold transition shadow cursor-pointer";
+            } else {
+                tab.className = "py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer";
+            }
+        }
+    });
+
+    const singleContainer = document.getElementById('penalty-single-rider-container');
+    const multiContainer = document.getElementById('penalty-multi-rider-container');
+    const allContainer = document.getElementById('penalty-all-riders-container');
+    const countBadge = document.getElementById('penalty-rider-count-badge');
+
+    if (singleContainer) singleContainer.classList.toggle('hidden', mode !== 'single');
+    if (multiContainer) {
+        multiContainer.classList.toggle('hidden', mode !== 'multi');
+        if (mode === 'multi') multiContainer.classList.add('flex');
+        else multiContainer.classList.remove('flex');
+    }
+    if (allContainer) allContainer.classList.toggle('hidden', mode !== 'all');
+
+    if (countBadge) {
+        if (mode === 'multi') {
+            countBadge.classList.remove('hidden');
+            countBadge.innerText = `${selectedPenaltyRiders.size} Selected`;
+        } else if (mode === 'all') {
+            countBadge.classList.remove('hidden');
+            countBadge.innerText = `All Active`;
+        } else {
+            countBadge.classList.add('hidden');
+        }
+    }
+}
+
+export function setPenaltyDateMode(mode) {
+    penaltyDateMode = mode;
+    ['single', 'range'].forEach(m => {
+        const tab = document.getElementById(`penalty-date-tab-${m}`);
+        if (tab) {
+            if (m === mode) {
+                tab.className = "py-1.5 rounded-lg bg-red-600 text-white font-bold transition shadow cursor-pointer";
+            } else {
+                tab.className = "py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-bold transition cursor-pointer";
+            }
+        }
+    });
+
+    const singleContainer = document.getElementById('penalty-single-date-container');
+    const rangeContainer = document.getElementById('penalty-date-range-container');
+
+    if (singleContainer) singleContainer.classList.toggle('hidden', mode !== 'single');
+    if (rangeContainer) {
+        rangeContainer.classList.toggle('hidden', mode !== 'range');
+        if (mode === 'range') rangeContainer.classList.add('flex');
+        else rangeContainer.classList.remove('flex');
+    }
+    updatePenaltyDateRangeSummary();
+}
+
+export function togglePenaltyRiderCheckbox(name, checked) {
+    if (checked) {
+        selectedPenaltyRiders.add(name);
+    } else {
+        selectedPenaltyRiders.delete(name);
+    }
+    updatePenaltyMultiStatus();
+}
+
+export function selectAllPenaltyRiders(checked) {
+    const list = document.getElementById('penalty-riders-checkbox-list');
+    if (!list) return;
+    const inputs = list.querySelectorAll('input[type="checkbox"]');
+    inputs.forEach(input => {
+        const parentLabel = input.closest('label');
+        if (!parentLabel || parentLabel.style.display !== 'none') {
+            input.checked = checked;
+            if (checked) selectedPenaltyRiders.add(input.value);
+            else selectedPenaltyRiders.delete(input.value);
+        }
+    });
+    updatePenaltyMultiStatus();
+}
+
+export function filterPenaltyRidersList(query) {
+    const list = document.getElementById('penalty-riders-checkbox-list');
+    if (!list) return;
+    const q = (query || "").toLowerCase().trim();
+    const labels = list.querySelectorAll('label');
+    labels.forEach(label => {
+        const text = label.innerText.toLowerCase();
+        if (!q || text.includes(q)) {
+            label.style.display = 'flex';
+        } else {
+            label.style.display = 'none';
+        }
+    });
+}
+
+function updatePenaltyMultiStatus() {
+    const statusText = document.getElementById('penalty-multi-status-text');
+    const countBadge = document.getElementById('penalty-rider-count-badge');
+    const count = selectedPenaltyRiders.size;
+    if (statusText) statusText.innerText = `${count} selected`;
+    if (countBadge && penaltyRiderMode === 'multi') countBadge.innerText = `${count} Selected`;
+}
+
+export function setPenaltyRatePreset(rate) {
+    const rateInput = document.getElementById('penalty-rate-input');
+    if (rateInput) rateInput.value = rate;
+}
+
+export function setPenaltyReasonPreset(reason) {
+    const reasonInput = document.getElementById('penalty-reason-input');
+    if (reasonInput) reasonInput.value = reason;
+}
+
+export function updatePenaltyDateRangeSummary() {
+    const startInput = document.getElementById('penalty-start-date-input');
+    const endInput = document.getElementById('penalty-end-date-input');
+    const summary = document.getElementById('penalty-date-range-summary');
+    if (!startInput || !endInput || !summary) return;
+
+    const startVal = startInput.value;
+    const endVal = endInput.value || startVal;
+
+    if (!startVal) {
+        summary.innerText = "Select start date";
+        return;
+    }
+
+    const dates = getDatesInRange(startVal, endVal);
+    const count = dates.length;
+    summary.innerText = `${count} day${count === 1 ? '' : 's'} selected (${startVal}${startVal !== endVal ? ' to ' + endVal : ''})`;
+}
+
+export function reviewAdminPenalty() {
+    const cleanRiders = getCleanRiderList();
+    let targetRiders = [];
+
+    if (penaltyRiderMode === 'single') {
+        const riderSelect = document.getElementById('penalty-rider-select');
+        const rName = riderSelect ? riderSelect.value.trim() : "";
+        if (!rName) return showToast("⚠️ Please select a rider from the dropdown.");
+        targetRiders = [rName];
+    } else if (penaltyRiderMode === 'multi') {
+        targetRiders = Array.from(selectedPenaltyRiders);
+        if (targetRiders.length === 0) return showToast("⚠️ Please select at least one rider.");
+    } else if (penaltyRiderMode === 'all') {
+        targetRiders = [...cleanRiders];
+        if (targetRiders.length === 0) return showToast("⚠️ No active riders found to penalize.");
+    }
+
+    let targetDates = [];
+    if (penaltyDateMode === 'single') {
+        const dateInput = document.getElementById('penalty-date-input');
+        const dVal = dateInput ? dateInput.value : "";
+        if (!dVal) return showToast("⚠️ Please select a target date.");
+        targetDates = [dVal];
+    } else {
+        const startInput = document.getElementById('penalty-start-date-input');
+        const endInput = document.getElementById('penalty-end-date-input');
+        const startVal = startInput ? startInput.value : "";
+        const endVal = endInput ? endInput.value : "";
+        if (!startVal || !endVal) return showToast("⚠️ Please select both start and end dates.");
+        if (startVal > endVal) return showToast("⚠️ Start date cannot be after end date.");
+        targetDates = getDatesInRange(startVal, endVal);
+        if (targetDates.length === 0) return showToast("⚠️ Invalid date range.");
+    }
+
+    const rateInput = document.getElementById('penalty-rate-input');
+    const penaltyRate = rateInput ? parseFloat(rateInput.value) : 0;
+    if (isNaN(penaltyRate) || penaltyRate <= 0 || penaltyRate > 100) {
+        return showToast("⚠️ Please enter a valid penalty percentage between 1% and 100%.");
+    }
+
+    const reasonInput = document.getElementById('penalty-reason-input');
+    const reason = reasonInput && reasonInput.value.trim() ? reasonInput.value.trim() : "Admin Penalty";
+
+    const totalRecords = targetRiders.length * targetDates.length;
+
+    pendingPenaltyPlan = {
+        targetRiders,
+        targetDates,
+        penaltyRate,
+        reason,
+        totalRecords
+    };
+
+    // Populate Step 2 Review UI
+    const ridersDisplay = document.getElementById('penalty-review-riders-display');
+    const datesDisplay = document.getElementById('penalty-review-dates-display');
+    const rateDisplay = document.getElementById('penalty-review-rate-display');
+    const countDisplay = document.getElementById('penalty-review-count-display');
+    const reasonDisplay = document.getElementById('penalty-review-reason-display');
+
+    if (ridersDisplay) {
+        if (targetRiders.length <= 4) {
+            ridersDisplay.innerText = targetRiders.join(', ');
+        } else {
+            ridersDisplay.innerText = `${targetRiders.slice(0, 3).join(', ')} + ${targetRiders.length - 3} more (${targetRiders.length} riders total)`;
+        }
+    }
+
+    if (datesDisplay) {
+        if (targetDates.length === 1) {
+            datesDisplay.innerText = `${targetDates[0]} (Single Day)`;
+        } else {
+            datesDisplay.innerText = `${targetDates[0]} to ${targetDates[targetDates.length - 1]} (${targetDates.length} days)`;
+        }
+    }
+
+    if (rateDisplay) rateDisplay.innerText = `+${penaltyRate}% Commission Surcharge`;
+    if (countDisplay) countDisplay.innerText = `${totalRecords} record${totalRecords === 1 ? '' : 's'} (${targetRiders.length} rider${targetRiders.length === 1 ? '' : 's'} × ${targetDates.length} day${targetDates.length === 1 ? '' : 's'})`;
+    if (reasonDisplay) reasonDisplay.innerText = `"${escapeHtml(reason)}"`;
+
+    // Switch to step 2 review
+    const formStep = document.getElementById('penalty-modal-step-form');
+    const reviewStep = document.getElementById('penalty-modal-step-review');
+    if (formStep) formStep.classList.add('hidden');
+    if (reviewStep) reviewStep.classList.remove('hidden');
+}
+
+export function penaltyBackToForm() {
+    const formStep = document.getElementById('penalty-modal-step-form');
+    const reviewStep = document.getElementById('penalty-modal-step-review');
+    if (reviewStep) reviewStep.classList.add('hidden');
+    if (formStep) formStep.classList.remove('hidden');
+}
+
+export async function executeAdminPenaltySubmission() {
+    if (!pendingPenaltyPlan) return showToast("⚠️ No pending penalty to apply.");
+    const { targetRiders, targetDates, penaltyRate, reason, totalRecords } = pendingPenaltyPlan;
+
+    const updates = {};
+    const createdBy = appState.riderName || "Admin";
+    const now = Date.now();
+
+    if (!globalState.globalCommissionPenalties) globalState.globalCommissionPenalties = {};
+
+    targetRiders.forEach(rName => {
+        const cleanName = rName.toLowerCase().trim();
+        const rosterMem = (globalState.rosterMembers || []).find(m => 
+            isRiderMatch(rName, m.riderName || m.name || "", "", m.telegramId || m.id)
+        );
+        const rId = rosterMem ? (rosterMem.telegramId || rosterMem.id || "").toString().trim() : "";
+
+        targetDates.forEach(dStr => {
+            const penaltyKey = `${cleanName}_${dStr}`;
+            const record = {
+                riderName: rName,
+                telegramId: rId,
+                date: dStr,
+                penaltyPercentage: penaltyRate,
+                reason: reason,
+                createdBy: createdBy,
+                createdAt: now
+            };
+
+            updates[`commissionPenalties/${penaltyKey}`] = record;
+            globalState.globalCommissionPenalties[penaltyKey] = record;
+        });
+    });
+
+    try {
+        if (db) {
+            await db.ref().update(updates);
+        }
+        closeAdminPenaltyModal();
+        showToast(`⚖️ Confirmed! Applied +${penaltyRate}% penalty to ${targetRiders.length} rider(s) for ${targetDates.length} day(s) (${totalRecords} record${totalRecords === 1 ? '' : 's'})!`);
+        refreshCommissionView();
+    } catch (err) {
+        console.error("Failed to save penalties:", err);
+        showToast(`❌ Failed to apply penalties: ${err.message || "Database error"}`);
+    }
 }
 
 export function submitAdminPenalty() {
-    const riderSelect = document.getElementById('penalty-rider-select');
-    const dateInput = document.getElementById('penalty-date-input');
-    const rateInput = document.getElementById('penalty-rate-input');
-    const reasonInput = document.getElementById('penalty-reason-input');
+    reviewAdminPenalty();
+}
 
-    const rName = riderSelect ? riderSelect.value.trim() : "";
-    const targetDate = dateInput ? dateInput.value : getLocalTodayStr();
-    const penaltyRate = rateInput ? parseFloat(rateInput.value) : 0;
-    const reason = reasonInput ? reasonInput.value.trim() : "Admin Penalty";
+export function removeAdminPenaltyByKey(penaltyKey, riderName, targetDate) {
+    const rec = (globalState.globalCommissionPenalties || {})[penaltyKey];
+    const rName = riderName || (rec ? rec.riderName : "Rider");
+    const dStr = targetDate || (rec ? rec.date : "");
+    const perc = rec ? rec.penaltyPercentage : "";
 
-    if (!rName) return showToast("⚠️ Please select a rider.");
-    if (isNaN(penaltyRate) || penaltyRate <= 0) return showToast("⚠️ Please enter a valid penalty percentage.");
-
-    const cleanName = rName.toLowerCase().trim();
-    const penaltyKey = `${cleanName}_${targetDate}`;
-
-    const rosterMem = (globalState.rosterMembers || []).find(m => 
-        isRiderMatch(rName, m.riderName || m.name || "", "", m.telegramId || m.id)
+    openSlideDeleteModal(
+        `Remove Penalty?`,
+        `Are you sure you want to remove the +${perc}% commission penalty for ${rName} on ${dStr}?`,
+        async () => {
+            if (db) {
+                await db.ref(`commissionPenalties/${penaltyKey}`).remove().catch(() => {});
+            }
+            if (globalState.globalCommissionPenalties) {
+                delete globalState.globalCommissionPenalties[penaltyKey];
+            }
+            showToast(`✅ Penalty removed for ${rName} on ${dStr}`);
+            refreshCommissionView();
+        }
     );
-    const rId = rosterMem ? (rosterMem.telegramId || rosterMem.id || "").toString().trim() : "";
-
-    const penaltyRecord = {
-        riderName: rName,
-        telegramId: rId,
-        date: targetDate,
-        penaltyPercentage: penaltyRate,
-        reason: reason,
-        createdBy: appState.riderName || "Admin",
-        createdAt: Date.now()
-    };
-
-    if (db) {
-        db.ref(`commissionPenalties/${penaltyKey}`).set(penaltyRecord);
-    }
-
-    if (!globalState.globalCommissionPenalties) globalState.globalCommissionPenalties = {};
-    globalState.globalCommissionPenalties[penaltyKey] = penaltyRecord;
-
-    closeAdminPenaltyModal();
-    showToast(`⚖️ Added +${penaltyRate}% Commission Penalty for ${rName} on ${targetDate}!`);
-    refreshCommissionView();
 }
 
 export function removeAdminPenalty(riderName, targetDate) {
     const cleanName = (riderName || "").toLowerCase().trim();
     const penaltyKey = `${cleanName}_${targetDate}`;
-
-    openSlideDeleteModal(`Remove Date Penalty?`, `Are you sure you want to remove the +commission penalty for ${riderName} on ${targetDate}?`, () => {
-        if (db) {
-            db.ref(`commissionPenalties/${penaltyKey}`).remove();
-            
-            db.ref('commissionPenalties')
-                .orderByChild('date')
-                .equalTo(targetDate)
-                .once('value', (snap) => {
-                    const val = snap.val() || {};
-                    Object.entries(val).forEach(([key, rec]) => {
-                        if (isRiderMatch(riderName, rec.riderName || key.split('_')[0])) {
-                            db.ref(`commissionPenalties/${key}`).remove();
-                        }
-                    });
-                });
-        }
-        if (globalState.globalCommissionPenalties) {
-            delete globalState.globalCommissionPenalties[penaltyKey];
-            Object.keys(globalState.globalCommissionPenalties).forEach(key => {
-                const rec = globalState.globalCommissionPenalties[key];
-                if (rec && isSameDateStr(rec.date, targetDate) && isRiderMatch(riderName, rec.riderName || key.split('_')[0])) {
-                    delete globalState.globalCommissionPenalties[key];
-                }
-            });
-        }
-        showToast(`✅ Penalty removed for ${riderName}`);
-        refreshCommissionView();
-    });
+    removeAdminPenaltyByKey(penaltyKey, riderName, targetDate);
 }
 
 /**
@@ -430,8 +731,20 @@ export function promptAdminEditCustomerFee(riderName, customerName, dateVal, cur
 if (typeof window !== 'undefined') {
     window.openAdminPenaltyModal = openAdminPenaltyModal;
     window.closeAdminPenaltyModal = closeAdminPenaltyModal;
+    window.setPenaltyRiderMode = setPenaltyRiderMode;
+    window.setPenaltyDateMode = setPenaltyDateMode;
+    window.togglePenaltyRiderCheckbox = togglePenaltyRiderCheckbox;
+    window.selectAllPenaltyRiders = selectAllPenaltyRiders;
+    window.filterPenaltyRidersList = filterPenaltyRidersList;
+    window.setPenaltyRatePreset = setPenaltyRatePreset;
+    window.setPenaltyReasonPreset = setPenaltyReasonPreset;
+    window.updatePenaltyDateRangeSummary = updatePenaltyDateRangeSummary;
+    window.reviewAdminPenalty = reviewAdminPenalty;
+    window.penaltyBackToForm = penaltyBackToForm;
+    window.executeAdminPenaltySubmission = executeAdminPenaltySubmission;
     window.submitAdminPenalty = submitAdminPenalty;
     window.removeAdminPenalty = removeAdminPenalty;
+    window.removeAdminPenaltyByKey = removeAdminPenaltyByKey;
     window.waiveEarlyShiftPenalty = waiveEarlyShiftPenalty;
     window.promptAdminAddCommissionRecord = promptAdminAddCommissionRecord;
     window.closeAdminAddCommModal = closeAdminAddCommModal;

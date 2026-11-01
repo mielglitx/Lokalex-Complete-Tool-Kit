@@ -215,8 +215,48 @@ function getOrCreateMenuGalleryModal() {
     return modal;
 }
 
-function compressImageToBlob(fileOrBlob, maxWidth = 1800, quality = 0.85, enhanceDocument = true) {
-    return new Promise((resolve, reject) => {
+function compressImageToBlob(fileOrBlob, maxWidth = 1600, quality = 0.80, enhanceDocument = true) {
+    return new Promise(async (resolve, reject) => {
+        // Fast-path: Hardware-accelerated decode using createImageBitmap if available
+        if (typeof createImageBitmap === 'function' && (fileOrBlob instanceof Blob || fileOrBlob instanceof File)) {
+            try {
+                const bitmap = await createImageBitmap(fileOrBlob);
+                let width = bitmap.width;
+                let height = bitmap.height;
+
+                if (width > maxWidth) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+
+                const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: false });
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+
+                if (enhanceDocument && ctx.filter !== undefined) {
+                    ctx.filter = 'contrast(1.08) brightness(1.02) saturate(1.05)';
+                }
+
+                ctx.drawImage(bitmap, 0, 0, width, height);
+                if (bitmap.close) bitmap.close();
+
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        resolve(blob);
+                    } else {
+                        reject(new Error("Canvas blob compression failed."));
+                    }
+                }, 'image/jpeg', quality);
+                return;
+            } catch (err) {
+                console.warn('[ImageCompress] createImageBitmap fast-path failed, fallback to Image:', err);
+            }
+        }
+
         let objectUrl = "";
         if (typeof fileOrBlob === 'string' && fileOrBlob.startsWith('data:')) {
             objectUrl = fileOrBlob;
@@ -273,6 +313,9 @@ function compressImageToBlob(fileOrBlob, maxWidth = 1800, quality = 0.85, enhanc
     });
 }
 
+let cameraCaptureMode = 'bulk';
+let bulkCameraQueue = [];
+
 export function getOrCreateMenuCameraModal() {
     let modal = document.getElementById('store-menu-camera-modal');
     if (!modal) {
@@ -289,11 +332,11 @@ export function getOrCreateMenuCameraModal() {
             </button>
             <div class="text-center min-w-0 flex-1 px-1 sm:px-2">
                 <h4 id="menu-camera-title" class="text-xs sm:text-sm font-black truncate text-white">Menu Document Scanner</h4>
-                <p id="menu-camera-sub" class="text-[9px] sm:text-[10px] text-amber-400 font-medium truncate">Instant HD Capture • Zoom & Rotate</p>
+                <p id="menu-camera-sub" class="text-[9px] sm:text-[10px] text-amber-400 font-medium truncate">Instant HD Capture • Continuous Multi-Shot</p>
             </div>
             <div class="flex items-center gap-1.5 sm:gap-2">
-                <!-- Native Camera Direct Trigger -->
-                <input type="file" id="menu-camera-native-input" accept="image/*" capture="environment" class="hidden" onchange="window.handleNativeMenuCameraCapture && window.handleNativeMenuCameraCapture(event)">
+                <!-- Native Camera Direct Trigger (Supports multi-select) -->
+                <input type="file" id="menu-camera-native-input" accept="image/*" capture="environment" multiple class="hidden" onchange="window.handleNativeMenuCameraCapture && window.handleNativeMenuCameraCapture(event)">
                 <button type="button" onclick="document.getElementById('menu-camera-native-input').click()" class="px-2 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold flex items-center gap-1 transition cursor-pointer" title="Switch to Native HD Camera App">
                     <i class="fa-solid fa-camera"></i> <span class="hidden xs:inline">Native</span>
                 </button>
@@ -329,7 +372,7 @@ export function getOrCreateMenuCameraModal() {
                 <button type="button" onclick="window.setMenuCameraZoomLevel && window.setMenuCameraZoomLevel(3)" class="menu-zoom-pill px-2.5 py-1 rounded-full text-[11px] font-bold backdrop-blur-md transition cursor-pointer bg-black/60 text-white/90 border border-white/20 hover:bg-white/20" data-zoom="3">3x</button>
             </div>
 
-            <!-- Snap review preview container (hidden until snapshot taken) -->
+            <!-- Snap review preview container (hidden until snapshot taken in single mode) -->
             <div id="menu-camera-review-container" class="absolute inset-0 bg-black/95 flex flex-col justify-between hidden z-30">
                 <div class="px-4 py-2.5 bg-black/85 flex items-center justify-between text-white text-xs font-bold border-b border-white/10">
                     <span class="flex items-center gap-1.5 text-amber-400">
@@ -360,14 +403,47 @@ export function getOrCreateMenuCameraModal() {
         </div>
 
         <!-- Camera Bottom Controls Bar -->
-        <div id="menu-camera-bottom-bar" class="p-4 sm:p-5 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center gap-2 z-20 border-t border-white/10">
-            <div class="flex items-center justify-center w-full">
-                <button type="button" onclick="window.takeMenuCameraSnapshot && window.takeMenuCameraSnapshot()" class="w-18 h-18 rounded-full border-4 border-white flex items-center justify-center bg-white/20 active:scale-90 transition p-1 cursor-pointer shadow-2xl focus:outline-none" title="Capture Photo">
-                    <div class="w-14 h-14 rounded-full bg-amber-500 hover:bg-amber-400 transition shadow-inner"></div>
+        <div id="menu-camera-bottom-bar" class="p-3 sm:p-4 bg-black/95 backdrop-blur-md flex flex-col items-center justify-center gap-2 z-20 border-t border-white/10">
+            <!-- Mode Switcher (Bulk Multi-Shot vs Single Snap) -->
+            <div class="flex items-center justify-center gap-2 mb-0.5">
+                <button type="button" id="menu-camera-mode-bulk-btn" onclick="window.setMenuCameraMode && window.setMenuCameraMode('bulk')" class="px-3 py-1 rounded-full text-[11px] font-black transition cursor-pointer bg-amber-400 text-black shadow-md flex items-center gap-1.5">
+                    <i class="fa-solid fa-layer-group"></i> Bulk Multi-Shot
+                </button>
+                <button type="button" id="menu-camera-mode-single-btn" onclick="window.setMenuCameraMode && window.setMenuCameraMode('single')" class="px-3 py-1 rounded-full text-[11px] font-bold transition cursor-pointer bg-black/60 text-white/80 border border-white/20 hover:bg-white/20 flex items-center gap-1.5">
+                    <i class="fa-solid fa-camera"></i> Single Snap
                 </button>
             </div>
+
+            <!-- Bulk Snap Reel Tray -->
+            <div id="menu-camera-bulk-tray" class="w-full flex flex-col gap-1 px-1 hidden">
+                <div class="flex items-center justify-between text-xs text-white">
+                    <span class="font-bold flex items-center gap-1.5 text-amber-400 text-[11px]">
+                        <i class="fa-solid fa-images"></i> <span id="menu-camera-bulk-count-label">0 Pages Captured</span>
+                    </span>
+                    <button type="button" onclick="window.clearMenuCameraBulkQueue && window.clearMenuCameraBulkQueue()" class="text-[10px] text-gray-400 hover:text-red-400 font-bold transition">
+                        Clear All
+                    </button>
+                </div>
+                <div id="menu-camera-bulk-thumbnails" class="flex items-center gap-2 overflow-x-auto py-1 no-scrollbar min-h-[56px] max-w-full"></div>
+            </div>
+
+            <!-- Live Shutter Trigger Button -->
+            <div class="flex items-center justify-center w-full relative">
+                <button type="button" onclick="window.takeMenuCameraSnapshot && window.takeMenuCameraSnapshot()" class="relative w-18 h-18 rounded-full border-4 border-white flex items-center justify-center bg-white/20 active:scale-90 transition p-1 cursor-pointer shadow-2xl focus:outline-none" title="Capture Photo">
+                    <div class="w-14 h-14 rounded-full bg-amber-500 hover:bg-amber-400 transition shadow-inner flex items-center justify-center">
+                        <i class="fa-solid fa-camera text-black/60 text-lg"></i>
+                    </div>
+                    <span id="menu-camera-shutter-badge" class="hidden absolute -top-1 -right-1 min-w-[22px] h-[22px] px-1 bg-red-600 text-white text-[10px] font-black rounded-full border-2 border-black flex items-center justify-center shadow-lg animate-pulse">0</span>
+                </button>
+            </div>
+
+            <!-- Bulk Upload All Action Button -->
+            <button type="button" id="menu-camera-upload-bulk-btn" onclick="window.uploadAllBulkCameraPages && window.uploadAllBulkCameraPages()" class="hidden w-full max-w-xs bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 px-4 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs cursor-pointer">
+                <i class="fa-solid fa-cloud-arrow-up text-sm"></i> <span id="menu-camera-upload-bulk-label">Upload All (0 Pages)</span>
+            </button>
+
             <p class="text-[10px] text-gray-400 font-medium tracking-wide">
-                Hold phone steady • Tap to capture sharp text & prices
+                Hold steady • Point and snap multiple menu pages continuously
             </p>
         </div>`;
         document.body.appendChild(modal);
@@ -814,19 +890,17 @@ async function ensurePhotoOrientation(blob, desiredOrientation, tiltGamma, tiltA
 }
 
 export async function handleNativeMenuCameraCapture(event) {
-    const file = event?.target?.files?.[0];
-    if (!file || !activeGalleryStore) return;
+    const files = Array.from(event?.target?.files || []);
+    if (files.length === 0 || !activeGalleryStore) return;
 
-    showToast("📸 Processing native high-res camera photo...");
+    showToast(`📸 Processing ${files.length} native high-res photo(s)...`);
     try {
-        const optimizedBlob = await compressImageToBlob(file, 2048, 0.88, true);
-        const pagesSnap = currentGalleryPages || [];
-        const nextIdx = pagesSnap.length + 1;
-        const caption = `Menu Page ${nextIdx}`;
-
-        await uploadSingleMenuBlob(optimizedBlob, caption, activeGalleryStore.key, activeGalleryStore.name);
-        showToast(`✅ High-Res photo saved for ${activeGalleryStore.name}!`);
-        showSideNotification("MENU PAGE ADDED", `${activeGalleryStore.name} (${caption})`, "fa-camera", "text-amber-400", "border-amber-500");
+        const items = files.map(f => ({ file: f, isCompressed: false }));
+        await uploadBatchMenuBlobs(items, activeGalleryStore.key, activeGalleryStore.name, (done, total) => {
+            showToast(`📸 Uploaded photo ${done} of ${total}...`);
+        });
+        showToast(`✅ ${files.length} photo(s) saved for ${activeGalleryStore.name}!`);
+        showSideNotification("MENU ADDED", `${activeGalleryStore.name} (+${files.length} pages)`, "fa-camera", "text-amber-400", "border-amber-500");
         closeMenuCameraScanner();
         openStoreMenuGalleryModal(activeGalleryStore.name, activeGalleryStore.key);
     } catch(err) {
@@ -898,6 +972,126 @@ export function closeMenuCameraScanner() {
     isTorchOn = false;
     currentCameraZoom = 1;
     updateTorchBtnUi(false);
+    clearMenuCameraBulkQueue(true);
+}
+
+export function setMenuCameraMode(mode) {
+    cameraCaptureMode = mode;
+    const bulkBtn = document.getElementById('menu-camera-mode-bulk-btn');
+    const singleBtn = document.getElementById('menu-camera-mode-single-btn');
+    const bulkTray = document.getElementById('menu-camera-bulk-tray');
+    const uploadBtn = document.getElementById('menu-camera-upload-bulk-btn');
+
+    if (mode === 'bulk') {
+        if (bulkBtn) bulkBtn.className = "px-3 py-1 rounded-full text-[11px] font-black transition cursor-pointer bg-amber-400 text-black shadow-md flex items-center gap-1.5";
+        if (singleBtn) singleBtn.className = "px-3 py-1 rounded-full text-[11px] font-bold transition cursor-pointer bg-black/60 text-white/80 border border-white/20 hover:bg-white/20 flex items-center gap-1.5";
+        if (bulkCameraQueue.length > 0) {
+            if (bulkTray) bulkTray.classList.remove('hidden');
+            if (uploadBtn) uploadBtn.classList.remove('hidden');
+        }
+    } else {
+        if (singleBtn) singleBtn.className = "px-3 py-1 rounded-full text-[11px] font-black transition cursor-pointer bg-amber-400 text-black shadow-md flex items-center gap-1.5";
+        if (bulkBtn) bulkBtn.className = "px-3 py-1 rounded-full text-[11px] font-bold transition cursor-pointer bg-black/60 text-white/80 border border-white/20 hover:bg-white/20 flex items-center gap-1.5";
+        if (bulkTray) bulkTray.classList.add('hidden');
+        if (uploadBtn) uploadBtn.classList.add('hidden');
+    }
+}
+
+export function renderBulkCameraTray() {
+    const tray = document.getElementById('menu-camera-bulk-tray');
+    const thumbContainer = document.getElementById('menu-camera-bulk-thumbnails');
+    const countLabel = document.getElementById('menu-camera-bulk-count-label');
+    const uploadBtn = document.getElementById('menu-camera-upload-bulk-btn');
+    const uploadLabel = document.getElementById('menu-camera-upload-bulk-label');
+    const shutterBadge = document.getElementById('menu-camera-shutter-badge');
+
+    if (!tray) return;
+
+    const count = bulkCameraQueue.length;
+    if (count > 0 && cameraCaptureMode === 'bulk') {
+        tray.classList.remove('hidden');
+        if (uploadBtn) uploadBtn.classList.remove('hidden');
+        if (countLabel) countLabel.innerText = `${count} Page${count > 1 ? 's' : ''} Captured`;
+        if (uploadLabel) uploadLabel.innerText = `Upload All (${count} Page${count > 1 ? 's' : ''})`;
+        if (shutterBadge) {
+            shutterBadge.innerText = count;
+            shutterBadge.classList.remove('hidden');
+        }
+
+        if (thumbContainer) {
+            thumbContainer.innerHTML = bulkCameraQueue.map((item, idx) => `
+                <div class="relative shrink-0 w-12 h-14 rounded-lg overflow-hidden border border-amber-400/80 shadow-md group">
+                    <img src="${item.thumbUrl}" alt="Page ${idx + 1}" class="w-full h-full object-cover">
+                    <span class="absolute bottom-0 left-0 right-0 bg-black/80 text-[8.5px] text-amber-300 font-bold text-center leading-tight">P${idx + 1}</span>
+                    <button type="button" onclick="window.removeBulkCameraQueueItem && window.removeBulkCameraQueueItem(${idx})" class="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-red-600 text-white flex items-center justify-center text-[8px] shadow cursor-pointer active:scale-90" title="Delete snapshot">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            `).join('');
+            thumbContainer.scrollLeft = thumbContainer.scrollWidth;
+        }
+    } else {
+        tray.classList.add('hidden');
+        if (uploadBtn) uploadBtn.classList.add('hidden');
+        if (shutterBadge) shutterBadge.classList.add('hidden');
+    }
+}
+
+export function removeBulkCameraQueueItem(idx) {
+    if (bulkCameraQueue[idx]) {
+        try { URL.revokeObjectURL(bulkCameraQueue[idx].thumbUrl); } catch(e) {}
+        bulkCameraQueue.splice(idx, 1);
+        renderBulkCameraTray();
+        showToast("🗑️ Snapshot removed.");
+    }
+}
+
+export function clearMenuCameraBulkQueue(silent = false) {
+    bulkCameraQueue.forEach(item => {
+        try { URL.revokeObjectURL(item.thumbUrl); } catch(e) {}
+    });
+    bulkCameraQueue = [];
+    renderBulkCameraTray();
+    if (!silent) showToast("🧹 Cleared snapped pages.");
+}
+
+export async function uploadAllBulkCameraPages() {
+    if (!activeGalleryStore || bulkCameraQueue.length === 0) return;
+
+    const uploadBtn = document.getElementById('menu-camera-upload-bulk-btn');
+    if (uploadBtn) {
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-sm"></i> <span>Uploading ${bulkCameraQueue.length} pages...</span>`;
+    }
+
+    const totalCount = bulkCameraQueue.length;
+    showToast(`⏳ Rapidly uploading ${totalCount} menu page(s)...`);
+
+    try {
+        const itemsToUpload = bulkCameraQueue.map(item => ({
+            blob: item.blob,
+            caption: item.caption,
+            isCompressed: true
+        }));
+
+        await uploadBatchMenuBlobs(itemsToUpload, activeGalleryStore.key, activeGalleryStore.name, (done, total) => {
+            showToast(`⏳ Uploaded ${done} of ${total} pages...`);
+        });
+
+        showToast(`✅ Successfully saved ${totalCount} pages for ${activeGalleryStore.name}!`);
+        showSideNotification("MENU UPLOADED", `${activeGalleryStore.name} (+${totalCount} pages)`, "fa-book-open", "text-emerald-400", "border-emerald-500");
+
+        clearMenuCameraBulkQueue(true);
+        closeMenuCameraScanner();
+        openStoreMenuGalleryModal(activeGalleryStore.name, activeGalleryStore.key);
+    } catch(err) {
+        console.error("Bulk upload error:", err);
+        showToast("❌ Failed to upload photos: " + (err.message || err));
+        if (uploadBtn) {
+            uploadBtn.disabled = false;
+            uploadBtn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up text-sm"></i> <span>Upload All (${totalCount} Pages)</span>`;
+        }
+    }
 }
 
 export async function takeMenuCameraSnapshot() {
@@ -959,8 +1153,6 @@ export async function takeMenuCameraSnapshot() {
 
     // High-Clarity Direct Stream Capture:
     // We capture directly from the live, focused, sharp HTML5 video stream onto an HD canvas.
-    // This avoids ImageCapture.takePhoto() HAL bugs on Android multi-camera phones (which caused
-    // blurry autofocus resets and wide/0.6x sensor distortion).
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(visibleW);
     canvas.height = Math.round(visibleH);
@@ -977,7 +1169,7 @@ export async function takeMenuCameraSnapshot() {
         0, 0, canvas.width, canvas.height
     );
 
-    let capturedBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.96));
+    let capturedBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.90));
 
     if (capturedBlob) {
         // Automatically ensure photo dimensions and orientation match the phone orientation
@@ -986,6 +1178,24 @@ export async function takeMenuCameraSnapshot() {
 
     if (!capturedBlob) {
         showToast("❌ Failed to capture photo.");
+        return;
+    }
+
+    // Bulk Mode: continuously collect snapshots without interrupting camera viewfinder
+    if (cameraCaptureMode === 'bulk') {
+        const thumbUrl = URL.createObjectURL(capturedBlob);
+        const nextIdx = (currentGalleryPages ? currentGalleryPages.length : 0) + bulkCameraQueue.length + 1;
+        const pageCaption = `Menu Page ${nextIdx}`;
+
+        bulkCameraQueue.push({
+            blob: capturedBlob,
+            thumbUrl: thumbUrl,
+            caption: pageCaption,
+            timestamp: Date.now()
+        });
+
+        renderBulkCameraTray();
+        showToast(`📸 ${pageCaption} snapped! (${bulkCameraQueue.length} queued)`);
         return;
     }
 
@@ -1271,22 +1481,116 @@ export async function uploadSingleMenuBlob(imageBlob, captionText, storeKey, sto
     return { count, pageId, finalImageUrl, caption: finalCaption };
 }
 
+export async function uploadBatchMenuBlobs(items, storeKey, storeName, onProgress = null) {
+    if (!items || items.length === 0 || !storeKey) return [];
+    const riderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
+    const riderId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const todayFormatted = new Date().toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+
+    let startCount = 1;
+    if (db) {
+        try {
+            const snap = await db.ref(`directory/storeMenuGalleries/${storeKey}/pages`).once('value');
+            if (snap.exists()) {
+                startCount = Object.keys(snap.val()).length + 1;
+            }
+        } catch(e) {}
+    }
+
+    let completedCount = 0;
+    const total = items.length;
+    const concurrency = 3; // Fast parallel uploads
+    const results = [];
+
+    for (let i = 0; i < items.length; i += concurrency) {
+        const chunk = items.slice(i, i + concurrency);
+        await Promise.all(chunk.map(async (item, chunkIdx) => {
+            const globalIdx = i + chunkIdx;
+            const pageOrder = startCount + globalIdx;
+            const pageId = `PAGE_${Date.now()}_${globalIdx}_${Math.random().toString(36).substring(2, 6)}`;
+            const storagePath = `menus/${storeKey}/${pageId}.jpg`;
+
+            let blob = item.blob;
+            if (!blob && item.file) {
+                blob = await compressImageToBlob(item.file, 1600, 0.80, true);
+            } else if (blob && !item.isCompressed) {
+                blob = await compressImageToBlob(blob, 1600, 0.80, true);
+            }
+
+            const finalImageUrl = await uploadImage(blob, storagePath, {
+                storeKey: storeKey,
+                uploaderId: riderId,
+                uploaderName: riderName
+            });
+
+            const finalCaption = item.caption && item.caption.trim() && item.caption.trim() !== "Menu Page" 
+                ? item.caption.trim() 
+                : `Menu Page ${pageOrder}`;
+
+            const pagePayload = {
+                id: pageId,
+                imageUrl: finalImageUrl,
+                caption: finalCaption,
+                uploaderName: riderName,
+                uploaderId: riderId,
+                orderIndex: pageOrder,
+                uploadedAt: todayFormatted
+            };
+
+            if (db) {
+                await db.ref(`directory/storeMenuGalleries/${storeKey}/pages/${pageId}`).set(pagePayload);
+            }
+
+            completedCount++;
+            if (typeof onProgress === 'function') {
+                try { onProgress(completedCount, total); } catch(e) {}
+            }
+            results.push(pagePayload);
+        }));
+    }
+
+    const finalCount = startCount + total - 1;
+    const nowTs = Date.now();
+    if (db) {
+        await Promise.all([
+            db.ref(`directory/storeMenuGalleries/${storeKey}/updatedAt`).set(nowTs),
+            db.ref(`directory/storeMenuGalleries/${storeKey}/storeName`).set(storeName),
+            db.ref(`directory/storeMenuMeta/${storeKey}`).set({
+                pageCount: finalCount,
+                updatedAt: nowTs,
+                storeName: storeName
+            })
+        ]).catch(e => console.warn('Menu meta update warning:', e));
+    }
+
+    storeMenuMetadataMap[storeKey] = {
+        pageCount: finalCount,
+        updatedAt: nowTs,
+        storeName: storeName
+    };
+    try {
+        localStorage.setItem('lokalex_store_menus_meta_cache', JSON.stringify(storeMenuMetadataMap));
+    } catch(e) {}
+
+    return results;
+}
+
 export async function handleMenuPhotoUpload(e) {
     const files = Array.from(e.target.files || []);
     if (files.length === 0 || !activeGalleryStore) return;
 
     const input = e.target;
-    showToast(`⏳ Compressing and uploading ${files.length} menu photo(s)...`);
+    showToast(`⏳ Rapidly compressing & uploading ${files.length} menu photo(s)...`);
 
     try {
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const imageBlob = await compressImageToBlob(file, 1800, 0.85, true);
-            await uploadSingleMenuBlob(imageBlob, `Menu Page`, activeGalleryStore.key, activeGalleryStore.name);
-        }
+        const items = files.map(f => ({ file: f, isCompressed: false }));
+        await uploadBatchMenuBlobs(items, activeGalleryStore.key, activeGalleryStore.name, (done, total) => {
+            showToast(`⏳ Uploaded ${done} of ${total} photo(s)...`);
+        });
 
         showToast(`✅ Uploaded ${files.length} menu page(s) for ${activeGalleryStore.name}!`);
         showSideNotification("MENU UPLOADED", `${activeGalleryStore.name} (+${files.length} pages)`, "fa-book-open", "text-emerald-400", "border-emerald-500");
+        openStoreMenuGalleryModal(activeGalleryStore.name, activeGalleryStore.key);
     } catch(err) {
         console.error("Upload error:", err);
         showToast("❌ Failed to save photo: " + (err.message || "Upload failed"));
