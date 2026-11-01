@@ -714,7 +714,7 @@ app.post('/webhook', async (req, res) => {
         // Fallback: If message has attachments but media wasn't in webhook payload, query Meta Graph API
         if (hasAttachment && images.length === 0 && !videoUrl && !audioUrl && !docUrl && token && item.message.mid) {
           try {
-            const midResp = await fetch(`https://graph.facebook.com/v19.0/${item.message.mid}?fields=attachments{id,mime_type,name,size,image_data,video_data,file_url,payload,subattachments}&access_token=${token}`);
+            const midResp = await fetch(`https://graph.facebook.com/v19.0/${item.message.mid}?fields=attachments&access_token=${token}`);
             if (midResp.ok) {
               const midData = await midResp.json();
               const attachments = midData?.attachments?.data || [];

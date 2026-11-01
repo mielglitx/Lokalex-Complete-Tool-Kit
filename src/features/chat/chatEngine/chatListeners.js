@@ -87,7 +87,7 @@ function triggerInstantFbAttachmentResolution(custId, msg, container, custData) 
             }
 
             const mediaPreview = existing.videoUrl ? '🎥 Video' : (existing.audioUrl ? '🎤 Voice message' : (existing.images && existing.images.length > 1 ? `📷 ${existing.images.length} Photos` : (existing.imageUrl ? '📷 Photo' : (existing.fileUrl ? '📄 Document' : existing.text))));
-            if (!existing.text || existing.text === '📷 Photo' || existing.text === 'Facebook Message') {
+            if (!existing.text || existing.text.includes('[Facebook') || existing.text === '📷 Photo' || existing.text === 'Facebook Message') {
                 existing.text = mediaPreview;
             }
 
@@ -632,6 +632,37 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
             const hasNewerMessages = !lastLoadedMsg || 
                 (latestMsgInAll && !loadedRiderMsgsMap.has(latestMsgInAll.id)) ||
                 (latestMsgInAll && lastLoadedMsg && getMessageTimestamp(latestMsgInAll) > getMessageTimestamp(lastLoadedMsg));
+
+            // Sync latest message to customerChatMeta and feed cards if metadata is behind
+            if (latestMsgInAll) {
+                const latestTs = getMessageTimestamp(latestMsgInAll);
+                const metaTs = Number(currentRiderChatMeta?.lastUpdated) || 0;
+                if (latestTs > metaTs) {
+                    const isFromCust = !latestMsgInAll.isRider && latestMsgInAll.senderType !== 'admin';
+                    const preview = latestMsgInAll.text || (latestMsgInAll.videoUrl ? "🎥 Video" : (latestMsgInAll.imageUrl ? "📷 Photo" : (latestMsgInAll.audioUrl ? "🎤 Voice message" : (latestMsgInAll.locationCoords ? "📍 Location" : "Message"))));
+                    const formattedPreview = isFromCust ? preview : `You: ${preview}`;
+
+                    try {
+                        if (typeof getCachedCustomerThreadsMap === 'function') {
+                            const threadsMap = getCachedCustomerThreadsMap();
+                            const dedupKey = getThreadDedupKey(custId, currentRiderChatMeta || {});
+                            const existingThread = threadsMap.get(dedupKey) || threadsMap.get(custId);
+                            if (existingThread && latestTs >= (existingThread.lastUpdated || 0)) {
+                                existingThread.lastMessage = formattedPreview;
+                                existingThread.lastUpdated = latestTs;
+                                existingThread.hasRealMessages = true;
+                            }
+                        }
+                    } catch (_) {}
+
+                    if (db) {
+                        db.ref(`customerChatMeta/${custId}`).update({
+                            lastMessage: formattedPreview,
+                            lastUpdated: latestTs
+                        }).catch(() => {});
+                    }
+                }
+            }
 
             if (!hasLocalRecord || loadedRiderMsgsMap.size === 0 || hasNewerMessages) {
                 // Strictly display only the last 10 messages on initial open

@@ -224,15 +224,15 @@ export function renderDocumentCardHtml(msg, isRider = false) {
 export function isVideoUrlOrType(msg) {
     if (!msg) return false;
     if (msg.type === 'video' || msg.videoUrl) return true;
-    const url = msg.videoUrl || msg.fileUrl || msg.imageUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : '');
-    if (typeof url !== 'string') return false;
+    const url = msg.videoUrl || msg.fileUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : '');
+    if (typeof url !== 'string' || !url) return false;
     const cleanUrl = url.split('?')[0].split('#')[0].toLowerCase();
     const videoExtensions = /\.(mp4|webm|mov|m4v|3gp|mkv|ogg)$/i;
-    return videoExtensions.test(cleanUrl) || cleanUrl.includes('video.xx.fbcdn.net') || cleanUrl.includes('/video-');
+    return videoExtensions.test(cleanUrl) || cleanUrl.includes('video.xx.fbcdn.net');
 }
 
 export function getVideoDetails(msg) {
-    const rawUrl = msg.videoUrl || (isVideoUrlOrType(msg) ? (msg.fileUrl || msg.imageUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : '')) : '');
+    const rawUrl = msg.videoUrl || (isVideoUrlOrType(msg) ? (msg.fileUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : '')) : '');
     let videoName = msg.videoName || msg.fileName || '';
     if (!videoName && rawUrl) {
         try {
@@ -313,14 +313,14 @@ let currentPlayingChatAudioId = null;
 export function isAudioUrlOrType(msg) {
     if (!msg) return false;
     if (msg.type === 'audio' || msg.type === 'voice' || msg.audioUrl) return true;
-    const url = msg.audioUrl || msg.fileUrl || msg.imageUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : '');
-    if (typeof url !== 'string') return false;
+    const url = msg.audioUrl || msg.fileUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : '');
+    if (typeof url !== 'string' || !url) return false;
     const cleanUrl = url.split('?')[0].split('#')[0].toLowerCase();
     return /\.(aac|mp3|m4a|wav|ogg|opus)(\?|$)/i.test(cleanUrl) || cleanUrl.includes('audioclip');
 }
 
 export function getAudioDetails(msg) {
-    const rawUrl = msg.audioUrl || (isAudioUrlOrType(msg) ? (msg.fileUrl || msg.imageUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : null)) : null);
+    const rawUrl = msg.audioUrl || (isAudioUrlOrType(msg) ? (msg.fileUrl || (typeof msg.text === 'string' && msg.text.startsWith('http') ? msg.text : null)) : null);
     return {
         url: rawUrl,
         durationStr: msg.audioDuration || '0:00'
@@ -992,24 +992,33 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const isDoc = isDocumentUrlOrType(m);
     const documentMarkup = isDoc ? renderDocumentCardHtml(m, isRider) : '';
 
-    const isVid = isVideoUrlOrType(m);
+    const isVid = !isDoc && isVideoUrlOrType(m);
     const videoMarkup = isVid ? renderVideoCardHtml(m, isRider) : '';
 
-    const isAud = isAudioUrlOrType(m);
+    const isAud = !isDoc && !isVid && isAudioUrlOrType(m);
     const audioMarkup = isAud ? renderAudioCardHtml(m, isRider) : '';
 
-    const imageList = (
+    const imageList = (!isDoc) ? (
         Array.isArray(m.images) && m.images.length > 0 
             ? m.images.filter(Boolean)
-            : (m.imageUrl && !isDoc && !isVideoUrlOrType({ videoUrl: m.imageUrl }) && !isAudioUrlOrType({ audioUrl: m.imageUrl })
+            : (m.imageUrl 
                 ? [m.imageUrl] 
-                : (m.type === 'image' && m.text && !m.text.includes('[Facebook') && !m.text.includes('Photo') ? [m.text] : []))
-    );
+                : (m.type === 'image' && m.text && !m.text.includes('[Facebook') && !m.text.includes('Photo') && m.text.startsWith('http') ? [m.text] : []))
+    ) : [];
 
     const hasMedia = isDoc || isVid || isAud || imageList.length > 0;
     const isResolvingFbMedia = !hasMedia && (
-        (m.text && (m.text.includes('[Facebook') || m.text === '📷 Photo' || m.text === '🎥 Video' || m.text === '🎤 Voice message' || /^📷 \d+ Photos$/.test(m.text))) ||
-        (m.type && m.type !== 'text') ||
+        (m.text && (
+            m.text.includes('[Facebook') || 
+            m.text === '📷 Photo' || 
+            m.text === 'Photo' ||
+            m.text === '🎥 Video' || 
+            m.text === 'Video' ||
+            m.text === '🎤 Voice message' || 
+            m.text === 'Voice message' ||
+            /^📷 \d+ Photos?$/.test(m.text)
+        )) ||
+        (m.type && m.type !== 'text' && m.type !== 'system') ||
         (!m.text && (m.mid || (m.id && String(m.id).startsWith('m_'))))
     );
     const isLikeSticker = !isDoc && !isVid && !isAud && imageList.length === 1 && Boolean(m.isSticker || m.stickerType === 'like' || (imageList[0].includes('369239') || imageList[0].includes('sticker') || imageList[0].includes('like')));
@@ -1079,11 +1088,14 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
         m.text && (
             m.text.includes('[Facebook') || 
             m.text === '📷 Photo' || 
+            m.text === 'Photo' ||
             m.text === '🎥 Video' || 
+            m.text === 'Video' ||
             m.text === '🎤 Voice message' || 
+            m.text === 'Voice message' ||
             m.text === 'Facebook Message' ||
             m.text === '📄 Document' ||
-            /^📷 \d+ Photos$/.test(m.text)
+            /^📷 \d+ Photos?$/.test(m.text)
         )
     );
     const isDocFilenameText = isDoc && m.text && (m.text === m.fileName || m.text === m.fileUrl || m.text === m.imageUrl || m.text === '📄 Document' || m.text.startsWith('http'));
@@ -1502,7 +1514,8 @@ export function handleChatImageLoadError(imgEl, msgId) {
     if (!activeCustId) return;
 
     if (typeof window.resolveFacebookMessageAttachment === 'function') {
-        window.resolveFacebookMessageAttachment(activeCustId, msgId, msgId).then(freshUrl => {
+        window.resolveFacebookMessageAttachment(activeCustId, msgId, msgId).then(res => {
+            const freshUrl = (typeof res === 'string') ? res : (res?.imageUrl || (res?.images && res.images[0]) || null);
             if (freshUrl && freshUrl !== imgEl.src) {
                 imgEl.src = freshUrl;
             }

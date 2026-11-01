@@ -597,7 +597,7 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid) {
             const fetchAttachmentWithToken = async (token) => {
                 const cleanToken = (token || '').trim();
                 if (!cleanToken) throw new Error("No token");
-                const resp = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(cleanMid)}?fields=id,message,attachments{id,mime_type,name,size,image_data,video_data,file_url,payload,subattachments}&access_token=${encodeURIComponent(cleanToken)}`);
+                const resp = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(cleanMid)}?fields=id,message,attachments&access_token=${encodeURIComponent(cleanToken)}`);
                 if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
                 const data = await resp.json();
                 const attachments = data?.attachments?.data || [];
