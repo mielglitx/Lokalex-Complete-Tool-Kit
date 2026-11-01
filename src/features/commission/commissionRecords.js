@@ -355,8 +355,8 @@ export async function executeAdminPenaltySubmission() {
     if (!pendingPenaltyPlan) return showToast("⚠️ No pending penalty to apply.");
     const { targetRiders, targetDates, penaltyRate, reason, totalRecords } = pendingPenaltyPlan;
 
-    const penaltyUpdates = {};
-    const createdBy = appState.riderName || "Admin";
+    const penaltyEntries = [];
+    const createdBy = (appState.riderName || "Admin").toString().trim();
     const now = Date.now();
 
     if (!globalState.globalCommissionPenalties) globalState.globalCommissionPenalties = {};
@@ -372,23 +372,26 @@ export async function executeAdminPenaltySubmission() {
             const safeDate = String(dStr || '').trim().replace(/[.#$\[\]\/]/g, '_');
             const penaltyKey = `${safeName}_${safeDate}`;
             const record = {
-                riderName: rName,
-                telegramId: rId,
-                date: dStr,
-                penaltyPercentage: penaltyRate,
-                reason: reason,
-                createdBy: createdBy,
+                riderName: String(rName || '').trim(),
+                telegramId: String(rId || '').trim(),
+                date: String(dStr || '').trim(),
+                penaltyPercentage: Number(penaltyRate) || 0,
+                reason: String(reason || 'Admin Penalty').trim(),
+                createdBy: createdBy || 'Admin',
                 createdAt: now
             };
 
-            penaltyUpdates[penaltyKey] = record;
+            penaltyEntries.push({ key: penaltyKey, record });
             globalState.globalCommissionPenalties[penaltyKey] = record;
         });
     });
 
     try {
         if (db) {
-            await db.ref('commissionPenalties').update(penaltyUpdates);
+            const writePromises = penaltyEntries.map(({ key, record }) => 
+                db.ref('commissionPenalties').child(key).set(record)
+            );
+            await Promise.all(writePromises);
         }
         closeAdminPenaltyModal();
         showToast(`⚖️ Confirmed! Applied +${penaltyRate}% penalty to ${targetRiders.length} rider(s) for ${targetDates.length} day(s) (${totalRecords} record${totalRecords === 1 ? '' : 's'})!`);

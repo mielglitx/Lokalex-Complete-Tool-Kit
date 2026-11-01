@@ -323,9 +323,9 @@ public class LokalexForegroundService extends Service {
                     wakeLock.setReferenceCounted(false);
                 }
             }
-            if (wakeLock != null) {
-                // Acquire with 15-minute safety timeout, continuously refreshed by performBackgroundCheck
-                wakeLock.acquire(15 * 60 * 1000L);
+            if (wakeLock != null && !wakeLock.isHeld()) {
+                // Keep CPU awake while foreground service is running for zero-latency background chat polling
+                wakeLock.acquire();
             }
         } catch (Exception ignored) {}
     }
@@ -426,7 +426,13 @@ public class LokalexForegroundService extends Service {
             PendingIntent pi = PendingIntent.getBroadcast(this, 9944, intent, flags);
             long triggerAt = System.currentTimeMillis() + 25000L; // 25s hardware alarm
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (am.canScheduleExactAlarms()) {
+                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi);
+                } else {
+                    am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi);
+                }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi);
             } else {
                 am.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pi);

@@ -172,7 +172,7 @@ function executeRenderRiderCustomerChatFeed() {
         const isDone = (t.status === 'completed' || t.status === 'done' || t.status === 'cancelled' || t.folder === 'done');
         const completedAt = Number(t.completedAt) || 0;
         const lastMsgTime = Number(t.lastUpdated) || Number(t.timestamp) || 0;
-        const isNewMessageAfterDone = isDone && completedAt > 0 && lastMsgTime > (completedAt + 3000) && t.unreadForRider === true && t.lastMessage && !t.lastMessage.startsWith('You:');
+        const isNewMessageAfterDone = isDone && (completedAt <= 0 || lastMsgTime >= completedAt) && t.unreadForRider === true && t.lastMessage && !t.lastMessage.startsWith('You:');
 
         if (isDone && !isNewMessageAfterDone) {
             t.folder = 'done';

@@ -28,21 +28,23 @@ export function initCartScroller() {
         const scrollHeight = list.scrollHeight;
         const clientHeight = list.clientHeight;
         const maxScroll = scrollHeight - clientHeight;
+        const itemCount = list.children ? list.children.length : 0;
+        const shouldShow = maxScroll > 6 || itemCount >= 5;
 
-        // If screen is not full (does not overflow)
-        if (maxScroll <= 15) {
+        // If screen is not full (does not overflow) and fewer than 5 items
+        if (!shouldShow) {
             track.classList.add('opacity-0', 'pointer-events-none');
             track.classList.remove('opacity-100');
             return;
         }
 
-        // Screen is full: ALWAYS VISIBLE
+        // Screen is full or 5+ items: ALWAYS VISIBLE
         track.classList.remove('opacity-0', 'pointer-events-none');
         track.classList.add('opacity-100');
 
         const trackHeight = track.clientHeight - thumb.clientHeight;
         if (trackHeight <= 0) return;
-        const ratio = Math.max(0, Math.min(1, list.scrollTop / maxScroll));
+        const ratio = maxScroll > 0 ? Math.max(0, Math.min(1, list.scrollTop / maxScroll)) : 0;
         thumb.style.top = `${ratio * trackHeight}px`;
     };
 
@@ -149,8 +151,13 @@ export function updateCartScroller() {
     const thumb = document.getElementById('cart-slider-thumb');
     if (!list || !track || !thumb) return;
 
-    const maxScroll = list.scrollHeight - list.clientHeight;
-    if (maxScroll <= 15) {
+    const scrollHeight = list.scrollHeight;
+    const clientHeight = list.clientHeight;
+    const maxScroll = scrollHeight - clientHeight;
+    const itemCount = list.children ? list.children.length : 0;
+    const shouldShow = maxScroll > 6 || itemCount >= 5;
+
+    if (!shouldShow) {
         track.classList.add('opacity-0', 'pointer-events-none');
         track.classList.remove('opacity-100');
     } else {
@@ -158,7 +165,7 @@ export function updateCartScroller() {
         track.classList.add('opacity-100');
         const trackHeight = track.clientHeight - thumb.clientHeight;
         if (trackHeight > 0) {
-            const ratio = Math.max(0, Math.min(1, list.scrollTop / maxScroll));
+            const ratio = maxScroll > 0 ? Math.max(0, Math.min(1, list.scrollTop / maxScroll)) : 0;
             thumb.style.top = `${ratio * trackHeight}px`;
         }
     }

@@ -266,6 +266,59 @@
         overscroll-behavior-y: contain !important;
         will-change: scroll-position;
     }
+
+    /* ========================================================================== */
+    /* UNIVERSAL SCROLLBAR ELIMINATION & SLEEK MOBILE SCROLLBARS                  */
+    /* ========================================================================== */
+    .no-scrollbar::-webkit-scrollbar,
+    [class*="no-scrollbar"]::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        -webkit-appearance: none !important;
+    }
+
+    .no-scrollbar,
+    [class*="no-scrollbar"] {
+        -ms-overflow-style: none !important;
+        scrollbar-width: none !important;
+    }
+
+    /* Eliminate native Windows/Android desktop scrollbar arrow buttons across the app */
+    ::-webkit-scrollbar-button {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+    }
+
+    /* Global sleek minimal scrollbar for all scrollable containers */
+    ::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.35);
+        border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: rgba(148, 163, 184, 0.65);
+    }
+
+    /* Chat message list sleek minimal scrollbar */
+    #rider-chat-messages-container::-webkit-scrollbar,
+    #rider-cust-chat-messages::-webkit-scrollbar,
+    #store-rider-chat-messages::-webkit-scrollbar {
+        width: 3px;
+    }
+    #rider-chat-messages-container::-webkit-scrollbar-thumb,
+    #rider-cust-chat-messages::-webkit-scrollbar-thumb,
+    #store-rider-chat-messages::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.25);
+        border-radius: 9999px;
+    }
 </style>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">

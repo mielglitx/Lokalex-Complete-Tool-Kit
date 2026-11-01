@@ -1084,31 +1084,35 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const encodedText = encodeURIComponent(m.text || '').replace(/'/g, '%27');
     const encodedSender = encodeURIComponent(senderName).replace(/'/g, '%27');
 
+    const cleanMsgText = (m.text || '').trim();
     const isPlaceholderText = Boolean(
-        m.text && (
-            m.text.includes('[Facebook') || 
-            m.text === '📷 Photo' || 
-            m.text === 'Photo' ||
-            m.text === '🎥 Video' || 
-            m.text === 'Video' ||
-            m.text === '🎤 Voice message' || 
-            m.text === 'Voice message' ||
-            m.text === 'Facebook Message' ||
-            m.text === '📄 Document' ||
-            /^📷 \d+ Photos?$/.test(m.text)
+        cleanMsgText && (
+            cleanMsgText.includes('[Facebook') || 
+            cleanMsgText === '📷 Photo' || 
+            cleanMsgText.toLowerCase() === 'photo' ||
+            cleanMsgText === '🎥 Video' || 
+            cleanMsgText.toLowerCase() === 'video' ||
+            cleanMsgText === '🎤 Voice message' || 
+            cleanMsgText.toLowerCase() === 'voice message' ||
+            cleanMsgText === 'Facebook Message' ||
+            cleanMsgText.toLowerCase() === 'document' ||
+            cleanMsgText === '📄 Document' ||
+            /^📷 \d+ Photos?$/i.test(cleanMsgText)
         )
     );
-    const isDocFilenameText = isDoc && m.text && (m.text === m.fileName || m.text === m.fileUrl || m.text === m.imageUrl || m.text === '📄 Document' || m.text.startsWith('http'));
-    const isVideoPlaceholderText = isVid && m.text && (m.text === '🎥 Video' || m.text === m.videoName || m.text === m.videoUrl || m.text.startsWith('http'));
-    const isAudioPlaceholderText = isAud && m.text && (m.text === '🎤 Voice message' || m.text.includes('[Facebook') || m.text.startsWith('http'));
-    const isMultiImagePlaceholderText = imageList.length > 1 && m.text && (m.text.includes('Photos') || m.text.includes('[Facebook'));
+    const isDocFilenameText = isDoc && cleanMsgText && (cleanMsgText === m.fileName || cleanMsgText === m.fileUrl || cleanMsgText === m.imageUrl || cleanMsgText === '📄 Document' || cleanMsgText.startsWith('http'));
+    const isVideoPlaceholderText = isVid && cleanMsgText && (cleanMsgText === '🎥 Video' || cleanMsgText.toLowerCase() === 'video' || cleanMsgText === m.videoName || cleanMsgText === m.videoUrl || cleanMsgText.startsWith('http'));
+    const isAudioPlaceholderText = isAud && cleanMsgText && (cleanMsgText === '🎤 Voice message' || cleanMsgText.toLowerCase() === 'voice message' || cleanMsgText.includes('[Facebook') || cleanMsgText.startsWith('http'));
+    const isMultiImagePlaceholderText = imageList.length > 1 && cleanMsgText && (cleanMsgText.includes('Photos') || cleanMsgText.includes('[Facebook') || cleanMsgText.toLowerCase() === 'photo');
+    const isSingleImagePlaceholderText = imageList.length === 1 && cleanMsgText && (cleanMsgText === '📷 Photo' || cleanMsgText.toLowerCase() === 'photo' || cleanMsgText.includes('[Facebook') || cleanMsgText.startsWith('http'));
     const showText = Boolean(
-        m.text && 
+        cleanMsgText && 
         !isPlaceholderText && 
         !isDocFilenameText && 
         !isVideoPlaceholderText && 
         !isAudioPlaceholderText && 
         !isMultiImagePlaceholderText && 
+        !isSingleImagePlaceholderText &&
         !isResolvingFbMedia && 
         !locationHtml && 
         !(isLikeSticker && imageList.length)
