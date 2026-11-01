@@ -433,6 +433,17 @@ public class MainActivity extends BridgeActivity {
                 }
 
                 @JavascriptInterface
+                public void exitFloatingWindowMode() {
+                    new Handler(Looper.getMainLooper()).post(() -> {
+                        try {
+                            Intent intent = new Intent(MainActivity.this, MainActivity.class);
+                            intent.setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                            startActivity(intent);
+                        } catch (Exception ignored) {}
+                    });
+                }
+
+                @JavascriptInterface
                 public void playNativeChatChime(String folder) {
                     MainActivity.this.playNativeChime(folder);
                 }

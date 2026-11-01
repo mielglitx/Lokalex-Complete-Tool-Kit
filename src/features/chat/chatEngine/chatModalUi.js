@@ -99,6 +99,9 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
     }
 
     const modal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
+    if (typeof document !== 'undefined' && document.documentElement) {
+        document.documentElement.classList.add('has-chat-open');
+    }
     const nameEl = document.getElementById('rider-chat-cust-name');
     const avatarEl = document.getElementById('rider-chat-avatar') || document.getElementById('rider-chat-cust-avatar');
 
@@ -622,6 +625,12 @@ export function closeRiderCustomerChatModal() {
     if (modal) {
         modal.classList.add('hidden');
         toggleBodyScroll(false);
+    }
+    if (typeof document !== 'undefined' && document.documentElement) {
+        document.documentElement.classList.remove('has-chat-open');
+    }
+    if (typeof window !== 'undefined' && typeof window.updatePipBadgeState === 'function') {
+        window.updatePipBadgeState();
     }
 
     if (activeRiderChatListener) {

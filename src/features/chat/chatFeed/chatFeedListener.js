@@ -676,6 +676,9 @@ export function updateAllChatFolderBadges() {
         stores: 0
     };
 
+    let myCateringUnread = 0;
+    const loggedInAuth = getLoggedInRiderInfo();
+
     allThreads.forEach(t => {
         // 1. Must be marked unread
         if (!t.isUnread) return;
@@ -716,6 +719,9 @@ export function updateAllChatFolderBadges() {
             const isCatered = folder === 'catering' || Boolean(t.cateredByRiderName || t.cateredByRiderId || t.cateredBy);
             if (isCatered) {
                 counts.catering++;
+                if (isMyCustomerThread(t, loggedInAuth)) {
+                    myCateringUnread++;
+                }
             } else if (folder === 'applicant' || t.isApplicant === true) {
                 counts.applicant++;
             } else if (folder === 'followup') {
@@ -762,7 +768,228 @@ export function updateAllChatFolderBadges() {
         });
     });
 
+    // Update PiP Interactive Floating Badge
+    try {
+        updatePipBadgeState({ inboxCount: counts.inbox, myCateringUnread: myCateringUnread });
+    } catch (e) {
+        console.warn('updatePipBadgeState error in updateAllChatFolderBadges:', e);
+    }
+
     return counts;
+}
+
+/**
+ * Checks whether the logged-in rider is currently catering an active order.
+ */
+export function isRiderCurrentlyCatering(loggedInAuth = null) {
+    try {
+        const { myId, myName } = loggedInAuth || getLoggedInRiderInfo();
+        if (!myId && !myName) return false;
+
+        // 1. Check active roster status
+        if (globalState.rosterMembers && Array.isArray(globalState.rosterMembers)) {
+            const myRecord = globalState.rosterMembers.find(m =>
+                (myId && (m.telegramId || m.id || '').toString() === myId) ||
+                (myName && (m.riderName || m.name || '').trim().toLowerCase() === myName)
+            );
+            if (myRecord && myRecord.status === 'Catering') {
+                return true;
+            }
+        }
+
+        // 2. Check cached customer threads for assigned catering threads
+        if (cachedCustomerThreadsMap) {
+            for (const t of cachedCustomerThreadsMap.values()) {
+                const isAlreadyDone = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+                if (isAlreadyDone) continue;
+                const folder = (t.folder || 'inbox').toLowerCase();
+                if (folder === 'spam' || folder === 'other') continue;
+                const isCatered = folder === 'catering' || Boolean(t.cateredByRiderName || t.cateredByRiderId || t.cateredBy);
+                if (isCatered && isMyCustomerThread(t, { myId, myName })) {
+                    return true;
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('isRiderCurrentlyCatering error:', e);
+    }
+    return false;
+}
+
+/**
+ * Updates the Picture-in-Picture (PiP) floating interactive badge in real time.
+ * - Blue ring if no chat in inbox and not currently catering
+ * - Yellow ring if currently catering
+ * - Green badge on the ring with count of unread chats in inbox
+ * - Orange badge on the ring with count of unread chats for the customer the rider is currently catering
+ */
+export function updatePipBadgeState(countsObj = null) {
+    if (typeof document === 'undefined') return;
+
+    const ringContainer = document.getElementById('pip-badge-ring-container') || document.querySelector('#pip-stashed-badge > div');
+    const pingRing = document.getElementById('pip-badge-ping-ring') || ringContainer?.querySelector('span');
+    const cateringBadge = document.getElementById('pip-badge-catering-counter');
+    const cateringCountEl = document.getElementById('pip-badge-catering-count');
+    const inboxBadge = document.getElementById('pip-badge-inbox-counter');
+    const inboxCountEl = document.getElementById('pip-badge-inbox-count');
+    const statusPill = document.getElementById('pip-badge-status-pill');
+
+    if (!ringContainer) return;
+
+    const loggedInAuth = getLoggedInRiderInfo();
+    const isCatering = isRiderCurrentlyCatering(loggedInAuth);
+
+    let inboxCount = 0;
+    let myCateringUnread = 0;
+
+    if (countsObj && typeof countsObj.inboxCount === 'number') {
+        inboxCount = countsObj.inboxCount;
+        myCateringUnread = countsObj.myCateringUnread || 0;
+    } else {
+        const allThreads = cachedCustomerThreadsMap ? Array.from(cachedCustomerThreadsMap.values()) : [];
+        allThreads.forEach(t => {
+            if (!t.isUnread) return;
+            if (t.lastMessage && t.lastMessage.startsWith('You:')) return;
+            const name = (t.customerName || '').trim().toLowerCase();
+            if (!name || name === 'customer' || name === 'customer name' || name === 'unknown') return;
+            const isDone = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+            if (isDone) return;
+            const folder = (t.folder || 'inbox').toLowerCase();
+            if (folder === 'spam' || folder === 'other') return;
+
+            const isCatered = folder === 'catering' || Boolean(t.cateredByRiderName || t.cateredByRiderId || t.cateredBy);
+            if (isCatered) {
+                if (isMyCustomerThread(t, loggedInAuth)) myCateringUnread++;
+            } else if (folder !== 'applicant' && folder !== 'followup' && folder !== 'done' && !t.isApplicant) {
+                inboxCount++;
+            }
+        });
+    }
+
+    // 1. UPDATE RING COLOR:
+    // "blue ring if no chat in inbox and not currently catering"
+    // "yellow ring if currently catering"
+    if (isCatering) {
+        ringContainer.className = 'relative w-16 h-16 rounded-full bg-slate-900 border-[3px] border-amber-400 dark:border-yellow-400 shadow-xl shadow-yellow-400/40 flex items-center justify-center transition-all duration-300 active:scale-90';
+        if (pingRing) {
+            pingRing.className = 'absolute -inset-1 rounded-full border-2 border-amber-300 dark:border-yellow-300 animate-ping opacity-40 pointer-events-none';
+        }
+        if (statusPill) {
+            statusPill.textContent = 'Catering';
+            statusPill.className = 'absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-amber-500/90 text-black font-black text-[8px] px-1.5 py-0.2 rounded-full uppercase tracking-wider shadow-sm pointer-events-none';
+            statusPill.classList.remove('hidden');
+        }
+    } else {
+        ringContainer.className = 'relative w-16 h-16 rounded-full bg-slate-900 border-[3px] border-sky-500 dark:border-blue-500 shadow-xl shadow-sky-500/30 flex items-center justify-center transition-all duration-300 active:scale-90';
+        if (pingRing) {
+            pingRing.className = 'absolute -inset-1 rounded-full border-2 border-sky-400 dark:border-blue-400 animate-ping opacity-25 pointer-events-none';
+        }
+        if (statusPill) {
+            statusPill.classList.add('hidden');
+        }
+    }
+
+    // 2. NOTIFICATION BADGES ON THE RING:
+    // Orange badge: Catering unread for rider's currently catered customer
+    if (cateringBadge && cateringCountEl) {
+        if (myCateringUnread > 0) {
+            cateringCountEl.textContent = myCateringUnread > 99 ? '99+' : myCateringUnread.toString();
+            cateringBadge.classList.remove('hidden');
+        } else {
+            cateringBadge.classList.add('hidden');
+        }
+    }
+
+    // Green badge: Inbox unread
+    if (inboxBadge && inboxCountEl) {
+        if (inboxCount > 0) {
+            inboxCountEl.textContent = inboxCount > 99 ? '99+' : inboxCount.toString();
+            inboxBadge.classList.remove('hidden');
+        } else {
+            inboxBadge.classList.add('hidden');
+        }
+    }
+
+    // Dynamic placement when both or single badge is visible
+    if (cateringBadge && inboxBadge) {
+        if (myCateringUnread > 0 && inboxCount > 0) {
+            cateringBadge.className = 'absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none animate-pulse z-20';
+            inboxBadge.className = 'absolute -bottom-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none z-20';
+        } else if (myCateringUnread > 0) {
+            cateringBadge.className = 'absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none animate-pulse z-20';
+        } else if (inboxCount > 0) {
+            inboxBadge.className = 'absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none z-20';
+        }
+    }
+}
+
+/**
+ * Handles clicks / taps on the Picture-in-Picture floating badge.
+ */
+export function handlePipBadgeClick(e) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    try {
+        if (typeof window.triggerNativeHaptic === 'function') window.triggerNativeHaptic('medium');
+    } catch (_) {}
+
+    const myAuth = getLoggedInRiderInfo();
+    const allThreads = cachedCustomerThreadsMap ? Array.from(cachedCustomerThreadsMap.values()) : [];
+
+    // Priority 1: Unread catering message for current rider
+    const unreadCaterThread = allThreads.find(t => {
+        if (!t.isUnread) return false;
+        if (t.lastMessage && t.lastMessage.startsWith('You:')) return false;
+        const isDone = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+        if (isDone) return false;
+        const isCatered = (t.folder || '').toLowerCase() === 'catering' || Boolean(t.cateredByRiderName || t.cateredByRiderId || t.cateredBy);
+        return isCatered && isMyCustomerThread(t, myAuth);
+    });
+
+    // Priority 2: Unread inbox message
+    const unreadInboxThread = allThreads.find(t => {
+        if (!t.isUnread) return false;
+        if (t.lastMessage && t.lastMessage.startsWith('You:')) return false;
+        const isDone = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+        if (isDone) return false;
+        const folder = (t.folder || 'inbox').toLowerCase();
+        return folder === 'inbox' && !t.cateredByRiderName && !t.cateredByRiderId;
+    });
+
+    // Priority 3: Active catering thread for current rider (even if already read)
+    const activeCaterThread = allThreads.find(t => {
+        const isDone = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+        if (isDone) return false;
+        const isCatered = (t.folder || '').toLowerCase() === 'catering' || Boolean(t.cateredByRiderName || t.cateredByRiderId || t.cateredBy);
+        return isCatered && isMyCustomerThread(t, myAuth);
+    });
+
+    const targetThread = unreadCaterThread || unreadInboxThread || activeCaterThread;
+
+    // Unstash DOM
+    if (typeof document !== 'undefined' && document.documentElement) {
+        document.documentElement.classList.remove('pip-stashed');
+        document.body.classList.remove('pip-stashed');
+    }
+
+    if (targetThread && typeof window.openRiderChatModal === 'function') {
+        const threadKey = targetThread.custId || targetThread.id || targetThread.threadId;
+        if (threadKey) {
+            window.openRiderChatModal(threadKey, targetThread.customerName || '', targetThread.avatarUrl || '');
+            if (typeof document !== 'undefined' && document.documentElement) {
+                document.documentElement.classList.add('has-chat-open');
+            }
+            return;
+        }
+    }
+
+    // Fallback: bring app to full screen from PiP
+    if (typeof window.exitFloatingWindowMode === 'function') {
+        window.exitFloatingWindowMode();
+    }
 }
 
 export function updateInboxUnreadBadge() {
@@ -911,5 +1138,28 @@ if (typeof window !== 'undefined') {
     window.markCustomerChatAsRead = markCustomerChatAsRead;
     window.markCustomerChatAsUnread = markCustomerChatAsUnread;
     window.toggleCustomerChatUnread = toggleCustomerChatUnread;
+    window.updatePipBadgeState = updatePipBadgeState;
+    window.handlePipBadgeClick = handlePipBadgeClick;
+    window.isRiderCurrentlyCatering = isRiderCurrentlyCatering;
+
+    window.addEventListener('rosterUpdated', () => {
+        try {
+            updatePipBadgeState();
+        } catch (_) {}
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                updatePipBadgeState();
+            } catch (_) {}
+        });
+    } else {
+        setTimeout(() => {
+            try {
+                updatePipBadgeState();
+            } catch (_) {}
+        }, 300);
+    }
 }
 

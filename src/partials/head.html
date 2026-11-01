@@ -239,14 +239,19 @@
         border-radius: 0 !important;
         border: none !important;
     }
+    html.in-floating-mode #rider-chat-expand-btn {
+        display: flex !important;
+    }
 
-    /* Stashed / Edge-Docked Floating Window Mode (Badge View) */
+    /* Stashed / Edge-Docked Floating Window Mode (Interactive Badge View) */
     html.pip-stashed body > *:not(#pip-stashed-badge),
-    html.in-floating-mode.pip-stashed body > *:not(#pip-stashed-badge) {
+    html.in-floating-mode.pip-stashed body > *:not(#pip-stashed-badge),
+    html.in-floating-mode:not(.has-chat-open) body > *:not(#pip-stashed-badge) {
         display: none !important;
     }
     html.pip-stashed #pip-stashed-badge,
-    html.in-floating-mode.pip-stashed #pip-stashed-badge {
+    html.in-floating-mode.pip-stashed #pip-stashed-badge,
+    html.in-floating-mode:not(.has-chat-open) #pip-stashed-badge {
         display: flex !important;
     }
 

@@ -123,6 +123,7 @@ export async function initNativeBridge() {
 
         // 4. Floating Window & Overlay Badge Global Handlers
         window.enterFloatingWindowMode = enterFloatingWindowMode;
+        window.exitFloatingWindowMode = exitFloatingWindowMode;
         window.isFloatingWindowSupported = isFloatingWindowSupported;
         window.isFloatingWindowAllowed = isFloatingWindowAllowed;
         window.isInFloatingWindowMode = isInFloatingWindowMode;
@@ -148,11 +149,22 @@ export async function initNativeBridge() {
             if (isInPip) {
                 document.documentElement.classList.add('in-floating-mode');
                 document.body.classList.add('in-floating-mode');
+                // Detect if chat modal is active
+                const chatModal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
+                if (chatModal && !chatModal.classList.contains('hidden')) {
+                    document.documentElement.classList.add('has-chat-open');
+                } else {
+                    document.documentElement.classList.remove('has-chat-open');
+                }
             } else {
                 document.documentElement.classList.remove('in-floating-mode');
                 document.body.classList.remove('in-floating-mode');
                 document.documentElement.classList.remove('pip-stashed');
                 document.body.classList.remove('pip-stashed');
+                document.documentElement.classList.remove('has-chat-open');
+            }
+            if (typeof window.updatePipBadgeState === 'function') {
+                window.updatePipBadgeState();
             }
             window.dispatchEvent(new CustomEvent('floatingWindowModeChanged', { detail: { isInPip } }));
         };
@@ -164,6 +176,9 @@ export async function initNativeBridge() {
             } else {
                 document.documentElement.classList.remove('pip-stashed');
                 document.body.classList.remove('pip-stashed');
+            }
+            if (typeof window.updatePipBadgeState === 'function') {
+                window.updatePipBadgeState();
             }
             window.dispatchEvent(new CustomEvent('floatingWindowStashChanged', { detail: { isStashed } }));
         };
@@ -516,6 +531,30 @@ export function enterFloatingWindowMode() {
         showToast("ℹ️ Picture-in-Picture mode is available in the Android mobile app.");
         return false;
     }
+}
+
+/**
+ * Exits native Android Picture-in-Picture (PiP) Floating Window mode and restores fullscreen.
+ */
+export function exitFloatingWindowMode() {
+    if (typeof window !== 'undefined') {
+        if (window.NativePermissionsBridge && typeof window.NativePermissionsBridge.exitFloatingWindowMode === 'function') {
+            try {
+                window.NativePermissionsBridge.exitFloatingWindowMode();
+                return true;
+            } catch (e) {
+                console.warn("exitFloatingWindowMode error:", e);
+            }
+        }
+        if (typeof document !== 'undefined' && document.documentElement) {
+            document.documentElement.classList.remove('in-floating-mode');
+            document.body.classList.remove('in-floating-mode');
+            document.documentElement.classList.remove('pip-stashed');
+            document.body.classList.remove('pip-stashed');
+            document.documentElement.classList.remove('has-chat-open');
+        }
+    }
+    return false;
 }
 
 export function isFloatingWindowSupported() {
