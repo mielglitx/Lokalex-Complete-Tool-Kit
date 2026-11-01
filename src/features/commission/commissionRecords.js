@@ -355,21 +355,22 @@ export async function executeAdminPenaltySubmission() {
     if (!pendingPenaltyPlan) return showToast("⚠️ No pending penalty to apply.");
     const { targetRiders, targetDates, penaltyRate, reason, totalRecords } = pendingPenaltyPlan;
 
-    const updates = {};
+    const penaltyUpdates = {};
     const createdBy = appState.riderName || "Admin";
     const now = Date.now();
 
     if (!globalState.globalCommissionPenalties) globalState.globalCommissionPenalties = {};
 
     targetRiders.forEach(rName => {
-        const cleanName = rName.toLowerCase().trim();
+        const safeName = String(rName || '').toLowerCase().trim().replace(/[.#$\[\]\/]/g, '_');
         const rosterMem = (globalState.rosterMembers || []).find(m => 
             isRiderMatch(rName, m.riderName || m.name || "", "", m.telegramId || m.id)
         );
         const rId = rosterMem ? (rosterMem.telegramId || rosterMem.id || "").toString().trim() : "";
 
         targetDates.forEach(dStr => {
-            const penaltyKey = `${cleanName}_${dStr}`;
+            const safeDate = String(dStr || '').trim().replace(/[.#$\[\]\/]/g, '_');
+            const penaltyKey = `${safeName}_${safeDate}`;
             const record = {
                 riderName: rName,
                 telegramId: rId,
@@ -380,14 +381,14 @@ export async function executeAdminPenaltySubmission() {
                 createdAt: now
             };
 
-            updates[`commissionPenalties/${penaltyKey}`] = record;
+            penaltyUpdates[penaltyKey] = record;
             globalState.globalCommissionPenalties[penaltyKey] = record;
         });
     });
 
     try {
         if (db) {
-            await db.ref().update(updates);
+            await db.ref('commissionPenalties').update(penaltyUpdates);
         }
         closeAdminPenaltyModal();
         showToast(`⚖️ Confirmed! Applied +${penaltyRate}% penalty to ${targetRiders.length} rider(s) for ${targetDates.length} day(s) (${totalRecords} record${totalRecords === 1 ? '' : 's'})!`);
@@ -403,7 +404,8 @@ export function submitAdminPenalty() {
 }
 
 export function removeAdminPenaltyByKey(penaltyKey, riderName, targetDate) {
-    const rec = (globalState.globalCommissionPenalties || {})[penaltyKey];
+    const safeKey = String(penaltyKey || '').replace(/[.#$\[\]\/]/g, '_');
+    const rec = (globalState.globalCommissionPenalties || {})[penaltyKey] || (globalState.globalCommissionPenalties || {})[safeKey];
     const rName = riderName || (rec ? rec.riderName : "Rider");
     const dStr = targetDate || (rec ? rec.date : "");
     const perc = rec ? rec.penaltyPercentage : "";
@@ -413,9 +415,13 @@ export function removeAdminPenaltyByKey(penaltyKey, riderName, targetDate) {
         `Are you sure you want to remove the +${perc}% commission penalty for ${rName} on ${dStr}?`,
         async () => {
             if (db) {
-                await db.ref(`commissionPenalties/${penaltyKey}`).remove().catch(() => {});
+                await db.ref('commissionPenalties').child(safeKey).remove().catch(() => {});
+                if (safeKey !== penaltyKey) {
+                    await db.ref('commissionPenalties').child(penaltyKey).remove().catch(() => {});
+                }
             }
             if (globalState.globalCommissionPenalties) {
+                delete globalState.globalCommissionPenalties[safeKey];
                 delete globalState.globalCommissionPenalties[penaltyKey];
             }
             showToast(`✅ Penalty removed for ${rName} on ${dStr}`);
@@ -425,8 +431,8 @@ export function removeAdminPenaltyByKey(penaltyKey, riderName, targetDate) {
 }
 
 export function removeAdminPenalty(riderName, targetDate) {
-    const cleanName = (riderName || "").toLowerCase().trim();
-    const penaltyKey = `${cleanName}_${targetDate}`;
+    const safeName = String(riderName || '').toLowerCase().trim().replace(/[.#$\[\]\/]/g, '_');
+    const penaltyKey = `${safeName}_${targetDate}`;
     removeAdminPenaltyByKey(penaltyKey, riderName, targetDate);
 }
 

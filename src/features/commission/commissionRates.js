@@ -198,10 +198,17 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
     let penaltyReason = "";
 
     if (globalState.globalCommissionPenalties) {
-        const directKey = `${cleanName}_${dateFormatted}`;
-        const idKey = cleanId ? `${cleanId}_${dateFormatted}` : null;
+        const safeName = cleanName.replace(/[.#$\[\]\/]/g, '_');
+        const safeId = cleanId ? cleanId.replace(/[.#$\[\]\/]/g, '_') : null;
 
-        let directRecord = globalState.globalCommissionPenalties[directKey] || 
+        const directKey = `${cleanName}_${dateFormatted}`;
+        const safeKey = `${safeName}_${dateFormatted}`;
+        const idKey = cleanId ? `${cleanId}_${dateFormatted}` : null;
+        const safeIdKey = safeId ? `${safeId}_${dateFormatted}` : null;
+
+        let directRecord = globalState.globalCommissionPenalties[safeKey] ||
+                             globalState.globalCommissionPenalties[directKey] || 
+                             (safeIdKey ? globalState.globalCommissionPenalties[safeIdKey] : null) ||
                              (idKey ? globalState.globalCommissionPenalties[idKey] : null);
 
         // Fallback: If cleanName doesn't directly match key, search with isRiderMatch
