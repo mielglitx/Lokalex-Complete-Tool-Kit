@@ -84,7 +84,7 @@ const manifest = {
     checksum: checksum,
     updatedAt: new Date().toISOString(),
     notes: process.argv[3] || "Restored native Picture-in-Picture mode and in-app OTA APK self-updater",
-    nativeVersion: targetVersion,
+    nativeVersion: process.env.MIN_NATIVE_VERSION || '1.0.78',
     apkUrl: "https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/app-release.apk"
 };
 
