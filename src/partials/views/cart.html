@@ -1,5 +1,5 @@
 <!-- src/partials/views/cart.html -->
-<section id="view-cart" class="hidden flex-1 flex flex-col text-gray-900 dark:text-white h-[calc(100dvh-5.5rem)] max-h-[calc(100dvh-5.5rem)] overflow-hidden">
+<section id="view-cart" class="hidden flex-1 flex flex-col text-gray-900 dark:text-white pb-24 relative">
     <!-- STICKY TOP TOOLBAR -->
     <div class="sticky top-0 z-20 shrink-0 bg-white dark:bg-cardBg shadow-xs flex flex-col">
         <div class="bg-white dark:bg-cardBg border-b border-gray-200 dark:border-gray-800 p-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0" id="cart-tabs-header"></div>
@@ -28,11 +28,11 @@
     </div>
 
     <!-- SCROLLABLE CART ITEMS WITH RELATIVE SCROLLER TRACK -->
-    <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden">
-        <div id="cart-items-list" class="flex-1 overflow-y-auto p-3 flex flex-col gap-2 pb-6" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; will-change: scroll-position;"></div>
+    <div class="relative flex-1 min-h-0 flex flex-col">
+        <div id="cart-items-list" class="flex-1 p-3 flex flex-col gap-2 pb-28 max-h-[calc(100vh-270px)] sm:max-h-[calc(100vh-280px)] overflow-y-auto" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; will-change: scroll-position;"></div>
         
         <!-- Smart Cart Slider Scroller (Permanently visible rail & circular knob when screen is full or 5+ items) -->
-        <div id="cart-slider-track" class="absolute right-1 top-2 bottom-3 w-8 flex justify-center z-30 select-none cursor-pointer transition-opacity duration-200 opacity-0 pointer-events-none">
+        <div id="cart-slider-track" class="absolute right-1 top-2 bottom-6 w-8 flex justify-center z-30 select-none cursor-pointer transition-opacity duration-200 opacity-0 pointer-events-none">
             <!-- Visible sleek rail track -->
             <div class="w-1.5 h-full bg-gray-300/80 dark:bg-zinc-700/80 rounded-full my-0.5"></div>
             <!-- Circular thumb knob -->
@@ -42,10 +42,10 @@
         </div>
     </div>
 
-    <!-- STICKY BOTTOM CREATE RECEIPT BUTTON -->
-    <div class="sticky bottom-0 z-20 p-3 sm:p-4 bg-white/95 dark:bg-darkBg/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 shrink-0 shadow-lg">
-        <button onclick="window.validateAndProceedToWizard && window.validateAndProceedToWizard()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black p-3.5 rounded-2xl shadow-lg transition active:scale-95 text-xs flex items-center justify-center gap-2 cursor-pointer">
-            <i class="fa-solid fa-receipt"></i> Create Receipt (<span id="btn-cart-slot-label">Cart 1</span>)
+    <!-- ALWAYS VISIBLE FIXED BOTTOM GENERATE RECEIPT BUTTON -->
+    <div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-3 sm:p-4 bg-white/95 dark:bg-cardBg/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 z-40 shadow-2xl">
+        <button id="cart-generate-receipt-btn" onclick="window.validateAndProceedToWizard && window.validateAndProceedToWizard()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black p-3.5 rounded-2xl shadow-lg transition active:scale-95 text-xs flex items-center justify-center gap-2 cursor-pointer">
+            <i class="fa-solid fa-receipt"></i> Generate Receipt (<span id="btn-cart-slot-label">Cart 1</span>)
         </button>
     </div>
 
