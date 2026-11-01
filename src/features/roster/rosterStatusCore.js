@@ -29,7 +29,7 @@ import {
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 
-export async function updateRosterStatus(status, targetId = null, targetName = null, precalculatedQueueTime = null, skipArchive = false) {
+export async function updateRosterStatus(status, targetId = null, targetName = null, precalculatedQueueTime = null, skipArchive = false, customExtraData = {}) {
     const tId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
     const tName = targetName || appState.riderName || localStorage.getItem('riderName') || "Rider";
     const rosterMembers = globalState.rosterMembers || [];
@@ -75,7 +75,11 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
     }
 
     const nowTimestamp = Date.now();
-    let accumulatedBreakMins = targetRecord?.totalBreakMinutes || 0;
+    const todayStr = getLocalTodayStr();
+    let accumulatedBreakMins = 0;
+    if (targetRecord && targetRecord.breakDate === todayStr) {
+        accumulatedBreakMins = targetRecord.totalBreakMinutes || 0;
+    }
 
     if (targetRecord && targetRecord.status === 'Break' && targetRecord.breakTimestamp) {
         const finishedBreakSession = Math.max(0, Math.floor((nowTimestamp - targetRecord.breakTimestamp) / 60000));
@@ -98,6 +102,11 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
             lastReceiptTotalFees: 0,
             breakTimestamp: null,
             breakStartTime: null,
+            breakDurationMinutes: null,
+            breakDurationLabel: null,
+            breakTargetTimestamp: null,
+            isUnlimitedBreak: false,
+            breakDate: todayStr,
             availableTimestamp: preservedAvailableTs,
             totalBreakMinutes: isStartingShift ? 0 : accumulatedBreakMins
         };
@@ -115,6 +124,11 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
             lastReceiptTotalFees: 0,
             breakTimestamp: null,
             breakStartTime: null,
+            breakDurationMinutes: null,
+            breakDurationLabel: null,
+            breakTargetTimestamp: null,
+            isUnlimitedBreak: false,
+            breakDate: todayStr,
             availableTimestamp: null,
             totalBreakMinutes: accumulatedBreakMins
         };
@@ -122,17 +136,25 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
         extraData = {
             breakTimestamp: null,
             breakStartTime: null,
+            breakDurationMinutes: null,
+            breakDurationLabel: null,
+            breakTargetTimestamp: null,
+            isUnlimitedBreak: false,
+            breakDate: todayStr,
             availableTimestamp: null,
             totalBreakMinutes: accumulatedBreakMins
         };
     } else if (status === 'Break') {
         extraData = {
             availableTimestamp: null,
-            totalBreakMinutes: accumulatedBreakMins
+            breakDate: todayStr,
+            isUnlimitedBreak: !!customExtraData.isUnlimitedBreak,
+            totalBreakMinutes: accumulatedBreakMins,
+            ...customExtraData
         };
     }
 
-    await updateRosterStatusData(status, "", "", newQueueTime, tId, tName, [], recordLogin, locationLink, extraData);
+    await updateRosterStatusData(status, "", "", newQueueTime, tId, tName, [], recordLogin, locationLink, { ...extraData, ...customExtraData });
 }
 
 export async function updateRosterStatusData(status, customerName, startTime, queueTime = 0, specificId = null, specificName = null, completedHistory = [], recordLogin = false, locationLink = "", extraData = {}) {
@@ -196,6 +218,9 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
 
     let currentBreakTimestamp = null;
     let currentBreakStartTime = null;
+    let currentBreakDurationMinutes = null;
+    let currentBreakDurationLabel = null;
+    let currentBreakTargetTimestamp = null;
 
     if (status === 'Break') {
         if (extraData.breakTimestamp !== undefined) {
@@ -212,6 +237,34 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
             currentBreakStartTime = existingRec.breakStartTime;
         } else {
             currentBreakStartTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        if (extraData.breakDurationMinutes !== undefined) {
+            currentBreakDurationMinutes = extraData.breakDurationMinutes;
+        } else if (existingRec && existingRec.status === 'Break' && existingRec.breakDurationMinutes) {
+            currentBreakDurationMinutes = existingRec.breakDurationMinutes;
+        }
+
+        if (extraData.breakDurationLabel !== undefined) {
+            currentBreakDurationLabel = extraData.breakDurationLabel;
+        } else if (existingRec && existingRec.status === 'Break' && existingRec.breakDurationLabel) {
+            currentBreakDurationLabel = existingRec.breakDurationLabel;
+        }
+
+        if (extraData.breakTargetTimestamp !== undefined) {
+            currentBreakTargetTimestamp = extraData.breakTargetTimestamp;
+        } else if (existingRec && existingRec.status === 'Break' && existingRec.breakTargetTimestamp) {
+            currentBreakTargetTimestamp = existingRec.breakTargetTimestamp;
+        }
+    }
+
+    let currentIsUnlimitedBreak = false;
+    let currentBreakDate = extraData.breakDate || existingRec?.breakDate || getLocalTodayStr();
+    if (status === 'Break') {
+        if (extraData.isUnlimitedBreak !== undefined) {
+            currentIsUnlimitedBreak = !!extraData.isUnlimitedBreak;
+        } else if (existingRec && existingRec.status === 'Break') {
+            currentIsUnlimitedBreak = !!existingRec.isUnlimitedBreak;
         }
     }
 
@@ -260,6 +313,11 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         lastReceiptTotalFees: currentLastReceiptTotalFees,
         breakTimestamp: currentBreakTimestamp,
         breakStartTime: currentBreakStartTime,
+        breakDurationMinutes: currentBreakDurationMinutes,
+        breakDurationLabel: currentBreakDurationLabel,
+        breakTargetTimestamp: currentBreakTargetTimestamp,
+        isUnlimitedBreak: currentIsUnlimitedBreak,
+        breakDate: currentBreakDate,
         totalBreakMinutes: currentTotalBreak
     };
 
@@ -362,7 +420,9 @@ export async function clockOutRider(targetId = null) {
     let finalBreakMins = 0;
     const rMem = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === tId);
     if (rMem) {
-        finalBreakMins = rMem.totalBreakMinutes || 0;
+        if (rMem.breakDate === todayStr) {
+            finalBreakMins = rMem.totalBreakMinutes || 0;
+        }
         if (rMem.status === 'Break' && rMem.breakTimestamp) {
             const activeBreak = Math.max(0, Math.floor((nowTimestamp - rMem.breakTimestamp) / 60000));
             finalBreakMins += activeBreak;
@@ -370,15 +430,23 @@ export async function clockOutRider(targetId = null) {
     }
 
     if (db && tId) {
+        let grossMins = 0;
+        let netWorkedMins = 0;
         try {
             const loginSnap = await db.ref('logins/' + tId).once('value');
             const existingLogin = loginSnap.val();
 
             if (existingLogin) {
+                if (existingLogin.loginTimestamp) {
+                    grossMins = Math.max(0, Math.floor((nowTimestamp - existingLogin.loginTimestamp) / 60000));
+                    netWorkedMins = Math.max(0, grossMins - finalBreakMins);
+                }
                 await db.ref('logins/' + tId).update({ 
                     clockOutTime: timeStr,
                     clockOutTimestamp: nowTimestamp,
-                    totalBreakMinutes: finalBreakMins
+                    totalBreakMinutes: finalBreakMins,
+                    grossMinutes: grossMins,
+                    workedMinutes: netWorkedMins
                 });
             } else {
                 const rName = rMem ? (rMem.riderName || rMem.name || "Rider") : (appState.riderName || "Rider");
@@ -392,7 +460,9 @@ export async function clockOutRider(targetId = null) {
                     clockOutTimestamp: nowTimestamp,
                     date: todayStr,
                     location: "",
-                    totalBreakMinutes: finalBreakMins
+                    totalBreakMinutes: finalBreakMins,
+                    grossMinutes: 0,
+                    workedMinutes: 0
                 });
             }
         } catch(e) {}
@@ -404,6 +474,11 @@ export async function clockOutRider(targetId = null) {
             isForcedCater: false,
             breakTimestamp: null,
             breakStartTime: null,
+            breakDurationMinutes: null,
+            breakDurationLabel: null,
+            breakTargetTimestamp: null,
+            isUnlimitedBreak: false,
+            breakDate: todayStr,
             availableTimestamp: null,
             totalBreakMinutes: finalBreakMins,
             lastActiveTimestamp: nowTimestamp,
@@ -418,6 +493,11 @@ export async function clockOutRider(targetId = null) {
         rMem.isForcedCater = false;
         rMem.breakTimestamp = null;
         rMem.breakStartTime = null;
+        rMem.breakDurationMinutes = null;
+        rMem.breakDurationLabel = null;
+        rMem.breakTargetTimestamp = null;
+        rMem.isUnlimitedBreak = false;
+        rMem.breakDate = todayStr;
         rMem.availableTimestamp = null;
         rMem.totalBreakMinutes = finalBreakMins;
     }
@@ -425,9 +505,16 @@ export async function clockOutRider(targetId = null) {
     if (globalState.globalLogins) {
         const lIdx = globalState.globalLogins.findIndex(l => (l.riderId || l.id || "").toString() === tId);
         if (lIdx !== -1) {
-            globalState.globalLogins[lIdx].clockOutTime = timeStr;
-            globalState.globalLogins[lIdx].clockOutTimestamp = nowTimestamp;
-            globalState.globalLogins[lIdx].totalBreakMinutes = finalBreakMins;
+            const loginRec = globalState.globalLogins[lIdx];
+            let gross = 0;
+            if (loginRec.loginTimestamp) {
+                gross = Math.max(0, Math.floor((nowTimestamp - loginRec.loginTimestamp) / 60000));
+            }
+            loginRec.clockOutTime = timeStr;
+            loginRec.clockOutTimestamp = nowTimestamp;
+            loginRec.totalBreakMinutes = finalBreakMins;
+            loginRec.grossMinutes = gross;
+            loginRec.workedMinutes = Math.max(0, gross - finalBreakMins);
         }
     }
     saveRosterCache();

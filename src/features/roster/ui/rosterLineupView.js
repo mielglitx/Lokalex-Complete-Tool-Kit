@@ -34,6 +34,7 @@ import {
     hasTlPermission,
     getElapsedCateringTime, 
     getElapsedBreakTime, 
+    getElapsedBreakMinutes, 
     checkFirstInLineAlarm, 
     getRiderTodayGross, 
     sortAvailableRiders, 
@@ -44,6 +45,7 @@ import {
     getQueueLineupSettings, 
     openAdminQueueSettingsModal 
 } from '../rosterQueueSettings.js';
+import { checkAndExpireRiderBreaks } from '../rosterBreakSettings.js';
 import { syncHeaderUserProfile } from '../rosterAvatar.js';
 import { openMapPicker } from '../../maps.js';
 import { getForcedCaterBadgeHtml } from './rosterBadge.js';
@@ -194,6 +196,11 @@ export function initBreakTimerTicker() {
     }
 
     breakTimerTickerInterval = setInterval(() => {
+        // Enforce break time expiry so riders who reached their break limit auto-exit break mode
+        if (typeof checkAndExpireRiderBreaks === 'function') {
+            checkAndExpireRiderBreaks();
+        }
+
         const badges = document.querySelectorAll('.break-elapsed-timer');
         if (!badges || badges.length === 0) return;
 
@@ -207,10 +214,39 @@ export function initBreakTimerTicker() {
 
             const rider = breakRiders.find(r => (r.telegramId || r.id || "").toString().trim() === riderId);
             if (rider) {
+                const isUnlimited = !!rider.isUnlimitedBreak;
                 const newDuration = getElapsedBreakTime(rider);
+                const elapsedMins = getElapsedBreakMinutes(rider);
+                const plannedMins = rider.breakDurationMinutes ? parseInt(rider.breakDurationMinutes, 10) : null;
+                const isOverdue = !isUnlimited && plannedMins && elapsedMins > plannedMins;
+                const overdueMins = isOverdue ? (elapsedMins - plannedMins) : 0;
+
                 const digitsEl = badge.querySelector('.break-timer-digits');
-                if (digitsEl && digitsEl.innerText !== newDuration) {
-                    digitsEl.innerText = newDuration;
+                if (digitsEl) {
+                    const targetText = isUnlimited ? `${newDuration} (∞)` : (plannedMins ? `${newDuration} / ${plannedMins}m` : newDuration);
+                    if (digitsEl.innerText !== targetText) {
+                        digitsEl.innerText = targetText;
+                    }
+                }
+
+                let overdueEl = badge.querySelector('.break-overdue-tag');
+                if (isOverdue) {
+                    if (!overdueEl) {
+                        overdueEl = document.createElement('span');
+                        overdueEl.className = 'break-overdue-tag bg-red-600 text-white text-[8px] font-black px-1 rounded ml-0.5 tracking-tight animate-pulse';
+                        badge.appendChild(overdueEl);
+                    }
+                    overdueEl.innerText = `+${overdueMins}m OVERDUE`;
+                    badge.classList.remove('text-amber-700', 'dark:text-amber-300', 'bg-amber-50', 'dark:bg-amber-500/15', 'border-amber-200', 'dark:border-amber-500/30');
+                    badge.classList.add('text-red-700', 'dark:text-red-300', 'bg-red-100', 'dark:bg-red-500/20', 'border-red-300', 'dark:border-red-500/40');
+                } else if (overdueEl) {
+                    overdueEl.remove();
+                    badge.classList.remove('text-red-700', 'dark:text-red-300', 'bg-red-100', 'dark:bg-red-500/20', 'border-red-300', 'dark:border-red-500/40');
+                    if (isUnlimited) {
+                        badge.classList.add('text-purple-700', 'dark:text-purple-300', 'bg-purple-50', 'dark:bg-purple-500/15', 'border-purple-200', 'dark:border-purple-500/30');
+                    } else {
+                        badge.classList.add('text-amber-700', 'dark:text-amber-300', 'bg-amber-50', 'dark:bg-amber-500/15', 'border-amber-200', 'dark:border-amber-500/30');
+                    }
                 }
             }
         });
@@ -347,6 +383,12 @@ export function updateRosterUI() {
     if (creditsSettingsBtn) {
         if (showControls && (isAdmin() || hasTlPermission('canManageCredits'))) creditsSettingsBtn.classList.remove('hidden');
         else creditsSettingsBtn.classList.add('hidden');
+    }
+
+    const breakSettingsBtn = document.getElementById('admin-break-settings-btn');
+    if (breakSettingsBtn) {
+        if (showControls && (isAdmin() || hasTlPermission('canManageBreakSettings'))) breakSettingsBtn.classList.remove('hidden');
+        else breakSettingsBtn.classList.add('hidden');
     }
 
     const earlyShiftBtn = document.getElementById('admin-early-shift-btn');
@@ -560,18 +602,39 @@ export function updateRosterUI() {
         const shortName = formatRiderShortName(rawName);
         const todayGross = getRiderTodayGross(rawName, mId);
         const elapsedBreak = getElapsedBreakTime(m);
+        const elapsedMins = getElapsedBreakMinutes(m);
+        const plannedMins = m.breakDurationMinutes ? parseInt(m.breakDurationMinutes, 10) : null;
+        const breakLabel = m.breakDurationLabel ? escapeHtml(m.breakDurationLabel) : "Break";
+        const isUnlimited = !!m.isUnlimitedBreak;
+        const isOverdue = !isUnlimited && plannedMins && elapsedMins > plannedMins;
+        const overdueMins = isOverdue ? (elapsedMins - plannedMins) : 0;
 
         let controlsHtml = "";
         if (showControls) {
             controlsHtml += ` <select onchange="const sel = this; const val = sel.value; if (val) { sel.selectedIndex = 0; sel.value = ''; setTimeout(() => { try { sel.selectedIndex = 0; sel.value = ''; } catch(_) {} }, 100); window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeHtml(mName)}', val); }" class="bg-white dark:bg-black text-[10px] text-gray-900 dark:text-yellow-400 border border-gray-300 dark:border-gray-700 rounded px-1 ml-1 cursor-pointer"><option value="" selected>⚡ Force Action</option><option value="Available">Available</option><option value="Catering">Catering</option><option value="Break">Break</option><option value="End">End Shift</option></select>`;
         }
 
+        let badgeClass = 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30';
+        let iconHtml = '<i class="fa-solid fa-mug-hot text-[9px]"></i>';
+        let timerText = `${elapsedBreak}${plannedMins ? ` / ${plannedMins}m` : ''}`;
+
+        if (isUnlimited) {
+            badgeClass = 'text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-500/15 border border-purple-200 dark:border-purple-500/30';
+            iconHtml = '<i class="fa-solid fa-infinity text-[9px]"></i>';
+            timerText = `${elapsedBreak} (∞)`;
+        } else if (isOverdue) {
+            badgeClass = 'text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-500/20 border border-red-300 dark:border-red-500/40';
+            iconHtml = '<i class="fa-solid fa-mug-hot text-[9px] animate-pulse text-red-500"></i>';
+        }
+
         brkHtml.push(`
             <div class="flex items-center justify-between py-1 text-xs font-bold text-gray-900 dark:text-gray-200">
                 <div class="flex items-center gap-1.5 flex-wrap">
                     <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${mId}', '${escapeHtml(mName)}')" class="hover:text-amber-500 dark:hover:text-amber-400 hover:underline transition cursor-pointer text-left" title="View Rider Details">${escapeHtml(shortName)}</button>
-                    <span class="break-elapsed-timer inline-flex items-center gap-1 text-[9px] font-mono font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/15 border border-amber-200 dark:border-amber-500/30 px-1.5 py-0.5 rounded" data-rider-id="${mId}" title="Total Break Time Consumed">
-                        <i class="fa-regular fa-clock text-[9px]"></i> <span class="break-timer-digits">${elapsedBreak}</span>
+                    <span class="break-elapsed-timer inline-flex items-center gap-1 text-[9px] font-mono font-bold ${badgeClass} px-1.5 py-0.5 rounded" data-rider-id="${mId}" title="${isUnlimited ? 'Unlimited Break (Admin)' : breakLabel + ' - Elapsed: ' + elapsedBreak + (plannedMins ? ' / ' + plannedMins + 'm' : '')}">
+                        ${iconHtml}
+                        <span class="break-timer-digits">${timerText}</span>
+                        ${isOverdue ? `<span class="break-overdue-tag bg-red-600 text-white text-[8px] font-black px-1 rounded ml-0.5 tracking-tight animate-pulse">+${overdueMins}m OVERDUE</span>` : ''}
                     </span>
                     ${controlsHtml}
                     <span class="text-[10px] font-mono font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30" title="Today's Gross Earnings">₱${todayGross.toFixed(0)}</span>

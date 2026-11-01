@@ -35,8 +35,11 @@
                 <label class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase">Delivery GPS Location Pin</label>
                 <div class="flex gap-1.5 mt-1">
                     <input type="text" id="edit-cust-gps-link" placeholder="Map Link" readonly class="flex-1 bg-inputBg text-[10px] rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-mono truncate font-bold">
-                    <button type="button" onclick="window.captureEditProfileGPS && window.captureEditProfileGPS()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition active:scale-95 shrink-0">
-                        <i class="fa-solid fa-location-crosshairs"></i> Pin Map
+                    <button type="button" onclick="window.openCustomerMapPicker && window.openCustomerMapPicker('edit-profile')" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-2 rounded-xl text-xs transition active:scale-95 shrink-0 flex items-center gap-1 cursor-pointer" title="Pick on Map">
+                        <i class="fa-solid fa-map-location-dot"></i> Pick on Map
+                    </button>
+                    <button type="button" onclick="window.captureEditProfileGPS && window.captureEditProfileGPS()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-2 rounded-xl text-xs transition active:scale-95 shrink-0 cursor-pointer" title="Device GPS">
+                        <i class="fa-solid fa-crosshairs"></i>
                     </button>
                 </div>
                 <input type="hidden" id="edit-cust-lat" value="0">
@@ -239,11 +242,21 @@
                 <div>
                     <div class="flex justify-between items-center mb-1">
                         <label class="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider">GPS Map Pin Link</label>
-                        <button type="button" onclick="window.captureCurrentGpsForNewLocation && window.captureCurrentGpsForNewLocation()" class="text-[9.5px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 hover:underline">
-                            <i class="fa-solid fa-crosshairs"></i> Use My GPS
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" onclick="window.openCustomerMapPicker && window.openCustomerMapPicker('customer-location')" class="text-[9.5px] bg-blue-600 hover:bg-blue-500 text-white font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-xs transition active:scale-95 cursor-pointer">
+                                <i class="fa-solid fa-map-location-dot"></i> Pick on Map
+                            </button>
+                            <button type="button" onclick="window.captureCurrentGpsForNewLocation && window.captureCurrentGpsForNewLocation()" class="text-[9.5px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 hover:underline cursor-pointer">
+                                <i class="fa-solid fa-crosshairs"></i> Use My GPS
+                            </button>
+                        </div>
+                    </div>
+                    <div class="relative flex items-center">
+                        <input type="text" id="cust-modal-new-loc-map" placeholder="Paste Google Maps link or pick on map" class="w-full bg-inputBg text-xs rounded-xl pl-3 pr-8 py-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-mono text-[11px]">
+                        <button type="button" onclick="window.openCustomerMapPicker && window.openCustomerMapPicker('customer-location')" class="absolute right-2.5 text-blue-600 dark:text-blue-400 hover:scale-110 active:scale-95 transition cursor-pointer" title="Pick on Map">
+                            <i class="fa-solid fa-map-pin text-xs"></i>
                         </button>
                     </div>
-                    <input type="text" id="cust-modal-new-loc-map" placeholder="Paste Google Maps link or coordinates" class="w-full bg-inputBg text-xs rounded-xl px-3 py-2 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-mono text-[11px]">
                 </div>
                 <div class="flex items-center justify-end gap-2 pt-1">
                     <button type="button" onclick="window.toggleAddLocationForm(false)" class="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-bold px-3 py-1.5 rounded-xl transition">
@@ -370,23 +383,33 @@
                 <textarea id="new-cust-submodal-address" rows="2" placeholder="Street, Barangay, Landmarks, House No..." class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white mt-1 font-medium focus:border-emerald-500 resize-none"></textarea>
             </div>
 
-            <!-- GPS Map Location Field (Automatically fills in by the system when the add address modal appears) -->
+            <!-- GPS Map Location Field (Automatically fills in by the system or manual map picking) -->
             <div>
                 <div class="flex items-center justify-between mb-1">
                     <label for="new-cust-submodal-gps" class="text-[10px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1">
                         GPS Map Location:
                     </label>
+                    <div class="flex items-center gap-1.5">
+                        <button type="button" onclick="window.openCustomerMapPicker && window.openCustomerMapPicker('add-customer-address')" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-2 py-0.5 rounded-lg text-[9.5px] transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer">
+                            <i class="fa-solid fa-map-location-dot"></i> Pick on Map
+                        </button>
+                        <button type="button" onclick="window.calibrateSubmodalGPS && window.calibrateSubmodalGPS()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2 py-0.5 rounded-lg text-[9.5px] transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Auto GPS">
+                            <i class="fa-solid fa-crosshairs"></i> Auto GPS
+                        </button>
+                    </div>
+                </div>
+                <div class="relative flex items-center">
+                    <input type="text" id="new-cust-submodal-gps" placeholder="Auto-calibrated GPS location link or picked pin..." class="w-full bg-inputBg text-[10.5px] font-mono rounded-xl pl-2.5 pr-8 py-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold focus:border-emerald-500">
+                    <button type="button" onclick="window.openCustomerMapPicker && window.openCustomerMapPicker('add-customer-address')" class="absolute right-2 text-blue-600 dark:text-blue-400 hover:scale-110 active:scale-95 transition cursor-pointer" title="Open Map Picker">
+                        <i class="fa-solid fa-map-pin text-xs"></i>
+                    </button>
+                </div>
+                <div class="flex items-center justify-between mt-1">
                     <span id="new-cust-gps-status" class="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
                         <i class="fa-solid fa-spinner fa-spin"></i> Auto-detecting GPS...
                     </span>
+                    <span class="text-[9px] text-gray-400 italic">Auto GPS or tap Pick on Map</span>
                 </div>
-                <div class="relative flex items-center">
-                    <input type="text" id="new-cust-submodal-gps" placeholder="Auto-calibrated GPS location link..." class="w-full bg-inputBg text-[10.5px] font-mono rounded-xl pl-2.5 pr-8 py-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white font-bold focus:border-emerald-500">
-                    <button type="button" onclick="window.calibrateSubmodalGPS && window.calibrateSubmodalGPS()" class="absolute right-2 text-emerald-600 dark:text-emerald-400 hover:scale-110 active:scale-95 transition cursor-pointer" title="Refresh GPS">
-                        <i class="fa-solid fa-crosshairs text-xs"></i>
-                    </button>
-                </div>
-                <p class="text-[9px] text-gray-400 mt-1 italic">Automatically fills in by the system when modal appears.</p>
             </div>
         </div>
 

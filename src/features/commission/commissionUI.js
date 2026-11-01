@@ -400,10 +400,14 @@ export function refreshCommissionView() {
         }
 
         let gross = parseFloat(r.totalFees) || 0;
-        const rates = getCommissionRates(rDate, rName, rId);
+        const receiptTime = r.time || r.receiptTime || r.completedTime || r.doneTime || null;
+        const rates = getCommissionRates(rDate, rName, rId, receiptTime);
 
-        const earnedAmt = gross * rates.riderRate;
-        const companyAmt = gross * rates.companyRate;
+        let companyAmt = gross * rates.companyRate;
+        if (rates.overtimeDiscountAmount > 0) {
+            companyAmt = Math.max(0, companyAmt - rates.overtimeDiscountAmount);
+        }
+        const earnedAmt = Math.max(0, gross - companyAmt);
 
         if (!riderTotals[rId]) {
             riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0, lastRates: rates, customers: [] };
@@ -417,11 +421,14 @@ export function refreshCommissionView() {
         riderTotals[rId].customers.push({
             customerName: cName,
             date: rDate,
-            time: r.time || "",
+            time: r.time || r.receiptTime || r.completedTime || "",
             gross: gross,
             earned: earnedAmt,
             company: companyAmt,
-            transactionId: r.transactionId || ""
+            transactionId: r.transactionId || "",
+            isOvertime: rates.isOvertime,
+            overtimeDiscountPerc: rates.overtimeDiscountPerc,
+            overtimeDiscountAmount: rates.overtimeDiscountAmount
         });
     });
 
@@ -563,16 +570,25 @@ export function refreshCommissionView() {
 
     let promoNotice = displayRates.promoDiscountPerc > 0 ? ` (-${displayRates.promoDiscountPerc}% Promo Less)` : '';
 
+    let overtimeNotice = '';
+    if (displayRates.isOvertime) {
+        if (displayRates.overtimeDiscountPerc > 0) {
+            overtimeNotice = ` (⚡ -${displayRates.overtimeDiscountPerc}% OT Reward)`;
+        } else if (displayRates.overtimeDiscountAmount > 0) {
+            overtimeNotice = ` (⚡ -₱${displayRates.overtimeDiscountAmount} OT Reward)`;
+        }
+    }
+
     if (viewSettings.mode === 'earned') {
         if (mainLabelEl) {
-            mainLabelEl.innerText = `YOUR EARNINGS (${displayRates.riderPerc}% Rate${penaltyNotice}${promoNotice})`;
+            mainLabelEl.innerText = `YOUR EARNINGS (${displayRates.riderPerc}% Rate${penaltyNotice}${promoNotice}${overtimeNotice})`;
             mainLabelEl.className = "text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase";
         }
         if (mainWrapperEl) mainWrapperEl.className = "text-4xl font-black text-emerald-600 dark:text-emerald-400 drop-shadow-md";
         if (mainAmountEl) mainAmountEl.innerText = grandEarned.toFixed(2);
     } else {
         if (mainLabelEl) {
-            mainLabelEl.innerText = displayRates.isAdmin ? `TO PAY COMPANY (ADMIN EXEMPT)` : `TO PAY COMPANY (${displayRates.companyPerc}% Rate${penaltyNotice}${promoNotice})`;
+            mainLabelEl.innerText = displayRates.isAdmin ? `TO PAY COMPANY (ADMIN EXEMPT)` : `TO PAY COMPANY (${displayRates.companyPerc}% Rate${penaltyNotice}${promoNotice}${overtimeNotice})`;
             mainLabelEl.className = "text-[10px] text-red-700 dark:text-red-400 font-bold uppercase";
         }
         if (mainWrapperEl) mainWrapperEl.className = "text-4xl font-black text-red-600 dark:text-red-400 drop-shadow-md";
@@ -713,11 +729,15 @@ export function renderRiderSummaryList(riderListArray) {
                     ? `<button onclick="event.stopPropagation(); promptAdminDeleteCommissionRecord('${escapeHtml(rider.name)}', '${escapeHtml(c.customerName)}', '${c.date}', '${c.transactionId}')" class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 ml-1 p-0.5 cursor-pointer" title="Delete Record"><i class="fa-solid fa-trash text-[10px]"></i></button>` 
                     : ``;
 
+                const otBadge = c.isOvertime 
+                    ? `<span class="bg-amber-500/20 text-amber-700 dark:text-amber-400 font-bold px-1.5 py-0.2 rounded text-[8.5px] border border-amber-500/30">⚡ Overtime</span>` 
+                    : ``;
+
                 return `
                 <div class="bg-white dark:bg-zinc-900/90 p-2.5 rounded-xl border border-gray-200 dark:border-zinc-700/60 flex justify-between items-center text-xs shadow-xs">
                     <div class="flex flex-col gap-0.5 min-w-0 flex-1">
                         <span class="font-black text-xs text-orange-700 dark:text-orange-400 flex items-center gap-1.5 truncate">
-                            <i class="fa-solid fa-user text-[10px]"></i> ${escapeHtml(c.customerName)} ${editBtn} ${deleteBtn}
+                            <i class="fa-solid fa-user text-[10px]"></i> ${escapeHtml(c.customerName)} ${otBadge} ${editBtn} ${deleteBtn}
                         </span>
                         <span class="text-[10px] text-gray-500 dark:text-gray-300 font-mono font-medium">${escapeHtml(dateTimeStr)}</span>
                     </div>
@@ -739,6 +759,10 @@ export function renderRiderSummaryList(riderListArray) {
 
         const earlyShiftHeaderBadge = rates.earlyShiftPenaltyPerc > 0
             ? `<span class="bg-amber-600/20 text-amber-700 dark:text-amber-400 border border-amber-500/40 text-[9px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-xs"><i class="fa-solid fa-user-clock"></i> +${rates.earlyShiftPenaltyPerc}% Early Out</span>`
+            : '';
+
+        const overtimeHeaderBadge = rates.isOvertime
+            ? `<span class="bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40 text-[9px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-xs"><i class="fa-solid fa-bolt"></i> OT Incentive ${rates.overtimeDiscountPerc > 0 ? `-${rates.overtimeDiscountPerc}%` : `-₱${rates.overtimeDiscountAmount}`}</span>`
             : '';
 
         const earlyShiftBadge = rates.earlyShiftPenaltyPerc > 0
@@ -764,6 +788,15 @@ export function renderRiderSummaryList(riderListArray) {
                </div>`
             : '';
 
+        const overtimeBadge = rates.isOvertime
+            ? `<div class="flex items-center justify-between bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-500/40 px-2.5 py-1 rounded-xl text-[10px] text-amber-800 dark:text-amber-300 font-bold my-1 shadow-xs">
+                <span class="flex items-center gap-1.5">
+                    <i class="fa-solid fa-bolt text-amber-500"></i>
+                    <span>Overtime Incentive Active (${rates.overtimeDiscountPerc > 0 ? `-${rates.overtimeDiscountPerc}% less commission` : `-₱${rates.overtimeDiscountAmount} off per order`})</span>
+                </span>
+               </div>`
+            : '';
+
         return `
             <div class="bg-white dark:bg-cardBg rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xs flex flex-col overflow-hidden">
                 <div onclick="toggleRiderCustomerBreakdown('${uid}')" class="p-3.5 flex justify-between items-center text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition select-none">
@@ -773,6 +806,7 @@ export function renderRiderSummaryList(riderListArray) {
                         </span>
                         ${penaltyHeaderBadge}
                         ${earlyShiftHeaderBadge}
+                        ${overtimeHeaderBadge}
                         <span class="bg-blue-50 dark:bg-blue-600/20 text-blue-700 dark:text-blue-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-500/30">
                             ${customerCount} ${customerCount === 1 ? 'customer' : 'customers'}
                         </span>
@@ -787,6 +821,7 @@ export function renderRiderSummaryList(riderListArray) {
                     ${earlyShiftBadge}
                     ${penaltyBadge}
                     ${promoBadge}
+                    ${overtimeBadge}
                     <div class="text-[10px] text-amber-700 dark:text-amber-400 font-bold uppercase tracking-wider mb-1 flex items-center justify-between">
                         <span><i class="fa-solid fa-list-check"></i> Customer Breakdown (${viewSettings.period.toUpperCase()})</span>
                         <span class="text-gray-700 dark:text-gray-200 font-mono font-black">Total Paid: ₱${rider.gross.toFixed(2)}</span>
@@ -833,14 +868,21 @@ export function generateDailyReportText() {
         }
 
         let gross = parseFloat(r.totalFees) || 0;
-        const rates = getCommissionRates(rDate, rName, rId);
+        const receiptTime = r.time || r.receiptTime || r.completedTime || r.doneTime || null;
+        const rates = getCommissionRates(rDate, rName, rId, receiptTime);
+
+        let companyAmt = gross * rates.companyRate;
+        if (rates.overtimeDiscountAmount > 0) {
+            companyAmt = Math.max(0, companyAmt - rates.overtimeDiscountAmount);
+        }
+        const earnedAmt = Math.max(0, gross - companyAmt);
 
         if (!riderTotals[rId]) {
             riderTotals[rId] = { name: rName, gross: 0, earned: 0, company: 0, lastRates: rates };
         }
         riderTotals[rId].gross += gross;
-        riderTotals[rId].earned += (gross * rates.riderRate);
-        riderTotals[rId].company += (gross * rates.companyRate);
+        riderTotals[rId].earned += earnedAmt;
+        riderTotals[rId].company += companyAmt;
         riderTotals[rId].lastRates = rates;
     });
 
@@ -863,13 +905,14 @@ export function generateDailyReportText() {
 
         let displayAmount = "";
         let penaltyNote = rates.earlyShiftPenaltyPerc > 0 ? ` (incl. +${rates.earlyShiftPenaltyPerc}% Early Shift penalty)` : '';
+        let otNote = rates.isOvertime ? (rates.overtimeDiscountPerc > 0 ? ` (incl. -${rates.overtimeDiscountPerc}% OT Reward)` : ` (incl. -₱${rates.overtimeDiscountAmount} OT Reward)`) : '';
         if (viewSettings.mode === 'earned') {
-            displayAmount = `₱${riderTotals[rId].earned.toFixed(2)} (${rates.riderPerc}%)${penaltyNote}`;
+            displayAmount = `₱${riderTotals[rId].earned.toFixed(2)} (${rates.riderPerc}%)${penaltyNote}${otNote}`;
         } else {
             if (rates.isAdmin) {
                 displayAmount = `₱0.00 (Admin Exempt)`;
             } else {
-                displayAmount = `₱${riderTotals[rId].company.toFixed(2)} (${rates.companyPerc}%)${penaltyNote}`;
+                displayAmount = `₱${riderTotals[rId].company.toFixed(2)} (${rates.companyPerc}%)${penaltyNote}${otNote}`;
             }
         }
         listText += `• ${riderTotals[rId].name}: ${displayAmount}\n`;

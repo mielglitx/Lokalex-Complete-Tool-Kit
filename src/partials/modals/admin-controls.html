@@ -334,6 +334,47 @@
                 </div>
             </div>
 
+            <!-- OVERTIME COMMISSION INCENTIVE & RELIEF -->
+            <div class="bg-darkBg p-3 rounded-2xl border border-amber-500/40 flex flex-col gap-2 shrink-0">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="font-bold text-amber-300 text-xs flex items-center gap-1.5">
+                            <i class="fa-solid fa-bolt text-amber-400"></i> Overtime Commission Incentive
+                        </div>
+                        <div class="text-[10px] text-gray-400">Award riders working past scheduled shift time</div>
+                    </div>
+                    <input type="checkbox" id="admin-overtime-reward-enabled" class="w-4 h-4 accent-amber-500 cursor-pointer">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <div>
+                        <label class="text-[9px] text-gray-400 font-bold uppercase">Incentive Type</label>
+                        <select id="admin-overtime-reward-type" onchange="window.handleOvertimeTypeChange && window.handleOvertimeTypeChange(this.value)" class="w-full bg-inputBg text-xs font-bold text-white rounded-xl p-2 border border-gray-700 outline-none mt-0.5">
+                            <option value="percentage" selected>Lessen Percentage (%)</option>
+                            <option value="fixed">Lessen Fixed Amount (₱)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label id="admin-overtime-val-label" class="text-[9px] text-gray-400 font-bold uppercase">Commission Relief</label>
+                        <div class="flex items-center gap-1 mt-0.5">
+                            <input type="number" step="0.5" min="0" max="100" id="admin-overtime-reward-value" value="5" class="w-full bg-inputBg text-xs text-center font-bold text-amber-300 rounded-xl p-2 border border-gray-700 outline-none focus:border-amber-500">
+                            <span id="admin-overtime-reward-unit" class="text-xs text-gray-400 font-bold">%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-1 border-t border-gray-800">
+                    <div>
+                        <label class="text-[9px] text-gray-400 font-bold uppercase block">Shift Duty Threshold</label>
+                        <span class="text-[9px] text-gray-500">Hours worked before overtime kicks in</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <input type="number" step="0.5" min="1" max="24" id="admin-overtime-reward-threshold" value="8" placeholder="8" class="w-14 bg-inputBg text-xs text-center font-bold text-white rounded-xl p-1.5 border border-gray-700 outline-none focus:border-amber-500">
+                        <span class="text-xs text-gray-400 font-bold">hrs</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="bg-darkBg p-3 rounded-2xl border border-purple-500/40 flex flex-col gap-2 shrink-0">
                 <div class="flex items-center justify-between">
                     <div>
@@ -648,6 +689,87 @@
         <div class="flex gap-2 mt-1 shrink-0">
             <button onclick="window.closeAdminEarlyShiftModal && window.closeAdminEarlyShiftModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-700 transition active:scale-95 cursor-pointer">Cancel</button>
             <button onclick="window.saveAdminEarlyShiftSettings && window.saveAdminEarlyShiftSettings()" class="flex-1 bg-red-600 hover:bg-red-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer">Save Penalty Rules</button>
+        </div>
+    </div>
+</div>
+
+<!-- 9B. ADMIN BREAK PERIODS & DURATION CHOICES SETTINGS MODAL -->
+<div id="admin-break-settings-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
+    <div class="bg-cardBg border border-amber-500/60 p-5 rounded-3xl w-full max-w-md shadow-2xl flex flex-col gap-3.5 relative animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center border-b border-gray-800 pb-2.5 shrink-0">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-amber-600/20 text-amber-400 flex items-center justify-center text-sm font-bold border border-amber-500/30">
+                    <i class="fa-solid fa-mug-hot"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-xs text-white">Break Periods & Duration Choices</h3>
+                    <p class="text-[9px] text-amber-400 font-mono">Configure Rider Break Options</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeAdminBreakSettingsModal && window.closeAdminBreakSettingsModal()" class="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white border border-gray-300 dark:border-gray-700 flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-xs"></i>
+            </button>
+        </div>
+
+        <p class="text-[11px] text-gray-400">
+            Define the break duration choices shown to riders when they tap Break. Break time is strictly excluded from total shift duty.
+        </p>
+
+        <!-- DAILY TOTAL BREAK ALLOWANCE SETTING -->
+        <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex items-center justify-between">
+            <div>
+                <div class="font-bold text-white text-xs flex items-center gap-1.5">
+                    <i class="fa-solid fa-hourglass-start text-amber-400"></i> Daily Break Allowance per Rider
+                </div>
+                <div class="text-[10px] text-gray-400 mt-0.5">Total break time permitted per day (leftover time can be reused)</div>
+            </div>
+            <div class="flex items-center gap-1">
+                <input type="number" min="5" max="360" step="5" id="admin-daily-break-allowance" value="60" class="w-16 bg-inputBg text-sm text-center font-mono font-black text-amber-400 rounded-xl p-2 border border-gray-700 outline-none focus:border-amber-500">
+                <span class="text-gray-400 text-xs font-bold">mins</span>
+            </div>
+        </div>
+
+        <!-- ADD NEW BREAK PERIOD SECTION -->
+        <div class="bg-darkBg p-3 rounded-2xl border border-gray-800 flex flex-col gap-2.5">
+            <span class="text-[10px] font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
+                <i class="fa-solid fa-plus-circle"></i> Add New Break Period
+            </span>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                    <label class="text-[9.5px] text-gray-400 block mb-1">Duration (Minutes)</label>
+                    <input type="number" id="admin-new-break-duration" min="1" max="180" placeholder="e.g. 20" class="w-full bg-inputBg text-xs font-mono font-bold text-white rounded-xl p-2 border border-gray-700 outline-none focus:border-amber-500">
+                </div>
+                <div>
+                    <label class="text-[9.5px] text-gray-400 block mb-1">Label / Description</label>
+                    <input type="text" id="admin-new-break-label" placeholder="e.g. Coffee Break" class="w-full bg-inputBg text-xs font-bold text-white rounded-xl p-2 border border-gray-700 outline-none focus:border-amber-500">
+                </div>
+            </div>
+            <div class="flex justify-end pt-1">
+                <button type="button" onclick="window.addAdminBreakPeriod && window.addAdminBreakPeriod()" class="bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs py-1.5 px-3 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow cursor-pointer">
+                    <i class="fa-solid fa-plus"></i> Add Break Option
+                </button>
+            </div>
+        </div>
+
+        <!-- LIST OF CONFIGURED BREAK PERIODS -->
+        <div class="flex flex-col gap-1.5">
+            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wide flex items-center justify-between">
+                <span>Active Break Choices (<span id="admin-break-count">0</span>)</span>
+                <button type="button" onclick="window.resetAdminBreakPeriodsToDefault && window.resetAdminBreakPeriodsToDefault()" class="text-[9px] text-amber-400 hover:underline cursor-pointer">Reset Defaults</button>
+            </span>
+            <div id="admin-break-periods-list" class="flex flex-col gap-2 max-h-[35vh] overflow-y-auto pr-0.5">
+                <!-- Dynamically populated list -->
+            </div>
+        </div>
+
+        <!-- ACTION BUTTONS -->
+        <div class="flex gap-2 pt-2 border-t border-gray-800">
+            <button type="button" onclick="window.closeAdminBreakSettingsModal && window.closeAdminBreakSettingsModal()" class="flex-1 bg-gray-800 hover:bg-gray-700 py-2.5 rounded-xl text-xs font-bold text-gray-300 transition active:scale-95 cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" onclick="window.saveAdminBreakSettings && window.saveAdminBreakSettings()" class="flex-1 bg-amber-600 hover:bg-amber-500 py-2.5 rounded-xl text-xs font-bold text-white transition active:scale-95 shadow cursor-pointer flex items-center justify-center gap-1.5">
+                <i class="fa-solid fa-check"></i> Save Break Settings
+            </button>
         </div>
     </div>
 </div>

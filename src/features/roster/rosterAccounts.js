@@ -45,6 +45,7 @@ export const TL_PERMISSION_DEFINITIONS = [
     { key: 'canManageFullBooking', label: 'Full Booking Auto-Reply', icon: 'fa-comment-slash', desc: 'Toggle full booking auto-responder on or off' },
     { key: 'canManageCommission', label: 'Commission Fee Settings', icon: 'fa-percent', desc: 'Configure daily commission fee rates & discounts' },
     { key: 'canManageCredits', label: 'Directory Credit Settings', icon: 'fa-coins', desc: 'Manage directory search costs & starting balances' },
+    { key: 'canManageBreakSettings', label: 'Break Period Settings', icon: 'fa-mug-hot', desc: 'Configure break period choices and durations' },
     { key: 'canManageEarlyShift', label: 'Early Shift Out Penalty', icon: 'fa-user-clock', desc: 'Configure 8-hour duty rules & exit penalties' },
     { key: 'canManageAutoEndShift', label: 'Auto End Shift Settings', icon: 'fa-clock-rotate-left', desc: 'Configure automated shift termination cutoff times' },
     { key: 'canManageBanList', label: 'Ban / Block User Management', icon: 'fa-user-slash', desc: 'Ban, block or unblock riders and accounts' },

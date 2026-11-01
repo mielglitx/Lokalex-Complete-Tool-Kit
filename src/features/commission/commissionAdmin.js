@@ -9,12 +9,32 @@ import {
     customRiderRates, 
     recurringDiscount, 
     specialDateDiscounts,
+    overtimeReward,
     setDefaultCommissionRate,
     setCustomRiderRates,
     setRecurringDiscount,
+    setOvertimeReward,
     saveCommissionSettingsCache 
 } from './commissionRates.js';
 import { refreshCommissionView } from './commissionUI.js';
+
+export function handleOvertimeTypeChange(selectedType) {
+    const unitEl = document.getElementById('admin-overtime-reward-unit');
+    const inputEl = document.getElementById('admin-overtime-reward-value');
+    if (!unitEl || !inputEl) return;
+
+    if (selectedType === 'fixed') {
+        unitEl.innerText = '₱';
+        inputEl.step = '1';
+        inputEl.removeAttribute('max');
+        inputEl.placeholder = '10';
+    } else {
+        unitEl.innerText = '%';
+        inputEl.step = '0.5';
+        inputEl.max = '100';
+        inputEl.placeholder = '5';
+    }
+}
 
 export function openAdminCommissionSettingsModal() {
     if (!checkIsAdmin() && !hasTlPermission('canManageCommission')) {
@@ -26,6 +46,11 @@ export function openAdminCommissionSettingsModal() {
     const recurringEnabled = document.getElementById('admin-recurring-discount-enabled');
     const recurringDaySelect = document.getElementById('admin-recurring-discount-day');
     const recurringRateInput = document.getElementById('admin-recurring-discount-rate');
+
+    const otEnabled = document.getElementById('admin-overtime-reward-enabled');
+    const otType = document.getElementById('admin-overtime-reward-type');
+    const otValue = document.getElementById('admin-overtime-reward-value');
+    const otThreshold = document.getElementById('admin-overtime-reward-threshold');
 
     if (defaultInput) {
         defaultInput.value = defaultCommissionRate;
@@ -39,6 +64,14 @@ export function openAdminCommissionSettingsModal() {
     if (recurringRateInput) {
         recurringRateInput.value = recurringDiscount.percentage || 5;
     }
+
+    if (otEnabled) otEnabled.checked = !!overtimeReward.enabled;
+    if (otType) {
+        otType.value = overtimeReward.type || 'percentage';
+        handleOvertimeTypeChange(otType.value);
+    }
+    if (otValue) otValue.value = overtimeReward.value !== undefined ? overtimeReward.value : 5;
+    if (otThreshold) otThreshold.value = overtimeReward.thresholdHours || 8;
 
     renderAdminRiderCommissionRatesList();
     renderSpecialPromoDatesList();
@@ -223,6 +256,18 @@ export async function saveAdminCommissionSettings() {
     const recurringDay = parseInt(document.getElementById('admin-recurring-discount-day')?.value) || 0;
     const recurringRate = parseFloat(document.getElementById('admin-recurring-discount-rate')?.value) || 0;
 
+    const otEnabled = document.getElementById('admin-overtime-reward-enabled')?.checked || false;
+    const otType = document.getElementById('admin-overtime-reward-type')?.value || 'percentage';
+    const otValue = parseFloat(document.getElementById('admin-overtime-reward-value')?.value) || 0;
+    const otThreshold = parseFloat(document.getElementById('admin-overtime-reward-threshold')?.value) || 8;
+
+    const newOvertimeReward = {
+        enabled: otEnabled,
+        type: otType,
+        value: otValue,
+        thresholdHours: otThreshold
+    };
+
     const payload = {
         defaultPercentage: newDefaultRate,
         riderRates: updatedRiderRates,
@@ -232,6 +277,7 @@ export async function saveAdminCommissionSettings() {
             percentage: recurringRate
         },
         specialDateDiscounts: specialDateDiscounts || {},
+        overtimeReward: newOvertimeReward,
         updatedBy: appState.riderName || localStorage.getItem('riderName') || "Admin",
         updatedAt: Date.now()
     };
@@ -244,6 +290,7 @@ export async function saveAdminCommissionSettings() {
         setDefaultCommissionRate(newDefaultRate);
         setCustomRiderRates(updatedRiderRates);
         setRecurringDiscount(payload.recurringDiscount);
+        setOvertimeReward(newOvertimeReward);
         saveCommissionSettingsCache();
 
         closeAdminCommissionSettingsModal();
@@ -254,4 +301,11 @@ export async function saveAdminCommissionSettings() {
         console.error("Firebase save error:", e);
         showToast(`❌ Failed to update: ${e.message || "Permission Denied"}`);
     }
+}
+
+if (typeof window !== 'undefined') {
+    window.handleOvertimeTypeChange = handleOvertimeTypeChange;
+    window.openAdminCommissionSettingsModal = openAdminCommissionSettingsModal;
+    window.closeAdminCommissionSettingsModal = closeAdminCommissionSettingsModal;
+    window.saveAdminCommissionSettings = saveAdminCommissionSettings;
 }

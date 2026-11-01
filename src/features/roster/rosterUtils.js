@@ -944,6 +944,27 @@ export function getElapsedCateringTime(startTimeStr) {
     return ` • ${firstTime} [${mins}m]`;
 }
 
+export function getElapsedBreakMinutes(rider) {
+    if (!rider) return 0;
+    const now = Date.now();
+    let startMs = rider.breakTimestamp || 0;
+
+    if (!startMs && (rider.breakStartTime || rider.startTime || rider.lastUpdated)) {
+        const timeStr = rider.breakStartTime || rider.startTime || rider.lastUpdated;
+        const mins = parseTimeToMinutes(timeStr);
+        if (mins !== null) {
+            const pht = getPHTDate();
+            const start = new Date(pht.getFullYear(), pht.getMonth(), pht.getDate(), Math.floor(mins / 60), mins % 60, 0);
+            startMs = start.getTime();
+            if (startMs > now) startMs -= 24 * 60 * 60 * 1000;
+        }
+    }
+
+    if (!startMs) return 0;
+    const diffMs = Math.max(0, now - startMs);
+    return Math.floor(diffMs / 60000);
+}
+
 export function getElapsedBreakTime(rider) {
     if (!rider) return "0m";
     const now = Date.now();

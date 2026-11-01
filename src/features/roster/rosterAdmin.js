@@ -94,6 +94,7 @@ export * from './rosterSchedule.js';
 export * from './rosterDayOff.js';
 export * from './rosterBookingLimits.js';
 export * from './rosterAutoEndShift.js';
+export * from './rosterBreakSettings.js';
 export * from './rosterAccounts.js';
 
 let pendingAdminTarget = null;
@@ -321,6 +322,7 @@ export function toggleAdminControls(enabled) {
         'admin-booking-limits-btn': 'canManageBookingLimits',
         'admin-commission-settings-btn': 'canManageCommission',
         'admin-credits-settings-btn': 'canManageCredits',
+        'admin-break-settings-btn': 'canManageBreakSettings',
         'admin-early-shift-btn': 'canManageEarlyShift',
         'admin-auto-endshift-btn': 'canManageAutoEndShift',
         'admin-block-btn': 'canManageBanList',

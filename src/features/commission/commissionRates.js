@@ -19,7 +19,7 @@ import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { ADMIN_IDS } from '../../config/constants.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
-import { isSameDateStr, isRiderMatch } from '../roster/rosterUtils.js';
+import { isSameDateStr, isRiderMatch, parseTimeToMinutes } from '../roster/rosterUtils.js';
 
 export const SETTINGS_CACHE_KEY = 'lokalex_commission_settings_cache_v2';
 export const RECEIPTS_CACHE_KEY = 'lokalex_receipts_cache_v2';
@@ -41,6 +41,14 @@ export function setRecurringDiscount(val) { recurringDiscount = val; }
 export let specialDateDiscounts = {};
 export function setSpecialDateDiscounts(val) { specialDateDiscounts = val; }
 
+export let overtimeReward = {
+    enabled: false,
+    type: 'percentage', // 'percentage' | 'fixed'
+    value: 5,
+    thresholdHours: 8
+};
+export function setOvertimeReward(val) { overtimeReward = val; }
+
 export function loadCommissionSettingsCache() {
     try {
         const savedSettings = localStorage.getItem(SETTINGS_CACHE_KEY);
@@ -51,6 +59,14 @@ export function loadCommissionSettingsCache() {
                 if (data.riderRates) customRiderRates = data.riderRates;
                 if (data.recurringDiscount) recurringDiscount = data.recurringDiscount;
                 if (data.specialDateDiscounts) specialDateDiscounts = data.specialDateDiscounts;
+                if (data.overtimeReward) {
+                    overtimeReward = {
+                        enabled: !!data.overtimeReward.enabled,
+                        type: data.overtimeReward.type || 'percentage',
+                        value: parseFloat(data.overtimeReward.value) || 0,
+                        thresholdHours: parseFloat(data.overtimeReward.thresholdHours) || 8
+                    };
+                }
             }
         }
 
@@ -72,7 +88,8 @@ export function saveCommissionSettingsCache() {
             defaultPercentage: defaultCommissionRate,
             riderRates: customRiderRates,
             recurringDiscount: recurringDiscount,
-            specialDateDiscounts: specialDateDiscounts
+            specialDateDiscounts: specialDateDiscounts,
+            overtimeReward: overtimeReward
         };
         localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(payload));
         if (globalState.globalDailyReceipts) {
@@ -143,7 +160,109 @@ export function isRiderAdmin(riderName = "", telegramId = "") {
     return false;
 }
 
-export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
+export function checkRiderIsOvertime(dateStr, riderName = "", telegramId = "", receiptTimeOrItem = null) {
+    if (!overtimeReward || !overtimeReward.enabled) return false;
+    if (isRiderAdmin(riderName, telegramId)) return false;
+
+    const dateFormatted = dateStr || getLocalTodayStr();
+    const cleanName = (riderName || "").toLowerCase().trim();
+    const cleanId = (telegramId || "").toString().trim();
+
+    let thresholdHours = parseFloat(overtimeReward.thresholdHours);
+    if (isNaN(thresholdHours) || thresholdHours <= 0) thresholdHours = 8;
+
+    if (globalState.earlyShiftPenaltyConfig && globalState.earlyShiftPenaltyConfig.riderTargets) {
+        const customTarget = parseFloat(globalState.earlyShiftPenaltyConfig.riderTargets[cleanId] || globalState.earlyShiftPenaltyConfig.riderTargets[cleanName]);
+        if (!isNaN(customTarget) && customTarget > 0 && thresholdHours === 8) {
+            thresholdHours = customTarget;
+        }
+    }
+    const targetMins = Math.round(thresholdHours * 60);
+
+    let loginRec = null;
+    if (globalState.globalLogins && Array.isArray(globalState.globalLogins)) {
+        loginRec = globalState.globalLogins.find(l => 
+            isSameDateStr(l.date, dateFormatted) &&
+            ((cleanId && (l.riderId || l.id || "").toString().trim() === cleanId) ||
+             (cleanName && (l.riderName || "").trim().toLowerCase() === cleanName))
+        );
+    }
+
+    let rosterMem = null;
+    if (globalState.rosterMembers) {
+        rosterMem = globalState.rosterMembers.find(m => 
+            (cleanId && (m.telegramId || m.id || "").toString().trim() === cleanId) ||
+            (cleanName && (m.riderName || m.name || "").trim().toLowerCase() === cleanName)
+        );
+    }
+
+    let totalBreakMins = 0;
+    if (loginRec && loginRec.totalBreakMinutes !== undefined) {
+        totalBreakMins = parseInt(loginRec.totalBreakMinutes, 10) || 0;
+    } else if (rosterMem && rosterMem.totalBreakMinutes !== undefined) {
+        totalBreakMins = parseInt(rosterMem.totalBreakMinutes, 10) || 0;
+    }
+
+    let loginTimestamp = loginRec?.loginTimestamp || null;
+    let loginTimeStr = loginRec?.loginTime || rosterMem?.timeIn || "";
+
+    if (!loginTimestamp && loginTimeStr) {
+        const parsedMins = parseTimeToMinutes(loginTimeStr);
+        if (parsedMins !== null) {
+            const d = new Date(dateFormatted.includes('-') ? dateFormatted + "T00:00:00" : Number(dateFormatted));
+            d.setHours(Math.floor(parsedMins / 60), parsedMins % 60, 0, 0);
+            loginTimestamp = d.getTime();
+        }
+    }
+
+    // 1. Specific receipt/order time check
+    if (receiptTimeOrItem !== null && receiptTimeOrItem !== undefined) {
+        if (typeof receiptTimeOrItem === 'string' && receiptTimeOrItem.trim() !== '') {
+            const rMins = parseTimeToMinutes(receiptTimeOrItem);
+            const lMins = loginTimeStr ? parseTimeToMinutes(loginTimeStr) : null;
+            if (rMins !== null && lMins !== null) {
+                let grossMins = rMins - lMins;
+                if (grossMins < 0) grossMins += 1440;
+                const netMins = Math.max(0, grossMins - totalBreakMins);
+                return netMins >= targetMins;
+            }
+        } else if (typeof receiptTimeOrItem === 'number' && loginTimestamp) {
+            const grossMins = Math.max(0, Math.floor((receiptTimeOrItem - loginTimestamp) / 60000));
+            const netMins = Math.max(0, grossMins - totalBreakMins);
+            return netMins >= targetMins;
+        }
+    }
+
+    // 2. Active duty check for live/upcoming orders today
+    const now = Date.now();
+    const isToday = isSameDateStr(dateFormatted, getLocalTodayStr());
+
+    if (isToday && loginTimestamp) {
+        let activeBreakMins = totalBreakMins;
+        if (rosterMem?.status === 'Break' && rosterMem.breakTimestamp) {
+            activeBreakMins += Math.max(0, Math.floor((now - rosterMem.breakTimestamp) / 60000));
+        }
+        const grossMins = Math.max(0, Math.floor((now - loginTimestamp) / 60000));
+        const netMins = Math.max(0, grossMins - activeBreakMins);
+        return netMins >= targetMins;
+    }
+
+    // 3. Historical or logged-out record
+    if (loginRec) {
+        if (loginRec.netWorkedMinutes !== undefined) {
+            return parseInt(loginRec.netWorkedMinutes, 10) >= targetMins;
+        }
+        if (loginTimestamp && loginRec.logoutTimestamp) {
+            const grossMins = Math.max(0, Math.floor((loginRec.logoutTimestamp - loginTimestamp) / 60000));
+            const netMins = Math.max(0, grossMins - totalBreakMins);
+            return netMins >= targetMins;
+        }
+    }
+
+    return false;
+}
+
+export function getCommissionRates(dateStr, riderName = "", telegramId = "", receiptTimeOrItem = null) {
     const dateFormatted = dateStr || getLocalTodayStr();
     const d = new Date(dateFormatted + "T00:00:00");
     const dayOfWeek = d.getDay();
@@ -164,7 +283,11 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
             earlyShiftDeficitHours: 0,
             promoDiscountPerc: 0,
             hasCustomOverride: true,
-            isAdmin: true
+            isAdmin: true,
+            isOvertime: false,
+            overtimeDiscountPerc: 0,
+            overtimeDiscountAmount: 0,
+            overtimeReward: overtimeReward
         };
     }
 
@@ -266,7 +389,24 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
     }
 
     const totalPenaltyPerc = manualPenaltyPerc + earlyShiftPenaltyPerc;
-    const finalCompanyPerc = Math.max(0, baseCompanyPerc + totalPenaltyPerc - promoDiscountPerc);
+    let finalCompanyPerc = Math.max(0, baseCompanyPerc + totalPenaltyPerc - promoDiscountPerc);
+
+    let isOvertime = false;
+    let overtimeDiscountPerc = 0;
+    let overtimeDiscountAmount = 0;
+
+    if (overtimeReward && overtimeReward.enabled) {
+        isOvertime = checkRiderIsOvertime(dateFormatted, cleanName, cleanId, receiptTimeOrItem);
+        if (isOvertime) {
+            if (overtimeReward.type === 'fixed') {
+                overtimeDiscountAmount = Math.max(0, parseFloat(overtimeReward.value) || 0);
+            } else {
+                overtimeDiscountPerc = Math.min(finalCompanyPerc, Math.max(0, parseFloat(overtimeReward.value) || 0));
+                finalCompanyPerc = Math.max(0, finalCompanyPerc - overtimeDiscountPerc);
+            }
+        }
+    }
+
     const companyRate = finalCompanyPerc / 100;
     const riderRate = Math.max(0, (100 - finalCompanyPerc) / 100);
 
@@ -284,7 +424,11 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "") {
         promoDiscountPerc: promoDiscountPerc,
         hasCustomOverride: hasCustomOverride,
         penaltyReason: penaltyReason,
-        isAdmin: false
+        isAdmin: false,
+        isOvertime: isOvertime,
+        overtimeDiscountPerc: overtimeDiscountPerc,
+        overtimeDiscountAmount: overtimeDiscountAmount,
+        overtimeReward: overtimeReward
     };
 }
 
@@ -309,6 +453,14 @@ export async function fetchCommissionSettings() {
                     };
                 }
                 specialDateDiscounts = data.specialDateDiscounts || {};
+                if (data.overtimeReward) {
+                    overtimeReward = {
+                        enabled: !!data.overtimeReward.enabled,
+                        type: data.overtimeReward.type || 'percentage',
+                        value: parseFloat(data.overtimeReward.value) || 0,
+                        thresholdHours: parseFloat(data.overtimeReward.thresholdHours) || 8
+                    };
+                }
                 saveCommissionSettingsCache();
             }
             if (window.refreshCommissionView) window.refreshCommissionView();

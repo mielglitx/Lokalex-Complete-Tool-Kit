@@ -316,9 +316,14 @@ export async function openMapPicker(context = 'form') {
     clearManualPin();
 
     const mapView = document.getElementById('view-map');
-    if (context === 'rider-chat' || context === 'chat') {
-        // Overlay directly without touching router history so chat modal and background view remain undisturbed
-        if (mapView) mapView.classList.remove('hidden');
+    const modalContexts = ['rider-chat', 'chat', 'add-customer-address', 'customer-location', 'edit-profile', 'customer-address'];
+
+    if (modalContexts.includes(context)) {
+        // Overlay directly without touching router history so modal and background view remain undisturbed
+        if (mapView) {
+            mapView.style.zIndex = '2000050';
+            mapView.classList.remove('hidden');
+        }
     } else {
         switchView('view-map');
     }
@@ -346,6 +351,18 @@ export async function openMapPicker(context = 'form') {
     } else if (context === 'registration') {
         if (titleEl) titleEl.innerText = "Pin Delivery Location";
         if (confirmBtnText) confirmBtnText.innerText = "CONFIRM REGISTRATION PIN";
+    } else if (context === 'add-customer-address') {
+        if (titleEl) titleEl.innerText = "Pick Customer Address Pin";
+        if (confirmBtnText) confirmBtnText.innerText = "CONFIRM ADDRESS PIN";
+    } else if (context === 'customer-location') {
+        if (titleEl) titleEl.innerText = "Pick Customer Saved Location";
+        if (confirmBtnText) confirmBtnText.innerText = "CONFIRM LOCATION PIN";
+    } else if (context === 'edit-profile') {
+        if (titleEl) titleEl.innerText = "Pin Delivery Location";
+        if (confirmBtnText) confirmBtnText.innerText = "CONFIRM PROFILE PIN";
+    } else if (context === 'customer-address') {
+        if (titleEl) titleEl.innerText = "Pick Delivery Address Pin";
+        if (confirmBtnText) confirmBtnText.innerText = "CONFIRM ADDRESS PIN";
     } else {
         if (titleEl) titleEl.innerText = "Pick Location Pin";
         if (confirmBtnText) confirmBtnText.innerText = "CONFIRM LOCATION PIN";
@@ -487,6 +504,7 @@ export function confirmGoogleMapPin() {
     appState.lon = targetLng;
 
     const captureLabel = isManualCapture ? "Placed Pin" : "Center Reticle";
+    const searchVal = document.getElementById('map-search-input')?.value?.trim() || "";
 
     if (mapState.mapPickerContext === 'chat') {
         const mapView = document.getElementById('view-map');
@@ -502,6 +520,61 @@ export function confirmGoogleMapPin() {
             sendRiderToCustomerChat("Shared Rider Location", null, { lat: targetLat, lng: targetLng }, mapState.mapPickerTargetCustId);
         }
         showToast(`📍 ${captureLabel} location sent to chat!`);
+    } else if (mapState.mapPickerContext === 'add-customer-address') {
+        const gpsInput = document.getElementById('new-cust-submodal-gps');
+        const addrInput = document.getElementById('new-cust-submodal-address');
+        const statusEl = document.getElementById('new-cust-gps-status');
+
+        if (gpsInput) gpsInput.value = mapLink;
+        if (statusEl) {
+            statusEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-500"></i> Map Pin Set (${formattedLat}, ${formattedLng})`;
+        }
+        if (searchVal && addrInput && !addrInput.value.trim()) {
+            addrInput.value = searchVal;
+        }
+
+        closeMapPicker();
+        showToast(`📍 ${captureLabel} pinned for customer address!`);
+    } else if (mapState.mapPickerContext === 'customer-location') {
+        const mapInput = document.getElementById('cust-modal-new-loc-map');
+        const addrInput = document.getElementById('cust-modal-new-loc-address');
+
+        if (mapInput) mapInput.value = mapLink;
+        if (searchVal && addrInput && !addrInput.value.trim()) {
+            addrInput.value = searchVal;
+        }
+
+        closeMapPicker();
+        showToast(`📍 ${captureLabel} pinned for saved location!`);
+    } else if (mapState.mapPickerContext === 'edit-profile') {
+        const gpsInput = document.getElementById('edit-cust-gps-link');
+        const latInput = document.getElementById('edit-cust-lat');
+        const lonInput = document.getElementById('edit-cust-lon');
+        const addrInput = document.getElementById('edit-cust-address');
+
+        if (gpsInput) gpsInput.value = mapLink;
+        if (latInput) latInput.value = formattedLat;
+        if (lonInput) lonInput.value = formattedLng;
+        if (searchVal && addrInput && !addrInput.value.trim()) {
+            addrInput.value = searchVal;
+        }
+
+        closeMapPicker();
+        showToast(`📍 ${captureLabel} pinned for profile!`);
+    } else if (mapState.mapPickerContext === 'customer-address') {
+        const pinBadge = document.getElementById('new-addr-pin-badge');
+        const textInput = document.getElementById('new-addr-text');
+
+        if (pinBadge) {
+            pinBadge.innerText = `GPS: ${Number(targetLat).toFixed(4)}, ${Number(targetLng).toFixed(4)}`;
+            pinBadge.className = "text-[9px] font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/30";
+        }
+        if (searchVal && textInput && !textInput.value.trim()) {
+            textInput.value = searchVal;
+        }
+
+        closeMapPicker();
+        showToast(`📍 ${captureLabel} pinned for address book!`);
     } else if (mapState.mapPickerContext === 'registration') {
         const regGpsInput = document.getElementById('reg-gps-link');
         const regLatInput = document.getElementById('reg-lat');
@@ -520,14 +593,31 @@ export function confirmGoogleMapPin() {
         goBack();
         showToast(`📍 ${captureLabel} confirmed!`);
     }
+
+    try {
+        window.dispatchEvent(new CustomEvent('mapPickerSelected', {
+            detail: {
+                lat: targetLat,
+                lon: targetLng,
+                link: mapLink,
+                address: searchVal,
+                context: mapState.mapPickerContext
+            }
+        }));
+    } catch (_) {}
 }
 
 export function closeMapPicker() {
     const mapView = document.getElementById('view-map');
     if (mapView) mapView.classList.add('hidden');
-    if (mapState.mapPickerContext !== 'rider-chat' && mapState.mapPickerContext !== 'chat') {
+    const modalContexts = ['rider-chat', 'chat', 'add-customer-address', 'customer-location', 'edit-profile', 'customer-address'];
+    if (!modalContexts.includes(mapState.mapPickerContext)) {
         goBack();
     }
+}
+
+export function openCustomerMapPicker(context = 'add-customer-address') {
+    openMapPicker(context);
 }
 
 // Global window attachments
@@ -536,6 +626,7 @@ if (typeof window !== 'undefined') {
     window.clearManualPin = clearManualPin;
     window.confirmGoogleMapPin = confirmGoogleMapPin;
     window.openMapPicker = openMapPicker;
+    window.openCustomerMapPicker = openCustomerMapPicker;
     window.closeMapPicker = closeMapPicker;
 }
 

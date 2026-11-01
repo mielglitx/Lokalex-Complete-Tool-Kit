@@ -33,6 +33,7 @@ import { checkRiderTimeInAllowed } from '../rosterStatusLimits.js';
 import { updateRosterStatus, clockOutRider } from '../rosterStatusCore.js';
 import { dismissQueueAlarm } from './rosterAlarms.js';
 import { completeSingleCateringCustomer } from './rosterCateringCompletion.js';
+import { openRiderBreakModal } from '../rosterBreakSettings.js';
 
 
 
@@ -420,6 +421,8 @@ export async function triggerStatusWithSlide(targetStatus) {
             await clockOutRider(myId);
             await updateRosterStatus('End', myId, myName);
         });
+    } else if (targetStatus === 'Break') {
+        openRiderBreakModal();
     } else {
         openSlideDeleteModal(`Are you sure you want to change status to [${targetStatus}]?`, async () => {
             dismissQueueAlarm();

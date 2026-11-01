@@ -364,6 +364,13 @@ export async function adminForceStatus(id, name, actionValue) {
         return;
     }
 
+    if (actionValue === 'Break') {
+        if (typeof window.openRiderBreakModal === 'function') {
+            window.openRiderBreakModal(id, name);
+        }
+        return;
+    }
+
     openSlideDeleteModal(`Force Status: ${actionValue}?`, `Force change status of ${name} to [${actionValue}]?`, async () => {
         if (actionValue === 'Available') {
             if (targetRecord) {
