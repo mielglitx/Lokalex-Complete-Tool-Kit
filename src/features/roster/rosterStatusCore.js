@@ -366,6 +366,10 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         db.ref(`logins/${tId}`).update({
             totalBreakMinutes: currentTotalBreak
         }).catch(() => {});
+        const todayStr = getLocalTodayStr();
+        db.ref(`shiftHistory/${todayStr}_${tId}`).update({
+            totalBreakMinutes: currentTotalBreak
+        }).catch(() => {});
     }
 
     if (recordLogin && db) {
@@ -399,6 +403,7 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
             totalBreakMinutes: 0
         };
         await db.ref('logins/' + tId).set(loginEntry);
+        db.ref('shiftHistory/' + todayStr + '_' + tId).set(loginEntry).catch(() => {});
 
         if (!globalState.globalLogins) globalState.globalLogins = [];
         const exIdx = globalState.globalLogins.findIndex(l => (l.riderId || l.id || "").toString() === tId);
@@ -442,13 +447,15 @@ export async function clockOutRider(targetId = null) {
                     grossMins = Math.max(0, Math.floor((nowTimestamp - existingLogin.loginTimestamp) / 60000));
                     netWorkedMins = Math.max(0, grossMins - finalBreakMins);
                 }
-                await db.ref('logins/' + tId).update({ 
+                const shiftClockOutPayload = { 
                     clockOutTime: timeStr,
                     clockOutTimestamp: nowTimestamp,
                     totalBreakMinutes: finalBreakMins,
                     grossMinutes: grossMins,
                     workedMinutes: netWorkedMins
-                });
+                };
+                await db.ref('logins/' + tId).update(shiftClockOutPayload);
+                db.ref('shiftHistory/' + todayStr + '_' + tId).update(shiftClockOutPayload).catch(() => {});
             } else {
                 const rName = rMem ? (rMem.riderName || rMem.name || "Rider") : (appState.riderName || "Rider");
                 await db.ref('logins/' + tId).set({

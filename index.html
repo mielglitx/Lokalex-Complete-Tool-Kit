@@ -79,7 +79,7 @@
             padding-bottom: env(safe-area-inset-bottom, 0px);
         }
         #app-header {
-            padding-top: 0.625rem !important;
+            padding-top: max(0.625rem, env(safe-area-inset-top, 0px)) !important;
         }
         [id$="-modal"] {
             padding-top: max(0.75rem, env(safe-area-inset-top, 0px)) !important;
@@ -647,6 +647,7 @@
     <load src="src/partials/modals/avatar-modal.html" />
     <load src="src/partials/modals/rider-password-modal.html" />
     <load src="src/partials/modals/profile-settings-modal.html" />
+    <load src="src/partials/modals/performance-tracker-modal.html" />
 
     <!-- STANDALONE PWA SERVICE WORKER REGISTRATION SCRIPT -->
     <script>

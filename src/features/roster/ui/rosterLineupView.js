@@ -289,6 +289,12 @@ export function updateRosterUI() {
         riderDayOffBtn.classList.remove('hidden');
     }
 
+    const perfBtn = document.getElementById('admin-performance-tracker-btn');
+    if (perfBtn) {
+        if (showControls && (isAdmin() || canManageRoster())) perfBtn.classList.remove('hidden');
+        else perfBtn.classList.add('hidden');
+    }
+
     const storeHubBtn = document.getElementById('admin-store-hub-btn');
     if (storeHubBtn) {
         if (showControls && (isAdmin() || hasTlPermission('canManageStoreAccounts'))) storeHubBtn.classList.remove('hidden');

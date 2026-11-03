@@ -1,0 +1,100 @@
+<!-- src/partials/modals/performance-tracker-modal.html -->
+<div id="performance-tracker-modal" class="hidden fixed inset-0 z-[9999] bg-black/85 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 select-none">
+    <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 rounded-3xl w-full max-w-xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden transition-all duration-300">
+        <!-- HEADER -->
+        <div class="bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 p-3.5 sm:p-4 text-white flex items-center justify-between shrink-0 shadow-md">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 text-amber-300 shadow-md text-lg shrink-0">
+                    <i class="fa-solid fa-trophy"></i>
+                </div>
+                <div class="min-w-0">
+                    <h2 class="text-sm sm:text-base font-black truncate leading-tight flex items-center gap-2">
+                        Rider Performance Tracker
+                        <span class="bg-amber-400 text-black text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider">Admin</span>
+                    </h2>
+                    <p class="text-[11px] text-teal-100 truncate">Top income, customers catered, work time & attendance</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeAdminPerformanceTrackerModal && window.closeAdminPerformanceTrackerModal()" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+
+        <!-- CONTROLS TOOLBAR: PERIOD PICKER & DATE NAVIGATOR -->
+        <div class="p-3 bg-gray-50 dark:bg-zinc-900/90 border-b border-gray-200 dark:border-gray-800 shrink-0 flex flex-col gap-2.5">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+                <!-- Period Tabs -->
+                <div class="inline-flex p-1 bg-gray-200 dark:bg-black/40 rounded-xl gap-1 shrink-0">
+                    <button type="button" id="perf-tab-weekly" onclick="window.switchPerformanceReportType('weekly')" class="px-3 py-1 text-xs font-bold rounded-lg transition-all bg-white dark:bg-emerald-600 text-emerald-700 dark:text-white shadow-xs cursor-pointer">
+                        <i class="fa-solid fa-calendar-week mr-1"></i> Weekly
+                    </button>
+                    <button type="button" id="perf-tab-monthly" onclick="window.switchPerformanceReportType('monthly')" class="px-3 py-1 text-xs font-bold rounded-lg transition-all text-gray-600 dark:text-gray-300 hover:text-gray-900 cursor-pointer">
+                        <i class="fa-solid fa-calendar-days mr-1"></i> Monthly
+                    </button>
+                </div>
+
+                <!-- Navigation arrows & Date Badge -->
+                <div class="flex items-center gap-1.5 ml-auto">
+                    <button type="button" onclick="window.navigatePerformanceOffset(-1)" class="w-7 h-7 rounded-lg bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700 flex items-center justify-center text-xs transition active:scale-95 cursor-pointer" title="Previous Period">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                    <div id="perf-date-range-badge" class="px-2.5 py-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg text-[11px] font-mono font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1 shadow-2xs">
+                        <i class="fa-regular fa-calendar text-emerald-500 text-[10px]"></i>
+                        <span id="perf-date-range-text">Loading...</span>
+                    </div>
+                    <button type="button" id="perf-btn-next" onclick="window.navigatePerformanceOffset(1)" class="w-7 h-7 rounded-lg bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-700 flex items-center justify-center text-xs transition active:scale-95 cursor-pointer" title="Next Period">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                    <button type="button" onclick="window.refreshPerformanceData()" class="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 flex items-center justify-center text-xs transition active:scale-95 cursor-pointer ml-1" title="Refresh Data">
+                        <i class="fa-solid fa-rotate text-xs"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- CRITERIA SORTING PILLS -->
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
+                <span class="text-[10px] font-bold text-gray-500 uppercase tracking-wider shrink-0 mr-1">Sort By:</span>
+                <button type="button" onclick="window.sortPerformanceLeaderboard('income')" id="perf-sort-income" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 shrink-0 bg-emerald-600 text-white shadow-xs cursor-pointer">
+                    <i class="fa-solid fa-coins text-yellow-200"></i> Income
+                </button>
+                <button type="button" onclick="window.sortPerformanceLeaderboard('catered')" id="perf-sort-catered" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 shrink-0 bg-gray-200 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer">
+                    <i class="fa-solid fa-box text-blue-400"></i> Customers
+                </button>
+                <button type="button" onclick="window.sortPerformanceLeaderboard('time')" id="perf-sort-time" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 shrink-0 bg-gray-200 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer">
+                    <i class="fa-solid fa-clock text-purple-400"></i> Time Worked
+                </button>
+                <button type="button" onclick="window.sortPerformanceLeaderboard('attendance')" id="perf-sort-attendance" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 shrink-0 bg-gray-200 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 cursor-pointer">
+                    <i class="fa-solid fa-calendar-check text-emerald-400"></i> Days Attended
+                </button>
+            </div>
+        </div>
+
+        <!-- MODAL SCROLLABLE BODY -->
+        <div id="perf-modal-body" class="flex-1 overflow-y-auto p-3 sm:p-4 flex flex-col gap-3.5 overscroll-contain">
+            <!-- 4 SPOTLIGHT CHAMPION CARDS -->
+            <div id="perf-champions-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+
+            <!-- OVERVIEW AGGREGATE SUMMARY STRIP -->
+            <div id="perf-overview-strip" class="bg-gray-100 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-2xl p-2.5 flex items-center justify-around text-center text-xs"></div>
+
+            <!-- DETAILED LEADERBOARD LIST -->
+            <div class="flex flex-col gap-2">
+                <div class="flex items-center justify-between text-xs font-bold text-gray-500 uppercase tracking-wider px-1">
+                    <span>Rider Leaderboard</span>
+                    <span id="perf-riders-count">0 Riders</span>
+                </div>
+                <div id="perf-leaderboard-container" class="flex flex-col gap-2"></div>
+            </div>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="p-3 bg-gray-50 dark:bg-zinc-900/90 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0">
+            <button type="button" onclick="window.copyPerformanceReportSummary()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 px-3 rounded-xl transition active:scale-95 flex items-center gap-1.5 shadow-md cursor-pointer">
+                <i class="fa-regular fa-copy"></i> Copy Group Summary
+            </button>
+            <button type="button" onclick="window.closeAdminPerformanceTrackerModal && window.closeAdminPerformanceTrackerModal()" class="bg-gray-200 hover:bg-gray-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-gray-800 dark:text-gray-200 font-bold text-xs py-2 px-4 rounded-xl transition active:scale-95 cursor-pointer">
+                Close
+            </button>
+        </div>
+    </div>
+</div>

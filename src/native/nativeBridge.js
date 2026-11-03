@@ -39,11 +39,10 @@ export async function initNativeBridge() {
     startKeepAlive();
 
     try {
-        // 1. Configure Status Bar (Do NOT overlay webview, prevent status bar from blocking top content)
-        await StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
-        await StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
-        if (Capacitor.getPlatform() === 'android') {
-            await StatusBar.setBackgroundColor({ color: '#0f172a' }).catch(() => {});
+        // 1. Configure Status Bar: Immersive sticky mode (hides system notification bar; swiping down from top reveals it transiently)
+        await StatusBar.hide().catch(() => {});
+        if (typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.hideStatusBarImmersive === 'function') {
+            window.NativePermissionsBridge.hideStatusBarImmersive();
         }
     } catch (_) {}
 
@@ -67,6 +66,7 @@ export async function initNativeBridge() {
                 { id: 'quick-replies-edit-modal', closeFn: window.closeQuickReplyEditModal },
                 { id: 'rider-sources-filter-modal', closeFn: window.closeRiderChatSourcesModal },
                 { id: 'admin-fb-api-modal', closeFn: window.closeAdminFbApiModal },
+                { id: 'performance-tracker-modal', closeFn: window.closeAdminPerformanceTrackerModal },
                 { id: 'changelog-modal', closeFn: window.closeChangelogModal },
                 { id: 'ota-update-selector-modal', closeFn: window.closeOtaUpdateSelectorModal },
                 { id: 'slide-delete-modal', closeFn: window.closeSlideDeleteModal },

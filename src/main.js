@@ -49,6 +49,7 @@ if (typeof window !== 'undefined') {
 }
 import { initOtaUpdater, syncVersionTrackerElements } from './utils/otaUpdater.js';
 import './utils/changelogViewer.js';
+import './features/roster/rosterPerformanceTracker.js';
 import { registerSW } from 'virtual:pwa-register';
 
 const updateSW = registerSW({
