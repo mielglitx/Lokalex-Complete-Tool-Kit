@@ -28,7 +28,7 @@ import { showToast } from '../ui/notifications.js';
 
 const OTA_MANIFEST_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/version.json';
 const OTA_CHECKSUMS_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/checksums.json';
-const CURRENT_BUILT_IN_VERSION = '1.0.91';
+const CURRENT_BUILT_IN_VERSION = '1.0.89';
 let isCheckingUpdate = false;
 let globalOtaChecksumsMap = {};
 
@@ -267,7 +267,10 @@ export async function checkForOtaUpdate(isManual = false) {
         }
 
         const currentVersion = await getCurrentAppVersion();
-        const hasUpdate = compareVersions(remoteVersion, currentVersion) > 0;
+        const currentChecksum = localStorage.getItem('lokalex_ota_checksum') || '';
+        const hasVersionUpdate = compareVersions(remoteVersion, currentVersion) > 0;
+        const hasChecksumUpdate = Boolean(checksum && currentChecksum && checksum !== currentChecksum && compareVersions(remoteVersion, currentVersion) >= 0);
+        const hasUpdate = hasVersionUpdate || hasChecksumUpdate;
 
         if (!hasUpdate) {
             if (isManual) {
@@ -302,6 +305,7 @@ export async function checkForOtaUpdate(isManual = false) {
 
             if (bundle && bundle.id) {
                 localStorage.setItem('lokalex_ota_version', remoteVersion);
+                if (checksum) localStorage.setItem('lokalex_ota_checksum', checksum);
                 showToast(`🎉 Downloaded v${remoteVersion}! Applying update...`);
 
                 try {
