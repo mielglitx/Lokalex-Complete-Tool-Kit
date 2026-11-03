@@ -2,7 +2,9 @@
 import { db } from '../../config/firebase.js';
 import { globalState, appState } from '../../store/state.js';
 import { showToast } from '../../ui/notifications.js';
-import { isAdmin, canManageRoster, isRiderMatch } from './rosterUtils.js';
+import { isAdmin, canManageRoster, isRiderMatch, getUserType, normalizeToDateStr } from './rosterUtils.js';
+import { ADMIN_IDS } from '../../config/constants.js';
+import { getLocalTodayStr } from '../../utils/helpers.js';
 
 let performanceModalElement = null;
 let currentReportType = 'weekly'; // 'weekly' | 'monthly' | 'custom'
@@ -132,10 +134,36 @@ export async function loadRiderPerformanceData(startDate, endDate) {
             });
         }
 
-        // 2. Build canonical registered riders registry
+        // 2. Build canonical registered riders registry & Admin filter helper
         const riderStatsMap = new Map();
 
-        const getOrCreateRiderStats = (id, name, avatar = '') => {
+        const isPerformanceAdmin = (targetId, targetName, userType = null) => {
+            const cleanId = (targetId || '').toString().trim();
+            const cleanName = (targetName || '').trim().toLowerCase();
+            const cleanType = (userType || '').trim().toLowerCase();
+
+            // 1. Explicit admin/management userType
+            const adminRoles = ['admin', 'owner', 'manager', 'superadmin', 'administrator'];
+            if (adminRoles.includes(cleanType)) return true;
+
+            // 2. Known Admin IDs (e.g. 4547425, amiel)
+            if (cleanId && ADMIN_IDS.some(id => id.toString().trim() === cleanId && cleanId !== "1234")) {
+                return true;
+            }
+
+            // 3. Known Admin names or keywords (Rex, Amiel, Admin, Azriel, Ruth Ann)
+            if (cleanName.includes('amiel') || cleanName.includes('admin') || cleanName.includes('azriel') || cleanName.includes('ruth ann') || cleanName.includes('rex')) {
+                return true;
+            }
+
+            // 4. Role lookup via getUserType from rosterUtils
+            const resolvedRole = getUserType(cleanId, cleanName);
+            if (adminRoles.includes(resolvedRole)) return true;
+
+            return false;
+        };
+
+        const getOrCreateRiderStats = (id, name, avatar = '', userType = '') => {
             const cleanId = (id || '').toString().trim();
             const cleanName = (name || 'Rider').trim();
             const key = cleanId || cleanName.toLowerCase();
@@ -145,6 +173,8 @@ export async function loadRiderPerformanceData(startDate, endDate) {
                     id: cleanId,
                     name: cleanName,
                     avatar: avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=0284c7&color=ffffff&bold=true&size=128`,
+                    userType: userType || '',
+                    isAdmin: isPerformanceAdmin(cleanId, cleanName, userType),
                     totalIncome: 0,
                     customerCount: 0,
                     workedMinutes: 0,
@@ -156,6 +186,10 @@ export async function loadRiderPerformanceData(startDate, endDate) {
             const item = riderStatsMap.get(key);
             if (cleanName && (!item.name || item.name === 'Rider')) item.name = cleanName;
             if (avatar && !item.avatar.includes('ui-avatars')) item.avatar = avatar;
+            if (userType && !item.userType) {
+                item.userType = userType;
+                item.isAdmin = isPerformanceAdmin(item.id, item.name, userType);
+            }
             return item;
         };
 
@@ -164,16 +198,17 @@ export async function loadRiderPerformanceData(startDate, endDate) {
             if (!rData) return;
             const id = (rData.telegramId || rData.id || rId).toString().trim();
             const name = (rData.riderName || rData.name || rData.displayName || '').trim();
+            const uType = (rData.userType || '').toString().trim();
             let photo = rData.photoUrl || rData.avatar || '';
             if (photo && (photo.includes('litterbox') || photo.includes('catbox'))) photo = '';
-            getOrCreateRiderStats(id, name, photo);
+            getOrCreateRiderStats(id, name, photo, uType);
         });
 
         // Also seed riders from globalState.allRidersList if present
         if (globalState && Array.isArray(globalState.allRidersList)) {
             globalState.allRidersList.forEach(r => {
                 if (r && r.name) {
-                    getOrCreateRiderStats(r.telegramId || r.id, r.name, r.avatar || r.photoUrl);
+                    getOrCreateRiderStats(r.telegramId || r.id, r.name, r.avatar || r.photoUrl, r.userType);
                 }
             });
         }
@@ -181,12 +216,17 @@ export async function loadRiderPerformanceData(startDate, endDate) {
         // 3. Process Receipts (Total delivery fees & Income)
         Object.entries(rawReceipts).forEach(([txId, r]) => {
             if (!r || r.status === 'voided' || r.voided || r.isVoided) return;
-            const rDate = String(r.date || r.createdAtDate || r.completedDate || '').substring(0, 10);
+            const rDate = normalizeToDateStr(r.date || r.createdAtDate || r.completedDate || '');
             if (!rDate || rDate < startDate || rDate > endDate) return;
 
             const riderId = (r.telegramId || r.riderId || '').toString().trim();
             const riderName = (r.riderName || r.name || 'Rider').trim();
+            const rUserType = (r.userType || '').toString().trim();
+
+            if (isPerformanceAdmin(riderId, riderName, rUserType)) return;
+
             const stat = getOrCreateRiderStats(riderId, riderName);
+            if (stat.isAdmin) return;
 
             if (!stat.completedTxIds.has(txId)) {
                 stat.completedTxIds.add(txId);
@@ -206,12 +246,17 @@ export async function loadRiderPerformanceData(startDate, endDate) {
         // 4. Process Catered History (Captures orders marked done via roster)
         Object.entries(rawCatered).forEach(([txId, h]) => {
             if (!h || h.status === 'voided' || h.voided || h.isVoided) return;
-            const hDate = String(h.completedDate || h.date || '').substring(0, 10);
+            const hDate = normalizeToDateStr(h.completedDate || h.date || '');
             if (!hDate || hDate < startDate || hDate > endDate) return;
 
             const riderId = (h.telegramId || h.riderId || '').toString().trim();
             const riderName = (h.riderName || h.name || 'Rider').trim();
+            const hUserType = (h.userType || '').toString().trim();
+
+            if (isPerformanceAdmin(riderId, riderName, hUserType)) return;
+
             const stat = getOrCreateRiderStats(riderId, riderName);
+            if (stat.isAdmin) return;
 
             if (!stat.completedTxIds.has(txId)) {
                 stat.completedTxIds.add(txId);
@@ -232,21 +277,29 @@ export async function loadRiderPerformanceData(startDate, endDate) {
         const combinedShifts = { ...rawShifts };
         Object.entries(rawLogins).forEach(([lId, lData]) => {
             if (lData && lData.date) {
-                const lDate = String(lData.date).substring(0, 10);
-                if (lDate >= startDate && lDate <= endDate) {
+                const lDate = normalizeToDateStr(lData.date);
+                if (lDate && lDate >= startDate && lDate <= endDate) {
                     combinedShifts[`${lDate}_${lId}`] = lData;
                 }
             }
         });
 
+        const todayStr = getLocalTodayStr();
+
         Object.entries(combinedShifts).forEach(([key, shift]) => {
             if (!shift || !shift.date) return;
-            const sDate = String(shift.date).substring(0, 10);
-            if (sDate < startDate || sDate > endDate) return;
+            const sDate = normalizeToDateStr(shift.date);
+            if (!sDate || sDate < startDate || sDate > endDate) return;
 
             const riderId = (shift.riderId || shift.id || '').toString().trim();
             const riderName = (shift.riderName || '').trim();
+            const sUserType = (shift.userType || '').toString().trim();
+
+            // Exclude Admin from shifts completely
+            if (isPerformanceAdmin(riderId, riderName, sUserType)) return;
+
             const stat = getOrCreateRiderStats(riderId, riderName);
+            if (stat.isAdmin) return;
 
             stat.attendedDates.add(sDate);
 
@@ -256,7 +309,9 @@ export async function loadRiderPerformanceData(startDate, endDate) {
 
             if (isNaN(netWorked) || netWorked <= 0) {
                 if (shift.loginTimestamp) {
-                    const endTs = shift.clockOutTimestamp || Date.now();
+                    // Only use Date.now() if this shift is for TODAY and still ongoing
+                    const isToday = (sDate === todayStr);
+                    const endTs = shift.clockOutTimestamp || (isToday ? Date.now() : shift.loginTimestamp);
                     const gross = Math.max(0, Math.floor((endTs - shift.loginTimestamp) / 60000));
                     netWorked = Math.max(0, gross - totalBreak);
                 } else {
@@ -264,8 +319,9 @@ export async function loadRiderPerformanceData(startDate, endDate) {
                 }
             }
 
-            if (netWorked > 18 * 60) netWorked = 18 * 60;
-            if (totalBreak > 8 * 60) totalBreak = 8 * 60;
+            // Cap realistic shift maximum (14 hours / 840 min max per shift)
+            if (netWorked > 14 * 60) netWorked = 14 * 60;
+            if (totalBreak > 6 * 60) totalBreak = 6 * 60;
 
             stat.workedMinutes += netWorked;
             stat.breakMinutes += totalBreak;
@@ -289,14 +345,17 @@ export async function loadRiderPerformanceData(startDate, endDate) {
             };
         });
 
-        // Active riders
-        const activeRiders = ridersList.filter(r => r.daysAttended > 0 || r.customerCount > 0 || r.totalIncome > 0);
+        // Exclude all admin accounts and inactive non-working riders
+        const activeRiders = ridersList.filter(r => {
+            if (r.isAdmin || isPerformanceAdmin(r.id, r.name, r.userType)) return false;
+            return (r.customerCount > 0 || r.totalIncome > 0 || (r.daysAttended > 0 && r.workedMinutes > 0));
+        });
 
-        // 7. Find Top Performers for the 4 Criteria
-        const topIncome = [...activeRiders].sort((a, b) => b.totalIncome - a.totalIncome)[0] || null;
-        const topCaterer = [...activeRiders].sort((a, b) => b.customerCount - a.customerCount)[0] || null;
-        const topTime = [...activeRiders].sort((a, b) => b.workedMinutes - a.workedMinutes)[0] || null;
-        const topAttendance = [...activeRiders].sort((a, b) => b.daysAttended - a.daysAttended)[0] || null;
+        // 7. Find Top Performers for the 4 Criteria (Must be bona fide active delivery riders)
+        const topIncome = [...activeRiders].filter(r => r.totalIncome > 0).sort((a, b) => b.totalIncome - a.totalIncome)[0] || null;
+        const topCaterer = [...activeRiders].filter(r => r.customerCount > 0).sort((a, b) => b.customerCount - a.customerCount)[0] || null;
+        const topTime = [...activeRiders].filter(r => r.workedMinutes > 0 && (r.customerCount > 0 || r.totalIncome > 0)).sort((a, b) => b.workedMinutes - a.workedMinutes)[0] || null;
+        const topAttendance = [...activeRiders].filter(r => r.daysAttended > 0 && (r.customerCount > 0 || r.totalIncome > 0)).sort((a, b) => b.daysAttended - a.daysAttended)[0] || null;
 
         cachedPerformanceData = {
             startDate,
