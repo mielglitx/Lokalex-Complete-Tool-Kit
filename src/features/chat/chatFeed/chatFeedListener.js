@@ -656,14 +656,15 @@ export function listenToAllCustomerChatsForRider() {
     setIsCustomerChatMetaListening(true);
 
     // 2. REALTIME WEBSOCKET LISTENER FOR INCOMING LIVE MESSAGES
-    let metaRafId = null;
+    // Directly process incoming metadata synchronously so notifications and audio chimes
+    // fire immediately even when the screen is locked or the app is in the background.
     db.ref('customerChatMeta').on('value', (snapshot) => {
         const data = snapshot.val();
-        if (metaRafId) cancelAnimationFrame(metaRafId);
-        metaRafId = requestAnimationFrame(() => {
-            metaRafId = null;
+        try {
             processCustomerChatMetaData(data, false);
-        });
+        } catch (err) {
+            console.error("Error processing customerChatMeta update:", err);
+        }
     }, (error) => {
         console.error("Firebase customerChatMeta listener error:", error);
     });

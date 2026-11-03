@@ -54,6 +54,12 @@ public class LokalexForegroundService extends Service {
     private static final String FIREBASE_META_QUERY_URL =
             "https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?orderBy=%22lastUpdated%22&limitToLast=35";
 
+    // Supabase REST endpoint for dual-monitoring incoming chats
+    private static final String SUPABASE_META_QUERY_URL =
+            "https://brdvugzjhkimcyabptcw.supabase.co/rest/v1/customer_chat_meta?select=*&order=last_updated.desc&limit=35";
+    private static final String SUPABASE_ANON_KEY =
+            "sb_publishable_7wn7gV5RvuKWE2kGLRmaTQ_fgIC579K";
+
     private static volatile boolean isRunning = false;
     private static LokalexForegroundService instance = null;
     private static Bitmap cachedLargeIcon = null;
@@ -150,30 +156,100 @@ public class LokalexForegroundService extends Service {
             }
 
             // 2. Query Firebase directly in Java to monitor incoming messages even when screen is off
-            URL url = new URL(FIREBASE_META_QUERY_URL);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(10000);
-            conn.setRequestProperty("User-Agent", "LokalexBackgroundMonitor/1.0");
+            try {
+                URL url = new URL(FIREBASE_META_QUERY_URL);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(6000);
+                conn.setRequestProperty("User-Agent", "LokalexBackgroundMonitor/1.0");
 
-            int responseCode = conn.getResponseCode();
-            if (responseCode == 200) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = in.readLine()) != null) {
-                    sb.append(line);
+                int responseCode = conn.getResponseCode();
+                if (responseCode == 200) {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = in.readLine()) != null) {
+                        sb.append(line);
+                    }
+                    in.close();
+
+                    processIncomingMetaJson(sb.toString());
                 }
-                in.close();
+                conn.disconnect();
+            } catch (Exception ignored) {}
 
-                processIncomingMetaJson(sb.toString());
-            } else {
-                Log.w(TAG, "Firebase meta query response code: " + responseCode);
-            }
-            conn.disconnect();
+            // 3. Query Supabase directly in Java to monitor incoming Supabase messages when screen is off
+            try {
+                URL sbUrl = new URL(SUPABASE_META_QUERY_URL);
+                HttpURLConnection sbConn = (HttpURLConnection) sbUrl.openConnection();
+                sbConn.setRequestMethod("GET");
+                sbConn.setConnectTimeout(6000);
+                sbConn.setReadTimeout(6000);
+                sbConn.setRequestProperty("apikey", SUPABASE_ANON_KEY);
+                sbConn.setRequestProperty("Authorization", "Bearer " + SUPABASE_ANON_KEY);
+                sbConn.setRequestProperty("User-Agent", "LokalexBackgroundMonitor/1.0");
+
+                int sbCode = sbConn.getResponseCode();
+                if (sbCode == 200) {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(sbConn.getInputStream(), "UTF-8"));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = in.readLine()) != null) {
+                        sb.append(line);
+                    }
+                    in.close();
+
+                    processIncomingSupabaseJson(sb.toString());
+                }
+                sbConn.disconnect();
+            } catch (Exception ignored) {}
         } catch (Exception e) {
             Log.e(TAG, "Background check cycle exception: " + e.getMessage());
+        }
+    }
+
+    private void processIncomingSupabaseJson(String jsonStr) {
+        if (jsonStr == null || jsonStr.trim().isEmpty() || jsonStr.equals("null") || !jsonStr.startsWith("[")) return;
+        try {
+            org.json.JSONArray arr = new org.json.JSONArray(jsonStr);
+            org.json.JSONObject combined = new org.json.JSONObject();
+            for (int i = 0; i < arr.length(); i++) {
+                org.json.JSONObject row = arr.optJSONObject(i);
+                if (row == null) continue;
+                String id = row.optString("id", "").trim();
+                if (id.isEmpty()) continue;
+
+                org.json.JSONObject dataObj = row.optJSONObject("data");
+                org.json.JSONObject metaObj = dataObj != null ? new org.json.JSONObject(dataObj.toString()) : new org.json.JSONObject();
+
+                if (!metaObj.has("customerName") && row.has("customer_name")) {
+                    metaObj.put("customerName", row.optString("customer_name"));
+                }
+                if (!metaObj.has("folder") && row.has("folder")) {
+                    metaObj.put("folder", row.optString("folder"));
+                }
+                if (!metaObj.has("status") && row.has("status")) {
+                    metaObj.put("status", row.optString("status"));
+                }
+                if (!metaObj.has("lastUpdated") && row.has("last_updated")) {
+                    metaObj.put("lastUpdated", row.optLong("last_updated"));
+                }
+                if (!metaObj.has("unreadForRider") && row.has("unread_for_rider")) {
+                    metaObj.put("unreadForRider", row.optBoolean("unread_for_rider"));
+                }
+                if (!metaObj.has("cateredByRiderId") && row.has("catered_by_rider_id")) {
+                    metaObj.put("cateredByRiderId", row.optString("catered_by_rider_id"));
+                }
+                if (!metaObj.has("cateredByRiderName") && row.has("catered_by_rider_name")) {
+                    metaObj.put("cateredByRiderName", row.optString("catered_by_rider_name"));
+                }
+
+                combined.put(id, metaObj);
+            }
+            processIncomingMetaJson(combined.toString());
+        } catch (Exception e) {
+            Log.e(TAG, "processIncomingSupabaseJson error: " + e.getMessage());
         }
     }
 

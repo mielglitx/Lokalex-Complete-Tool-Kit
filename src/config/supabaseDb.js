@@ -1428,7 +1428,15 @@ export const supabaseDb = {
     return createSupabaseRef(path);
   },
   goOnline() {
-    console.log('[Supabase Adapter] Online state active.');
+    try {
+      const client = getSupabase();
+      if (client && client.realtime) {
+        if (typeof client.realtime.isConnected === 'function' && !client.realtime.isConnected()) {
+          console.log('[Supabase Adapter] Realtime disconnected; reconnecting...');
+          client.realtime.connect();
+        }
+      }
+    } catch (_) {}
   },
   goOffline() {
     console.log('[Supabase Adapter] Offline state simulated.');
