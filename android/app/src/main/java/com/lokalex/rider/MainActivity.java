@@ -69,16 +69,10 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         instance = this;
 
-        // Immersive sticky status bar: Hides system notification bar.
-        // Swiping down from top reveals notification bar transiently for a brief moment.
+        // Reserve space for native status bar so web content is not blocked by clock/icons
         try {
-            Window window = getWindow();
-            WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, window.getDecorView());
-            if (controller != null) {
-                controller.hide(WindowInsetsCompat.Type.statusBars());
-                controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-            }
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         } catch (Exception e) {}
 
         // Hardware & Rendering Performance Optimization for smooth 60fps operation
@@ -110,20 +104,6 @@ public class MainActivity extends BridgeActivity {
         // Expose NativePermissionsBridge to JavaScript web layer
         try {
             getBridge().getWebView().addJavascriptInterface(new Object() {
-                @JavascriptInterface
-                public void hideStatusBarImmersive() {
-                    new Handler(Looper.getMainLooper()).post(() -> {
-                        try {
-                            Window window = getWindow();
-                            WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, window.getDecorView());
-                            if (controller != null) {
-                                controller.hide(WindowInsetsCompat.Type.statusBars());
-                                controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-                            }
-                        } catch (Exception ignored) {}
-                    });
-                }
-
                 @JavascriptInterface
                 public void requestAllPermissions() {
                     new Handler(Looper.getMainLooper()).post(MainActivity.this::checkAndRequestPermissions);
@@ -1204,20 +1184,6 @@ public class MainActivity extends BridgeActivity {
                 }
             } catch (Exception ignored) {}
         });
-    }
-
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) {
-            try {
-                WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-                if (controller != null) {
-                    controller.hide(WindowInsetsCompat.Type.statusBars());
-                    controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-                }
-            } catch (Exception ignored) {}
-        }
     }
 
     @Override

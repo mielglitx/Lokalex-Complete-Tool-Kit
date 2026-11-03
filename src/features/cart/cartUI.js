@@ -12,6 +12,7 @@ import {
     syncSmartCartsWithCateringCustomers
 } from './cartState.js';
 import { updateCartScroller } from './cartScroller.js';
+import { handleCardTouchStart, handleCardTouchMove, handleCardTouchEnd } from './cartGestures.js';
 
 export function switchCartTab(slot) {
     setActiveCartSlot(slot);
@@ -456,4 +457,7 @@ if (typeof window !== 'undefined') {
     window.promptUnlockCart = promptUnlockCart;
     window.renderCartItems = renderCartItems;
     window.getMaxCartSlots = getMaxCartSlots;
+    window.handleCardTouchStart = handleCardTouchStart;
+    window.handleCardTouchMove = handleCardTouchMove;
+    window.handleCardTouchEnd = handleCardTouchEnd;
 }

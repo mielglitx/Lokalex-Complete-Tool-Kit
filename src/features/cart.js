@@ -42,12 +42,14 @@ import * as cartGesturesMod from './cart/cartGestures.js';
 import * as cartSukliMod from './cart/cartSukli.js';
 import * as cartUIMod from './cart/cartUI.js';
 import * as cartOperationsMod from './cart/cartOperations.js';
+import * as cartScrollerMod from './cart/cartScroller.js';
 
 export * from './cart/cartState.js';
 export * from './cart/cartGestures.js';
 export * from './cart/cartSukli.js';
 export * from './cart/cartUI.js';
 export * from './cart/cartOperations.js';
+export * from './cart/cartScroller.js';
 
 // Restore cart slots and lock statuses from localStorage
 cartStateMod.loadCartState();
@@ -65,7 +67,8 @@ if (typeof window !== 'undefined') {
         cartGesturesMod,
         cartSukliMod,
         cartUIMod,
-        cartOperationsMod
+        cartOperationsMod,
+        cartScrollerMod
     ];
 
     modules.forEach(mod => {

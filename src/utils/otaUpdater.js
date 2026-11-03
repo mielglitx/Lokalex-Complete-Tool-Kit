@@ -291,15 +291,28 @@ export async function checkForOtaUpdate(isManual = false) {
 
         if (isNativePlatform()) {
             console.log(`[OTA] Initiating download from ${downloadUrl} (version ${remoteVersion}, checksum ${checksum || 'none'})...`);
+            const freshUrl = downloadUrl.includes('?') ? `${downloadUrl}&t=${Date.now()}` : `${downloadUrl}?t=${Date.now()}`;
             const downloadOpts = {
-                url: downloadUrl,
+                url: freshUrl,
                 version: remoteVersion
             };
             if (checksum) {
                 downloadOpts.checksum = checksum;
             }
 
-            const bundle = await CapacitorUpdater.download(downloadOpts);
+            let bundle = null;
+            try {
+                bundle = await CapacitorUpdater.download(downloadOpts);
+            } catch (dlErr) {
+                console.warn("[OTA] Primary download failed, attempting fallback without strict checksum:", dlErr);
+                try {
+                    delete downloadOpts.checksum;
+                    bundle = await CapacitorUpdater.download(downloadOpts);
+                } catch (retryErr) {
+                    downloadOpts.url = downloadUrl;
+                    bundle = await CapacitorUpdater.download(downloadOpts);
+                }
+            }
 
             console.log("[OTA] Download completed successfully, bundle info:", bundle);
 
@@ -448,8 +461,9 @@ export async function installSpecificOtaVersion(version, customUrl = null, custo
                 } catch (_) {}
             }
 
+            const freshUrl = downloadUrl.includes('?') ? `${downloadUrl}&t=${Date.now()}` : `${downloadUrl}?t=${Date.now()}`;
             const downloadOpts = {
-                url: downloadUrl,
+                url: freshUrl,
                 version: cleanVer
             };
             if (resolvedChecksum) {
@@ -457,7 +471,19 @@ export async function installSpecificOtaVersion(version, customUrl = null, custo
             }
 
             console.log(`[OTA] Installing specific version ${cleanVer} from ${downloadUrl} (checksum: ${resolvedChecksum || 'none'})...`);
-            const bundle = await CapacitorUpdater.download(downloadOpts);
+            let bundle = null;
+            try {
+                bundle = await CapacitorUpdater.download(downloadOpts);
+            } catch (dlErr) {
+                console.warn("[OTA] Specific version primary download failed, trying fallback:", dlErr);
+                try {
+                    delete downloadOpts.checksum;
+                    bundle = await CapacitorUpdater.download(downloadOpts);
+                } catch (retryErr) {
+                    downloadOpts.url = downloadUrl;
+                    bundle = await CapacitorUpdater.download(downloadOpts);
+                }
+            }
 
             if (bundle && bundle.id) {
                 localStorage.setItem('lokalex_ota_version', cleanVer);

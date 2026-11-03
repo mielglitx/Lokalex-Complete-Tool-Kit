@@ -823,3 +823,4 @@ if (typeof window !== 'undefined') {
     window.refreshPerformanceData = refreshPerformanceView;
     window.copyPerformanceReportSummary = copyPerformanceReportSummary;
 }
+

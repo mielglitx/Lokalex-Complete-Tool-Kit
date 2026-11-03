@@ -9,7 +9,8 @@ let activeSwipingCard = null;
 let gestureDirection = null; // 'horizontal' | 'vertical' | null
 
 export function handleCardTouchStart(e, cardEl) {
-    if (e.target && e.target.closest('button, input, select, textarea, a, [onclick], .cursor-pointer')) {
+    const interactive = e.target && e.target.closest('button, input, select, textarea, a');
+    if (interactive && interactive !== cardEl) {
         // Direct interactive controls inside the card must receive tap/click without gesture interference
         activeSwipingCard = null;
         gestureDirection = null;
@@ -39,14 +40,14 @@ export function handleCardTouchMove(e, cardEl) {
 
     // Detect gesture orientation with threshold
     if (!gestureDirection) {
-        if (Math.abs(diffY) > 6 && Math.abs(diffY) > Math.abs(diffX)) {
+        if (Math.abs(diffY) > 8 && Math.abs(diffY) > Math.abs(diffX)) {
             // Definite vertical scroll - release card immediately
             gestureDirection = 'vertical';
             activeSwipingCard = null;
             cardEl.style.transform = '';
             cardEl.style.borderColor = '';
             return;
-        } else if (Math.abs(diffX) > 12 && Math.abs(diffX) > Math.abs(diffY) * 1.5) {
+        } else if (Math.abs(diffX) > 10 && Math.abs(diffX) > Math.abs(diffY)) {
             // Definite horizontal swipe
             gestureDirection = 'horizontal';
             cardEl.style.transition = 'none';
@@ -57,6 +58,9 @@ export function handleCardTouchMove(e, cardEl) {
     }
 
     if (gestureDirection === 'horizontal') {
+        if (e.cancelable) {
+            e.preventDefault();
+        }
         let translateX = diffX;
         if (Math.abs(diffX) > 120) {
             const sign = diffX > 0 ? 1 : -1;
@@ -65,7 +69,7 @@ export function handleCardTouchMove(e, cardEl) {
 
         cardEl.style.transform = `translateX(${translateX}px)`;
         
-        if (Math.abs(diffX) > 80) {
+        if (Math.abs(diffX) > 65) {
             cardEl.style.borderColor = '#ef4444';
         } else {
             cardEl.style.borderColor = '';
@@ -84,14 +88,11 @@ export function handleCardTouchEnd(e, index) {
     if (gestureDirection === 'horizontal') {
         cardEl.style.transition = 'transform 0.2s ease-out, border-color 0.2s ease-out';
 
-        if (Math.abs(diffX) >= 80) {
+        if (Math.abs(diffX) >= 65) {
             deleteSingleCartItem(index);
-            cardEl.style.transform = 'translateX(0px)';
-            cardEl.style.borderColor = '';
-        } else {
-            cardEl.style.transform = 'translateX(0px)';
-            cardEl.style.borderColor = '';
         }
+        cardEl.style.transform = 'translateX(0px)';
+        cardEl.style.borderColor = '';
     } else {
         cardEl.style.transform = '';
         cardEl.style.borderColor = '';
@@ -103,4 +104,10 @@ export function handleCardTouchEnd(e, index) {
     touchStartY = 0;
     touchCurrentX = 0;
     touchCurrentY = 0;
+}
+
+if (typeof window !== 'undefined') {
+    window.handleCardTouchStart = handleCardTouchStart;
+    window.handleCardTouchMove = handleCardTouchMove;
+    window.handleCardTouchEnd = handleCardTouchEnd;
 }

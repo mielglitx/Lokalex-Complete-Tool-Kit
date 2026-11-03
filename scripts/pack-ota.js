@@ -79,8 +79,8 @@ if (fs.existsSync(releaseApkSource)) {
 
 const manifest = {
     version: targetVersion,
-    url: `https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist-v${targetVersion}.zip`,
-    fallbackUrl: "https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist.zip",
+    url: `https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist-v${targetVersion}.zip?v=${Date.now()}`,
+    fallbackUrl: `https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist.zip?v=${Date.now()}`,
     checksum: checksum,
     updatedAt: new Date().toISOString(),
     notes: process.argv[3] || "Restored native Picture-in-Picture mode and in-app OTA APK self-updater",
