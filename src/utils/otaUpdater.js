@@ -268,8 +268,8 @@ export async function checkForOtaUpdate(isManual = false) {
 
         const currentVersion = await getCurrentAppVersion();
         const currentChecksum = localStorage.getItem('lokalex_ota_checksum') || '';
-        const hasVersionUpdate = compareVersions(remoteVersion, currentVersion) > 0;
-        const hasChecksumUpdate = Boolean(checksum && currentChecksum && checksum !== currentChecksum && compareVersions(remoteVersion, currentVersion) >= 0);
+        const hasVersionUpdate = compareVersions(remoteVersion, currentVersion) !== 0;
+        const hasChecksumUpdate = Boolean(checksum && checksum !== currentChecksum);
         const hasUpdate = hasVersionUpdate || hasChecksumUpdate;
 
         if (!hasUpdate) {

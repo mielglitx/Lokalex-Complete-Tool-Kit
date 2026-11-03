@@ -2,7 +2,7 @@
 import { db, isSupabaseSelected } from '../../../config/firebase.js';
 import { appState, globalState } from '../../../store/state.js';
 import { showToast, showNativeNotification } from '../../../ui/notifications.js';
-import { isCustomerMatch, cleanCustomerForMatch } from '../../roster/rosterUtils.js';
+import { isCustomerMatch, cleanCustomerForMatch, isAdmin } from '../../roster/rosterUtils.js';
 import { 
     isAllSourcesSelected,
     isSourceSelected,
@@ -171,23 +171,19 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                     }
 
                     const isMine = isMyCustomerThread(threadForCheck, loggedInRider);
+                    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) || (typeof window !== 'undefined' && window.isAdmin && window.isAdmin());
 
                     let isEligible = false;
                     if (isCatered || targetFolder === 'catering') {
-                        // Strictly only the rider actively catering this customer receives alerts!
-                        // Never leak other riders' catered orders to anyone.
-                        if (isMine) {
+                        // Strictly only the rider actively catering this customer (or administrators) receive alerts!
+                        if (isMine || isUserAdmin) {
                             arrivedFolders.add('catering');
                             isEligible = true;
                         }
                     } else {
-                        // Unassigned customer threads: inbox, applicant, followup, done
+                        // Customer threads: inbox, applicant, followup, done
                         isEligible = true;
-                        // Audio chime: only non-rider dispatchers receive general unassigned chimes
-                        // Riders on duty must NOT receive alarm chimes for customers that are not their cater
-                        if (!isRiderRole) {
-                            arrivedFolders.add(targetFolder);
-                        }
+                        arrivedFolders.add(targetFolder);
                     }
 
                     if (isEligible) {
