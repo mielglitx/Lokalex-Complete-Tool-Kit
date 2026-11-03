@@ -294,12 +294,20 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
                 <div class="text-[9px] ${senderColor} font-bold flex justify-between gap-3 pointer-events-none">
                     <span class="flex items-center">${escapeHtml(senderName)} ${roleBadge}</span>
                     <div class="flex items-center gap-1 opacity-80 font-mono">
+                        ${(m.isEdited || m.editedAt) ? `<span class="inline-flex items-center gap-0.5 text-[8.5px] opacity-90 font-sans italic mr-0.5 text-amber-500 dark:text-amber-400" title="Edited message${m.numEdit ? ` (${m.numEdit}x)` : ''}"><i class="fa-solid fa-pen-to-square text-[7.5px]"></i> edited</span>` : ''}
                         <span>${timeStr}</span>
                         ${statusIndicator}
                     </div>
                 </div>
                 ${replyBlockHtml}
                 ${showText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${formatChatTextWithPhoneLinks(m.text)}</div>` : ''}
+                ${(m.isEdited && m.originalText && m.originalText !== m.text) ? `
+                <div class="mt-1 pt-1 border-t border-current/15 text-[10px] opacity-85">
+                    <div class="text-[8.5px] font-bold uppercase tracking-wider flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                        <i class="fa-solid fa-clock-rotate-left text-[8px]"></i> Original:
+                    </div>
+                    <div class="line-through opacity-75 break-words whitespace-pre-wrap select-text">${escapeHtml(m.originalText)}</div>
+                </div>` : ''}
                 ${docMarkup}
                 ${videoMarkup}
                 ${audioMarkup}

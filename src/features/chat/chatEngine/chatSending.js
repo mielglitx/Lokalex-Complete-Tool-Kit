@@ -1,5 +1,5 @@
 // src/features/chat/chatEngine/chatSending.js
-import { db } from '../../../config/firebase.js';
+import { db, isSupabaseSelected } from '../../../config/firebase.js';
 import { appState, globalState } from '../../../store/state.js';
 import { showToast } from '../../../ui/notifications.js';
 import { uploadImage, dataUrlToBlob } from '../../../utils/imageUpload.js';
@@ -74,7 +74,7 @@ export async function forwardRiderReactionToMessenger({ custId, msgId, emoji, ac
 
         // Fallback to Cloudflare Worker endpoint if direct call wasn't made or failed
         if (!sent && fbMid) {
-            const sendReactionEndpoint = "https://lokalex-messenger-webhook.lokaledeliver.workers.dev/api/send-reaction";
+            const sendReactionEndpoint = "https://dry-firefly-ee76.lokaledeliver.workers.dev/api/send-reaction";
             try {
                 await fetch(sendReactionEndpoint, {
                     method: 'POST',
@@ -1034,7 +1034,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
 
         // Fallback 3: Production Cloudflare Worker endpoint
         if (!sendEndpoint) {
-            sendEndpoint = "https://lokalex-messenger-webhook.lokaledeliver.workers.dev/api/send-reply";
+            sendEndpoint = "https://dry-firefly-ee76.lokaledeliver.workers.dev/api/send-reply";
         }
 
         let finalFbImageUrl = imageUrl;

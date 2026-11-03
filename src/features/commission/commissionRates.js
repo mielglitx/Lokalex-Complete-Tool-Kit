@@ -47,7 +47,11 @@ export let overtimeReward = {
     value: 5,
     thresholdHours: 8
 };
-export function setOvertimeReward(val) { overtimeReward = val; }
+export function setOvertimeReward(val) { 
+    overtimeReward = val; 
+    if (typeof window !== 'undefined') window.overtimeReward = val;
+}
+if (typeof window !== 'undefined') window.overtimeReward = overtimeReward;
 
 export function loadCommissionSettingsCache() {
     try {

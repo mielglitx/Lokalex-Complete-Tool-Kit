@@ -1,5 +1,5 @@
 // src/features/chat/fbAdmin/fbResolvers.js
-import { db } from '../../../config/firebase.js';
+import { db, isSupabaseSelected } from '../../../config/firebase.js';
 import { showToast } from '../../../ui/notifications.js';
 import { cachedAdminApisMap } from './fbChannels.js';
 
@@ -550,6 +550,9 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid, fo
         if (cleanMid.startsWith('m_mid_')) cleanMid = 'm_mid.' + cleanMid.slice(6);
         else if (cleanMid.startsWith('mid_')) cleanMid = 'mid.' + cleanMid.slice(4);
     }
+    if (typeof cleanMid !== 'string' || (!cleanMid.startsWith('m_') && !cleanMid.startsWith('mid.') && !cleanMid.startsWith('m_mid.'))) {
+        return null;
+    }
     const cacheKey = `${custId}_${msgId}`;
 
     if (forceFresh) {
@@ -599,7 +602,7 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid, fo
                     apiList = Object.values(apis).filter(a => a && a.pageAccessToken);
                 } catch (_) {}
             }
-            if (apiList.length === 0) {
+            if (apiList.length === 0 && !isSupabaseSelected()) {
                 try {
                     const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/adminSettings/facebookApis.json?t=${Date.now()}`;
                     const res = await fetch(directRestUrl);
@@ -620,10 +623,10 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid, fo
             const fetchAttachmentWithToken = async (token) => {
                 const cleanToken = (token || '').trim();
                 if (!cleanToken) throw new Error("No token");
-                const resp = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(cleanMid)}?fields=id,message,attachments&access_token=${encodeURIComponent(cleanToken)}`);
+                const resp = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(cleanMid)}?fields=id,message,attachments{id,mime_type,name,size,file_url,image_data,video_data,payload,subattachments},shares&access_token=${encodeURIComponent(cleanToken)}`);
                 if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
                 const data = await resp.json();
-                const attachments = data?.attachments?.data || [];
+                const attachments = data?.attachments?.data || (data?.attachments?.id ? [data.attachments] : []);
                 const images = [];
                 let audioUrl = null;
                 let videoUrl = null;
@@ -671,6 +674,12 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid, fo
                 }
 
                 if (images.length === 0 && !audioUrl && !videoUrl && !docUrl) {
+                    if (data?.message && typeof data.message === 'string' && data.message.trim() && !data.message.includes('[Message unavailable')) {
+                        return {
+                            text: data.message.trim(),
+                            type: 'text'
+                        };
+                    }
                     throw new Error("No attachments found");
                 }
 
@@ -722,6 +731,7 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid, fo
                     const rtdbUpdate = {
                         type: resolvedResult.type
                     };
+                    if (resolvedResult.text) rtdbUpdate.text = resolvedResult.text;
                     if (resolvedResult.imageUrl) rtdbUpdate.imageUrl = resolvedResult.imageUrl;
                     if (resolvedResult.images && resolvedResult.images.length > 0) rtdbUpdate.images = resolvedResult.images;
                     if (resolvedResult.audioUrl) rtdbUpdate.audioUrl = resolvedResult.audioUrl;
@@ -768,7 +778,7 @@ export async function resolveFacebookMessageReplyTo(custId, msgId, rawMid) {
                     apiList = Object.values(apis).filter(a => a && a.pageAccessToken);
                 } catch (_) {}
             }
-            if (apiList.length === 0) {
+            if (apiList.length === 0 && !isSupabaseSelected()) {
                 try {
                     const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/adminSettings/facebookApis.json?t=${Date.now()}`;
                     const res = await fetch(directRestUrl);

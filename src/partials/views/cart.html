@@ -1,7 +1,7 @@
 <!-- src/partials/views/cart.html -->
-<section id="view-cart" class="hidden flex-1 flex flex-col text-gray-900 dark:text-white pb-24 relative">
-    <!-- STICKY TOP TOOLBAR -->
-    <div class="sticky top-0 z-20 shrink-0 bg-white dark:bg-cardBg shadow-xs flex flex-col">
+<section id="view-cart" class="hidden flex-1 flex flex-col text-gray-900 dark:text-white relative min-h-0 w-full overflow-hidden" style="height: calc(100dvh - 54px - env(safe-area-inset-top, 0px)); max-height: calc(100dvh - 54px - env(safe-area-inset-top, 0px));">
+    <!-- TOP TOOLBAR (SHRINK-0: NEVER OVERLAPPED BY APP HEADER) -->
+    <div class="shrink-0 bg-white dark:bg-cardBg shadow-xs flex flex-col border-b border-gray-200 dark:border-gray-800/80 z-20">
         <div class="bg-white dark:bg-cardBg border-b border-gray-200 dark:border-gray-800 p-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0" id="cart-tabs-header"></div>
 
         <div class="bg-gray-50 dark:bg-inputBg/80 px-3 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2 shrink-0">
@@ -11,12 +11,12 @@
             <div id="cart-customer-selector-container" class="flex-1 flex items-center"></div>
         </div>
 
-        <div class="bg-gray-100 dark:bg-black/40 p-3 px-4 flex justify-between items-center text-sm border-b border-gray-200 dark:border-gray-800 shrink-0">
+        <div class="bg-gray-100 dark:bg-black/40 p-2.5 px-4 flex justify-between items-center text-sm border-b border-gray-200 dark:border-gray-800 shrink-0">
             <span class="text-gray-600 dark:text-gray-400 font-bold"><span id="cart-slot-label" class="font-black text-gray-900 dark:text-white">Cart 1</span> Subtotal:</span>
             <span class="text-lg font-black text-emerald-600 dark:text-green-400 font-mono">₱<span id="cart-subtotal-display">0.00</span></span>
         </div>
         
-        <div class="p-3 flex justify-between gap-2 shrink-0 flex-wrap" id="cart-actions-toolbar">
+        <div class="p-2.5 flex justify-between gap-2 shrink-0 flex-wrap" id="cart-actions-toolbar">
             <button onclick="window.showBulkAddModal && window.showBulkAddModal()" class="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/20 dark:text-blue-400 dark:border-blue-600/30 text-xs font-bold py-2 rounded-xl transition active:scale-95 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer">
                 <i class="fa-solid fa-list-check"></i> Paste List
             </button>
@@ -27,12 +27,12 @@
         </div>
     </div>
 
-    <!-- SCROLLABLE CART ITEMS WITH RELATIVE SCROLLER TRACK -->
-    <div class="relative flex-1 min-h-0 flex flex-col">
-        <div id="cart-items-list" class="flex-1 p-3 flex flex-col gap-2 pb-28 max-h-[calc(100vh-270px)] sm:max-h-[calc(100vh-280px)] overflow-y-auto" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; will-change: scroll-position;"></div>
+    <!-- SCROLLABLE CART ITEMS WITH RELATIVE SCROLLER TRACK (FLEX-1 MIN-H-0: AUTO-FITS REMAINING SPACE) -->
+    <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden w-full">
+        <div id="cart-items-list" class="flex-1 p-2.5 sm:p-3 flex flex-col gap-2.5 overflow-y-auto overscroll-contain pb-6" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; will-change: scroll-position;"></div>
         
         <!-- Smart Cart Slider Scroller (Permanently visible rail & circular knob when screen is full or 5+ items) -->
-        <div id="cart-slider-track" class="absolute right-1 top-2 bottom-6 w-8 flex justify-center z-30 select-none cursor-pointer transition-opacity duration-200 opacity-0 pointer-events-none">
+        <div id="cart-slider-track" class="absolute right-1 top-2 bottom-2 w-8 flex justify-center z-20 select-none cursor-pointer transition-opacity duration-200 opacity-0 pointer-events-none">
             <!-- Visible sleek rail track -->
             <div class="w-1.5 h-full bg-gray-300/80 dark:bg-zinc-700/80 rounded-full my-0.5"></div>
             <!-- Circular thumb knob -->
@@ -42,8 +42,8 @@
         </div>
     </div>
 
-    <!-- ALWAYS VISIBLE FIXED BOTTOM GENERATE RECEIPT BUTTON -->
-    <div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-3 sm:p-4 bg-white/95 dark:bg-cardBg/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 z-40 shadow-2xl">
+    <!-- ALWAYS VISIBLE BOTTOM GENERATE RECEIPT FOOTER (SHRINK-0: NEVER OVERLAPS ITEMS LIST) -->
+    <div class="shrink-0 w-full max-w-md mx-auto p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] bg-white/95 dark:bg-cardBg/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 z-30 shadow-2xl">
         <button id="cart-generate-receipt-btn" onclick="window.validateAndProceedToWizard && window.validateAndProceedToWizard()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black p-3.5 rounded-2xl shadow-lg transition active:scale-95 text-xs flex items-center justify-center gap-2 cursor-pointer">
             <i class="fa-solid fa-receipt"></i> Generate Receipt (<span id="btn-cart-slot-label">Cart 1</span>)
         </button>

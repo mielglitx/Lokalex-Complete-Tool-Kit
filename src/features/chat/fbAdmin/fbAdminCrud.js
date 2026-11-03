@@ -1,5 +1,5 @@
 // src/features/chat/fbAdmin/fbAdminCrud.js
-import { db } from '../../../config/firebase.js';
+import { db, isSupabaseSelected } from '../../../config/firebase.js';
 import { appState, globalState } from '../../../store/state.js';
 import { showToast } from '../../../ui/notifications.js';
 import { openSlideDeleteModal } from '../../../ui/modals.js';
@@ -84,26 +84,28 @@ export function listenToAdminFbApis() {
     renderAdminFbApisList();
 
     // 2. Fast parallel direct REST fetch (<150ms guaranteed on mobile networks)
-    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/adminSettings/facebookApis.json?t=${Date.now()}`;
-    fetch(directRestUrl, { cache: 'no-store' })
-        .then(res => res.json())
-        .then(val => {
-            if (val && typeof val === 'object') {
-                try {
-                    localStorage.setItem('lokalex_cached_admin_facebook_apis', JSON.stringify(val));
-                } catch (_) {}
-                cachedAdminApisMap.clear();
-                Object.entries(val).forEach(([id, data]) => {
-                    if (data) {
-                        cachedAdminApisMap.set(id, { id, ...data });
-                    }
-                });
-                renderAdminFbApisList();
-            }
-        })
-        .catch(err => {
-            console.warn('[AdminFbApis] Direct REST fetch fallback:', err);
-        });
+    if (!isSupabaseSelected()) {
+        const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/adminSettings/facebookApis.json?t=${Date.now()}`;
+        fetch(directRestUrl, { cache: 'no-store' })
+            .then(res => res.json())
+            .then(val => {
+                if (val && typeof val === 'object') {
+                    try {
+                        localStorage.setItem('lokalex_cached_admin_facebook_apis', JSON.stringify(val));
+                    } catch (_) {}
+                    cachedAdminApisMap.clear();
+                    Object.entries(val).forEach(([id, data]) => {
+                        if (data) {
+                            cachedAdminApisMap.set(id, { id, ...data });
+                        }
+                    });
+                    renderAdminFbApisList();
+                }
+            })
+            .catch(err => {
+                console.warn('[AdminFbApis] Direct REST fetch fallback:', err);
+            });
+    }
 
     if (!db || isAdminApisListening) return;
     isAdminApisListening = true;

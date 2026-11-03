@@ -1,7 +1,7 @@
 {
   "name": "lokalex-app",
   "private": true,
-  "version": "1.0.88",
+  "version": "1.0.89",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -26,6 +26,7 @@
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/status-bar": "^8.0.4",
     "@capgo/capacitor-updater": "^8.52.1",
+    "@supabase/supabase-js": "^2.118.0",
     "qrcode": "^1.5.4"
   }
 }

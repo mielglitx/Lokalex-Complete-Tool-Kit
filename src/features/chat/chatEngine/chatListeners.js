@@ -66,18 +66,44 @@ export async function reloadRiderChatFromFirebase(custId) {
 
 function triggerInstantFbAttachmentResolution(custId, msg, container, custData) {
     if (!custId || !msg || !msg.id) return;
+    if (msg.attachmentFailed) return;
+    if (msg.text && msg.text.includes('[Message unavailable')) return;
     let mid = msg.metaMid || msg.mid || (String(msg.id).startsWith('m_') ? msg.id : null) || msg.id;
     if (typeof mid === 'string') {
         if (mid.startsWith('m_mid_')) mid = 'm_mid.' + mid.slice(6);
         else if (mid.startsWith('mid_')) mid = 'mid.' + mid.slice(4);
     }
+    // Only valid Meta Message IDs (m_... or mid....) can be resolved via Meta Graph API
+    if (typeof mid !== 'string' || (!mid.startsWith('m_') && !mid.startsWith('mid.'))) {
+        return;
+    }
+
+    let isHandled = false;
+    const markFailed = () => {
+        if (isHandled) return;
+        isHandled = true;
+        const existing = loadedRiderMsgsMap.get(msg.id) || msg;
+        existing.attachmentFailed = true;
+        if (activeRiderChatCustId === custId && container) {
+            appendOrUpdateSingleRiderMessage(container, existing, custData || activeCustData);
+        }
+    };
+
+    const timer = setTimeout(markFailed, 7000);
+
     resolveFacebookMessageAttachment(custId, msg.id, mid).then(res => {
+        clearTimeout(timer);
+        if (isHandled) return;
         if (res && activeRiderChatCustId === custId) {
+            isHandled = true;
+            delete msg.attachmentFailed;
             const existing = loadedRiderMsgsMap.get(msg.id) || msg;
+            delete existing.attachmentFailed;
             if (typeof res === 'string') {
                 existing.imageUrl = res;
                 existing.type = 'image';
             } else if (typeof res === 'object') {
+                if (res.text) existing.text = res.text;
                 if (res.imageUrl) existing.imageUrl = res.imageUrl;
                 if (res.images && res.images.length > 0) existing.images = res.images;
                 if (res.audioUrl) existing.audioUrl = res.audioUrl;
@@ -146,16 +172,46 @@ function triggerInstantFbAttachmentResolution(custId, msg, container, custData) 
                     preloader.src = existing.imageUrl;
                 }
             } catch (_) {}
+        } else if (!res) {
+            markFailed();
         }
-    }).catch(() => {});
+    }).catch(() => {
+        clearTimeout(timer);
+        markFailed();
+    });
+}
+
+if (typeof window !== 'undefined') {
+    window.retryFbAttachmentResolution = (custId, msgId) => {
+        const msg = loadedRiderMsgsMap.get(msgId);
+        if (!msg) return;
+        delete msg.attachmentFailed;
+        const container = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
+        if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
+        let mid = msg.metaMid || msg.mid || (String(msg.id).startsWith('m_') ? msg.id : null) || msg.id;
+        resolveFacebookMessageAttachment(custId, msgId, mid, true).then(res => {
+            if (res && activeRiderChatCustId === custId) {
+                triggerInstantFbAttachmentResolution(custId, msg, container, activeCustData);
+            } else {
+                msg.attachmentFailed = true;
+                if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
+            }
+        }).catch(() => {
+            msg.attachmentFailed = true;
+            if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
+        });
+    };
 }
 
 function autoResolveRecentFbCustomerAttachments(custId, container, custData) {
     if (!String(custId).startsWith('fb_')) return;
     const candidates = Array.from(loadedRiderMsgsMap.values())
-        .filter(m => m && !m.imageUrl && (!m.images || m.images.length === 0) && !m.audioUrl && !m.videoUrl && (
+        .filter(m => m && !m.attachmentFailed && !m.imageUrl && (!m.images || m.images.length === 0) && !m.audioUrl && !m.videoUrl && !(m.text && m.text.includes('[Message unavailable')) && (
             (m.text && (
-                m.text.includes('[Facebook') || 
+                m.text.includes('[Facebook Attachment]') || 
+                m.text.includes('[Facebook Photo]') || 
+                m.text.includes('[Facebook Video]') || 
+                m.text.includes('[Facebook Audio]') || 
                 m.text.includes('📷 Photo') || 
                 m.text.includes('🎥 Video') || 
                 m.text.includes('🎤 Voice')
@@ -163,7 +219,7 @@ function autoResolveRecentFbCustomerAttachments(custId, container, custData) {
             m.type === 'image' ||
             m.type === 'video' ||
             m.type === 'audio' ||
-            (!m.text && (m.mid || (m.id && String(m.id).startsWith('m_'))))
+            m.type === 'file'
         ));
     for (const m of candidates) {
         triggerInstantFbAttachmentResolution(custId, m, container, custData);
@@ -192,6 +248,14 @@ function autoResolveRecentFbCustomerReplies(custId, container, custData) {
 }
 
 let isSyncingGraphMessages = false;
+let fbGraphPollingInterval = null;
+
+export function stopFbGraphPolling() {
+    if (fbGraphPollingInterval) {
+        clearInterval(fbGraphPollingInterval);
+        fbGraphPollingInterval = null;
+    }
+}
 
 /**
  * Direct Parallel Meta Graph API Fast-Sync:
@@ -242,8 +306,37 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
             if (!rawMid) continue;
             const safeMid = rawMid.replace(/[.#$\[\]\/]/g, '_');
 
-            // Skip if already loaded or rendered
-            if (loadedRiderMsgsMap.has(safeMid) || loadedRiderMsgsMap.has(rawMid)) {
+            const hasTextMessage = Boolean(m.message && m.message.trim().length > 0);
+            const hasAttachments = Boolean(m.attachments?.data && m.attachments.data.length > 0);
+            const hasShares = Boolean(m.shares?.data && m.shares.data.length > 0);
+
+            // Filter out empty Facebook status/transfer/handoff echoes that have no content
+            if (!hasTextMessage && !hasAttachments && !hasShares) {
+                if (db) {
+                    db.ref(`customerChats/${targetCustId}/messages/${safeMid}`).remove().catch(() => {});
+                }
+                document.getElementById(`msg-bubble-${safeMid}`)?.remove();
+                loadedRiderMsgsMap.delete(safeMid);
+                continue;
+            }
+
+            // Check if already loaded or rendered
+            const existingLoaded = loadedRiderMsgsMap.get(safeMid) || loadedRiderMsgsMap.get(rawMid);
+            if (existingLoaded) {
+                // If message text was edited on Facebook, update existing bubble!
+                if (m.message && existingLoaded.text && m.message.trim() !== existingLoaded.text.trim()) {
+                    existingLoaded.originalText = existingLoaded.originalText || existingLoaded.text;
+                    existingLoaded.text = m.message.trim();
+                    existingLoaded.isEdited = true;
+                    existingLoaded.editedAt = Date.now();
+                    if (container) appendOrUpdateSingleRiderMessage(container, existingLoaded, activeCustData);
+                    if (db) db.ref(`customerChats/${targetCustId}/messages/${safeMid}`).update({
+                        text: existingLoaded.text,
+                        originalText: existingLoaded.originalText,
+                        isEdited: true,
+                        editedAt: existingLoaded.editedAt
+                    }).catch(() => {});
+                }
                 continue;
             }
 
@@ -362,6 +455,14 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                             return true;
                         }
                     }
+
+                    // Match rider media sent from app within 2 minutes if the rider message does not have mid yet
+                    if (isRider && eitherHasMedia) {
+                        const diff = Math.abs(getMessageTimestamp(existing) - ts);
+                        if (diff < 120000 && !existing.metaMid && (existing.id.startsWith('-') || existing.id.startsWith('msg_'))) {
+                            return true;
+                        }
+                    }
                 }
                 return false;
             };
@@ -448,7 +549,8 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                 audioUrl: audioUrl,
                 videoUrl: videoUrl,
                 fileUrl: fileUrl,
-                type: type
+                type: type,
+                attachmentFailed: Boolean((text && text.includes('[Message unavailable')) || (existingMatch?.attachmentFailed && !imageUrl && (!images || images.length === 0)))
             };
 
             loadedRiderMsgsMap.set(safeMid, formattedMsg);
@@ -627,8 +729,17 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
     }
 
     // Fast-sync directly with Facebook Page after local memory and DOM are initialized
+    stopFbGraphPolling();
     if (String(custId).startsWith('fb_')) {
         syncCurrentThreadFromMetaGraph(custId, false).catch(() => {});
+        // Lightweight polling interval while Facebook thread is actively open to capture messages sent from page
+        fbGraphPollingInterval = setInterval(() => {
+            if (activeRiderChatCustId === custId) {
+                syncCurrentThreadFromMetaGraph(custId, false).catch(() => {});
+            } else {
+                stopFbGraphPolling();
+            }
+        }, 10000);
     }
 
     // Realtime Firebase connection: strictly load only the last 10 messages for lightning-fast startup ordered by timestamp
@@ -752,6 +863,7 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 (!fullMsg.images || fullMsg.images.length === 0) && 
                 !fullMsg.audioUrl && 
                 !fullMsg.videoUrl && 
+                !fullMsg.attachmentFailed &&
                 (
                     (fullMsg.text && (
                         fullMsg.text.includes('[Facebook') || 
@@ -812,6 +924,25 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
             }
         }
 
+        const hasAnyContent = Boolean(
+            (fullMsg.text && fullMsg.text.trim().length > 0) ||
+            fullMsg.imageUrl ||
+            (Array.isArray(fullMsg.images) && fullMsg.images.length > 0) ||
+            fullMsg.videoUrl ||
+            fullMsg.audioUrl ||
+            fullMsg.fileUrl ||
+            fullMsg.locationCoords ||
+            (fullMsg.type && fullMsg.type !== 'text' && fullMsg.type !== 'system')
+        );
+
+        // Discard any empty ghost message (echo with no content)
+        if (!hasAnyContent) {
+            if (db && key.startsWith('m_')) {
+                db.ref(`customerChats/${custId}/messages/${key}`).remove().catch(() => {});
+            }
+            return;
+        }
+
         // If initial 10-message slice is already rendered, ignore any older historical message
         if (isInitialScrollDone && oldestRiderMsgTimestamp && msgTs > 0 && msgTs < oldestRiderMsgTimestamp) {
             setHasMoreRiderMsgs(true);
@@ -860,6 +991,7 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 (!fullMsg.images || fullMsg.images.length === 0) && 
                 !fullMsg.audioUrl && 
                 !fullMsg.videoUrl && 
+                !fullMsg.attachmentFailed &&
                 (
                     (fullMsg.text && (
                         fullMsg.text.includes('[Facebook') || 
@@ -870,7 +1002,7 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                     fullMsg.type === 'image' || 
                     fullMsg.type === 'video' || 
                     fullMsg.type === 'audio' ||
-                    (!fullMsg.text && (fullMsg.mid || (fullMsg.id && String(fullMsg.id).startsWith('m_'))))
+                    fullMsg.type === 'file'
                 );
             if (needsRes) {
                 triggerInstantFbAttachmentResolution(custId, fullMsg, container, activeCustData);
@@ -969,9 +1101,9 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         const fullMsg = { id: key, ...msg };
 
         let memCached = riderChatMemoryCache.get(custId) || [];
-        const existingIdx = memCached.findIndex(m => m.id === key);
+        const existingIdx = memCached.findIndex(m => m.id === key || m.mid === key || m.metaMid === key || (fullMsg.mid && m.mid === fullMsg.mid));
         if (existingIdx >= 0) {
-            memCached[existingIdx] = fullMsg;
+            memCached[existingIdx] = { ...memCached[existingIdx], ...fullMsg };
         } else {
             memCached.push(fullMsg);
         }
@@ -979,27 +1111,47 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         riderChatMemoryCache.set(custId, memCached);
         idbSet('chats', custId, memCached).catch(() => {});
 
-        if (loadedRiderMsgsMap.has(key)) {
-            loadedRiderMsgsMap.set(key, fullMsg);
-            appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
+        let targetKey = key;
+        if (!loadedRiderMsgsMap.has(key)) {
+            for (const [k, m] of loadedRiderMsgsMap.entries()) {
+                if (k === key || m.id === key || m.mid === key || m.metaMid === key ||
+                    (fullMsg.mid && (k === fullMsg.mid || m.mid === fullMsg.mid || m.id === fullMsg.mid)) ||
+                    (fullMsg.metaMid && (k === fullMsg.metaMid || m.metaMid === fullMsg.metaMid))) {
+                    targetKey = k;
+                    break;
+                }
+            }
+        }
+
+        const isKnown = loadedRiderMsgsMap.has(targetKey) 
+            || Boolean(document.getElementById(`msg-bubble-${key}`))
+            || Boolean(fullMsg.mid && document.getElementById(`msg-bubble-${fullMsg.mid}`))
+            || Boolean(fullMsg.metaMid && document.getElementById(`msg-bubble-${fullMsg.metaMid}`));
+
+        if (isKnown) {
+            const existingLoaded = loadedRiderMsgsMap.get(targetKey) || {};
+            const mergedMsg = { ...existingLoaded, ...fullMsg, id: targetKey };
+            loadedRiderMsgsMap.set(targetKey, mergedMsg);
+            appendOrUpdateSingleRiderMessage(container, mergedMsg, activeCustData);
             const needsRes = String(custId).startsWith('fb_') && 
-                !fullMsg.imageUrl && 
-                (!fullMsg.images || fullMsg.images.length === 0) && 
-                !fullMsg.audioUrl && 
-                !fullMsg.videoUrl && 
+                !mergedMsg.imageUrl && 
+                (!mergedMsg.images || mergedMsg.images.length === 0) && 
+                !mergedMsg.audioUrl && 
+                !mergedMsg.videoUrl && 
+                !mergedMsg.attachmentFailed &&
                 (
-                    (fullMsg.text && (
-                        fullMsg.text.includes('[Facebook') || 
-                        fullMsg.text.includes('📷 Photo') || 
-                        fullMsg.text.includes('🎥 Video') || 
-                        fullMsg.text.includes('🎤 Voice')
+                    (mergedMsg.text && (
+                        mergedMsg.text.includes('[Facebook') || 
+                        mergedMsg.text.includes('📷 Photo') || 
+                        mergedMsg.text.includes('🎥 Video') || 
+                        mergedMsg.text.includes('🎤 Voice')
                     )) || 
-                    fullMsg.type === 'image' || 
-                    fullMsg.type === 'video' || 
-                    fullMsg.type === 'audio'
+                    mergedMsg.type === 'image' || 
+                    mergedMsg.type === 'video' || 
+                    mergedMsg.type === 'audio'
                 );
             if (needsRes) {
-                triggerInstantFbAttachmentResolution(custId, fullMsg, container, activeCustData);
+                triggerInstantFbAttachmentResolution(custId, mergedMsg, container, activeCustData);
             }
         }
     });
@@ -1045,11 +1197,35 @@ export function syncIncomingMessageFromMeta(custId, meta) {
                 let hasAppended = false;
                 recentMsgs.forEach(fullMsg => {
                     const ts = getMessageTimestamp(fullMsg);
-                    // Only append if it's truly a newer incoming message, never an older past message
-                    if (!loadedRiderMsgsMap.has(fullMsg.id) && (newestLoadedTime === 0 || ts >= (newestLoadedTime - 3000))) {
+                    let existing = loadedRiderMsgsMap.get(fullMsg.id);
+                    let existingKey = fullMsg.id;
+                    if (!existing) {
+                        for (const [k, m] of loadedRiderMsgsMap.entries()) {
+                            if (k === fullMsg.id || m.id === fullMsg.id || m.mid === fullMsg.id || m.metaMid === fullMsg.id ||
+                                (fullMsg.mid && (k === fullMsg.mid || m.mid === fullMsg.mid || m.id === fullMsg.mid)) ||
+                                (fullMsg.metaMid && (k === fullMsg.metaMid || m.metaMid === fullMsg.metaMid))) {
+                                existing = m;
+                                existingKey = k;
+                                break;
+                            }
+                        }
+                    }
+
+                    const isChanged = existing && (
+                        (existing.text || '') !== (fullMsg.text || '') ||
+                        Boolean(existing.isEdited) !== Boolean(fullMsg.isEdited) ||
+                        (existing.editedAt || 0) !== (fullMsg.editedAt || 0) ||
+                        JSON.stringify(existing.reactions || {}) !== JSON.stringify(fullMsg.reactions || {})
+                    );
+
+                    if (!existing && (newestLoadedTime === 0 || ts >= (newestLoadedTime - 3000))) {
                         loadedRiderMsgsMap.set(fullMsg.id, fullMsg);
                         appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
                         hasAppended = true;
+                    } else if (isChanged) {
+                        const mergedMsg = { ...existing, ...fullMsg, id: existingKey };
+                        loadedRiderMsgsMap.set(existingKey, mergedMsg);
+                        appendOrUpdateSingleRiderMessage(container, mergedMsg, activeCustData);
                     }
                 });
 

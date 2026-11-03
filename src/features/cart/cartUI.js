@@ -18,7 +18,7 @@ export function switchCartTab(slot) {
     globalState.activeCartIndex = slot - 1;
     saveCartState();
     renderCartTabs();
-    renderCartItems();
+    renderCartItems(false);
 }
 
 export function resetToCartOne() {
@@ -26,7 +26,7 @@ export function resetToCartOne() {
     globalState.activeCartIndex = 0;
     saveCartState();
     renderCartTabs();
-    renderCartItems();
+    renderCartItems(false);
 }
 
 export function renderCartTabs() {
@@ -159,10 +159,12 @@ export function handleOverlaySlideEnd(sliderEl) {
     }
 }
 
-export function renderCartItems() {
+export function renderCartItems(preserveScroll = true) {
     const container = document.getElementById('cart-items-list');
     const subtotalDisplay = document.getElementById('cart-subtotal-display');
     const deleteBtnContainer = document.getElementById('delete-selected-btn-container');
+
+    const savedScrollTop = (container && preserveScroll) ? container.scrollTop : 0;
 
     renderCartTabs();
 
@@ -352,14 +354,14 @@ export function renderCartItems() {
             : '';
 
         return `
-        <div ontouchstart="handleCardTouchStart(event, this)" ontouchmove="handleCardTouchMove(event, this)" ontouchend="handleCardTouchEnd(event, ${index})" style="touch-action: pan-y; content-visibility: auto; contain-intrinsic-size: 0 115px;" class="${cardStyleClass} border p-3 rounded-xl flex flex-col gap-2.5 transition-transform duration-75 relative select-none shadow-xs">
+        <div ontouchstart="handleCardTouchStart(event, this)" ontouchmove="handleCardTouchMove(event, this)" ontouchend="handleCardTouchEnd(event, ${index})" style="touch-action: pan-y;" class="${cardStyleClass} border p-3 rounded-xl flex flex-col gap-2.5 transition-transform duration-75 relative select-none shadow-xs">
             <div class="flex items-start justify-between gap-2">
                 <div class="flex items-start gap-1.5 flex-1 min-w-0">
-                    <input type="checkbox" onchange="toggleItemSelect(${index})" ${isSelected ? "checked" : ""} class="w-4 h-4 accent-blue-500 rounded cursor-pointer shrink-0 mt-0.5">
+                    <input type="checkbox" onclick="event.stopPropagation();" onchange="toggleItemSelect(${index})" ${isSelected ? "checked" : ""} class="w-4 h-4 accent-blue-500 rounded cursor-pointer shrink-0 mt-0.5">
                     <span class="text-[10px] text-gray-400 dark:text-gray-500 font-bold shrink-0 mt-0.5">#${index + 1}</span>
                     <div class="flex items-center gap-1 flex-wrap flex-1 min-w-0">
                         <span class="${itemNameClass}">${escapeHtml(item.name)}</span>
-                        <button type="button" onclick="window.openEditNameModal && window.openEditNameModal(${index})" class="text-blue-500 hover:text-blue-400 p-1 text-xs active:scale-90 shrink-0" title="Edit Item Name">
+                        <button type="button" onclick="event.stopPropagation(); window.openEditNameModal && window.openEditNameModal(${index})" class="text-blue-500 hover:text-blue-400 p-1 text-xs active:scale-90 shrink-0" title="Edit Item Name">
                             <i class="fa-solid fa-pen text-[10px]"></i>
                         </button>
                         ${naBadge}
@@ -371,7 +373,7 @@ export function renderCartItems() {
 
                 <!-- PRICE BUTTON PAIRED DIRECTLY BEFORE THE ITEM PRICE -->
                 <div class="flex items-center gap-1.5 shrink-0">
-                    <button type="button" onclick="window.openAddPriceModal && window.openAddPriceModal(${index})" class="py-1 px-2 rounded-lg text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/20 dark:text-blue-300 dark:border-blue-500/30 transition active:scale-95 flex items-center gap-1 font-bold shadow-xs">
+                    <button type="button" onclick="event.stopPropagation(); window.openAddPriceModal && window.openAddPriceModal(${index})" class="py-1 px-2 rounded-lg text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-600/20 dark:text-blue-300 dark:border-blue-500/30 transition active:scale-95 flex items-center gap-1 font-bold shadow-xs">
                         <i class="fa-solid fa-tag"></i> Price
                     </button>
                     <span class="${priceDisplayClass}">
@@ -384,23 +386,23 @@ export function renderCartItems() {
             <div class="flex items-center justify-between gap-2 pt-2 border-t border-gray-200 dark:border-gray-800/60 text-xs">
                 <!-- Left: Market stacked vertically under Store -->
                 <div class="flex flex-col gap-1 shrink-0">
-                    <button onclick="toggleItemCategory(${index}, 'store')" class="px-3 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${catStoreClass}">
+                    <button type="button" onclick="event.stopPropagation(); toggleItemCategory(${index}, 'store')" class="px-3 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${catStoreClass}">
                         <i class="fa-solid fa-store"></i> Store
                     </button>
-                    <button onclick="toggleItemCategory(${index}, 'market')" class="px-3 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${catMarketClass}">
+                    <button type="button" onclick="event.stopPropagation(); toggleItemCategory(${index}, 'market')" class="px-3 py-1 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${catMarketClass}">
                         <i class="fa-solid fa-basket-shopping"></i> Market
                     </button>
                 </div>
 
                 <!-- Right: On Hand, Paid, and N/A Grouped Together -->
                 <div class="flex items-center gap-1.5 flex-wrap justify-end">
-                    <button onclick="toggleItemBought(${index})" class="py-1.5 px-2.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${boughtBtnClass}">
+                    <button type="button" onclick="event.stopPropagation(); toggleItemBought(${index})" class="py-1.5 px-2.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${boughtBtnClass}">
                         <i class="fa-solid fa-check"></i> On Hand
                     </button>
-                    <button onclick="toggleItemPaid(${index})" class="py-1.5 px-2.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${paidBtnClass}">
+                    <button type="button" onclick="event.stopPropagation(); toggleItemPaid(${index})" class="py-1.5 px-2.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 ${paidBtnClass}">
                         <i class="fa-solid fa-receipt"></i> Paid
                     </button>
-                    <button onclick="toggleItemUnavailable(${index})" class="py-1.5 px-2.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${naBtnClass}" title="Mark as Not Available">
+                    <button type="button" onclick="event.stopPropagation(); toggleItemUnavailable(${index})" class="py-1.5 px-2.5 rounded-lg text-[10px] transition active:scale-95 flex items-center gap-1 font-bold ${naBtnClass}" title="Mark as Not Available">
                         <i class="fa-solid fa-ban"></i> N/A
                     </button>
                 </div>
@@ -414,12 +416,17 @@ export function renderCartItems() {
 
     container.innerHTML = progressBannerHtml + cardsHtml;
 
+    // Immediately restore scroll position so list does not jump or scroll up
+    if (preserveScroll && savedScrollTop > 0) {
+        container.scrollTop = savedScrollTop;
+    }
+
     if (subtotalDisplay) subtotalDisplay.innerText = subtotal.toFixed(2);
 
     if (deleteBtnContainer) {
         if (selectedCount > 0) {
             deleteBtnContainer.innerHTML = `
-                <button onclick="deleteSelectedCartItems()" class="bg-red-600 text-white text-xs font-bold px-3 py-2 rounded-lg transition active:scale-95 flex items-center gap-1">
+                <button type="button" onclick="deleteSelectedCartItems()" class="bg-red-600 text-white text-xs font-bold px-3 py-2 rounded-lg transition active:scale-95 flex items-center gap-1">
                     <i class="fa-solid fa-trash"></i> Delete (${selectedCount})
                 </button>`;
         } else {
@@ -427,9 +434,15 @@ export function renderCartItems() {
         }
     }
 
-    try {
-        requestAnimationFrame(() => updateCartScroller());
-    } catch (_) {}
+    // Double-check on next animation frame after paint & update scroller thumb
+    requestAnimationFrame(() => {
+        if (preserveScroll && container && savedScrollTop > 0 && Math.abs(container.scrollTop - savedScrollTop) > 1) {
+            container.scrollTop = savedScrollTop;
+        }
+        try {
+            updateCartScroller();
+        } catch (_) {}
+    });
 }
 
 if (typeof window !== 'undefined') {

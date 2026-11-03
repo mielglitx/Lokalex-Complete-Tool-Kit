@@ -1,5 +1,5 @@
 // src/features/chat/fbAdmin/fbChannels.js
-import { db } from '../../../config/firebase.js';
+import { db, isSupabaseSelected } from '../../../config/firebase.js';
 import { showToast } from '../../../ui/notifications.js';
 import { escapeHtml } from '../../../utils/helpers.js';
 import { isAdmin, canManageRoster } from '../../roster/rosterUtils.js';
@@ -56,19 +56,21 @@ export function setActiveRiderSources(sources) {
     } catch (_) {}
 
     // Proactive background fetch to ensure cachedAdminApisMap always has valid tokens across all devices
-    fetch(`https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/adminSettings/facebookApis.json`)
-        .then(res => res.json())
-        .then(apis => {
-            if (apis && typeof apis === 'object') {
-                try {
-                    localStorage.setItem('lokalex_cached_admin_facebook_apis', JSON.stringify(apis));
-                } catch (_) {}
-                Object.entries(apis).forEach(([id, data]) => {
-                    if (data) cachedAdminApisMap.set(id, { id, ...data });
-                });
-            }
-        })
-        .catch(() => {});
+    if (!isSupabaseSelected()) {
+        fetch(`https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/adminSettings/facebookApis.json`)
+            .then(res => res.json())
+            .then(apis => {
+                if (apis && typeof apis === 'object') {
+                    try {
+                        localStorage.setItem('lokalex_cached_admin_facebook_apis', JSON.stringify(apis));
+                    } catch (_) {}
+                    Object.entries(apis).forEach(([id, data]) => {
+                        if (data) cachedAdminApisMap.set(id, { id, ...data });
+                    });
+                }
+            })
+            .catch(() => {});
+    }
 })();
 
 // Initialize active sources from persistent storage
@@ -134,6 +136,9 @@ export function getPublicFbChannelName(apiId) {
 }
 
 export function getPublicFbSendEndpoint(apiId) {
+    if (isSupabaseSelected()) {
+        return "https://dry-firefly-ee76.lokaledeliver.workers.dev/api/send-reply";
+    }
     if (apiId) {
         const channel = cachedPublicChannelsMap.get(apiId);
         if (channel?.sendEndpoint) return channel.sendEndpoint;
@@ -144,7 +149,7 @@ export function getPublicFbSendEndpoint(apiId) {
             return ch.sendEndpoint;
         }
     }
-    return "https://lokalex-messenger-webhook.lokaledeliver.workers.dev/api/send-reply";
+    return "https://dry-firefly-ee76.lokaledeliver.workers.dev/api/send-reply";
 }
 
 export async function getFbPageAccessToken(apiId) {
@@ -312,35 +317,37 @@ export function listenToPublicFbChannels() {
     renderRiderSourcesUI();
 
     // 2. Fast parallel direct REST fetch (<150ms guaranteed on mobile networks)
-    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/facebookChannels.json?t=${Date.now()}`;
-    fetch(directRestUrl, { cache: 'no-store' })
-        .then(res => res.json())
-        .then(val => {
-            if (val && typeof val === 'object') {
-                try {
-                    localStorage.setItem('lokalex_cached_facebook_channels', JSON.stringify(val));
-                } catch (_) {}
-                cachedPublicChannelsMap.clear();
-                Object.entries(val).forEach(([id, data]) => {
-                    if (data && data.isActive !== false) {
-                        cachedPublicChannelsMap.set(id, {
-                            id: id,
-                            name: data.name || "FB Channel",
-                            sendEndpoint: data.sendEndpoint || null,
-                            isActive: data.isActive !== false,
-                            createdAt: data.createdAt || 0
-                        });
+    if (!isSupabaseSelected()) {
+        const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/facebookChannels.json?t=${Date.now()}`;
+        fetch(directRestUrl, { cache: 'no-store' })
+            .then(res => res.json())
+            .then(val => {
+                if (val && typeof val === 'object') {
+                    try {
+                        localStorage.setItem('lokalex_cached_facebook_channels', JSON.stringify(val));
+                    } catch (_) {}
+                    cachedPublicChannelsMap.clear();
+                    Object.entries(val).forEach(([id, data]) => {
+                        if (data && data.isActive !== false) {
+                            cachedPublicChannelsMap.set(id, {
+                                id: id,
+                                name: data.name || "FB Channel",
+                                sendEndpoint: data.sendEndpoint || null,
+                                isActive: data.isActive !== false,
+                                createdAt: data.createdAt || 0
+                            });
+                        }
+                    });
+                    renderRiderSourcesUI();
+                    if (window.renderRiderCustomerChatFeed) {
+                        window.renderRiderCustomerChatFeed();
                     }
-                });
-                renderRiderSourcesUI();
-                if (window.renderRiderCustomerChatFeed) {
-                    window.renderRiderCustomerChatFeed();
                 }
-            }
-        })
-        .catch(err => {
-            console.warn('[FacebookChannels] Direct REST fetch fallback:', err);
-        });
+            })
+            .catch(err => {
+                console.warn('[FacebookChannels] Direct REST fetch fallback:', err);
+            });
+    }
 
     if (!db || isPublicChannelsListening) return;
     isPublicChannelsListening = true;

@@ -37,7 +37,8 @@ import {
 import {
     cancelRiderReply,
     listenToRiderChatMessages,
-    syncIncomingMessageFromMeta
+    syncIncomingMessageFromMeta,
+    stopFbGraphPolling
 } from './chatListeners.js';
 import { startChatPresence, stopChatPresence, startChatTypingListener } from './chatPresence.js';
 
@@ -55,6 +56,45 @@ export function viewCurrentCustomerPhoto() {
 export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
     if (activeRiderChatCustId && activeRiderChatCustId !== custId) {
         saveCurrentThreadDraft(activeRiderChatCustId);
+    }
+
+    // Immediately detach previous thread listeners before switching ID
+    if (activeRiderChatListener) {
+        if (typeof activeRiderChatListener.off === 'function') activeRiderChatListener.off();
+        setActiveRiderChatListener(null);
+    }
+    if (activeRiderChatChildListener) {
+        if (typeof activeRiderChatChildListener.off === 'function') activeRiderChatChildListener.off();
+        setActiveRiderChatChildListener(null);
+    }
+    if (activeRiderChatChangedListener) {
+        if (typeof activeRiderChatChangedListener.off === 'function') activeRiderChatChangedListener.off();
+        setActiveRiderChatChangedListener(null);
+    }
+    if (activeRiderChatMetaListener) {
+        if (typeof activeRiderChatMetaListener.off === 'function') activeRiderChatMetaListener.off();
+        setActiveRiderChatMetaListener(null);
+    }
+
+    // Immediately clear loaded messages & show skeleton to prevent any cross-customer message mixing
+    loadedRiderMsgsMap.clear();
+    const msgContainer = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
+    if (msgContainer) {
+        msgContainer.innerHTML = `
+        <div id="rider-chat-loading-skeleton" class="flex flex-col gap-3 py-6 px-4 animate-pulse">
+            <div class="flex items-end gap-2 self-start w-3/4">
+                <div class="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-800 shrink-0"></div>
+                <div class="h-8 rounded-2xl rounded-bl-none bg-gray-200 dark:bg-gray-800 flex-1"></div>
+            </div>
+            <div class="flex items-end gap-2 self-end w-2/3 justify-end">
+                <div class="h-8 rounded-2xl rounded-br-none bg-emerald-600/20 dark:bg-emerald-600/30 w-3/4"></div>
+                <div class="w-7 h-7 rounded-full bg-emerald-600/20 dark:bg-emerald-600/30 shrink-0"></div>
+            </div>
+            <div class="flex items-end gap-2 self-start w-1/2">
+                <div class="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-800 shrink-0"></div>
+                <div class="h-6 rounded-2xl rounded-bl-none bg-gray-200 dark:bg-gray-800 flex-1"></div>
+            </div>
+        </div>`;
     }
 
     setActiveRiderChatCustId(custId);
@@ -675,6 +715,7 @@ export function closeRiderChatModal() {
 
 export function closeRiderCustomerChatModal() {
     stopChatPresence();
+    stopFbGraphPolling();
     if (activeRiderChatCustId) {
         saveCurrentThreadDraft(activeRiderChatCustId);
     }

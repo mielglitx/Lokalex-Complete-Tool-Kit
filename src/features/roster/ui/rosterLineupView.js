@@ -22,7 +22,7 @@
  */
 
 import { appState, globalState } from '../../../store/state.js';
-import { db } from '../../../config/firebase.js';
+import { db, isSupabaseSelected } from '../../../config/firebase.js';
 import { showToast } from '../../../ui/notifications.js';
 import * as storageEngine from '../../../utils/storageEngine.js';
 import { escapeHtml, escapeJsAttr, formatTitleCase } from '../../../utils/helpers.js';
@@ -721,20 +721,27 @@ export async function forceRefreshRosterList(btn = null) {
     if (btn) btn.disabled = true;
 
     try {
-        const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/roster.json?t=${Date.now()}`;
         let rosterData = null;
-        try {
-            const res = await fetch(directRestUrl, { cache: 'no-store' });
-            if (res.ok) {
-                rosterData = await res.json();
+
+        if (db) {
+            try {
+                const snap = await db.ref('roster').once('value');
+                rosterData = snap.val();
+            } catch (dbErr) {
+                console.warn("[ForceRefreshRoster] db.ref fetch failed:", dbErr);
             }
-        } catch (fetchErr) {
-            console.warn("[ForceRefreshRoster] Direct REST fetch fallback:", fetchErr);
         }
 
-        if (!rosterData && db) {
-            const snap = await db.ref('roster').once('value');
-            rosterData = snap.val();
+        if (!rosterData && !isSupabaseSelected()) {
+            try {
+                const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/roster.json?t=${Date.now()}`;
+                const res = await fetch(directRestUrl, { cache: 'no-store' });
+                if (res.ok) {
+                    rosterData = await res.json();
+                }
+            } catch (fetchErr) {
+                console.warn("[ForceRefreshRoster] Direct REST fetch fallback:", fetchErr);
+            }
         }
 
         if (rosterData && typeof rosterData === 'object') {

@@ -1,5 +1,5 @@
 // src/features/chat/chatFeed/chatFeedListener.js
-import { db } from '../../../config/firebase.js';
+import { db, isSupabaseSelected } from '../../../config/firebase.js';
 import { appState, globalState } from '../../../store/state.js';
 import { showToast, showNativeNotification } from '../../../ui/notifications.js';
 import { isCustomerMatch, cleanCustomerForMatch } from '../../roster/rosterUtils.js';
@@ -44,6 +44,9 @@ import {
 } from './chatFeedState.js';
 import { renderRiderCustomerChatFeed } from './chatFeedRender.js';
 import { storeChatState } from '../storeChat/storeChatState.js';
+
+// Cache to prevent infinite repeated purge updates of stale caterers in a single session
+const purgedStaleCatererKeys = new Set();
 
 export function schedulePersistMetaCache(data) {
     if (persistMetaTimeout) clearTimeout(persistMetaTimeout);
@@ -461,7 +464,8 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                 if (wasInCatering) {
                     threadFolder = isFinished ? 'done' : (isApplicant ? 'applicant' : (isFollowUp ? 'followup' : 'inbox'));
                 }
-                if (db && key) {
+                if (db && key && !purgedStaleCatererKeys.has(key)) {
+                    purgedStaleCatererKeys.add(key);
                     const purgePayload = {
                         cateredByRiderId: null,
                         cateredByRiderName: null,
@@ -1089,20 +1093,26 @@ export async function forceRefreshLiveChatsFeed(btn = null) {
     if (btn) btn.disabled = true;
 
     try {
-        const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?t=${Date.now()}`;
         let chatData = null;
-        try {
-            const res = await fetch(directRestUrl, { cache: 'no-store' });
-            if (res.ok) {
-                chatData = await res.json();
+        if (db) {
+            try {
+                const snap = await db.ref('customerChatMeta').once('value');
+                chatData = snap.val();
+            } catch (dbErr) {
+                console.warn('[ForceRefreshChat] db.ref fetch failed:', dbErr);
             }
-        } catch (fetchErr) {
-            console.warn('[ForceRefreshChat] REST fetch failed:', fetchErr);
         }
 
-        if (!chatData && db) {
-            const snap = await db.ref('customerChatMeta').once('value');
-            chatData = snap.val();
+        if (!chatData && !isSupabaseSelected()) {
+            try {
+                const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?t=${Date.now()}`;
+                const res = await fetch(directRestUrl, { cache: 'no-store' });
+                if (res.ok) {
+                    chatData = await res.json();
+                }
+            } catch (fetchErr) {
+                console.warn('[ForceRefreshChat] REST fetch fallback failed:', fetchErr);
+            }
         }
 
         if (chatData && typeof chatData === 'object') {

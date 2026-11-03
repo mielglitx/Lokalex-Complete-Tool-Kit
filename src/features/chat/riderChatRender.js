@@ -1007,19 +1007,22 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     ) : [];
 
     const hasMedia = isDoc || isVid || isAud || imageList.length > 0;
-    const isResolvingFbMedia = !hasMedia && (
+    const isUnavailableMsg = Boolean(m.text && m.text.includes('[Message unavailable'));
+    const isResolvingFbMedia = !hasMedia && !m.attachmentFailed && !isUnavailableMsg && (
         (m.text && (
-            m.text.includes('[Facebook') || 
+            m.text.includes('[Facebook Attachment]') || 
+            m.text.includes('[Facebook Photo]') || 
+            m.text.includes('[Facebook Video]') || 
+            m.text.includes('[Facebook Audio]') || 
             m.text === '📷 Photo' || 
             m.text === 'Photo' ||
             m.text === '🎥 Video' || 
             m.text === 'Video' ||
             m.text === '🎤 Voice message' || 
             m.text === 'Voice message' ||
-            /^📷 \d+ Photos?$/.test(m.text)
+            /^📷 \d+ Photos?$/i.test(m.text)
         )) ||
-        (m.type && m.type !== 'text' && m.type !== 'system') ||
-        (!m.text && (m.mid || (m.id && String(m.id).startsWith('m_'))))
+        (m.type && m.type !== 'text' && m.type !== 'system')
     );
     const isLikeSticker = !isDoc && !isVid && !isAud && imageList.length === 1 && Boolean(m.isSticker || m.stickerType === 'like' || (imageList[0].includes('369239') || imageList[0].includes('sticker') || imageList[0].includes('like')));
     
@@ -1045,6 +1048,13 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
         imageMarkup = isLikeSticker 
             ? `<div class="p-0.5 select-none flex items-center justify-start"><img src="${escapeHtml(imgHtml)}" alt="👍" referrerpolicy="no-referrer" class="w-10 h-10 object-contain hover:scale-110 active:scale-90 transition-transform cursor-pointer" onclick="event.stopPropagation()"></div>`
             : `<img src="${escapeHtml(imgHtml)}" loading="eager" decoding="async" fetchpriority="high" referrerpolicy="no-referrer" onerror="window.handleChatImageLoadError && window.handleChatImageLoadError(this, '${escapeHtml(m.id || '')}', '${escapeHtml(midArg)}')" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgHtml)}', 'rider')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-95 transition bg-gray-100 dark:bg-gray-800 min-h-[120px] object-cover">`;
+    } else if (m.attachmentFailed) {
+        imageMarkup = `
+        <div class="flex items-center gap-2 py-2 px-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-600 dark:text-amber-400 text-xs mt-1 font-medium select-none" onclick="event.stopPropagation()">
+            <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+            <span>Attachment unavailable</span>
+            <button type="button" onclick="event.stopPropagation(); window.retryFbAttachmentResolution && window.retryFbAttachmentResolution('${escapeHtml(targetCustId || '')}', '${escapeHtml(m.id || '')}')" class="ml-auto underline hover:text-amber-700 dark:hover:text-amber-300 font-bold cursor-pointer">Retry</button>
+        </div>`;
     } else if (isResolvingFbMedia) {
         imageMarkup = `<div class="flex items-center gap-2 py-2 px-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-blue-600 dark:text-blue-400 text-xs mt-1 font-medium animate-pulse"><i class="fa-solid fa-spinner fa-spin text-blue-500"></i><span>Loading attachment...</span></div>`;
     }
@@ -1088,8 +1098,13 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
 
     const cleanMsgText = (m.text || '').trim();
     const isPlaceholderText = Boolean(
-        cleanMsgText && (
-            cleanMsgText.includes('[Facebook') || 
+        cleanMsgText && !isUnavailableMsg && (
+            cleanMsgText.includes('[Facebook Attachment]') || 
+            cleanMsgText.includes('[Facebook Photo]') || 
+            cleanMsgText.includes('[Facebook Video]') || 
+            cleanMsgText.includes('[Facebook Audio]') || 
+            cleanMsgText.includes('[Facebook File]') || 
+            cleanMsgText.includes('[Facebook Document]') || 
             cleanMsgText === '📷 Photo' || 
             cleanMsgText.toLowerCase() === 'photo' ||
             cleanMsgText === '🎥 Video' || 
@@ -1104,9 +1119,9 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     );
     const isDocFilenameText = isDoc && cleanMsgText && (cleanMsgText === m.fileName || cleanMsgText === m.fileUrl || cleanMsgText === m.imageUrl || cleanMsgText === '📄 Document' || cleanMsgText.startsWith('http'));
     const isVideoPlaceholderText = isVid && cleanMsgText && (cleanMsgText === '🎥 Video' || cleanMsgText.toLowerCase() === 'video' || cleanMsgText === m.videoName || cleanMsgText === m.videoUrl || cleanMsgText.startsWith('http'));
-    const isAudioPlaceholderText = isAud && cleanMsgText && (cleanMsgText === '🎤 Voice message' || cleanMsgText.toLowerCase() === 'voice message' || cleanMsgText.includes('[Facebook') || cleanMsgText.startsWith('http'));
-    const isMultiImagePlaceholderText = imageList.length > 1 && cleanMsgText && (cleanMsgText.includes('Photos') || cleanMsgText.includes('[Facebook') || cleanMsgText.toLowerCase() === 'photo');
-    const isSingleImagePlaceholderText = imageList.length === 1 && cleanMsgText && (cleanMsgText === '📷 Photo' || cleanMsgText.toLowerCase() === 'photo' || cleanMsgText.includes('[Facebook') || cleanMsgText.startsWith('http'));
+    const isAudioPlaceholderText = isAud && cleanMsgText && (cleanMsgText === '🎤 Voice message' || cleanMsgText.toLowerCase() === 'voice message' || cleanMsgText.includes('[Facebook Audio]') || cleanMsgText.startsWith('http'));
+    const isMultiImagePlaceholderText = imageList.length > 1 && cleanMsgText && (cleanMsgText.includes('Photos') || cleanMsgText.includes('[Facebook Photo]') || cleanMsgText.toLowerCase() === 'photo');
+    const isSingleImagePlaceholderText = imageList.length === 1 && cleanMsgText && (cleanMsgText === '📷 Photo' || cleanMsgText.toLowerCase() === 'photo' || cleanMsgText.includes('[Facebook Photo]') || cleanMsgText.startsWith('http'));
     const showText = Boolean(
         cleanMsgText && 
         !isPlaceholderText && 
@@ -1127,6 +1142,10 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
             ${isRider && m.id ? `<button type="button" onclick="event.stopPropagation(); window.retryRiderChatMessage && window.retryRiderChatMessage('${m.id}')" class="underline hover:text-rose-700 dark:hover:text-rose-300 ml-1.5 font-bold cursor-pointer">Retry</button>` : ''}
         </div>` : '';
 
+    if (!cleanMsgText && !hasMedia && !locationHtml && !isResolvingFbMedia) {
+        return '';
+    }
+
     return `
     <div id="msg-bubble-${m.id}" data-timestamp="${msgTs}" class="flex flex-col ${isRider ? 'items-end' : 'items-start'} my-0.5 w-full">
         <div class="flex items-start gap-1.5 ${isRider ? 'flex-row-reverse' : 'flex-row'} max-w-full">
@@ -1141,12 +1160,20 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
                 <div class="text-[9px] ${isRider ? 'text-emerald-100' : 'text-teal-700 dark:text-teal-400'} font-bold flex justify-between gap-3 pointer-events-none">
                     <span class="inline-flex items-center">${escapeHtml(senderName)}${adminBadgeHtml}</span>
                     <div class="flex items-center gap-1 opacity-80 font-mono shrink-0">
+                        ${(m.isEdited || m.editedAt) ? `<span class="inline-flex items-center gap-0.5 text-[8.5px] opacity-90 font-sans italic mr-0.5 text-amber-500 dark:text-amber-400" title="Edited message${m.numEdit ? ` (${m.numEdit}x)` : ''}"><i class="fa-solid fa-pen-to-square text-[7.5px]"></i> edited</span>` : ''}
                         <span>${timeStr}</span>
                         ${statusIndicator}
                     </div>
                 </div>
                 ${replyBlockHtml}
                 ${showText ? `<div class="leading-relaxed whitespace-pre-wrap font-sans break-words">${formatChatTextWithPhoneLinks(m.text)}</div>` : ''}
+                ${(m.isEdited && m.originalText && m.originalText !== m.text) ? `
+                <div class="mt-1 pt-1 border-t border-current/15 text-[10px] opacity-85">
+                    <div class="text-[8px] font-bold uppercase tracking-wider flex items-center gap-1 ${isRider ? 'text-emerald-200' : 'text-amber-500 dark:text-amber-400'}">
+                        <i class="fa-solid fa-clock-rotate-left text-[8px]"></i> Original:
+                    </div>
+                    <div class="line-through opacity-75 break-words whitespace-pre-wrap select-text">${escapeHtml(m.originalText)}</div>
+                </div>` : ''}
                 ${documentMarkup}
                 ${videoMarkup}
                 ${audioMarkup}
@@ -1169,7 +1196,9 @@ export function appendOrUpdateSingleRiderMessage(container, msg, activeCustData 
     const emptyNote = container.querySelector('.italic');
     if (emptyNote && container.children.length === 1) emptyNote.remove();
 
-    const existingBubble = document.getElementById(`msg-bubble-${msg.id}`);
+    const existingBubble = document.getElementById(`msg-bubble-${msg.id}`)
+        || (msg.mid ? document.getElementById(`msg-bubble-${msg.mid}`) : null)
+        || (msg.metaMid ? document.getElementById(`msg-bubble-${msg.metaMid}`) : null);
     
     // Guard against duplicate page echo bubbles
     if (!existingBubble) {
@@ -1218,9 +1247,16 @@ export function appendOrUpdateSingleRiderMessage(container, msg, activeCustData 
         }
     }
 
+    const renderedHtml = buildSingleMessageHtml(msg, activeCustData).trim();
+    if (!renderedHtml) {
+        if (existingBubble) existingBubble.remove();
+        return;
+    }
+
     const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = buildSingleMessageHtml(msg, activeCustData).trim();
+    tempDiv.innerHTML = renderedHtml;
     const newBubble = tempDiv.firstElementChild;
+    if (!newBubble) return;
 
     if (existingBubble) {
         existingBubble.replaceWith(newBubble);
@@ -1484,7 +1520,7 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
         }
     }
 
-    const messagesHtml = msgs.map(m => buildSingleMessageHtml(m, activeCustData)).join('');
+    const messagesHtml = msgs.map(m => buildSingleMessageHtml(m, activeCustData)).filter(Boolean).join('');
 
     let topHeader = '';
     if (hasMoreRiderMsgs) {

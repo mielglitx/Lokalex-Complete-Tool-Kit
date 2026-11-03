@@ -28,7 +28,7 @@ import { showToast } from '../ui/notifications.js';
 
 const OTA_MANIFEST_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/version.json';
 const OTA_CHECKSUMS_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/checksums.json';
-const CURRENT_BUILT_IN_VERSION = '1.0.88';
+const CURRENT_BUILT_IN_VERSION = '1.0.89';
 let isCheckingUpdate = false;
 let globalOtaChecksumsMap = {};
 

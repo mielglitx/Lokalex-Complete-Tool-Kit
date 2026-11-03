@@ -9,6 +9,13 @@ let activeSwipingCard = null;
 let gestureDirection = null; // 'horizontal' | 'vertical' | null
 
 export function handleCardTouchStart(e, cardEl) {
+    if (e.target && e.target.closest('button, input, select, textarea, a, [onclick], .cursor-pointer')) {
+        // Direct interactive controls inside the card must receive tap/click without gesture interference
+        activeSwipingCard = null;
+        gestureDirection = null;
+        return;
+    }
+
     if (e.touches && e.touches[0]) {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;

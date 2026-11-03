@@ -487,7 +487,17 @@ function createQueryWrapper(primaryQuery, backupRef) {
     };
 }
 
-export const db = fb ? {
+import { supabaseDb } from './supabaseDb.js';
+
+// Active Database Provider Selection:
+// Default is now SUPABASE ('supabase'). Can still be switched back to 'firebase' anytime via window.switchDatabaseProvider('firebase')
+export function isSupabaseSelected() {
+    const stored = (typeof window !== 'undefined' && window.localStorage?.getItem('lokalex_db_provider')) || null;
+    return stored ? (stored === 'supabase') : true;
+}
+const isInitialSupabaseSelected = isSupabaseSelected();
+
+const firebaseDb = fb ? {
     ref(path) {
         const cleanPath = normalizeFirebasePath(path);
         const pRef = primaryDb ? (cleanPath ? primaryDb.ref(cleanPath) : primaryDb.ref()) : null;
@@ -507,9 +517,23 @@ export const db = fb ? {
     }
 } : null;
 
+export const db = isInitialSupabaseSelected ? supabaseDb : (firebaseDb || supabaseDb);
+
 if (typeof window !== 'undefined') {
     window.db = db;
     window.primaryDb = primaryDb;
+    window.supabaseDb = supabaseDb;
+    window.activeDbProvider = isInitialSupabaseSelected ? 'supabase' : 'firebase';
+    window.switchDatabaseProvider = (provider) => {
+        if (provider === 'supabase' || provider === 'firebase') {
+            window.localStorage?.setItem('lokalex_db_provider', provider);
+            console.log(`[Database Provider] Switched to ${provider}. Reloading page...`);
+            window.location.reload();
+        } else {
+            console.warn('Invalid provider. Use "supabase" or "firebase".');
+        }
+    };
+    console.log(`[Database Provider] ⚡ Active: ${isInitialSupabaseSelected ? 'SUPABASE' : 'FIREBASE'}`);
 }
 
 export default fb;
