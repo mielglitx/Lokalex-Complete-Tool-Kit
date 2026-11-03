@@ -100,27 +100,37 @@ export async function loadRiderPerformanceData(startDate, endDate) {
         isFetchingReport = true;
         renderLoadingState(true);
 
-        // 1. Concurrently fetch Receipts, Catered History, Shift History, Logins, and Riders
+        const safeQuery = (refPromise, timeoutMs = 6000) => {
+            return Promise.race([
+                Promise.resolve(refPromise),
+                new Promise(resolve => setTimeout(() => resolve(null), timeoutMs))
+            ]).catch(() => null);
+        };
+
+        // 1. Concurrently fetch Receipts, Catered History, Shift History, Logins, and Riders with safe timeouts
         const [receiptsSnap, cateredSnap, shiftsSnap, loginsSnap, ridersSnap] = await Promise.all([
-            db.ref('receipts').orderByChild('date').startAt(startDate).endAt(endDate).once('value').catch(() => null),
-            db.ref('cateredHistory').orderByChild('completedDate').startAt(startDate).endAt(endDate).once('value').catch(() => null),
-            db.ref('shiftHistory').once('value').catch(() => null),
-            db.ref('logins').once('value').catch(() => null),
-            db.ref('riders').once('value').catch(() => null)
+            safeQuery(db.ref('receipts').once('value')),
+            safeQuery(db.ref('cateredHistory').once('value')),
+            safeQuery(db.ref('shiftHistory').once('value')),
+            safeQuery(db.ref('logins').once('value')),
+            safeQuery(db.ref('riders').once('value'))
         ]);
 
-        const rawReceipts = receiptsSnap ? receiptsSnap.val() || {} : {};
-        const rawCatered = cateredSnap ? cateredSnap.val() || {} : {};
-        const rawShifts = shiftsSnap ? shiftsSnap.val() || {} : {};
-        const rawLogins = loginsSnap ? loginsSnap.val() || {} : {};
-        const rawRiders = ridersSnap ? ridersSnap.val() || {} : {};
+        const rawReceipts = (receiptsSnap && typeof receiptsSnap.val === 'function') ? (receiptsSnap.val() || {}) : {};
+        const rawCatered = (cateredSnap && typeof cateredSnap.val === 'function') ? (cateredSnap.val() || {}) : {};
+        const rawShifts = (shiftsSnap && typeof shiftsSnap.val === 'function') ? (shiftsSnap.val() || {}) : {};
+        const rawLogins = (loginsSnap && typeof loginsSnap.val === 'function') ? (loginsSnap.val() || {}) : {};
+        const rawRiders = (ridersSnap && typeof ridersSnap.val === 'function') ? (ridersSnap.val() || {}) : {};
 
-        // Also check if any cateredHistory uses 'date' instead of 'completedDate'
-        let extraCatered = {};
-        try {
-            const extraSnap = await db.ref('cateredHistory').orderByChild('date').startAt(startDate).endAt(endDate).once('value');
-            extraCatered = extraSnap ? extraSnap.val() || {} : {};
-        } catch (_) {}
+        // Merge in any daily receipts in memory
+        if (globalState && Array.isArray(globalState.globalDailyReceipts)) {
+            globalState.globalDailyReceipts.forEach(r => {
+                if (r && (r.id || r.transactionId)) {
+                    const id = r.transactionId || r.id;
+                    if (!rawReceipts[id]) rawReceipts[id] = r;
+                }
+            });
+        }
 
         // 2. Build canonical registered riders registry
         const riderStatsMap = new Map();
@@ -159,11 +169,20 @@ export async function loadRiderPerformanceData(startDate, endDate) {
             getOrCreateRiderStats(id, name, photo);
         });
 
+        // Also seed riders from globalState.allRidersList if present
+        if (globalState && Array.isArray(globalState.allRidersList)) {
+            globalState.allRidersList.forEach(r => {
+                if (r && r.name) {
+                    getOrCreateRiderStats(r.telegramId || r.id, r.name, r.avatar || r.photoUrl);
+                }
+            });
+        }
+
         // 3. Process Receipts (Total delivery fees & Income)
         Object.entries(rawReceipts).forEach(([txId, r]) => {
             if (!r || r.status === 'voided' || r.voided || r.isVoided) return;
-            const rDate = r.date || '';
-            if (rDate < startDate || rDate > endDate) return;
+            const rDate = String(r.date || r.createdAtDate || r.completedDate || '').substring(0, 10);
+            if (!rDate || rDate < startDate || rDate > endDate) return;
 
             const riderId = (r.telegramId || r.riderId || '').toString().trim();
             const riderName = (r.riderName || r.name || 'Rider').trim();
@@ -177,7 +196,6 @@ export async function loadRiderPerformanceData(startDate, endDate) {
                 stat.customerCount += custs;
                 if (rDate) stat.attendedDates.add(rDate);
 
-                // If duration in receipt, track duration
                 const dur = parseInt(r.duration, 10) || 0;
                 if (dur > 0 && dur < 300) {
                     stat._orderDurations = (stat._orderDurations || 0) + dur;
@@ -186,11 +204,10 @@ export async function loadRiderPerformanceData(startDate, endDate) {
         });
 
         // 4. Process Catered History (Captures orders marked done via roster)
-        const combinedCatered = { ...rawCatered, ...extraCatered };
-        Object.entries(combinedCatered).forEach(([txId, h]) => {
+        Object.entries(rawCatered).forEach(([txId, h]) => {
             if (!h || h.status === 'voided' || h.voided || h.isVoided) return;
-            const hDate = h.completedDate || h.date || '';
-            if (hDate < startDate || hDate > endDate) return;
+            const hDate = String(h.completedDate || h.date || '').substring(0, 10);
+            if (!hDate || hDate < startDate || hDate > endDate) return;
 
             const riderId = (h.telegramId || h.riderId || '').toString().trim();
             const riderName = (h.riderName || h.name || 'Rider').trim();
@@ -213,18 +230,18 @@ export async function loadRiderPerformanceData(startDate, endDate) {
 
         // 5. Process Shift History and Daily Logins (Duty Time, Break Time & Attendance Days)
         const combinedShifts = { ...rawShifts };
-        // Also merge current day logins
         Object.entries(rawLogins).forEach(([lId, lData]) => {
             if (lData && lData.date) {
-                combinedShifts[`${lData.date}_${lId}`] = lData;
+                const lDate = String(lData.date).substring(0, 10);
+                if (lDate >= startDate && lDate <= endDate) {
+                    combinedShifts[`${lDate}_${lId}`] = lData;
+                }
             }
         });
 
-        const riderShiftDays = new Map(); // key -> Set(dates)
-
         Object.entries(combinedShifts).forEach(([key, shift]) => {
             if (!shift || !shift.date) return;
-            const sDate = shift.date;
+            const sDate = String(shift.date).substring(0, 10);
             if (sDate < startDate || sDate > endDate) return;
 
             const riderId = (shift.riderId || shift.id || '').toString().trim();
@@ -238,7 +255,6 @@ export async function loadRiderPerformanceData(startDate, endDate) {
             let totalBreak = parseInt(shift.totalBreakMinutes, 10) || 0;
 
             if (isNaN(netWorked) || netWorked <= 0) {
-                // If currently on shift or not finalized, compute from loginTimestamp
                 if (shift.loginTimestamp) {
                     const endTs = shift.clockOutTimestamp || Date.now();
                     const gross = Math.max(0, Math.floor((endTs - shift.loginTimestamp) / 60000));
@@ -248,7 +264,6 @@ export async function loadRiderPerformanceData(startDate, endDate) {
                 }
             }
 
-            // Cap absurd shifts (e.g. > 18 hours per single day) to avoid corrupted entries
             if (netWorked > 18 * 60) netWorked = 18 * 60;
             if (totalBreak > 8 * 60) totalBreak = 8 * 60;
 
@@ -256,7 +271,7 @@ export async function loadRiderPerformanceData(startDate, endDate) {
             stat.breakMinutes += totalBreak;
         });
 
-        // If a rider completed orders on dates without an explicit shift login, fallback to order duration sum
+        // Fallback: order durations
         riderStatsMap.forEach(stat => {
             if (stat.workedMinutes === 0 && stat._orderDurations > 0) {
                 stat.workedMinutes = stat._orderDurations;
@@ -274,7 +289,7 @@ export async function loadRiderPerformanceData(startDate, endDate) {
             };
         });
 
-        // Filter out riders with 0 attendance AND 0 catering to avoid cluttering leaderboard
+        // Active riders
         const activeRiders = ridersList.filter(r => r.daysAttended > 0 || r.customerCount > 0 || r.totalIncome > 0);
 
         // 7. Find Top Performers for the 4 Criteria
@@ -302,8 +317,17 @@ export async function loadRiderPerformanceData(startDate, endDate) {
         return cachedPerformanceData;
     } catch (err) {
         console.error("Error loading performance data:", err);
-        showToast("❌ Failed to load performance report: " + (err.message || "Unknown error"));
-        return null;
+        showToast("⚠️ Notice: Loaded partial or offline performance data.");
+        return {
+            startDate,
+            endDate,
+            reportType: currentReportType,
+            riders: [],
+            champions: { income: null, caterer: null, time: null, attendance: null },
+            totalRevenue: 0,
+            totalOrders: 0,
+            totalHoursWorked: 0
+        };
     } finally {
         isFetchingReport = false;
         renderLoadingState(false);
@@ -645,6 +669,10 @@ function renderLoadingState(isLoading) {
             <i class="fa-solid fa-spinner fa-spin text-xl text-emerald-500"></i>
             <span class="text-xs font-bold">Calculating performance metrics across all orders & shifts...</span>
         </div>`;
+    } else {
+        if (container.innerHTML.includes('fa-spinner')) {
+            container.innerHTML = '';
+        }
     }
 }
 
@@ -715,11 +743,22 @@ export async function refreshPerformanceView() {
         nextBtn.style.pointerEvents = currentOffset >= 0 ? "none" : "auto";
     }
 
-    const data = await loadRiderPerformanceData(range.startDate, range.endDate);
-    if (data) {
-        renderChampionsGrid(data.champions);
-        renderOverviewStrip(data);
-        renderLeaderboardList(data.riders, activeSortCriteria);
+    try {
+        const data = await loadRiderPerformanceData(range.startDate, range.endDate);
+        if (data && data.riders) {
+            renderChampionsGrid(data.champions);
+            renderOverviewStrip(data);
+            renderLeaderboardList(data.riders, activeSortCriteria);
+        } else {
+            renderChampionsGrid(null);
+            renderOverviewStrip({ totalRevenue: 0, totalOrders: 0, totalHoursWorked: 0 });
+            renderLeaderboardList([], activeSortCriteria);
+        }
+    } catch (err) {
+        console.error("refreshPerformanceView error:", err);
+        renderChampionsGrid(null);
+        renderOverviewStrip({ totalRevenue: 0, totalOrders: 0, totalHoursWorked: 0 });
+        renderLeaderboardList([], activeSortCriteria);
     }
 }
 

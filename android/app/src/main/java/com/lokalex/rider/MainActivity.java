@@ -105,6 +105,20 @@ public class MainActivity extends BridgeActivity {
         try {
             getBridge().getWebView().addJavascriptInterface(new Object() {
                 @JavascriptInterface
+                public void hideStatusBarImmersive() {
+                    new Handler(Looper.getMainLooper()).post(() -> {
+                        try {
+                            Window window = getWindow();
+                            WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, window.getDecorView());
+                            if (controller != null) {
+                                controller.hide(WindowInsetsCompat.Type.statusBars());
+                                controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                            }
+                        } catch (Exception ignored) {}
+                    });
+                }
+
+                @JavascriptInterface
                 public void requestAllPermissions() {
                     new Handler(Looper.getMainLooper()).post(MainActivity.this::checkAndRequestPermissions);
                 }

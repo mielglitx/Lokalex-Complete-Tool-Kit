@@ -42,6 +42,7 @@ export const TABLE_MAP = {
   roster: 'roster',
   settings: 'settings',
   sharedQuickReplies: 'shared_quick_replies',
+  shiftHistory: 'shift_history',
   storeAccounts: 'store_accounts',
   storeMenus: 'store_menus',
   storeOrders: 'store_orders',
@@ -406,6 +407,23 @@ export function createSupabaseRef(rawPath, queryState = {}) {
               const filtered = {};
               for (const [k, v] of Object.entries(result)) {
                 if (v && v[field] === eqVal) {
+                  filtered[k] = v;
+                }
+              }
+              result = filtered;
+            }
+
+            // Filter if startAt/endAt range query specified
+            if ((ref._query.startAt !== undefined || ref._query.endAt !== undefined) && ref._query.orderBy) {
+              const field = ref._query.orderBy;
+              const sVal = ref._query.startAt;
+              const eVal = ref._query.endAt;
+              const filtered = {};
+              for (const [k, v] of Object.entries(result)) {
+                if (v && v[field] !== undefined) {
+                  const val = v[field];
+                  if (sVal !== undefined && val < sVal) continue;
+                  if (eVal !== undefined && val > eVal) continue;
                   filtered[k] = v;
                 }
               }
@@ -854,6 +872,12 @@ export function createSupabaseRef(rawPath, queryState = {}) {
     },
     equalTo(val) {
       return createSupabaseRef(rawPath, { ...ref._query, equalTo: val });
+    },
+    startAt(val) {
+      return createSupabaseRef(rawPath, { ...ref._query, startAt: val });
+    },
+    endAt(val) {
+      return createSupabaseRef(rawPath, { ...ref._query, endAt: val });
     }
   };
 
