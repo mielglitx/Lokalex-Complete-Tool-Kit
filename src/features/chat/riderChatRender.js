@@ -948,7 +948,8 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const alignClass = isRider 
         ? `self-end bg-[#076B57] text-white rounded-tr-none ${dimClass}` 
         : `self-start bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-200 rounded-tl-none ${dimClass}`;
-    const timeStr = formatChatDateTime(m.timestamp);
+    const msgTs = getMessageTimestamp(m);
+    const timeStr = formatChatDateTime(msgTs || m.timestamp || m.createdAt || m.time || m.created_time || m.date);
 
     const riderName = appState.riderName || "Rider";
     const currentCustId = (typeof window !== 'undefined' && (window.activeRiderChatCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null))) || null;
@@ -982,7 +983,6 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const senderName = cleanSenderName;
     const senderAvatar = getMessageSenderAvatar(m, isRider, custAvatar);
     const customerLastSeenTs = Number(meta?.customerLastSeenTimestamp || activeCustData?.customerLastSeenTimestamp || meta?.watermark || 0) || 0;
-    const msgTs = getMessageTimestamp(m);
     const isSeen = !isFailed && (m.status === 'seen' || Boolean(m.seenAt) || (customerLastSeenTs > 0 && msgTs > 0 && msgTs <= customerLastSeenTs));
 
     const statusIndicator = isRider ? renderRiderMessageStatusIndicator(m, isSeen) : '';
@@ -1258,14 +1258,33 @@ export function appendOrUpdateSingleRiderMessage(container, msg, activeCustData 
     const newBubble = tempDiv.firstElementChild;
     if (!newBubble) return;
 
+    const newTs = getMessageTimestamp(msg);
+
     if (existingBubble) {
         existingBubble.replaceWith(newBubble);
     } else {
-        const newTs = getMessageTimestamp(msg);
         const bubbles = Array.from(container.querySelectorAll('[data-timestamp]'));
         const nextBubble = bubbles.find(b => (Number(b.dataset.timestamp) || 0) > newTs);
         if (nextBubble) {
             container.insertBefore(newBubble, nextBubble);
+        } else {
+            container.appendChild(newBubble);
+        }
+    }
+
+    // Strictly enforce chronological DOM order so no message gets stuck out of order
+    const currentTs = Number(newBubble.dataset.timestamp) || newTs;
+    const prevBubble = newBubble.previousElementSibling;
+    const nextSibling = newBubble.nextElementSibling;
+    const prevTs = (prevBubble && prevBubble.dataset?.timestamp) ? Number(prevBubble.dataset.timestamp) : 0;
+    const nextTs = (nextSibling && nextSibling.dataset?.timestamp) ? Number(nextSibling.dataset.timestamp) : Infinity;
+
+    if ((prevTs && currentTs < prevTs) || (nextTs !== Infinity && currentTs > nextTs)) {
+        newBubble.remove();
+        const bubbles = Array.from(container.querySelectorAll('[data-timestamp]'));
+        const correctNext = bubbles.find(b => (Number(b.dataset.timestamp) || 0) > currentTs);
+        if (correctNext) {
+            container.insertBefore(newBubble, correctNext);
         } else {
             container.appendChild(newBubble);
         }

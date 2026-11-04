@@ -1096,7 +1096,11 @@ export function generateDailyReportText() {
             if (baseRates.promoDiscountPerc > 0) penaltyDetails.push(`-${baseRates.promoDiscountPerc}% Promo`);
             const notes = penaltyDetails.length > 0 ? ` (${penaltyDetails.join(', ')})` : '';
 
-            report += `   • Base Rate: ${baseRates.companyPerc}%${notes}\n`;
+            const effectiveBasePerc = (rider.regularGross > 0)
+                ? Math.round((rider.regularCompany / rider.regularGross) * 100)
+                : (baseRates.baseCompanyPerc || defaultCommissionRate || baseRates.companyPerc);
+
+            report += `   • Base Rate: ${effectiveBasePerc}%${notes}\n`;
             report += `   • ${isEarnedMode ? 'Rider Earned' : 'To Pay Company'}: ₱${(isEarnedMode ? rider.regularEarned : rider.regularCompany).toFixed(2)}\n`;
         }
         report += `\n`;
@@ -1203,7 +1207,10 @@ export function generateDailyReportText() {
         
         // Regular breakdown
         const regAmt = isEarnedMode ? `₱${r.regularEarned.toFixed(2)}` : (baseRates.isAdmin ? '₱0.00' : `₱${r.regularCompany.toFixed(2)}`);
-        rText += `  - Regular (${r.regularOrdersCount} ord): ${regAmt} (Gross: ₱${r.regularGross.toFixed(2)} @ ${baseRates.companyPerc}% Base)\n`;
+        const rEffectiveBasePerc = (r.regularGross > 0)
+            ? Math.round((r.regularCompany / r.regularGross) * 100)
+            : (baseRates.baseCompanyPerc || defaultCommissionRate || baseRates.companyPerc);
+        rText += `  - Regular (${r.regularOrdersCount} ord): ${regAmt} (Gross: ₱${r.regularGross.toFixed(2)} @ ${rEffectiveBasePerc}% Base)\n`;
         
         // Overtime breakdown
         if (r.overtimeOrdersCount > 0) {

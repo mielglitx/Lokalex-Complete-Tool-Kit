@@ -856,6 +856,27 @@ async function processMetaEntries(entries, cfg, ctx) {
               console.warn("Supabase message_edit error:", editErr);
             }
           }
+          if (cfg.firebaseDbUrl || cfg.dbUrl) {
+            try {
+              const dbEndpoint = cfg.firebaseDbUrl || cfg.dbUrl;
+              const editPatch = {
+                [`customerChats/${custId}/messages/${targetKey}/text`]: newText,
+                [`customerChats/${custId}/messages/${targetKey}/message`]: newText,
+                [`customerChats/${custId}/messages/${targetKey}/isEdited`]: true,
+                [`customerChats/${custId}/messages/${targetKey}/editedAt`]: editTimestamp,
+                [`customerChats/${custId}/messages/${targetKey}/numEdit`]: numEdit,
+                [`customerChatMeta/${custId}/lastUpdated`]: editTimestamp,
+                [`customerChatMeta/${custId}/lastMessage`]: newText,
+                [`customerChats/${custId}/metadata/lastUpdated`]: editTimestamp,
+                [`customerChats/${custId}/metadata/lastMessage`]: newText
+              };
+              fetch(`${dbEndpoint}/.json`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(editPatch)
+              }).catch(() => {});
+            } catch (_) {}
+          }
         }
         continue;
       }

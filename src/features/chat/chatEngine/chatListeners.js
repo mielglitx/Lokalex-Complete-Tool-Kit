@@ -321,7 +321,10 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
             }
 
             // Check if already loaded or rendered
-            const existingLoaded = loadedRiderMsgsMap.get(safeMid) || loadedRiderMsgsMap.get(rawMid);
+            const existingLoaded = loadedRiderMsgsMap.get(safeMid) 
+                || loadedRiderMsgsMap.get(rawMid)
+                || Array.from(loadedRiderMsgsMap.values()).find(prev => prev.id === safeMid || prev.id === rawMid || prev.mid === safeMid || prev.metaMid === rawMid || prev.mid === rawMid || prev.metaMid === safeMid);
+
             if (existingLoaded) {
                 // If message text was edited on Facebook, update existing bubble!
                 if (m.message && existingLoaded.text && m.message.trim() !== existingLoaded.text.trim()) {
@@ -330,7 +333,8 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                     existingLoaded.isEdited = true;
                     existingLoaded.editedAt = Date.now();
                     if (container) appendOrUpdateSingleRiderMessage(container, existingLoaded, activeCustData);
-                    if (db) db.ref(`customerChats/${targetCustId}/messages/${safeMid}`).update({
+                    const updateKey = existingLoaded.id || safeMid;
+                    if (db) db.ref(`customerChats/${targetCustId}/messages/${updateKey}`).update({
                         text: existingLoaded.text,
                         originalText: existingLoaded.originalText,
                         isEdited: true,
@@ -777,7 +781,19 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
             setHasMoreRiderMsgs(false);
         } else {
             const allMsgs = Object.entries(data)
-                .map(([key, msg]) => ({ id: key, ...msg }))
+                .map(([key, msg]) => {
+                    const full = { id: key, ...msg };
+                    if (!full.timestamp) {
+                        const resolvedTs = getMessageTimestamp(full);
+                        if (resolvedTs > 0) {
+                            full.timestamp = resolvedTs;
+                            if (db && custId) {
+                                db.ref(`customerChats/${custId}/messages/${key}/timestamp`).set(resolvedTs).catch(() => {});
+                            }
+                        }
+                    }
+                    return full;
+                })
                 .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
 
             // Merge into persistent cache without wiping older history
@@ -861,6 +877,12 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
 
         const fullMsg = { id: key, ...msg };
         const msgTs = getMessageTimestamp(fullMsg);
+        if (!fullMsg.timestamp && msgTs > 0) {
+            fullMsg.timestamp = msgTs;
+            if (db && custId) {
+                db.ref(`customerChats/${custId}/messages/${key}/timestamp`).set(msgTs).catch(() => {});
+            }
+        }
 
         // Keep master RAM cache & IndexedDB updated
         let memCached = riderChatMemoryCache.get(custId) || [];

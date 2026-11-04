@@ -539,7 +539,57 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
 
-        // 0.1 Handle customer read receipts (Meta Messenger message_reads)
+// 0.05 Handle customer message edits (Meta Messenger message_edits)
+        if (item.message_edit) {
+          const senderId = item.sender?.id;
+          if (!senderId) continue;
+          const custId = `fb_${senderId}`;
+          const rawMid = item.message_edit.mid;
+          const newText = (item.message_edit.text || "").trim();
+          const numEdit = item.message_edit.num_edit || 1;
+          const editTimestamp = item.timestamp || Date.now();
+
+          if (rawMid && newText) {
+            let token = PAGE_ACCESS_TOKEN;
+            let targetKey = String(rawMid).replace(/[.#$\[\]\/]/g, "_");
+            let existingMsg = null;
+            try {
+              const resolved = await resolveMessageByMid(FIREBASE_DB_URL, custId, rawMid, editTimestamp, token);
+              if (resolved && resolved.key) {
+                targetKey = resolved.key;
+                existingMsg = resolved.message;
+              }
+            } catch(e) {
+              console.warn("Failed to resolve message_edit targetKey:", e);
+            }
+
+            const origText = existingMsg?.originalText || existingMsg?.text || existingMsg?.message || "";
+            const msgEditPatch = {
+              [`/customerChats/${custId}/messages/${targetKey}/text`]: newText,
+              [`/customerChats/${custId}/messages/${targetKey}/message`]: newText,
+              [`/customerChats/${custId}/messages/${targetKey}/isEdited`]: true,
+              [`/customerChats/${custId}/messages/${targetKey}/editedAt`]: editTimestamp,
+              [`/customerChats/${custId}/messages/${targetKey}/numEdit`]: numEdit,
+              [`/customerChatMeta/${custId}/lastUpdated`]: editTimestamp,
+              [`/customerChatMeta/${custId}/lastMessage`]: newText,
+              [`/customerChats/${custId}/metadata/lastUpdated`]: editTimestamp,
+              [`/customerChats/${custId}/metadata/lastMessage`]: newText
+            };
+            if (origText && origText !== newText) {
+              msgEditPatch[`/customerChats/${custId}/messages/${targetKey}/originalText`] = origText;
+              msgEditPatch[`/customerChats/${custId}/messages/${targetKey}/previousText`] = existingMsg?.previousText || origText;
+            }
+
+            await fetch(`${FIREBASE_DB_URL}/.json`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(msgEditPatch)
+            }).catch((err) => console.warn("Failed to patch message_edit to Firebase RTDB:", err));
+          }
+          continue;
+        }
+
+                // 0.1 Handle customer read receipts (Meta Messenger message_reads)
         if (item.read) {
           const senderId = item.sender?.id;
           if (!senderId) continue;

@@ -359,9 +359,8 @@ export function getCommissionRates(dateStr, riderName = "", telegramId = "", rec
     } else if (cleanName && customRiderRates[cleanName] !== undefined && customRiderRates[cleanName] !== null && customRiderRates[cleanName] !== "") {
         baseCompanyPerc = parseFloat(customRiderRates[cleanName]);
         hasCustomOverride = true;
-    }
-
-    if (!hasCustomOverride && globalState.globalRiderRates) {
+    } else if (customRiderRates && Object.keys(customRiderRates).length === 0 && globalState.globalRiderRates) {
+        // Only fallback to legacy commissionSettings if no modern customRiderRates are configured
         if (globalState.globalRiderRates[cleanName]) {
             const setting = globalState.globalRiderRates[cleanName];
             baseCompanyPerc = parseFloat(setting.percentage || setting.basePercentage || defaultCommissionRate);

@@ -74,9 +74,18 @@ export function formatChatDateParts(timestamp) {
 
 export function getMessageTimestamp(msg) {
     if (!msg) return 0;
-    if (msg.timestamp && typeof msg.timestamp === 'number') return msg.timestamp;
-    if (msg.timestamp && !isNaN(Number(msg.timestamp))) return Number(msg.timestamp);
-    if (msg.time && !isNaN(Number(msg.time))) return Number(msg.time);
+    if (typeof msg.timestamp === 'number' && !isNaN(msg.timestamp) && msg.timestamp > 0) return msg.timestamp;
+    if (msg.timestamp && !isNaN(Number(msg.timestamp)) && Number(msg.timestamp) > 0) return Number(msg.timestamp);
+    if (msg.timestamp) {
+        const parsed = new Date(msg.timestamp).getTime();
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    if (typeof msg.time === 'number' && !isNaN(msg.time) && msg.time > 0) return msg.time;
+    if (msg.time && !isNaN(Number(msg.time)) && Number(msg.time) > 0) return Number(msg.time);
+    if (msg.time) {
+        const parsed = new Date(msg.time).getTime();
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
     if (msg.createdAt) {
         const num = Number(msg.createdAt);
         if (!isNaN(num) && num > 0) return num;
@@ -93,16 +102,30 @@ export function getMessageTimestamp(msg) {
         const parsed = new Date(msg.date).getTime();
         if (!isNaN(parsed) && parsed > 0) return parsed;
     }
+    if (msg.receiptTime) {
+        const parsed = new Date(msg.receiptTime).getTime();
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
     if (msg.id && typeof msg.id === 'string' && msg.id.startsWith('-')) {
         try {
             const PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
             let time = 0;
-            for (let i = 1; i < 9; i++) {
+            for (let i = 0; i < 8; i++) {
                 const c = msg.id.charAt(i);
-                time = time * 64 + PUSH_CHARS.indexOf(c);
+                const idx = PUSH_CHARS.indexOf(c);
+                if (idx === -1) { time = 0; break; }
+                time = time * 64 + idx;
             }
-            if (time > 0) return time;
+            // Sanity check: valid timestamp between year 2020 and 2040
+            if (time > 1577836800000 && time < 2208988800000) return time;
         } catch (_) {}
+    }
+    if (msg.id && typeof msg.id === 'string') {
+        const match = msg.id.match(/\b(17\d{11})\b/);
+        if (match) {
+            const ts = Number(match[1]);
+            if (!isNaN(ts) && ts > 0) return ts;
+        }
     }
     return 0;
 }
