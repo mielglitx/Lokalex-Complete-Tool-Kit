@@ -405,6 +405,18 @@ export function createSupabaseRef(rawPath, queryState = {}) {
       try {
         if (pathInfo.isRoot) {
           result = null;
+        } else if (pathInfo.rootNode === 'shiftHistory' || pathInfo.table === 'shift_history') {
+          // shiftHistory is maintained in Firebase RTDB
+          if (typeof window !== 'undefined' && window.firebaseDb && typeof window.firebaseDb.ref === 'function') {
+            try {
+              const fbSnap = await window.firebaseDb.ref(rawPath).once('value');
+              result = fbSnap ? fbSnap.val() : null;
+            } catch (_) {
+              result = {};
+            }
+          } else {
+            result = {};
+          }
         } else if (pathInfo.isCustomerChats) {
           result = await handleCustomerChatsOnce(client, pathInfo, ref._query);
         } else if (pathInfo.isStoreRiderChats) {
@@ -502,6 +514,14 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           window.addEventListener('online', onlineHandler);
           window.addEventListener('offline', offlineHandler);
         }
+        return callback;
+      }
+
+      if (pathInfo.rootNode === 'shiftHistory' || pathInfo.table === 'shift_history') {
+        if (typeof window !== 'undefined' && window.firebaseDb && typeof window.firebaseDb.ref === 'function') {
+          return window.firebaseDb.ref(rawPath).on(eventType, callback);
+        }
+        callback(createSnapshot({}, ref.key));
         return callback;
       }
 

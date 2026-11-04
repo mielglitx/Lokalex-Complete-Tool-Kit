@@ -4,6 +4,7 @@ import { db, messaging } from '../config/firebase.js';
 import { notifyUser } from '../ui/notifications.js';
 
 export function registerServiceWorker() {
+    if (import.meta.env?.DEV) return;
     if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
         navigator.serviceWorker.register('/sw.js').then((reg) => {
             initFCMNotifications(reg);

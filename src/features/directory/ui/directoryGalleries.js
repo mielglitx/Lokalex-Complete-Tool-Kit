@@ -2841,17 +2841,20 @@ export async function deleteMenuGalleryPage(pageId) {
             storeMenuMetadataMap[activeGalleryStore.key].updatedAt = nowTs;
             try {
                 localStorage.setItem('lokalex_store_menus_meta_cache', JSON.stringify(storeMenuMetadataMap));
-            } catch (_) {}
+            } catch (storageErr) {
+                console.warn('Failed to cache store menu metadata:', storageErr);
+            }
         }
 
         const mem = getStoreMenuGallery(activeGalleryStore.name, activeGalleryStore.key);
         if (mem && Array.isArray(mem.pages)) {
-            const updatedPages = mem.pages.filter(p => p.id !== pageId);
+            const updatedPages = mem.pages.filter((p) => p.id !== pageId);
             indexGalleryEntry(activeGalleryStore.key, { storeName: activeGalleryStore.name, pages: updatedPages, updatedAt: nowTs });
         }
 
         showToast("Deleted page from gallery.");
     } catch (err) {
+        console.error('Delete menu page error:', err);
         showToast("Failed to delete page.");
     }
 }

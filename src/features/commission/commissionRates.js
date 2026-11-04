@@ -16,7 +16,7 @@
  */
 
 import { appState, globalState } from '../../store/state.js';
-import { db } from '../../config/firebase.js';
+import { db, primaryDb } from '../../config/firebase.js';
 import { ADMIN_IDS } from '../../config/constants.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
 import { isSameDateStr, isRiderMatch, parseTimeToMinutes } from '../roster/rosterUtils.js';
@@ -604,13 +604,14 @@ export async function fetchCommissionSettings() {
             if (window.refreshCommissionView) window.refreshCommissionView();
         });
 
-        db.ref('logins').on('value', (snapshot) => {
+        const rtdb = (primaryDb && typeof primaryDb.ref === 'function') ? primaryDb : db;
+        rtdb.ref('logins').on('value', (snapshot) => {
             const val = snapshot.val();
             globalState.globalLogins = val ? Object.values(val) : [];
             if (window.refreshCommissionView) window.refreshCommissionView();
         });
 
-        db.ref('shiftHistory').limitToLast(500).on('value', (snapshot) => {
+        rtdb.ref('shiftHistory').limitToLast(500).on('value', (snapshot) => {
             globalState.shiftHistory = snapshot.val() || {};
             if (window.refreshCommissionView) window.refreshCommissionView();
         });
