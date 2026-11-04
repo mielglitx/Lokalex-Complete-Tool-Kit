@@ -5,6 +5,7 @@ import { escapeHtml } from '../../../utils/helpers.js';
 import { toggleBodyScroll } from '../chatUtils.js';
 import { clearNativeNotification } from '../../../ui/notifications.js';
 import { isAdmin, canManageRoster, isCustomerMatch, isRiderMatch } from '../../roster/rosterUtils.js';
+import { ADMIN_IDS } from '../../../config/constants.js';
 import { getActiveRosterCaterer } from '../chatFeed/chatFeedState.js';
 import { resolveFacebookCustomerName, getResolvedFbName } from '../facebookApiAdmin.js';
 import { highlightActiveMilestoneUI } from '../riderThreadActions.js';
@@ -230,7 +231,9 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         const map = window.getCachedCustomerThreadsMap();
         const thread = map ? (map.get(custId) || map.get(`fb_${custId}`) || (custId.startsWith('fb_') ? map.get(custId.replace(/^fb_/, '')) : null)) : null;
         if (thread) {
+            setCurrentRiderChatMeta({ ...thread });
             syncApplicantUI(thread);
+            evaluateRiderChatLockPermissions();
         } else {
             syncApplicantUI(null);
         }
@@ -543,6 +546,22 @@ export function evaluateRiderChatLockPermissions() {
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
     const custDisplayName = (currentRiderChatMeta.customerName || currentRiderChatMeta.name || '').trim();
 
+    const isAmielAdmin = myName.includes('amiel') || (myId && ADMIN_IDS.includes(myId));
+    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
+                        (typeof canManageRoster === 'function' && canManageRoster()) ||
+                        (typeof window.isAdmin === 'function' && window.isAdmin()) ||
+                        (typeof window.canManageRoster === 'function' && window.canManageRoster()) ||
+                        Boolean(globalState.adminControlsEnabled) ||
+                        isAmielAdmin;
+
+    const isMatchMyRider = (targetId, targetName) => {
+        const cleanTId = (targetId || "").toString().trim().toLowerCase();
+        const cleanTName = (targetName || "").toString().trim().toLowerCase();
+        if (myId && cleanTId && (myId === cleanTId || (isAmielAdmin && ADMIN_IDS.includes(cleanTId)))) return true;
+        if (myName && cleanTName && (myName === cleanTName || isRiderMatch(myName, cleanTName) || (isAmielAdmin && cleanTName.includes('amiel')))) return true;
+        return false;
+    };
+
     // Check active roster catering info
     let activeCaterer = (typeof getActiveRosterCaterer === 'function') 
         ? getActiveRosterCaterer(custDisplayName, currentRiderChatMeta.id || currentRiderChatMeta.key || activeRiderChatCustId, currentRiderChatMeta)
@@ -558,7 +577,9 @@ export function evaluateRiderChatLockPermissions() {
         const matchingMember = liveRoster.find(m => {
             const mId = (m.telegramId || m.id || "").toString().trim();
             const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
-            return (metaRiderId && mId === metaRiderId) || (cleanMetaRiderName && (mName === cleanMetaRiderName || isRiderMatch(mName, cleanMetaRiderName)));
+            return (metaRiderId && mId === metaRiderId) || 
+                   (cleanMetaRiderName && (mName === cleanMetaRiderName || isRiderMatch(mName, cleanMetaRiderName))) ||
+                   (cleanMetaRiderName.includes('amiel') && mName.includes('amiel'));
         });
         if (matchingMember && matchingMember.status === 'Catering') {
             activeCaterer = matchingMember;
@@ -571,46 +592,56 @@ export function evaluateRiderChatLockPermissions() {
     if (activeCaterer) {
         cateredRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
         cateredRiderName = (activeCaterer.riderName || activeCaterer.name || "").toString().trim();
-    } else if (liveRoster.length > 0) {
-        // Live roster is active and NO rider is catering this customer!
-        // Automatically purge stale catering metadata from Firebase and local state
-        const hadStaleCaterer = Boolean(metaRiderId || cleanMetaRiderName || (currentRiderChatMeta.folder || '').toLowerCase() === 'catering');
-        if (hadStaleCaterer) {
-            currentRiderChatMeta.cateredByRiderId = null;
-            currentRiderChatMeta.cateredByRiderName = null;
-            currentRiderChatMeta.cateredBy = null;
-            const isFinished = (currentRiderChatMeta.status === 'completed' || currentRiderChatMeta.status === 'done' || currentRiderChatMeta.status === 'cancelled');
-            currentRiderChatMeta.folder = isFinished ? 'done' : (currentRiderChatMeta.isApplicant ? 'applicant' : 'inbox');
+    } else {
+        // Fallback: retain existing metadata caterer if they are in catering status or if not proven off-duty
+        cateredRiderId = metaRiderId;
+        cateredRiderName = metaRiderName;
 
-            const custId = currentRiderChatMeta.id || currentRiderChatMeta.key || activeRiderChatCustId;
-            if (db && custId) {
-                const purgePayload = {
-                    cateredByRiderId: null,
-                    cateredByRiderName: null,
-                    cateredBy: null,
-                    folder: currentRiderChatMeta.folder
-                };
-                db.ref(`customerChats/${custId}/metadata`).update(purgePayload).catch(() => {});
-                db.ref(`customerChatMeta/${custId}`).update(purgePayload).catch(() => {});
-            }
+        // Strict stale check: ONLY purge if the assigned rider is actively logged in on the roster with status 'Available' or 'End'
+        // (meaning that rider has definitively moved on from catering), AND this customer is not in anyone's catering list!
+        if (liveRoster.length > 0 && (metaRiderId || cleanMetaRiderName)) {
+            const assignedMember = liveRoster.find(m => {
+                const mId = (m.telegramId || m.id || "").toString().trim();
+                const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+                return (metaRiderId && mId === metaRiderId) || (cleanMetaRiderName && isRiderMatch(mName, cleanMetaRiderName));
+            });
+            const isAssignedRiderOffOrAvailable = assignedMember && (assignedMember.status === 'Available' || assignedMember.status === 'End' || assignedMember.status === 'Break');
+            const isAnyoneCateringCustomer = liveRoster.some(m => m.status === 'Catering' && m.customerName && isCustomerMatch(m.customerName, custDisplayName));
 
-            if (typeof window.getCachedCustomerThreadsMap === 'function') {
-                const map = window.getCachedCustomerThreadsMap();
-                if (map) {
-                    const thread = map.get(custId) || (custId.startsWith('fb_') ? map.get(custId.replace(/^fb_/, '')) : map.get(`fb_${custId}`));
-                    if (thread) {
-                        thread.cateredByRiderId = null;
-                        thread.cateredByRiderName = null;
-                        thread.cateredBy = null;
-                        thread.folder = currentRiderChatMeta.folder;
+            if (isAssignedRiderOffOrAvailable && !isAnyoneCateringCustomer && !isMatchMyRider(metaRiderId, metaRiderName)) {
+                // Now and only now is it truly a stale caterer left over from a previous completed/closed shift!
+                currentRiderChatMeta.cateredByRiderId = null;
+                currentRiderChatMeta.cateredByRiderName = null;
+                currentRiderChatMeta.cateredBy = null;
+                const isFinished = (currentRiderChatMeta.status === 'completed' || currentRiderChatMeta.status === 'done' || currentRiderChatMeta.status === 'cancelled');
+                currentRiderChatMeta.folder = isFinished ? 'done' : (currentRiderChatMeta.isApplicant ? 'applicant' : 'inbox');
+
+                const custId = currentRiderChatMeta.id || currentRiderChatMeta.key || activeRiderChatCustId;
+                if (db && custId) {
+                    const purgePayload = {
+                        cateredByRiderId: null,
+                        cateredByRiderName: null,
+                        cateredBy: null,
+                        folder: currentRiderChatMeta.folder
+                    };
+                    db.ref(`customerChats/${custId}/metadata`).update(purgePayload).catch(() => {});
+                    db.ref(`customerChatMeta/${custId}`).update(purgePayload).catch(() => {});
+                }
+
+                if (typeof window.getCachedCustomerThreadsMap === 'function') {
+                    const map = window.getCachedCustomerThreadsMap();
+                    if (map) {
+                        const thread = map.get(custId) || (custId.startsWith('fb_') ? map.get(custId.replace(/^fb_/, '')) : map.get(`fb_${custId}`));
+                        if (thread) {
+                            thread.cateredByRiderId = null;
+                            thread.cateredByRiderName = null;
+                            thread.cateredBy = null;
+                            thread.folder = currentRiderChatMeta.folder;
+                        }
                     }
                 }
             }
         }
-    } else {
-        // Fallback only if roster not loaded at all
-        cateredRiderId = metaRiderId;
-        cateredRiderName = metaRiderName;
     }
 
     const cleanCateredRiderName = cateredRiderName.toLowerCase();
@@ -619,16 +650,15 @@ export function evaluateRiderChatLockPermissions() {
     const myCateringCusts = (typeof window.getMyCateringCustomers === 'function') ? window.getMyCateringCustomers() : [];
     const isCustomerInMyList = myCateringCusts.some(c => c.toLowerCase() === custDisplayName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(c, custDisplayName)));
 
-    const isCateringRider = Boolean(activeCaterer && ((cateredRiderId && cateredRiderId === myId) || (cleanCateredRiderName && cleanCateredRiderName === myName))) || isCustomerInMyList;
-    
-    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
-                        (typeof canManageRoster === 'function' && canManageRoster()) ||
-                        (typeof window.isAdmin === 'function' && window.isAdmin()) ||
-                        (typeof window.canManageRoster === 'function' && window.canManageRoster()) ||
-                        Boolean(globalState.adminControlsEnabled);
+    const isCateringRider = Boolean(
+        isMatchMyRider(cateredRiderId, cateredRiderName) ||
+        isCustomerInMyList ||
+        isMatchMyRider(metaRiderId, metaRiderName)
+    );
 
     const isCateringFolder = Boolean(activeCaterer) || ((currentRiderChatMeta.folder || '').toLowerCase() === 'catering' && Boolean(cateredRiderId || cleanCateredRiderName));
     const isLocked = isCateringFolder && !isCateringRider && !isUserAdmin;
+    const isThreadCatered = isCateringFolder || Boolean(cateredRiderId || cleanCateredRiderName || (currentRiderChatMeta.folder || '').toLowerCase() === 'catering');
 
     const caterBtn = document.getElementById('rider-chat-cater-btn');
     const cancelBtn = document.getElementById('rider-chat-cancel-btn');
@@ -678,33 +708,37 @@ export function evaluateRiderChatLockPermissions() {
         if (inputEl) inputEl.disabled = false;
         if (sendBtn) sendBtn.disabled = false;
         if (actionToolbar) actionToolbar.classList.remove('opacity-50', 'pointer-events-none');
-        if (caterBtn) caterBtn.classList.remove('hidden');
-        if (cancelBtn) cancelBtn.classList.remove('hidden');
 
         const modalDialog = document.querySelector('#rider-chat-modal > div') || document.querySelector('#rider-customer-chat-modal > div');
         if (modalDialog) {
-            modalDialog.classList.remove('ring-2', 'ring-emerald-500', 'border-emerald-500', 'catering-glow-my', 'catering-glow-other', 'catering-glow-gold');
+            modalDialog.classList.remove('ring-2', 'ring-4', 'ring-emerald-500', 'ring-amber-500', 'border-emerald-500', 'catering-glow-my', 'catering-glow-other', 'catering-glow-gold');
             if (isCateringRider) {
-                modalDialog.classList.add('catering-glow-gold');
+                modalDialog.classList.add('catering-glow-my', 'ring-2', 'ring-emerald-500');
+            } else if (isThreadCatered) {
+                modalDialog.classList.add('catering-glow-gold', 'ring-2', 'ring-amber-500');
             }
         }
 
-        if (isCateringRider) {
-            if (caterBtn) caterBtn.classList.add('hidden');
-            if (cancelBtn) cancelBtn.classList.remove('hidden');
-            if (goCartBtn) goCartBtn.classList.remove('hidden');
-        } else {
-            const activeRole = localStorage.getItem('lokalex_active_role');
-            const isRiderLoggedIn = Boolean(myId && myName && activeRole === 'rider');
-            if (caterBtn) {
-                if (isRiderLoggedIn || isUserAdmin) {
-                    caterBtn.classList.remove('hidden');
-                } else {
-                    caterBtn.classList.add('hidden');
-                }
+        if (isCateringRider || isUserAdmin) {
+            if (isThreadCatered) {
+                if (caterBtn) caterBtn.classList.add('hidden');
+                if (cancelBtn) cancelBtn.classList.remove('hidden');
+                if (goCartBtn) goCartBtn.classList.remove('hidden');
+            } else {
+                if (caterBtn) caterBtn.classList.remove('hidden');
+                if (cancelBtn) cancelBtn.classList.add('hidden');
+                if (goCartBtn) goCartBtn.classList.add('hidden');
             }
-            if (cancelBtn) cancelBtn.classList.add('hidden');
-            if (goCartBtn) goCartBtn.classList.add('hidden');
+        } else {
+            if (isThreadCatered) {
+                if (caterBtn) caterBtn.classList.add('hidden');
+                if (cancelBtn) cancelBtn.classList.add('hidden');
+                if (goCartBtn) goCartBtn.classList.add('hidden');
+            } else {
+                if (caterBtn) caterBtn.classList.remove('hidden');
+                if (cancelBtn) cancelBtn.classList.add('hidden');
+                if (goCartBtn) goCartBtn.classList.add('hidden');
+            }
         }
     }
 }

@@ -357,10 +357,12 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         rosterRef.child('locationUpdatedAt').remove().catch(() => {});
 
         const fb = window.firebase || (typeof firebase !== 'undefined' ? firebase : null);
-        if (fb?.database?.ServerValue?.TIMESTAMP) {
-            rosterRef.onDisconnect().update({
-                lastActiveTimestamp: fb.database.ServerValue.TIMESTAMP
-            }).catch(() => {});
+        if (typeof rosterRef?.onDisconnect === 'function') {
+            try {
+                rosterRef.onDisconnect().update({
+                    lastActiveTimestamp: fb?.database?.ServerValue?.TIMESTAMP || Date.now()
+                }).catch(() => {});
+            } catch (_) {}
         }
 
         db.ref(`logins/${tId}`).update({

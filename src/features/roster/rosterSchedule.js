@@ -301,8 +301,11 @@ export async function saveAdminTimeInScheduleSettings() {
     }
 }
 
+let isListeningToTimeInSchedule = false;
+
 export function listenToTimeInSchedule() {
-    if (!db) return;
+    if (!db || isListeningToTimeInSchedule) return;
+    isListeningToTimeInSchedule = true;
 
     try {
         const cached = localStorage.getItem('lokalex_timein_schedule_cache');

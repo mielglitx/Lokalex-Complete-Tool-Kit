@@ -1,16 +1,19 @@
 // src/features/cart/cartState.js
 import { appState, globalState, multiCarts, activeCartSlot, setActiveCartSlot } from '../../store/state.js';
-import { isCustomerMatch } from '../roster/rosterUtils.js';
+import { isCustomerMatch, isRiderMatch } from '../roster/rosterUtils.js';
 
 export function getMyCateringCustomers() {
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
     const rosterMembers = globalState.rosterMembers || [];
 
-    const myRecord = rosterMembers.find(m => 
-        (myId && (m.telegramId || m.id) && (m.telegramId || m.id).toString().trim() === myId) ||
-        (myName && (m.riderName || m.name) && (m.riderName || m.name).toString().trim().toLowerCase() === myName)
-    );
+    const myRecord = rosterMembers.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        if (myId && mId && mId === myId) return true;
+        if (myName && mName && (mName === myName || isRiderMatch(myName, mName, myId, mId))) return true;
+        return false;
+    });
 
     if (!myRecord || myRecord.status !== 'Catering') {
         return [];

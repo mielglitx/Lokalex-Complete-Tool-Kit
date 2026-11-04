@@ -138,49 +138,23 @@ export function initRealtimeFirebaseListeners() {
             return;
         }
 
-        if (roster && roster.listenToSwapRequests) {
-            roster.listenToSwapRequests();
-        }
+        const safeCall = (fn, name) => {
+            if (typeof fn === 'function') {
+                try { fn(); } catch (err) { console.warn(`[AppListeners safeCall error on ${name}]:`, err); }
+            }
+        };
 
-        if (roster && roster.listenToTimeInSchedule) {
-            roster.listenToTimeInSchedule();
-        }
-
-        if (roster && roster.listenToDayOffData) {
-            roster.listenToDayOffData();
-        }
-
-        if (roster && roster.listenToBookingLimits) {
-            roster.listenToBookingLimits();
-        }
-
-        if (roster && roster.listenToAutoEndShift) {
-            roster.listenToAutoEndShift();
-        }
-
-        if (chat && chat.listenToAllCustomerChatsForRider) {
-            chat.listenToAllCustomerChatsForRider();
-        }
-
-        if (chat && chat.initFullBookingListener) {
-            chat.initFullBookingListener();
-        }
-
-        if (chat && chat.initAutoMessageListener) {
-            chat.initAutoMessageListener();
-        }
-
-        if (chat && chat.listenToPublicFbChannels) {
-            chat.listenToPublicFbChannels();
-        }
-
-        if (chat && chat.listenToAdminFbApis) {
-            chat.listenToAdminFbApis();
-        }
-
-        if (chat && chat.listenToFirebaseChat) {
-            chat.listenToFirebaseChat();
-        }
+        safeCall(roster?.listenToSwapRequests, 'listenToSwapRequests');
+        safeCall(roster?.listenToTimeInSchedule, 'listenToTimeInSchedule');
+        safeCall(roster?.listenToDayOffData, 'listenToDayOffData');
+        safeCall(roster?.listenToBookingLimits, 'listenToBookingLimits');
+        safeCall(roster?.listenToAutoEndShift, 'listenToAutoEndShift');
+        safeCall(chat?.listenToAllCustomerChatsForRider, 'listenToAllCustomerChatsForRider');
+        safeCall(chat?.initFullBookingListener, 'initFullBookingListener');
+        safeCall(chat?.initAutoMessageListener, 'initAutoMessageListener');
+        safeCall(chat?.listenToPublicFbChannels, 'listenToPublicFbChannels');
+        safeCall(chat?.listenToAdminFbApis, 'listenToAdminFbApis');
+        safeCall(chat?.listenToFirebaseChat, 'listenToFirebaseChat');
 
         db.ref('riders').on('value', (snapshot) => {
             const val = snapshot.val();
@@ -292,6 +266,35 @@ export function initRealtimeFirebaseListeners() {
                 window.requestRosterUIRefresh();
             }
         });
+
+        // Resilient auto-sync for roster (5s): guarantees lineup sync across all devices
+        // even during momentary WebSocket dropouts or cross-tab background throttling
+        if (!window._rosterPollingInterval) {
+            window._rosterPollingInterval = setInterval(async () => {
+                if (!db) return;
+                try {
+                    const snap = await db.ref('roster').once('value');
+                    const val = snap.val();
+                    if (val && typeof val === 'object') {
+                        const members = Object.entries(val).map(([key, item]) => ({
+                            ...item,
+                            telegramId: (item.telegramId || item.id || key).toString().trim(),
+                            id: (item.telegramId || item.id || key).toString().trim()
+                        }));
+                        const prevSummary = (globalState.rosterMembers || []).map(m => `${m.id}:${m.status}:${m.customerName}`).join('|');
+                        const newSummary = members.map(m => `${m.id}:${m.status}:${m.customerName}`).join('|');
+                        if (prevSummary !== newSummary) {
+                            globalState.rosterMembers = members;
+                            if (roster && roster.saveRosterCache) roster.saveRosterCache();
+                            window.dispatchEvent(new Event('rosterUpdated'));
+                            if (typeof window.requestRosterUIRefresh === 'function') {
+                                window.requestRosterUIRefresh();
+                            }
+                        }
+                    }
+                } catch (_) {}
+            }, 5000);
+        }
 
         db.ref('blockedUsers').on('value', (snapshot) => {
             globalState.blockedUsers = snapshot.val() || {};

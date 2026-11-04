@@ -180,7 +180,9 @@ export function startChatPresence(custId) {
 
     // 1. Set presence and guarantee cleanup on disconnect
     myPresenceRef.set(presenceData).catch(() => {});
-    myPresenceRef.onDisconnect().remove().catch(() => {});
+    if (typeof myPresenceRef.onDisconnect === 'function') {
+        myPresenceRef.onDisconnect().remove().catch(() => {});
+    }
 
     // 2. Keepalive heartbeat every 15 seconds
     presenceHeartbeatInterval = setInterval(() => {
@@ -289,7 +291,9 @@ export function handleChatTyping(custId, isTyping = true) {
             riderName,
             timestamp: Date.now()
         }).catch(() => {});
-        myTypingRef.onDisconnect().remove().catch(() => {});
+        if (typeof myTypingRef.onDisconnect === 'function') {
+            myTypingRef.onDisconnect().remove().catch(() => {});
+        }
 
         // Reset auto-clear debounce timeout (3.5 seconds)
         if (typingDebounceTimeout) clearTimeout(typingDebounceTimeout);

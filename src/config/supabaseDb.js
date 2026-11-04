@@ -149,14 +149,17 @@ export function parsePath(rawPath) {
     const targetId = segments[3] || null; // e.g. messageKey or safeMid
     const subPath = segments.slice(4);
 
+    const isMeta = subType === 'metadata';
+
     return {
       isRoot: false,
       rootNode,
-      table: 'customer_chats',
+      table: isMeta ? 'customer_chat_meta' : 'customer_chats',
       isCustomerChats: true,
       custId,
       subType,
       targetId,
+      id: isMeta ? custId : (subType === 'messages' && targetId ? targetId : null),
       subPath
     };
   }
@@ -269,6 +272,11 @@ function removeSingleSubscription(client, sub) {
     sub.debounceTimer = null;
   }
 
+  if (sub._broadcastHandler) {
+    globalBroadcastSubscribers.delete(sub._broadcastHandler);
+    sub._broadcastHandler = null;
+  }
+
   if (client && sub.channel) {
     try {
       client.removeChannel(sub.channel).catch(() => {});
@@ -288,12 +296,27 @@ function removeSingleSubscription(client, sub) {
   }
 }
 
+// Centralized Global Broadcast Channel & Listener Registry
 let globalBroadcastChannel = null;
+const globalBroadcastSubscribers = new Set();
 
 function getGlobalBroadcastChannel(client) {
   if (!globalBroadcastChannel && client) {
-    globalBroadcastChannel = client.channel('lokalex_broadcast');
-    globalBroadcastChannel.subscribe();
+    try {
+      globalBroadcastChannel = client.channel('lokalex_broadcast');
+      globalBroadcastChannel.on('broadcast', { event: 'db_change' }, (eventPayload) => {
+        for (const handler of globalBroadcastSubscribers) {
+          try {
+            handler(eventPayload);
+          } catch (e) {
+            console.warn('[Broadcast Handler Error]:', e);
+          }
+        }
+      });
+      globalBroadcastChannel.subscribe();
+    } catch (err) {
+      console.warn('[Supabase Global Broadcast Init Error]:', err);
+    }
   }
   return globalBroadcastChannel;
 }
@@ -336,6 +359,30 @@ export function createSupabaseRef(rawPath, queryState = {}) {
     child(childPath) {
       const joined = [rawPath, childPath].filter(Boolean).join('/').replace(/\/+/g, '/');
       return createSupabaseRef(joined);
+    },
+
+    onDisconnect() {
+      return {
+        set(val, onComplete) {
+          if (typeof onComplete === 'function') onComplete(null);
+          return Promise.resolve();
+        },
+        update(val, onComplete) {
+          if (typeof onComplete === 'function') onComplete(null);
+          return Promise.resolve();
+        },
+        remove(onComplete) {
+          if (typeof onComplete === 'function') onComplete(null);
+          return Promise.resolve();
+        },
+        cancel(onComplete) {
+          if (typeof onComplete === 'function') onComplete(null);
+          return Promise.resolve();
+        }
+      };
+    },
+    get ondisconnect() {
+      return this.onDisconnect;
     },
 
     async once(eventType, successCallback) {
@@ -495,15 +542,16 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         });
       }
 
-      // 2. Realtime Subscription Channel
+      // 2. Realtime Subscription Channel (Dedicated channel instance per subscription)
       const targetTable = pathInfo.table || 'settings';
-      const channelId = `ch_${targetTable}_${(pathInfo.custId || pathInfo.roomId || pathInfo.id || 'all').toString().replace(/[^a-zA-Z0-9_]/g, '_')}_${Math.random().toString(36).slice(2, 8)}`;
+      const subId = Math.random().toString(36).slice(2, 9);
+      const channelId = `ch_${targetTable}_${(pathInfo.custId || pathInfo.roomId || pathInfo.id || 'all').toString().replace(/[^a-zA-Z0-9_]/g, '_')}_${subId}`;
       
       const channel = client.channel(channelId);
       subRecord.channel = channel;
 
-      // Listen to broadcast events (fast client-to-client updates)
-      channel.on('broadcast', { event: 'db_change' }, async (eventPayload) => {
+      // Listen to broadcast events on both channel and global broadcast channel
+      const handleBroadcastEvent = async (eventPayload) => {
         if (subRecord.isClosed) return;
         const payloadPath = eventPayload?.payload?.path;
         if (payloadPath && (payloadPath === rawPath || payloadPath.startsWith(rawPath) || rawPath.startsWith(payloadPath))) {
@@ -527,7 +575,13 @@ export function createSupabaseRef(rawPath, queryState = {}) {
             callback(createSnapshot(null, eventPayload.payload.removedKey));
           }
         }
-      });
+      };
+
+      subRecord._broadcastHandler = handleBroadcastEvent;
+      globalBroadcastSubscribers.add(handleBroadcastEvent);
+      getGlobalBroadcastChannel(client);
+
+      channel.on('broadcast', { event: 'db_change' }, handleBroadcastEvent);
 
       // Listen to PostgreSQL CDC changes
       const changeFilter = {
@@ -536,7 +590,13 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         table: targetTable
       };
 
-      if (pathInfo.isCustomerChats && pathInfo.custId) {
+      if (pathInfo.isCustomerChats && pathInfo.subType === 'metadata') {
+        changeFilter.table = 'customer_chat_meta';
+        if (pathInfo.custId) {
+          changeFilter.filter = `id=eq.${pathInfo.custId}`;
+        }
+      } else if (pathInfo.isCustomerChats && pathInfo.custId) {
+        changeFilter.table = 'customer_chats';
         changeFilter.filter = `room_id=eq.${pathInfo.custId}`;
       } else if (pathInfo.isStoreRiderChats && pathInfo.roomId) {
         changeFilter.filter = `room_id=eq.${pathInfo.roomId}`;
@@ -1067,10 +1127,12 @@ async function handleCustomerChatsOnce(client, pathInfo, query) {
       return msgData;
     } else {
       // All messages in room
+      const cleanCust = String(custId || '').replace(/^fb_/, '');
+      const altCust = String(custId || '').startsWith('fb_') ? cleanCust : `fb_${cleanCust}`;
       let q = client
         .from('customer_chats')
         .select('id, data, timestamp')
-        .eq('room_id', custId)
+        .or(`room_id.eq.${custId},room_id.eq.${altCust}`)
         .not('id', 'like', '%_metadata')
         .not('id', 'like', '%_threadSeenBy')
         .not('id', 'like', '%_midIndex')

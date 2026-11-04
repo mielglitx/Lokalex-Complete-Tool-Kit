@@ -1826,7 +1826,9 @@ export async function executeSendMenuPages(targetCustId, pages, custDisplayName 
                     attachmentId: p.metaAttachmentId || p.attachmentId || null,
                     storeKey: storeKey,
                     pageId: p.id || null,
-                    skipSeparateCaption: true
+                    skipSeparateCaption: true,
+                    isBatch: total > 1,
+                    isLastPage: isLastPage
                 });
                 ok = !!res;
                 if (res && res.attachmentId && storeKey && p.id && db) {
@@ -2544,61 +2546,110 @@ export async function quickSendStoreMenuToActiveChat(storeName, compositeKey, me
     const normName = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const normComposite = (compositeKey || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-    // Try candidate keys
+    // Resolve candidates & primary key with extreme priority
     if (pages.length === 0) {
         const candidateKeys = Array.from(new Set([
             metadataKey,
-            'stores' + normName,
-            'stores_' + normName,
-            normName,
             normComposite,
             compositeKey,
+            'stores_' + normName,
+            'stores' + normName,
+            normName,
             (compositeKey || '').replace(/^[a-z0-9]+_stores_?/, ''),
             (compositeKey || '').replace(/^[a-z0-9]+_/, '')
         ])).map(k => (k || '').trim()).filter(Boolean);
 
-        // 1. Check IndexedDB across all candidate keys
+        let primaryKey = metadataKey || compositeKey || '';
         for (const k of candidateKeys) {
+            if (storeMenuMetadataMap[k] && storeMenuMetadataMap[k].pageCount > 0) {
+                primaryKey = k;
+                break;
+            }
+        }
+        if (!primaryKey && candidateKeys.length > 0) {
+            primaryKey = candidateKeys[0];
+        }
+
+        // 1. Direct IndexedDB check for primaryKey first
+        if (primaryKey) {
             try {
-                const cached = await idbGet('storeMenuGalleries', k);
+                const cached = await idbGet('storeMenuGalleries', primaryKey);
                 if (cached) {
                     if (Array.isArray(cached) && cached.length > 0) {
                         pages = cached;
-                        break;
                     } else if (cached.pages && Array.isArray(cached.pages) && cached.pages.length > 0) {
                         pages = cached.pages;
-                        break;
                     }
                 }
-            } catch(e) {}
+            } catch (_) {}
         }
 
-        // 2. If not found in IndexedDB, fetch from Firebase RTDB
-        if (pages.length === 0 && db) {
-            for (const k of candidateKeys) {
+        // 2. Check remaining candidate keys in IndexedDB
+        if (pages.length === 0) {
+            const otherKeys = candidateKeys.filter(k => k !== primaryKey);
+            for (const k of otherKeys) {
                 try {
-                    const snap = await db.ref(`directory/storeMenuGalleries/${k}/pages`).once('value');
-                    const data = snap.val();
-                    if (data && typeof data === 'object') {
-                        pages = Object.entries(data).map(([id, item]) => ({
-                            id,
-                            ...(item || {})
-                        }));
-                        if (pages.length > 0) break;
+                    const cached = await idbGet('storeMenuGalleries', k);
+                    if (cached) {
+                        if (Array.isArray(cached) && cached.length > 0) {
+                            pages = cached;
+                            primaryKey = k;
+                            break;
+                        } else if (cached.pages && Array.isArray(cached.pages) && cached.pages.length > 0) {
+                            pages = cached.pages;
+                            primaryKey = k;
+                            break;
+                        }
                     }
+                } catch (_) {}
+            }
+        }
 
-                    // Fallback: check root gallery object
-                    const fullSnap = await db.ref(`directory/storeMenuGalleries/${k}`).once('value');
-                    const fullData = fullSnap.val();
-                    if (fullData && fullData.pages && typeof fullData.pages === 'object') {
-                        pages = Object.entries(fullData.pages).map(([id, item]) => ({
-                            id,
-                            ...(item || {})
-                        }));
-                        if (pages.length > 0) break;
+        // 3. If not found in IndexedDB, fetch from Firebase RTDB (single query on primaryKey)
+        if (pages.length === 0 && db && primaryKey) {
+            try {
+                const snap = await db.ref(`directory/storeMenuGalleries/${primaryKey}`).once('value');
+                const val = snap.val();
+                if (val && typeof val === 'object') {
+                    if (val.pages && typeof val.pages === 'object') {
+                        pages = Object.entries(val.pages).map(([id, item]) => ({ id, ...(item || {}) }));
+                    } else if (Array.isArray(val)) {
+                        pages = val;
                     }
-                } catch(e) {
-                    console.error('[QuickSendMenu] Error loading pages from Firebase for key ' + k + ':', e);
+                }
+                if (pages.length > 0) {
+                    idbSet('storeMenuGalleries', primaryKey, { pages, updatedAt: val?.updatedAt || Date.now() }).catch(() => {});
+                }
+            } catch (err) {
+                console.warn('[QuickSendMenu] Firebase fetch error on primary key ' + primaryKey + ':', err);
+            }
+        }
+
+        // 4. Parallel fallback across remaining candidate keys if primary key had no pages
+        if (pages.length === 0 && db) {
+            const remainingKeys = candidateKeys.filter(k => k !== primaryKey);
+            if (remainingKeys.length > 0) {
+                const results = await Promise.allSettled(remainingKeys.map(async (k) => {
+                    const s = await db.ref(`directory/storeMenuGalleries/${k}`).once('value');
+                    const v = s.val();
+                    if (v && typeof v === 'object') {
+                        let p = [];
+                        if (v.pages && typeof v.pages === 'object') {
+                            p = Object.entries(v.pages).map(([id, item]) => ({ id, ...(item || {}) }));
+                        } else if (Array.isArray(v)) {
+                            p = v;
+                        }
+                        if (p.length > 0) {
+                            idbSet('storeMenuGalleries', k, { pages: p, updatedAt: v?.updatedAt || Date.now() }).catch(() => {});
+                            return { key: k, pages: p };
+                        }
+                    }
+                    return null;
+                }));
+                const matched = results.find(r => r.status === 'fulfilled' && r.value?.pages?.length > 0);
+                if (matched && matched.value) {
+                    pages = matched.value.pages;
+                    primaryKey = matched.value.key;
                 }
             }
         }

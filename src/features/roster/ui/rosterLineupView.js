@@ -32,6 +32,7 @@ import {
     canManageRoster, 
     isAdmin, 
     hasTlPermission,
+    isRiderMatch,
     getElapsedCateringTime, 
     getElapsedBreakTime, 
     getElapsedBreakMinutes, 
@@ -424,7 +425,7 @@ export function updateRosterUI() {
     const myRecord = rosterMembers.find(m => {
         const rId = (m.telegramId || m.id || "").toString().trim();
         const rName = (m.riderName || m.name || "").toString().trim().toLowerCase();
-        return (myId && rId === myId) || (myName && rName === myName);
+        return (myId && rId === myId) || (myName && (rName === myName || isRiderMatch(rName, myName)));
     });
 
     const isEnded = myRecord && myRecord.status === 'End';
@@ -522,7 +523,7 @@ export function updateRosterUI() {
         const shortName = formatRiderShortName(rawName);
         const todayGross = getRiderTodayGross(rawName, mId);
 
-        const isMyLine = (myId && mId === myId) || (myName && (mName.toLowerCase() === myName || rawName.toLowerCase() === myName));
+        const isMyLine = (myId && mId === myId) || (myName && (mName.toLowerCase() === myName || rawName.toLowerCase() === myName || isRiderMatch(rawName, myName)));
         const canComplete = isMyLine || showControls;
         const canSwap = isMyLine || showControls;
 

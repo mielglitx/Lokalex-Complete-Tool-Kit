@@ -368,31 +368,38 @@ function createRefWrapper(primaryRef, backupRef) {
             }, applyLocally);
         },
         onDisconnect() {
-            const pDisconnect = primaryRef.onDisconnect();
-            const bDisconnect = backupRef ? backupRef.onDisconnect() : null;
+            const pDisconnect = (primaryRef && typeof primaryRef.onDisconnect === 'function') 
+                ? primaryRef.onDisconnect() 
+                : ((primaryRef && typeof primaryRef.ondisconnect === 'function') ? primaryRef.ondisconnect() : null);
+            const bDisconnect = (backupRef && typeof backupRef.onDisconnect === 'function') 
+                ? backupRef.onDisconnect() 
+                : ((backupRef && typeof backupRef.ondisconnect === 'function') ? backupRef.ondisconnect() : null);
 
             return {
                 set(value, onComplete) {
-                    const p = pDisconnect.set(value, onComplete);
+                    const p = pDisconnect ? pDisconnect.set(value, onComplete) : Promise.resolve();
                     if (bDisconnect) bDisconnect.set(value).catch(() => {});
                     return p;
                 },
                 update(values, onComplete) {
-                    const p = pDisconnect.update(values, onComplete);
+                    const p = pDisconnect ? pDisconnect.update(values, onComplete) : Promise.resolve();
                     if (bDisconnect) bDisconnect.update(values).catch(() => {});
                     return p;
                 },
                 remove(onComplete) {
-                    const p = pDisconnect.remove(onComplete);
+                    const p = pDisconnect ? pDisconnect.remove(onComplete) : Promise.resolve();
                     if (bDisconnect) bDisconnect.remove().catch(() => {});
                     return p;
                 },
                 cancel(onComplete) {
-                    const p = pDisconnect.cancel(onComplete);
+                    const p = pDisconnect ? pDisconnect.cancel(onComplete) : Promise.resolve();
                     if (bDisconnect) bDisconnect.cancel().catch(() => {});
                     return p;
                 }
             };
+        },
+        get ondisconnect() {
+            return this.onDisconnect;
         },
 
         on(eventType, callback, cancelCallbackOrContext, context) {
@@ -490,7 +497,8 @@ function createQueryWrapper(primaryQuery, backupRef) {
 import { supabaseDb } from './supabaseDb.js';
 
 // Active Database Provider Selection:
-// Default is now SUPABASE ('supabase'). Can still be switched back to 'firebase' anytime via window.switchDatabaseProvider('firebase')
+// Default is FIREBASE Realtime Database ('firebase') for production real-time sync with riders, webhooks & background services.
+// Can be switched to 'supabase' anytime via window.switchDatabaseProvider('supabase')
 export function isSupabaseSelected() {
     const stored = (typeof window !== 'undefined' && window.localStorage?.getItem('lokalex_db_provider')) || null;
     return stored ? (stored === 'supabase') : true;

@@ -480,6 +480,12 @@ export function isCustomerMatch(cust1 = "", cust2 = "") {
     // Rule 1: First name token MUST match
     if (words1[0] !== words2[0]) return false;
 
+    // Direct containment: if both names share first token and one full string contains the other
+    // (e.g. "Kate Anne Quimoyog Genove" contains "Kate Anne Quimoyog" or vice-versa)
+    if (s1.includes(s2) || s2.includes(s1)) {
+        return true;
+    }
+
     // Rule 2: Last name token MUST match
     if (words1[words1.length - 1] !== words2[words2.length - 1]) return false;
 
@@ -513,7 +519,8 @@ export function isRiderMatch(targetName = "", recordName = "", targetId = "", re
     
     // 1. If both IDs are present: ID match is definitive
     if (tId && rId) {
-        return tId === rId;
+        if (tId === rId) return true;
+        if (ADMIN_IDS.some(a => a.toString().trim() === tId) && ADMIN_IDS.some(a => a.toString().trim() === rId)) return true;
     }
 
     const tn = (targetName || "").trim().toLowerCase();
@@ -521,15 +528,22 @@ export function isRiderMatch(targetName = "", recordName = "", targetId = "", re
     if (!tn || !rn) return false;
     if (tn === rn) return true;
 
+    // Cross-match known admin accounts
+    if (tn.includes('amiel') && rn.includes('amiel')) return true;
+
     // Split into distinct word tokens
     const w1 = tn.split(/\s+/).filter(Boolean);
     const w2 = rn.split(/\s+/).filter(Boolean);
 
-    // 2. If both records have multiple names (first + last), never match if last name differs
+    // 2. If both records have multiple names (first + last)
     if (w1.length >= 2 && w2.length >= 2) {
         const firstMatch = w1[0] === w2[0];
-        const lastMatch = w1[w1.length - 1] === w2[w2.length - 1];
-        return firstMatch && lastMatch;
+        const last1 = w1[w1.length - 1].replace(/\.$/, '');
+        const last2 = w2[w2.length - 1].replace(/\.$/, '');
+        const lastMatch = (last1 === last2) || 
+                          (last1.length === 1 && last2.startsWith(last1)) || 
+                          (last2.length === 1 && last1.startsWith(last2));
+        if (firstMatch && lastMatch) return true;
     }
 
     // 3. Single word against full name (e.g. "Allan" matching "Allan Reyes" or vice-versa)

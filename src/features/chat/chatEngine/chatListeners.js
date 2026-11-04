@@ -732,22 +732,70 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
     stopFbGraphPolling();
     if (String(custId).startsWith('fb_')) {
         syncCurrentThreadFromMetaGraph(custId, false).catch(() => {});
-        // Lightweight polling interval while Facebook thread is actively open to capture messages sent from page
+        // Lightweight polling interval while Facebook thread is actively open to capture messages sent from page & database
         fbGraphPollingInterval = setInterval(() => {
             if (activeRiderChatCustId === custId) {
                 syncCurrentThreadFromMetaGraph(custId, false).catch(() => {});
+                if (db) {
+                    db.ref(`customerChats/${custId}/messages`).orderByChild('timestamp').limitToLast(RIDER_CHAT_BATCH_SIZE).once('value').then(snap => {
+                        if (activeRiderChatCustId !== custId) return;
+                        const data = snap.val();
+                        if (data && typeof data === 'object') {
+                            const newMsgs = Object.entries(data).map(([k, m]) => ({ id: k, ...m })).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+                            let hasNew = false;
+                            newMsgs.forEach(m => {
+                                if (!loadedRiderMsgsMap.has(m.id)) {
+                                    loadedRiderMsgsMap.set(m.id, m);
+                                    hasNew = true;
+                                }
+                            });
+                            if (hasNew) {
+                                renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
+                                requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+                            }
+                        }
+                    }).catch(() => {});
+                }
             } else {
                 stopFbGraphPolling();
             }
-        }, 10000);
+        }, 4000);
     }
 
     // Realtime Firebase connection: strictly load only the last 10 messages for lightning-fast startup ordered by timestamp
     const messagesQuery = db.ref(`customerChats/${custId}/messages`).orderByChild('timestamp').limitToLast(RIDER_CHAT_BATCH_SIZE);
     setActiveRiderChatListener(messagesQuery);
 
+    let skeletonTimeout = setTimeout(() => {
+        if (activeRiderChatCustId === custId && loadedRiderMsgsMap.size === 0) {
+            const skel = document.getElementById('rider-chat-loading-skeleton');
+            if (skel) {
+                db.ref(`customerChats/${custId}/messages`).limitToLast(RIDER_CHAT_BATCH_SIZE).once('value').then(fallbackSnap => {
+                    if (activeRiderChatCustId !== custId) return;
+                    const fData = fallbackSnap.val();
+                    if (fData && Object.keys(fData).length > 0 && loadedRiderMsgsMap.size === 0) {
+                        const allF = Object.entries(fData).map(([k, m]) => ({ id: k, ...m })).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+                        allF.forEach(m => loadedRiderMsgsMap.set(m.id, m));
+                        renderRiderMessages(container, loadedRiderMsgsMap, false, true, 0, activeCustData);
+                        setIsInitialScrollDone(true);
+                    } else if (loadedRiderMsgsMap.size === 0) {
+                        container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
+                    }
+                }).catch(() => {
+                    if (loadedRiderMsgsMap.size === 0) {
+                        container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
+                    }
+                });
+            }
+        }
+    }, 3000);
+
     // Authoritative check & synchronization of newest incoming messages on thread open
     messagesQuery.once('value', (snapshot) => {
+        if (skeletonTimeout) {
+            clearTimeout(skeletonTimeout);
+            skeletonTimeout = null;
+        }
         if (activeRiderChatCustId !== custId) return;
         const data = snapshot.val();
         if (!data || Object.keys(data).length === 0) {
@@ -974,6 +1022,10 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         const shouldScroll = isNearBottom || isRecentlyOpened;
 
         if (!isInitialScrollDone) {
+            if (skeletonTimeout) {
+                clearTimeout(skeletonTimeout);
+                skeletonTimeout = null;
+            }
             renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
             setIsInitialScrollDone(true);
             requestAnimationFrame(() => {

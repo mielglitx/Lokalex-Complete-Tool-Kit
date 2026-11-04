@@ -664,6 +664,23 @@ export function listenToAllCustomerChatsForRider() {
     }, (error) => {
         console.error("Firebase customerChatMeta listener error:", error);
     });
+
+    // 3. ACTIVE REAL-TIME POLLING GUARD (4s):
+    // Guarantees incoming Facebook Messenger messages and Meta Page echoes written by
+    // the Cloudflare Worker via REST appear automatically in real-time with audio chimes & notifications,
+    // without requiring manual "Refresh" clicks!
+    if (!window._chatMetaPollingInterval) {
+        window._chatMetaPollingInterval = setInterval(async () => {
+            if (!db) return;
+            try {
+                const snap = await db.ref('customerChatMeta').once('value');
+                const freshData = snap.val();
+                if (freshData && typeof freshData === 'object') {
+                    processCustomerChatMetaData(freshData, false);
+                }
+            } catch (_) {}
+        }, 4000);
+    }
 }
 
 export function updateAllChatFolderBadges() {

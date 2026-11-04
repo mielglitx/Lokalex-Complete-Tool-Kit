@@ -3,7 +3,7 @@ import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { showToast } from '../../ui/notifications.js';
 import { escapeHtml } from '../../utils/helpers.js';
-import { isAdmin, canManageRoster, isCustomerMatch } from '../roster/rosterUtils.js';
+import { isAdmin, canManageRoster, isCustomerMatch, isRiderMatch } from '../roster/rosterUtils.js';
 import { sendRiderToCustomerChat } from './chatEngine/chatSending.js';
 
 /**
@@ -361,25 +361,8 @@ export async function triggerAutoMessageOnCater(custId, custName, riderName) {
         return;
     }
 
-    // Strict safety check: ensure the rider is actually in Catering status before dispatching
     const currentId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
     const currentRider = (riderName || appState.riderName || localStorage.getItem('riderName') || "").toString().trim();
-    const isAdminUser = typeof window.isAdmin === 'function' ? window.isAdmin() : false;
-    const canManage = typeof window.canManageRoster === 'function' ? window.canManageRoster() : false;
-
-    if (!isAdminUser && !canManage) {
-        const liveRoster = globalState.rosterMembers || [];
-        const myRecord = liveRoster.find(m => {
-            const mId = (m.telegramId || m.id || "").toString().trim();
-            const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
-            return (currentId && mId === currentId) || (currentRider && mName === currentRider.toLowerCase());
-        });
-
-        if (!myRecord || myRecord.status !== 'Catering') {
-            console.warn(`[AutoMessage] Rider ${currentRider} is not in Catering status. Aborting auto-message.`);
-            return;
-        }
-    }
 
     const cleanCustId = custId.toString().trim();
     const now = Date.now();

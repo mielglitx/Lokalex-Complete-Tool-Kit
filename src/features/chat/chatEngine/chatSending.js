@@ -201,8 +201,18 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
         const myCateringCusts = (typeof window.getMyCateringCustomers === 'function') ? window.getMyCateringCustomers() : [];
         const isCustomerInMyList = myCateringCusts.some(c => c.toLowerCase() === custDisplayName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(c, custDisplayName)));
 
-        const isCateringRider = (cateredRiderId && cateredRiderId === myId) || 
-                                (cleanCateredRiderName && cleanCateredRiderName === myName) || 
+        const isMatchMyRider = (id, name) => {
+            if (id && myId && String(id).trim() === String(myId).trim()) return true;
+            if (name && myName) {
+                const nA = String(name).trim().toLowerCase();
+                const nB = String(myName).trim().toLowerCase();
+                if (nA === nB) return true;
+                if (typeof isRiderMatch === 'function' && isRiderMatch(nA, nB)) return true;
+            }
+            return false;
+        };
+
+        const isCateringRider = isMatchMyRider(cateredRiderId, cleanCateredRiderName) || 
                                 isCustomerInMyList;
 
         if (isCateringFolder && !isCateringRider) {
@@ -402,7 +412,9 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
         attachmentId = null,
         storeKey = null,
         pageId = null,
-        skipSeparateCaption = true
+        skipSeparateCaption = true,
+        isBatch = false,
+        isLastPage = true
     } = (typeof options === 'object' && options) ? options : {};
 
     const riderName = appState.riderName || localStorage.getItem('riderName') || "Lokalex Rider";
@@ -474,17 +486,19 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
             writePromises.push(pushRef.set(sanitizeForFirebase(newMsg)));
         }
 
-        const metaUpdate = sanitizeForFirebase({
-            lastMessage: `You: 📋 ${captionText || "Menu Photo"}`,
-            lastUpdated: now,
-            unreadForRider: false
-        });
-        if (custName) {
-            metaUpdate.customerName = custName;
-        }
+        if (!isBatch || isLastPage) {
+            const metaUpdate = sanitizeForFirebase({
+                lastMessage: `You: 📋 ${captionText || "Menu Photo"}`,
+                lastUpdated: now,
+                unreadForRider: false
+            });
+            if (custName) {
+                metaUpdate.customerName = custName;
+            }
 
-        writePromises.push(db.ref(`customerChats/${cleanCustId}/metadata`).update(metaUpdate));
-        writePromises.push(db.ref(`customerChatMeta/${cleanCustId}`).update(metaUpdate));
+            writePromises.push(db.ref(`customerChats/${cleanCustId}/metadata`).update(metaUpdate));
+            writePromises.push(db.ref(`customerChatMeta/${cleanCustId}`).update(metaUpdate));
+        }
         await Promise.all(writePromises).catch(() => {});
 
         const fullMsg = { id: newMsgKey || `MENU_${now}`, ...newMsg };
@@ -526,7 +540,7 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
         // Forward to Messenger if thread is from Facebook
         let fbSendResult = null;
         if (isFb) {
-            fbSendResult = await forwardRiderReplyToMessenger({
+            const fbTask = forwardRiderReplyToMessenger({
                 custId: cleanCustId,
                 apiId: targetApiId,
                 text: textPayload,
@@ -536,13 +550,18 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
                 riderName: riderName,
                 newMsgKey: newMsgKey,
                 suppressToast: true
+            }).then(res => {
+                if (res && res.attachmentId && storeKey && pageId && db) {
+                    db.ref(`directory/storeMenuGalleries/${storeKey}/pages/${pageId}/metaAttachmentId`).set(res.attachmentId).catch(() => {});
+                }
+                return res;
             }).catch(err => {
                 console.warn("[MenuSend] forwardRiderReplyToMessenger error:", err);
                 return null;
             });
 
-            if (fbSendResult && fbSendResult.attachmentId && storeKey && pageId && db) {
-                db.ref(`directory/storeMenuGalleries/${storeKey}/pages/${pageId}/metaAttachmentId`).set(fbSendResult.attachmentId).catch(() => {});
+            if (!isBatch) {
+                fbSendResult = await fbTask;
             }
         }
 

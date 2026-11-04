@@ -240,10 +240,13 @@ export function isMyCustomerThread(t, cachedAuth = null) {
     if (myName && rName && (myName === rName || isRiderMatch(myName, rName, myId, rId))) return true;
 
     // Check if the current logged-in rider's active record in the roster has this customer
-    const myRecord = (globalState.rosterMembers || []).find(m => 
-        (myId && (m.telegramId || m.id || "").toString() === myId) ||
-        (myName && (m.riderName || m.name || "").trim().toLowerCase() === myName)
-    );
+    const myRecord = (globalState.rosterMembers || []).find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").trim().toLowerCase();
+        if (myId && mId && mId === myId) return true;
+        if (myName && mName && (mName === myName || isRiderMatch(myName, mName, myId, mId))) return true;
+        return false;
+    });
     if (myRecord && myRecord.status === 'Catering') {
         const candidateNames = getThreadCustomerCandidates(t, t.customerName, t.custId);
         if (candidateNames.size === 0) return false;
