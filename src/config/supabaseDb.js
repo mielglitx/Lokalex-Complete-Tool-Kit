@@ -51,6 +51,7 @@ export const TABLE_MAP = {
   stores: 'stores',
   swapRequests: 'swap_requests',
   teamChat: 'team_chat',
+  chat: 'team_chat',
   riderLiveLocations: 'live_tracking',
   directoryCreditTransfers: 'directory'
 };
@@ -436,7 +437,7 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           }
 
           const { data, error } = await query;
-          if (error) {
+          if (error && !error.message?.includes('schema cache')) {
             console.warn(`[Supabase once error on table ${pathInfo.table}]:`, error.message);
           }
 

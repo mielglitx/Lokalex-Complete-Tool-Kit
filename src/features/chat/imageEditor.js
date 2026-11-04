@@ -608,7 +608,7 @@ export async function exportAndSendEditedImage() {
         }
     } else if (targetType === 'team') {
         if (db) {
-            db.ref('chat').push({
+            db.ref('teamChat/general').push({
                 sender: appState.riderName || "Lokalex Rider",
                 text: "📷 [Shared Image]",
                 imageUrl: finalImageUrl,

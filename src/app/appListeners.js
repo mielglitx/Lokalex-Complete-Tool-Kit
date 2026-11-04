@@ -298,11 +298,6 @@ export function initRealtimeFirebaseListeners() {
             roster.initLocalFirstCateredSync();
         }
 
-        db.ref('chat').limitToLast(25).on('value', (snapshot) => {
-            globalState.chatMessages = snapshot.val() ? Object.values(snapshot.val()) : [];
-            window.dispatchEvent(new Event('chatUpdated'));
-        });
-
         let isInitialAdvLoad = true;
         const knownAdvOrderKeys = new Set();
         db.ref('advancedOrders').limitToLast(40).on('value', (snapshot) => {

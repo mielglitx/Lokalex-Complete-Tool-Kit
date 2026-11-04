@@ -2841,7 +2841,7 @@ export async function deleteMenuGalleryPage(pageId) {
             storeMenuMetadataMap[activeGalleryStore.key].updatedAt = nowTs;
             try {
                 localStorage.setItem('lokalex_store_menus_meta_cache', JSON.stringify(storeMenuMetadataMap));
-            } catch(e) {}
+            } catch (_) {}
         }
 
         const mem = getStoreMenuGallery(activeGalleryStore.name, activeGalleryStore.key);
@@ -2850,9 +2850,9 @@ export async function deleteMenuGalleryPage(pageId) {
             indexGalleryEntry(activeGalleryStore.key, { storeName: activeGalleryStore.name, pages: updatedPages, updatedAt: nowTs });
         }
 
-        showToast("🗑️ Deleted page from gallery.");
-    } catch(e) {
-        showToast("❌ Failed to delete page.");
+        showToast("Deleted page from gallery.");
+    } catch (err) {
+        showToast("Failed to delete page.");
     }
 }
 
