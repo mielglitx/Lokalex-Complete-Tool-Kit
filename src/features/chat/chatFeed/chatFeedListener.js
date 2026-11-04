@@ -151,8 +151,8 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                     // Always check live roster catering: active roster catering takes precedence!
                     const activeCaterer = getActiveRosterCaterer(displayName, key, meta);
                     const liveRoster = globalState.rosterMembers || [];
-                    const hasCaterer = Boolean(activeCaterer) || (liveRoster.length === 0 && Boolean(rawFolder === 'catering' && (meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy)));
-                    const isCatered = !isDone && hasCaterer;
+                    const hasCaterer = Boolean(activeCaterer) || Boolean(rawFolder === 'catering' && (meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy));
+                    const isCatered = !isDone && (hasCaterer || rawFolder === 'catering');
                     const isApplicant = !isDone && !isCatered && (rawFolder === 'applicant' || meta.isApplicant === true);
                     const isFollowup = !isDone && !isCatered && !isApplicant && (rawFolder === 'followup');
 
@@ -165,18 +165,17 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
 
                     const threadForCheck = { custId: key, ...meta, customerName: displayName };
                     if (activeCaterer) {
-                        threadForCheck.cateredByRiderId = threadForCheck.cateredByRiderId || (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
-                        threadForCheck.cateredByRiderName = threadForCheck.cateredByRiderName || (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
-                        threadForCheck.cateredBy = threadForCheck.cateredBy || threadForCheck.cateredByRiderName;
+                        threadForCheck.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+                        threadForCheck.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
+                        threadForCheck.cateredBy = threadForCheck.cateredByRiderName;
                     }
 
                     const isMine = isMyCustomerThread(threadForCheck, loggedInRider);
-                    const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) || (typeof window !== 'undefined' && window.isAdmin && window.isAdmin());
 
                     let isEligible = false;
-                    if (isCatered || targetFolder === 'catering') {
-                        // Strictly only the rider actively catering this customer (or administrators) receive alerts!
-                        if (isMine || isUserAdmin) {
+                    if (isCatered || targetFolder === 'catering' || rawFolder === 'catering') {
+                        // Strictly only the rider actively catering this customer receives chimes & notifications!
+                        if (isMine) {
                             arrivedFolders.add('catering');
                             isEligible = true;
                         }

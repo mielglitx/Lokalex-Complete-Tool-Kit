@@ -1069,7 +1069,7 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 const isDone = rawFolder === 'done' || currentRiderChatMeta?.status === 'completed' || currentRiderChatMeta?.status === 'done';
                 const custDisplayName = activeCustData?.name || currentRiderChatMeta?.customerName || "";
                 const activeCaterer = getActiveRosterCaterer(custDisplayName, custId, currentRiderChatMeta);
-                const isCatered = !isDone && Boolean(activeCaterer);
+                const isCatered = !isDone && (Boolean(activeCaterer) || rawFolder === 'catering');
                 const isApplicant = !isDone && !isCatered && (rawFolder === 'applicant' || currentRiderChatMeta?.isApplicant === true);
                 const isFollowup = !isDone && !isCatered && !isApplicant && (rawFolder === 'followup');
 
@@ -1082,12 +1082,12 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
 
                 const threadForCheck = { custId, ...(currentRiderChatMeta || {}), customerName: custDisplayName };
                 if (activeCaterer) {
-                    threadForCheck.cateredByRiderId = threadForCheck.cateredByRiderId || (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
-                    threadForCheck.cateredByRiderName = threadForCheck.cateredByRiderName || (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
-                    threadForCheck.cateredBy = threadForCheck.cateredBy || threadForCheck.cateredByRiderName;
+                    threadForCheck.cateredByRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+                    threadForCheck.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
+                    threadForCheck.cateredBy = threadForCheck.cateredByRiderName;
                 }
 
-                if (isCatered || targetFolder === 'catering') {
+                if (isCatered || targetFolder === 'catering' || rawFolder === 'catering') {
                     const isMine = isMyCustomerThread(threadForCheck);
                     if (isMine) playChatChime('catering');
                 } else {

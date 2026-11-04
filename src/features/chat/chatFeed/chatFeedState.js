@@ -235,9 +235,11 @@ export function isMyCustomerThread(t, cachedAuth = null) {
 
     const rId = (t.cateredByRiderId || "").toString().trim();
     const rName = (t.cateredByRiderName || "").toString().trim().toLowerCase();
+    const rCateredBy = (t.cateredBy || "").toString().trim().toLowerCase();
 
     if (myId && rId && myId === rId) return true;
     if (myName && rName && (myName === rName || isRiderMatch(myName, rName, myId, rId))) return true;
+    if (myName && rCateredBy && (myName === rCateredBy || isRiderMatch(myName, rCateredBy, myId, rId))) return true;
 
     // Check if the current logged-in rider's active record in the roster has this customer
     const myRecord = (globalState.rosterMembers || []).find(m => {

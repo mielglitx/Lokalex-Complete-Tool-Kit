@@ -101,8 +101,13 @@
         <span class="text-2xl font-black text-emerald-700 dark:text-emerald-400">₱<span id="wiz-grand-total">0.00</span></span>
     </div>
 
-    <!-- SUBMIT BUTTON -->
-    <button type="button" onclick="window.generateFinalReceipt && window.generateFinalReceipt()" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold p-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2">
-        <i class="fa-solid fa-receipt"></i> Generate Digital Receipt
-    </button>
+    <!-- SUBMIT BUTTONS -->
+    <div class="mt-4 flex flex-col sm:flex-row gap-2">
+        <button type="button" onclick="window.sendReceiptDirectlyFromWizard && window.sendReceiptDirectlyFromWizard()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold p-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer">
+            <i class="fa-solid fa-paper-plane"></i> Send Receipt Directly
+        </button>
+        <button type="button" onclick="window.generateFinalReceipt && window.generateFinalReceipt()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold p-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer">
+            <i class="fa-solid fa-receipt"></i> Generate Digital Receipt
+        </button>
+    </div>
 </section>

@@ -9,7 +9,7 @@
  * Directly delivers generated image receipts to the target customer's chat thread
  * and Facebook Messenger conversation:
  * - Smart Recipient Resolver: Automatically matches the active catered customer
- *   name against live chat threads (customerChatMeta).
+ *   name against live chat threads (supports in-memory cache, Supabase, and RTDB).
  * - Direct Dispatch with Webhook Relay: Uploads receipt to Firebase Storage and
  *   relays to Facebook Messenger via Cloudflare webhook worker if thread is from Messenger.
  * - Interactive Recipient Picker Modal: If the customer name is ambiguous or Sample,
@@ -22,7 +22,10 @@ import { appState, globalState, wizState, multiCarts } from '../../store/state.j
 import { uploadImage } from '../../utils/imageUpload.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { escapeHtml } from '../../utils/helpers.js';
-import { currentReceiptDataUrl, currentReceiptCanvas, formatShortRef } from './wizardImageReceipt.js';
+import { currentReceiptDataUrl, currentReceiptCanvas, formatShortRef, renderReceiptCanvas } from './wizardImageReceipt.js';
+import { renderFinalReceiptText } from './wizardTextReceipt.js';
+import { saveReceiptToDatabase } from './wizardCore.js';
+import { calculateGrandTotal } from './wizardCalc.js';
 import { forwardRiderReplyToMessenger } from '../chat/riderChat.js';
 import { getActiveCateringCustomersWithTimes } from '../roster/index.js';
 import { isCustomerMatch } from '../roster/rosterUtils.js';
@@ -36,18 +39,72 @@ function sanitizeForFirebase(obj) {
 }
 
 /**
- * Main entry point: Sends the created receipt to the target recipient
+ * Directly validates, generates, and delivers the receipt from the Wizard screen
  */
-export async function sendReceiptToRecipient(targetCustId = null, targetCustName = null) {
-    if (!currentReceiptDataUrl && !currentReceiptCanvas) {
-        showToast("⚠️ Image receipt is still generating. Please wait a moment...");
+export async function sendReceiptDirectlyFromWizard() {
+    calculateGrandTotal();
+
+    const freeDeliveryEl = document.getElementById('wiz-free-delivery');
+    const isFree = freeDeliveryEl ? freeDeliveryEl.checked : false;
+    const deliveryVal = document.getElementById('wiz-delivery')?.value.trim() || "";
+
+    if (!isFree && (deliveryVal === "" || isNaN(parseFloat(deliveryVal)) || parseFloat(deliveryVal) <= 0)) {
+        showToast("⚠️ Please enter Rider Delivery Fee before sending receipt!");
+        const deliveryInput = document.getElementById('wiz-delivery');
+        if (deliveryInput) deliveryInput.focus();
         return;
     }
 
+    const rcptNameInput = document.getElementById('rcpt-name');
+    let customerName = rcptNameInput ? rcptNameInput.value.trim() : "";
+    if (!customerName || customerName.toLowerCase() === 'sample') {
+        const activeCartIdx = globalState.activeCartIndex || 0;
+        customerName = (multiCarts && multiCarts[activeCartIdx + 1]?.customerName) || appState.selectedCateringClient || "";
+    }
+
+    if (!customerName) {
+        showToast("⚠️ Please enter customer name or select catered client first!");
+        if (rcptNameInput) rcptNameInput.focus();
+        return;
+    }
+
+    showToast("🧾 Generating receipt image...");
+
+    // 1. Save receipt record to database
+    await saveReceiptToDatabase(customerName);
+
+    // 2. Render text and canvas
+    renderFinalReceiptText();
+    await renderReceiptCanvas();
+
+    // 3. Dispatch to customer
+    await sendReceiptToRecipient(null, customerName);
+}
+
+/**
+ * Main entry point: Sends the created receipt to the target recipient
+ */
+export async function sendReceiptToRecipient(targetCustId = null, targetCustName = null) {
     const explicitName = document.getElementById('rcpt-name')?.value?.trim() || "";
     const activeCartIdx = globalState.activeCartIndex || 0;
     const cartCustName = (multiCarts && multiCarts[activeCartIdx + 1]?.customerName) || "";
     const customerName = (targetCustName || explicitName || cartCustName || appState.selectedCateringClient || "").trim();
+
+    // Ensure image receipt canvas is rendered if not yet ready
+    if (!currentReceiptDataUrl && !currentReceiptCanvas) {
+        showToast("⏳ Rendering receipt image...");
+        try {
+            renderFinalReceiptText();
+            await renderReceiptCanvas();
+        } catch (e) {
+            console.warn("Failed generating receipt canvas:", e);
+        }
+    }
+
+    if (!currentReceiptDataUrl && !currentReceiptCanvas) {
+        showToast("⚠️ Image receipt is still generating. Please try again in a moment.");
+        return;
+    }
 
     if (targetCustId) {
         await executeSendReceiptToCustId(targetCustId, customerName || targetCustName);
@@ -80,18 +137,44 @@ export async function sendReceiptToRecipient(targetCustId = null, targetCustName
  * Automatically looks up a unique customer thread matching the given customer name
  */
 async function resolveMatchingCustomerThread(targetName) {
-    if (!targetName || !db) return null;
+    if (!targetName) return null;
     const cleanTarget = targetName.trim().toLowerCase();
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").trim().toLowerCase();
 
-    const snap = await db.ref('customerChatMeta').once('value');
-    const allChats = snap.val() || {};
+    // 1. Check in-memory cached threads first (instant, 0ms latency)
+    let allChats = {};
+    if (typeof window !== 'undefined' && typeof window.getCachedCustomerThreadsMap === 'function') {
+        const map = window.getCachedCustomerThreadsMap();
+        if (map && map.size > 0) {
+            for (const [k, v] of map.entries()) {
+                allChats[k] = v;
+            }
+        }
+    }
+
+    // 2. Fallback to DB query if memory cache is empty
+    if (Object.keys(allChats).length === 0 && db) {
+        try {
+            const snap = await db.ref('customerChatMeta').once('value');
+            allChats = snap.val() || {};
+        } catch (e) {
+            console.warn("customerChatMeta query fallback warning:", e);
+        }
+    }
 
     const matches = [];
-    Object.entries(allChats).forEach(([cId, meta]) => {
-        if (!meta) return;
-        const cName = (meta.customerName || meta.name || "").trim().toLowerCase();
+    Object.entries(allChats).forEach(([cId, metaItem]) => {
+        if (!metaItem) return;
+        const meta = metaItem.metadata || metaItem;
+        let cName = (meta.customerName || meta.name || "").trim().toLowerCase();
+
+        if (cId.startsWith('fb_') && typeof window.getResolvedFbName === 'function') {
+            const fbInfo = window.getResolvedFbName(cId);
+            if (fbInfo && fbInfo.name) {
+                cName = fbInfo.name.trim().toLowerCase();
+            }
+        }
         if (!cName) return;
 
         const isExact = cName === cleanTarget;
@@ -118,10 +201,19 @@ async function resolveMatchingCustomerThread(targetName) {
     // Prioritize threads currently catered by the logged-in rider
     const myMatches = matches.filter(m => m.isMine);
     if (myMatches.length === 1) return myMatches[0];
+    if (myMatches.length > 1) {
+        // Return most recently active
+        myMatches.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+        return myMatches[0];
+    }
 
-    // Otherwise if there's only 1 exact match
+    // Otherwise if there's an exact match
     const exactMatches = matches.filter(m => m.isExact);
     if (exactMatches.length === 1) return exactMatches[0];
+    if (exactMatches.length > 1) {
+        exactMatches.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+        return exactMatches[0];
+    }
 
     // If exactly one match in total
     if (matches.length === 1) return matches[0];
@@ -194,9 +286,20 @@ async function fetchRecipientsList(suggestedName = "") {
         : [];
 
     let chatMeta = {};
-    if (db) {
-        const snap = await db.ref('customerChatMeta').limitToLast(60).once('value');
-        chatMeta = snap.val() || {};
+    if (typeof window !== 'undefined' && typeof window.getCachedCustomerThreadsMap === 'function') {
+        const map = window.getCachedCustomerThreadsMap();
+        if (map && map.size > 0) {
+            for (const [k, v] of map.entries()) {
+                chatMeta[k] = v;
+            }
+        }
+    }
+
+    if (Object.keys(chatMeta).length === 0 && db) {
+        try {
+            const snap = await db.ref('customerChatMeta').once('value');
+            chatMeta = snap.val() || {};
+        } catch (_) {}
     }
 
     // Match active deliveries to chat threads
@@ -207,9 +310,15 @@ async function fetchRecipientsList(suggestedName = "") {
         let matchedId = null;
         let matchedMeta = null;
 
-        for (const [cId, meta] of Object.entries(chatMeta)) {
-            if (!meta) continue;
-            const cName = meta.customerName || meta.name || "";
+        for (const [cId, metaItem] of Object.entries(chatMeta)) {
+            if (!metaItem) continue;
+            const meta = metaItem.metadata || metaItem;
+            let cName = meta.customerName || meta.name || "";
+            if (cId.startsWith('fb_') && typeof window.getResolvedFbName === 'function') {
+                const fbInfo = window.getResolvedFbName(cId);
+                if (fbInfo && fbInfo.name) cName = fbInfo.name;
+            }
+
             if (isCustomerMatch(cName, cleanName)) {
                 if (cId.startsWith('fb_') || !matchedId) {
                     matchedId = cId;
@@ -227,16 +336,23 @@ async function fetchRecipientsList(suggestedName = "") {
             customerName: cleanName,
             isDelivery: true,
             isMine: true,
-            channel: matchedMeta?.channel || 'messenger',
+            channel: matchedMeta?.channel || (effectiveId.startsWith('fb_') ? 'messenger' : 'web'),
+            apiId: matchedMeta?.apiId || matchedMeta?.channelId || null,
+            apiName: matchedMeta?.apiName || null,
             avatarUrl: matchedMeta?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=10B981&color=fff`,
             lastUpdated: Date.now() + 1000000 // Float to top
         });
     });
 
     // 2. Recent threads in customerChatMeta
-    Object.entries(chatMeta).forEach(([cId, meta]) => {
-        if (!meta || seenCustIds.has(cId)) return;
-        const cName = (meta.customerName || meta.name || "").trim();
+    Object.entries(chatMeta).forEach(([cId, metaItem]) => {
+        if (!metaItem || seenCustIds.has(cId)) return;
+        const meta = metaItem.metadata || metaItem;
+        let cName = (meta.customerName || meta.name || "").trim();
+        if (cId.startsWith('fb_') && typeof window.getResolvedFbName === 'function') {
+            const fbInfo = window.getResolvedFbName(cId);
+            if (fbInfo && fbInfo.name) cName = fbInfo.name;
+        }
         if (!cName || cName.toLowerCase() === 'sample') return;
 
         const rId = (meta.cateredByRiderId || "").toString().trim();
@@ -249,6 +365,8 @@ async function fetchRecipientsList(suggestedName = "") {
             isDelivery: false,
             isMine: isMine,
             channel: meta.channel || (cId.startsWith('fb_') ? 'messenger' : 'web'),
+            apiId: meta.apiId || meta.channelId || null,
+            apiName: meta.apiName || null,
             avatarUrl: meta.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(cName)}&background=0084FF&color=fff`,
             lastUpdated: meta.lastUpdated || 0,
             lastMessage: meta.lastMessage || ""
@@ -329,7 +447,7 @@ export function filterReceiptRecipients(query) {
 export async function executeSendReceiptToCustId(targetCustId, recipientName) {
     if (!targetCustId) return;
 
-    // 0. Close recipient modal immediately for instantaneous responsiveness
+    // 0. Close recipient modal immediately
     closeReceiptRecipientModal();
 
     const btn = document.getElementById('send-receipt-to-cust-btn');
@@ -347,26 +465,60 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
         const riderName = appState.riderName || localStorage.getItem('riderName') || "Lokalex Rider";
         const now = Date.now();
 
-        // 1. Instant receipt image generation (JPEG 0.82 for ~50KB payload size and ultra-fast transmission)
+        // 1. Ensure receipt image is generated
         let finalImageUrl = currentReceiptDataUrl;
         if (!finalImageUrl && currentReceiptCanvas) {
             try {
-                finalImageUrl = currentReceiptCanvas.toDataURL('image/jpeg', 0.82);
+                finalImageUrl = currentReceiptCanvas.toDataURL('image/jpeg', 0.85);
+            } catch (_) {}
+        }
+        if (!finalImageUrl) {
+            renderFinalReceiptText();
+            await renderReceiptCanvas();
+            finalImageUrl = currentReceiptDataUrl || (currentReceiptCanvas ? currentReceiptCanvas.toDataURL('image/jpeg', 0.85) : null);
+        }
+
+        if (!finalImageUrl) {
+            throw new Error("Receipt image generation failed. Please try saving image manually.");
+        }
+
+        // 2. Resolve metadata from thread cache or DB
+        let targetMeta = null;
+        if (typeof window !== 'undefined' && typeof window.getCachedCustomerThreadsMap === 'function') {
+            const threadMap = window.getCachedCustomerThreadsMap();
+            if (threadMap && threadMap.has(targetCustId)) {
+                targetMeta = threadMap.get(targetCustId);
+            }
+        }
+        if (!targetMeta && db) {
+            try {
+                const snap = await db.ref(`customerChatMeta/${targetCustId}`).once('value');
+                targetMeta = snap.val()?.metadata || snap.val() || null;
             } catch (_) {}
         }
 
-        // 2. Resolve channel metadata from cached recipients list (0ms lookup, no DB round-trip delay)
         const cachedRecipient = (cachedRecipientsList || []).find(r => r.custId === targetCustId);
-        const isFbTarget = String(targetCustId).startsWith('fb_') || String(targetCustId).startsWith('messenger_') || cachedRecipient?.channel === 'messenger';
-        const targetChannel = isFbTarget ? 'messenger' : (cachedRecipient?.channel || 'messenger');
-        const targetApiId = cachedRecipient?.apiId || 'fb_api_1791648211091';
-        const targetApiName = cachedRecipient?.apiName || 'Camiling FB';
+        const isFbTarget = String(targetCustId).startsWith('fb_') || targetMeta?.channel === 'messenger' || cachedRecipient?.channel === 'messenger';
+        const targetChannel = isFbTarget ? 'messenger' : (targetMeta?.channel || cachedRecipient?.channel || 'messenger');
+        const targetApiId = targetMeta?.apiId || targetMeta?.channelId || cachedRecipient?.apiId || null;
+        const targetApiName = targetMeta?.apiName || cachedRecipient?.apiName || 'Facebook';
+
+        // 3. Upload image to Firebase Storage for ultra-fast and reliable delivery (fallback to data URL)
+        let hostedImageUrl = finalImageUrl;
+        if (finalImageUrl.startsWith('data:')) {
+            try {
+                hostedImageUrl = await uploadImage(finalImageUrl, `chats/${targetCustId}/receipt_${now}.jpg`);
+            } catch (upErr) {
+                console.warn("[Receipt] Storage upload fallback to data URL:", upErr);
+                hostedImageUrl = finalImageUrl;
+            }
+        }
 
         const newMsg = {
             sender: riderName,
             senderType: 'rider',
-            text: "",
-            imageUrl: finalImageUrl,
+            text: `🧾 Official Delivery Receipt #${shortRef}`,
+            imageUrl: hostedImageUrl || finalImageUrl,
             type: 'image',
             timestamp: now,
             isRider: true,
@@ -380,44 +532,52 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
         const metaUpdate = sanitizeForFirebase({
             lastMessage: `You: 🧾 Official Delivery Receipt #${shortRef}`,
             lastUpdated: now,
-            customerName: recipientName || (targetCustId.startsWith('cust_') ? targetCustId.replace(/^cust_/, '').replace(/_/g, ' ') : null),
+            customerName: recipientName || targetMeta?.customerName || (targetCustId.startsWith('cust_') ? targetCustId.replace(/^cust_/, '').replace(/_/g, ' ') : null),
             channel: targetChannel,
             apiId: targetApiId,
             apiName: targetApiName,
             unreadForRider: false
         });
 
-        // 3. Fast parallel write to Firebase Realtime Database
+        // 4. Parallel write to Database
         let newMsgKey = null;
         if (db) {
             const pushRef = db.ref(`customerChats/${targetCustId}/messages`).push();
-            newMsgKey = pushRef.key;
-            Promise.all([
-                pushRef.set(sanitizeForFirebase(newMsg)),
+            newMsgKey = pushRef ? pushRef.key : null;
+            if (pushRef) {
+                await pushRef.set(sanitizeForFirebase(newMsg));
+            }
+            await Promise.all([
                 db.ref(`customerChats/${targetCustId}/metadata`).update(metaUpdate),
                 db.ref(`customerChatMeta/${targetCustId}`).update(metaUpdate)
             ]).catch(err => console.warn("Firebase receipt write warning:", err));
         }
 
-        // 4. Relay directly to Facebook Messenger webhook if customer came from Facebook
-        if (targetChannel === 'messenger' || String(targetCustId).startsWith('fb_')) {
+        // 5. Relay directly to Facebook Messenger webhook if customer is from Facebook
+        if (targetChannel === 'messenger' || isFbTarget) {
             try {
                 if (typeof forwardRiderReplyToMessenger === 'function') {
-                    forwardRiderReplyToMessenger({
+                    await forwardRiderReplyToMessenger({
                         custId: targetCustId,
                         apiId: targetApiId,
                         text: "", // Never send text alongside image receipt to Messenger
-                        imageUrl: finalImageUrl,
+                        imageUrl: hostedImageUrl || finalImageUrl,
                         riderName: riderName,
-                        newMsgKey: newMsgKey
-                    }).catch(fbErr => console.warn("Forwarding receipt to Messenger warning:", fbErr));
+                        newMsgKey: newMsgKey,
+                        suppressToast: true
+                    });
                 }
             } catch (fbErr) {
                 console.warn("Forwarding receipt to Messenger warning:", fbErr);
             }
         }
 
-        // 5. Success notifications and UI updates
+        // 6. Update in-memory chat cache if function is available
+        if (newMsgKey && typeof window !== 'undefined' && typeof window.appendSingleChatMessageToCache === 'function') {
+            window.appendSingleChatMessageToCache(targetCustId, { id: newMsgKey, ...newMsg });
+        }
+
+        // 7. Success notifications and UI updates
         showToast(`✅ Receipt successfully sent to ${recipientName || 'customer'}!`);
         showSideNotification("RECEIPT SENT", `Delivered to ${recipientName || 'customer'}`, "fa-paper-plane", "text-blue-400", "border-blue-500");
 
@@ -438,10 +598,10 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
 
 // Global window registration
 if (typeof window !== 'undefined') {
+    window.sendReceiptDirectlyFromWizard = sendReceiptDirectlyFromWizard;
     window.sendReceiptToRecipient = sendReceiptToRecipient;
     window.openReceiptRecipientModal = openReceiptRecipientModal;
     window.closeReceiptRecipientModal = closeReceiptRecipientModal;
     window.filterReceiptRecipients = filterReceiptRecipients;
     window.executeSendReceiptToCustId = executeSendReceiptToCustId;
 }
-
