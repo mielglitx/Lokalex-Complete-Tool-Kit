@@ -6,7 +6,7 @@ import { toggleBodyScroll } from '../chatUtils.js';
 import { clearNativeNotification } from '../../../ui/notifications.js';
 import { isAdmin, canManageRoster, isCustomerMatch, isRiderMatch } from '../../roster/rosterUtils.js';
 import { ADMIN_IDS } from '../../../config/constants.js';
-import { getActiveRosterCaterer } from '../chatFeed/chatFeedState.js';
+import { getActiveRosterCaterer, isMyCustomerThread } from '../chatFeed/chatFeedState.js';
 import { resolveFacebookCustomerName, getResolvedFbName } from '../facebookApiAdmin.js';
 import { highlightActiveMilestoneUI } from '../riderThreadActions.js';
 import {
@@ -250,15 +250,25 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         setActiveRiderChatMetaListener(metaRef);
         metaRef.on('value', (snapshot) => {
             const fetchedMeta = snapshot.val() || {};
-            setCurrentRiderChatMeta(fetchedMeta);
-            if (!fetchedMeta.isApplicant && typeof window.getCachedCustomerThreadsMap === 'function') {
+            const existingMeta = currentRiderChatMeta || {};
+            const mergedMeta = { ...existingMeta, ...fetchedMeta };
+            if (existingMeta.cateredByRiderId && !fetchedMeta.cateredByRiderId) {
+                mergedMeta.cateredByRiderId = existingMeta.cateredByRiderId;
+                mergedMeta.cateredByRiderName = existingMeta.cateredByRiderName;
+                mergedMeta.cateredBy = existingMeta.cateredBy;
+            }
+            if (existingMeta.folder === 'catering' && fetchedMeta.folder !== 'done') {
+                mergedMeta.folder = 'catering';
+            }
+            setCurrentRiderChatMeta(mergedMeta);
+            if (!mergedMeta.isApplicant && typeof window.getCachedCustomerThreadsMap === 'function') {
                 const map = window.getCachedCustomerThreadsMap();
                 const thread = map ? (map.get(custId) || map.get(`fb_${custId}`) || (custId.startsWith('fb_') ? map.get(custId.replace(/^fb_/, '')) : null)) : null;
                 if (thread?.isApplicant) {
-                    fetchedMeta.isApplicant = true;
-                    fetchedMeta.folder = 'applicant';
-                } else if (thread?.folder === 'followup' && fetchedMeta.folder !== 'applicant') {
-                    fetchedMeta.folder = 'followup';
+                    mergedMeta.isApplicant = true;
+                    mergedMeta.folder = 'applicant';
+                } else if (thread?.folder === 'followup' && mergedMeta.folder !== 'applicant') {
+                    mergedMeta.folder = 'followup';
                 }
             }
             if (activeRiderChatCustId !== custId) return;
@@ -544,7 +554,8 @@ export function evaluateRiderChatLockPermissions() {
 
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
-    const custDisplayName = (currentRiderChatMeta.customerName || currentRiderChatMeta.name || '').trim();
+    const nameEl = document.getElementById('rider-chat-cust-name');
+    const custDisplayName = (nameEl?.innerText || currentRiderChatMeta.customerName || currentRiderChatMeta.name || '').trim();
 
     const isAmielAdmin = myName.includes('amiel') || (myId && ADMIN_IDS.includes(myId));
     const isUserAdmin = (typeof isAdmin === 'function' && isAdmin()) ||
@@ -593,72 +604,47 @@ export function evaluateRiderChatLockPermissions() {
         cateredRiderId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
         cateredRiderName = (activeCaterer.riderName || activeCaterer.name || "").toString().trim();
     } else {
-        // Fallback: retain existing metadata caterer if they are in catering status or if not proven off-duty
         cateredRiderId = metaRiderId;
         cateredRiderName = metaRiderName;
-
-        // Strict stale check: ONLY purge if the assigned rider is actively logged in on the roster with status 'Available' or 'End'
-        // (meaning that rider has definitively moved on from catering), AND this customer is not in anyone's catering list!
-        if (liveRoster.length > 0 && (metaRiderId || cleanMetaRiderName)) {
-            const assignedMember = liveRoster.find(m => {
-                const mId = (m.telegramId || m.id || "").toString().trim();
-                const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
-                return (metaRiderId && mId === metaRiderId) || (cleanMetaRiderName && isRiderMatch(mName, cleanMetaRiderName));
-            });
-            const isAssignedRiderOffOrAvailable = assignedMember && (assignedMember.status === 'Available' || assignedMember.status === 'End' || assignedMember.status === 'Break');
-            const isAnyoneCateringCustomer = liveRoster.some(m => m.status === 'Catering' && m.customerName && isCustomerMatch(m.customerName, custDisplayName));
-
-            if (isAssignedRiderOffOrAvailable && !isAnyoneCateringCustomer && !isMatchMyRider(metaRiderId, metaRiderName)) {
-                // Now and only now is it truly a stale caterer left over from a previous completed/closed shift!
-                currentRiderChatMeta.cateredByRiderId = null;
-                currentRiderChatMeta.cateredByRiderName = null;
-                currentRiderChatMeta.cateredBy = null;
-                const isFinished = (currentRiderChatMeta.status === 'completed' || currentRiderChatMeta.status === 'done' || currentRiderChatMeta.status === 'cancelled');
-                currentRiderChatMeta.folder = isFinished ? 'done' : (currentRiderChatMeta.isApplicant ? 'applicant' : 'inbox');
-
-                const custId = currentRiderChatMeta.id || currentRiderChatMeta.key || activeRiderChatCustId;
-                if (db && custId) {
-                    const purgePayload = {
-                        cateredByRiderId: null,
-                        cateredByRiderName: null,
-                        cateredBy: null,
-                        folder: currentRiderChatMeta.folder
-                    };
-                    db.ref(`customerChats/${custId}/metadata`).update(purgePayload).catch(() => {});
-                    db.ref(`customerChatMeta/${custId}`).update(purgePayload).catch(() => {});
-                }
-
-                if (typeof window.getCachedCustomerThreadsMap === 'function') {
-                    const map = window.getCachedCustomerThreadsMap();
-                    if (map) {
-                        const thread = map.get(custId) || (custId.startsWith('fb_') ? map.get(custId.replace(/^fb_/, '')) : map.get(`fb_${custId}`));
-                        if (thread) {
-                            thread.cateredByRiderId = null;
-                            thread.cateredByRiderName = null;
-                            thread.cateredBy = null;
-                            thread.folder = currentRiderChatMeta.folder;
-                        }
-                    }
-                }
-            }
-        }
     }
 
     const cleanCateredRiderName = cateredRiderName.toLowerCase();
 
+    // Check if the current customer belongs to the logged-in rider
+    const isMine = (typeof isMyCustomerThread === 'function')
+        ? isMyCustomerThread(currentRiderChatMeta)
+        : false;
+
     // Check active roster catering list for current rider
     const myCateringCusts = (typeof window.getMyCateringCustomers === 'function') ? window.getMyCateringCustomers() : [];
-    const isCustomerInMyList = myCateringCusts.some(c => c.toLowerCase() === custDisplayName.toLowerCase() || (typeof isCustomerMatch === 'function' && isCustomerMatch(c, custDisplayName)));
+    const isCustomerInMyList = myCateringCusts.some(c => {
+        const cleanC = c.toLowerCase().trim();
+        return cleanC === custDisplayName.toLowerCase() || 
+               cleanC === (activeRiderChatCustId || '').toLowerCase() || 
+               (typeof isCustomerMatch === 'function' && isCustomerMatch(cleanC, custDisplayName));
+    });
 
     const isCateringRider = Boolean(
+        isMine ||
         isMatchMyRider(cateredRiderId, cateredRiderName) ||
         isCustomerInMyList ||
         isMatchMyRider(metaRiderId, metaRiderName)
     );
 
-    const isCateringFolder = Boolean(activeCaterer) || ((currentRiderChatMeta.folder || '').toLowerCase() === 'catering' && Boolean(cateredRiderId || cleanCateredRiderName));
-    const isLocked = isCateringFolder && !isCateringRider && !isUserAdmin;
-    const isThreadCatered = isCateringFolder || Boolean(cateredRiderId || cleanCateredRiderName || (currentRiderChatMeta.folder || '').toLowerCase() === 'catering');
+    const isCateringFolder = Boolean(activeCaterer) || ((currentRiderChatMeta.folder || '').toLowerCase() === 'catering');
+    const isThreadCatered = isCateringRider ||
+                            isCateringFolder ||
+                            Boolean(activeCaterer) ||
+                            Boolean(cateredRiderId || cleanCateredRiderName);
+    const isLocked = isThreadCatered && !isCateringRider && !isUserAdmin;
+
+    // If I am catering this customer, ensure local meta has catering folder synced
+    if (isCateringRider && currentRiderChatMeta.folder !== 'catering') {
+        currentRiderChatMeta.folder = 'catering';
+        currentRiderChatMeta.cateredByRiderId = myId;
+        currentRiderChatMeta.cateredByRiderName = appState.riderName || localStorage.getItem('riderName') || "Rider";
+        currentRiderChatMeta.cateredBy = currentRiderChatMeta.cateredByRiderName;
+    }
 
     const caterBtn = document.getElementById('rider-chat-cater-btn');
     const cancelBtn = document.getElementById('rider-chat-cancel-btn');

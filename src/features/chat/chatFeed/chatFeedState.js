@@ -209,7 +209,7 @@ export function getThreadCustomerCandidates(tOrMeta = {}, fallbackName = '', cus
     const add = (val) => {
         if (!val || typeof val !== 'string') return;
         const clean = val.trim().toLowerCase();
-        if (clean && clean !== 'customer' && clean !== 'customer name' && clean !== 'null' && clean !== 'undefined') {
+        if (clean && clean !== 'customer' && clean !== 'customer name' && clean !== 'null' && clean !== 'undefined' && !clean.startsWith('fb customer (')) {
             candidates.add(clean);
         }
     };
@@ -221,9 +221,20 @@ export function getThreadCustomerCandidates(tOrMeta = {}, fallbackName = '', cus
     add(tOrMeta?.facebookName);
     add(tOrMeta?.linkedDirectoryName);
     add(tOrMeta?.linkedDirectoryKey);
-    const id = custId || tOrMeta?.custId || tOrMeta?.id || '';
-    if (id && id.startsWith('cust_')) {
-        add(id.replace(/^cust_/, '').replace(/_/g, ' '));
+    const id = custId || tOrMeta?.custId || tOrMeta?.id || tOrMeta?.key || '';
+    if (id) {
+        if (id.startsWith('cust_')) {
+            add(id.replace(/^cust_/, '').replace(/_/g, ' '));
+        } else if (id.startsWith('fb_') || id.startsWith('messenger_') || /^\d{10,}$/.test(id)) {
+            if (typeof window !== 'undefined' && typeof window.getResolvedFbName === 'function') {
+                const fb = window.getResolvedFbName(id);
+                if (fb && fb.name) add(fb.name);
+            }
+        }
+    }
+    if (typeof document !== 'undefined') {
+        const activeChatName = document.getElementById('rider-chat-cust-name')?.innerText;
+        if (activeChatName) add(activeChatName);
     }
     return candidates;
 }
@@ -287,37 +298,60 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
     if (!liveRoster || liveRoster.length === 0) return null;
 
     const candidateNames = getThreadCustomerCandidates(meta, custName, custId);
-    if (candidateNames.size === 0) return null;
 
-    return liveRoster.find(m => {
-        if (m.status !== 'Catering') return false;
+    // 1. Direct match by candidate customer names or forcedCaters in live roster
+    if (candidateNames.size > 0) {
+        const matched = liveRoster.find(m => {
+            if (m.status !== 'Catering') return false;
 
-        // 1. Check comma-separated customerName field
-        if (m.customerName) {
-            const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c && c !== 'customer' && c !== 'customer name');
-            for (const c of custs) {
-                for (const candidate of candidateNames) {
-                    if (c === candidate || isCustomerMatch(c, candidate)) return true;
-                }
-            }
-        }
-
-        // 2. Check forcedCaters map
-        if (m.forcedCaters && typeof m.forcedCaters === 'object') {
-            for (const [fKey, fVal] of Object.entries(m.forcedCaters)) {
-                if (custId && fKey === custId && fKey !== 'customer') return true;
-                const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
-                const cleanFName = (fName || '').toLowerCase().trim();
-                if (cleanFName && cleanFName !== 'customer' && cleanFName !== 'customer name') {
+            // Check comma-separated customerName field
+            if (m.customerName) {
+                const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c && c !== 'customer' && c !== 'customer name');
+                for (const c of custs) {
                     for (const candidate of candidateNames) {
-                        if (cleanFName === candidate || isCustomerMatch(fName, candidate)) return true;
+                        if (c === candidate || isCustomerMatch(c, candidate)) return true;
                     }
                 }
             }
-        }
 
-        return false;
-    });
+            // Check forcedCaters map
+            if (m.forcedCaters && typeof m.forcedCaters === 'object') {
+                for (const [fKey, fVal] of Object.entries(m.forcedCaters)) {
+                    if (custId && fKey === custId && fKey !== 'customer') return true;
+                    const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
+                    const cleanFName = (fName || '').toLowerCase().trim();
+                    if (cleanFName && cleanFName !== 'customer' && cleanFName !== 'customer name') {
+                        for (const candidate of candidateNames) {
+                            if (cleanFName === candidate || isCustomerMatch(fName, candidate)) return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        });
+
+        if (matched) return matched;
+    }
+
+    // 2. Reliable fallback: If thread metadata has cateredBy rider info or folder is catering, check if that rider is currently Catering on the roster
+    const metaRiderId = (meta?.cateredByRiderId || "").toString().trim();
+    const metaRiderName = (meta?.cateredByRiderName || meta?.cateredBy || "").toString().trim().toLowerCase();
+    const isCateringFolder = (meta?.folder || '').toLowerCase() === 'catering';
+
+    if (metaRiderId || metaRiderName || isCateringFolder) {
+        const member = liveRoster.find(m => {
+            if (m.status !== 'Catering') return false;
+            const mId = (m.telegramId || m.id || "").toString().trim();
+            const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+            if (metaRiderId && mId && metaRiderId === mId) return true;
+            if (metaRiderName && mName && (metaRiderName === mName || isRiderMatch(mName, metaRiderName))) return true;
+            return false;
+        });
+        if (member) return member;
+    }
+
+    return null;
 }
 
 export function isMessengerSource(meta = {}, key = '') {

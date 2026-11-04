@@ -446,31 +446,10 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
             meta.cateredByRiderId = null;
             meta.cateredByRiderName = null;
             meta.cateredBy = null;
-        } else if (globalState.rosterMembers && globalState.rosterMembers.length > 0) {
-            // Roster is loaded and NO rider is actively catering this customer!
-            const hadStaleCaterer = !!(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy);
-            const wasInCatering = threadFolder === 'catering';
-
-            if (hadStaleCaterer || wasInCatering) {
-                meta.cateredByRiderId = null;
-                meta.cateredByRiderName = null;
-                meta.cateredBy = null;
-                const isFinished = isCompletedStatus || meta.completedAt || meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled';
-                if (wasInCatering) {
-                    threadFolder = isFinished ? 'done' : (isApplicant ? 'applicant' : (isFollowUp ? 'followup' : 'inbox'));
-                }
-                if (db && key && !purgedStaleCatererKeys.has(key)) {
-                    purgedStaleCatererKeys.add(key);
-                    const purgePayload = {
-                        cateredByRiderId: null,
-                        cateredByRiderName: null,
-                        cateredBy: null,
-                        folder: threadFolder
-                    };
-                    db.ref(`customerChats/${key}/metadata`).update(purgePayload).catch(() => {});
-                    db.ref(`customerChatMeta/${key}`).update(purgePayload).catch(() => {});
-                }
-            }
+        } else if (threadFolder === 'catering' || Boolean(meta.cateredByRiderName || meta.cateredByRiderId || meta.cateredBy)) {
+            // Retain active catering status without destructive background database overwrites
+            threadFolder = 'catering';
+            isCompletedStatus = false;
         }
 
         const threadObj = {
