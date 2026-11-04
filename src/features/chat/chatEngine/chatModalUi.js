@@ -418,7 +418,7 @@ export function renderRiderCateredSwitcher() {
             const custs = myRecord.customerName.split(',').map(c => c.trim()).filter(Boolean);
             custs.forEach(c => {
                 const lower = c.toLowerCase();
-                if (!addedNames.has(lower)) {
+                if (lower !== 'customer' && lower !== 'customer name' && !addedNames.has(lower)) {
                     addedNames.add(lower);
                     cateredList.push({ name: c });
                 }
@@ -429,7 +429,7 @@ export function renderRiderCateredSwitcher() {
                 const fName = (v && typeof v === 'object' && v.customerName) ? v.customerName : (typeof v === 'string' ? v : "");
                 if (fName && typeof fName === 'string') {
                     const lower = fName.toLowerCase();
-                    if (!addedNames.has(lower)) {
+                    if (lower !== 'customer' && lower !== 'customer name' && !addedNames.has(lower)) {
                         addedNames.add(lower);
                         cateredList.push({ name: fName, forcedKey: k });
                     }
@@ -438,18 +438,20 @@ export function renderRiderCateredSwitcher() {
         }
     }
 
+    // Also include active catering threads from cache strictly if they belong to me and rider is not in specific roster list
     const threadMap = (typeof window.getCachedCustomerThreadsMap === 'function') ? window.getCachedCustomerThreadsMap() : null;
     if (threadMap && threadMap.size > 0) {
         for (const [tId, t] of threadMap.entries()) {
-            const isMe = (myId && t.cateredByRiderId && t.cateredByRiderId.toString() === myId) ||
-                         (myName && t.cateredByRiderName && t.cateredByRiderName.toLowerCase() === myName);
-            if (isMe && t.folder === 'catering' && t.status !== 'completed' && t.status !== 'cancelled') {
+            if (!isMyCustomerThread(t, { myId, myName })) continue;
+            if (t.folder === 'catering' && t.status !== 'completed' && t.status !== 'cancelled') {
                 const cName = t.customerName || t.name || "";
                 if (cName && typeof cName === 'string') {
                     const lower = cName.toLowerCase();
-                    if (!addedNames.has(lower)) {
-                        addedNames.add(lower);
-                        cateredList.push({ name: cName, threadId: tId, thread: t });
+                    if (lower !== 'customer' && lower !== 'customer name' && !addedNames.has(lower)) {
+                        if (!myRecord || myRecord.status !== 'Catering') {
+                            addedNames.add(lower);
+                            cateredList.push({ name: cName, threadId: tId, thread: t });
+                        }
                     } else {
                         const item = cateredList.find(i => i.name.toLowerCase() === lower);
                         if (item && !item.threadId) {
@@ -610,26 +612,30 @@ export function evaluateRiderChatLockPermissions() {
 
     const cleanCateredRiderName = cateredRiderName.toLowerCase();
 
-    // Check if the current customer belongs to the logged-in rider
-    const isMine = (typeof isMyCustomerThread === 'function')
-        ? isMyCustomerThread(currentRiderChatMeta)
-        : false;
-
-    // Check active roster catering list for current rider
-    const myCateringCusts = (typeof window.getMyCateringCustomers === 'function') ? window.getMyCateringCustomers() : [];
-    const isCustomerInMyList = myCateringCusts.some(c => {
-        const cleanC = c.toLowerCase().trim();
-        return cleanC === custDisplayName.toLowerCase() || 
-               cleanC === (activeRiderChatCustId || '').toLowerCase() || 
-               (typeof isCustomerMatch === 'function' && isCustomerMatch(cleanC, custDisplayName));
-    });
-
-    const isCateringRider = Boolean(
-        isMine ||
-        isMatchMyRider(cateredRiderId, cateredRiderName) ||
-        isCustomerInMyList ||
-        isMatchMyRider(metaRiderId, metaRiderName)
-    );
+    let isCateringRider = false;
+    if (activeCaterer) {
+        // Active caterer on live roster is the absolute source of truth
+        const aId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+        const aName = (activeCaterer.riderName || activeCaterer.name || "").toString().trim().toLowerCase();
+        isCateringRider = (myId && aId && myId === aId) || (myName && aName && (myName === aName || isRiderMatch(myName, aName, myId, aId)));
+    } else {
+        const isMine = (typeof isMyCustomerThread === 'function')
+            ? isMyCustomerThread(currentRiderChatMeta)
+            : false;
+        const myCateringCusts = (typeof window.getMyCateringCustomers === 'function') ? window.getMyCateringCustomers() : [];
+        const isCustomerInMyList = myCateringCusts.some(c => {
+            const cleanC = c.toLowerCase().trim();
+            return cleanC === custDisplayName.toLowerCase() || 
+                   cleanC === (activeRiderChatCustId || '').toLowerCase() || 
+                   (typeof isCustomerMatch === 'function' && isCustomerMatch(cleanC, custDisplayName));
+        });
+        isCateringRider = Boolean(
+            isMine ||
+            isMatchMyRider(cateredRiderId, cateredRiderName) ||
+            isCustomerInMyList ||
+            isMatchMyRider(metaRiderId, metaRiderName)
+        );
+    }
 
     const isCateringFolder = Boolean(activeCaterer) || ((currentRiderChatMeta.folder || '').toLowerCase() === 'catering');
     const isThreadCatered = isCateringRider ||

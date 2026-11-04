@@ -26,6 +26,87 @@ let cameraZoomCapabilities = null;
 let touchStartDistance = 0;
 let touchStartZoom = 1;
 
+// High-performance in-memory galleries cache: stores preloaded pages for ALL restaurants
+// Keyed by Firebase key, normalized name, compositeKey, etc. to guarantee 0ms instant fetch
+export const storeMenuGalleriesMemoryMap = new Map();
+let isStoreMenuGalleriesListenerActive = false;
+let cachedPickerStoreList = null;
+
+const normalizeKey = (str) => (str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+export function indexGalleryEntry(rawKey, data) {
+    if (!data) return null;
+    const pages = data.pages
+        ? (Array.isArray(data.pages) ? data.pages : Object.values(data.pages))
+        : (Array.isArray(data) ? data : []);
+
+    pages.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+
+    const cleanStoreName = (data.storeName || rawKey || "Store").trim();
+    const normName = normalizeKey(cleanStoreName);
+    const normKey = normalizeKey(rawKey);
+
+    const entry = {
+        firebaseKey: rawKey,
+        storeName: cleanStoreName,
+        pages: pages,
+        pageCount: pages.length,
+        updatedAt: data.updatedAt || 0
+    };
+
+    const keysToIndex = Array.from(new Set([
+        rawKey,
+        normKey,
+        cleanStoreName,
+        cleanStoreName.toLowerCase(),
+        normName,
+        'stores_' + normName,
+        'stores' + normName,
+        'stores_' + normKey,
+        'stores' + normKey
+    ])).filter(Boolean);
+
+    keysToIndex.forEach(k => {
+        storeMenuGalleriesMemoryMap.set(k, entry);
+    });
+
+    return entry;
+}
+
+export function getStoreMenuGallery(storeName = "", compositeKey = "", metaKey = "") {
+    const cleanName = (storeName || "").trim();
+    const normName = normalizeKey(cleanName);
+    const normComposite = normalizeKey(compositeKey);
+    const normMeta = normalizeKey(metaKey);
+
+    const candidates = Array.from(new Set([
+        metaKey,
+        normMeta,
+        compositeKey,
+        normComposite,
+        cleanName,
+        normName,
+        'stores_' + normName,
+        'stores' + normName,
+        'stores_' + normMeta,
+        'stores' + normMeta,
+        (compositeKey || '').replace(/^[a-z0-9]+_stores_?/, ''),
+        (compositeKey || '').replace(/^[a-z0-9]+_/, '')
+    ])).map(k => (k || '').trim()).filter(Boolean);
+
+    for (const k of candidates) {
+        if (storeMenuGalleriesMemoryMap.has(k)) {
+            const item = storeMenuGalleriesMemoryMap.get(k);
+            if (item && Array.isArray(item.pages) && item.pages.length > 0) {
+                return item;
+            } else if (Array.isArray(item) && item.length > 0) {
+                return { firebaseKey: k, pages: item, storeName: cleanName, pageCount: item.length };
+            }
+        }
+    }
+    return null;
+}
+
 // Synchronously hydrate menu metadata immediately at module load time to guarantee 0ms instant display
 export let storeMenuMetadataMap = (() => {
     try {
@@ -34,16 +115,16 @@ export let storeMenuMetadataMap = (() => {
         return {};
     }
 })();
-let isStoreMenuMetadataListenerActive = false;
 
 export function getStoreMenuMetadataMap() {
     return storeMenuMetadataMap;
 }
 
 export function initStoreMenuGalleriesListener() {
-    if (!db || isStoreMenuMetadataListenerActive) return;
-    isStoreMenuMetadataListenerActive = true;
+    if (!db || isStoreMenuGalleriesListenerActive) return;
+    isStoreMenuGalleriesListenerActive = true;
 
+    // 1. Immediately hydrate metadata and galleries from local cache (0ms)
     try {
         const cached = localStorage.getItem('lokalex_store_menus_meta_cache');
         if (cached) {
@@ -51,58 +132,82 @@ export function initStoreMenuGalleriesListener() {
         }
     } catch (e) {}
 
-    db.ref('directory/storeMenuMeta').on('value', (snap) => {
-        let val = snap.val();
-        if (!val || Object.keys(val).length === 0) {
-            // One-time fallback migration: seed directory/storeMenuMeta from galleries once
-            db.ref('directory/storeMenuGalleries').once('value').then(gSnap => {
-                const gVal = gSnap.val() || {};
-                const metaBatch = {};
-                Object.entries(gVal).forEach(([k, d]) => {
-                    if (d) {
-                        const pages = d.pages ? Object.values(d.pages) : [];
-                        metaBatch[`directory/storeMenuMeta/${k}`] = {
-                            pageCount: pages.length,
-                            updatedAt: d.updatedAt || 0,
-                            storeName: d.storeName || ""
-                        };
-                    }
-                });
-                if (Object.keys(metaBatch).length > 0) {
-                    db.ref().update(metaBatch).catch(() => {});
-                }
-            }).catch(() => {});
-            return;
+    // 2. Fast IndexedDB hydration of full menu galleries
+    idbGet('storeMenuGalleries', 'all_store_menus').then(cachedGalleries => {
+        if (cachedGalleries && typeof cachedGalleries === 'object') {
+            Object.entries(cachedGalleries).forEach(([k, data]) => {
+                if (data) indexGalleryEntry(k, data);
+            });
         }
+    }).catch(() => {});
 
-        const newMap = {};
-        Object.entries(val).forEach(([key, data]) => {
+    // 3. Proactive Real-Time Sync on ALL storeMenuGalleries
+    // Downloads lightweight page metadata & image URLs once and keeps memory synced in 0ms!
+    db.ref('directory/storeMenuGalleries').on('value', (snap) => {
+        const val = snap.val() || {};
+
+        Object.entries(val).forEach(([k, data]) => {
             if (data) {
-                const storeMeta = {
-                    pageCount: data.pageCount || 0,
-                    updatedAt: data.updatedAt || 0,
-                    storeName: data.storeName || ""
-                };
-                newMap[key] = storeMeta;
-
-                // Also index by normalized storeName to guarantee instant matches
-                if (data.storeName) {
-                    const cleanNameKey = data.storeName.toLowerCase().replace(/[^a-z0-9]/g, '');
-                    if (cleanNameKey) newMap[cleanNameKey] = storeMeta;
+                const entry = indexGalleryEntry(k, data);
+                if (entry) {
+                    const norm = normalizeKey(entry.storeName);
+                    const meta = {
+                        pageCount: entry.pageCount,
+                        updatedAt: entry.updatedAt,
+                        storeName: entry.storeName,
+                        firebaseKey: k
+                    };
+                    storeMenuMetadataMap[k] = meta;
+                    if (norm) storeMenuMetadataMap[norm] = meta;
                 }
             }
         });
 
-        storeMenuMetadataMap = newMap;
-
+        // Background save full galleries and metadata to IndexedDB / localStorage
+        idbSet('storeMenuGalleries', 'all_store_menus', val).catch(() => {});
         try {
-            localStorage.setItem('lokalex_store_menus_meta_cache', JSON.stringify(newMap));
+            localStorage.setItem('lokalex_store_menus_meta_cache', JSON.stringify(storeMenuMetadataMap));
         } catch (e) {}
 
         const viewDir = document.getElementById('view-directory');
         if (globalState.currentType === 'stores' && viewDir && !viewDir.classList.contains('hidden')) {
             renderDirectoryList();
         }
+
+        // If chat menu picker modal is open, smoothly update in real time
+        const pickerModal = document.getElementById('chat-store-menu-picker-modal');
+        if (pickerModal && !pickerModal.classList.contains('hidden')) {
+            const searchInput = document.getElementById('chat-store-picker-search');
+            renderChatStoreMenuPicker(searchInput?.value || "");
+        }
+    });
+
+    // 4. Auxiliary listener on storeMenuMeta for backwards compatibility
+    db.ref('directory/storeMenuMeta').on('value', (snap) => {
+        const val = snap.val();
+        if (!val || Object.keys(val).length === 0) return;
+
+        Object.entries(val).forEach(([key, data]) => {
+            if (data) {
+                const storeMeta = {
+                    pageCount: data.pageCount || 0,
+                    updatedAt: data.updatedAt || 0,
+                    storeName: data.storeName || "",
+                    firebaseKey: key
+                };
+                if (!storeMenuMetadataMap[key] || storeMeta.pageCount >= (storeMenuMetadataMap[key].pageCount || 0)) {
+                    storeMenuMetadataMap[key] = storeMeta;
+                }
+                const cleanNameKey = normalizeKey(data.storeName);
+                if (cleanNameKey && (!storeMenuMetadataMap[cleanNameKey] || storeMeta.pageCount >= (storeMenuMetadataMap[cleanNameKey].pageCount || 0))) {
+                    storeMenuMetadataMap[cleanNameKey] = storeMeta;
+                }
+            }
+        });
+
+        try {
+            localStorage.setItem('lokalex_store_menus_meta_cache', JSON.stringify(storeMenuMetadataMap));
+        } catch (e) {}
     });
 }
 
@@ -1274,23 +1379,26 @@ export async function openStoreMenuGalleryModal(storeName, compositeKey) {
     modal.style.zIndex = '1000010';
 
     const cleanName = (storeName || "Store").trim();
+    const galleryEntry = getStoreMenuGallery(cleanName, compositeKey);
     const normName = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    let galleryKey = (compositeKey || cleanName).toLowerCase().replace(/[^a-z0-9]/g, '');
+    let galleryKey = galleryEntry?.firebaseKey || (compositeKey || cleanName).toLowerCase().replace(/[^a-z0-9]/g, '');
 
     // Resolve true gallery key if present in metadata or candidate forms
-    const candidateKeys = [
-        galleryKey,
-        normName,
-        'stores' + normName,
-        'stores_' + normName,
-        (compositeKey || '').replace(/^[a-z0-9]+_stores_?/, ''),
-        (compositeKey || '').replace(/^[a-z0-9]+_/, '')
-    ].map(k => (k || '').trim()).filter(Boolean);
+    if (!galleryEntry?.firebaseKey) {
+        const candidateKeys = [
+            galleryKey,
+            normName,
+            'stores' + normName,
+            'stores_' + normName,
+            (compositeKey || '').replace(/^[a-z0-9]+_stores_?/, ''),
+            (compositeKey || '').replace(/^[a-z0-9]+_/, '')
+        ].map(k => (k || '').trim()).filter(Boolean);
 
-    for (const k of candidateKeys) {
-        if (storeMenuMetadataMap[k] && storeMenuMetadataMap[k].pageCount > 0) {
-            galleryKey = k;
-            break;
+        for (const k of candidateKeys) {
+            if (storeMenuMetadataMap[k] && storeMenuMetadataMap[k].pageCount > 0) {
+                galleryKey = k;
+                break;
+            }
         }
     }
 
@@ -1307,22 +1415,31 @@ export async function openStoreMenuGalleryModal(storeName, compositeKey) {
     if (subEl) subEl.innerText = `Complete physical menu for ${cleanName}`;
     if (dlBtn) dlBtn.classList.add('hidden');
 
+    // 0ms INSTANT RENDER FROM IN-MEMORY CACHE
+    if (galleryEntry && Array.isArray(galleryEntry.pages) && galleryEntry.pages.length > 0) {
+        renderMenuPages(galleryEntry.pages, cleanName);
+    }
+
     modal.classList.remove('hidden');
 
-    try {
-        const cached = await idbGet('storeMenuGalleries', galleryKey);
-        if (cached && cached.pages && cached.pages.length > 0) {
-            renderMenuPages(cached.pages, cleanName);
-        }
-    } catch(e) {}
+    // If not in memory yet, check IndexedDB
+    if (!galleryEntry || !galleryEntry.pages || galleryEntry.pages.length === 0) {
+        try {
+            const cached = await idbGet('storeMenuGalleries', galleryKey);
+            if (cached && cached.pages && cached.pages.length > 0) {
+                renderMenuPages(cached.pages, cleanName);
+            }
+        } catch(e) {}
+    }
 
     if (db) {
         db.ref(`directory/storeMenuGalleries/${galleryKey}`).on('value', (snap) => {
             const val = snap.val() || {};
-            const pages = val.pages ? Object.values(val.pages) : [];
+            const pages = val.pages ? Object.values(val.pages) : (Array.isArray(val) ? val : []);
 
             pages.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
 
+            indexGalleryEntry(galleryKey, { pages, storeName: cleanName, updatedAt: val.updatedAt });
             idbSet('storeMenuGalleries', galleryKey, { pages, updatedAt: val.updatedAt || Date.now() }).catch(() => {});
             renderMenuPages(pages, cleanName);
         });
@@ -1380,7 +1497,7 @@ function renderMenuPages(pages = [], storeName = "Store") {
         return `
         <div class="bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-gray-800/80 rounded-xl p-1.5 flex flex-col gap-1.5 shadow-2xs group relative">
             <div class="relative w-full aspect-[4/3] bg-black/60 rounded-lg overflow-hidden cursor-pointer" onclick="window.openGalleryLightbox && window.openGalleryLightbox('${safeUrl}', '${escapeHtml(caption)}')">
-                <img src="${safeUrl}" alt="${escapeHtml(caption)}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
+                <img src="${safeUrl}" alt="${escapeHtml(caption)}" loading="lazy" decoding="async" class="w-full h-full object-cover group-hover:scale-105 transition duration-200">
                 <span class="absolute top-1.5 left-1.5 bg-black/75 backdrop-blur-xs text-amber-400 font-mono font-black text-[9px] px-1.5 py-0.5 rounded-md border border-amber-500/30">
                     P${pageNum}
                 </span>
@@ -1469,6 +1586,11 @@ export async function uploadSingleMenuBlob(imageBlob, captionText, storeKey, sto
 
     // Instantly update memory and cache to prevent any UI delay
     const nowTs = Date.now();
+    const existingEntry = getStoreMenuGallery(storeName, storeKey);
+    const existingPages = existingEntry && Array.isArray(existingEntry.pages) ? [...existingEntry.pages] : [];
+    existingPages.push(pagePayload);
+    indexGalleryEntry(storeKey, { storeName, pages: existingPages, updatedAt: nowTs });
+
     storeMenuMetadataMap[storeKey] = {
         pageCount: count,
         updatedAt: nowTs,
@@ -1562,6 +1684,11 @@ export async function uploadBatchMenuBlobs(items, storeKey, storeName, onProgres
             })
         ]).catch(e => console.warn('Menu meta update warning:', e));
     }
+
+    const existingEntry = getStoreMenuGallery(storeName, storeKey);
+    const existingPages = existingEntry && Array.isArray(existingEntry.pages) ? [...existingEntry.pages] : [];
+    results.forEach(r => existingPages.push(r));
+    indexGalleryEntry(storeKey, { storeName, pages: existingPages, updatedAt: nowTs });
 
     storeMenuMetadataMap[storeKey] = {
         pageCount: finalCount,
@@ -1766,9 +1893,37 @@ export async function executeSendMenuPages(targetCustId, pages, custDisplayName 
     const total = pages.length;
     showToast(`📤 Starting to send ${total} menu picture(s) to ${custDisplayName}...`);
 
-    // 1. High-Performance Pre-fetch: query customer channel details ONCE for the entire batch
+    // 1. High-Performance Instant Pre-fetch: check active in-memory chat and memory cache first (0ms)
     let prefetchedMeta = null;
-    if (db) {
+    const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') 
+        ? window.getActiveRiderChatCustId() 
+        : window.activeRiderChatCustId;
+
+    if (String(activeCustId || '').trim() === cleanCustId && window.currentRiderChatMeta) {
+        const m = window.currentRiderChatMeta;
+        if (m.apiId || m.channelId) {
+            prefetchedMeta = {
+                targetApiId: m.apiId || m.channelId,
+                custName: m.customerName || m.name || custDisplayName
+            };
+        }
+    }
+
+    if (!prefetchedMeta && typeof window.getCachedCustomerThreadsMap === 'function') {
+        const tMap = window.getCachedCustomerThreadsMap();
+        if (tMap && tMap.has(cleanCustId)) {
+            const t = tMap.get(cleanCustId);
+            if (t?.apiId || t?.channelId) {
+                prefetchedMeta = {
+                    targetApiId: t.apiId || t.channelId,
+                    custName: t.customerName || t.name || custDisplayName
+                };
+            }
+        }
+    }
+
+    // Only fallback to network query if completely absent from memory
+    if (!prefetchedMeta && db) {
         try {
             const metaSnap = await db.ref(`customerChatMeta/${cleanCustId}`).once('value');
             if (metaSnap.exists()) {
@@ -2319,38 +2474,45 @@ export async function renderChatStoreMenuPicker(searchQuery = "") {
     const container = document.getElementById('chat-store-picker-list');
     if (!container) return;
 
-    let storeList = [];
-    try {
-        const cached = await idbGet('directory', 'all_directory_records');
-        if (cached && Array.isArray(cached)) {
-            storeList = cached.filter(r => (r.type || '').toLowerCase() === 'stores');
-        }
-    } catch(e) {}
-
-    if (storeList.length === 0 && globalState.records && Array.isArray(globalState.records)) {
-        storeList = globalState.records.filter(r => (r.type || '').toLowerCase() === 'stores');
-    }
-
-    if (storeList.length === 0) {
+    // 1. High-speed in-memory store list cache
+    let storeList = cachedPickerStoreList;
+    if (!storeList || storeList.length === 0) {
         try {
-            const raw = localStorage.getItem('lokalex_directory_cache_v2');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (Array.isArray(parsed)) {
-                    storeList = parsed.filter(r => (r.type || '').toLowerCase() === 'stores');
-                }
+            const cached = await idbGet('directory', 'all_directory_records');
+            if (cached && Array.isArray(cached)) {
+                storeList = cached.filter(r => (r.type || '').toLowerCase() === 'stores');
             }
         } catch(e) {}
-    }
 
-    if (storeList.length === 0 && globalState.directoryCache && globalState.directoryCache.stores) {
-        storeList = globalState.directoryCache.stores;
+        if ((!storeList || storeList.length === 0) && globalState.records && Array.isArray(globalState.records)) {
+            storeList = globalState.records.filter(r => (r.type || '').toLowerCase() === 'stores');
+        }
+
+        if (!storeList || storeList.length === 0) {
+            try {
+                const raw = localStorage.getItem('lokalex_directory_cache_v2');
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed)) {
+                        storeList = parsed.filter(r => (r.type || '').toLowerCase() === 'stores');
+                    }
+                }
+            } catch(e) {}
+        }
+
+        if ((!storeList || storeList.length === 0) && globalState.directoryCache && globalState.directoryCache.stores) {
+            storeList = globalState.directoryCache.stores;
+        }
+
+        if (Array.isArray(storeList) && storeList.length > 0) {
+            cachedPickerStoreList = storeList;
+        } else {
+            storeList = [];
+        }
     }
 
     // DEDUPLICATION: Use a unified map keyed by normalized store name!
-    // This prevents duplicate cards (e.g. Chowking x2, Chooks To Go x2)
     const storeMap = new Map();
-    const normalizeKey = (str) => (str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
     // 1. Populate from directory store records
     storeList.forEach(s => {
@@ -2372,51 +2534,48 @@ export async function renderChatStoreMenuPicker(searchQuery = "") {
         }
     });
 
-    // 2. Merge metadata entries from Firebase RTDB (storeMenuMetadataMap)
-    Object.entries(storeMenuMetadataMap).forEach(([metaKey, meta]) => {
-        if (!meta) return;
-        const storeName = (meta.storeName || '').trim();
-        if (!storeName) return;
-        const normKey = normalizeKey(storeName);
-        const pageCount = meta.pageCount || 0;
-
-        if (storeMap.has(normKey)) {
-            const existing = storeMap.get(normKey);
-            existing.metaKey = metaKey;
-            if (pageCount > (existing.pageCount || 0)) {
-                existing.pageCount = pageCount;
-            }
-            if (meta.updatedAt) existing.updatedAt = meta.updatedAt;
+    // 2. Direct augment from in-memory galleries cache (guarantees accurate pages count & keys in 0ms)
+    storeMenuGalleriesMemoryMap.forEach((entry, k) => {
+        if (!entry || !entry.storeName) return;
+        const normName = normalizeKey(entry.storeName);
+        const count = entry.pages ? entry.pages.length : (entry.pageCount || 0);
+        if (storeMap.has(normName)) {
+            const existing = storeMap.get(normName);
+            if (count > existing.pageCount) existing.pageCount = count;
+            if (entry.firebaseKey) existing.metaKey = entry.firebaseKey;
+            if (entry.updatedAt) existing.updatedAt = entry.updatedAt;
         } else {
-            storeMap.set(normKey, {
-                name: storeName,
-                compositeKey: metaKey,
-                metaKey: metaKey,
-                pageCount: pageCount,
-                updatedAt: meta.updatedAt
+            storeMap.set(normName, {
+                name: entry.storeName,
+                compositeKey: entry.firebaseKey || normName,
+                metaKey: entry.firebaseKey || normName,
+                pageCount: count,
+                updatedAt: entry.updatedAt
             });
         }
     });
 
-    // 3. Resolve metadata keys for any stores still missing metaKey
-    storeMap.forEach((entry, normKey) => {
-        if (!entry.pageCount || !entry.metaKey) {
-            const candidateKeys = [
-                entry.metaKey,
-                normalizeKey(entry.compositeKey),
-                normKey,
-                'stores' + normKey,
-                'stores_' + normKey
-            ].filter(Boolean);
+    // 3. Merge metadata entries from storeMenuMetadataMap
+    Object.entries(storeMenuMetadataMap).forEach(([metaKey, meta]) => {
+        if (!meta || !meta.storeName) return;
+        const normKey = normalizeKey(meta.storeName);
+        const count = meta.pageCount || 0;
 
-            for (const k of candidateKeys) {
-                if (storeMenuMetadataMap[k] && storeMenuMetadataMap[k].pageCount > 0) {
-                    entry.metaKey = k;
-                    entry.pageCount = storeMenuMetadataMap[k].pageCount;
-                    if (storeMenuMetadataMap[k].updatedAt) entry.updatedAt = storeMenuMetadataMap[k].updatedAt;
-                    break;
-                }
+        if (storeMap.has(normKey)) {
+            const existing = storeMap.get(normKey);
+            if (count > (existing.pageCount || 0)) {
+                existing.pageCount = count;
             }
+            if (!existing.metaKey) existing.metaKey = meta.firebaseKey || metaKey;
+            if (meta.updatedAt) existing.updatedAt = meta.updatedAt;
+        } else {
+            storeMap.set(normKey, {
+                name: meta.storeName,
+                compositeKey: meta.firebaseKey || metaKey,
+                metaKey: meta.firebaseKey || metaKey,
+                pageCount: count,
+                updatedAt: meta.updatedAt
+            });
         }
     });
 
@@ -2534,20 +2693,26 @@ export async function quickSendStoreMenuToActiveChat(storeName, compositeKey, me
         return;
     }
 
-    showToast(`⏳ Loading ${cleanName} menu photos...`);
-
     let pages = [];
 
-    // Check if current active gallery store is already loaded for this store
-    if (activeGalleryStore && activeGalleryStore.name === cleanName && Array.isArray(currentGalleryPages) && currentGalleryPages.length > 0) {
+    // 1. FASTEST (0ms): Look up directly from in-memory galleries cache!
+    const memEntry = getStoreMenuGallery(cleanName, compositeKey, metadataKey);
+    if (memEntry && Array.isArray(memEntry.pages) && memEntry.pages.length > 0) {
+        pages = [...memEntry.pages];
+    }
+
+    // 2. Active gallery fallback if open
+    if (pages.length === 0 && activeGalleryStore && activeGalleryStore.name === cleanName && Array.isArray(currentGalleryPages) && currentGalleryPages.length > 0) {
         pages = [...currentGalleryPages];
     }
 
-    const normName = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const normComposite = (compositeKey || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-
-    // Resolve candidates & primary key with extreme priority
+    // 3. Fallback to IndexedDB / Firebase ONLY on rare cache miss
     if (pages.length === 0) {
+        showToast(`⏳ Loading ${cleanName} menu photos...`);
+
+        const normName = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normComposite = (compositeKey || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
         const candidateKeys = Array.from(new Set([
             metadataKey,
             normComposite,
@@ -2570,7 +2735,7 @@ export async function quickSendStoreMenuToActiveChat(storeName, compositeKey, me
             primaryKey = candidateKeys[0];
         }
 
-        // 1. Direct IndexedDB check for primaryKey first
+        // Direct IndexedDB check
         if (primaryKey) {
             try {
                 const cached = await idbGet('storeMenuGalleries', primaryKey);
@@ -2584,7 +2749,7 @@ export async function quickSendStoreMenuToActiveChat(storeName, compositeKey, me
             } catch (_) {}
         }
 
-        // 2. Check remaining candidate keys in IndexedDB
+        // Parallel fallback across candidate keys in IndexedDB
         if (pages.length === 0) {
             const otherKeys = candidateKeys.filter(k => k !== primaryKey);
             for (const k of otherKeys) {
@@ -2605,7 +2770,7 @@ export async function quickSendStoreMenuToActiveChat(storeName, compositeKey, me
             }
         }
 
-        // 3. If not found in IndexedDB, fetch from Firebase RTDB (single query on primaryKey)
+        // Firebase RTDB fallback query
         if (pages.length === 0 && db && primaryKey) {
             try {
                 const snap = await db.ref(`directory/storeMenuGalleries/${primaryKey}`).once('value');
@@ -2618,39 +2783,11 @@ export async function quickSendStoreMenuToActiveChat(storeName, compositeKey, me
                     }
                 }
                 if (pages.length > 0) {
+                    indexGalleryEntry(primaryKey, { pages, storeName: cleanName });
                     idbSet('storeMenuGalleries', primaryKey, { pages, updatedAt: val?.updatedAt || Date.now() }).catch(() => {});
                 }
             } catch (err) {
                 console.warn('[QuickSendMenu] Firebase fetch error on primary key ' + primaryKey + ':', err);
-            }
-        }
-
-        // 4. Parallel fallback across remaining candidate keys if primary key had no pages
-        if (pages.length === 0 && db) {
-            const remainingKeys = candidateKeys.filter(k => k !== primaryKey);
-            if (remainingKeys.length > 0) {
-                const results = await Promise.allSettled(remainingKeys.map(async (k) => {
-                    const s = await db.ref(`directory/storeMenuGalleries/${k}`).once('value');
-                    const v = s.val();
-                    if (v && typeof v === 'object') {
-                        let p = [];
-                        if (v.pages && typeof v.pages === 'object') {
-                            p = Object.entries(v.pages).map(([id, item]) => ({ id, ...(item || {}) }));
-                        } else if (Array.isArray(v)) {
-                            p = v;
-                        }
-                        if (p.length > 0) {
-                            idbSet('storeMenuGalleries', k, { pages: p, updatedAt: v?.updatedAt || Date.now() }).catch(() => {});
-                            return { key: k, pages: p };
-                        }
-                    }
-                    return null;
-                }));
-                const matched = results.find(r => r.status === 'fulfilled' && r.value?.pages?.length > 0);
-                if (matched && matched.value) {
-                    pages = matched.value.pages;
-                    primaryKey = matched.value.key;
-                }
             }
         }
     }
@@ -2665,6 +2802,7 @@ export async function quickSendStoreMenuToActiveChat(storeName, compositeKey, me
         return;
     }
 
+    // Confirmation dialog appears IMMEDIATELY in 0ms!
     const confirmed = await askMenuSendConfirmation({
         storeName: cleanName,
         pageCount: validPages.length,
@@ -2677,7 +2815,9 @@ export async function quickSendStoreMenuToActiveChat(storeName, compositeKey, me
 
     const pagesToSend = validPages.map((p, idx) => ({
         imageUrl: p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image,
-        caption: p.caption || `${cleanName} Menu • Page ${idx + 1}`
+        caption: p.caption || `${cleanName} Menu • Page ${idx + 1}`,
+        id: p.id || null,
+        metaAttachmentId: p.metaAttachmentId || p.attachmentId || null
     }));
 
     closeStoreMenuPickerFromChat();
@@ -2702,6 +2842,12 @@ export async function deleteMenuGalleryPage(pageId) {
             try {
                 localStorage.setItem('lokalex_store_menus_meta_cache', JSON.stringify(storeMenuMetadataMap));
             } catch(e) {}
+        }
+
+        const mem = getStoreMenuGallery(activeGalleryStore.name, activeGalleryStore.key);
+        if (mem && Array.isArray(mem.pages)) {
+            const updatedPages = mem.pages.filter(p => p.id !== pageId);
+            indexGalleryEntry(activeGalleryStore.key, { storeName: activeGalleryStore.name, pages: updatedPages, updatedAt: nowTs });
         }
 
         showToast("🗑️ Deleted page from gallery.");

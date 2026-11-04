@@ -232,9 +232,12 @@ export function getThreadCustomerCandidates(tOrMeta = {}, fallbackName = '', cus
             }
         }
     }
-    if (typeof document !== 'undefined') {
-        const activeChatName = document.getElementById('rider-chat-cust-name')?.innerText;
-        if (activeChatName) add(activeChatName);
+    if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+        const thisId = custId || tOrMeta?.custId || tOrMeta?.id || tOrMeta?.key || '';
+        if (thisId && window.activeRiderChatCustId && String(thisId) === String(window.activeRiderChatCustId)) {
+            const activeChatName = document.getElementById('rider-chat-cust-name')?.innerText;
+            if (activeChatName) add(activeChatName);
+        }
     }
     return candidates;
 }
@@ -244,9 +247,29 @@ export function isMyCustomerThread(t, cachedAuth = null) {
     const { myId, myName } = cachedAuth || getLoggedInRiderInfo();
     if (!myId && !myName) return false;
 
+    // 1. Live roster active catering takes ABSOLUTE precedence!
+    // If a rider is actively catering this customer on the live roster, that assignment is authoritative.
+    const activeCaterer = getActiveRosterCaterer(t.customerName, t.custId, t);
+    if (activeCaterer) {
+        const aId = (activeCaterer.telegramId || activeCaterer.id || "").toString().trim();
+        const aName = (activeCaterer.riderName || activeCaterer.name || "").toString().trim().toLowerCase();
+        if (myId && aId && myId === aId) return true;
+        if (myName && aName && (myName === aName || isRiderMatch(myName, aName, myId, aId))) return true;
+        // This customer is actively catered by ANOTHER rider on the roster (e.g. force-assigned to Allan/Marlon).
+        // It is strictly THEIR customer, NEVER mine!
+        return false;
+    }
+
     const rId = (t.cateredByRiderId || "").toString().trim();
     const rName = (t.cateredByRiderName || "").toString().trim().toLowerCase();
     const rCateredBy = (t.cateredBy || "").toString().trim().toLowerCase();
+
+    // If metadata explicitly indicates another rider is catering, it does NOT belong to me
+    const isOtherRider = (rId && myId && rId !== myId) || 
+                         (rName && myName && rName !== myName && !isRiderMatch(myName, rName, myId, rId));
+    if (isOtherRider) {
+        return false;
+    }
 
     if (myId && rId && myId === rId) return true;
     if (myName && rName && (myName === rName || isRiderMatch(myName, rName, myId, rId))) return true;

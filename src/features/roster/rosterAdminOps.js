@@ -230,8 +230,9 @@ export async function submitAdminForceCatering() {
     // Concurrently update customerChats in background without blocking status change
     if (db && custName) {
         const cleanSearchName = custName.trim().toLowerCase();
-        const selectedCustId = custSelect && custSelect.value.trim().toLowerCase() === cleanSearchName
-            ? (custSelect.selectedOptions?.[0]?.dataset?.custId || null)
+        const selectedOpt = custSelect?.selectedOptions?.[0];
+        const selectedCustId = (selectedOpt && (selectedOpt.value.trim().toLowerCase() === cleanSearchName || selectedOpt.dataset?.custId))
+            ? (selectedOpt.dataset?.custId || null)
             : null;
 
         const updateObj = {

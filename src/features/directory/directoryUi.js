@@ -74,6 +74,8 @@ import {
 } from './ui/directoryRouting.js';
 
 import {
+    storeMenuGalleriesMemoryMap,
+    getStoreMenuGallery,
     initStoreMenuGalleriesListener,
     openStoreMenuGalleryModal,
     closeStoreMenuGalleryModal,
@@ -184,6 +186,8 @@ if (typeof window !== 'undefined') {
     window.confirmAndOpenCustomerLocation = confirmAndOpenCustomerLocation;
 
     // Menu Galleries & Scanner
+    window.storeMenuGalleriesMemoryMap = storeMenuGalleriesMemoryMap;
+    window.getStoreMenuGallery = getStoreMenuGallery;
     window.initStoreMenuGalleriesListener = initStoreMenuGalleriesListener;
     window.handleOpenMenuGalleryClick = handleOpenMenuGalleryClick;
     window.openStoreMenuGalleryModal = openStoreMenuGalleryModal;

@@ -93,6 +93,28 @@ export async function loadCustomerMenuCatalog() {
         return;
     }
 
+    // 0ms instant display from preloaded memory cache if available
+    if (typeof window !== 'undefined' && window.storeMenuGalleriesMemoryMap && window.storeMenuGalleriesMemoryMap.size > 0) {
+        const seenKeys = new Set();
+        const memStores = [];
+        window.storeMenuGalleriesMemoryMap.forEach((entry) => {
+            if (entry && entry.firebaseKey && !seenKeys.has(entry.firebaseKey) && entry.pageCount > 0) {
+                seenKeys.add(entry.firebaseKey);
+                memStores.push({
+                    key: entry.firebaseKey,
+                    name: entry.storeName,
+                    pageCount: entry.pageCount,
+                    updatedAt: entry.updatedAt || 0
+                });
+            }
+        });
+        if (memStores.length > 0) {
+            memStores.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
+            cachedCatalogStores = memStores;
+            renderCustomerMenuFeed(memStores);
+        }
+    }
+
     try {
         const snap = await db.ref('directory/storeMenuGalleries').once('value');
         const val = snap.val() || {};

@@ -466,6 +466,7 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
             apiName: meta.apiName || meta.channelName || (isMessengerSource(meta, key) ? 'Camiling FB' : null),
             cateredByRiderId: isCompletedStatus ? null : (meta.cateredByRiderId || null),
             cateredByRiderName: isCompletedStatus ? null : (meta.cateredByRiderName || meta.cateredBy || null),
+            cateredBy: isCompletedStatus ? null : (meta.cateredByRiderName || meta.cateredBy || null),
             status: isApplicant ? 'active' : (meta.status || (isCompletedStatus ? 'completed' : 'active')),
             isUnread: isUnread,
             unreadForRider: meta.unreadForRider === true && !isCompletedStatus,
@@ -498,6 +499,7 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                 threadObj.status = 'active';
                 threadObj.cateredByRiderId = (activeCateringRider.telegramId || activeCateringRider.id || "").toString().trim();
                 threadObj.cateredByRiderName = (activeCateringRider.riderName || activeCateringRider.name || "Rider").toString().trim();
+                threadObj.cateredBy = threadObj.cateredByRiderName;
             }
         }
 
