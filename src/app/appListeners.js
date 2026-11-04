@@ -267,33 +267,10 @@ export function initRealtimeFirebaseListeners() {
             }
         });
 
-        // Resilient auto-sync for roster (5s): guarantees lineup sync across all devices
-        // even during momentary WebSocket dropouts or cross-tab background throttling
-        if (!window._rosterPollingInterval) {
-            window._rosterPollingInterval = setInterval(async () => {
-                if (!db) return;
-                try {
-                    const snap = await db.ref('roster').once('value');
-                    const val = snap.val();
-                    if (val && typeof val === 'object') {
-                        const members = Object.entries(val).map(([key, item]) => ({
-                            ...item,
-                            telegramId: (item.telegramId || item.id || key).toString().trim(),
-                            id: (item.telegramId || item.id || key).toString().trim()
-                        }));
-                        const prevSummary = (globalState.rosterMembers || []).map(m => `${m.id}:${m.status}:${m.customerName}`).join('|');
-                        const newSummary = members.map(m => `${m.id}:${m.status}:${m.customerName}`).join('|');
-                        if (prevSummary !== newSummary) {
-                            globalState.rosterMembers = members;
-                            if (roster && roster.saveRosterCache) roster.saveRosterCache();
-                            window.dispatchEvent(new Event('rosterUpdated'));
-                            if (typeof window.requestRosterUIRefresh === 'function') {
-                                window.requestRosterUIRefresh();
-                            }
-                        }
-                    }
-                } catch (_) {}
-            }, 5000);
+        // Zero-polling architecture: Clean up any legacy background polling
+        if (window._rosterPollingInterval) {
+            clearInterval(window._rosterPollingInterval);
+            window._rosterPollingInterval = null;
         }
 
         db.ref('blockedUsers').on('value', (snapshot) => {

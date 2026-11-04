@@ -728,38 +728,10 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         </div>`;
     }
 
-    // Fast-sync directly with Facebook Page after local memory and DOM are initialized
+    // Fast-sync directly with Facebook Page on open; real-time incoming messages stream over WebSockets
     stopFbGraphPolling();
     if (String(custId).startsWith('fb_')) {
         syncCurrentThreadFromMetaGraph(custId, false).catch(() => {});
-        // Lightweight polling interval while Facebook thread is actively open to capture messages sent from page & database
-        fbGraphPollingInterval = setInterval(() => {
-            if (activeRiderChatCustId === custId) {
-                syncCurrentThreadFromMetaGraph(custId, false).catch(() => {});
-                if (db) {
-                    db.ref(`customerChats/${custId}/messages`).orderByChild('timestamp').limitToLast(RIDER_CHAT_BATCH_SIZE).once('value').then(snap => {
-                        if (activeRiderChatCustId !== custId) return;
-                        const data = snap.val();
-                        if (data && typeof data === 'object') {
-                            const newMsgs = Object.entries(data).map(([k, m]) => ({ id: k, ...m })).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-                            let hasNew = false;
-                            newMsgs.forEach(m => {
-                                if (!loadedRiderMsgsMap.has(m.id)) {
-                                    loadedRiderMsgsMap.set(m.id, m);
-                                    hasNew = true;
-                                }
-                            });
-                            if (hasNew) {
-                                renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
-                                requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
-                            }
-                        }
-                    }).catch(() => {});
-                }
-            } else {
-                stopFbGraphPolling();
-            }
-        }, 4000);
     }
 
     // Realtime Firebase connection: strictly load only the last 10 messages for lightning-fast startup ordered by timestamp
