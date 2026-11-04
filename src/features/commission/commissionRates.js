@@ -183,32 +183,71 @@ export function checkRiderIsOvertime(dateStr, riderName = "", telegramId = "", r
     }
     const targetMins = Math.round(thresholdHours * 60);
 
-    let loginRec = null;
-    if (globalState.globalLogins && Array.isArray(globalState.globalLogins)) {
+    // 1. Locate shift record from shiftHistory, logins, or roster
+    let shiftRec = null;
+    if (globalState.shiftHistory && typeof globalState.shiftHistory === 'object') {
+        if (cleanId && globalState.shiftHistory[`${dateFormatted}_${cleanId}`]) {
+            shiftRec = globalState.shiftHistory[`${dateFormatted}_${cleanId}`];
+        } else {
+            const shifts = Object.values(globalState.shiftHistory);
+            shiftRec = shifts.find(s => 
+                s && isSameDateStr(s.date, dateFormatted) &&
+                ((cleanId && (s.riderId || s.id || "").toString().trim() === cleanId) ||
+                 (cleanName && (s.riderName || "").trim().toLowerCase() === cleanName))
+            );
+        }
+    }
+
+    let loginRec = shiftRec;
+    if (!loginRec && globalState.globalLogins && Array.isArray(globalState.globalLogins)) {
         loginRec = globalState.globalLogins.find(l => 
-            isSameDateStr(l.date, dateFormatted) &&
+            l && isSameDateStr(l.date, dateFormatted) &&
             ((cleanId && (l.riderId || l.id || "").toString().trim() === cleanId) ||
              (cleanName && (l.riderName || "").trim().toLowerCase() === cleanName))
         );
     }
 
     let rosterMem = null;
-    if (globalState.rosterMembers) {
+    if (globalState.rosterMembers && Array.isArray(globalState.rosterMembers)) {
         rosterMem = globalState.rosterMembers.find(m => 
-            (cleanId && (m.telegramId || m.id || "").toString().trim() === cleanId) ||
-            (cleanName && (m.riderName || m.name || "").trim().toLowerCase() === cleanName)
+            m && ((cleanId && (m.telegramId || m.id || "").toString().trim() === cleanId) ||
+                 (cleanName && (m.riderName || m.name || "").trim().toLowerCase() === cleanName))
         );
     }
 
-    let totalBreakMins = 0;
-    if (loginRec && loginRec.totalBreakMinutes !== undefined) {
-        totalBreakMins = parseInt(loginRec.totalBreakMinutes, 10) || 0;
-    } else if (rosterMem && rosterMem.totalBreakMinutes !== undefined) {
-        totalBreakMins = parseInt(rosterMem.totalBreakMinutes, 10) || 0;
+    // 2. Determine break time
+    // In Philippine standard work shifts and Lokalex policy, an 8h duty includes break allowance (default 60m lunch break).
+    // A rider working an 8h shift starting at 8:00 AM with breaks reaches duty threshold after 8h duty + break time (5:00 PM).
+    let loggedBreakMins = 0;
+    if (shiftRec && shiftRec.totalBreakMinutes !== undefined && shiftRec.totalBreakMinutes !== null) {
+        loggedBreakMins = parseInt(shiftRec.totalBreakMinutes, 10) || 0;
+    } else if (loginRec && loginRec.totalBreakMinutes !== undefined && loginRec.totalBreakMinutes !== null) {
+        loggedBreakMins = parseInt(loginRec.totalBreakMinutes, 10) || 0;
+    } else if (rosterMem && rosterMem.totalBreakMinutes !== undefined && rosterMem.totalBreakMinutes !== null) {
+        if (!dateFormatted || isSameDateStr(rosterMem.breakDate, dateFormatted)) {
+            loggedBreakMins = parseInt(rosterMem.totalBreakMinutes, 10) || 0;
+        }
     }
 
-    let loginTimestamp = loginRec?.loginTimestamp || rosterMem?.loginTimestamp || null;
-    let loginTimeStr = loginRec?.loginTime || rosterMem?.loginTime || rosterMem?.startTime || rosterMem?.timeIn || "";
+    let standardBreakMins = 60;
+    if (globalState.breakSettings && globalState.breakSettings.dailyAllowanceMinutes !== undefined) {
+        standardBreakMins = parseInt(globalState.breakSettings.dailyAllowanceMinutes, 10) || 60;
+    }
+    if (targetMins < 480) {
+        standardBreakMins = Math.round(targetMins * (standardBreakMins / 480));
+    }
+
+    // Sanitize break: cap runaway/unended break values at max 120m so corrupted numbers don't void overtime
+    const validLoggedBreak = Math.max(0, Math.min(loggedBreakMins, 120));
+    // A rider is entitled to their breaks (minimum standardBreakMins like 60m lunch break)
+    const totalBreakMins = Math.max(standardBreakMins, validLoggedBreak);
+
+    // 3. Determine login / start time
+    let loginTimestamp = shiftRec?.loginTimestamp || loginRec?.loginTimestamp || (rosterMem?.loginTimestamp && isSameDateStr(rosterMem.breakDate, dateFormatted) ? rosterMem.loginTimestamp : null);
+    let loginTimeStr = shiftRec?.loginTime || loginRec?.loginTime || "";
+    if (!loginTimeStr && rosterMem && isSameDateStr(rosterMem.breakDate, dateFormatted)) {
+        loginTimeStr = rosterMem.loginTime || rosterMem.startTime || rosterMem.timeIn || "";
+    }
 
     // Fallback 1: check timeInSchedule if loginTime not explicitly found
     if (!loginTimeStr && !loginTimestamp) {
@@ -244,6 +283,11 @@ export function checkRiderIsOvertime(dateStr, riderName = "", telegramId = "", r
         }
     }
 
+    // Default to 8:00 AM if still empty (official opening time)
+    if (!loginTimeStr && !loginTimestamp) {
+        loginTimeStr = "08:00 AM";
+    }
+
     if (!loginTimestamp && loginTimeStr) {
         const parsedMins = parseTimeToMinutes(loginTimeStr);
         if (parsedMins !== null) {
@@ -275,7 +319,20 @@ export function checkRiderIsOvertime(dateStr, riderName = "", telegramId = "", r
             orderTimestamp = receiptTimeOrItem;
         }
 
-        // Check by timestamp difference if available
+        // Primary: Check by clock time string (immune to timezone/timestamp skew)
+        if (orderTimeStr) {
+            const orderMins = parseTimeToMinutes(orderTimeStr);
+            const loginMins = loginTimeStr ? parseTimeToMinutes(loginTimeStr) : null;
+            if (orderMins !== null && loginMins !== null) {
+                let grossMins = orderMins - loginMins;
+                // An order completed before shift login can NEVER be overtime (e.g. dummy '00:00')
+                if (grossMins < 0) return false;
+                const netMins = Math.max(0, grossMins - totalBreakMins);
+                return netMins >= targetMins;
+            }
+        }
+
+        // Secondary: Check by timestamp difference if available
         if (orderTimestamp && loginTimestamp) {
             const grossMins = Math.floor((orderTimestamp - loginTimestamp) / 60000);
             if (grossMins < 0) return false;
@@ -283,20 +340,7 @@ export function checkRiderIsOvertime(dateStr, riderName = "", telegramId = "", r
             return netMins >= targetMins;
         }
 
-        // Check by string clock time
-        if (orderTimeStr) {
-            const orderMins = parseTimeToMinutes(orderTimeStr);
-            const loginMins = loginTimeStr ? parseTimeToMinutes(loginTimeStr) : null;
-            if (orderMins !== null && loginMins !== null) {
-                let grossMins = orderMins - loginMins;
-                if (grossMins < 0) grossMins += 1440;
-                const netMins = Math.max(0, grossMins - totalBreakMins);
-                return netMins >= targetMins;
-            }
-        }
-
         // If order time was provided but could not be parsed or was within duty:
-        // Strictly return false! Do NOT mark orders within scheduled duty as overtime.
         return false;
     }
 
@@ -305,14 +349,30 @@ export function checkRiderIsOvertime(dateStr, riderName = "", telegramId = "", r
     const now = Date.now();
     const isToday = isSameDateStr(dateFormatted, getLocalTodayStr());
 
-    if (isToday && loginTimestamp) {
+    if (isToday) {
         let activeBreakMins = totalBreakMins;
         if (rosterMem?.status === 'Break' && rosterMem.breakTimestamp) {
             activeBreakMins += Math.max(0, Math.floor((now - rosterMem.breakTimestamp) / 60000));
         }
-        const grossMins = Math.max(0, Math.floor((now - loginTimestamp) / 60000));
-        const netMins = Math.max(0, grossMins - activeBreakMins);
-        return netMins >= targetMins;
+
+        if (loginTimeStr) {
+            const loginMins = parseTimeToMinutes(loginTimeStr);
+            const currentD = new Date();
+            const currentMins = currentD.getHours() * 60 + currentD.getMinutes();
+            if (loginMins !== null) {
+                let grossMins = currentMins - loginMins;
+                if (grossMins < 0) return false;
+                const netMins = Math.max(0, grossMins - activeBreakMins);
+                return netMins >= targetMins;
+            }
+        }
+
+        if (loginTimestamp) {
+            const grossMins = Math.max(0, Math.floor((now - loginTimestamp) / 60000));
+            if (grossMins < 0) return false;
+            const netMins = Math.max(0, grossMins - activeBreakMins);
+            return netMins >= targetMins;
+        }
     }
 
     return false;
@@ -544,14 +604,16 @@ export async function fetchCommissionSettings() {
             if (window.refreshCommissionView) window.refreshCommissionView();
         });
 
-        db.ref('logins')
-            .orderByChild('date')
-            .equalTo(todayStr)
-            .on('value', (snapshot) => {
-                const val = snapshot.val();
-                globalState.globalLogins = val ? Object.values(val) : [];
-                if (window.refreshCommissionView) window.refreshCommissionView();
-            });
+        db.ref('logins').on('value', (snapshot) => {
+            const val = snapshot.val();
+            globalState.globalLogins = val ? Object.values(val) : [];
+            if (window.refreshCommissionView) window.refreshCommissionView();
+        });
+
+        db.ref('shiftHistory').limitToLast(500).on('value', (snapshot) => {
+            globalState.shiftHistory = snapshot.val() || {};
+            if (window.refreshCommissionView) window.refreshCommissionView();
+        });
     }
 }
 
