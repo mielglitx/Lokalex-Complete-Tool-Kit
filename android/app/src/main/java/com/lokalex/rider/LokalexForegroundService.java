@@ -56,7 +56,7 @@ public class LokalexForegroundService extends Service {
 
     // Supabase REST endpoint for dual-monitoring incoming chats
     private static final String SUPABASE_META_QUERY_URL =
-            "https://brdvugzjhkimcyabptcw.supabase.co/rest/v1/customer_chat_meta?select=*&order=last_updated.desc&limit=35";
+            "https://brdvugzjhkimcyabptcw.supabase.co/rest/v1/customer_chat_meta?select=*&order=updated_at.desc&limit=35";
     private static final String SUPABASE_ANON_KEY =
             "sb_publishable_7wn7gV5RvuKWE2kGLRmaTQ_fgIC579K";
 
@@ -167,12 +167,15 @@ public class LokalexForegroundService extends Service {
 
             // 2. Query Supabase directly in Java with lightweight incremental timestamp query
             try {
-                String sbUrlStr = SUPABASE_META_QUERY_URL;
+                String sbUrlStr;
                 if (!isInitialCheck && lastKnownMsgTimestamp > 0) {
-                    sbUrlStr = "https://brdvugzjhkimcyabptcw.supabase.co/rest/v1/customer_chat_meta?select=*&last_updated=gt."
-                            + lastKnownMsgTimestamp + "&order=last_updated.desc&limit=10";
+                    java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
+                    sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                    String isoTime = sdf.format(new java.util.Date(lastKnownMsgTimestamp));
+                    sbUrlStr = "https://brdvugzjhkimcyabptcw.supabase.co/rest/v1/customer_chat_meta?select=*&updated_at=gt."
+                            + java.net.URLEncoder.encode(isoTime, "UTF-8") + "&order=updated_at.desc&limit=10";
                 } else {
-                    sbUrlStr = "https://brdvugzjhkimcyabptcw.supabase.co/rest/v1/customer_chat_meta?select=*&order=last_updated.desc&limit=25";
+                    sbUrlStr = "https://brdvugzjhkimcyabptcw.supabase.co/rest/v1/customer_chat_meta?select=*&order=updated_at.desc&limit=25";
                 }
 
                 URL sbUrl = new URL(sbUrlStr);
