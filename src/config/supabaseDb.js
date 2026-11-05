@@ -686,9 +686,26 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           if (eventType === 'value') {
             if (subRecord.tableCache && childKey) {
               if (val === null || eventPayload.payload?.action === 'remove') {
-                subRecord.tableCache.delete(childKey);
+                if (segments.length <= 2) {
+                  subRecord.tableCache.delete(childKey);
+                } else if (subRecord.tableCache.has(childKey)) {
+                  const existingRow = subRecord.tableCache.get(childKey);
+                  if (existingRow && typeof existingRow === 'object') {
+                    const rowObj = { ...existingRow };
+                    delete rowObj[segments[2]];
+                    subRecord.tableCache.set(childKey, rowObj);
+                  }
+                }
               } else {
-                subRecord.tableCache.set(childKey, val);
+                if (segments.length <= 2) {
+                  subRecord.tableCache.set(childKey, val);
+                } else if (subRecord.tableCache.has(childKey)) {
+                  const existingRow = subRecord.tableCache.get(childKey);
+                  if (existingRow && typeof existingRow === 'object') {
+                    const rowObj = { ...existingRow, [segments[2]]: val };
+                    subRecord.tableCache.set(childKey, rowObj);
+                  }
+                }
               }
               clearTimeout(subRecord.debounceTimer);
               subRecord.debounceTimer = setTimeout(() => {

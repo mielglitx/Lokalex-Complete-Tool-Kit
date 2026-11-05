@@ -349,13 +349,6 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
 
         await rosterRef.update(sanitizedRosterData);
 
-        // Clean legacy GPS attributes from roster node
-        rosterRef.child('lat').remove().catch(() => {});
-        rosterRef.child('lng').remove().catch(() => {});
-        rosterRef.child('accuracy').remove().catch(() => {});
-        rosterRef.child('availableLocation').remove().catch(() => {});
-        rosterRef.child('locationUpdatedAt').remove().catch(() => {});
-
         const fb = window.firebase || (typeof firebase !== 'undefined' ? firebase : null);
         if (typeof rosterRef?.onDisconnect === 'function') {
             try {

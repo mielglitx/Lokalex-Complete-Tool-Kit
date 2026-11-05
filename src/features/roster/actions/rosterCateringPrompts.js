@@ -12,7 +12,8 @@ import {
     canManageRoster, 
     saveRosterCache,
     sanitizeFirebaseKey,
-    isCustomerMatch
+    isCustomerMatch,
+    isRiderMatch
 } from '../rosterUtils.js';
 import { updateRosterUI } from '../rosterUI.js';
 import { canRiderTakeMoreBookings } from '../rosterStatusLimits.js';
@@ -150,9 +151,9 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
 
         let myRecord = liveRoster.find(m => {
             const mId = (m.telegramId || m.id || "").toString().trim();
-            const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+            const mName = (m.riderName || m.name || "").toString().trim();
             if (currentId && mId && mId === currentId) return true;
-            if (currentName && mName && mName === currentName.toLowerCase()) return true;
+            if (currentName && mName && (currentName.toLowerCase() === mName.toLowerCase() || isRiderMatch(currentName, mName, currentId, mId))) return true;
             return false;
         });
 
