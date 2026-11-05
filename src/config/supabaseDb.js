@@ -469,6 +469,37 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           // Standard table full list read
           let query = client.from(pathInfo.table).select('id, data');
 
+          // 1. Push equalTo filter down to PostgREST so queries never hit the default 1000-row truncate
+          if (ref._query.equalTo !== undefined && ref._query.orderBy) {
+            const field = ref._query.orderBy;
+            const eqVal = String(ref._query.equalTo);
+            if (pathInfo.table === 'receipts' && (field === 'date' || field === 'completedDate')) {
+              query = query.or(`data->>date.eq.${eqVal},data->>completedDate.eq.${eqVal}`);
+            } else if (pathInfo.table === 'catered_history' && (field === 'completedDate' || field === 'date')) {
+              query = query.or(`data->>completedDate.eq.${eqVal},data->>date.eq.${eqVal}`);
+            } else if (field === 'transactionId') {
+              query = query.or(`id.eq.${eqVal},data->>transactionId.eq.${eqVal}`);
+            } else if (field === 'phoneNumber') {
+              query = query.or(`id.eq.${eqVal},data->>phoneNumber.eq.${eqVal}`);
+            } else if (field === 'username') {
+              query = query.or(`id.eq.${eqVal},data->>username.eq.${eqVal}`);
+            } else {
+              query = query.eq(`data->>${field}`, eqVal);
+            }
+          }
+
+          // 2. Push startAt/endAt range queries down to PostgREST
+          if (ref._query.orderBy && (ref._query.startAt !== undefined || ref._query.endAt !== undefined)) {
+            const field = ref._query.orderBy;
+            if (ref._query.startAt !== undefined) {
+              query = query.gte(`data->>${field}`, String(ref._query.startAt));
+            }
+            if (ref._query.endAt !== undefined) {
+              query = query.lte(`data->>${field}`, String(ref._query.endAt));
+            }
+          }
+
+          // 3. Ordering and Limits
           if (ref._query.limit && ref._query.limitType === 'last') {
             if (pathInfo.table === 'advanced_orders' || pathInfo.table === 'receipts') {
               query = query.order('created_at', { ascending: false }).limit(ref._query.limit);
@@ -496,6 +527,15 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           } else if (pathInfo.table === 'customer_chat_meta') {
             // Data optimization: prevent unbounded full-table scan on customer_chat_meta
             query = query.order('updated_at', { ascending: false }).limit(80);
+          } else if (!ref._query.equalTo) {
+            // When querying entire table without limit or equalTo, order descending by newest first
+            if (pathInfo.table === 'advanced_orders' || pathInfo.table === 'receipts') {
+              query = query.order('created_at', { ascending: false });
+            } else if (pathInfo.table === 'catered_history') {
+              query = query.order('completed_at', { ascending: false, nullsFirst: false });
+            } else if (pathInfo.table === 'logins') {
+              query = query.order('logged_at', { ascending: false });
+            }
           }
 
           const { data, error } = await query;
@@ -510,14 +550,18 @@ export function createSupabaseRef(rawPath, queryState = {}) {
               result[row.id] = val;
             });
 
-            // Filter if equalTo query specified
+            // Filter if equalTo query specified (ensure secondary safety match in memory)
             if (ref._query.equalTo !== undefined && ref._query.orderBy) {
               const field = ref._query.orderBy;
-              const eqVal = ref._query.equalTo;
+              const eqVal = String(ref._query.equalTo);
               const filtered = {};
               for (const [k, v] of Object.entries(result)) {
-                if (v && v[field] === eqVal) {
-                  filtered[k] = v;
+                if (v) {
+                  const itemVal = v[field] !== undefined ? String(v[field]) : (v.data && v.data[field] !== undefined ? String(v.data[field]) : null);
+                  const altVal = (field === 'date' && v.completedDate) ? String(v.completedDate) : ((field === 'completedDate' && v.date) ? String(v.date) : null);
+                  if (itemVal === eqVal || altVal === eqVal) {
+                    filtered[k] = v;
+                  }
                 }
               }
               result = filtered;
