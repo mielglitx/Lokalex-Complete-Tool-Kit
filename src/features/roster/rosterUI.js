@@ -58,8 +58,6 @@ if (typeof window !== 'undefined') {
     });
 
     window.addEventListener('rosterUpdated', rosterLineupView.updateRosterUI);
-    window.addEventListener('cateredUpdated', rosterFeeds.loadGlobalCateredList);
-    window.addEventListener('receiptsUpdated', rosterFeeds.loadGlobalCateredList);
     window.addEventListener('loginsUpdated', rosterFeeds.loadGlobalLoginList);
 
     if (document.readyState === 'loading') {

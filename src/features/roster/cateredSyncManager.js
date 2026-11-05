@@ -33,6 +33,7 @@ function scheduleBatchedSyncEvents({ catered = false, receipts = false, roster =
     if (updateBatchTimer) return;
     updateBatchTimer = setTimeout(() => {
         updateBatchTimer = null;
+        invalidateRosterGrossCache();
         if (pendingCatered) {
             window.dispatchEvent(new Event('cateredUpdated'));
             pendingCatered = false;
@@ -45,7 +46,7 @@ function scheduleBatchedSyncEvents({ catered = false, receipts = false, roster =
             window.dispatchEvent(new Event('rosterUpdated'));
             pendingRoster = false;
         }
-    }, 120);
+    }, 60);
 }
 
 const CATERED_IDB_KEY = 'all_catered_history';
@@ -138,7 +139,6 @@ export function initCateredDeltaSync() {
         }
 
         globalState.globalCateredHistory = current;
-        invalidateRosterGrossCache();
         debouncedPersistToIndexedDB();
 
         scheduleBatchedSyncEvents({ catered: true, roster: true });
@@ -173,7 +173,6 @@ export function initCateredDeltaSync() {
         }
 
         globalState.globalCateredHistory = current;
-        invalidateRosterGrossCache();
         debouncedPersistToIndexedDB();
 
         scheduleBatchedSyncEvents({ catered: true, roster: true });
@@ -185,7 +184,6 @@ export function initCateredDeltaSync() {
         const current = globalState.globalCateredHistory || [];
         globalState.globalCateredHistory = current.filter(h => (h.transactionId || h.id) !== key);
 
-        invalidateRosterGrossCache();
         debouncedPersistToIndexedDB();
 
         scheduleBatchedSyncEvents({ catered: true, roster: true });
@@ -222,7 +220,6 @@ export function initReceiptsDeltaSync() {
         }
 
         globalState.globalDailyReceipts = current;
-        invalidateRosterGrossCache();
         debouncedPersistToIndexedDB();
 
         scheduleBatchedSyncEvents({ receipts: true, roster: true });
@@ -249,7 +246,6 @@ export function initReceiptsDeltaSync() {
         }
 
         globalState.globalDailyReceipts = current;
-        invalidateRosterGrossCache();
         debouncedPersistToIndexedDB();
 
         scheduleBatchedSyncEvents({ receipts: true, roster: true });
@@ -260,7 +256,6 @@ export function initReceiptsDeltaSync() {
         const current = globalState.globalDailyReceipts || [];
         globalState.globalDailyReceipts = current.filter(r => (r.transactionId || r.id) !== key);
 
-        invalidateRosterGrossCache();
         debouncedPersistToIndexedDB();
 
         scheduleBatchedSyncEvents({ receipts: true, roster: true });

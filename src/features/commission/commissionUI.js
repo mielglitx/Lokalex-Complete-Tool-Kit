@@ -93,7 +93,13 @@ export function initCommissionLiveListeners() {
         });
 }
 
-initCommissionLiveListeners();
+if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+    const activeRole = (localStorage.getItem('lokalex_active_role') || localStorage.getItem('userType') || '').toLowerCase();
+    const hasRiderSession = Boolean(localStorage.getItem('telegramId') || localStorage.getItem('riderId') || localStorage.getItem('riderName'));
+    if (hasRiderSession && activeRole !== 'customer') {
+        initCommissionLiveListeners();
+    }
+}
 
 export async function fetchCommissionData(specificDate = null) {
     if (!db) return;

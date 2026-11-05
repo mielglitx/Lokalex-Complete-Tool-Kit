@@ -94,6 +94,9 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
     const rosterMembers = globalState.rosterMembers || [];
     const cleanTargetId = (targetId || "").toString().trim();
     const cleanTargetName = (targetName || "").toString().trim().toLowerCase();
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+    const isMe = Boolean((myId && cleanTargetId && myId === cleanTargetId) || (myName && cleanTargetName && myName === cleanTargetName));
 
     let targetRecord = rosterMembers.find(m => {
         const mId = (m.telegramId || m.id || "").toString().trim();
@@ -187,7 +190,6 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
 
     if (!hasReceipt) {
         showToast(`⚠️ Please create a receipt for ${custNameToComplete} before marking as Done!`);
-        const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
         if (resolvedTargetId === myId) {
             if (typeof window.syncSmartCartsWithCateringCustomers === 'function') {
                 window.syncSmartCartsWithCateringCustomers();

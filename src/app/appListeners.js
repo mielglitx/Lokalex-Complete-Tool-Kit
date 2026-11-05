@@ -321,6 +321,9 @@ export function initRealtimeFirebaseListeners() {
         if (roster && roster.initLocalFirstCateredSync) {
             roster.initLocalFirstCateredSync();
         }
+        if (commission && typeof commission.initCommissionLiveListeners === 'function') {
+            commission.initCommissionLiveListeners();
+        }
 
         let isInitialAdvLoad = true;
         const knownAdvOrderKeys = new Set();

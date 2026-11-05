@@ -82,7 +82,11 @@ export function loadGlobalCateredList(forceFresh = false) {
     if (badge) badge.innerText = `${todayHistory.length} recorded`;
 
     if (todayHistory.length === 0) {
-        feed.innerHTML = `<div class="text-gray-500 dark:text-gray-400 italic text-center py-4 text-xs">No completed catered customers yet today.</div>`;
+        const emptyHtml = `<div class="text-gray-500 dark:text-gray-400 italic text-center py-4 text-xs">No completed catered customers yet today.</div>`;
+        if (feed._lastRenderedHtml !== emptyHtml || feed.children.length === 0) {
+            feed.innerHTML = emptyHtml;
+            feed._lastRenderedHtml = emptyHtml;
+        }
         return;
     }
 
@@ -114,7 +118,7 @@ export function loadGlobalCateredList(forceFresh = false) {
 
     const isAdminUser = isAdmin();
 
-    feed.innerHTML = todayHistory.map(h => {
+    const newHtml = todayHistory.map(h => {
         let voidBtn = "";
         const recordTxId = (h.transactionId || h.id || "").toString().trim();
         const cDate = h.date || h.completedDate || todayStr;
@@ -236,6 +240,11 @@ export function loadGlobalCateredList(forceFresh = false) {
             </div>
         </div>`;
     }).join('');
+
+    if (feed._lastRenderedHtml !== newHtml || feed.children.length === 0) {
+        feed.innerHTML = newHtml;
+        feed._lastRenderedHtml = newHtml;
+    }
 }
 
 export function loadGlobalLoginList() {
@@ -266,11 +275,15 @@ export function loadGlobalLoginList() {
     if (badge) badge.innerText = `${todayLogins.length} ${todayLogins.length === 1 ? 'login' : 'logins'}`;
 
     if (todayLogins.length === 0) {
-        feed.innerHTML = `<div class="text-gray-500 dark:text-gray-400 italic text-center py-2 text-xs">No logins recorded yet today.</div>`;
+        const emptyLoginHtml = `<div class="text-gray-500 dark:text-gray-400 italic text-center py-2 text-xs">No logins recorded yet today.</div>`;
+        if (feed._lastRenderedHtml !== emptyLoginHtml || feed.children.length === 0) {
+            feed.innerHTML = emptyLoginHtml;
+            feed._lastRenderedHtml = emptyLoginHtml;
+        }
         return;
     }
 
-    feed.innerHTML = todayLogins.slice().reverse().map(l => {
+    const newLoginHtml = todayLogins.slice().reverse().map(l => {
         let mapBtn = "";
         if (l.location) {
             mapBtn = `<a href="${escapeHtml(l.location)}" target="_blank" class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold underline flex items-center gap-1 mt-0.5 active:opacity-60"><i class="fa-solid fa-location-dot text-red-500 text-[9px]"></i> View Pin Location</a>`;
@@ -290,6 +303,11 @@ export function loadGlobalLoginList() {
             </div>
         </div>`;
     }).join('');
+
+    if (feed._lastRenderedHtml !== newLoginHtml || feed.children.length === 0) {
+        feed.innerHTML = newLoginHtml;
+        feed._lastRenderedHtml = newLoginHtml;
+    }
 }
 
 if (typeof window !== 'undefined') {

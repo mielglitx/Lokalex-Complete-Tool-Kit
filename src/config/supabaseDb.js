@@ -1306,15 +1306,22 @@ export function createSupabaseRef(rawPath, queryState = {}) {
 
         let bPath = rawPath;
         let bVal = values;
+        let skipBroadcast = false;
 
         // Single-path object merge
         if (pathInfo.isEphemeral) {
           writeEphemeralNode(pathInfo, values, 'update');
-        } else if (pathInfo.isCustomerChats) {
-          const res = await handleCustomerChatsUpdate(client, pathInfo, values);
+        } else if (pathInfo.isCustomerChats || (pathInfo.table === 'customer_chat_meta' && pathInfo.id && pathInfo.subPath.length === 0)) {
+          const metaPathInfo = pathInfo.isCustomerChats
+            ? pathInfo
+            : { custId: pathInfo.id, subType: 'metadata', targetId: null, subPath: [] };
+          const res = await handleCustomerChatsUpdate(client, metaPathInfo, values);
           if (res && res.broadcastPath) {
             bPath = res.broadcastPath;
             bVal = res.broadcastValue;
+          }
+          if (res && res.skippedDuplicate) {
+            skipBroadcast = true;
           }
         } else if (pathInfo.isStoreRiderChats) {
           await handleStoreRiderChatsUpdate(client, pathInfo, values);
@@ -1359,7 +1366,9 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         }
 
         // Broadcast change event with full merged state
-        broadcastMutation(client, pathInfo.table, bPath, bVal, 'update');
+        if (!skipBroadcast) {
+          broadcastMutation(client, pathInfo.table, bPath, bVal, 'update');
+        }
 
         if (typeof onComplete === 'function') onComplete(null);
       } catch (err) {
@@ -1379,7 +1388,7 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         if (rawPath === 'directory/storeMenuGalleries' || rawPath.startsWith('directory/storeMenuGalleries/')) {
           const fbDb = (typeof window !== 'undefined' && (window.primaryDb || window.firebaseDb)) ? (window.primaryDb || window.firebaseDb) : null;
           if (fbDb && typeof fbDb.ref === 'function') {
-            await fbDb.ref(rawPath).set(value);
+            await fbDb.ref(rawPath).remove();
           }
           if (typeof onComplete === 'function') onComplete(null);
           return;
@@ -1941,6 +1950,8 @@ async function handleCustomerChatsSet(client, pathInfo, value) {
   }
 }
 
+const recentCustomerMetaCache = new Map();
+
 async function handleCustomerChatsUpdate(client, pathInfo, values) {
   const { custId, subType, targetId } = pathInfo;
 
@@ -1967,8 +1978,23 @@ async function handleCustomerChatsUpdate(client, pathInfo, values) {
       };
     });
   } else {
-    // Metadata update (default for customerChats/<custId>/metadata or customerChats/<custId>)
+    // Metadata update (default for customerChats/<custId>/metadata, customerChats/<custId>, or customerChatMeta/<custId>)
     return await runExclusive(`customer_chat_meta:${custId}`, async () => {
+      const recent = recentCustomerMetaCache.get(custId);
+      if (recent && (Date.now() - recent.time) < 1500 && recent.data && typeof values === 'object') {
+        const isIdentical = Object.entries(values).every(([k, v]) => {
+          return JSON.stringify(recent.data[k]) === JSON.stringify(v);
+        });
+        if (isIdentical) {
+          return {
+            skippedDuplicate: true,
+            broadcastPath: `customerChatMeta/${custId}`,
+            broadcastValue: recent.data,
+            broadcastAction: 'update'
+          };
+        }
+      }
+
       const { data: existing } = await client.from('customer_chat_meta').select('data').eq('id', custId).maybeSingle();
       const current = (existing && existing.data) ? { ...existing.data } : {};
       const merged = { ...current, ...values };
@@ -1977,6 +2003,7 @@ async function handleCustomerChatsUpdate(client, pathInfo, values) {
         client.from('customer_chat_meta').upsert({ id: custId, data: merged, updated_at: new Date().toISOString() }, { onConflict: 'id' }),
         client.from('customer_chats').upsert({ id: `${custId}_metadata`, room_id: custId, data: merged }, { onConflict: 'id' })
       ]);
+      recentCustomerMetaCache.set(custId, { data: merged, time: Date.now() });
       return {
         broadcastPath: `customerChatMeta/${custId}`,
         broadcastValue: merged,
