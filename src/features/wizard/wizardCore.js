@@ -6,6 +6,7 @@ import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { switchView } from '../../ui/router.js';
 import { saveCartState, renderCartItems, renderCartTabs } from '../cart.js';
 import { getActiveCateringCustomersWithTimes, calculateSplitDuration, saveRosterCache, updateRosterUI } from '../roster/index.js';
+import { isCustomerMatch, invalidateRosterGrossCache } from '../roster/rosterUtils.js';
 import { calculateGrandTotal, updateDiscountTypeUI } from './wizardCalc.js';
 import { renderFinalReceiptText } from './wizardTextReceipt.js';
 import { renderReceiptCanvas, formatShortRef } from './wizardImageReceipt.js';
@@ -82,15 +83,41 @@ export async function saveReceiptToDatabase(customerName) {
 
     const cName = customerName.trim();
     const cleanCustKey = sanitizeFirebaseKey(cName);
-    const rName = (appState.riderName || "").trim();
-    const cleanRiderKey = rName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    let rName = (appState.riderName || localStorage.getItem('riderName') || "").trim();
+    let telegramId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
     const todayStr = getLocalTodayStr();
     const todayClean = todayStr.replace(/-/g, '');
     const currentTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const activeCustList = getActiveCateringCustomersWithTimes();
-    const match = activeCustList.find(i => i.name.trim().toLowerCase() === cName.toLowerCase());
-    const sTime = match ? match.startTime.trim() : currentTimeStr;
+    let match = activeCustList.find(i => i.name.trim().toLowerCase() === cName.toLowerCase() || isCustomerMatch(i.name, cName));
+
+    if (!match && globalState.rosterMembers && Array.isArray(globalState.rosterMembers)) {
+        const cateringMember = globalState.rosterMembers.find(m => {
+            if (!m || m.status !== 'Catering') return false;
+            if (m.customerName) {
+                const names = m.customerName.split(',').map(s => s.trim()).filter(Boolean);
+                if (names.some(n => n.toLowerCase() === cName.toLowerCase() || isCustomerMatch(n, cName))) return true;
+            }
+            if (m.forcedCaters && typeof m.forcedCaters === 'object') {
+                for (const [fKey, fVal] of Object.entries(m.forcedCaters)) {
+                    const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
+                    if (fName && (fName.trim().toLowerCase() === cName.toLowerCase() || isCustomerMatch(fName, cName))) return true;
+                }
+            }
+            return false;
+        });
+        if (cateringMember) {
+            rName = (cateringMember.riderName || cateringMember.name || rName).trim();
+            telegramId = (cateringMember.telegramId || cateringMember.id || telegramId).toString().trim();
+            if (cateringMember.startTime) {
+                match = { name: cName, startTime: cateringMember.startTime };
+            }
+        }
+    }
+
+    const cleanRiderKey = rName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const sTime = match && match.startTime ? match.startTime.trim() : currentTimeStr;
     const cleanTimeKey = sTime.replace(/[^a-z0-9]/gi, '');
     const custCount = Math.max(1, activeCustList.length || 1);
     const splitDuration = calculateSplitDuration(sTime, currentTimeStr, custCount);
@@ -116,7 +143,7 @@ export async function saveReceiptToDatabase(customerName) {
         type: "receipts",
         transactionId: generatedTxId,
         shortRef: shortRef,
-        telegramId: (appState.telegramId || "").toString().trim(),
+        telegramId: telegramId,
         riderName: rName,
         customerName: cName,
         cateringStartTime: sTime,
@@ -143,7 +170,7 @@ export async function saveReceiptToDatabase(customerName) {
         if (db) {
             await db.ref('receipts/' + generatedTxId).set(receiptPayload);
 
-            const riderKey = (appState.telegramId || appState.riderName || "rider").toString().replace(/[^a-zA-Z0-9_-]/g, '_');
+            const riderKey = (telegramId || rName || "rider").toString().replace(/[^a-zA-Z0-9_-]/g, '_');
             db.ref('roster/' + riderKey).update({
                 lastReceiptFees: receiptPayload.fees,
                 lastReceiptTotalFees: totalFees
@@ -166,6 +193,7 @@ export async function saveReceiptToDatabase(customerName) {
         if (rIdx !== -1) globalState.globalDailyReceipts[rIdx] = receiptPayload;
         else globalState.globalDailyReceipts.push(receiptPayload);
 
+        invalidateRosterGrossCache();
         saveRosterCache();
         updateRosterUI();
 
@@ -177,7 +205,7 @@ export async function saveReceiptToDatabase(customerName) {
     }
 }
 
-export function completeReceiptDone() {
+export function completeReceiptDone(customerNameOverride = null) {
     const activeCartIdx = globalState.activeCartIndex || 0;
     const activeSlot = activeCartIdx + 1;
 
@@ -194,6 +222,7 @@ export function completeReceiptDone() {
     }
 
     const totalFees = Math.max(0, (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0));
+    const resolvedCustName = (customerNameOverride || document.getElementById('rcpt-name')?.value.trim() || appState.selectedCateringClient || multiCarts[activeSlot]?.customerName || "Customer").trim();
 
     multiCarts[activeSlot].receiptSummary = {
         subtotal: wizState.subtotal || 0,
@@ -201,7 +230,7 @@ export function completeReceiptDone() {
         deliveryFee: wizState.deliveryFee || 0,
         codTotal: wizState.codTotal || wizState.finalTotal || 0,
         gcashTotal: wizState.gcashTotal || 0,
-        customerName: document.getElementById('rcpt-name')?.value.trim() || appState.selectedCateringClient || "Customer",
+        customerName: resolvedCustName,
         txId: currentTx,
         shortRef: formatShortRef(currentTx),
         timestamp: Date.now()

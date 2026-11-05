@@ -24,7 +24,7 @@ import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { escapeHtml } from '../../utils/helpers.js';
 import { currentReceiptDataUrl, currentReceiptCanvas, formatShortRef, renderReceiptCanvas } from './wizardImageReceipt.js';
 import { renderFinalReceiptText } from './wizardTextReceipt.js';
-import { saveReceiptToDatabase } from './wizardCore.js';
+import { saveReceiptToDatabase, completeReceiptDone } from './wizardCore.js';
 import { calculateGrandTotal } from './wizardCalc.js';
 import { forwardRiderReplyToMessenger } from '../chat/riderChat.js';
 import { getActiveCateringCustomersWithTimes } from '../roster/index.js';
@@ -61,6 +61,14 @@ export async function sendReceiptDirectlyFromWizard() {
         const activeCartIdx = globalState.activeCartIndex || 0;
         customerName = (multiCarts && multiCarts[activeCartIdx + 1]?.customerName) || appState.selectedCateringClient || "";
     }
+    if (!customerName || customerName.toLowerCase() === 'sample') {
+        const activeCusts = (typeof getActiveCateringCustomersWithTimes === 'function') ? getActiveCateringCustomersWithTimes() : [];
+        if (activeCusts && activeCusts.length === 1 && activeCusts[0]?.name) {
+            customerName = activeCusts[0].name.trim();
+            if (rcptNameInput) rcptNameInput.value = customerName;
+            appState.selectedCateringClient = customerName;
+        }
+    }
 
     if (!customerName) {
         showToast("⚠️ Please enter customer name or select catered client first!");
@@ -68,16 +76,16 @@ export async function sendReceiptDirectlyFromWizard() {
         return;
     }
 
-    showToast("🧾 Generating receipt image...");
+    showToast("🧾 Generating & sending receipt...");
 
-    // 1. Save receipt record to database
+    // 1. Save receipt & commission record to database toward the rider
     await saveReceiptToDatabase(customerName);
 
     // 2. Render text and canvas
     renderFinalReceiptText();
     await renderReceiptCanvas();
 
-    // 3. Dispatch to customer
+    // 3. Dispatch to customer (and automatically close wizard & lock cart upon send)
     await sendReceiptToRecipient(null, customerName);
 }
 
@@ -460,6 +468,20 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
     showToast(`📤 Sending receipt to ${recipientName || 'customer'}...`);
 
     try {
+        const activeCartIdx = globalState.activeCartIndex || 0;
+        const finalCustomerName = (
+            recipientName ||
+            document.getElementById('rcpt-name')?.value?.trim() ||
+            (multiCarts && multiCarts[activeCartIdx + 1]?.customerName) ||
+            appState.selectedCateringClient ||
+            ""
+        ).trim();
+
+        // Ensure receipt & commission are recorded toward the rider for this customer
+        if (finalCustomerName && finalCustomerName.toLowerCase() !== 'sample') {
+            await saveReceiptToDatabase(finalCustomerName);
+        }
+
         const rawTxId = wizState.currentReceiptTransactionId || Date.now().toString(36);
         const shortRef = formatShortRef(rawTxId);
         const riderName = appState.riderName || localStorage.getItem('riderName') || "Lokalex Rider";
@@ -577,15 +599,17 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
             window.appendSingleChatMessageToCache(targetCustId, { id: newMsgKey, ...newMsg });
         }
 
-        // 7. Success notifications and UI updates
-        showToast(`✅ Receipt successfully sent to ${recipientName || 'customer'}!`);
-        showSideNotification("RECEIPT SENT", `Delivered to ${recipientName || 'customer'}`, "fa-paper-plane", "text-blue-400", "border-blue-500");
+        // 7. Success notifications, lock cart, and close the wizard window immediately
+        showToast(`✅ Receipt sent to ${finalCustomerName || recipientName || 'customer'} & commission recorded!`);
+        showSideNotification("RECEIPT SENT", `Delivered to ${finalCustomerName || recipientName || 'customer'}`, "fa-paper-plane", "text-blue-400", "border-blue-500");
 
         if (btn) {
             btn.disabled = false;
             btn.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center cursor-pointer";
-            btn.innerHTML = `<i class="fa-solid fa-check text-xs shrink-0"></i><span class="text-[11px] leading-tight">Sent to ${escapeHtml(recipientName || 'Customer')}!</span>`;
+            btn.innerHTML = `<i class="fa-solid fa-check text-xs shrink-0"></i><span class="text-[11px] leading-tight">Sent to ${escapeHtml(finalCustomerName || recipientName || 'Customer')}!</span>`;
         }
+
+        completeReceiptDone(finalCustomerName || recipientName);
     } catch (e) {
         console.error("Failed to send receipt to customer:", e);
         showToast(`❌ Failed to send receipt: ${e.message || 'Network error'}`);
