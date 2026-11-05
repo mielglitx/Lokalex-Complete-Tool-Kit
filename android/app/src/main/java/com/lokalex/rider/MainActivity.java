@@ -59,9 +59,14 @@ public class MainActivity extends BridgeActivity {
     private static MainActivity instance = null;
     private Ringtone activeSystemRingtone = null;
     private boolean isPipStashed = false;
+    private static volatile boolean isAppInForeground = false;
 
     public static MainActivity getInstance() {
         return instance;
+    }
+
+    public static boolean isAppInForeground() {
+        return isAppInForeground;
     }
 
     @Override
@@ -533,6 +538,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() {
         super.onResume();
+        isAppInForeground = true;
         try {
             if (getBridge() != null && getBridge().getWebView() != null) {
                 getBridge().getWebView().onResume();
@@ -560,6 +566,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onPause() {
         super.onPause();
+        isAppInForeground = false;
         // Unpause WebView engine so background WebSockets and JS listeners stay connected!
         try {
             if (getBridge() != null && getBridge().getWebView() != null) {
@@ -572,6 +579,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onStop() {
         super.onStop();
+        isAppInForeground = false;
         // Keep WebView engine running so Firebase listeners don't sleep when screen is off
         try {
             if (getBridge() != null && getBridge().getWebView() != null) {
@@ -1202,6 +1210,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onDestroy() {
+        isAppInForeground = false;
         if (instance == this) {
             instance = null;
         }

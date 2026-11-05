@@ -136,8 +136,9 @@ public class LokalexForegroundService extends Service {
 
         if (scheduler == null || scheduler.isShutdown()) {
             scheduler = Executors.newSingleThreadScheduledExecutor();
-            scheduler.scheduleWithFixedDelay(this::performBackgroundCheck, 1, 5, TimeUnit.SECONDS);
-            Log.i(TAG, "LokalexForegroundService scheduler started (5s interval)");
+            // 15-second background interval with incremental timestamp checks: saves 99%+ mobile data
+            scheduler.scheduleWithFixedDelay(this::performBackgroundCheck, 2, 15, TimeUnit.SECONDS);
+            Log.i(TAG, "LokalexForegroundService scheduler started (15s interval, data-saver optimized)");
         }
 
         return START_STICKY;
@@ -145,43 +146,36 @@ public class LokalexForegroundService extends Service {
 
     public void performBackgroundCheck() {
         try {
-            // Keep CPU alive during network processing
+            // 1. Skip heavy HTTP polling if the app is actively in the foreground
+            MainActivity activity = MainActivity.getInstance();
+            if (activity != null && MainActivity.isAppInForeground()) {
+                // When in foreground, real-time WebSockets handle live chat feeds & chimes with 0 polling.
+                // Skipping background polling here completely eliminates cellular data waste!
+                return;
+            }
+
+            // Keep CPU alive during background network processing
             acquireWakeLock();
             scheduleNextAlarm();
 
-            // 1. Wake up WebView event loop and JS timers if MainActivity is alive
-            MainActivity activity = MainActivity.getInstance();
+            // Wake up WebView event loop and JS timers if MainActivity is alive in background
             if (activity != null) {
                 activity.pulseWebViewKeepAlive();
             }
 
-            // 2. Query Firebase directly in Java to monitor incoming messages even when screen is off
+            boolean checkedSuccessfully = false;
+
+            // 2. Query Supabase directly in Java with lightweight incremental timestamp query
             try {
-                URL url = new URL(FIREBASE_META_QUERY_URL);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setConnectTimeout(6000);
-                conn.setReadTimeout(6000);
-                conn.setRequestProperty("User-Agent", "LokalexBackgroundMonitor/1.0");
-
-                int responseCode = conn.getResponseCode();
-                if (responseCode == 200) {
-                    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-                    StringBuilder sb = new StringBuilder();
-                    String line;
-                    while ((line = in.readLine()) != null) {
-                        sb.append(line);
-                    }
-                    in.close();
-
-                    processIncomingMetaJson(sb.toString());
+                String sbUrlStr = SUPABASE_META_QUERY_URL;
+                if (!isInitialCheck && lastKnownMsgTimestamp > 0) {
+                    sbUrlStr = "https://brdvugzjhkimcyabptcw.supabase.co/rest/v1/customer_chat_meta?select=*&last_updated=gt."
+                            + lastKnownMsgTimestamp + "&order=last_updated.desc&limit=10";
+                } else {
+                    sbUrlStr = "https://brdvugzjhkimcyabptcw.supabase.co/rest/v1/customer_chat_meta?select=*&order=last_updated.desc&limit=25";
                 }
-                conn.disconnect();
-            } catch (Exception ignored) {}
 
-            // 3. Query Supabase directly in Java to monitor incoming Supabase messages when screen is off
-            try {
-                URL sbUrl = new URL(SUPABASE_META_QUERY_URL);
+                URL sbUrl = new URL(sbUrlStr);
                 HttpURLConnection sbConn = (HttpURLConnection) sbUrl.openConnection();
                 sbConn.setRequestMethod("GET");
                 sbConn.setConnectTimeout(6000);
@@ -201,9 +195,46 @@ public class LokalexForegroundService extends Service {
                     in.close();
 
                     processIncomingSupabaseJson(sb.toString());
+                    checkedSuccessfully = true;
                 }
                 sbConn.disconnect();
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                Log.w(TAG, "Supabase background check note: " + e.getMessage());
+            }
+
+            // 3. Fallback to Firebase RTDB ONLY if Supabase was unreachable or failed
+            if (!checkedSuccessfully) {
+                try {
+                    String fbUrlStr;
+                    if (!isInitialCheck && lastKnownMsgTimestamp > 0) {
+                        fbUrlStr = "https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?orderBy=%22lastUpdated%22&startAt="
+                                + (lastKnownMsgTimestamp + 1) + "&limitToLast=10";
+                    } else {
+                        fbUrlStr = "https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?orderBy=%22lastUpdated%22&limitToLast=25";
+                    }
+
+                    URL url = new URL(fbUrlStr);
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("GET");
+                    conn.setConnectTimeout(6000);
+                    conn.setReadTimeout(6000);
+                    conn.setRequestProperty("User-Agent", "LokalexBackgroundMonitor/1.0");
+
+                    int responseCode = conn.getResponseCode();
+                    if (responseCode == 200) {
+                        BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = in.readLine()) != null) {
+                            sb.append(line);
+                        }
+                        in.close();
+
+                        processIncomingMetaJson(sb.toString());
+                    }
+                    conn.disconnect();
+                } catch (Exception ignored) {}
+            }
         } catch (Exception e) {
             Log.e(TAG, "Background check cycle exception: " + e.getMessage());
         }

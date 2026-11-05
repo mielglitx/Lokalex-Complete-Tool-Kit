@@ -462,6 +462,10 @@ export function createSupabaseRef(rawPath, queryState = {}) {
               query = query.order('created_at', { ascending: false }).limit(ref._query.limit);
             } else if (pathInfo.table === 'catered_history') {
               query = query.order('completed_at', { ascending: false }).limit(ref._query.limit);
+            } else if (pathInfo.table === 'customer_chat_meta') {
+              query = query.order('last_updated', { ascending: false }).limit(ref._query.limit);
+            } else if (pathInfo.table === 'logins') {
+              query = query.order('date', { ascending: false }).limit(ref._query.limit);
             } else {
               query = query.order('id', { ascending: false }).limit(ref._query.limit);
             }
@@ -470,9 +474,16 @@ export function createSupabaseRef(rawPath, queryState = {}) {
               query = query.order('created_at', { ascending: true }).limit(ref._query.limit);
             } else if (pathInfo.table === 'catered_history') {
               query = query.order('completed_at', { ascending: true }).limit(ref._query.limit);
+            } else if (pathInfo.table === 'customer_chat_meta') {
+              query = query.order('last_updated', { ascending: true }).limit(ref._query.limit);
+            } else if (pathInfo.table === 'logins') {
+              query = query.order('date', { ascending: true }).limit(ref._query.limit);
             } else {
               query = query.order('id', { ascending: true }).limit(ref._query.limit);
             }
+          } else if (pathInfo.table === 'customer_chat_meta') {
+            // Data optimization: prevent unbounded full-table scan on customer_chat_meta
+            query = query.order('last_updated', { ascending: false }).limit(80);
           }
 
           const { data, error } = await query;

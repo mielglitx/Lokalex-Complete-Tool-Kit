@@ -587,6 +587,15 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
         }
     });
 
+    // Data-saver optimization: Preserve existing cached threads not in this limited delta snapshot
+    if (cachedCustomerThreadsMap && cachedCustomerThreadsMap.size > 0) {
+        cachedCustomerThreadsMap.forEach((oldThread, dedupK) => {
+            if (!threadsMap.has(dedupK)) {
+                threadsMap.set(dedupK, oldThread);
+            }
+        });
+    }
+
     setCachedCustomerThreadsMap(threadsMap);
 
     const allThreads = Array.from(threadsMap.values());
@@ -643,9 +652,9 @@ export function listenToAllCustomerChatsForRider() {
     setIsCustomerChatMetaListening(true);
 
     // 2. REALTIME WEBSOCKET LISTENER FOR INCOMING LIVE MESSAGES
-    // Directly process incoming metadata synchronously so notifications and audio chimes
-    // fire immediately even when the screen is locked or the app is in the background.
-    db.ref('customerChatMeta').on('value', (snapshot) => {
+    // Ordered by lastUpdated and strictly limited to the most recent 60 active conversations
+    // to eliminate excessive cellular data usage while streaming incoming live chats.
+    db.ref('customerChatMeta').orderByChild('lastUpdated').limitToLast(60).on('value', (snapshot) => {
         const data = snapshot.val();
         try {
             processCustomerChatMetaData(data, false);
@@ -1091,7 +1100,7 @@ export async function forceRefreshLiveChatsFeed(btn = null) {
         let chatData = null;
         if (db) {
             try {
-                const snap = await db.ref('customerChatMeta').once('value');
+                const snap = await db.ref('customerChatMeta').orderByChild('lastUpdated').limitToLast(60).once('value');
                 chatData = snap.val();
             } catch (dbErr) {
                 console.warn('[ForceRefreshChat] db.ref fetch failed:', dbErr);
@@ -1100,7 +1109,7 @@ export async function forceRefreshLiveChatsFeed(btn = null) {
 
         if (!chatData && !isSupabaseSelected()) {
             try {
-                const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?t=${Date.now()}`;
+                const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?orderBy=%22lastUpdated%22&limitToLast=60&t=${Date.now()}`;
                 const res = await fetch(directRestUrl, { cache: 'no-store' });
                 if (res.ok) {
                     chatData = await res.json();
