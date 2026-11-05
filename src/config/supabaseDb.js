@@ -454,6 +454,8 @@ function subscribeTableCdc(client, targetTable, handler) {
   };
 }
 
+let isBroadcastChannelSubscribed = false;
+
 function getGlobalBroadcastChannel(client) {
   if (!globalBroadcastChannel && client) {
     try {
@@ -470,6 +472,7 @@ function getGlobalBroadcastChannel(client) {
       });
       globalBroadcastChannel.subscribe((status) => {
         if (status === 'SUBSCRIBED') {
+          isBroadcastChannelSubscribed = true;
           lastRealtimeActivityTime = Date.now();
           if (hasBroadcastConnectedOnce && wasBroadcastDisconnected) {
             wasBroadcastDisconnected = false;
@@ -477,6 +480,7 @@ function getGlobalBroadcastChannel(client) {
           }
           hasBroadcastConnectedOnce = true;
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          isBroadcastChannelSubscribed = false;
           wasBroadcastDisconnected = true;
           setTimeout(() => {
             if (globalBroadcastChannel) {
@@ -508,21 +512,38 @@ function broadcastMutation(client, table, path, value, action = 'update') {
       } else {
         childKey = pInfo.id || (segments.length > 1 ? segments[1] : null);
       }
-      ch.send({
-        type: 'broadcast',
-        event: 'db_change',
-        payload: {
-          path,
-          table,
-          value,
-          action,
-          childKey,
-          newChild: (action === 'insert' || action === 'update') && childKey ? { key: childKey, data: value } : null,
-          updatedChild: action === 'update' && childKey ? { key: childKey, data: value } : null,
-          removedKey: action === 'remove' ? (childKey || segments[0]) : null,
-          time: Date.now()
-        }
-      }).catch(() => {});
+      const msgPayload = {
+        path,
+        table,
+        value,
+        action,
+        childKey,
+        newChild: (action === 'insert' || action === 'update') && childKey ? { key: childKey, data: value } : null,
+        updatedChild: action === 'update' && childKey ? { key: childKey, data: value } : null,
+        removedKey: action === 'remove' ? (childKey || segments[0]) : null,
+        time: Date.now()
+      };
+
+      // Notify local in-tab subscribers immediately (deduplicated by signature)
+      for (const handler of globalBroadcastSubscribers) {
+        try {
+          handler({ payload: msgPayload });
+        } catch (_) {}
+      }
+
+      const canPushWs = typeof ch.canPush === 'function'
+        ? ch.canPush()
+        : (isBroadcastChannelSubscribed && ch.state === 'joined');
+
+      if (canPushWs) {
+        ch.send({
+          type: 'broadcast',
+          event: 'db_change',
+          payload: msgPayload
+        }).catch(() => {});
+      } else if (typeof ch.httpSend === 'function') {
+        ch.httpSend('db_change', msgPayload).catch(() => {});
+      }
     }
   } catch (e) {}
 }
