@@ -250,12 +250,25 @@
         height: 100% !important;
     }
 
-    /* High-Performance Smart Cart Momentum Touch Scrolling */
-    #cart-items-list {
+    /* High-Performance Smart Cart & Feed Momentum Touch Scrolling (Snapdragon 450 / Adreno 506 Optimized) */
+    #cart-items-list,
+    #rider-cust-chats-feed,
+    #global-catered-list,
+    #global-logins-list,
+    #rider-chat-messages-container,
+    #rider-cust-chat-messages,
+    #store-rider-chat-messages {
         touch-action: pan-y !important;
         -webkit-overflow-scrolling: touch !important;
         overscroll-behavior-y: contain !important;
         will-change: scroll-position;
+    }
+
+    #rider-cust-chats-feed > div:not(.catering-glow-gold):not(.catering-glow-my),
+    #global-catered-list > div,
+    #global-logins-list > div {
+        content-visibility: auto;
+        contain-intrinsic-size: auto 76px;
     }
 
     /* ========================================================================== */

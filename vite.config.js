@@ -5,6 +5,17 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
   base: './',
+  build: {
+    rolldownOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/@supabase') || id.includes('node_modules/qrcode') || id.includes('node_modules/@capacitor')) {
+            return 'vendor';
+          }
+        }
+      }
+    }
+  },
   plugins: [
     htmlInject(),
     VitePWA({

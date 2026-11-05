@@ -278,10 +278,18 @@ function removeSingleSubscription(client, sub) {
     sub._broadcastHandler = null;
   }
 
+  if (typeof sub._unsubscribeCdc === 'function') {
+    try {
+      sub._unsubscribeCdc();
+    } catch (_) {}
+    sub._unsubscribeCdc = null;
+  }
+
   if (client && sub.channel) {
     try {
       client.removeChannel(sub.channel).catch(() => {});
     } catch (_) {}
+    sub.channel = null;
   }
 
   if (subscriptionsByPath.has(sub.path)) {
@@ -297,15 +305,70 @@ function removeSingleSubscription(client, sub) {
   }
 }
 
-// Centralized Global Broadcast Channel & Listener Registry
+// Centralized Global Broadcast Channel, Shared Table CDC Multiplexer & Health Tracker
 let globalBroadcastChannel = null;
+let hasBroadcastConnectedOnce = false;
+let wasBroadcastDisconnected = false;
+let lastRealtimeActivityTime = Date.now();
 const globalBroadcastSubscribers = new Set();
+const sharedTableChannels = new Map(); // targetTable -> { channel, handlers: Set<Function> }
+
+export function getLastRealtimeActivityTime() {
+  return lastRealtimeActivityTime;
+}
+
+function computeFastSignature(val) {
+  if (val === null || val === undefined) return 'null';
+  if (typeof val !== 'object') return `${typeof val}:${String(val)}`;
+  try {
+    return JSON.stringify(val, (k, v) => {
+      if (typeof v === 'string' && v.length > 180) {
+        return `${v.slice(0, 32)}..[${v.length}]..${v.slice(-16)}`;
+      }
+      return v;
+    });
+  } catch (_) {
+    return String(Date.now());
+  }
+}
+
+function subscribeTableCdc(client, targetTable, handler) {
+  if (!client || !targetTable) return () => {};
+  let entry = sharedTableChannels.get(targetTable);
+  if (!entry) {
+    const channel = client.channel(`cdc_table_${targetTable}`);
+    const handlers = new Set();
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: targetTable }, (payload) => {
+      lastRealtimeActivityTime = Date.now();
+      for (const fn of handlers) {
+        try {
+          fn(payload);
+        } catch (err) {
+          console.warn(`[CDC Handler Error on ${targetTable}]:`, err);
+        }
+      }
+    }).subscribe();
+    entry = { channel, handlers };
+    sharedTableChannels.set(targetTable, entry);
+  }
+  entry.handlers.add(handler);
+  return () => {
+    entry.handlers.delete(handler);
+    if (entry.handlers.size === 0) {
+      sharedTableChannels.delete(targetTable);
+      try {
+        client.removeChannel(entry.channel).catch(() => {});
+      } catch (_) {}
+    }
+  };
+}
 
 function getGlobalBroadcastChannel(client) {
   if (!globalBroadcastChannel && client) {
     try {
       globalBroadcastChannel = client.channel('lokalex_broadcast');
       globalBroadcastChannel.on('broadcast', { event: 'db_change' }, (eventPayload) => {
+        lastRealtimeActivityTime = Date.now();
         for (const handler of globalBroadcastSubscribers) {
           try {
             handler(eventPayload);
@@ -316,8 +379,14 @@ function getGlobalBroadcastChannel(client) {
       });
       globalBroadcastChannel.subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          try { resyncActiveSubscriptions(); } catch (_) {}
-        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          lastRealtimeActivityTime = Date.now();
+          if (hasBroadcastConnectedOnce && wasBroadcastDisconnected) {
+            wasBroadcastDisconnected = false;
+            try { resyncActiveSubscriptions(); } catch (_) {}
+          }
+          hasBroadcastConnectedOnce = true;
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          wasBroadcastDisconnected = true;
           setTimeout(() => {
             if (globalBroadcastChannel) {
               try { globalBroadcastChannel.subscribe(); } catch (_) {}
@@ -335,10 +404,19 @@ function getGlobalBroadcastChannel(client) {
 function broadcastMutation(client, table, path, value, action = 'update') {
   if (!client) return;
   try {
+    lastRealtimeActivityTime = Date.now();
     const ch = getGlobalBroadcastChannel(client);
     if (ch) {
+      const pInfo = parsePath(path);
       const segments = (path || '').replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
-      const childKey = segments.length > 1 ? segments[1] : null;
+      let childKey = null;
+      if (pInfo.isCustomerChats) {
+        childKey = (pInfo.subType === 'messages' && pInfo.targetId) ? pInfo.targetId : pInfo.custId;
+      } else if (pInfo.isStoreRiderChats) {
+        childKey = (pInfo.subType === 'messages' && pInfo.targetId) ? pInfo.targetId : pInfo.roomId;
+      } else {
+        childKey = pInfo.id || (segments.length > 1 ? segments[1] : null);
+      }
       ch.send({
         type: 'broadcast',
         event: 'db_change',
@@ -662,22 +740,80 @@ export function createSupabaseRef(rawPath, queryState = {}) {
 
       const subRecord = {
         path: cleanPath,
+        query: { ...ref._query },
         eventType,
         callback,
         channel: null,
+        _unsubscribeCdc: null,
         tableCache: null,
+        lastSignature: null,
+        childSignatures: new Map(),
         debounceTimer: null,
         isClosed: false
+      };
+
+      const matchesQueryFilter = (item) => {
+        if (!item || typeof item !== 'object') return true;
+        const q = subRecord.query;
+        if (!q || !q.orderBy) return true;
+        const field = q.orderBy;
+        if (q.equalTo !== undefined) {
+          const eqVal = String(q.equalTo);
+          const itemVal = item[field] !== undefined ? String(item[field]) : (item.data && item.data[field] !== undefined ? String(item.data[field]) : null);
+          const altVal = (field === 'date' && item.completedDate) ? String(item.completedDate) : ((field === 'completedDate' && item.date) ? String(item.date) : null);
+          if (itemVal !== eqVal && altVal !== eqVal) return false;
+        }
+        if (q.startAt !== undefined || q.endAt !== undefined) {
+          const val = item[field];
+          if (val !== undefined) {
+            if (q.startAt !== undefined && val < q.startAt) return false;
+            if (q.endAt !== undefined && val > q.endAt) return false;
+          }
+        }
+        return true;
+      };
+
+      const emitValueSnapshot = (val, key = ref.key) => {
+        if (subRecord.isClosed) return;
+        const sig = computeFastSignature(val);
+        if (subRecord.lastSignature === sig) return;
+        subRecord.lastSignature = sig;
+        callback(createSnapshot(val, key));
+      };
+
+      const emitChildAdded = (val, cKey) => {
+        if (subRecord.isClosed || !cKey || val === null || val === undefined) return;
+        if (!matchesQueryFilter(val)) return;
+        const sig = computeFastSignature(val);
+        if (subRecord.childSignatures.has(cKey)) return;
+        subRecord.childSignatures.set(cKey, sig);
+        callback(createSnapshot(val, cKey));
+      };
+
+      const emitChildChanged = (val, cKey) => {
+        if (subRecord.isClosed || !cKey || val === null || val === undefined) return;
+        if (!matchesQueryFilter(val)) return;
+        const sig = computeFastSignature(val);
+        if (subRecord.childSignatures.get(cKey) === sig) return;
+        subRecord.childSignatures.set(cKey, sig);
+        callback(createSnapshot(val, cKey));
+      };
+
+      const emitChildRemoved = (cKey) => {
+        if (subRecord.isClosed || !cKey) return;
+        subRecord.childSignatures.delete(cKey);
+        callback(createSnapshot(null, cKey));
       };
 
       // 1. Initial read
       if (eventType === 'value') {
         ref.once(eventType, (snap) => {
           if (subRecord.isClosed) return;
+          const val = snap.val();
           if (isTableValueListener) {
-            const val = snap.val();
             subRecord.tableCache = new Map(val && typeof val === 'object' ? Object.entries(val) : []);
           }
+          subRecord.lastSignature = computeFastSignature(val);
           callback(snap);
         });
       } else if (eventType === 'child_added') {
@@ -685,103 +821,142 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           if (subRecord.isClosed) return;
           snap.forEach((childSnap) => {
             if (subRecord.isClosed) return;
-            callback(childSnap);
+            emitChildAdded(childSnap.val(), childSnap.key);
           });
         });
       }
 
-      // 2. Realtime Subscription Channel (Dedicated channel instance per subscription)
-      const targetTable = pathInfo.table || 'settings';
-      const subId = Math.random().toString(36).slice(2, 9);
-      const channelId = `ch_${targetTable}_${(pathInfo.custId || pathInfo.roomId || pathInfo.id || 'all').toString().replace(/[^a-zA-Z0-9_]/g, '_')}_${subId}`;
-      
-      const channel = client.channel(channelId);
-      subRecord.channel = channel;
+      // 2. Shared Realtime Multiplexed Subscription (Broadcast + Shared Table CDC)
+      const targetTable = (pathInfo.isCustomerChats && pathInfo.subType === 'metadata')
+        ? 'customer_chat_meta'
+        : (pathInfo.table || 'settings');
 
-      // Listen to broadcast events on both channel and global broadcast channel
       const handleBroadcastEvent = async (eventPayload) => {
         if (subRecord.isClosed) return;
         const payloadPath = eventPayload?.payload?.path;
         const payloadTable = eventPayload?.payload?.table;
         const action = eventPayload?.payload?.action || 'update';
         const val = eventPayload?.payload?.value;
+        const pInfo = parsePath(payloadPath || '');
         const segments = (payloadPath || '').replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
-        const childKey = eventPayload?.payload?.childKey || (segments.length > 1 ? segments[1] : null);
+
+        let rowKey = eventPayload?.payload?.childKey || null;
+        if (pInfo.isCustomerChats) {
+          rowKey = (pInfo.subType === 'messages' && pInfo.targetId) ? pInfo.targetId : pInfo.custId;
+        } else if (pInfo.isStoreRiderChats) {
+          rowKey = (pInfo.subType === 'messages' && pInfo.targetId) ? pInfo.targetId : pInfo.roomId;
+        } else if (pInfo.id) {
+          rowKey = pInfo.id;
+        } else if (!rowKey && segments.length > 1) {
+          rowKey = segments[1];
+        }
+
+        const rowSubPath = (pInfo.isCustomerChats && pInfo.subType === 'metadata')
+          ? (pInfo.targetId ? [pInfo.targetId, ...pInfo.subPath] : [])
+          : (pInfo.subPath || []);
 
         const isPathMatch = payloadPath && (
           payloadPath === rawPath ||
           payloadPath.startsWith(rawPath + '/') ||
           rawPath.startsWith(payloadPath + '/')
         );
-        const isTableMatch = payloadTable && pathInfo.table && payloadTable === pathInfo.table;
-        const isDocMatch = isTableMatch && childKey && (
-          (pathInfo.id && childKey === pathInfo.id) ||
-          (pathInfo.custId && childKey === pathInfo.custId)
-        );
+        const isTableMatch = payloadTable && targetTable && payloadTable === targetTable;
 
-        const shouldProcess = isPathMatch || (isTableMatch && isTableValueListener) || isDocMatch;
+        let shouldProcess = false;
+        if (isPathMatch) {
+          shouldProcess = true;
+        } else if (isTableMatch && isTableValueListener) {
+          shouldProcess = true;
+        } else if (isTableMatch) {
+          if (pathInfo.isCustomerChats) {
+            if (pathInfo.subType === 'metadata' && pInfo.custId === pathInfo.custId && (pInfo.subType === 'metadata' || pInfo.rootNode === 'customerChatMeta')) {
+              shouldProcess = true;
+            } else if (pathInfo.subType === 'messages' && pInfo.custId === pathInfo.custId && pInfo.subType === 'messages') {
+              shouldProcess = !pathInfo.targetId || pInfo.targetId === pathInfo.targetId;
+            } else if (pathInfo.subType === pInfo.subType && pInfo.custId === pathInfo.custId) {
+              shouldProcess = true;
+            }
+          } else if (pathInfo.isStoreRiderChats) {
+            if (pInfo.roomId === pathInfo.roomId) shouldProcess = true;
+          } else if (pathInfo.id && rowKey === pathInfo.id) {
+            shouldProcess = true;
+          }
+        }
         if (!shouldProcess) return;
 
         if (eventType === 'value') {
-          if (subRecord.tableCache && childKey) {
-            if (action === 'remove' || val === null || val === undefined) {
-              if (segments.length <= 2 || (payloadPath && payloadPath.endsWith('/' + childKey))) {
-                subRecord.tableCache.delete(childKey);
-              } else if (subRecord.tableCache.has(childKey)) {
-                const existingRow = subRecord.tableCache.get(childKey);
-                if (existingRow && typeof existingRow === 'object') {
-                  const prop = segments[segments.length - 1];
-                  const rowObj = { ...existingRow };
-                  delete rowObj[prop];
-                  subRecord.tableCache.set(childKey, rowObj);
+          if (subRecord.tableCache && rowKey) {
+            if (rowSubPath.length === 0) {
+              if (action === 'remove' || val === null || val === undefined) {
+                subRecord.tableCache.delete(rowKey);
+              } else {
+                const existingRow = subRecord.tableCache.get(rowKey);
+                const nextRow = (action === 'update' && existingRow && typeof existingRow === 'object' && val && typeof val === 'object' && !Array.isArray(val))
+                  ? { ...existingRow, ...val }
+                  : val;
+                if (matchesQueryFilter(nextRow)) {
+                  subRecord.tableCache.set(rowKey, nextRow);
+                } else {
+                  subRecord.tableCache.delete(rowKey);
                 }
               }
             } else {
-              if (subRecord.tableCache.has(childKey)) {
-                const existingRow = subRecord.tableCache.get(childKey);
-                if (action === 'update' && existingRow && typeof existingRow === 'object' && val && typeof val === 'object' && !Array.isArray(val)) {
-                  // Merge partial updates into existing cache row to preserve other fields
-                  subRecord.tableCache.set(childKey, { ...existingRow, ...val });
-                } else if (segments.length > 2) {
-                  const prop = segments[segments.length - 1];
-                  subRecord.tableCache.set(childKey, { ...(existingRow && typeof existingRow === 'object' ? existingRow : {}), [prop]: val });
-                } else {
-                  subRecord.tableCache.set(childKey, val);
-                }
+              const existingRow = subRecord.tableCache.get(rowKey);
+              const baseObj = (existingRow && typeof existingRow === 'object') ? { ...existingRow } : {};
+              let cursor = baseObj;
+              for (let i = 0; i < rowSubPath.length - 1; i++) {
+                const seg = rowSubPath[i];
+                cursor[seg] = (cursor[seg] && typeof cursor[seg] === 'object') ? { ...cursor[seg] } : {};
+                cursor = cursor[seg];
+              }
+              const lastKey = rowSubPath[rowSubPath.length - 1];
+              if (action === 'remove' || val === null || val === undefined) {
+                delete cursor[lastKey];
+              } else if (action === 'update' && cursor[lastKey] && typeof cursor[lastKey] === 'object' && val && typeof val === 'object' && !Array.isArray(val)) {
+                cursor[lastKey] = { ...cursor[lastKey], ...val };
               } else {
-                subRecord.tableCache.set(childKey, val);
+                cursor[lastKey] = val;
+              }
+              if (matchesQueryFilter(baseObj)) {
+                subRecord.tableCache.set(rowKey, baseObj);
               }
             }
 
             clearTimeout(subRecord.debounceTimer);
             subRecord.debounceTimer = setTimeout(() => {
               if (subRecord.isClosed) return;
-              callback(createSnapshot(Object.fromEntries(subRecord.tableCache), ref.key));
-            }, 30);
+              emitValueSnapshot(Object.fromEntries(subRecord.tableCache), ref.key);
+            }, 25);
           } else {
             clearTimeout(subRecord.debounceTimer);
             subRecord.debounceTimer = setTimeout(async () => {
               if (subRecord.isClosed) return;
               const snap = await ref.once(eventType);
-              if (!subRecord.isClosed) callback(snap);
-            }, 30);
+              if (!subRecord.isClosed) emitValueSnapshot(snap.val(), snap.key);
+            }, 25);
           }
         } else if (eventType === 'child_added') {
-          if (childKey && val !== null && val !== undefined) {
-            callback(createSnapshot(val, childKey));
-          } else if (eventPayload?.payload?.newChild) {
-            callback(createSnapshot(eventPayload.payload.newChild.data, eventPayload.payload.newChild.key));
+          if (action !== 'remove') {
+            if (rowKey && val !== null && val !== undefined && rowSubPath.length === 0) {
+              emitChildAdded(val, rowKey);
+            } else if (eventPayload?.payload?.newChild) {
+              emitChildAdded(eventPayload.payload.newChild.data, eventPayload.payload.newChild.key);
+            }
           }
         } else if (eventType === 'child_changed') {
-          if (childKey && val !== null && val !== undefined) {
-            callback(createSnapshot(val, childKey));
-          } else if (eventPayload?.payload?.updatedChild) {
-            callback(createSnapshot(eventPayload.payload.updatedChild.data, eventPayload.payload.updatedChild.key));
+          if (action === 'update' || (action === 'insert' && rowKey && subRecord.childSignatures.has(rowKey))) {
+            if (rowKey && val !== null && val !== undefined && rowSubPath.length === 0) {
+              emitChildChanged(val, rowKey);
+            } else if (eventPayload?.payload?.updatedChild) {
+              emitChildChanged(eventPayload.payload.updatedChild.data, eventPayload.payload.updatedChild.key);
+            }
           }
         } else if (eventType === 'child_removed') {
-          const removedKey = childKey || eventPayload.payload?.removedKey;
-          if (removedKey) {
-            callback(createSnapshot(null, removedKey));
+          if (action === 'remove' || val === null) {
+            const removedKey = rowKey || eventPayload.payload?.removedKey;
+            if (removedKey) {
+              emitChildRemoved(removedKey);
+            }
           }
         }
       };
@@ -790,93 +965,96 @@ export function createSupabaseRef(rawPath, queryState = {}) {
       globalBroadcastSubscribers.add(handleBroadcastEvent);
       getGlobalBroadcastChannel(client);
 
-      channel.on('broadcast', { event: 'db_change' }, handleBroadcastEvent);
-
-      // Listen to PostgreSQL CDC changes
-      const changeFilter = {
-        event: '*',
-        schema: 'public',
-        table: targetTable
-      };
-
-      if (pathInfo.isCustomerChats && pathInfo.subType === 'metadata') {
-        changeFilter.table = 'customer_chat_meta';
-        if (pathInfo.custId) {
-          changeFilter.filter = `id=eq.${pathInfo.custId}`;
-        }
-      } else if (pathInfo.isCustomerChats && pathInfo.custId) {
-        changeFilter.table = 'customer_chats';
-        changeFilter.filter = `room_id=eq.${pathInfo.custId}`;
-      } else if (pathInfo.isStoreRiderChats && pathInfo.roomId) {
-        changeFilter.filter = `room_id=eq.${pathInfo.roomId}`;
-      } else if (pathInfo.id) {
-        changeFilter.filter = `id=eq.${pathInfo.id}`;
-      }
-
-      channel.on('postgres_changes', changeFilter, (payload) => {
+      const handleCdcEvent = (payload) => {
         if (subRecord.isClosed) return;
+        const row = payload.new || payload.old;
+        if (!row) return;
+
+        // Filter row in memory for shared table CDC channel
+        if (pathInfo.isCustomerChats && pathInfo.subType === 'metadata') {
+          if (pathInfo.custId && row.id !== pathInfo.custId) return;
+        } else if (pathInfo.isCustomerChats && pathInfo.custId) {
+          if (row.room_id && row.room_id !== pathInfo.custId) return;
+          if (!row.room_id && !String(row.id || '').startsWith(pathInfo.custId + '_')) return;
+          if (pathInfo.subType === 'messages') {
+            const rid = String(row.id || '');
+            if (rid.endsWith('_metadata') || rid.endsWith('_threadSeenBy') || rid.endsWith('_midIndex')) return;
+            if (pathInfo.targetId && extractChildKey(rid, pathInfo) !== pathInfo.targetId) return;
+          } else if (pathInfo.subType === 'threadSeenBy' || pathInfo.subType === 'midIndex') {
+            if (row.id !== `${pathInfo.custId}_${pathInfo.subType}`) return;
+          }
+        } else if (pathInfo.isStoreRiderChats && pathInfo.roomId) {
+          if (row.room_id && row.room_id !== pathInfo.roomId) return;
+          if (!row.room_id && !String(row.id || '').startsWith(pathInfo.roomId + '_')) return;
+        } else if (pathInfo.id && !isTableLevel) {
+          if (row.id !== pathInfo.id) return;
+        }
 
         if (eventType === 'value') {
           if (subRecord.tableCache) {
-            const row = payload.new || payload.old;
-            const childKey = extractChildKey(row?.id, pathInfo);
+            const childKey = extractChildKey(row.id, pathInfo);
             if (childKey) {
               if (payload.eventType === 'DELETE') {
                 subRecord.tableCache.delete(childKey);
               } else if (payload.new) {
                 const val = payload.new.data !== undefined ? payload.new.data : payload.new;
-                subRecord.tableCache.set(childKey, val);
+                if (matchesQueryFilter(val)) {
+                  subRecord.tableCache.set(childKey, val);
+                } else {
+                  subRecord.tableCache.delete(childKey);
+                }
               }
             }
 
             clearTimeout(subRecord.debounceTimer);
             subRecord.debounceTimer = setTimeout(() => {
               if (subRecord.isClosed) return;
-              callback(createSnapshot(Object.fromEntries(subRecord.tableCache), ref.key));
-            }, 50);
+              emitValueSnapshot(Object.fromEntries(subRecord.tableCache), ref.key);
+            }, 40);
           } else {
-            // Single document listener
             clearTimeout(subRecord.debounceTimer);
             subRecord.debounceTimer = setTimeout(async () => {
               if (subRecord.isClosed) return;
               if (payload.eventType === 'DELETE') {
-                callback(createSnapshot(null, ref.key));
+                emitValueSnapshot(null, ref.key);
               } else if (payload.new) {
                 let val = payload.new.data !== undefined ? payload.new.data : payload.new;
-                if (val && pathInfo.subPath && pathInfo.subPath.length > 0) {
-                  for (const seg of pathInfo.subPath) {
+                const effectiveSub = (pathInfo.isCustomerChats && (pathInfo.subType === 'metadata' || pathInfo.subType === 'threadSeenBy' || pathInfo.subType === 'midIndex') && pathInfo.targetId)
+                  ? [pathInfo.targetId, ...pathInfo.subPath]
+                  : (pathInfo.subPath || []);
+                if (val && effectiveSub.length > 0) {
+                  for (const seg of effectiveSub) {
                     val = (val && typeof val === 'object') ? val[seg] : null;
                   }
                 }
-                callback(createSnapshot(val, ref.key));
+                emitValueSnapshot(val, ref.key);
               } else {
                 const snap = await ref.once('value');
-                if (!subRecord.isClosed) callback(snap);
+                if (!subRecord.isClosed) emitValueSnapshot(snap.val(), snap.key);
               }
-            }, 40);
+            }, 35);
           }
         } else if (eventType === 'child_added' && payload.eventType === 'INSERT') {
-          const row = payload.new;
-          if (row) {
-            const childKey = extractChildKey(row.id, pathInfo);
-            const val = row.data !== undefined ? row.data : row;
-            callback(createSnapshot(val, childKey));
+          if (payload.new) {
+            const childKey = extractChildKey(payload.new.id, pathInfo);
+            const val = payload.new.data !== undefined ? payload.new.data : payload.new;
+            emitChildAdded(val, childKey);
           }
         } else if (eventType === 'child_changed' && payload.eventType === 'UPDATE') {
-          const row = payload.new;
-          if (row) {
-            const childKey = extractChildKey(row.id, pathInfo);
-            const val = row.data !== undefined ? row.data : row;
-            callback(createSnapshot(val, childKey));
+          if (payload.new) {
+            const childKey = extractChildKey(payload.new.id, pathInfo);
+            const val = payload.new.data !== undefined ? payload.new.data : payload.new;
+            emitChildChanged(val, childKey);
           }
         } else if (eventType === 'child_removed' && payload.eventType === 'DELETE') {
-          const row = payload.old;
-          if (row) {
-            const childKey = extractChildKey(row.id, pathInfo);
-            callback(createSnapshot(null, childKey));
+          if (payload.old) {
+            const childKey = extractChildKey(payload.old.id, pathInfo);
+            emitChildRemoved(childKey);
           }
         }
-      }).subscribe();
+      };
+
+      subRecord._unsubscribeCdc = subscribeTableCdc(client, targetTable, handleCdcEvent);
 
       // Register subscription for clean, leak-free removal
       registerSubscription(subRecord);
@@ -939,8 +1117,17 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           return;
         }
 
+        let bPath = rawPath;
+        let bVal = value;
+        let bAction = 'insert';
+
         if (pathInfo.isCustomerChats) {
-          await handleCustomerChatsSet(client, pathInfo, value);
+          const res = await handleCustomerChatsSet(client, pathInfo, value);
+          if (res && res.broadcastPath) {
+            bPath = res.broadcastPath;
+            bVal = res.broadcastValue;
+            bAction = res.broadcastAction || 'insert';
+          }
         } else if (pathInfo.isStoreRiderChats) {
           await handleStoreRiderChatsSet(client, pathInfo, value);
         } else if (pathInfo.id) {
@@ -984,6 +1171,9 @@ export function createSupabaseRef(rawPath, queryState = {}) {
               }
               const { error } = await client.from(pathInfo.table).upsert(rowData, { onConflict: 'id' });
               if (error) throw error;
+              bPath = `${pathInfo.rootNode}/${pathInfo.id}`;
+              bVal = current;
+              bAction = 'update';
             }
           });
         } else if (value && typeof value === 'object') {
@@ -1001,7 +1191,7 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         }
 
         // Broadcast change event
-        broadcastMutation(client, pathInfo.table, rawPath, value, 'insert');
+        broadcastMutation(client, pathInfo.table, bPath, bVal, bAction);
 
         if (typeof onComplete === 'function') onComplete(null);
       } catch (err) {
@@ -1028,9 +1218,16 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           return;
         }
 
+        let bPath = rawPath;
+        let bVal = values;
+
         // Single-path object merge
         if (pathInfo.isCustomerChats) {
-          await handleCustomerChatsUpdate(client, pathInfo, values);
+          const res = await handleCustomerChatsUpdate(client, pathInfo, values);
+          if (res && res.broadcastPath) {
+            bPath = res.broadcastPath;
+            bVal = res.broadcastValue;
+          }
         } else if (pathInfo.isStoreRiderChats) {
           await handleStoreRiderChatsUpdate(client, pathInfo, values);
         } else if (pathInfo.id) {
@@ -1042,7 +1239,21 @@ export function createSupabaseRef(rawPath, queryState = {}) {
               .maybeSingle();
 
             const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
-            const merged = { ...current, ...values };
+            let merged;
+            if (pathInfo.subPath.length === 0) {
+              merged = { ...current, ...values };
+            } else {
+              merged = { ...current };
+              let cursor = merged;
+              for (let i = 0; i < pathInfo.subPath.length - 1; i++) {
+                const seg = pathInfo.subPath[i];
+                cursor[seg] = (cursor[seg] && typeof cursor[seg] === 'object') ? { ...cursor[seg] } : {};
+                cursor = cursor[seg];
+              }
+              const lastSeg = pathInfo.subPath[pathInfo.subPath.length - 1];
+              const existingSub = (cursor[lastSeg] && typeof cursor[lastSeg] === 'object') ? { ...cursor[lastSeg] } : {};
+              cursor[lastSeg] = { ...existingSub, ...values };
+            }
 
             const rowData = {
               id: pathInfo.id,
@@ -1054,11 +1265,13 @@ export function createSupabaseRef(rawPath, queryState = {}) {
             }
             const { error } = await client.from(pathInfo.table).upsert(rowData, { onConflict: 'id' });
             if (error) throw error;
+            bPath = `${pathInfo.rootNode}/${pathInfo.id}`;
+            bVal = merged;
           });
         }
 
-        // Broadcast change event
-        broadcastMutation(client, pathInfo.table, rawPath, values, 'update');
+        // Broadcast change event with full merged state
+        broadcastMutation(client, pathInfo.table, bPath, bVal, 'update');
 
         if (typeof onComplete === 'function') onComplete(null);
       } catch (err) {
@@ -1208,15 +1421,20 @@ async function handleMultiPathUpdate(client, rawPath, values) {
     const fullPath = [rawPath, subKey].filter(Boolean).join('/').replace(/\/+/g, '/');
     const pInfo = parsePath(fullPath);
 
-    if (pInfo.isCustomerChats) {
-      if (pInfo.subType === 'metadata') {
-        const docKey = `cust_meta:${pInfo.custId}`;
-        if (!docGroups.has(docKey)) docGroups.set(docKey, { type: 'cust_meta', custId: pInfo.custId, fields: [] });
-        docGroups.get(docKey).fields.push({ targetId: pInfo.targetId, subPath: pInfo.subPath, value: subVal });
-      } else if (pInfo.subType === 'messages' && pInfo.targetId) {
+    if (pInfo.table === 'customer_chat_meta' || (pInfo.isCustomerChats && pInfo.subType === 'metadata')) {
+      const custId = pInfo.custId || pInfo.id;
+      if (custId) {
+        const docKey = `cust_meta:${custId}`;
+        if (!docGroups.has(docKey)) docGroups.set(docKey, { type: 'cust_meta', custId, fields: [] });
+        const targetId = pInfo.isCustomerChats ? pInfo.targetId : (pInfo.subPath[0] || null);
+        const subPath = pInfo.isCustomerChats ? pInfo.subPath : pInfo.subPath.slice(1);
+        docGroups.get(docKey).fields.push({ targetId, subPath, value: subVal });
+      }
+    } else if (pInfo.isCustomerChats) {
+      if (pInfo.subType === 'messages' && pInfo.targetId) {
         const rowId = pInfo.targetId.startsWith(`${pInfo.custId}_`) ? pInfo.targetId : `${pInfo.custId}_${pInfo.targetId}`;
         const docKey = `cust_msg:${rowId}`;
-        if (!docGroups.has(docKey)) docGroups.set(docKey, { type: 'cust_msg', custId: pInfo.custId, rowId, fields: [] });
+        if (!docGroups.has(docKey)) docGroups.set(docKey, { type: 'cust_msg', custId: pInfo.custId, targetId: pInfo.targetId, rowId, fields: [] });
         docGroups.get(docKey).fields.push({ subPath: pInfo.subPath, value: subVal });
       } else {
         const docKey = `direct:${fullPath}`;
@@ -1224,7 +1442,7 @@ async function handleMultiPathUpdate(client, rawPath, values) {
       }
     } else if (pInfo.id) {
       const docKey = `std:${pInfo.table}:${pInfo.id}`;
-      if (!docGroups.has(docKey)) docGroups.set(docKey, { type: 'std', table: pInfo.table, id: pInfo.id, fields: [] });
+      if (!docGroups.has(docKey)) docGroups.set(docKey, { type: 'std', rootNode: pInfo.rootNode, table: pInfo.table, id: pInfo.id, fields: [] });
       docGroups.get(docKey).fields.push({ subPath: pInfo.subPath, value: subVal });
     } else {
       const docKey = `direct:${fullPath}`;
@@ -1235,7 +1453,7 @@ async function handleMultiPathUpdate(client, rawPath, values) {
   const tasks = [];
   for (const group of docGroups.values()) {
     if (group.type === 'std') {
-      tasks.push((async () => {
+      tasks.push(runExclusive(`${group.table}:${group.id}`, async () => {
         const { data: existing } = await client.from(group.table).select('data').eq('id', group.id).maybeSingle();
         const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
         for (const f of group.fields) {
@@ -1259,15 +1477,15 @@ async function handleMultiPathUpdate(client, rawPath, values) {
           }
         }
         await client.from(group.table).upsert({ id: group.id, data: current }, { onConflict: 'id' });
-        broadcastMutation(client, group.table, `${group.rootNode}/${group.id}`, current, 'update');
-      })());
+        broadcastMutation(client, group.table, `${group.rootNode || group.table}/${group.id}`, current, 'update');
+      }));
     } else if (group.type === 'cust_meta') {
-      tasks.push((async () => {
+      tasks.push(runExclusive(`customer_chat_meta:${group.custId}`, async () => {
         const { data: existing } = await client.from('customer_chat_meta').select('data').eq('id', group.custId).maybeSingle();
         const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
         for (const f of group.fields) {
           if (!f.targetId) {
-            if (typeof f.value === 'object') Object.assign(current, f.value);
+            if (f.value && typeof f.value === 'object') Object.assign(current, f.value);
           } else {
             let cursor = current;
             const fullSub = [f.targetId, ...f.subPath];
@@ -1289,15 +1507,14 @@ async function handleMultiPathUpdate(client, rawPath, values) {
           client.from('customer_chats').upsert({ id: `${group.custId}_metadata`, room_id: group.custId, data: current }, { onConflict: 'id' })
         ]);
         broadcastMutation(client, 'customer_chat_meta', `customerChatMeta/${group.custId}`, current, 'update');
-        broadcastMutation(client, 'customer_chat_meta', `customerChats/${group.custId}/metadata`, current, 'update');
-      })());
+      }));
     } else if (group.type === 'cust_msg') {
-      tasks.push((async () => {
+      tasks.push(runExclusive(`customer_chats:${group.rowId}`, async () => {
         const { data: existing } = await client.from('customer_chats').select('data').eq('id', group.rowId).maybeSingle();
         const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
         for (const f of group.fields) {
           if (f.subPath.length === 0) {
-            if (typeof f.value === 'object') Object.assign(current, f.value);
+            if (f.value && typeof f.value === 'object') Object.assign(current, f.value);
           } else {
             let cursor = current;
             for (let i = 0; i < f.subPath.length - 1; i++) {
@@ -1321,8 +1538,8 @@ async function handleMultiPathUpdate(client, rawPath, values) {
           timestamp: current.timestamp ? new Date(current.timestamp).toISOString() : new Date().toISOString(),
           data: current
         }, { onConflict: 'id' });
-        broadcastMutation(client, 'customer_chats', `customerChats/${group.custId}/messages/${group.targetId || group.rowId}`, current, 'insert');
-      })());
+        broadcastMutation(client, 'customer_chats', `customerChats/${group.custId}/messages/${group.targetId || group.rowId}`, current, 'update');
+      }));
     } else if (group.type === 'ref') {
       if (group.value === null || group.value === undefined) {
         tasks.push(group.ref.remove());
@@ -1507,34 +1724,46 @@ async function handleCustomerChatsSet(client, pathInfo, value) {
   if (subType === 'messages') {
     if (targetId) {
       const rowId = targetId.startsWith(`${custId}_`) ? targetId : `${custId}_${targetId}`;
-      if (subPath.length === 0) {
-        const { error } = await client.from('customer_chats').upsert({
-          id: rowId,
-          room_id: custId,
-          sender_id: value?.sender || value?.senderName || null,
-          message: value?.text || value?.message || null,
-          timestamp: value?.timestamp ? new Date(value.timestamp).toISOString() : new Date().toISOString(),
-          data: value
-        }, { onConflict: 'id' });
-        if (error) throw error;
-      } else {
-        const { data: existing } = await client.from('customer_chats').select('data').eq('id', rowId).maybeSingle();
-        const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
-        let cursor = current;
-        for (let i = 0; i < subPath.length - 1; i++) {
-          const seg = subPath[i];
-          if (!cursor[seg] || typeof cursor[seg] !== 'object') cursor[seg] = {};
-          cursor = cursor[seg];
-        }
-        cursor[subPath[subPath.length - 1]] = value;
+      return await runExclusive(`customer_chats:${rowId}`, async () => {
+        if (subPath.length === 0) {
+          const { error } = await client.from('customer_chats').upsert({
+            id: rowId,
+            room_id: custId,
+            sender_id: value?.sender || value?.senderName || null,
+            message: value?.text || value?.message || null,
+            timestamp: value?.timestamp ? new Date(value.timestamp).toISOString() : new Date().toISOString(),
+            data: value
+          }, { onConflict: 'id' });
+          if (error) throw error;
+          return {
+            broadcastPath: `customerChats/${custId}/messages/${targetId}`,
+            broadcastValue: value,
+            broadcastAction: 'insert'
+          };
+        } else {
+          const { data: existing } = await client.from('customer_chats').select('data').eq('id', rowId).maybeSingle();
+          const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
+          let cursor = current;
+          for (let i = 0; i < subPath.length - 1; i++) {
+            const seg = subPath[i];
+            if (!cursor[seg] || typeof cursor[seg] !== 'object') cursor[seg] = {};
+            cursor = cursor[seg];
+          }
+          cursor[subPath[subPath.length - 1]] = value;
 
-        const { error } = await client.from('customer_chats').upsert({
-          id: rowId,
-          room_id: custId,
-          data: current
-        }, { onConflict: 'id' });
-        if (error) throw error;
-      }
+          const { error } = await client.from('customer_chats').upsert({
+            id: rowId,
+            room_id: custId,
+            data: current
+          }, { onConflict: 'id' });
+          if (error) throw error;
+          return {
+            broadcastPath: `customerChats/${custId}/messages/${targetId}`,
+            broadcastValue: current,
+            broadcastAction: 'update'
+          };
+        }
+      });
     } else if (value && typeof value === 'object') {
       const rows = Object.entries(value).map(([mKey, mVal]) => {
         const rowId = mKey.startsWith(`${custId}_`) ? mKey : `${custId}_${mKey}`;
@@ -1552,33 +1781,73 @@ async function handleCustomerChatsSet(client, pathInfo, value) {
         const { error } = await client.from('customer_chats').upsert(rows, { onConflict: 'id' });
         if (error) throw error;
       }
+      return {
+        broadcastPath: `customerChats/${custId}/messages`,
+        broadcastValue: value,
+        broadcastAction: 'insert'
+      };
     }
   } else if (subType === 'metadata') {
-    if (targetId) {
-      const { data: existing } = await client.from('customer_chat_meta').select('data').eq('id', custId).maybeSingle();
-      const current = (existing && existing.data) ? { ...existing.data } : {};
-      current[targetId] = value;
+    return await runExclusive(`customer_chat_meta:${custId}`, async () => {
+      if (targetId) {
+        const { data: existing } = await client.from('customer_chat_meta').select('data').eq('id', custId).maybeSingle();
+        const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
+        if (subPath && subPath.length > 0) {
+          if (!current[targetId] || typeof current[targetId] !== 'object') current[targetId] = {};
+          let cursor = current[targetId];
+          for (let i = 0; i < subPath.length - 1; i++) {
+            const seg = subPath[i];
+            if (!cursor[seg] || typeof cursor[seg] !== 'object') cursor[seg] = {};
+            cursor = cursor[seg];
+          }
+          cursor[subPath[subPath.length - 1]] = value;
+        } else {
+          current[targetId] = value;
+        }
 
-      await Promise.all([
-        client.from('customer_chat_meta').upsert({ id: custId, data: current, updated_at: new Date().toISOString() }, { onConflict: 'id' }),
-        client.from('customer_chats').upsert({ id: `${custId}_metadata`, room_id: custId, data: current }, { onConflict: 'id' })
-      ]);
-    } else {
-      await Promise.all([
-        client.from('customer_chat_meta').upsert({ id: custId, data: value, updated_at: new Date().toISOString() }, { onConflict: 'id' }),
-        client.from('customer_chats').upsert({ id: `${custId}_metadata`, room_id: custId, data: value }, { onConflict: 'id' })
-      ]);
-    }
+        await Promise.all([
+          client.from('customer_chat_meta').upsert({ id: custId, data: current, updated_at: new Date().toISOString() }, { onConflict: 'id' }),
+          client.from('customer_chats').upsert({ id: `${custId}_metadata`, room_id: custId, data: current }, { onConflict: 'id' })
+        ]);
+        return {
+          broadcastPath: `customerChatMeta/${custId}`,
+          broadcastValue: current,
+          broadcastAction: 'update'
+        };
+      } else {
+        await Promise.all([
+          client.from('customer_chat_meta').upsert({ id: custId, data: value, updated_at: new Date().toISOString() }, { onConflict: 'id' }),
+          client.from('customer_chats').upsert({ id: `${custId}_metadata`, room_id: custId, data: value }, { onConflict: 'id' })
+        ]);
+        return {
+          broadcastPath: `customerChatMeta/${custId}`,
+          broadcastValue: value,
+          broadcastAction: 'insert'
+        };
+      }
+    });
   } else if (subType === 'threadSeenBy' || subType === 'midIndex') {
     const rowId = `${custId}_${subType}`;
-    if (targetId) {
-      const { data: existing } = await client.from('customer_chats').select('data').eq('id', rowId).maybeSingle();
-      const current = (existing && existing.data) ? { ...existing.data } : {};
-      current[targetId] = value;
-      await client.from('customer_chats').upsert({ id: rowId, room_id: custId, data: current }, { onConflict: 'id' });
-    } else {
-      await client.from('customer_chats').upsert({ id: rowId, room_id: custId, data: value }, { onConflict: 'id' });
-    }
+    return await runExclusive(`customer_chats:${rowId}`, async () => {
+      if (targetId) {
+        const { data: existing } = await client.from('customer_chats').select('data').eq('id', rowId).maybeSingle();
+        const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
+        current[targetId] = value;
+        await client.from('customer_chats').upsert({ id: rowId, room_id: custId, data: current }, { onConflict: 'id' });
+        return {
+          broadcastPath: `customerChats/${custId}/${subType}`,
+          broadcastValue: current,
+          broadcastAction: 'update'
+        };
+      } else {
+        await client.from('customer_chats').upsert({ id: rowId, room_id: custId, data: value }, { onConflict: 'id' });
+        return {
+          broadcastPath: `customerChats/${custId}/${subType}`,
+          broadcastValue: value,
+          broadcastAction: 'update'
+        };
+      }
+    });
   }
 }
 
@@ -1587,29 +1856,43 @@ async function handleCustomerChatsUpdate(client, pathInfo, values) {
 
   if (subType === 'messages' && targetId) {
     const rowId = targetId.startsWith(`${custId}_`) ? targetId : `${custId}_${targetId}`;
-    const { data: existing } = await client.from('customer_chats').select('data').eq('id', rowId).maybeSingle();
-    const current = (existing && existing.data) ? { ...existing.data } : {};
-    const merged = { ...current, ...values };
+    return await runExclusive(`customer_chats:${rowId}`, async () => {
+      const { data: existing } = await client.from('customer_chats').select('data').eq('id', rowId).maybeSingle();
+      const current = (existing && existing.data) ? { ...existing.data } : {};
+      const merged = { ...current, ...values };
 
-    const { error } = await client.from('customer_chats').upsert({
-      id: rowId,
-      room_id: custId,
-      sender_id: merged?.sender || merged?.senderName || null,
-      message: merged?.text || merged?.message || null,
-      timestamp: merged?.timestamp ? new Date(merged.timestamp).toISOString() : new Date().toISOString(),
-      data: merged
-    }, { onConflict: 'id' });
-    if (error) throw error;
+      const { error } = await client.from('customer_chats').upsert({
+        id: rowId,
+        room_id: custId,
+        sender_id: merged?.sender || merged?.senderName || null,
+        message: merged?.text || merged?.message || null,
+        timestamp: merged?.timestamp ? new Date(merged.timestamp).toISOString() : new Date().toISOString(),
+        data: merged
+      }, { onConflict: 'id' });
+      if (error) throw error;
+      return {
+        broadcastPath: `customerChats/${custId}/messages/${targetId}`,
+        broadcastValue: merged,
+        broadcastAction: 'update'
+      };
+    });
   } else {
     // Metadata update (default for customerChats/<custId>/metadata or customerChats/<custId>)
-    const { data: existing } = await client.from('customer_chat_meta').select('data').eq('id', custId).maybeSingle();
-    const current = (existing && existing.data) ? { ...existing.data } : {};
-    const merged = { ...current, ...values };
+    return await runExclusive(`customer_chat_meta:${custId}`, async () => {
+      const { data: existing } = await client.from('customer_chat_meta').select('data').eq('id', custId).maybeSingle();
+      const current = (existing && existing.data) ? { ...existing.data } : {};
+      const merged = { ...current, ...values };
 
-    await Promise.all([
-      client.from('customer_chat_meta').upsert({ id: custId, data: merged, updated_at: new Date().toISOString() }, { onConflict: 'id' }),
-      client.from('customer_chats').upsert({ id: `${custId}_metadata`, room_id: custId, data: merged }, { onConflict: 'id' })
-    ]);
+      await Promise.all([
+        client.from('customer_chat_meta').upsert({ id: custId, data: merged, updated_at: new Date().toISOString() }, { onConflict: 'id' }),
+        client.from('customer_chats').upsert({ id: `${custId}_metadata`, room_id: custId, data: merged }, { onConflict: 'id' })
+      ]);
+      return {
+        broadcastPath: `customerChatMeta/${custId}`,
+        broadcastValue: merged,
+        broadcastAction: 'update'
+      };
+    });
   }
 }
 
@@ -1702,21 +1985,35 @@ async function handleStoreRiderChatsSet(client, pathInfo, value) {
 
   if (subType === 'messages' && targetId) {
     const rowId = targetId.startsWith(`${roomId}_`) ? targetId : `${roomId}_${targetId}`;
-    const { error } = await client.from('store_rider_chats').upsert({
-      id: rowId,
-      room_id: roomId,
-      sender_id: value?.sender || value?.senderName || null,
-      message: value?.text || value?.message || null,
-      timestamp: value?.timestamp ? new Date(value.timestamp).toISOString() : new Date().toISOString(),
-      data: value
-    }, { onConflict: 'id' });
-    if (error) throw error;
+    return await runExclusive(`store_rider_chats:${rowId}`, async () => {
+      const { error } = await client.from('store_rider_chats').upsert({
+        id: rowId,
+        room_id: roomId,
+        sender_id: value?.sender || value?.senderName || null,
+        message: value?.text || value?.message || null,
+        timestamp: value?.timestamp ? new Date(value.timestamp).toISOString() : new Date().toISOString(),
+        data: value
+      }, { onConflict: 'id' });
+      if (error) throw error;
+      return {
+        broadcastPath: `storeRiderChats/${roomId}/messages/${targetId}`,
+        broadcastValue: value,
+        broadcastAction: 'insert'
+      };
+    });
   } else {
     // Room metadata update
-    await Promise.all([
-      client.from('store_rider_chat_meta').upsert({ id: roomId, data: value }, { onConflict: 'id' }),
-      client.from('store_rider_chats').upsert({ id: `${roomId}_metadata`, room_id: roomId, data: value }, { onConflict: 'id' })
-    ]);
+    return await runExclusive(`store_rider_chat_meta:${roomId}`, async () => {
+      await Promise.all([
+        client.from('store_rider_chat_meta').upsert({ id: roomId, data: value }, { onConflict: 'id' }),
+        client.from('store_rider_chats').upsert({ id: `${roomId}_metadata`, room_id: roomId, data: value }, { onConflict: 'id' })
+      ]);
+      return {
+        broadcastPath: `storeRiderChats/${roomId}`,
+        broadcastValue: value,
+        broadcastAction: 'insert'
+      };
+    });
   }
 }
 
@@ -1725,25 +2022,39 @@ async function handleStoreRiderChatsUpdate(client, pathInfo, values) {
 
   if (subType === 'messages' && targetId) {
     const rowId = targetId.startsWith(`${roomId}_`) ? targetId : `${roomId}_${targetId}`;
-    const { data: existing } = await client.from('store_rider_chats').select('data').eq('id', rowId).maybeSingle();
-    const current = (existing && existing.data) ? { ...existing.data } : {};
-    const merged = { ...current, ...values };
+    return await runExclusive(`store_rider_chats:${rowId}`, async () => {
+      const { data: existing } = await client.from('store_rider_chats').select('data').eq('id', rowId).maybeSingle();
+      const current = (existing && existing.data) ? { ...existing.data } : {};
+      const merged = { ...current, ...values };
 
-    const { error } = await client.from('store_rider_chats').upsert({
-      id: rowId,
-      room_id: roomId,
-      data: merged
-    }, { onConflict: 'id' });
-    if (error) throw error;
+      const { error } = await client.from('store_rider_chats').upsert({
+        id: rowId,
+        room_id: roomId,
+        data: merged
+      }, { onConflict: 'id' });
+      if (error) throw error;
+      return {
+        broadcastPath: `storeRiderChats/${roomId}/messages/${targetId}`,
+        broadcastValue: merged,
+        broadcastAction: 'update'
+      };
+    });
   } else {
-    const { data: existing } = await client.from('store_rider_chat_meta').select('data').eq('id', roomId).maybeSingle();
-    const current = (existing && existing.data) ? { ...existing.data } : {};
-    const merged = { ...current, ...values };
+    return await runExclusive(`store_rider_chat_meta:${roomId}`, async () => {
+      const { data: existing } = await client.from('store_rider_chat_meta').select('data').eq('id', roomId).maybeSingle();
+      const current = (existing && existing.data) ? { ...existing.data } : {};
+      const merged = { ...current, ...values };
 
-    await Promise.all([
-      client.from('store_rider_chat_meta').upsert({ id: roomId, data: merged }, { onConflict: 'id' }),
-      client.from('store_rider_chats').upsert({ id: `${roomId}_metadata`, room_id: roomId, data: merged }, { onConflict: 'id' })
-    ]);
+      await Promise.all([
+        client.from('store_rider_chat_meta').upsert({ id: roomId, data: merged }, { onConflict: 'id' }),
+        client.from('store_rider_chats').upsert({ id: `${roomId}_metadata`, room_id: roomId, data: merged }, { onConflict: 'id' })
+      ]);
+      return {
+        broadcastPath: `storeRiderChats/${roomId}`,
+        broadcastValue: merged,
+        broadcastAction: 'update'
+      };
+    });
   }
 }
 
@@ -1775,15 +2086,19 @@ export async function resyncActiveSubscriptions() {
       if (!sub || sub.isClosed) continue;
       if (sub.eventType === 'value') {
         try {
-          const ref = createSupabaseRef(sub.path);
+          const ref = createSupabaseRef(sub.path, sub.query || {});
           const snap = await ref.once('value');
           if (sub.isClosed) continue;
+          const val = snap.val();
           if (sub.tableCache) {
-            const val = snap.val();
             sub.tableCache = new Map(val && typeof val === 'object' ? Object.entries(val) : []);
           }
-          if (typeof sub.callback === 'function') {
-            sub.callback(snap);
+          const sig = computeFastSignature(val);
+          if (sub.lastSignature !== sig) {
+            sub.lastSignature = sig;
+            if (typeof sub.callback === 'function') {
+              sub.callback(snap);
+            }
           }
         } catch (err) {
           console.warn(`[Supabase Adapter] Resync failed for ${sub.path}:`, err);

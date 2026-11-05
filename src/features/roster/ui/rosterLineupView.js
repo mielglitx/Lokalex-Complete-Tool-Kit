@@ -716,7 +716,25 @@ export function updateRosterUI() {
     if (elCooldown) elCooldown.innerHTML = cdHtml.length ? cdHtml.join('') : '(No riders on cooldown)';
     if (elDayoff) elDayoff.innerHTML = dayOffHtml.length ? dayOffHtml.join('') : '(No riders on day off)';
 
+    lastRenderedRosterSig = computeRosterStateSignature(globalState.rosterMembers);
     // Decoupled: loadGlobalCateredList() is no longer called here on high-frequency timers.
+}
+
+let lastRenderedRosterSig = '';
+function computeRosterStateSignature(membersOrMap) {
+    if (!membersOrMap) return '';
+    const list = Array.isArray(membersOrMap)
+        ? membersOrMap
+        : Object.entries(membersOrMap).map(([k, v]) => ({ ...v, id: (v?.telegramId || v?.id || k).toString().trim() }));
+    return list
+        .map(m => {
+            const id = (m.telegramId || m.id || '').toString().trim();
+            const fees = m.customerFees ? JSON.stringify(m.customerFees) : '';
+            const ts = m.customerTimestamps ? JSON.stringify(m.customerTimestamps) : '';
+            return `${id}:${m.status || ''}:${m.customerName || ''}:${m.queueTime || ''}:${m.breakTargetTimestamp || ''}:${m.forcedCaters || 0}:${m.lastReceiptTotalFees || 0}:${fees}:${ts}:${m.lastVoidedAt || ''}`;
+        })
+        .sort()
+        .join('|');
 }
 
 /**
@@ -751,6 +769,13 @@ export async function forceRefreshRosterList(btn = null, isSilent = false) {
             }
         }
 
+        if (isSilent && rosterData && typeof rosterData === 'object') {
+            const incomingSig = computeRosterStateSignature(rosterData);
+            if (incomingSig && incomingSig === lastRenderedRosterSig) {
+                return;
+            }
+        }
+
         if (rosterData && typeof rosterData === 'object') {
             globalState.rosterMembers = Object.entries(rosterData).map(([key, item]) => ({
                 ...item,
@@ -769,7 +794,7 @@ export async function forceRefreshRosterList(btn = null, isSilent = false) {
         window.dispatchEvent(new Event('rosterUpdated'));
         updateRosterUI();
 
-        if (typeof loadGlobalCateredList === 'function') {
+        if (!isSilent && typeof loadGlobalCateredList === 'function') {
             loadGlobalCateredList();
         }
 

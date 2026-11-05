@@ -17,6 +17,7 @@
 
 import { appState, globalState } from '../store/state.js';
 import { db } from '../config/firebase.js';
+import { getLastRealtimeActivityTime } from '../config/supabaseDb.js';
 import { showToast, showNativeNotification } from '../ui/notifications.js';
 import * as storageEngine from '../utils/storageEngine.js';
 import * as authFeature from '../features/auth/index.js';
@@ -267,14 +268,15 @@ export function initRealtimeFirebaseListeners() {
             }
         });
 
-        // Background safety sync watchdog for roster: ensures rotation never stays stale if a packet drops or device wakes
+        // Background safety sync watchdog for roster: only polls when Realtime WebSocket has been silent > 18s
         if (!window._rosterPollingInterval) {
             window._rosterPollingInterval = setInterval(() => {
                 const isVisible = typeof document !== 'undefined' ? (!document.hidden && document.visibilityState === 'visible') : true;
-                if (isVisible && navigator.onLine && typeof window.forceRefreshRosterList === 'function') {
+                const silentMs = Date.now() - getLastRealtimeActivityTime();
+                if (isVisible && navigator.onLine && silentMs > 18000 && typeof window.forceRefreshRosterList === 'function') {
                     window.forceRefreshRosterList(null, true).catch(() => {});
                 }
-            }, 10000);
+            }, 25000);
         }
 
         db.ref('blockedUsers').on('value', (snapshot) => {

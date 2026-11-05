@@ -1,5 +1,6 @@
 // src/features/chat/chatFeed/chatFeedListener.js
 import { db, isSupabaseSelected } from '../../../config/firebase.js';
+import { getLastRealtimeActivityTime } from '../../../config/supabaseDb.js';
 import { appState, globalState } from '../../../store/state.js';
 import { showToast, showNativeNotification } from '../../../ui/notifications.js';
 import { isCustomerMatch, cleanCustomerForMatch, isAdmin } from '../../roster/rosterUtils.js';
@@ -687,6 +688,9 @@ export function listenToAllCustomerChatsForRider() {
     db.ref('customerChatMeta').orderByChild('lastUpdated').limitToLast(60).on('value', (snapshot) => {
         const data = snapshot.val();
         try {
+            if (data && typeof data === 'object') {
+                lastRenderedChatFeedSig = computeChatFeedSignature(data);
+            }
             processCustomerChatMetaData(data, false);
         } catch (err) {
             console.error("Error processing customerChatMeta update:", err);
@@ -695,14 +699,15 @@ export function listenToAllCustomerChatsForRider() {
         console.error("Firebase customerChatMeta listener error:", error);
     });
 
-    // 3. Background safety sync watchdog: ensures feed never runs late if a WebSocket event drops or phone wakes from sleep
+    // 3. Background safety sync watchdog: only polls when Realtime WebSocket has been silent > 18s
     if (!window._chatMetaPollingInterval) {
         window._chatMetaPollingInterval = setInterval(() => {
             const isVisible = typeof document !== 'undefined' ? (!document.hidden && document.visibilityState === 'visible') : true;
-            if (isVisible && navigator.onLine && typeof forceRefreshLiveChatsFeed === 'function') {
+            const silentMs = Date.now() - getLastRealtimeActivityTime();
+            if (isVisible && navigator.onLine && silentMs > 18000 && typeof forceRefreshLiveChatsFeed === 'function') {
                 forceRefreshLiveChatsFeed(null, true).catch(() => {});
             }
-        }, 12000);
+        }, 25000);
     }
 }
 
@@ -1119,6 +1124,18 @@ export function toggleCustomerChatUnread(targetCustId) {
     }
 }
 
+let lastRenderedChatFeedSig = '';
+function computeChatFeedSignature(chatData) {
+    if (!chatData || typeof chatData !== 'object') return '';
+    return Object.entries(chatData)
+        .map(([k, v]) => {
+            const m = (v && v.metadata && typeof v.metadata === 'object') ? v.metadata : (v || {});
+            return `${k}:${m.lastUpdated || 0}:${m.lastMessage || ''}:${m.isUnread ? 1 : 0}:${m.folder || ''}:${m.cateringRiderId || ''}:${m.cateringRiderName || ''}:${m.customerName || ''}:${m.isDone ? 1 : 0}`;
+        })
+        .sort()
+        .join('|');
+}
+
 /**
  * Force refresh Live Chats Feed on demand via fresh REST query and UI re-render.
  */
@@ -1148,6 +1165,16 @@ export async function forceRefreshLiveChatsFeed(btn = null, isSilent = false) {
             } catch (fetchErr) {
                 console.warn('[ForceRefreshChat] REST fetch fallback failed:', fetchErr);
             }
+        }
+
+        if (isSilent && chatData && typeof chatData === 'object') {
+            const incomingSig = computeChatFeedSignature(chatData);
+            if (incomingSig && incomingSig === lastRenderedChatFeedSig) {
+                return;
+            }
+            lastRenderedChatFeedSig = incomingSig;
+        } else if (chatData && typeof chatData === 'object') {
+            lastRenderedChatFeedSig = computeChatFeedSignature(chatData);
         }
 
         if (chatData && typeof chatData === 'object') {
