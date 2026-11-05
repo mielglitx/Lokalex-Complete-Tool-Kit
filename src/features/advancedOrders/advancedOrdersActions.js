@@ -1,5 +1,5 @@
 // src/features/advancedOrders/advancedOrdersActions.js
-import { db } from '../../config/firebase.js';
+import { db, primaryDb } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { showToast } from '../../ui/notifications.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
@@ -90,7 +90,16 @@ export async function submitNewAdvancedOrder() {
             updatedAt: Date.now()
         };
 
-        await db.ref(`advancedOrders/${editingAdvancedOrderId}`).update(updatePayload).catch(() => {});
+        try {
+            await db.ref(`advancedOrders/${editingAdvancedOrderId}`).update(updatePayload);
+        } catch (e) {
+            console.warn("[AdvanceOrder Update Error]:", e);
+        }
+        try {
+            if (primaryDb && primaryDb !== db) {
+                primaryDb.ref(`advancedOrders/${editingAdvancedOrderId}`).update(updatePayload).catch(() => {});
+            }
+        } catch (_) {}
 
         const localOrd = (globalState.globalAdvancedOrders || []).find(o => (o.id || o.key || "").toString() === editingAdvancedOrderId.toString());
         if (localOrd) {
@@ -101,7 +110,27 @@ export async function submitNewAdvancedOrder() {
         setEditingAdvancedOrderId(null);
     } else {
         const currentDateStr = getLocalTodayStr();
+        let pushKey = null;
+        try {
+            if (db) {
+                const pushRef = db.ref('advancedOrders').push();
+                pushKey = pushRef ? pushRef.key : null;
+            }
+        } catch (_) {}
+        if (!pushKey) {
+            try {
+                if (primaryDb) {
+                    pushKey = primaryDb.ref('advancedOrders').push().key;
+                }
+            } catch (_) {}
+        }
+        if (!pushKey) {
+            pushKey = 'adv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+        }
+
         const newOrd = {
+            id: pushKey,
+            key: pushKey,
             custName: custName,
             timeOrdered: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             dateOrdered: currentDateStr,
@@ -115,12 +144,30 @@ export async function submitNewAdvancedOrder() {
             cateredBy: ""
         };
 
-        if (db) {
-            const pushRef = db.ref('advancedOrders').push();
-            newOrd.id = pushRef.key;
-            newOrd.key = pushRef.key;
-            await pushRef.set(newOrd);
+        // 1. Optimistically insert into globalState immediately
+        if (!globalState.globalAdvancedOrders) {
+            globalState.globalAdvancedOrders = [];
         }
+        const existingIdx = globalState.globalAdvancedOrders.findIndex(o => (o.id || o.key || "").toString() === pushKey.toString());
+        if (existingIdx >= 0) {
+            globalState.globalAdvancedOrders[existingIdx] = newOrd;
+        } else {
+            globalState.globalAdvancedOrders.unshift(newOrd);
+        }
+
+        // 2. Persist to active database and backup
+        try {
+            if (db) {
+                await db.ref(`advancedOrders/${pushKey}`).set(newOrd);
+            }
+        } catch (dbErr) {
+            console.warn("[AdvanceOrder Save active DB error]:", dbErr);
+        }
+        try {
+            if (primaryDb && primaryDb !== db) {
+                primaryDb.ref(`advancedOrders/${pushKey}`).set(newOrd).catch(() => {});
+            }
+        } catch (_) {}
 
         showToast(`✅ Scheduled order created for ${custName} on ${dateToReceive}!`);
     }
@@ -141,6 +188,12 @@ export async function submitNewAdvancedOrder() {
 
     resetAddTabButtonState();
     switchAdvTab('list');
+    if (typeof renderAdvancedOrdersList === 'function') {
+        renderAdvancedOrdersList();
+    }
+    if (typeof checkScheduledDeliveryAlerts === 'function') {
+        checkScheduledDeliveryAlerts();
+    }
 }
 
 export function takeAdvancedOrder(orderId) {
@@ -284,4 +337,15 @@ export function autoCancelAdvancedOrdersForRider(riderName) {
             }
         });
     });
+}
+
+// Global window attachments for HTML template compatibility
+if (typeof window !== 'undefined') {
+    window.submitNewAdvancedOrder = submitNewAdvancedOrder;
+    window.editAdvancedOrder = editAdvancedOrder;
+    window.takeAdvancedOrder = takeAdvancedOrder;
+    window.markAdvancedOrderDone = markAdvancedOrderDone;
+    window.cancelAdvancedOrder = cancelAdvancedOrder;
+    window.autoCompleteAdvancedOrdersFromCatered = autoCompleteAdvancedOrdersFromCatered;
+    window.autoCancelAdvancedOrdersForRider = autoCancelAdvancedOrdersForRider;
 }

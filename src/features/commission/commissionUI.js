@@ -394,9 +394,14 @@ export function refreshCommissionView() {
         let rDate = r.date || r.completedDate;
 
         if (!rId) {
-            const rosterRec = globalState.rosterMembers?.find(mem => isRiderMatch(rName, mem.riderName || mem.name || ""));
-            if (rosterRec && rosterRec.telegramId) rId = rosterRec.telegramId.toString();
-            else rId = rName.toLowerCase();
+            const exactRoster = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").trim().toLowerCase() === rName.toLowerCase());
+            if (exactRoster && (exactRoster.telegramId || exactRoster.id)) {
+                rId = (exactRoster.telegramId || exactRoster.id).toString();
+            } else {
+                const rosterRec = globalState.rosterMembers?.find(mem => isRiderMatch(rName, mem.riderName || mem.name || ""));
+                if (rosterRec && (rosterRec.telegramId || rosterRec.id)) rId = (rosterRec.telegramId || rosterRec.id).toString();
+                else rId = rName.toLowerCase();
+            }
         }
 
         let gross = parseFloat(r.totalFees) || 0;
@@ -500,7 +505,8 @@ export function refreshCommissionView() {
 
             // Ensure penalized rider is in riderTotals even with 0 deliveries
             const rName = rec.riderName || key.split('_')[0];
-            const rosterRec = globalState.rosterMembers?.find(mem => isRiderMatch(rName, mem.riderName || mem.name || "", "", mem.telegramId || mem.id));
+            const exactRoster = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").trim().toLowerCase() === rName.toLowerCase());
+            const rosterRec = exactRoster || globalState.rosterMembers?.find(mem => isRiderMatch(rName, mem.riderName || mem.name || "", "", mem.telegramId || mem.id));
             const rId = (rec.telegramId || (rosterRec && (rosterRec.telegramId || rosterRec.id)) || rName.toLowerCase()).toString().trim();
 
             if (!riderTotals[rId]) {
@@ -951,9 +957,14 @@ export function generateDailyReportText() {
         let rDate = r.date || r.completedDate;
 
         if (!rId) {
-            const rosterRec = globalState.rosterMembers?.find(mem => isRiderMatch(rName, mem.riderName || mem.name || ""));
-            if (rosterRec && rosterRec.telegramId) rId = rosterRec.telegramId.toString();
-            else rId = rName.toLowerCase();
+            const exactRoster = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").trim().toLowerCase() === rName.toLowerCase());
+            if (exactRoster && (exactRoster.telegramId || exactRoster.id)) {
+                rId = (exactRoster.telegramId || exactRoster.id).toString();
+            } else {
+                const rosterRec = globalState.rosterMembers?.find(mem => isRiderMatch(rName, mem.riderName || mem.name || ""));
+                if (rosterRec && (rosterRec.telegramId || rosterRec.id)) rId = (rosterRec.telegramId || rosterRec.id).toString();
+                else rId = rName.toLowerCase();
+            }
         }
 
         let gross = parseFloat(r.totalFees) || 0;

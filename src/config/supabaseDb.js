@@ -445,7 +445,21 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           let query = client.from(pathInfo.table).select('id, data');
 
           if (ref._query.limit && ref._query.limitType === 'last') {
-            query = query.limit(ref._query.limit);
+            if (pathInfo.table === 'advanced_orders' || pathInfo.table === 'receipts') {
+              query = query.order('created_at', { ascending: false }).limit(ref._query.limit);
+            } else if (pathInfo.table === 'catered_history') {
+              query = query.order('completed_at', { ascending: false }).limit(ref._query.limit);
+            } else {
+              query = query.order('id', { ascending: false }).limit(ref._query.limit);
+            }
+          } else if (ref._query.limit && ref._query.limitType === 'first') {
+            if (pathInfo.table === 'advanced_orders' || pathInfo.table === 'receipts') {
+              query = query.order('created_at', { ascending: true }).limit(ref._query.limit);
+            } else if (pathInfo.table === 'catered_history') {
+              query = query.order('completed_at', { ascending: true }).limit(ref._query.limit);
+            } else {
+              query = query.order('id', { ascending: true }).limit(ref._query.limit);
+            }
           }
 
           const { data, error } = await query;

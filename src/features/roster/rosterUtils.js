@@ -520,7 +520,9 @@ export function isRiderMatch(targetName = "", recordName = "", targetId = "", re
     // 1. If both IDs are present: ID match is definitive
     if (tId && rId) {
         if (tId === rId) return true;
-        if (ADMIN_IDS.some(a => a.toString().trim() === tId) && ADMIN_IDS.some(a => a.toString().trim() === rId)) return true;
+        if (ADMIN_IDS.some(a => a.toString().trim().toLowerCase() === tId) && 
+            ADMIN_IDS.some(a => a.toString().trim().toLowerCase() === rId)) return true;
+        return false; // Non-admin distinct IDs are definitively different riders!
     }
 
     const tn = (targetName || "").trim().toLowerCase();
@@ -535,26 +537,56 @@ export function isRiderMatch(targetName = "", recordName = "", targetId = "", re
     const w1 = tn.split(/\s+/).filter(Boolean);
     const w2 = rn.split(/\s+/).filter(Boolean);
 
-    // 2. If both records have multiple names (first + last)
+    // First name token MUST match; otherwise they cannot be the same rider
+    if (w1[0] !== w2[0]) return false;
+
+    // 2. If both records have multiple names (first + last or initial)
     if (w1.length >= 2 && w2.length >= 2) {
-        const firstMatch = w1[0] === w2[0];
         const last1 = w1[w1.length - 1].replace(/\.$/, '');
         const last2 = w2[w2.length - 1].replace(/\.$/, '');
         const lastMatch = (last1 === last2) || 
                           (last1.length === 1 && last2.startsWith(last1)) || 
                           (last2.length === 1 && last1.startsWith(last2));
-        if (firstMatch && lastMatch) return true;
+        if (lastMatch) return true;
+        return false; // Incompatible last names/initials (e.g. "Mark A." vs "Mark T.")
     }
 
-    // 3. Single word against full name (e.g. "Allan" matching "Allan Reyes" or vice-versa)
-    if (w1.length === 1 && w2.length > 1 && w1[0].length >= 3) {
-        return w2.includes(w1[0]);
-    }
-    if (w2.length === 1 && w1.length > 1 && w2[0].length >= 3) {
-        return w1.includes(w2[0]);
+    // 3. Single word name against full/short name (e.g. "Mark" vs "Mark Tejada" or "Mark T.")
+    // CRITICAL: A single-word name can NEVER match a multi-word name if multiple riders
+    // in the roster share that same first name (e.g. "Mark" and "Mark Tejada" in the same fleet).
+    const singleToken = w1.length === 1 ? w1[0] : w2[0];
+    const multiWords = w1.length === 1 ? w2 : w1;
+
+    if (globalState.rosterMembers && Array.isArray(globalState.rosterMembers) && globalState.rosterMembers.length > 0) {
+        const matchingMembers = globalState.rosterMembers.filter(m => {
+            const mName = (m.riderName || m.name || "").trim().toLowerCase();
+            if (!mName) return false;
+            const parts = mName.split(/\s+/).filter(Boolean);
+            return parts[0] === singleToken;
+        });
+
+        // If multiple riders have this first name (e.g. "Mark" and "Mark Tejada"), never fuzzy match
+        if (matchingMembers.length > 1) {
+            return false;
+        }
+
+        // If there is an exact registered roster member with this single-word name,
+        // do not let it bleed into another rider's orders
+        const hasExactSingle = globalState.rosterMembers.some(m => {
+            const mName = (m.riderName || m.name || "").trim().toLowerCase();
+            return mName === singleToken;
+        });
+        if (hasExactSingle && multiWords.length > 1) {
+            return false;
+        }
+    } else {
+        // Without roster list, do not match a bare 1-word name to a multi-word name
+        if (multiWords.length > 1) {
+            return false;
+        }
     }
 
-    return false;
+    return multiWords[0] === singleToken;
 }
 
 export function getMergedDeduplicatedCommissionList(forceFresh = false) {
@@ -707,11 +739,18 @@ function buildDailyGrossIndex() {
         const recName = (rec.riderName || "").trim().toLowerCase();
 
         if (!recId && globalState.rosterMembers) {
-            const rosterRec = globalState.rosterMembers.find(mem => 
-                isRiderMatch(recName, mem.riderName || mem.name || "")
+            const exactRoster = globalState.rosterMembers.find(mem => 
+                (mem.riderName || mem.name || "").trim().toLowerCase() === recName
             );
-            if (rosterRec && rosterRec.telegramId) {
-                recId = rosterRec.telegramId.toString().trim();
+            if (exactRoster && (exactRoster.telegramId || exactRoster.id)) {
+                recId = (exactRoster.telegramId || exactRoster.id).toString().trim();
+            } else {
+                const rosterRec = globalState.rosterMembers.find(mem => 
+                    isRiderMatch(recName, mem.riderName || mem.name || "")
+                );
+                if (rosterRec && (rosterRec.telegramId || rosterRec.id)) {
+                    recId = (rosterRec.telegramId || rosterRec.id).toString().trim();
+                }
             }
         }
 
