@@ -2,7 +2,7 @@
 import { db } from '../../config/firebase.js';
 import { globalState, appState } from '../../store/state.js';
 import { showToast } from '../../ui/notifications.js';
-import { isAdmin, canManageRoster, isRiderMatch, getUserType, normalizeToDateStr } from './rosterUtils.js';
+import { isAdmin, canManageRoster, isRiderMatch, getUserType, normalizeToDateStr, parseTimeToMinutes } from './rosterUtils.js';
 import { ADMIN_IDS } from '../../config/constants.js';
 import { getLocalTodayStr } from '../../utils/helpers.js';
 
@@ -110,9 +110,12 @@ export async function loadRiderPerformanceData(startDate, endDate) {
         };
 
         // 1. Concurrently fetch Receipts, Catered History, Shift History, Logins, and Riders with safe timeouts
+        // Pass date range query when supported to prevent PostgREST 1000-row truncate
         const [receiptsSnap, cateredSnap, shiftsSnap, loginsSnap, ridersSnap] = await Promise.all([
-            safeQuery(db.ref('receipts').once('value')),
-            safeQuery(db.ref('cateredHistory').once('value')),
+            safeQuery(db.ref('receipts').orderByChild('date').startAt(startDate).endAt(endDate).once('value'))
+                .then(s => (s && s.val && Object.keys(s.val() || {}).length > 0) ? s : safeQuery(db.ref('receipts').once('value'))),
+            safeQuery(db.ref('cateredHistory').orderByChild('completedDate').startAt(startDate).endAt(endDate).once('value'))
+                .then(s => (s && s.val && Object.keys(s.val() || {}).length > 0) ? s : safeQuery(db.ref('cateredHistory').once('value'))),
             safeQuery(db.ref('shiftHistory').once('value')),
             safeQuery(db.ref('logins').once('value')),
             safeQuery(db.ref('riders').once('value'))
@@ -180,7 +183,8 @@ export async function loadRiderPerformanceData(startDate, endDate) {
                     workedMinutes: 0,
                     breakMinutes: 0,
                     attendedDates: new Set(),
-                    completedTxIds: new Set()
+                    completedTxIds: new Set(),
+                    dailyDutyMap: new Map() // dateStr -> { shiftWorked: 0, breakMinutes: 0, minTime: 9999, maxTime: -1, orderCount: 0 }
                 });
             }
             const item = riderStatsMap.get(key);
@@ -213,7 +217,7 @@ export async function loadRiderPerformanceData(startDate, endDate) {
             });
         }
 
-        // 3. Process Receipts (Total delivery fees & Income)
+        // 3. Process Receipts (Total delivery fees & Income across the entire week)
         Object.entries(rawReceipts).forEach(([txId, r]) => {
             if (!r || r.status === 'voided' || r.voided || r.isVoided) return;
             const rDate = normalizeToDateStr(r.date || r.createdAtDate || r.completedDate || '');
@@ -234,7 +238,29 @@ export async function loadRiderPerformanceData(startDate, endDate) {
                 stat.totalIncome += fee;
                 const custs = parseInt(r.customerCount, 10) || 1;
                 stat.customerCount += custs;
-                if (rDate) stat.attendedDates.add(rDate);
+                if (rDate) {
+                    stat.attendedDates.add(rDate);
+
+                    if (!stat.dailyDutyMap.has(rDate)) {
+                        stat.dailyDutyMap.set(rDate, { shiftWorked: 0, breakMinutes: 0, minTime: 9999, maxTime: -1, orderCount: 0 });
+                    }
+                    const dayObj = stat.dailyDutyMap.get(rDate);
+                    dayObj.orderCount += custs;
+
+                    const sTime = r.startTime || r.cateringStartTime || r.time || r.receiptTime || '';
+                    const cTime = r.completedTime || r.doneTime || r.receiptTime || '';
+                    const sMins = parseTimeToMinutes(sTime);
+                    const cMins = parseTimeToMinutes(cTime);
+
+                    if (sMins !== null) {
+                        dayObj.minTime = Math.min(dayObj.minTime, sMins);
+                        dayObj.maxTime = Math.max(dayObj.maxTime, sMins);
+                    }
+                    if (cMins !== null) {
+                        dayObj.minTime = Math.min(dayObj.minTime, cMins);
+                        dayObj.maxTime = Math.max(dayObj.maxTime, cMins);
+                    }
+                }
 
                 const dur = parseInt(r.duration, 10) || 0;
                 if (dur > 0 && dur < 300) {
@@ -243,7 +269,7 @@ export async function loadRiderPerformanceData(startDate, endDate) {
             }
         });
 
-        // 4. Process Catered History (Captures orders marked done via roster)
+        // 4. Process Catered History (Captures orders marked done via roster across the entire week)
         Object.entries(rawCatered).forEach(([txId, h]) => {
             if (!h || h.status === 'voided' || h.voided || h.isVoided) return;
             const hDate = normalizeToDateStr(h.completedDate || h.date || '');
@@ -264,7 +290,29 @@ export async function loadRiderPerformanceData(startDate, endDate) {
                 stat.totalIncome += fee;
                 const custs = parseInt(h.customerCount, 10) || 1;
                 stat.customerCount += custs;
-                if (hDate) stat.attendedDates.add(hDate);
+                if (hDate) {
+                    stat.attendedDates.add(hDate);
+
+                    if (!stat.dailyDutyMap.has(hDate)) {
+                        stat.dailyDutyMap.set(hDate, { shiftWorked: 0, breakMinutes: 0, minTime: 9999, maxTime: -1, orderCount: 0 });
+                    }
+                    const dayObj = stat.dailyDutyMap.get(hDate);
+                    dayObj.orderCount += custs;
+
+                    const sTime = h.startTime || h.cateringStartTime || h.time || h.receiptTime || '';
+                    const cTime = h.completedTime || h.doneTime || '';
+                    const sMins = parseTimeToMinutes(sTime);
+                    const cMins = parseTimeToMinutes(cTime);
+
+                    if (sMins !== null) {
+                        dayObj.minTime = Math.min(dayObj.minTime, sMins);
+                        dayObj.maxTime = Math.max(dayObj.maxTime, sMins);
+                    }
+                    if (cMins !== null) {
+                        dayObj.minTime = Math.min(dayObj.minTime, cMins);
+                        dayObj.maxTime = Math.max(dayObj.maxTime, cMins);
+                    }
+                }
 
                 const dur = parseInt(h.duration, 10) || 0;
                 if (dur > 0 && dur < 300) {
@@ -273,7 +321,7 @@ export async function loadRiderPerformanceData(startDate, endDate) {
             }
         });
 
-        // 5. Process Shift History and Daily Logins (Duty Time, Break Time & Attendance Days)
+        // 5. Process Shift History and Daily Logins (Duty Time, Break Time & Attendance Days across the whole week)
         const combinedShifts = { ...rawShifts };
         Object.entries(rawLogins).forEach(([lId, lData]) => {
             if (lData && lData.date) {
@@ -303,7 +351,12 @@ export async function loadRiderPerformanceData(startDate, endDate) {
 
             stat.attendedDates.add(sDate);
 
-            // Track worked & break minutes
+            if (!stat.dailyDutyMap.has(sDate)) {
+                stat.dailyDutyMap.set(sDate, { shiftWorked: 0, breakMinutes: 0, minTime: 9999, maxTime: -1, orderCount: 0 });
+            }
+            const dayObj = stat.dailyDutyMap.get(sDate);
+
+            // Track worked & break minutes for this specific day
             let netWorked = parseInt(shift.workedMinutes, 10);
             let totalBreak = parseInt(shift.totalBreakMinutes, 10) || 0;
 
@@ -314,27 +367,61 @@ export async function loadRiderPerformanceData(startDate, endDate) {
                     const endTs = shift.clockOutTimestamp || (isToday ? Date.now() : shift.loginTimestamp);
                     const gross = Math.max(0, Math.floor((endTs - shift.loginTimestamp) / 60000));
                     netWorked = Math.max(0, gross - totalBreak);
+                } else if (shift.loginTime && shift.clockOutTime) {
+                    const sM = parseTimeToMinutes(shift.loginTime);
+                    const eM = parseTimeToMinutes(shift.clockOutTime);
+                    if (sM !== null && eM !== null && eM >= sM) {
+                        netWorked = Math.max(0, (eM - sM) - totalBreak);
+                    }
                 } else {
                     netWorked = 0;
                 }
             }
 
-            // Cap realistic shift maximum (14 hours / 840 min max per shift)
-            if (netWorked > 14 * 60) netWorked = 14 * 60;
-            if (totalBreak > 6 * 60) totalBreak = 6 * 60;
-
-            stat.workedMinutes += netWorked;
-            stat.breakMinutes += totalBreak;
-        });
-
-        // Fallback: order durations
-        riderStatsMap.forEach(stat => {
-            if (stat.workedMinutes === 0 && stat._orderDurations > 0) {
-                stat.workedMinutes = stat._orderDurations;
+            if (!isNaN(netWorked) && netWorked > 0) {
+                dayObj.shiftWorked = Math.max(dayObj.shiftWorked, netWorked);
+            }
+            if (totalBreak > 0) {
+                dayObj.breakMinutes = Math.max(dayObj.breakMinutes, totalBreak);
             }
         });
 
-        // 6. Convert Map to Array & Calculate Averages
+        // 6. Aggregate Total Time Worked & Break Minutes Across the Entire Week/Period
+        riderStatsMap.forEach(stat => {
+            if (stat.isAdmin) return;
+            let totalWeekWorked = 0;
+            let totalWeekBreak = 0;
+
+            stat.dailyDutyMap.forEach((dayObj, dateStr) => {
+                let dayWorked = dayObj.shiftWorked || 0;
+
+                // If rider delivered orders on this day, evaluate active delivery duty span
+                if (dayObj.orderCount > 0 && dayObj.minTime < 9999 && dayObj.maxTime > -1) {
+                    const orderSpan = dayObj.orderCount > 1
+                        ? Math.max(45, (dayObj.maxTime - dayObj.minTime) + 30) // Active span + 30m prep/standby cushion
+                        : 45; // 45m minimum duty for single order
+                    dayWorked = Math.max(dayWorked, orderSpan);
+                }
+
+                // Cap realistic shift maximum (14 hours / 840 min max per day)
+                if (dayWorked > 14 * 60) dayWorked = 14 * 60;
+                let dayBreak = dayObj.breakMinutes || 0;
+                if (dayBreak > 6 * 60) dayBreak = 6 * 60;
+
+                totalWeekWorked += dayWorked;
+                totalWeekBreak += dayBreak;
+            });
+
+            // Fallback: order durations if no active span or shift was calculated
+            if (totalWeekWorked === 0 && stat._orderDurations > 0) {
+                totalWeekWorked = stat._orderDurations;
+            }
+
+            stat.workedMinutes = totalWeekWorked;
+            stat.breakMinutes = totalWeekBreak;
+        });
+
+        // 7. Convert Map to Array & Calculate Averages
         const ridersList = Array.from(riderStatsMap.values()).map(r => {
             const daysCount = r.attendedDates.size;
             return {
