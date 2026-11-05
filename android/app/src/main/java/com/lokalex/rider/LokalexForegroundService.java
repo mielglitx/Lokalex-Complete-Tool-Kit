@@ -171,7 +171,9 @@ public class LokalexForegroundService extends Service {
                 if (!isInitialCheck && lastKnownMsgTimestamp > 0) {
                     java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US);
                     sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
-                    String isoTime = sdf.format(new java.util.Date(lastKnownMsgTimestamp));
+                    // 45-second overlap window prevents missing messages due to client/server clock skew or delayed delivery
+                    long queryTime = Math.max(0, lastKnownMsgTimestamp - 45000L);
+                    String isoTime = sdf.format(new java.util.Date(queryTime));
                     sbUrlStr = "https://brdvugzjhkimcyabptcw.supabase.co/rest/v1/customer_chat_meta?select=*&updated_at=gt."
                             + java.net.URLEncoder.encode(isoTime, "UTF-8") + "&order=updated_at.desc&limit=10";
                 } else {
@@ -210,8 +212,9 @@ public class LokalexForegroundService extends Service {
                 try {
                     String fbUrlStr;
                     if (!isInitialCheck && lastKnownMsgTimestamp > 0) {
+                        long fbQueryTime = Math.max(0, lastKnownMsgTimestamp - 45000L);
                         fbUrlStr = "https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?orderBy=%22lastUpdated%22&startAt="
-                                + (lastKnownMsgTimestamp + 1) + "&limitToLast=10";
+                                + fbQueryTime + "&limitToLast=10";
                     } else {
                         fbUrlStr = "https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?orderBy=%22lastUpdated%22&limitToLast=25";
                     }
@@ -266,9 +269,27 @@ public class LokalexForegroundService extends Service {
                 if (!metaObj.has("status") && row.has("status")) {
                     metaObj.put("status", row.optString("status"));
                 }
-                if (!metaObj.has("lastUpdated") && row.has("last_updated")) {
-                    metaObj.put("lastUpdated", row.optLong("last_updated"));
+                long lastUpdated = metaObj.optLong("lastUpdated", 0);
+                if (lastUpdated <= 0) {
+                    if (row.has("last_updated")) {
+                        lastUpdated = row.optLong("last_updated", 0);
+                    }
+                    if (lastUpdated <= 0 && row.has("updated_at")) {
+                        String uStr = row.optString("updated_at", "").trim();
+                        if (!uStr.isEmpty()) {
+                            try {
+                                java.text.SimpleDateFormat sdfParser = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US);
+                                sdfParser.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                                String cleanIso = uStr.replace("Z", "").split("\\+")[0].split("\\.")[0];
+                                lastUpdated = sdfParser.parse(cleanIso).getTime();
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                    if (lastUpdated > 0) {
+                        metaObj.put("lastUpdated", lastUpdated);
+                    }
                 }
+
                 if (!metaObj.has("unreadForRider") && row.has("unread_for_rider")) {
                     metaObj.put("unreadForRider", row.optBoolean("unread_for_rider"));
                 }
@@ -313,14 +334,21 @@ public class LokalexForegroundService extends Service {
             // Handle Initial Startup Snapshot: prime signatures so historical chats do not spam
             if (isInitialCheck) {
                 int primedCount = 0;
+                long maxChatTs = 0;
                 for (JSONObject meta : chatList) {
                     String custId = meta.optString("__custId");
                     long lastUpdated = meta.optLong("lastUpdated", 0);
-                    processedMsgSignatures.add(custId + "_" + lastUpdated);
-                    if (lastUpdated > lastKnownMsgTimestamp) {
-                        lastKnownMsgTimestamp = lastUpdated;
+                    String sig = custId + "_" + (lastUpdated > 0 ? lastUpdated : meta.optString("lastMessage").hashCode());
+                    processedMsgSignatures.add(sig);
+                    if (lastUpdated > maxChatTs) {
+                        maxChatTs = lastUpdated;
                     }
                     primedCount++;
+                }
+                if (maxChatTs > 0) {
+                    lastKnownMsgTimestamp = maxChatTs;
+                } else {
+                    lastKnownMsgTimestamp = System.currentTimeMillis() - 45000L;
                 }
                 isInitialCheck = false;
                 Log.i(TAG, "Initial meta snapshot primed with " + primedCount + " chats. Monitoring for new arrivals...");
@@ -352,6 +380,9 @@ public class LokalexForegroundService extends Service {
                 if (folder.equals("catering")) {
                     String cateredByRiderId = meta.optString("cateredByRiderId", "").trim();
                     String cateredByRiderName = meta.optString("cateredByRiderName", "").trim().toLowerCase();
+                    if (cateredByRiderName.isEmpty()) {
+                        cateredByRiderName = meta.optString("cateredBy", "").trim().toLowerCase();
+                    }
                     if (!myRiderId.isEmpty() && !cateredByRiderId.isEmpty() && !cateredByRiderId.equals(myRiderId)) {
                         continue;
                     }
@@ -360,7 +391,7 @@ public class LokalexForegroundService extends Service {
                     }
                 }
 
-                String signature = custId + "_" + lastUpdated;
+                String signature = custId + "_" + (lastUpdated > 0 ? lastUpdated : lastMessage.hashCode());
                 if (processedMsgSignatures.contains(signature)) continue;
                 processedMsgSignatures.add(signature);
 
