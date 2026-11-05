@@ -8,6 +8,7 @@ import {
     isSourceSelected,
     hasAnyFbSourceSelected,
     getResolvedFbName,
+    resolveFacebookCustomerName,
     autoResolvePendingFacebookThreads,
     syncFacebookPageFolderStatus
 } from '../facebookApiAdmin.js';
@@ -343,7 +344,7 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                     displayName = rawExtracted.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
                 }
             }
-            // Check live roster forcedCaters for a mapped name
+            // Check live roster forcedCaters or active catering assignment for a mapped name
             if (!displayName || displayName.toLowerCase() === 'customer' || displayName.toLowerCase() === 'customer name') {
                 const liveRoster = globalState.rosterMembers || [];
                 for (const m of liveRoster) {
@@ -358,6 +359,16 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                             }
                         }
                     }
+                    if (!displayName || displayName.toLowerCase() === 'customer') {
+                        const isThisRiderCatering = (meta.cateredByRiderId && String(meta.cateredByRiderId).trim() === String(m.telegramId || m.id).trim()) ||
+                                                    (meta.cateredByRiderName && String(meta.cateredByRiderName).trim().toLowerCase() === String(m.riderName || m.name).trim().toLowerCase());
+                        if (isThisRiderCatering && m.status === 'Catering' && m.customerName) {
+                            const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim()).filter(c => c && c.toLowerCase() !== 'customer');
+                            if (custs.length === 1) {
+                                displayName = custs[0];
+                            }
+                        }
+                    }
                     if (displayName && displayName.toLowerCase() !== 'customer') break;
                 }
             }
@@ -365,6 +376,12 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
 
         const cleanDisplayName = displayName.toLowerCase();
         const isPlaceholderName = !cleanDisplayName || cleanDisplayName === 'customer' || cleanDisplayName === 'customer name' || cleanDisplayName === 'unknown';
+
+        if (key.startsWith('fb_') && isPlaceholderName && !isFromCache) {
+            if (typeof resolveFacebookCustomerName === 'function') {
+                resolveFacebookCustomerName(key).catch(() => {});
+            }
+        }
 
         // 1. Exclude non-existing ghost threads:
         // Must have actual message history, and placeholder "Customer" threads with zero messages are discarded!
@@ -503,6 +520,12 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                         if (cleanFName !== 'customer' && cleanFName !== 'customer name' && tCustName && isCustomerMatch(fName, tCustName)) return true;
                     }
                 }
+                const metaRId = (meta.cateredByRiderId || "").toString().trim();
+                const metaRName = (meta.cateredByRiderName || meta.cateredBy || "").toString().trim().toLowerCase();
+                const mRId = (m.telegramId || m.id || "").toString().trim();
+                const mRName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+                if (metaRId && metaRId === mRId) return true;
+                if (metaRName && metaRName === mRName) return true;
                 return false;
             });
             if (activeCateringRider) {
@@ -511,6 +534,12 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                 threadObj.cateredByRiderId = (activeCateringRider.telegramId || activeCateringRider.id || "").toString().trim();
                 threadObj.cateredByRiderName = (activeCateringRider.riderName || activeCateringRider.name || "Rider").toString().trim();
                 threadObj.cateredBy = threadObj.cateredByRiderName;
+                if ((!threadObj.customerName || threadObj.customerName.toLowerCase() === 'customer') && activeCateringRider.customerName) {
+                    const rCusts = activeCateringRider.customerName.split(/\s*,\s*/).map(c => c.trim()).filter(c => c && c.toLowerCase() !== 'customer');
+                    if (rCusts.length === 1) {
+                        threadObj.customerName = rCusts[0];
+                    }
+                }
             }
         }
 

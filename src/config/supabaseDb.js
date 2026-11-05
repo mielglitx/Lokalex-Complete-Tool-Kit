@@ -348,6 +348,20 @@ function broadcastMutation(client, table, path, value, action = 'update') {
   } catch (e) {}
 }
 
+const mutationQueues = new Map();
+function runExclusive(key, task) {
+  if (!key) return task();
+  const prev = mutationQueues.get(key) || Promise.resolve();
+  const next = prev.catch(() => {}).then(task);
+  mutationQueues.set(key, next);
+  next.finally(() => {
+    if (mutationQueues.get(key) === next) {
+      mutationQueues.delete(key);
+    }
+  });
+  return next;
+}
+
 export function createSupabaseRef(rawPath, queryState = {}) {
   const pathInfo = parsePath(rawPath);
   const client = getSupabase();
@@ -896,45 +910,47 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           await handleStoreRiderChatsSet(client, pathInfo, value);
         } else if (pathInfo.id) {
           // Standard table row write
-          if (pathInfo.subPath.length === 0) {
-            const rowData = {
-              id: pathInfo.id,
-              data: value
-            };
-            if (pathInfo.table === 'catered_history') {
-              const ts = value?.timestamp || (value?.completedDate && value?.completedTime ? new Date(`${value.completedDate} ${value.completedTime}`).getTime() : Date.now());
-              rowData.completed_at = new Date(ts).toISOString();
-            }
-            const { error } = await client.from(pathInfo.table).upsert(rowData, { onConflict: 'id' });
-            if (error) throw error;
-          } else {
-            // Nested property write
-            const { data: existing } = await client
-              .from(pathInfo.table)
-              .select('data')
-              .eq('id', pathInfo.id)
-              .maybeSingle();
+          await runExclusive(`${pathInfo.table}:${pathInfo.id}`, async () => {
+            if (pathInfo.subPath.length === 0) {
+              const rowData = {
+                id: pathInfo.id,
+                data: value
+              };
+              if (pathInfo.table === 'catered_history') {
+                const ts = value?.timestamp || (value?.completedDate && value?.completedTime ? new Date(`${value.completedDate} ${value.completedTime}`).getTime() : Date.now());
+                rowData.completed_at = new Date(ts).toISOString();
+              }
+              const { error } = await client.from(pathInfo.table).upsert(rowData, { onConflict: 'id' });
+              if (error) throw error;
+            } else {
+              // Nested property write
+              const { data: existing } = await client
+                .from(pathInfo.table)
+                .select('data')
+                .eq('id', pathInfo.id)
+                .maybeSingle();
 
-            const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
-            let cursor = current;
-            for (let i = 0; i < pathInfo.subPath.length - 1; i++) {
-              const seg = pathInfo.subPath[i];
-              if (!cursor[seg] || typeof cursor[seg] !== 'object') cursor[seg] = {};
-              cursor = cursor[seg];
-            }
-            cursor[pathInfo.subPath[pathInfo.subPath.length - 1]] = value;
+              const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
+              let cursor = current;
+              for (let i = 0; i < pathInfo.subPath.length - 1; i++) {
+                const seg = pathInfo.subPath[i];
+                if (!cursor[seg] || typeof cursor[seg] !== 'object') cursor[seg] = {};
+                cursor = cursor[seg];
+              }
+              cursor[pathInfo.subPath[pathInfo.subPath.length - 1]] = value;
 
-            const rowData = {
-              id: pathInfo.id,
-              data: current
-            };
-            if (pathInfo.table === 'catered_history') {
-              const ts = current?.timestamp || (current?.completedDate && current?.completedTime ? new Date(`${current.completedDate} ${current.completedTime}`).getTime() : Date.now());
-              rowData.completed_at = new Date(ts).toISOString();
+              const rowData = {
+                id: pathInfo.id,
+                data: current
+              };
+              if (pathInfo.table === 'catered_history') {
+                const ts = current?.timestamp || (current?.completedDate && current?.completedTime ? new Date(`${current.completedDate} ${current.completedTime}`).getTime() : Date.now());
+                rowData.completed_at = new Date(ts).toISOString();
+              }
+              const { error } = await client.from(pathInfo.table).upsert(rowData, { onConflict: 'id' });
+              if (error) throw error;
             }
-            const { error } = await client.from(pathInfo.table).upsert(rowData, { onConflict: 'id' });
-            if (error) throw error;
-          }
+          });
         } else if (value && typeof value === 'object') {
           // Full table batch upsert
           const rows = Object.entries(value).map(([k, v]) => {
@@ -983,25 +999,27 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         } else if (pathInfo.isStoreRiderChats) {
           await handleStoreRiderChatsUpdate(client, pathInfo, values);
         } else if (pathInfo.id) {
-          const { data: existing } = await client
-            .from(pathInfo.table)
-            .select('data')
-            .eq('id', pathInfo.id)
-            .maybeSingle();
+          await runExclusive(`${pathInfo.table}:${pathInfo.id}`, async () => {
+            const { data: existing } = await client
+              .from(pathInfo.table)
+              .select('data')
+              .eq('id', pathInfo.id)
+              .maybeSingle();
 
-          const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
-          const merged = { ...current, ...values };
+            const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
+            const merged = { ...current, ...values };
 
-          const rowData = {
-            id: pathInfo.id,
-            data: merged
-          };
-          if (pathInfo.table === 'catered_history') {
-            const ts = merged?.timestamp || (merged?.completedDate && merged?.completedTime ? new Date(`${merged.completedDate} ${merged.completedTime}`).getTime() : Date.now());
-            rowData.completed_at = new Date(ts).toISOString();
-          }
-          const { error } = await client.from(pathInfo.table).upsert(rowData, { onConflict: 'id' });
-          if (error) throw error;
+            const rowData = {
+              id: pathInfo.id,
+              data: merged
+            };
+            if (pathInfo.table === 'catered_history') {
+              const ts = merged?.timestamp || (merged?.completedDate && merged?.completedTime ? new Date(`${merged.completedDate} ${merged.completedTime}`).getTime() : Date.now());
+              rowData.completed_at = new Date(ts).toISOString();
+            }
+            const { error } = await client.from(pathInfo.table).upsert(rowData, { onConflict: 'id' });
+            if (error) throw error;
+          });
         }
 
         // Broadcast change event
@@ -1036,30 +1054,32 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         } else if (pathInfo.isStoreRiderChats) {
           await handleStoreRiderChatsRemove(client, pathInfo);
         } else if (pathInfo.id) {
-          if (pathInfo.subPath.length === 0) {
-            await client.from(pathInfo.table).delete().eq('id', pathInfo.id);
-          } else {
-            const { data: existing } = await client
-              .from(pathInfo.table)
-              .select('data')
-              .eq('id', pathInfo.id)
-              .maybeSingle();
+          await runExclusive(`${pathInfo.table}:${pathInfo.id}`, async () => {
+            if (pathInfo.subPath.length === 0) {
+              await client.from(pathInfo.table).delete().eq('id', pathInfo.id);
+            } else {
+              const { data: existing } = await client
+                .from(pathInfo.table)
+                .select('data')
+                .eq('id', pathInfo.id)
+                .maybeSingle();
 
-            if (existing && existing.data) {
-              const current = { ...existing.data };
-              let cursor = current;
-              for (let i = 0; i < pathInfo.subPath.length - 1; i++) {
-                cursor = cursor ? cursor[pathInfo.subPath[i]] : null;
-              }
-              if (cursor && typeof cursor === 'object') {
-                delete cursor[pathInfo.subPath[pathInfo.subPath.length - 1]];
-                await client.from(pathInfo.table).upsert({
-                  id: pathInfo.id,
-                  data: current
-                }, { onConflict: 'id' });
+              if (existing && existing.data) {
+                const current = { ...existing.data };
+                let cursor = current;
+                for (let i = 0; i < pathInfo.subPath.length - 1; i++) {
+                  cursor = cursor ? cursor[pathInfo.subPath[i]] : null;
+                }
+                if (cursor && typeof cursor === 'object') {
+                  delete cursor[pathInfo.subPath[pathInfo.subPath.length - 1]];
+                  await client.from(pathInfo.table).upsert({
+                    id: pathInfo.id,
+                    data: current
+                  }, { onConflict: 'id' });
+                }
               }
             }
-          }
+          });
         }
 
         broadcastMutation(client, pathInfo.table, rawPath, null, 'remove');

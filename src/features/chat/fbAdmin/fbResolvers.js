@@ -1,5 +1,7 @@
 // src/features/chat/fbAdmin/fbResolvers.js
 import { db, isSupabaseSelected } from '../../../config/firebase.js';
+import { globalState } from '../../../store/state.js';
+import { isCustomerMatch } from '../../roster/rosterUtils.js';
 import { showToast } from '../../../ui/notifications.js';
 import { cachedAdminApisMap } from './fbChannels.js';
 
@@ -364,7 +366,19 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
                             existingMeta.cateredBy ||
                             (existingMeta.folder && existingMeta.folder.toLowerCase() === 'catering')
                         );
-                        if (isCatered) continue; // Never override active roster catering
+                        const isRosterCatered = (globalState.rosterMembers || []).some(m => {
+                            if (m.status !== 'Catering') return false;
+                            const custName = (existingMeta.customerName || existingMeta.name || '').trim().toLowerCase();
+                            if (m.customerName && custName && custName !== 'customer' && custName !== 'customer name') {
+                                const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase());
+                                if (custs.some(c => c === custName || isCustomerMatch(c, custName))) return true;
+                            }
+                            if (m.forcedCaters && typeof m.forcedCaters === 'object') {
+                                if (m.forcedCaters[custId]) return true;
+                            }
+                            return false;
+                        });
+                        if (isCatered || isRosterCatered) continue; // Never override active roster catering
 
                         // Check if tagged as applicant in Lokalex (Applicant folder/tag must NEVER be overridden by Facebook sync)
                         const isApplicant = Boolean(

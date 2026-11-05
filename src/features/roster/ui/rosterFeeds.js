@@ -248,7 +248,20 @@ export function loadGlobalLoginList() {
     }
 
     const todayStr = getLocalTodayStr();
-    const todayLogins = globalState.globalLogins ? globalState.globalLogins.filter(l => l && isSameDateStr(l.date, todayStr)) : [];
+    const isLoginToday = (l) => {
+        if (!l) return false;
+        if (isSameDateStr(l.date, todayStr)) return true;
+        if (l.clockOutTimestamp) {
+            const coDate = new Date(l.clockOutTimestamp).toLocaleDateString('en-CA');
+            if (isSameDateStr(coDate, todayStr)) return true;
+        }
+        if (l.loginTimestamp) {
+            const liDate = new Date(l.loginTimestamp).toLocaleDateString('en-CA');
+            if (isSameDateStr(liDate, todayStr)) return true;
+        }
+        return false;
+    };
+    const todayLogins = globalState.globalLogins ? globalState.globalLogins.filter(isLoginToday) : [];
 
     if (badge) badge.innerText = `${todayLogins.length} ${todayLogins.length === 1 ? 'login' : 'logins'}`;
 

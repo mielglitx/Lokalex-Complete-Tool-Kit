@@ -447,7 +447,8 @@ export async function clockOutRider(targetId = null) {
                     clockOutTimestamp: nowTimestamp,
                     totalBreakMinutes: finalBreakMins,
                     grossMinutes: grossMins,
-                    workedMinutes: netWorkedMins
+                    workedMinutes: netWorkedMins,
+                    date: todayStr
                 };
                 await db.ref('logins/' + tId).update(shiftClockOutPayload);
                 db.ref('shiftHistory/' + todayStr + '_' + tId).update(shiftClockOutPayload).catch(() => {});

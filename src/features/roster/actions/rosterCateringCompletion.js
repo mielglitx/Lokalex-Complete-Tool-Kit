@@ -383,14 +383,6 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
                 });
             }).catch(() => {});
         }
-
-        if (resolvedTargetId) {
-            try {
-                if (cleanCustKey) db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
-                if (matchedCfKey && matchedCfKey !== cleanCustKey) db.ref(`roster/${resolvedTargetId}/customerFees/${sanitizeFirebaseKey(matchedCfKey)}`).remove().catch(() => {});
-                if (cleanCustKey) db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
-            } catch (_) {}
-        }
     }
 
     if (!globalState.globalCateredHistory) globalState.globalCateredHistory = [];
@@ -452,24 +444,13 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
         const availableTimestamp = Date.now();
         const availableTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        if (db && resolvedTargetId) {
-            db.ref(`roster/${resolvedTargetId}/forcedCaters`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}/customerFees`).remove().catch(() => {});
-            db.ref(`roster/${resolvedTargetId}/availableLocation`).remove().catch(() => {});
-            const updatePayload = {
-                forcedBy: null,
-                isForcedCater: false,
-                availableTimestamp: availableTimestamp,
-                availableTimeStr: availableTimeStr,
-                queueTime: availableTimestamp
-            };
-            db.ref(`roster/${resolvedTargetId}`).update(updatePayload).catch(() => {});
-        }
         if (targetRecord) {
             targetRecord.forcedCaters = null;
             targetRecord.forcedBy = null;
             targetRecord.isForcedCater = false;
             targetRecord.customerFees = null;
+            targetRecord.lastReceiptFees = null;
+            targetRecord.lastReceiptTotalFees = 0;
             targetRecord.availableTimestamp = availableTimestamp;
             targetRecord.availableTimeStr = availableTimeStr;
             targetRecord.queueTime = availableTimestamp;
@@ -490,6 +471,10 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
                 forcedCaters: null,
                 forcedBy: null,
                 isForcedCater: false,
+                customerFees: null,
+                lastReceiptFees: null,
+                lastReceiptTotalFees: 0,
+                availableLocation: null,
                 availableTimestamp: availableTimestamp,
                 availableTimeStr: availableTimeStr
             }
@@ -738,23 +723,6 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         delete targetRecord.customerFees[cleanCustKey];
     }
 
-    // Explicitly delete forcedCaters and customerFees from Firebase RTDB
-    if (db && resolvedTargetId) {
-        try {
-            if (cleanCustKey) {
-                db.ref(`roster/${resolvedTargetId}/customerFees/${cleanCustKey}`).remove().catch(() => {});
-                db.ref(`roster/${resolvedTargetId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
-            }
-            if (remainingCusts.length === 0) {
-                db.ref(`roster/${resolvedTargetId}/forcedCaters`).remove().catch(() => {});
-                db.ref(`roster/${resolvedTargetId}/customerFees`).remove().catch(() => {});
-                db.ref(`roster/${resolvedTargetId}/availableLocation`).remove().catch(() => {});
-            }
-        } catch (dbErr) {
-            console.warn("RTDB void cleanup warning:", dbErr);
-        }
-    }
-
     // Reset lastReceiptFees if they were set for the voided customer
     if (targetRecord && targetRecord.lastReceiptFees) {
         targetRecord.lastReceiptFees = null;
@@ -997,6 +965,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
                 customerFees: null,
                 lastReceiptFees: null,
                 lastReceiptTotalFees: 0,
+                availableLocation: null,
                 availableTimestamp: availableTimestamp,
                 availableTimeStr: availableTimeStr,
                 lastVoidedAt: voidTimestamp,
