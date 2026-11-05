@@ -267,10 +267,14 @@ export function initRealtimeFirebaseListeners() {
             }
         });
 
-        // Zero-polling architecture: Clean up any legacy background polling
-        if (window._rosterPollingInterval) {
-            clearInterval(window._rosterPollingInterval);
-            window._rosterPollingInterval = null;
+        // Background safety sync watchdog for roster: ensures rotation never stays stale if a packet drops or device wakes
+        if (!window._rosterPollingInterval) {
+            window._rosterPollingInterval = setInterval(() => {
+                const isVisible = typeof document !== 'undefined' ? (!document.hidden && document.visibilityState === 'visible') : true;
+                if (isVisible && navigator.onLine && typeof window.forceRefreshRosterList === 'function') {
+                    window.forceRefreshRosterList(null, true).catch(() => {});
+                }
+            }, 10000);
         }
 
         db.ref('blockedUsers').on('value', (snapshot) => {

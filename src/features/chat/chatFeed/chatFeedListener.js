@@ -27,6 +27,7 @@ import {
     setCachedCustomerThreadsMap,
     isCustomerChatMetaListening,
     setIsCustomerChatMetaListening,
+    rawCustomerChatMetaData,
     setRawCustomerChatMetaData,
     isInitialCustomerChatMetaLoad,
     setIsInitialCustomerChatMetaLoad,
@@ -694,11 +695,14 @@ export function listenToAllCustomerChatsForRider() {
         console.error("Firebase customerChatMeta listener error:", error);
     });
 
-    // 3. ZERO-POLLING ARCHITECTURE:
-    // Supabase & Firebase Realtime WebSockets push updates automatically with near-zero data usage!
-    if (window._chatMetaPollingInterval) {
-        clearInterval(window._chatMetaPollingInterval);
-        window._chatMetaPollingInterval = null;
+    // 3. Background safety sync watchdog: ensures feed never runs late if a WebSocket event drops or phone wakes from sleep
+    if (!window._chatMetaPollingInterval) {
+        window._chatMetaPollingInterval = setInterval(() => {
+            const isVisible = typeof document !== 'undefined' ? (!document.hidden && document.visibilityState === 'visible') : true;
+            if (isVisible && navigator.onLine && typeof forceRefreshLiveChatsFeed === 'function') {
+                forceRefreshLiveChatsFeed(null, true).catch(() => {});
+            }
+        }, 12000);
     }
 }
 
@@ -1192,6 +1196,9 @@ if (typeof window !== 'undefined') {
     window.addEventListener('rosterUpdated', () => {
         try {
             updatePipBadgeState();
+            if (rawCustomerChatMetaData) {
+                processCustomerChatMetaData(rawCustomerChatMetaData, true);
+            }
         } catch (_) {}
     });
 

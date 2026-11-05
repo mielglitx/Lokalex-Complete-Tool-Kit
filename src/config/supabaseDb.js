@@ -314,7 +314,17 @@ function getGlobalBroadcastChannel(client) {
           }
         }
       });
-      globalBroadcastChannel.subscribe();
+      globalBroadcastChannel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          try { resyncActiveSubscriptions(); } catch (_) {}
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          setTimeout(() => {
+            if (globalBroadcastChannel) {
+              try { globalBroadcastChannel.subscribe(); } catch (_) {}
+            }
+          }, 3000);
+        }
+      });
     } catch (err) {
       console.warn('[Supabase Global Broadcast Init Error]:', err);
     }
@@ -692,61 +702,86 @@ export function createSupabaseRef(rawPath, queryState = {}) {
       const handleBroadcastEvent = async (eventPayload) => {
         if (subRecord.isClosed) return;
         const payloadPath = eventPayload?.payload?.path;
-        if (payloadPath && (payloadPath === rawPath || payloadPath.startsWith(rawPath) || rawPath.startsWith(payloadPath))) {
-          const val = eventPayload.payload?.value;
-          const segments = payloadPath.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
-          const childKey = eventPayload.payload?.childKey || (segments.length > 1 ? segments[1] : null);
+        const payloadTable = eventPayload?.payload?.table;
+        const action = eventPayload?.payload?.action || 'update';
+        const val = eventPayload?.payload?.value;
+        const segments = (payloadPath || '').replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+        const childKey = eventPayload?.payload?.childKey || (segments.length > 1 ? segments[1] : null);
 
-          if (eventType === 'value') {
-            if (subRecord.tableCache && childKey) {
-              if (val === null || eventPayload.payload?.action === 'remove') {
-                if (segments.length <= 2) {
-                  subRecord.tableCache.delete(childKey);
-                } else if (subRecord.tableCache.has(childKey)) {
-                  const existingRow = subRecord.tableCache.get(childKey);
-                  if (existingRow && typeof existingRow === 'object') {
-                    const rowObj = { ...existingRow };
-                    delete rowObj[segments[2]];
-                    subRecord.tableCache.set(childKey, rowObj);
-                  }
-                }
-              } else {
-                if (segments.length <= 2) {
-                  subRecord.tableCache.set(childKey, val);
-                } else if (subRecord.tableCache.has(childKey)) {
-                  const existingRow = subRecord.tableCache.get(childKey);
-                  if (existingRow && typeof existingRow === 'object') {
-                    const rowObj = { ...existingRow, [segments[2]]: val };
-                    subRecord.tableCache.set(childKey, rowObj);
-                  }
+        const isPathMatch = payloadPath && (
+          payloadPath === rawPath ||
+          payloadPath.startsWith(rawPath + '/') ||
+          rawPath.startsWith(payloadPath + '/')
+        );
+        const isTableMatch = payloadTable && pathInfo.table && payloadTable === pathInfo.table;
+        const isDocMatch = isTableMatch && childKey && (
+          (pathInfo.id && childKey === pathInfo.id) ||
+          (pathInfo.custId && childKey === pathInfo.custId)
+        );
+
+        const shouldProcess = isPathMatch || (isTableMatch && isTableValueListener) || isDocMatch;
+        if (!shouldProcess) return;
+
+        if (eventType === 'value') {
+          if (subRecord.tableCache && childKey) {
+            if (action === 'remove' || val === null || val === undefined) {
+              if (segments.length <= 2 || (payloadPath && payloadPath.endsWith('/' + childKey))) {
+                subRecord.tableCache.delete(childKey);
+              } else if (subRecord.tableCache.has(childKey)) {
+                const existingRow = subRecord.tableCache.get(childKey);
+                if (existingRow && typeof existingRow === 'object') {
+                  const prop = segments[segments.length - 1];
+                  const rowObj = { ...existingRow };
+                  delete rowObj[prop];
+                  subRecord.tableCache.set(childKey, rowObj);
                 }
               }
-              clearTimeout(subRecord.debounceTimer);
-              subRecord.debounceTimer = setTimeout(() => {
-                if (subRecord.isClosed) return;
-                callback(createSnapshot(Object.fromEntries(subRecord.tableCache), ref.key));
-              }, 40);
             } else {
+              if (subRecord.tableCache.has(childKey)) {
+                const existingRow = subRecord.tableCache.get(childKey);
+                if (action === 'update' && existingRow && typeof existingRow === 'object' && val && typeof val === 'object' && !Array.isArray(val)) {
+                  // Merge partial updates into existing cache row to preserve other fields
+                  subRecord.tableCache.set(childKey, { ...existingRow, ...val });
+                } else if (segments.length > 2) {
+                  const prop = segments[segments.length - 1];
+                  subRecord.tableCache.set(childKey, { ...(existingRow && typeof existingRow === 'object' ? existingRow : {}), [prop]: val });
+                } else {
+                  subRecord.tableCache.set(childKey, val);
+                }
+              } else {
+                subRecord.tableCache.set(childKey, val);
+              }
+            }
+
+            clearTimeout(subRecord.debounceTimer);
+            subRecord.debounceTimer = setTimeout(() => {
+              if (subRecord.isClosed) return;
+              callback(createSnapshot(Object.fromEntries(subRecord.tableCache), ref.key));
+            }, 30);
+          } else {
+            clearTimeout(subRecord.debounceTimer);
+            subRecord.debounceTimer = setTimeout(async () => {
+              if (subRecord.isClosed) return;
               const snap = await ref.once(eventType);
               if (!subRecord.isClosed) callback(snap);
-            }
-          } else if (eventType === 'child_added') {
-            if (childKey && val !== null && val !== undefined) {
-              callback(createSnapshot(val, childKey));
-            } else if (eventPayload?.payload?.newChild) {
-              callback(createSnapshot(eventPayload.payload.newChild.data, eventPayload.payload.newChild.key));
-            }
-          } else if (eventType === 'child_changed') {
-            if (childKey && val !== null && val !== undefined) {
-              callback(createSnapshot(val, childKey));
-            } else if (eventPayload?.payload?.updatedChild) {
-              callback(createSnapshot(eventPayload.payload.updatedChild.data, eventPayload.payload.updatedChild.key));
-            }
-          } else if (eventType === 'child_removed') {
-            const removedKey = childKey || eventPayload.payload?.removedKey;
-            if (removedKey) {
-              callback(createSnapshot(null, removedKey));
-            }
+            }, 30);
+          }
+        } else if (eventType === 'child_added') {
+          if (childKey && val !== null && val !== undefined) {
+            callback(createSnapshot(val, childKey));
+          } else if (eventPayload?.payload?.newChild) {
+            callback(createSnapshot(eventPayload.payload.newChild.data, eventPayload.payload.newChild.key));
+          }
+        } else if (eventType === 'child_changed') {
+          if (childKey && val !== null && val !== undefined) {
+            callback(createSnapshot(val, childKey));
+          } else if (eventPayload?.payload?.updatedChild) {
+            callback(createSnapshot(eventPayload.payload.updatedChild.data, eventPayload.payload.updatedChild.key));
+          }
+        } else if (eventType === 'child_removed') {
+          const removedKey = childKey || eventPayload.payload?.removedKey;
+          if (removedKey) {
+            callback(createSnapshot(null, removedKey));
           }
         }
       };
@@ -1224,6 +1259,7 @@ async function handleMultiPathUpdate(client, rawPath, values) {
           }
         }
         await client.from(group.table).upsert({ id: group.id, data: current }, { onConflict: 'id' });
+        broadcastMutation(client, group.table, `${group.rootNode}/${group.id}`, current, 'update');
       })());
     } else if (group.type === 'cust_meta') {
       tasks.push((async () => {
@@ -1252,6 +1288,8 @@ async function handleMultiPathUpdate(client, rawPath, values) {
           client.from('customer_chat_meta').upsert({ id: group.custId, data: current, updated_at: new Date().toISOString() }, { onConflict: 'id' }),
           client.from('customer_chats').upsert({ id: `${group.custId}_metadata`, room_id: group.custId, data: current }, { onConflict: 'id' })
         ]);
+        broadcastMutation(client, 'customer_chat_meta', `customerChatMeta/${group.custId}`, current, 'update');
+        broadcastMutation(client, 'customer_chat_meta', `customerChats/${group.custId}/metadata`, current, 'update');
       })());
     } else if (group.type === 'cust_msg') {
       tasks.push((async () => {
@@ -1283,6 +1321,7 @@ async function handleMultiPathUpdate(client, rawPath, values) {
           timestamp: current.timestamp ? new Date(current.timestamp).toISOString() : new Date().toISOString(),
           data: current
         }, { onConflict: 'id' });
+        broadcastMutation(client, 'customer_chats', `customerChats/${group.custId}/messages/${group.targetId || group.rowId}`, current, 'insert');
       })());
     } else if (group.type === 'ref') {
       if (group.value === null || group.value === undefined) {
@@ -1775,6 +1814,7 @@ export const supabaseDb = {
           try { client.realtime.connect(); } catch (_) {}
         }
       }
+      resyncActiveSubscriptions();
     } catch (_) {}
   },
   goOffline() {

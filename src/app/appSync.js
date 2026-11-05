@@ -196,13 +196,13 @@ export function initSyncWatchdog() {
         }
         if (wasDocumentHidden) {
             wasDocumentHidden = false;
-            triggerLifecycleResync(false);
+            triggerLifecycleResync(true);
         }
     });
 
     window.addEventListener('appResumedFromBackground', () => {
         wasDocumentHidden = false;
-        triggerLifecycleResync(false);
+        triggerLifecycleResync(true);
     });
 
     window.addEventListener('appPausedToBackground', () => {
