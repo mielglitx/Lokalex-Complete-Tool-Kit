@@ -339,6 +339,18 @@ export function autoCancelAdvancedOrdersForRider(riderName) {
     });
 }
 
+export async function cancelAdvancedOrder(orderId) {
+    return changeAdvOrderStatus(orderId, 'Cancelled');
+}
+
+export function autoCompleteAdvancedOrdersFromCatered(cateredList) {
+    if (!cateredList || !Array.isArray(cateredList) || cateredList.length === 0) return;
+    cateredList.forEach(item => {
+        const rName = item.riderName || item.rider || "";
+        if (rName) autoCompleteAdvancedOrdersForRider(rName);
+    });
+}
+
 // Global window attachments for HTML template compatibility
 if (typeof window !== 'undefined') {
     window.submitNewAdvancedOrder = submitNewAdvancedOrder;
@@ -346,6 +358,8 @@ if (typeof window !== 'undefined') {
     window.takeAdvancedOrder = takeAdvancedOrder;
     window.markAdvancedOrderDone = markAdvancedOrderDone;
     window.cancelAdvancedOrder = cancelAdvancedOrder;
+    window.changeAdvOrderStatus = changeAdvOrderStatus;
+    window.autoCompleteAdvancedOrdersForRider = autoCompleteAdvancedOrdersForRider;
     window.autoCompleteAdvancedOrdersFromCatered = autoCompleteAdvancedOrdersFromCatered;
     window.autoCancelAdvancedOrdersForRider = autoCancelAdvancedOrdersForRider;
 }

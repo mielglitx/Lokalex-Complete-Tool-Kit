@@ -111,6 +111,19 @@
     })();
 </script>
 
+<script>
+    (function() {
+        try {
+            const _origWarn = console.warn;
+            console.warn = function(...args) {
+                if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com should not be used in production')) {
+                    return;
+                }
+                _origWarn.apply(console, args);
+            };
+        } catch (_) {}
+    })();
+</script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
     tailwind.config = {
@@ -883,7 +896,7 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-BPsD9WsU.js"></script>
+  <script type="module" crossorigin src="./assets/index-Cu5DtwX9.js"></script>
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 

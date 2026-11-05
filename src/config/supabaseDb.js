@@ -417,6 +417,19 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           } else {
             result = {};
           }
+        } else if (rawPath === 'directory/storeMenuGalleries' || rawPath.startsWith('directory/storeMenuGalleries/')) {
+          // storeMenuGalleries is photo menu data maintained in Firebase RTDB to prevent statement timeouts
+          const fbDb = (typeof window !== 'undefined' && (window.primaryDb || window.firebaseDb)) ? (window.primaryDb || window.firebaseDb) : null;
+          if (fbDb && typeof fbDb.ref === 'function') {
+            try {
+              const fbSnap = await fbDb.ref(rawPath).once('value');
+              result = fbSnap ? fbSnap.val() : null;
+            } catch (_) {
+              result = {};
+            }
+          } else {
+            result = {};
+          }
         } else if (pathInfo.isCustomerChats) {
           result = await handleCustomerChatsOnce(client, pathInfo, ref._query);
         } else if (pathInfo.isStoreRiderChats) {
@@ -534,6 +547,15 @@ export function createSupabaseRef(rawPath, queryState = {}) {
       if (pathInfo.rootNode === 'shiftHistory' || pathInfo.table === 'shift_history') {
         if (typeof window !== 'undefined' && window.firebaseDb && typeof window.firebaseDb.ref === 'function') {
           return window.firebaseDb.ref(rawPath).on(eventType, callback);
+        }
+        callback(createSnapshot({}, ref.key));
+        return callback;
+      }
+
+      if (rawPath === 'directory/storeMenuGalleries' || rawPath.startsWith('directory/storeMenuGalleries/')) {
+        const fbDb = (typeof window !== 'undefined' && (window.primaryDb || window.firebaseDb)) ? (window.primaryDb || window.firebaseDb) : null;
+        if (fbDb && typeof fbDb.ref === 'function') {
+          return fbDb.ref(rawPath).on(eventType, callback);
         }
         callback(createSnapshot({}, ref.key));
         return callback;
@@ -756,6 +778,15 @@ export function createSupabaseRef(rawPath, queryState = {}) {
       }
 
       try {
+        if (rawPath === 'directory/storeMenuGalleries' || rawPath.startsWith('directory/storeMenuGalleries/')) {
+          const fbDb = (typeof window !== 'undefined' && (window.primaryDb || window.firebaseDb)) ? (window.primaryDb || window.firebaseDb) : null;
+          if (fbDb && typeof fbDb.ref === 'function') {
+            await fbDb.ref(rawPath).set(value);
+          }
+          if (typeof onComplete === 'function') onComplete(null);
+          return;
+        }
+
         if (pathInfo.isCustomerChats) {
           await handleCustomerChatsSet(client, pathInfo, value);
         } else if (pathInfo.isStoreRiderChats) {
@@ -869,6 +900,15 @@ export function createSupabaseRef(rawPath, queryState = {}) {
       }
 
       try {
+        if (rawPath === 'directory/storeMenuGalleries' || rawPath.startsWith('directory/storeMenuGalleries/')) {
+          const fbDb = (typeof window !== 'undefined' && (window.primaryDb || window.firebaseDb)) ? (window.primaryDb || window.firebaseDb) : null;
+          if (fbDb && typeof fbDb.ref === 'function') {
+            await fbDb.ref(rawPath).set(value);
+          }
+          if (typeof onComplete === 'function') onComplete(null);
+          return;
+        }
+
         if (pathInfo.isCustomerChats) {
           await handleCustomerChatsRemove(client, pathInfo);
         } else if (pathInfo.isStoreRiderChats) {
