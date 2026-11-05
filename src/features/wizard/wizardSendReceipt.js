@@ -39,7 +39,8 @@ function sanitizeForFirebase(obj) {
 }
 
 /**
- * Directly validates, generates, and delivers the receipt from the Wizard screen
+ * Directly validates, generates, and delivers the receipt from the Wizard screen.
+ * Immediately closes the wizard modal while receipt rendering and dispatch run in the background.
  */
 export async function sendReceiptDirectlyFromWizard() {
     calculateGrandTotal();
@@ -76,23 +77,33 @@ export async function sendReceiptDirectlyFromWizard() {
         return;
     }
 
-    showToast("🧾 Generating & sending receipt...");
+    // 1. Start saving receipt & commission record toward the rider (synchronously sets wizState.currentReceiptTransactionId)
+    const savePromise = saveReceiptToDatabase(customerName);
+    const snapshotTxId = wizState.currentReceiptTransactionId || `E37FG-${Date.now().toString(36).toUpperCase()}`;
 
-    // 1. Save receipt & commission record to database toward the rider
-    await saveReceiptToDatabase(customerName);
-
-    // 2. Render text and canvas
+    // 2. Start rendering text and canvas (synchronously snapshots wizState & cart before first await)
     renderFinalReceiptText();
-    await renderReceiptCanvas();
+    const canvasPromise = renderReceiptCanvas();
 
-    // 3. Dispatch to customer (and automatically close wizard & lock cart upon send)
-    await sendReceiptToRecipient(null, customerName);
+    // 3. Close the wizard modal & lock the cart immediately (0ms UI transition)
+    completeReceiptDone(customerName);
+    showToast(`🧾 Sending receipt to ${customerName} in background...`);
+
+    // 4. Finish rendering & dispatching in the background without blocking the user
+    (async () => {
+        try {
+            await Promise.all([savePromise, canvasPromise]);
+            await sendReceiptToRecipient(null, customerName, { alreadyClosedModal: true, rawTxIdSnapshot: snapshotTxId });
+        } catch (bgErr) {
+            console.error("[SendReceiptDirectly] Background dispatch error:", bgErr);
+        }
+    })();
 }
 
 /**
  * Main entry point: Sends the created receipt to the target recipient
  */
-export async function sendReceiptToRecipient(targetCustId = null, targetCustName = null) {
+export async function sendReceiptToRecipient(targetCustId = null, targetCustName = null, options = {}) {
     const explicitName = document.getElementById('rcpt-name')?.value?.trim() || "";
     const activeCartIdx = globalState.activeCartIndex || 0;
     const cartCustName = (multiCarts && multiCarts[activeCartIdx + 1]?.customerName) || "";
@@ -100,7 +111,9 @@ export async function sendReceiptToRecipient(targetCustId = null, targetCustName
 
     // Ensure image receipt canvas is rendered if not yet ready
     if (!currentReceiptDataUrl && !currentReceiptCanvas) {
-        showToast("⏳ Rendering receipt image...");
+        if (!options?.alreadyClosedModal) {
+            showToast("⏳ Rendering receipt image...");
+        }
         try {
             renderFinalReceiptText();
             await renderReceiptCanvas();
@@ -115,7 +128,7 @@ export async function sendReceiptToRecipient(targetCustId = null, targetCustName
     }
 
     if (targetCustId) {
-        await executeSendReceiptToCustId(targetCustId, customerName || targetCustName);
+        await executeSendReceiptToCustId(targetCustId, customerName || targetCustName, options);
         return;
     }
 
@@ -129,7 +142,7 @@ export async function sendReceiptToRecipient(targetCustId = null, targetCustName
         try {
             const matchedThread = await resolveMatchingCustomerThread(customerName);
             if (matchedThread && matchedThread.custId) {
-                await executeSendReceiptToCustId(matchedThread.custId, matchedThread.customerName || customerName);
+                await executeSendReceiptToCustId(matchedThread.custId, matchedThread.customerName || customerName, options);
                 return;
             }
         } catch (err) {
@@ -452,7 +465,7 @@ export function filterReceiptRecipients(query) {
 /**
  * Performs actual message dispatch into Firebase Realtime Database and Facebook Messenger
  */
-export async function executeSendReceiptToCustId(targetCustId, recipientName) {
+export async function executeSendReceiptToCustId(targetCustId, recipientName, options = {}) {
     if (!targetCustId) return;
 
     // 0. Close recipient modal immediately
@@ -465,7 +478,9 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
         btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-xs shrink-0"></i><span class="text-[11px] leading-tight">Sending...</span>`;
     }
 
-    showToast(`📤 Sending receipt to ${recipientName || 'customer'}...`);
+    if (!options?.alreadyClosedModal) {
+        showToast(`📤 Sending receipt to ${recipientName || 'customer'}...`);
+    }
 
     try {
         const activeCartIdx = globalState.activeCartIndex || 0;
@@ -477,17 +492,17 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
             ""
         ).trim();
 
-        // Ensure receipt & commission are recorded toward the rider for this customer
-        if (finalCustomerName && finalCustomerName.toLowerCase() !== 'sample') {
-            await saveReceiptToDatabase(finalCustomerName);
-        }
-
-        const rawTxId = wizState.currentReceiptTransactionId || Date.now().toString(36);
+        const rawTxId = options?.rawTxIdSnapshot || wizState.currentReceiptTransactionId || (multiCarts?.[activeCartIdx + 1]?.receiptSummary?.txId) || Date.now().toString(36);
         const shortRef = formatShortRef(rawTxId);
         const riderName = appState.riderName || localStorage.getItem('riderName') || "Lokalex Rider";
         const now = Date.now();
 
-        // 1. Ensure receipt image is generated
+        // Ensure receipt & commission are recorded toward the rider for this customer (skip duplicate if already triggered)
+        if (!options?.alreadyClosedModal && finalCustomerName && finalCustomerName.toLowerCase() !== 'sample') {
+            saveReceiptToDatabase(finalCustomerName).catch(() => {});
+        }
+
+        // If modal wasn't already closed by sendReceiptDirectlyFromWizard, close it right after canvas is ready
         let finalImageUrl = currentReceiptDataUrl;
         if (!finalImageUrl && currentReceiptCanvas) {
             try {
@@ -498,6 +513,10 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
             renderFinalReceiptText();
             await renderReceiptCanvas();
             finalImageUrl = currentReceiptDataUrl || (currentReceiptCanvas ? currentReceiptCanvas.toDataURL('image/jpeg', 0.85) : null);
+        }
+
+        if (!options?.alreadyClosedModal) {
+            completeReceiptDone(finalCustomerName || recipientName);
         }
 
         if (!finalImageUrl) {
@@ -599,7 +618,7 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
             window.appendSingleChatMessageToCache(targetCustId, { id: newMsgKey, ...newMsg });
         }
 
-        // 7. Success notifications, lock cart, and close the wizard window immediately
+        // 7. Background delivery completion notification
         showToast(`✅ Receipt sent to ${finalCustomerName || recipientName || 'customer'} & commission recorded!`);
         showSideNotification("RECEIPT SENT", `Delivered to ${finalCustomerName || recipientName || 'customer'}`, "fa-paper-plane", "text-blue-400", "border-blue-500");
 
@@ -608,8 +627,6 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName) {
             btn.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-1.5 rounded-xl shadow-lg flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 transition active:scale-95 text-center cursor-pointer";
             btn.innerHTML = `<i class="fa-solid fa-check text-xs shrink-0"></i><span class="text-[11px] leading-tight">Sent to ${escapeHtml(finalCustomerName || recipientName || 'Customer')}!</span>`;
         }
-
-        completeReceiptDone(finalCustomerName || recipientName);
     } catch (e) {
         console.error("Failed to send receipt to customer:", e);
         showToast(`❌ Failed to send receipt: ${e.message || 'Network error'}`);

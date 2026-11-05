@@ -77,15 +77,26 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
 
     const nowTimestamp = Date.now();
     const todayStr = getLocalTodayStr();
-    let accumulatedBreakMins = 0;
-    if (targetRecord && targetRecord.breakDate === todayStr) {
-        accumulatedBreakMins = targetRecord.totalBreakMinutes || 0;
+    let accumulatedBreakSeconds = 0;
+    if (targetRecord && isSameDateStr(targetRecord.breakDate, todayStr)) {
+        const recSecs = Number(targetRecord.totalBreakSeconds) || 0;
+        const recMins = Number(targetRecord.totalBreakMinutes) || 0;
+        accumulatedBreakSeconds = Math.max(recSecs, recMins * 60);
+    }
+    const existingLoginToday = (globalState.globalLogins || []).find(
+        l => (l.riderId || l.id || "").toString() === tId && isSameDateStr(l.date, todayStr)
+    );
+    if (existingLoginToday) {
+        const loginSecs = Number(existingLoginToday.totalBreakSeconds) || 0;
+        const loginMins = Number(existingLoginToday.totalBreakMinutes) || 0;
+        accumulatedBreakSeconds = Math.max(accumulatedBreakSeconds, loginSecs, loginMins * 60);
     }
 
     if (targetRecord && targetRecord.status === 'Break' && targetRecord.breakTimestamp) {
-        const finishedBreakSession = Math.max(0, Math.floor((nowTimestamp - targetRecord.breakTimestamp) / 60000));
-        accumulatedBreakMins += finishedBreakSession;
+        const finishedBreakSecs = Math.max(1, Math.ceil((nowTimestamp - targetRecord.breakTimestamp) / 1000));
+        accumulatedBreakSeconds += finishedBreakSecs;
     }
+    const accumulatedBreakMins = Math.ceil(accumulatedBreakSeconds / 60);
 
     let extraData = {};
     if (status === 'Available') {
@@ -109,7 +120,8 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
             isUnlimitedBreak: false,
             breakDate: todayStr,
             availableTimestamp: preservedAvailableTs,
-            totalBreakMinutes: isStartingShift ? 0 : accumulatedBreakMins
+            totalBreakMinutes: accumulatedBreakMins,
+            totalBreakSeconds: accumulatedBreakSeconds
         };
         if (isStartingShift) {
             extraData.commissionSurcharge = 0;
@@ -131,7 +143,8 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
             isUnlimitedBreak: false,
             breakDate: todayStr,
             availableTimestamp: null,
-            totalBreakMinutes: accumulatedBreakMins
+            totalBreakMinutes: accumulatedBreakMins,
+            totalBreakSeconds: accumulatedBreakSeconds
         };
     } else if (status === 'Catering') {
         extraData = {
@@ -143,7 +156,8 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
             isUnlimitedBreak: false,
             breakDate: todayStr,
             availableTimestamp: null,
-            totalBreakMinutes: accumulatedBreakMins
+            totalBreakMinutes: accumulatedBreakMins,
+            totalBreakSeconds: accumulatedBreakSeconds
         };
     } else if (status === 'Break') {
         extraData = {
@@ -151,6 +165,7 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
             breakDate: todayStr,
             isUnlimitedBreak: !!customExtraData.isUnlimitedBreak,
             totalBreakMinutes: accumulatedBreakMins,
+            totalBreakSeconds: accumulatedBreakSeconds,
             ...customExtraData
         };
     }
@@ -272,6 +287,9 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     const currentTotalBreak = extraData.totalBreakMinutes !== undefined 
         ? extraData.totalBreakMinutes 
         : (existingRec?.totalBreakMinutes || 0);
+    const currentTotalBreakSeconds = extraData.totalBreakSeconds !== undefined
+        ? extraData.totalBreakSeconds
+        : (existingRec?.totalBreakSeconds !== undefined ? existingRec.totalBreakSeconds : currentTotalBreak * 60);
 
     let currentAvailableTimestamp = null;
     if (status === 'Available') {
@@ -319,7 +337,8 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         breakTargetTimestamp: currentBreakTargetTimestamp,
         isUnlimitedBreak: currentIsUnlimitedBreak,
         breakDate: currentBreakDate,
-        totalBreakMinutes: currentTotalBreak
+        totalBreakMinutes: currentTotalBreak,
+        totalBreakSeconds: currentTotalBreakSeconds
     };
 
     if (!globalState.rosterMembers) globalState.rosterMembers = [];
@@ -359,11 +378,13 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         }
 
         db.ref(`logins/${tId}`).update({
-            totalBreakMinutes: currentTotalBreak
+            totalBreakMinutes: currentTotalBreak,
+            totalBreakSeconds: currentTotalBreakSeconds
         }).catch(() => {});
         const todayStr = getLocalTodayStr();
         db.ref(`shiftHistory/${todayStr}_${tId}`).update({
-            totalBreakMinutes: currentTotalBreak
+            totalBreakMinutes: currentTotalBreak,
+            totalBreakSeconds: currentTotalBreakSeconds
         }).catch(() => {});
     }
 
@@ -371,15 +392,23 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         const todayStr = getLocalTodayStr();
         let finalLoginTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         let finalLoginTimestamp = nowTimestamp;
+        let preservedBreakMins = currentTotalBreak;
+        let preservedBreakSecs = currentTotalBreakSeconds;
 
         try {
             const loginSnap = await db.ref('logins/' + tId).once('value');
             const existingLogin = loginSnap.val();
-            if (existingLogin && isSameDateStr(existingLogin.date, todayStr) && existingLogin.loginTime) {
-                finalLoginTime = existingLogin.loginTime;
+            if (existingLogin && isSameDateStr(existingLogin.date, todayStr)) {
+                if (existingLogin.loginTime) {
+                    finalLoginTime = existingLogin.loginTime;
+                }
                 if (existingLogin.loginTimestamp) {
                     finalLoginTimestamp = existingLogin.loginTimestamp;
                 }
+                const exMins = Number(existingLogin.totalBreakMinutes) || 0;
+                const exSecs = Number(existingLogin.totalBreakSeconds) || (exMins * 60);
+                preservedBreakSecs = Math.max(preservedBreakSecs, exSecs);
+                preservedBreakMins = Math.max(preservedBreakMins, exMins, Math.ceil(preservedBreakSecs / 60));
             }
         } catch(e) {}
 
@@ -395,7 +424,8 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
             location: locationLink || "",
             earlyShiftPenaltyPercent: 0,
             deficitHours: 0,
-            totalBreakMinutes: 0
+            totalBreakMinutes: preservedBreakMins,
+            totalBreakSeconds: preservedBreakSecs
         };
         await db.ref('logins/' + tId).set(loginEntry);
         db.ref('shiftHistory/' + todayStr + '_' + tId).set(loginEntry).catch(() => {});
@@ -418,17 +448,28 @@ export async function clockOutRider(targetId = null) {
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const todayStr = getLocalTodayStr();
 
-    let finalBreakMins = 0;
+    let finalBreakSecs = 0;
     const rMem = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === tId);
     if (rMem) {
-        if (rMem.breakDate === todayStr) {
-            finalBreakMins = rMem.totalBreakMinutes || 0;
+        if (isSameDateStr(rMem.breakDate, todayStr)) {
+            const recSecs = Number(rMem.totalBreakSeconds) || 0;
+            const recMins = Number(rMem.totalBreakMinutes) || 0;
+            finalBreakSecs = Math.max(recSecs, recMins * 60);
         }
         if (rMem.status === 'Break' && rMem.breakTimestamp) {
-            const activeBreak = Math.max(0, Math.floor((nowTimestamp - rMem.breakTimestamp) / 60000));
-            finalBreakMins += activeBreak;
+            const activeBreakSecs = Math.max(1, Math.ceil((nowTimestamp - rMem.breakTimestamp) / 1000));
+            finalBreakSecs += activeBreakSecs;
         }
     }
+    const existingLoginToday = (globalState.globalLogins || []).find(
+        l => (l.riderId || l.id || "").toString() === tId && isSameDateStr(l.date, todayStr)
+    );
+    if (existingLoginToday) {
+        const loginSecs = Number(existingLoginToday.totalBreakSeconds) || 0;
+        const loginMins = Number(existingLoginToday.totalBreakMinutes) || 0;
+        finalBreakSecs = Math.max(finalBreakSecs, loginSecs, loginMins * 60);
+    }
+    const finalBreakMins = Math.ceil(finalBreakSecs / 60);
 
     if (db && tId) {
         let grossMins = 0;
@@ -446,6 +487,7 @@ export async function clockOutRider(targetId = null) {
                     clockOutTime: timeStr,
                     clockOutTimestamp: nowTimestamp,
                     totalBreakMinutes: finalBreakMins,
+                    totalBreakSeconds: finalBreakSecs,
                     grossMinutes: grossMins,
                     workedMinutes: netWorkedMins,
                     date: todayStr
@@ -465,6 +507,7 @@ export async function clockOutRider(targetId = null) {
                     date: todayStr,
                     location: "",
                     totalBreakMinutes: finalBreakMins,
+                    totalBreakSeconds: finalBreakSecs,
                     grossMinutes: 0,
                     workedMinutes: 0
                 });
@@ -486,6 +529,7 @@ export async function clockOutRider(targetId = null) {
             breakDate: todayStr,
             availableTimestamp: null,
             totalBreakMinutes: finalBreakMins,
+            totalBreakSeconds: finalBreakSecs,
             lastActiveTimestamp: nowTimestamp,
             lastUpdated: timeStr
         }).catch(() => {});
@@ -533,6 +577,7 @@ export async function clockOutRider(targetId = null) {
         rMem.breakDate = todayStr;
         rMem.availableTimestamp = null;
         rMem.totalBreakMinutes = finalBreakMins;
+        rMem.totalBreakSeconds = finalBreakSecs;
     }
 
     if (globalState.globalLogins) {
@@ -546,6 +591,7 @@ export async function clockOutRider(targetId = null) {
             loginRec.clockOutTime = timeStr;
             loginRec.clockOutTimestamp = nowTimestamp;
             loginRec.totalBreakMinutes = finalBreakMins;
+            loginRec.totalBreakSeconds = finalBreakSecs;
             loginRec.grossMinutes = gross;
             loginRec.workedMinutes = Math.max(0, gross - finalBreakMins);
         }

@@ -172,10 +172,13 @@ export function getRiderBreakUsageToday(riderId = null) {
     const todayStr = getLocalTodayStr();
     const rosterMembers = globalState.rosterMembers || [];
     const rMem = rosterMembers.find(m => (m.telegramId || m.id || "").toString().trim() === tId);
+    const loginRec = (globalState.globalLogins || []).find(
+        l => (l.riderId || l.id || "").toString().trim() === tId && l.date === todayStr
+    );
 
     const totalAllowance = getBreakDailyAllowance();
 
-    if (!rMem) {
+    if (!rMem && !loginRec) {
         return {
             usedMinutes: 0,
             remainingMinutes: totalAllowance,
@@ -186,25 +189,34 @@ export function getRiderBreakUsageToday(riderId = null) {
         };
     }
 
-    const isUnlimited = !!rMem.isUnlimitedBreak;
+    const isUnlimited = !!(rMem && rMem.isUnlimitedBreak);
 
-    let usedMinutes = 0;
-    // Break time refreshes each new day: only count break minutes recorded today
-    if (rMem.breakDate === todayStr) {
-        usedMinutes = rMem.totalBreakMinutes || 0;
+    let usedSeconds = 0;
+    // Break time refreshes each new day: only count break time recorded today
+    if (rMem && rMem.breakDate === todayStr) {
+        const recSecs = Number(rMem.totalBreakSeconds) || 0;
+        const recMins = Number(rMem.totalBreakMinutes) || 0;
+        usedSeconds = Math.max(recSecs, recMins * 60);
+    }
+    if (loginRec) {
+        const loginSecs = Number(loginRec.totalBreakSeconds) || 0;
+        const loginMins = Number(loginRec.totalBreakMinutes) || 0;
+        usedSeconds = Math.max(usedSeconds, loginSecs, loginMins * 60);
     }
 
-    // If currently on Break, add ongoing break session minutes
-    if (rMem.status === 'Break' && rMem.breakTimestamp) {
-        const activeMins = Math.max(0, Math.floor((Date.now() - rMem.breakTimestamp) / 60000));
-        usedMinutes += activeMins;
+    // If currently on Break, add ongoing break session seconds
+    if (rMem && rMem.status === 'Break' && rMem.breakTimestamp) {
+        const activeSecs = Math.max(1, Math.ceil((Date.now() - rMem.breakTimestamp) / 1000));
+        usedSeconds += activeSecs;
     }
 
+    const usedMinutes = Math.ceil(usedSeconds / 60);
     const remainingMinutes = isUnlimited ? Infinity : Math.max(0, totalAllowance - usedMinutes);
     const isOverLimit = !isUnlimited && remainingMinutes <= 0;
 
     return {
         usedMinutes,
+        usedSeconds,
         remainingMinutes,
         totalAllowance,
         isUnlimited,

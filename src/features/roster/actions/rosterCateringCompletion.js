@@ -565,7 +565,7 @@ export function checkCustomerReceiptExists(custName, riderName = "", riderId = "
         if (riderName && !matchRider) return false;
 
         // Verify receipt date is today
-        if (rc.date && !isSameDate(rc.date, todayStr)) {
+        if (rc.date && !isSameDateStr(rc.date, todayStr)) {
             return false;
         }
 

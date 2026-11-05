@@ -166,6 +166,19 @@ export async function saveReceiptToDatabase(customerName) {
         date: todayStr
     };
 
+    if (!globalState.globalDailyReceipts) globalState.globalDailyReceipts = [];
+    const rIdx = globalState.globalDailyReceipts.findIndex(r => (r.transactionId === generatedTxId || r.id === generatedTxId));
+    if (rIdx !== -1) globalState.globalDailyReceipts[rIdx] = receiptPayload;
+    else globalState.globalDailyReceipts.push(receiptPayload);
+
+    invalidateRosterGrossCache();
+    saveRosterCache();
+    updateRosterUI();
+
+    window.dispatchEvent(new CustomEvent('cateredUpdated'));
+    window.dispatchEvent(new CustomEvent('receiptsUpdated'));
+    window.dispatchEvent(new CustomEvent('rosterUpdated'));
+
     try {
         if (db) {
             await db.ref('receipts/' + generatedTxId).set(receiptPayload);
@@ -187,19 +200,6 @@ export async function saveReceiptToDatabase(customerName) {
                 });
             }
         }
-
-        if (!globalState.globalDailyReceipts) globalState.globalDailyReceipts = [];
-        const rIdx = globalState.globalDailyReceipts.findIndex(r => (r.transactionId === generatedTxId || r.id === generatedTxId));
-        if (rIdx !== -1) globalState.globalDailyReceipts[rIdx] = receiptPayload;
-        else globalState.globalDailyReceipts.push(receiptPayload);
-
-        invalidateRosterGrossCache();
-        saveRosterCache();
-        updateRosterUI();
-
-        window.dispatchEvent(new CustomEvent('cateredUpdated'));
-        window.dispatchEvent(new CustomEvent('receiptsUpdated'));
-        window.dispatchEvent(new CustomEvent('rosterUpdated'));
     } catch (e) {
         console.error("Firebase write error:", e);
     }

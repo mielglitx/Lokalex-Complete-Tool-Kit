@@ -206,6 +206,7 @@ export async function renderReceiptCanvas() {
     const codTotal = Math.max(0, wizState.codTotal || wizState.finalTotal || 0);
     const epayFee = wizState.finalEpay || (codTotal <= 1000 ? 15 : 15 + Math.ceil((codTotal - 1000) / 500) * 5);
     const gcashTotal = codTotal + epayFee;
+    const snapshotRawTxId = wizState.currentReceiptTransactionId || `E37FG-${Date.now().toString(36).toUpperCase()}`;
 
     const rawGcashName = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || riderName;
     const gcashName = toTitleCase(rawGcashName);
@@ -398,7 +399,7 @@ export async function renderReceiptCanvas() {
     drawMetaRow("Date:", dateStr);
     drawMetaRow("Rider:", `${riderName} (${dailyRiderId})`);
 
-    const rawTxId = wizState.currentReceiptTransactionId || `E37FG-${Date.now().toString(36).toUpperCase()}`;
+    const rawTxId = snapshotRawTxId || wizState.currentReceiptTransactionId || `E37FG-${Date.now().toString(36).toUpperCase()}`;
     const shortRef = formatShortRef(rawTxId);
     drawMetaRow("Ref #:", `#${shortRef}`);
 
