@@ -268,8 +268,8 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
     if (!targetCustId || !String(targetCustId).startsWith('fb_')) return;
     if (isSyncingGraphMessages) return;
 
-    const psid = String(targetCustId).replace(/^fb_/, '').trim();
-    if (!psid) return;
+    const psid = String(targetCustId).replace(/^(?:fb_|messenger_)+/i, '').trim();
+    if (!psid || !/^\d+$/.test(psid)) return;
 
     const syncBtn = document.getElementById('rider-chat-sync-fb-btn');
     if (syncBtn) {

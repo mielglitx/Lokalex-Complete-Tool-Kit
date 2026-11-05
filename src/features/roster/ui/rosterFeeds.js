@@ -290,11 +290,12 @@ export function loadGlobalLoginList() {
         }
         const clockOutTxt = l.clockOutTime ? `<span class="text-red-600 dark:text-red-400 font-bold ml-1">(Out: ${escapeHtml(l.clockOutTime)})</span>` : '';
         const riderFormatted = formatTitleCase(l.riderName || 'Rider');
+        const rId = (l.riderId || l.telegramId || l.id || '').toString().trim();
 
         return `
         <div class="bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-800 p-2.5 rounded-xl flex justify-between items-center gap-2 shadow-xs">
             <div class="flex flex-col min-w-0 flex-1">
-                <span class="font-black text-xs text-gray-900 dark:text-white truncate flex items-center gap-1.5"><i class="fa-solid fa-motorcycle text-blue-600 dark:text-blue-400 text-[10px]"></i> <span>${escapeHtml(riderFormatted)}</span></span>
+                <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${escapeHtml(rId)}', '${escapeHtml(riderFormatted)}')" class="font-black text-xs text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 hover:underline truncate flex items-center gap-1.5 text-left cursor-pointer" title="View Rider Profile"><i class="fa-solid fa-motorcycle text-blue-600 dark:text-blue-400 text-[10px]"></i> <span>${escapeHtml(riderFormatted)}</span></button>
                 ${mapBtn}
             </div>
             <div class="text-[10px] text-gray-800 dark:text-gray-200 font-mono text-right shrink-0 font-medium">

@@ -198,8 +198,12 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
     }
 
     if (modal) {
-        modal.classList.remove('hidden');
-        toggleBodyScroll(true);
+        if (typeof window !== 'undefined' && window.isModernUiActive && window.isModernUiActive()) {
+            modal.classList.add('hidden');
+        } else {
+            modal.classList.remove('hidden');
+            toggleBodyScroll(true);
+        }
         if (typeof syncChatHdButtonUI === 'function') syncChatHdButtonUI();
         else if (window.syncChatHdButtonUI) window.syncChatHdButtonUI();
         if (window.initSharedQuickRepliesListener) window.initSharedQuickRepliesListener();
@@ -229,7 +233,8 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
     }
     if (custId && typeof window.getCachedCustomerThreadsMap === 'function') {
         const map = window.getCachedCustomerThreadsMap();
-        const thread = map ? (map.get(custId) || map.get(`fb_${custId}`) || (custId.startsWith('fb_') ? map.get(custId.replace(/^fb_/, '')) : null)) : null;
+        const rawPsid = custId.replace(/^(?:fb_|messenger_)+/i, '');
+        const thread = map ? (map.get(custId) || map.get(`fb_${rawPsid}`) || map.get(rawPsid)) : null;
         if (thread) {
             setCurrentRiderChatMeta({ ...thread });
             syncApplicantUI(thread);
@@ -263,7 +268,8 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
             setCurrentRiderChatMeta(mergedMeta);
             if (!mergedMeta.isApplicant && typeof window.getCachedCustomerThreadsMap === 'function') {
                 const map = window.getCachedCustomerThreadsMap();
-                const thread = map ? (map.get(custId) || map.get(`fb_${custId}`) || (custId.startsWith('fb_') ? map.get(custId.replace(/^fb_/, '')) : null)) : null;
+                const rawPsid = custId.replace(/^(?:fb_|messenger_)+/i, '');
+                const thread = map ? (map.get(custId) || map.get(`fb_${rawPsid}`) || map.get(rawPsid)) : null;
                 if (thread?.isApplicant) {
                     mergedMeta.isApplicant = true;
                     mergedMeta.folder = 'applicant';

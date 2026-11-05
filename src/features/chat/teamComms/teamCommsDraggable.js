@@ -5,6 +5,7 @@ export function restoreBubbleDockedPosition() {
     const container = document.getElementById('floating-chat-container');
     const bubble = document.getElementById('chat-bubble');
     if (!container || !bubble) return;
+    bubble.style.display = 'none';
 
     container.style.transition = 'top 0.25s ease-out, right 0.25s ease-out';
 

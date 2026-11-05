@@ -25,8 +25,8 @@ import { getActiveRosterCaterer } from '../chatFeed/chatFeedState.js';
 
 export async function forwardRiderReactionToMessenger({ custId, msgId, emoji, action = 'react' }) {
     try {
-        const cleanPsid = String(custId || '').replace(/^fb_/, '');
-        if (!cleanPsid || !msgId) return;
+        const cleanPsid = String(custId || '').replace(/^(?:fb_|messenger_)+/i, '');
+        if (!cleanPsid || !/^\d+$/.test(cleanPsid) || !msgId) return;
 
         // Find the actual Facebook mid from loaded messages or fetch from db
         let fbMid = msgId;
@@ -611,8 +611,8 @@ function compressDataUrlForBridge(dataUrl, maxDim = 800, quality = 0.65) {
  */
 export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageUrl, videoUrl = null, attachmentId = null, fileUrl, fileName, locationCoords, riderName, replyToMid, replyToText, newMsgKey, skipSeparateCaption = false, suppressToast = false }) {
     try {
-        const cleanPsid = String(custId || '').replace(/^fb_/, '');
-        if (!cleanPsid) return;
+        const cleanPsid = String(custId || '').replace(/^(?:fb_|messenger_)+/i, '');
+        if (!cleanPsid || !/^\d+$/.test(cleanPsid)) return;
 
         const markDeliverySuccess = async (rawMid = null) => {
             if (!newMsgKey || !custId) return;

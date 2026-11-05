@@ -803,8 +803,8 @@ export function createSupabaseRef(rawPath, queryState = {}) {
               query = query.order('id', { ascending: true }).limit(ref._query.limit);
             }
           } else if (pathInfo.table === 'customer_chat_meta') {
-            // Data optimization: prevent unbounded full-table scan on customer_chat_meta
-            query = query.order('updated_at', { ascending: false }).limit(80);
+            // Data optimization: window query on customer_chat_meta
+            query = query.order('updated_at', { ascending: false }).limit(350);
           } else if (!ref._query.equalTo) {
             // When querying entire table without limit or equalTo, order descending by newest first
             if (pathInfo.table === 'advanced_orders' || pathInfo.table === 'receipts') {

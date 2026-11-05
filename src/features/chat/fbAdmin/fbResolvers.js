@@ -12,7 +12,7 @@ let autoResolveDebounceTimer = null;
 
 export function getResolvedFbName(custId) {
     if (!custId) return null;
-    const psid = String(custId).replace(/^fb_/, '').trim();
+    const psid = String(custId).replace(/^(?:fb_|messenger_)+/i, '').trim();
     return fbNameResolutionCache.get(psid) || null;
 }
 
@@ -24,8 +24,10 @@ export function getResolvedFbName(custId) {
 export async function resolveFacebookCustomerName(custId, force = false) {
     if (!custId) return null;
     const cleanId = String(custId).trim();
-    const psid = cleanId.replace(/^fb_/, '').trim();
-    if (!psid) return null;
+    // Strip ALL leading fb_ / messenger_ repetitions (e.g. fb_fb_...)
+    const psid = cleanId.replace(/^(?:fb_|messenger_)+/i, '').trim();
+    // Facebook Page-Scoped User ID (PSID) MUST be a numeric string (digits only)
+    if (!psid || !/^\d+$/.test(psid)) return null;
 
     if (!force && fbNameResolutionCache.has(psid)) {
         return fbNameResolutionCache.get(psid);
@@ -55,11 +57,11 @@ export async function resolveFacebookCustomerName(custId, force = false) {
 
                 // Method A: Targeted Page Conversations API by user_id
                 try {
-                    const convEndpoint = api.pageId 
-                        ? `https://graph.facebook.com/v19.0/${api.pageId}/conversations?user_id=${psid}&fields=participants{id,name,picture.type(large)},senders{id,name,picture.type(large)}&access_token=${token}`
+                    const convEndpoint = pageId 
+                        ? `https://graph.facebook.com/v19.0/${pageId}/conversations?user_id=${psid}&fields=participants{id,name,picture.type(large)},senders{id,name,picture.type(large)}&access_token=${token}`
                         : `https://graph.facebook.com/v19.0/me/conversations?user_id=${psid}&fields=participants{id,name,picture.type(large)},senders{id,name,picture.type(large)}&access_token=${token}`;
                     let convResp = await fetch(convEndpoint);
-                    if (!convResp.ok) {
+                    if (!convResp.ok && convResp.status !== 400 && pageId) {
                         convResp = await fetch(`https://graph.facebook.com/v19.0/me/conversations?user_id=${psid}&fields=participants{id,name,picture.type(large)},senders{id,name,picture.type(large)}&access_token=${token}`);
                     }
                     if (convResp.ok) {
@@ -121,10 +123,16 @@ export async function resolveFacebookCustomerName(custId, force = false) {
                                 if (realAvatar) {
                                     updatePayload.avatarUrl = realAvatar;
                                 }
-                                await Promise.all([
-                                    db.ref(`customerChatMeta/${cleanId}`).update(updatePayload),
-                                    db.ref(`customerChats/${cleanId}/metadata`).update(updatePayload)
-                                ]).catch(() => {});
+                                const canonicalId = `fb_${psid}`;
+                                const updateOps = [
+                                    db.ref(`customerChatMeta/${canonicalId}`).update(updatePayload),
+                                    db.ref(`customerChats/${canonicalId}/metadata`).update(updatePayload)
+                                ];
+                                if (cleanId !== canonicalId) {
+                                    updateOps.push(db.ref(`customerChatMeta/${cleanId}`).remove());
+                                    updateOps.push(db.ref(`customerChats/${cleanId}`).remove());
+                                }
+                                await Promise.all(updateOps).catch(() => {});
                             }
                             return resolved;
                         }
@@ -177,7 +185,8 @@ export function autoResolvePendingFacebookThreads(threadsList) {
             if (!t) return false;
             const cid = t.custId || t.id || '';
             if (!cid.startsWith('fb_')) return false;
-            const psid = cid.replace(/^fb_/, '').trim();
+            const psid = cid.replace(/^(?:fb_|messenger_)+/i, '').trim();
+            if (!psid || !/^\d+$/.test(psid)) return false;
             const cached = fbNameResolutionCache.get(psid);
             const name = (t.customerName || t.name || '').trim();
             const hasNoName = !name || name.startsWith('FB Customer (') || name.toLowerCase() === 'customer';
@@ -250,7 +259,8 @@ export async function syncAllFacebookCustomerNames() {
 
                         for (const [custId, item] of Object.entries(allMeta)) {
                             if (!custId.startsWith('fb_')) continue;
-                            const psid = custId.replace(/^fb_/, '');
+                            const psid = custId.replace(/^(?:fb_|messenger_)+/i, '').trim();
+                            if (!psid || !/^\d+$/.test(psid)) continue;
                             const currentName = item.customerName || item.metadata?.customerName || '';
 
                             if (nameMap.has(psid)) {
@@ -285,6 +295,8 @@ export async function syncAllFacebookCustomerNames() {
         // 2. Direct resolution fallback for any remaining FB Customer entries or missing avatars
         for (const [custId, item] of Object.entries(allMeta)) {
             if (!custId.startsWith('fb_')) continue;
+            const psid = custId.replace(/^(?:fb_|messenger_)+/i, '').trim();
+            if (!psid || !/^\d+$/.test(psid)) continue;
             const currentName = item.customerName || item.metadata?.customerName || '';
             const currentAvatar = item.avatarUrl || item.metadata?.avatarUrl || '';
             const needsName = !currentName || currentName.startsWith('FB Customer (');

@@ -276,8 +276,8 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
 
     Object.keys(data).forEach(key => {
         const cleanKey = (key || '').trim().toLowerCase();
-        // Automatically purge invalid/ghost customer IDs
-        if (!cleanKey || cleanKey === 'customer' || cleanKey === 'customer name' || cleanKey === 'undefined' || cleanKey === 'null') {
+        // Automatically purge invalid/ghost customer IDs and corrupted duplicates (e.g. fb_fb_)
+        if (!cleanKey || cleanKey === 'customer' || cleanKey === 'customer name' || cleanKey === 'undefined' || cleanKey === 'null' || cleanKey.startsWith('fb_fb_')) {
             if (db && key && !isFromCache) {
                 db.ref(`customerChats/${key}`).remove().catch(() => {});
                 db.ref(`customerChatMeta/${key}`).remove().catch(() => {});
@@ -380,8 +380,9 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
         const isPlaceholderName = !cleanDisplayName || cleanDisplayName === 'customer' || cleanDisplayName === 'customer name' || cleanDisplayName === 'unknown';
 
         if (key.startsWith('fb_') && isPlaceholderName && !isFromCache) {
-            if (typeof resolveFacebookCustomerName === 'function') {
-                resolveFacebookCustomerName(key).catch(() => {});
+            const cleanPsid = key.replace(/^(?:fb_|messenger_)+/i, '').trim();
+            if (/^\d+$/.test(cleanPsid) && typeof resolveFacebookCustomerName === 'function') {
+                resolveFacebookCustomerName(cleanPsid).catch(() => {});
             }
         }
 
@@ -417,16 +418,29 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
 
         const isApplicant = Boolean(meta.isApplicant === true || (meta.folder || '').toLowerCase() === 'applicant');
         const isFollowUp = Boolean(!isApplicant && (meta.folder || '').toLowerCase() === 'followup');
-        const isAlreadyDone = (meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled' || (meta.folder || '').toLowerCase() === 'done');
+        let isAlreadyDone = (meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled' || (meta.folder || '').toLowerCase() === 'done');
         const completedAt = Number(meta.completedAt) || 0;
         const lastMsgTime = Number(meta.lastUpdated) || Number(meta.timestamp) || 0;
-        const isNewMessageAfterDone = isAlreadyDone && completedAt > 0 && lastMsgTime > (completedAt + 3000) && meta.unreadForRider === true && rawLastMsg && !rawLastMsg.startsWith('You:');
+        const isCustomerIncomingMsg = Boolean(rawLastMsg && !rawLastMsg.startsWith('You:') && meta.unreadForRider !== false);
+        const isNewMessageAfterDone = Boolean(isAlreadyDone && isCustomerIncomingMsg && (completedAt === 0 || lastMsgTime > (completedAt + 1000) || meta.unreadForRider === true));
+
+        if (isAlreadyDone && isNewMessageAfterDone) {
+            // If customer sent a message from done folder, automatically move back to inbox!
+            isAlreadyDone = false;
+            meta.status = 'active';
+            meta.folder = 'inbox';
+            if (db && key && !isFromCache) {
+                const moveUpdate = { folder: 'inbox', status: 'active', unreadForRider: true };
+                db.ref(`customerChats/${key}/metadata`).update(moveUpdate).catch(() => {});
+                db.ref(`customerChatMeta/${key}`).update(moveUpdate).catch(() => {});
+            }
+        }
 
         let isUnread = false;
         if (rawLastMsg && rawLastMsg.startsWith('You:')) {
             // Outgoing rider messages can NEVER be unread
             isUnread = false;
-        } else if (isAlreadyDone && !isNewMessageAfterDone && !isApplicant && !isFollowUp) {
+        } else if (isAlreadyDone && !isApplicant && !isFollowUp) {
             // Completed threads do not show unread badge for old messages
             isUnread = false;
         } else if (meta.unreadForRider === true) {
@@ -437,7 +451,7 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
             isUnread = true;
         }
 
-        let isCompletedStatus = isAlreadyDone && !isNewMessageAfterDone && !isApplicant && !isFollowUp;
+        let isCompletedStatus = isAlreadyDone && !isApplicant && !isFollowUp;
         let threadFolder = (meta.folder || 'inbox').toLowerCase();
         if (isApplicant) {
             threadFolder = 'applicant';
@@ -683,9 +697,9 @@ export function listenToAllCustomerChatsForRider() {
     setIsCustomerChatMetaListening(true);
 
     // 2. REALTIME WEBSOCKET LISTENER FOR INCOMING LIVE MESSAGES
-    // Ordered by lastUpdated and strictly limited to the most recent 60 active conversations
-    // to eliminate excessive cellular data usage while streaming incoming live chats.
-    db.ref('customerChatMeta').orderByChild('lastUpdated').limitToLast(60).on('value', (snapshot) => {
+    // Ordered by lastUpdated with comprehensive window (350 active conversations)
+    // so active threads across multiple days are never omitted from feed or search.
+    db.ref('customerChatMeta').orderByChild('lastUpdated').limitToLast(350).on('value', (snapshot) => {
         const data = snapshot.val();
         try {
             if (data && typeof data === 'object') {
@@ -762,7 +776,8 @@ export function updateAllChatFolderBadges() {
 
         // Determine destination folder
         if (folder === 'done' || isAlreadyDone) {
-            counts.done++;
+            // Done section has NO unread number badge per specification
+            // (any customer sending a message from done folder is auto-moved to inbox)
         } else {
             const isCatered = folder === 'catering' || Boolean(t.cateredByRiderName || t.cateredByRiderId || t.cateredBy);
             if (isCatered) {
@@ -1154,7 +1169,7 @@ export async function forceRefreshLiveChatsFeed(btn = null, isSilent = false) {
         let chatData = null;
         if (db) {
             try {
-                const snap = await db.ref('customerChatMeta').orderByChild('lastUpdated').limitToLast(60).once('value');
+                const snap = await db.ref('customerChatMeta').orderByChild('lastUpdated').limitToLast(350).once('value');
                 chatData = snap.val();
             } catch (dbErr) {
                 console.warn('[ForceRefreshChat] db.ref fetch failed:', dbErr);
@@ -1163,7 +1178,7 @@ export async function forceRefreshLiveChatsFeed(btn = null, isSilent = false) {
 
         if (!chatData && !isSupabaseSelected()) {
             try {
-                const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?orderBy=%22lastUpdated%22&limitToLast=60&t=${Date.now()}`;
+                const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?orderBy=%22lastUpdated%22&limitToLast=350&t=${Date.now()}`;
                 const res = await fetch(directRestUrl, { cache: 'no-store' });
                 if (res.ok) {
                     chatData = await res.json();

@@ -75,6 +75,7 @@ export async function openRiderInfoModal(targetId, targetName = "") {
     const userType = (member?.userType || cloudData?.userType || "rider").toUpperCase();
     const status = (member?.status || "End").toUpperCase();
     const phone = cloudData?.phone || cloudData?.mobile || member?.phone || "";
+    const address = cloudData?.address || cloudData?.homeAddress || cloudData?.barangay || member?.address || "Camiling, Tarlac";
     
     // Resolve GCash credentials with multi-source fallback (Cloud account, Roster, Local State, and Firebase GCash registry)
     let gcashName = cloudData?.gcashName || member?.gcashName || "";
@@ -295,6 +296,7 @@ export async function openRiderInfoModal(targetId, targetName = "") {
     const statusEl = document.getElementById('rider-info-status');
     const phoneEl = document.getElementById('rider-info-phone');
     const phoneLinkEl = document.getElementById('rider-info-phone-link');
+    const addressEl = document.getElementById('rider-info-address');
     const gcashNameEl = document.getElementById('rider-info-gcash-name');
     const gcashNoEl = document.getElementById('rider-info-gcash-no');
     const grossEl = document.getElementById('rider-info-gross');
@@ -331,6 +333,7 @@ export async function openRiderInfoModal(targetId, targetName = "") {
     }
 
     if (phoneEl) phoneEl.innerText = phone || "Not Set";
+    if (addressEl) addressEl.innerText = address || "Camiling, Tarlac";
     if (phoneLinkEl) {
         if (phone) {
             phoneLinkEl.href = `tel:${phone.replace(/[^0-9+]/g, '')}`;

@@ -34,6 +34,7 @@ import * as storeHub from '../features/storeHub/index.js';
 import * as customerStorefront from '../features/customer/customerStorefront.js';
 import * as customerMenuCatalog from '../features/customer/customerMenuCatalog.js';
 import * as profileSettings from '../features/profile/profileSettings.js';
+import * as modernUi from '../features/modernUi/modernUiController.js';
 
 import * as modals from '../ui/modals.js';
 import * as router from '../ui/router.js';
@@ -66,7 +67,7 @@ export function initGlobalWindowBridge() {
         authFeature, cart, chat, roster, directory, commission, 
         advancedOrders, maps, wizard, liveTracker, storeHub, 
         customerStorefront, customerMenuCatalog, profileSettings, 
-        modals, router, helpers, storageEngine
+        modernUi, modals, router, helpers, storageEngine
     ];
 
     allModules.forEach(mod => {

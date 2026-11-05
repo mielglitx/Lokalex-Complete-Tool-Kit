@@ -50,6 +50,7 @@ if (typeof window !== 'undefined') {
 import { initOtaUpdater, syncVersionTrackerElements } from './utils/otaUpdater.js';
 import './utils/changelogViewer.js';
 import './features/roster/rosterPerformanceTracker.js';
+import { initModernUiController } from './features/modernUi/modernUiController.js';
 import { registerSW } from 'virtual:pwa-register';
 
 const updateSW = registerSW({
@@ -128,6 +129,9 @@ initSyncWatchdog();
 
 // 5. Initialize application lifecycle & session change events
 initAppLifecycleEvents();
+
+// 6. Initialize modern workspace UI controller & dual UI switcher
+initModernUiController();
 
 // 4. Run application boot sequence
 if (document.readyState === 'loading') {

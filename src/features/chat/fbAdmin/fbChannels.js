@@ -636,6 +636,24 @@ export function syncChannelBarLockUI() {
         }
     }
 
+    const modernLockBtn = document.getElementById('modern-sources-lock-btn');
+    const modernLockIcon = document.getElementById('modern-sources-lock-icon');
+    const modernLockText = document.getElementById('modern-sources-lock-text');
+
+    if (modernLockBtn) {
+        if (locked) {
+            modernLockBtn.className = "px-1.5 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-400 text-[9.5px] font-bold flex items-center gap-1 cursor-pointer transition active:scale-95 shrink-0";
+            modernLockBtn.title = "Feed filters are LOCKED. Tap to unlock.";
+            if (modernLockIcon) modernLockIcon.className = "fa-solid fa-lock text-[8.5px]";
+            if (modernLockText) modernLockText.innerText = "Locked";
+        } else {
+            modernLockBtn.className = "px-1.5 py-0.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400 text-[9.5px] font-bold flex items-center gap-1 cursor-pointer transition active:scale-95 shrink-0";
+            modernLockBtn.title = "Feed filters are UNLOCKED. Tap to lock.";
+            if (modernLockIcon) modernLockIcon.className = "fa-solid fa-lock-open text-[8.5px]";
+            if (modernLockText) modernLockText.innerText = "Unlocked";
+        }
+    }
+
     if (overlay) {
         if (locked) overlay.classList.remove('hidden');
         else overlay.classList.add('hidden');

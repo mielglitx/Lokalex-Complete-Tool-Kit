@@ -159,7 +159,8 @@ export function getActiveRiderChatCustId() {
 export function getCurrentRiderChatMeta() { 
     if (activeRiderChatCustId && typeof window.getCachedCustomerThreadsMap === 'function') {
         const map = window.getCachedCustomerThreadsMap();
-        const thread = map ? (map.get(activeRiderChatCustId) || map.get(`fb_${activeRiderChatCustId}`) || (activeRiderChatCustId.startsWith('fb_') ? map.get(activeRiderChatCustId.replace(/^fb_/, '')) : null)) : null;
+        const rawPsid = activeRiderChatCustId.replace(/^(?:fb_|messenger_)+/i, '');
+        const thread = map ? (map.get(activeRiderChatCustId) || map.get(`fb_${rawPsid}`) || map.get(rawPsid)) : null;
         if (thread) {
             return { ...thread, ...(currentRiderChatMeta || {}) };
         }

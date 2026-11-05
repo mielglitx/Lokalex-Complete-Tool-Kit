@@ -21,7 +21,7 @@
         </div>
     </div>
 
-    <!-- RIGHT: LIVE DIGITAL CLOCK, BATTERY INDICATOR, THEME TOGGLE & NETWORK STATUS PILL -->
+    <!-- RIGHT: LIVE DIGITAL CLOCK, BATTERY INDICATOR, THEME TOGGLE, PIP & SWITCH TO NEW UI BUTTON -->
     <div class="flex items-center gap-1.5 shrink-0">
         <!-- FLOATING WINDOW (PIP) MODE BUTTON -->
         <button id="header-floating-window-btn" type="button" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" class="flex items-center justify-center w-7 h-7 rounded-xl bg-gray-100 dark:bg-black/40 hover:bg-sky-50 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700/60 text-sky-600 dark:text-sky-400 transition active:scale-95 shadow-2xs cursor-pointer" title="Float App as Mini Window over Other Apps (PiP)">
@@ -46,9 +46,10 @@
             <span id="header-battery-text">--%</span>
         </div>
 
-        <!-- COLOR-COORDINATED NETWORK STATUS INDICATOR (Only visible in Rider views) -->
-        <div id="network-status-pill" class="hidden flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/40 shadow-xs transition-all duration-300 shrink-0" title="Network: Online">
-            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
-        </div>
+        <!-- SWITCH TO NEW UI BUTTON (AT UPPER RIGHT CORNER OF APP) -->
+        <button id="header-ui-mode-switch-btn" type="button" onclick="window.toggleLokalexUiMode && window.toggleLokalexUiMode('modern')" class="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white border border-emerald-400/40 text-[10px] font-black transition active:scale-95 shadow-xs cursor-pointer shrink-0" title="Switch to New Split-Screen UI">
+            <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
+            <span>New UI</span>
+        </button>
     </div>
 </header>

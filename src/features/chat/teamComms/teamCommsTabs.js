@@ -39,7 +39,8 @@ export function toggleChatWindow(show) {
             scrollChatToBottom();
         } else {
             windowEl.classList.add('hidden');
-            if (bubble) bubble.classList.remove('hidden');
+            if (bubble) bubble.classList.add('hidden');
+            if (container) container.classList.add('hidden');
 
             restoreBubbleDockedPosition();
             closeCreateGroupModal();

@@ -340,7 +340,7 @@ export function syncHeaderAndWidgets(targetViewId) {
         if (userSection) userSection.title = "Click to change rider profile";
 
         if (networkPill) networkPill.classList.remove('hidden');
-        if (floatingChat) floatingChat.classList.remove('hidden');
+        if (floatingChat) floatingChat.classList.add('hidden');
     }
 }
 
@@ -376,6 +376,17 @@ export function renderViewUI(targetViewId) {
         if (targetViewId === 'view-home') {
             if (headerTitle) headerTitle.innerHTML = `L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub`;
             syncRiderAppDockPermissions();
+
+            const isModern = (typeof localStorage !== 'undefined') && localStorage.getItem('lokalex_ui_mode') === 'modern';
+            if (isModern) {
+                const modernWorkspace = document.getElementById('modern-ui-workspace');
+                if (modernWorkspace) modernWorkspace.classList.remove('hidden');
+                if (targetEl) targetEl.classList.add('hidden');
+                if (appHeader) appHeader.classList.add('hidden');
+                if (window.applyLokalexUiMode) {
+                    window.applyLokalexUiMode('modern', false);
+                }
+            }
         } else if (targetViewId === 'view-customer-home' && headerTitle) {
             headerTitle.innerHTML = `L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Customer Portal`;
         } else if (targetViewId === 'view-customer-menus' && headerTitle) {
