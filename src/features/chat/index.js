@@ -204,8 +204,19 @@ export function renderFilteredCustomerChats(targetFolder = 'inbox') {
                     (rId && (m.telegramId || m.id || "").toString() === rId) ||
                     (rName && (m.riderName || m.name || "").trim().toLowerCase() === rName)
                 );
+                // Only eject from Catering tab if the rider is explicitly in a terminal/non-catering
+                // state (EndShift or explicitly marked done). Do NOT eject on "Available" alone —
+                // that could be a transient status flip caused by poor signal (rubberbanding fix).
                 if (assignedRider && assignedRider.status !== 'Catering') {
-                    return false;
+                    const terminalStatuses = ['EndShift', 'DayOff', 'end_shift', 'day_off'];
+                    if (terminalStatuses.includes(assignedRider.status)) {
+                        return false;
+                    }
+                    // If rider shows Available/Break on bad signal, keep in Catering tab
+                    // as long as the folder is explicitly 'catering' and cateredBy fields are set
+                    if (folder !== 'catering') {
+                        return false;
+                    }
                 }
             }
 
@@ -231,17 +242,10 @@ export function renderFilteredCustomerChats(targetFolder = 'inbox') {
             }
             if (targetFolder === 'done') {
                 if (folder === 'done' || meta.status === 'completed' || meta.status === 'done') return true;
-                if (folder === 'catering') {
-                    const rName = (meta.cateredByRiderName || meta.cateredBy || "").trim().toLowerCase();
-                    const rId = (meta.cateredByRiderId || "").toString().trim();
-                    if (rId || rName) {
-                        const assignedRider = (globalState.rosterMembers || []).find(m => 
-                            (rId && (m.telegramId || m.id || "").toString() === rId) ||
-                            (rName && (m.riderName || m.name || "").trim().toLowerCase() === rName)
-                        );
-                        if (assignedRider && assignedRider.status === 'Available') return true;
-                    }
-                }
+                // Do NOT classify a catering thread as Done just because the rider's live
+                // status briefly shows 'Available' — that is a transient rubberbanding artefact
+                // on bad signal. Only a folder='done' or explicit completion status moves a
+                // thread to Done.
                 return false;
             }
             return folder === targetFolder.toLowerCase();

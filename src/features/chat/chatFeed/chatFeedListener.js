@@ -146,7 +146,12 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                     if (!displayName) displayName = "Customer";
 
                     const rawFolder = (meta.folder || 'inbox').toLowerCase();
-                    const isDone = rawFolder === 'done' || meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled';
+                    // Rubberbanding fix: if the thread has active cateredBy fields set, do NOT
+                    // classify it as done based solely on a transient status value. The cateredBy
+                    // fields are only cleared by an explicit completion action, so they act as a
+                    // reliable "still-being-catered" anchor even when signal is poor.
+                    const hasActiveCaterFields = !!(meta.cateredByRiderId || meta.cateredByRiderName || meta.cateredBy);
+                    const isDone = !hasActiveCaterFields && (rawFolder === 'done' || meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled');
                     
                     // Always check live roster catering: active roster catering takes precedence!
                     const activeCaterer = getActiveRosterCaterer(displayName, key, meta);
@@ -425,7 +430,11 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
 
         // Validate catering against live roster: ACTIVE ROSTER CATERING ALWAYS TAKES PRECEDENCE!
         const activeCaterer = getActiveRosterCaterer(displayName, key, meta);
-        const isExplicitlyDoneOrCancelled = !activeCaterer && (isCompletedStatus || meta.status === 'cancelled' || meta.status === 'completed' || meta.folder === 'done');
+        // Rubberbanding fix: also treat thread as "still catering" if cateredBy fields are
+        // present in the persisted metadata — the live roster may temporarily show Available
+        // on bad signal, but those fields are only cleared by an explicit completion action.
+        const hasActiveCaterFields = !!(meta.cateredByRiderId || meta.cateredByRiderName || meta.cateredBy);
+        const isExplicitlyDoneOrCancelled = !activeCaterer && !hasActiveCaterFields && (isCompletedStatus || meta.status === 'cancelled' || meta.status === 'completed' || meta.folder === 'done');
 
         if (activeCaterer) {
             isCompletedStatus = false;
@@ -441,7 +450,9 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
             meta.cateredByRiderId = activeCaterer ? (activeCaterer.telegramId || activeCaterer.id || "").toString().trim() : null;
             meta.cateredByRiderName = activeCaterer ? (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim() : null;
             meta.cateredBy = meta.cateredByRiderName;
-        } else if (isCompletedStatus) {
+        } else if (isCompletedStatus && !hasActiveCaterFields) {
+            // Only clear catering fields and move to done when there is no active catering
+            // metadata — prevents rubberbanding on bad signal from prematurely completing threads.
             threadFolder = 'done';
             meta.cateredByRiderId = null;
             meta.cateredByRiderName = null;
