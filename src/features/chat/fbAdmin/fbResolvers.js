@@ -718,14 +718,26 @@ export async function resolveFacebookMessageAttachment(custId, msgId, rawMid, fo
 }
 
 const inFlightReplyToResolutions = new Map();
+const resolvedReplyToMemoryCache = new Map();
 
 /**
- * Resolves quoted reply_to message details from Meta Graph API when missing in Firebase
+ * Resolves quoted reply_to message details from Meta Graph API when missing in database
  */
 export async function resolveFacebookMessageReplyTo(custId, msgId, rawMid) {
     if (!custId || !msgId) return null;
-    const cleanMid = rawMid || msgId;
+    let cleanMid = rawMid || msgId;
+    if (typeof cleanMid === 'string') {
+        if (cleanMid.startsWith('m_mid_')) cleanMid = 'm_mid.' + cleanMid.slice(6);
+        else if (cleanMid.startsWith('mid_')) cleanMid = 'mid.' + cleanMid.slice(4);
+    }
+    if (typeof cleanMid !== 'string' || (!cleanMid.startsWith('m_') && !cleanMid.startsWith('mid.') && !cleanMid.startsWith('m_mid.'))) {
+        return null;
+    }
+
     const cacheKey = `${custId}_${msgId}`;
+    if (resolvedReplyToMemoryCache.has(cacheKey)) {
+        return resolvedReplyToMemoryCache.get(cacheKey);
+    }
 
     if (inFlightReplyToResolutions.has(cacheKey)) {
         return inFlightReplyToResolutions.get(cacheKey);
@@ -816,11 +828,16 @@ export async function resolveFacebookMessageReplyTo(custId, msgId, rawMid) {
                                     replyTo: replyToObj
                                 }).catch(() => {});
                             }
+                            resolvedReplyToMemoryCache.set(cacheKey, replyToObj);
                             return replyToObj;
                         }
+                    } else {
+                        resolvedReplyToMemoryCache.set(cacheKey, null);
+                        return null;
                     }
                 }
             }
+            resolvedReplyToMemoryCache.set(cacheKey, null);
         } catch (e) {
             console.warn(`[FB ReplyTo] Resolution failed for mid ${cleanMid}:`, e);
         } finally {

@@ -228,8 +228,9 @@ function autoResolveRecentFbCustomerAttachments(custId, container, custData) {
 
 function autoResolveRecentFbCustomerReplies(custId, container, custData) {
     if (!String(custId).startsWith('fb_')) return;
+    const isMetaMid = (val) => typeof val === 'string' && (val.startsWith('m_') || val.startsWith('mid.') || val.startsWith('m_mid.') || val.startsWith('m_mid_') || val.startsWith('mid_'));
     const candidates = Array.from(loadedRiderMsgsMap.values())
-        .filter(m => m && !m.isRider && !m.replyTo && (m.mid || (m.id && m.id.startsWith('m_'))))
+        .filter(m => m && !m.isRider && !m.replyTo && (isMetaMid(m.mid) || isMetaMid(m.metaMid) || isMetaMid(m.id)))
         .slice(-8);
     for (const m of candidates) {
         resolveFacebookMessageReplyTo(custId, m.id, m.mid || m.id).then(replyToObj => {
