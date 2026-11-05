@@ -509,14 +509,60 @@ export function isCustomerMatch(cust1 = "", cust2 = "") {
 }
 
 /**
+ * Resolves a unified list of all known rider accounts across active roster and logins.
+ */
+export function getAllKnownRiders() {
+    const map = new Map();
+    (globalState.rosterMembers || []).forEach(m => {
+        const id = (m.telegramId || m.id || "").toString().trim();
+        const name = (m.riderName || m.name || "").trim();
+        if (id || name) {
+            const key = id ? `id_${id.toLowerCase()}` : `name_${name.toLowerCase()}`;
+            if (!map.has(key)) map.set(key, { id, name });
+        }
+    });
+    (globalState.globalLogins || []).forEach(l => {
+        const id = (l.riderId || l.id || l.telegramId || "").toString().trim();
+        const name = (l.riderName || l.name || "").trim();
+        if (id || name) {
+            const key = id ? `id_${id.toLowerCase()}` : `name_${name.toLowerCase()}`;
+            if (!map.has(key)) map.set(key, { id, name });
+            else if (!map.get(key).id && id) map.get(key).id = id;
+        }
+    });
+    return Array.from(map.values());
+}
+
+/**
+ * Finds the canonical ID for a rider name or ID.
+ */
+export function findKnownRiderId(nameOrId) {
+    if (!nameOrId) return "";
+    const clean = nameOrId.toString().trim().toLowerCase();
+    const all = getAllKnownRiders();
+    const byId = all.find(r => r.id && r.id.toLowerCase() === clean);
+    if (byId) return byId.id;
+    const byName = all.find(r => (r.name && r.name.toLowerCase() === clean) || (r.riderName && r.riderName.toLowerCase() === clean));
+    if (byName) return byName.id;
+    return "";
+}
+
+/**
  * Precise Rider Matching:
  * Evaluates ID, full-name, or first-name tokens while preventing
- * loose substring collisions (e.g. "al" matching "allan").
+ * loose substring collisions and cross-account commission bleeding.
  */
 export function isRiderMatch(targetName = "", recordName = "", targetId = "", recordId = "") {
-    const tId = (targetId || "").toString().trim().toLowerCase();
-    const rId = (recordId || "").toString().trim().toLowerCase();
-    
+    let tId = (targetId || "").toString().trim().toLowerCase();
+    let rId = (recordId || "").toString().trim().toLowerCase();
+
+    const tn = (targetName || "").trim().toLowerCase();
+    const rn = (recordName || "").trim().toLowerCase();
+
+    // Resolve missing IDs from known accounts across roster and logins
+    if (!tId && tn) tId = findKnownRiderId(tn).toLowerCase();
+    if (!rId && rn) rId = findKnownRiderId(rn).toLowerCase();
+
     // 1. If both IDs are present: ID match is definitive
     if (tId && rId) {
         if (tId === rId) return true;
@@ -525,8 +571,6 @@ export function isRiderMatch(targetName = "", recordName = "", targetId = "", re
         return false; // Non-admin distinct IDs are definitively different riders!
     }
 
-    const tn = (targetName || "").trim().toLowerCase();
-    const rn = (recordName || "").trim().toLowerCase();
     if (!tn || !rn) return false;
     if (tn === rn) return true;
 
@@ -553,12 +597,13 @@ export function isRiderMatch(targetName = "", recordName = "", targetId = "", re
 
     // 3. Single word name against full/short name (e.g. "Mark" vs "Mark Tejada" or "Mark T.")
     // CRITICAL: A single-word name can NEVER match a multi-word name if multiple riders
-    // in the roster share that same first name (e.g. "Mark" and "Mark Tejada" in the same fleet).
+    // in the fleet share that same first name (e.g. "Mark" and "Mark Tejada").
     const singleToken = w1.length === 1 ? w1[0] : w2[0];
     const multiWords = w1.length === 1 ? w2 : w1;
 
-    if (globalState.rosterMembers && Array.isArray(globalState.rosterMembers) && globalState.rosterMembers.length > 0) {
-        const matchingMembers = globalState.rosterMembers.filter(m => {
+    const allKnown = getAllKnownRiders();
+    if (allKnown && Array.isArray(allKnown) && allKnown.length > 0) {
+        const matchingMembers = allKnown.filter(m => {
             const mName = (m.riderName || m.name || "").trim().toLowerCase();
             if (!mName) return false;
             const parts = mName.split(/\s+/).filter(Boolean);
@@ -570,9 +615,9 @@ export function isRiderMatch(targetName = "", recordName = "", targetId = "", re
             return false;
         }
 
-        // If there is an exact registered roster member with this single-word name,
+        // If there is an exact registered account with this single-word name,
         // do not let it bleed into another rider's orders
-        const hasExactSingle = globalState.rosterMembers.some(m => {
+        const hasExactSingle = allKnown.some(m => {
             const mName = (m.riderName || m.name || "").trim().toLowerCase();
             return mName === singleToken;
         });
@@ -580,7 +625,7 @@ export function isRiderMatch(targetName = "", recordName = "", targetId = "", re
             return false;
         }
     } else {
-        // Without roster list, do not match a bare 1-word name to a multi-word name
+        // Without rider accounts list, do not match a bare 1-word name to a multi-word name
         if (multiWords.length > 1) {
             return false;
         }
@@ -738,13 +783,9 @@ function buildDailyGrossIndex() {
         let recId = (rec.telegramId || "").toString().trim();
         const recName = (rec.riderName || "").trim().toLowerCase();
 
-        if (!recId && globalState.rosterMembers) {
-            const exactRoster = globalState.rosterMembers.find(mem => 
-                (mem.riderName || mem.name || "").trim().toLowerCase() === recName
-            );
-            if (exactRoster && (exactRoster.telegramId || exactRoster.id)) {
-                recId = (exactRoster.telegramId || exactRoster.id).toString().trim();
-            } else {
+        if (!recId) {
+            recId = findKnownRiderId(recName);
+            if (!recId && globalState.rosterMembers) {
                 const rosterRec = globalState.rosterMembers.find(mem => 
                     isRiderMatch(recName, mem.riderName || mem.name || "")
                 );
@@ -777,18 +818,33 @@ export function getRiderTodayGross(riderName, telegramId) {
         cachedDailyGrossMap = buildDailyGrossIndex();
     }
 
+    // 1. Authoritative direct ID lookup
     if (tId && cachedDailyGrossMap.has(`id_${tId}`)) {
         return cachedDailyGrossMap.get(`id_${tId}`);
     }
 
+    // 2. Direct name lookup (ensure name does not belong to another known rider with a different ID)
     if (rName && cachedDailyGrossMap.has(`name_${rName}`)) {
+        if (tId) {
+            const knownId = findKnownRiderId(rName);
+            if (knownId && knownId.toLowerCase() !== tId.toLowerCase()) {
+                // Different rider! Do not return this name's gross.
+                return 0;
+            }
+        }
         return cachedDailyGrossMap.get(`name_${rName}`);
     }
 
+    // 3. Fallback name key scan with explicit ID guard
     for (const [key, amount] of cachedDailyGrossMap.entries()) {
         if (key.startsWith('name_')) {
             const kName = key.replace('name_', '');
-            if (isRiderMatch(rName, kName, tId)) {
+            const kId = findKnownRiderId(kName);
+            if (tId && kId && tId.toLowerCase() !== kId.toLowerCase()) {
+                // Distinct rider accounts! Skip!
+                continue;
+            }
+            if (isRiderMatch(rName, kName, tId, kId)) {
                 return amount;
             }
         }

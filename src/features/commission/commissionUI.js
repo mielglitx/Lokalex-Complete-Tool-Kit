@@ -10,7 +10,7 @@ import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { getLocalTodayStr, copyText, getWeekString, getMonthString, escapeHtml } from '../../utils/helpers.js';
 import { switchView } from '../../ui/router.js';
-import { isAdmin as checkIsAdmin, getMergedDeduplicatedCommissionList, isSameDateStr, normalizeToDateStr, saveRosterCache, isRiderMatch, invalidateRosterGrossCache } from '../roster/rosterUtils.js';
+import { isAdmin as checkIsAdmin, getMergedDeduplicatedCommissionList, isSameDateStr, normalizeToDateStr, saveRosterCache, isRiderMatch, findKnownRiderId, invalidateRosterGrossCache } from '../roster/rosterUtils.js';
 import { getCommissionRates, fetchCommissionSettings, overtimeReward } from './commissionRates.js';
 
 export let viewSettings = {
@@ -164,7 +164,11 @@ export function getCleanRiderList() {
     const list = [];
 
     const findExisting = (name, id) => {
-        return list.find(r => isRiderMatch(r.name, name, r.id, id));
+        return list.find(r => {
+            if (r.id && id && r.id.toLowerCase() === id.toLowerCase()) return true;
+            if (r.id && id && r.id.toLowerCase() !== id.toLowerCase()) return false;
+            return isRiderMatch(r.name, name, r.id, id);
+        });
     };
 
     (globalState.rosterMembers || []).forEach(r => {
@@ -316,25 +320,30 @@ export function checkRiderFilterMatch(targetFilter, rName, rId) {
 
     const rNameClean = (rName || "").toString().trim();
     const rIdClean = (rId || "").toString().trim();
+    const targetId = findKnownRiderId(target);
 
     // 1. Direct case-insensitive match on ID or Name
-    if (rIdClean && target.toLowerCase() === rIdClean.toLowerCase()) return true;
-    if (rNameClean && target.toLowerCase() === rNameClean.toLowerCase()) return true;
+    if (rIdClean && (target.toLowerCase() === rIdClean.toLowerCase() || (targetId && targetId.toLowerCase() === rIdClean.toLowerCase()))) return true;
+    if (rNameClean && target.toLowerCase() === rNameClean.toLowerCase()) {
+        if (targetId && rIdClean && targetId.toLowerCase() !== rIdClean.toLowerCase()) return false;
+        return true;
+    }
 
-    // 2. Token/word name match via isRiderMatch
-    if (isRiderMatch(target, rNameClean)) return true;
+    // 2. Token/word name match via isRiderMatch with both IDs passed
+    if (isRiderMatch(target, rNameClean, targetId, rIdClean)) return true;
 
     // 3. Match against roster member
     const targetRoster = (globalState.rosterMembers || []).find(m => {
         const mName = (m.riderName || m.name || "").toString().trim();
         const mId = (m.telegramId || m.id || "").toString().trim();
-        return (mId && mId.toLowerCase() === target.toLowerCase()) || (mName && isRiderMatch(target, mName));
+        return (mId && mId.toLowerCase() === target.toLowerCase()) || 
+               (mName && isRiderMatch(target, mName, targetId, mId));
     });
     if (targetRoster) {
         const rosterId = (targetRoster.telegramId || targetRoster.id || "").toString().trim();
         const rosterName = (targetRoster.riderName || targetRoster.name || "").toString().trim();
         if (rosterId && rIdClean && rosterId.toLowerCase() === rIdClean.toLowerCase()) return true;
-        if (rosterName && isRiderMatch(rosterName, rNameClean)) return true;
+        if (rosterName && isRiderMatch(rosterName, rNameClean, rosterId, rIdClean)) return true;
     }
 
     return false;
@@ -394,10 +403,8 @@ export function refreshCommissionView() {
         let rDate = r.date || r.completedDate;
 
         if (!rId) {
-            const exactRoster = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").trim().toLowerCase() === rName.toLowerCase());
-            if (exactRoster && (exactRoster.telegramId || exactRoster.id)) {
-                rId = (exactRoster.telegramId || exactRoster.id).toString();
-            } else {
+            rId = findKnownRiderId(rName);
+            if (!rId) {
                 const rosterRec = globalState.rosterMembers?.find(mem => isRiderMatch(rName, mem.riderName || mem.name || ""));
                 if (rosterRec && (rosterRec.telegramId || rosterRec.id)) rId = (rosterRec.telegramId || rosterRec.id).toString();
                 else rId = rName.toLowerCase();
@@ -957,10 +964,8 @@ export function generateDailyReportText() {
         let rDate = r.date || r.completedDate;
 
         if (!rId) {
-            const exactRoster = globalState.rosterMembers?.find(mem => (mem.riderName || mem.name || "").trim().toLowerCase() === rName.toLowerCase());
-            if (exactRoster && (exactRoster.telegramId || exactRoster.id)) {
-                rId = (exactRoster.telegramId || exactRoster.id).toString();
-            } else {
+            rId = findKnownRiderId(rName);
+            if (!rId) {
                 const rosterRec = globalState.rosterMembers?.find(mem => isRiderMatch(rName, mem.riderName || mem.name || ""));
                 if (rosterRec && (rosterRec.telegramId || rosterRec.id)) rId = (rosterRec.telegramId || rosterRec.id).toString();
                 else rId = rName.toLowerCase();

@@ -790,7 +790,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
     // 1. PURGE IN-MEMORY RECEIPTS
     if (globalState.globalDailyReceipts) {
         globalState.globalDailyReceipts = globalState.globalDailyReceipts.filter(r => {
-            const matchRider = isRiderMatch(resolvedTargetName, r.riderName) || (r.riderId && r.riderId.toString() === resolvedTargetId.toString());
+            const matchRider = isRiderMatch(resolvedTargetName, r.riderName, resolvedTargetId, r.telegramId || r.riderId) || (r.riderId && r.riderId.toString() === resolvedTargetId.toString());
             const matchCust = isCustomerMatch(r.customerName, custNameToVoid) || (r.id && r.id.toLowerCase().includes(cleanCustKey)) || (r.customerName || '').toLowerCase().includes(cleanVoidCust);
             return !(matchRider && matchCust);
         });
@@ -799,7 +799,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
     // 2. PURGE IN-MEMORY CATERED HISTORY (COMMISSION SOURCE)
     if (globalState.globalCateredHistory) {
         globalState.globalCateredHistory = globalState.globalCateredHistory.filter(h => {
-            const matchRider = isRiderMatch(resolvedTargetName, h.riderName) || (h.riderId && h.riderId.toString() === resolvedTargetId.toString()) || (h.telegramId && h.telegramId.toString() === resolvedTargetId.toString());
+            const matchRider = isRiderMatch(resolvedTargetName, h.riderName, resolvedTargetId, h.telegramId || h.riderId) || (h.riderId && h.riderId.toString() === resolvedTargetId.toString()) || (h.telegramId && h.telegramId.toString() === resolvedTargetId.toString());
             const matchCust = isCustomerMatch(h.customerName, custNameToVoid) || (h.id && h.id.toLowerCase().includes(cleanCustKey)) || (h.customerName || '').toLowerCase().includes(cleanVoidCust);
             return !(matchRider && matchCust);
         });
@@ -902,7 +902,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
         db.ref('receipts').orderByChild('date').equalTo(todayStr).once('value', (snap) => {
             const rcpts = snap.val() || {};
             Object.entries(rcpts).forEach(([rId, r]) => {
-                const matchRider = isRiderMatch(resolvedTargetName, r.riderName) || (r.riderId && r.riderId.toString() === resolvedTargetId.toString());
+                const matchRider = isRiderMatch(resolvedTargetName, r.riderName, resolvedTargetId, r.telegramId || r.riderId) || (r.riderId && r.riderId.toString() === resolvedTargetId.toString());
                 const matchCust = isCustomerMatch(r.customerName, custNameToVoid) || (rId && rId.toLowerCase().includes(cleanCustKey)) || (r.customerName || '').toLowerCase().includes(cleanVoidCust);
                 if (matchRider && matchCust) {
                     // 1. Tombstone first so all connected clients immediately zero out fees
@@ -919,7 +919,7 @@ export async function voidSingleCateringCustomer(targetId, targetName, custNameT
             db.ref('cateredHistory').orderByChild(dateField).equalTo(todayStr).once('value', (snap) => {
                 const hist = snap.val() || {};
                 Object.entries(hist).forEach(([hId, h]) => {
-                    const matchRider = isRiderMatch(resolvedTargetName, h.riderName) || (h.riderId && h.riderId.toString() === resolvedTargetId.toString()) || (h.telegramId && h.telegramId.toString() === resolvedTargetId.toString());
+                    const matchRider = isRiderMatch(resolvedTargetName, h.riderName, resolvedTargetId, h.telegramId || h.riderId) || (h.riderId && h.riderId.toString() === resolvedTargetId.toString()) || (h.telegramId && h.telegramId.toString() === resolvedTargetId.toString());
                     const matchCust = isCustomerMatch(h.customerName, custNameToVoid) || (hId && hId.toLowerCase().includes(cleanCustKey)) || (h.customerName || '').toLowerCase().includes(cleanVoidCust);
                     if (matchRider && matchCust) {
                         // 1. Tombstone first so all connected clients immediately zero out fees
