@@ -53,7 +53,7 @@ export async function processUnifiedLogin() {
     }
 
     if (btn) {
-        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Checking Account...`;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Signing in...`;
         btn.disabled = true;
     }
 
@@ -85,7 +85,7 @@ export async function processUnifiedLogin() {
             if (!existingPassword) {
                 if (!isSkipped) {
                     if (btn) {
-                        btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> LOGIN`;
+                        btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> Sign In`;
                         btn.disabled = false;
                     }
                     openRiderPasswordSetupModal(identifier, cleanName, async () => {
@@ -95,16 +95,16 @@ export async function processUnifiedLogin() {
                 }
             } else {
                 if (!password) {
-                    showToast("⚠️ Please enter your Password.");
+                    showToast("⚠️ Please enter your password.");
                     if (passInput) passInput.focus();
                     if (btn) {
-                        btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> LOGIN`;
+                        btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> Sign In`;
                         btn.disabled = false;
                     }
                     return;
                 }
                 if (password !== existingPassword.toString()) {
-                    throw new Error("❌ Incorrect Rider Password. Please try again.");
+                    throw new Error("❌ Incorrect password. Please try again.");
                 }
             }
 
@@ -114,10 +114,10 @@ export async function processUnifiedLogin() {
 
         // Non-rider accounts (Customers & Stores) strictly require a password
         if (!password) {
-            showToast("⚠️ Please enter your Password.");
+            showToast("⚠️ Please enter your password.");
             if (passInput) passInput.focus();
             if (btn) {
-                btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> LOGIN`;
+                btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> Sign In`;
                 btn.disabled = false;
             }
             return;
@@ -201,7 +201,7 @@ export async function processUnifiedLogin() {
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> LOGIN`;
+            btn.innerHTML = `<i class="fa-solid fa-right-to-bracket"></i> Sign In`;
         }
     }
 }
