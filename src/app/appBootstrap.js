@@ -110,7 +110,109 @@ export function hideAutoLoginSplash() {
     } catch (_) {}
 }
 
+export function persistSessionVault() {
+    try {
+        const sessionObj = {
+            role: localStorage.getItem('lokalex_active_role') || '',
+            telegramId: localStorage.getItem('telegramId') || localStorage.getItem('riderId') || appState.telegramId || '',
+            riderName: localStorage.getItem('riderName') || appState.riderName || '',
+            userType: localStorage.getItem('userType') || appState.userType || '',
+            photoUrl: localStorage.getItem('lokalex_photo_url') || localStorage.getItem('riderPhotoUrl') || appState.photoUrl || '',
+            customerFbId: localStorage.getItem('lokalex_customer_fb_id') || appState.customerFacebookId || '',
+            customerName: localStorage.getItem('lokalex_customer_name') || localStorage.getItem('customerName') || appState.customerName || '',
+            customerEmail: localStorage.getItem('lokalex_customer_email') || localStorage.getItem('customerPhone') || '',
+            customerAvatar: localStorage.getItem('lokalex_customer_avatar') || localStorage.getItem('customerAvatarUrl') || '',
+            merchantAccountId: localStorage.getItem('lokalex_merchant_account_id') || appState.merchantAccountId || '',
+            merchantStoreId: localStorage.getItem('lokalex_merchant_store_id') || appState.merchantStoreId || '',
+            merchantStoreName: localStorage.getItem('lokalex_merchant_store_name') || appState.merchantStoreName || '',
+            merchantUsername: localStorage.getItem('lokalex_merchant_username') || appState.merchantUsername || '',
+            savedAt: Date.now()
+        };
+        if (sessionObj.telegramId || sessionObj.riderName || sessionObj.customerFbId || sessionObj.merchantAccountId) {
+            const raw = JSON.stringify(sessionObj);
+            localStorage.setItem('lokalex_preserved_session_backup', raw);
+            try { sessionStorage.setItem('lokalex_preserved_session_backup', raw); } catch (_) {}
+            storageEngine.idbSet('roster', 'preserved_auth_session', sessionObj).catch(() => {});
+            if (sessionObj.telegramId || sessionObj.riderName) {
+                syncRiderSession(sessionObj.telegramId, sessionObj.riderName);
+            }
+        }
+    } catch (_) {}
+}
+
+export async function restoreSessionFromVaultIfNeeded() {
+    try {
+        const hasRider = Boolean(localStorage.getItem('telegramId') || localStorage.getItem('riderId') || localStorage.getItem('riderName'));
+        const hasCust = Boolean(localStorage.getItem('lokalex_customer_fb_id'));
+        const hasMerch = Boolean(localStorage.getItem('lokalex_merchant_account_id'));
+        if (hasRider || hasCust || hasMerch) {
+            persistSessionVault();
+            return;
+        }
+
+        let restored = null;
+        try {
+            const rawBackup = localStorage.getItem('lokalex_preserved_session_backup') || sessionStorage.getItem('lokalex_preserved_session_backup');
+            if (rawBackup) restored = JSON.parse(rawBackup);
+        } catch (_) {}
+
+        if (!restored && typeof window !== 'undefined' && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.getSavedRiderSession === 'function') {
+            try {
+                const rawNative = window.NativePermissionsBridge.getSavedRiderSession();
+                if (rawNative) {
+                    const parsed = JSON.parse(rawNative);
+                    if (parsed && (parsed.riderId || parsed.riderName)) {
+                        restored = {
+                            role: 'rider',
+                            telegramId: parsed.riderId || '',
+                            riderName: parsed.riderName || ''
+                        };
+                    }
+                }
+            } catch (_) {}
+        }
+
+        if (!restored) {
+            try {
+                const idbSession = await storageEngine.idbGet('roster', 'preserved_auth_session');
+                if (idbSession && typeof idbSession === 'object') {
+                    restored = idbSession;
+                }
+            } catch (_) {}
+        }
+
+        if (restored) {
+            if (restored.telegramId || restored.riderName) {
+                if (restored.telegramId) localStorage.setItem('telegramId', restored.telegramId);
+                if (restored.riderName) localStorage.setItem('riderName', restored.riderName);
+                if (restored.userType) localStorage.setItem('userType', restored.userType);
+                if (restored.photoUrl) {
+                    localStorage.setItem('lokalex_photo_url', restored.photoUrl);
+                    localStorage.setItem('riderPhotoUrl', restored.photoUrl);
+                }
+                localStorage.setItem('lokalex_active_role', restored.role || 'rider');
+                appState.telegramId = restored.telegramId || appState.telegramId;
+                appState.riderName = restored.riderName || appState.riderName;
+                appState.userType = restored.userType || appState.userType;
+            } else if (restored.merchantAccountId && restored.merchantStoreId) {
+                localStorage.setItem('lokalex_merchant_account_id', restored.merchantAccountId);
+                localStorage.setItem('lokalex_merchant_store_id', restored.merchantStoreId);
+                if (restored.merchantStoreName) localStorage.setItem('lokalex_merchant_store_name', restored.merchantStoreName);
+                if (restored.merchantUsername) localStorage.setItem('lokalex_merchant_username', restored.merchantUsername);
+                localStorage.setItem('lokalex_active_role', 'merchant');
+            } else if (restored.customerFbId) {
+                localStorage.setItem('lokalex_customer_fb_id', restored.customerFbId);
+                if (restored.customerName) localStorage.setItem('lokalex_customer_name', restored.customerName);
+                if (restored.customerEmail) localStorage.setItem('lokalex_customer_email', restored.customerEmail);
+                if (restored.customerAvatar) localStorage.setItem('lokalex_customer_avatar', restored.customerAvatar);
+                localStorage.setItem('lokalex_active_role', 'customer');
+            }
+        }
+    } catch (_) {}
+}
+
 if (typeof window !== 'undefined') {
+    window.persistSessionVault = persistSessionVault;
     window.showAutoLoginSplash = showAutoLoginSplash;
     window.hideAutoLoginSplash = hideAutoLoginSplash;
     window.cancelAutoLogin = function() {
@@ -123,6 +225,9 @@ if (typeof window !== 'undefined') {
         localStorage.removeItem('lokalex_active_role');
         localStorage.removeItem('lokalex_merchant_account_id');
         localStorage.removeItem('lokalex_merchant_store_id');
+        localStorage.removeItem('lokalex_preserved_session_backup');
+        try { sessionStorage.removeItem('lokalex_preserved_session_backup'); } catch (_) {}
+        storageEngine.idbSet('roster', 'preserved_auth_session', null).catch(() => {});
         syncRiderSession('', '');
         showToast("ℹ️ Auto-login cancelled. You can now log in using another account.");
     };
@@ -182,6 +287,8 @@ export async function bootApp() {
         // ====================================================================
         // FAST-PATH: INSTANT ZERO-LATENCY SESSION RESTORATION (0ms LAUNCH)
         // ====================================================================
+        await restoreSessionFromVaultIfNeeded();
+
         const activeUserRole = localStorage.getItem('lokalex_active_role');
         const savedCustomerFbId = localStorage.getItem('lokalex_customer_fb_id');
         const savedCustomerName = localStorage.getItem('lokalex_customer_name') || localStorage.getItem('customerName');
@@ -199,6 +306,7 @@ export async function bootApp() {
             localStorage.setItem('telegramId', appState.telegramId || savedRiderId);
             localStorage.setItem('riderName', appState.riderName || savedRiderName);
             localStorage.setItem('lokalex_active_role', 'rider');
+            persistSessionVault();
 
             // Instantly render Home view with zero network latency
             history.replaceState({ view: 'view-home' }, '', '#view-home');
@@ -209,13 +317,28 @@ export async function bootApp() {
 
             // Asynchronous non-blocking account validity check & profile photo sync
             if (savedRiderId && db) {
-                db.ref(`riders/${savedRiderId}`).once('value').then(riderSnap => {
+                db.ref(`riders/${savedRiderId}`).once('value').then(async riderSnap => {
+                    if (typeof window !== 'undefined' && window._isApplyingAppUpdate) return;
+                    if (!riderSnap || riderSnap._error) return;
+                    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+
                     if (!riderSnap.exists()) {
+                        const [rosSnap, allRidersSnap] = await Promise.all([
+                            db.ref(`roster/${savedRiderId}`).once('value'),
+                            db.ref('riders').once('value')
+                        ]);
+                        if (typeof window !== 'undefined' && window._isApplyingAppUpdate) return;
+                        if (rosSnap?._error || allRidersSnap?._error) return;
+                        const allRiders = allRidersSnap ? allRidersSnap.val() : null;
+                        if (!allRiders || typeof allRiders !== 'object' || Object.keys(allRiders).length === 0) return;
+                        if (rosSnap && rosSnap.exists()) return;
+
                         console.warn(`Rider ${savedRiderId} deleted from database; clearing session.`);
                         if (typeof document !== 'undefined' && document.documentElement) {
                             document.documentElement.classList.remove('instant-session-home');
                         }
                         hideAutoLoginSplash();
+                        storageEngine.idbSet('roster', 'preserved_auth_session', null).catch(() => {});
                         localStorage.clear();
                         syncRiderSession('', '');
                         history.replaceState({ view: 'view-login' }, '', '#view-login');
@@ -229,6 +352,7 @@ export async function bootApp() {
                             appState.photoUrl = rPhoto;
                             localStorage.setItem('lokalex_photo_url', rPhoto);
                             localStorage.setItem('riderPhotoUrl', rPhoto);
+                            persistSessionVault();
                             if (typeof window.syncHeaderUserProfile === 'function') {
                                 window.syncHeaderUserProfile();
                             }
@@ -247,17 +371,22 @@ export async function bootApp() {
         } else if (savedMerchAccId && savedMerchStoreId && activeUserRole === 'merchant') {
             appState.merchantAccountId = savedMerchAccId;
             appState.merchantStoreId = savedMerchStoreId;
+            persistSessionVault();
             history.replaceState({ view: 'view-store-hub' }, '', '#view-store-hub');
             router.renderViewUI('view-store-hub');
 
             // Asynchronous non-blocking check
             if (db) {
                 db.ref(`storeAccounts/${savedMerchAccId}`).once('value').then(merchSnap => {
+                    if (typeof window !== 'undefined' && window._isApplyingAppUpdate) return;
+                    if (!merchSnap || merchSnap._error) return;
+                    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
                     if (!merchSnap.exists()) {
                         if (typeof document !== 'undefined' && document.documentElement) {
                             document.documentElement.classList.remove('instant-session-merchant');
                         }
                         hideAutoLoginSplash();
+                        storageEngine.idbSet('roster', 'preserved_auth_session', null).catch(() => {});
                         localStorage.clear();
                         history.replaceState({ view: 'view-login' }, '', '#view-login');
                         router.renderViewUI('view-login');
@@ -268,6 +397,7 @@ export async function bootApp() {
         } else if (savedCustomerFbId && activeUserRole === 'customer') {
             appState.customerFacebookId = savedCustomerFbId;
             appState.customerName = savedCustomerName || "Customer";
+            persistSessionVault();
 
             const avatarImg = document.getElementById('cust-landing-avatar');
             const nameEl = document.getElementById('cust-landing-name');
@@ -291,11 +421,15 @@ export async function bootApp() {
             // Asynchronous non-blocking check
             if (db) {
                 db.ref(`customers/${savedCustomerFbId}`).once('value').then(custSnap => {
+                    if (typeof window !== 'undefined' && window._isApplyingAppUpdate) return;
+                    if (!custSnap || custSnap._error) return;
+                    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
                     if (!custSnap.exists()) {
                         if (typeof document !== 'undefined' && document.documentElement) {
                             document.documentElement.classList.remove('instant-session-customer');
                         }
                         hideAutoLoginSplash();
+                        storageEngine.idbSet('roster', 'preserved_auth_session', null).catch(() => {});
                         localStorage.clear();
                         history.replaceState({ view: 'view-login' }, '', '#view-login');
                         router.renderViewUI('view-login');

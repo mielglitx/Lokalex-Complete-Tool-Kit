@@ -185,6 +185,9 @@ export async function processUnifiedLogin() {
             appState.merchantStoreId = targetAccount.storeId;
             appState.merchantStoreName = targetAccount.storeName;
             appState.merchantUsername = targetAccount.username;
+            if (typeof window !== 'undefined' && typeof window.persistSessionVault === 'function') {
+                try { window.persistSessionVault(); } catch (_) {}
+            }
 
             showToast(`✅ Store Login Successful! Welcome ${targetAccount.storeName}`);
             history.replaceState({ view: 'view-store-hub' }, '', '#view-store-hub');
@@ -328,6 +331,10 @@ export async function executeRiderLoginSequence(idInput, cleanName, cleanUserTyp
         appState.merchantAccountId = null;
         appState.merchantStoreId = null;
 
+        if (typeof window !== 'undefined' && typeof window.persistSessionVault === 'function') {
+            try { window.persistSessionVault(); } catch (_) {}
+        }
+
         showToast("Login Successful!");
 
         fetchGCashDetails();
@@ -356,14 +363,22 @@ export function logout() {
         auth.signOut().catch(() => {});
     }
 
-    if (typeof window !== 'undefined' && typeof window.syncRiderSession === 'function') {
-        try {
-            window.syncRiderSession('', '');
-        } catch (_) {}
+    if (typeof window !== 'undefined') {
+        if (typeof window.syncRiderSession === 'function') {
+            try {
+                window.syncRiderSession('', '');
+            } catch (_) {}
+        }
+        if (typeof window.idbSet === 'function') {
+            try {
+                window.idbSet('roster', 'preserved_auth_session', null).catch(() => {});
+            } catch (_) {}
+        }
     }
 
     const sessionKeysToClear = [
         'lokalex_active_role',
+        'lokalex_preserved_session_backup',
         'telegramId', 'riderName', 'userType', 'riderPhotoUrl', 'lokalex_photo_url', 'lokalex_rider_phone',
         'lokalex_customer_fb_id', 'customerId', 'customerFacebookId', 'customerName', 'customerPhone', 'customerAvatarUrl',
         'lokalex_customer_name', 'lokalex_customer_email', 'lokalex_customer_avatar', 'lokalex_customer_address', 'lokalex_customer_pin_coords',
@@ -371,6 +386,7 @@ export function logout() {
         'merchantAccountId', 'merchantStoreId'
     ];
     sessionKeysToClear.forEach(key => localStorage.removeItem(key));
+    try { sessionStorage.removeItem('lokalex_preserved_session_backup'); } catch (_) {}
 
     appState.telegramId = null;
     appState.riderName = null;

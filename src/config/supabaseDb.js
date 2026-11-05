@@ -71,8 +71,9 @@ function generatePushId() {
   return id;
 }
 
-export function createSnapshot(val, key = null) {
+export function createSnapshot(val, key = null, hasError = false) {
   return {
+    _error: Boolean(hasError),
     val: () => (val === undefined ? null : val),
     exists: () => val !== null && val !== undefined,
     key: key,
@@ -515,6 +516,7 @@ export function createSupabaseRef(rawPath, queryState = {}) {
       }
 
       let result = null;
+      let hadError = false;
 
       try {
         if (pathInfo.isRoot) {
@@ -557,6 +559,7 @@ export function createSupabaseRef(rawPath, queryState = {}) {
             .maybeSingle();
 
           if (error) {
+            hadError = true;
             console.warn(`[Supabase once error on ${rawPath}]:`, error.message);
           }
 
@@ -641,8 +644,11 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           }
 
           const { data, error } = await query;
-          if (error && !error.message?.includes('schema cache')) {
-            console.warn(`[Supabase once error on table ${pathInfo.table}]:`, error.message);
+          if (error) {
+            hadError = true;
+            if (!error.message?.includes('schema cache')) {
+              console.warn(`[Supabase once error on table ${pathInfo.table}]:`, error.message);
+            }
           }
 
           if (data && Array.isArray(data)) {
@@ -688,10 +694,11 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           }
         }
       } catch (err) {
+        hadError = true;
         console.warn(`[Supabase once exception on ${rawPath}]:`, err.message || err);
       }
 
-      const snap = createSnapshot(result, ref.key);
+      const snap = createSnapshot(result, ref.key, hadError);
       if (typeof successCallback === 'function') {
         successCallback(snap);
       }
@@ -809,6 +816,10 @@ export function createSupabaseRef(rawPath, queryState = {}) {
       if (eventType === 'value') {
         ref.once(eventType, (snap) => {
           if (subRecord.isClosed) return;
+          if (snap && snap._error) {
+            // Do not emit false-null snapshot on transient network/reload abort error
+            return;
+          }
           const val = snap.val();
           if (isTableValueListener) {
             subRecord.tableCache = new Map(val && typeof val === 'object' ? Object.entries(val) : []);

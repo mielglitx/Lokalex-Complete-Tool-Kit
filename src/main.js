@@ -56,6 +56,10 @@ const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
     console.log("⚡ New Lokalex version detected; activating latest modules...");
+    if (typeof window !== 'undefined') {
+      window._isApplyingAppUpdate = true;
+      if (typeof window.persistSessionVault === 'function') window.persistSessionVault();
+    }
     updateSW(true);
   },
   onOfflineReady() {
@@ -63,12 +67,25 @@ const updateSW = registerSW({
   }
 });
 
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    window._isApplyingAppUpdate = true;
+    if (typeof window.persistSessionVault === 'function') {
+      try { window.persistSessionVault(); } catch (_) {}
+    }
+  });
+}
+
 // Proactively check for new modules whenever the device comes online or the app resumes
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   let swRefreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!swRefreshing) {
       swRefreshing = true;
+      window._isApplyingAppUpdate = true;
+      if (typeof window.persistSessionVault === 'function') {
+        try { window.persistSessionVault(); } catch (_) {}
+      }
       console.log("⚡ New service worker active; refreshing application...");
       window.location.reload();
     }

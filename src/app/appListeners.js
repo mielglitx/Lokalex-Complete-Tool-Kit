@@ -29,10 +29,19 @@ import * as maps from '../features/maps.js';
 import { updateNetworkStatus } from './appMonitors.js';
 
 export function forceRevokeSession(reason = "⚠️ Your account has been removed.") {
+    if (typeof window !== 'undefined' && window._isApplyingAppUpdate) {
+        return;
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return;
+    }
     console.warn("Session revoked:", reason);
     if (typeof window !== 'undefined' && typeof window.syncRiderSession === 'function') {
         try { window.syncRiderSession('', ''); } catch (_) {}
     }
+    try {
+        storageEngine.idbSet('roster', 'preserved_auth_session', null).catch(() => {});
+    } catch (_) {}
     
     // Clear all session storage and local storage
     try {
@@ -66,46 +75,55 @@ export function initAccountRevocationListener() {
     const activeCustomerFbId = appState.customerFacebookId || localStorage.getItem('lokalex_customer_fb_id');
     const activeMerchantId = appState.merchantAccountId || localStorage.getItem('merchantAccountId') || localStorage.getItem('lokalex_merchant_account_id');
 
-    if (activeRiderId && (!activeRole || activeRole === 'rider')) {
-        let isInitial = true;
-        db.ref(`riders/${activeRiderId}`).on('value', (snap) => {
-            if (isInitial) {
-                isInitial = false;
-                if (!snap.exists()) {
-                    forceRevokeSession("⚠️ Your Rider account has been removed by Admin.");
-                }
-                return;
-            }
-            if (!snap.exists()) {
+    const verifyAndRevokeRider = async () => {
+        if (typeof window !== 'undefined' && window._isApplyingAppUpdate) return;
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+        try {
+            const [rSnap, rosSnap, allRidersSnap] = await Promise.all([
+                db.ref(`riders/${activeRiderId}`).once('value'),
+                db.ref(`roster/${activeRiderId}`).once('value'),
+                db.ref('riders').once('value')
+            ]);
+            if (typeof window !== 'undefined' && window._isApplyingAppUpdate) return;
+            if (rSnap?._error || rosSnap?._error || allRidersSnap?._error) return;
+            const allRiders = allRidersSnap ? allRidersSnap.val() : null;
+            // Only revoke if the riders table is reachable & non-empty AND this rider is absent from both riders and roster
+            if (!allRiders || typeof allRiders !== 'object' || Object.keys(allRiders).length === 0) return;
+            if (!rSnap.exists() && !rosSnap.exists()) {
                 forceRevokeSession("⚠️ Your Rider account has been removed by Admin.");
+            }
+        } catch (_) {}
+    };
+
+    if (activeRiderId && (!activeRole || activeRole === 'rider')) {
+        db.ref(`riders/${activeRiderId}`).on('value', (snap) => {
+            if (!snap || snap._error) return;
+            if (!snap.exists()) {
+                verifyAndRevokeRider();
             }
         });
     } else if (activeCustomerFbId && activeRole === 'customer') {
-        let isInitial = true;
-        db.ref(`customers/${activeCustomerFbId}`).on('value', (snap) => {
-            if (isInitial) {
-                isInitial = false;
-                if (!snap.exists()) {
+        db.ref(`customers/${activeCustomerFbId}`).on('value', async (snap) => {
+            if (!snap || snap._error) return;
+            if (!snap.exists()) {
+                if (typeof window !== 'undefined' && window._isApplyingAppUpdate) return;
+                if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+                const check = await db.ref(`customers/${activeCustomerFbId}`).once('value');
+                if (check && !check._error && !check.exists()) {
                     forceRevokeSession("⚠️ Your Customer account has been removed.");
                 }
-                return;
-            }
-            if (!snap.exists()) {
-                forceRevokeSession("⚠️ Your Customer account has been removed.");
             }
         });
     } else if (activeMerchantId && activeRole === 'merchant') {
-        let isInitial = true;
-        db.ref(`storeAccounts/${activeMerchantId}`).on('value', (snap) => {
-            if (isInitial) {
-                isInitial = false;
-                if (!snap.exists()) {
+        db.ref(`storeAccounts/${activeMerchantId}`).on('value', async (snap) => {
+            if (!snap || snap._error) return;
+            if (!snap.exists()) {
+                if (typeof window !== 'undefined' && window._isApplyingAppUpdate) return;
+                if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+                const check = await db.ref(`storeAccounts/${activeMerchantId}`).once('value');
+                if (check && !check._error && !check.exists()) {
                     forceRevokeSession("⚠️ Your Merchant account has been removed.");
                 }
-                return;
-            }
-            if (!snap.exists()) {
-                forceRevokeSession("⚠️ Your Merchant account has been removed.");
             }
         });
     }

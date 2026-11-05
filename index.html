@@ -42,6 +42,52 @@
                 var custFbId = localStorage.getItem('lokalex_customer_fb_id');
                 var merchId = localStorage.getItem('lokalex_merchant_account_id');
 
+                if (!riderId && !riderName && !custFbId && !merchId) {
+                    try {
+                        var rawBackup = localStorage.getItem('lokalex_preserved_session_backup') || sessionStorage.getItem('lokalex_preserved_session_backup');
+                        if (rawBackup) {
+                            var b = JSON.parse(rawBackup);
+                            if (b && (b.telegramId || b.riderName)) {
+                                riderId = b.telegramId || '';
+                                riderName = b.riderName || '';
+                                role = b.role || 'rider';
+                                if (riderId) localStorage.setItem('telegramId', riderId);
+                                if (riderName) localStorage.setItem('riderName', riderName);
+                                localStorage.setItem('lokalex_active_role', role);
+                            } else if (b && b.merchantAccountId) {
+                                merchId = b.merchantAccountId;
+                                role = 'merchant';
+                                localStorage.setItem('lokalex_merchant_account_id', merchId);
+                                if (b.merchantStoreId) localStorage.setItem('lokalex_merchant_store_id', b.merchantStoreId);
+                                localStorage.setItem('lokalex_active_role', 'merchant');
+                            } else if (b && b.customerFbId) {
+                                custFbId = b.customerFbId;
+                                role = 'customer';
+                                localStorage.setItem('lokalex_customer_fb_id', custFbId);
+                                if (b.customerName) localStorage.setItem('lokalex_customer_name', b.customerName);
+                                localStorage.setItem('lokalex_active_role', 'customer');
+                            }
+                        }
+                    } catch (_) {}
+
+                    if (!riderId && !riderName && !custFbId && !merchId && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.getSavedRiderSession === 'function') {
+                        try {
+                            var rawNative = window.NativePermissionsBridge.getSavedRiderSession();
+                            if (rawNative) {
+                                var n = JSON.parse(rawNative);
+                                if (n && (n.riderId || n.riderName)) {
+                                    riderId = n.riderId || '';
+                                    riderName = n.riderName || '';
+                                    role = 'rider';
+                                    if (riderId) localStorage.setItem('telegramId', riderId);
+                                    if (riderName) localStorage.setItem('riderName', riderName);
+                                    localStorage.setItem('lokalex_active_role', 'rider');
+                                }
+                            }
+                        } catch (_) {}
+                    }
+                }
+
                 if ((riderId || riderName) && (!role || role === 'rider')) {
                     document.documentElement.classList.add('instant-session-home');
                 } else if (custFbId && role === 'customer') {

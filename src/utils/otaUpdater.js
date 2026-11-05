@@ -337,6 +337,10 @@ export async function checkForOtaUpdate(isManual = false) {
             console.log("[OTA] Download completed successfully, bundle info:", bundle);
 
             if (bundle && bundle.id) {
+                if (typeof window !== 'undefined') {
+                    window._isApplyingAppUpdate = true;
+                    if (typeof window.persistSessionVault === 'function') window.persistSessionVault();
+                }
                 localStorage.setItem('lokalex_ota_version', remoteVersion);
                 if (checksum) localStorage.setItem('lokalex_ota_checksum', checksum);
                 showToast(`🎉 Downloaded ${remoteDisplay}! Applying update...`);
@@ -360,9 +364,11 @@ export async function checkForOtaUpdate(isManual = false) {
                             window.location.reload();
                         }, 1200);
                     } else {
+                        window._isApplyingAppUpdate = false;
                         showToast(`✨ ${remoteDisplay} is ready. Will apply on next restart.`);
                     }
                 } else {
+                    window._isApplyingAppUpdate = false;
                     console.log(`[OTA] ${remoteDisplay} staged. App is minimized in background, will apply on next restart.`);
                 }
             } else {
@@ -370,6 +376,10 @@ export async function checkForOtaUpdate(isManual = false) {
             }
         } else {
             // In web browser mode, service worker handles assets, but we still store version
+            if (typeof window !== 'undefined') {
+                window._isApplyingAppUpdate = true;
+                if (typeof window.persistSessionVault === 'function') window.persistSessionVault();
+            }
             localStorage.setItem('lokalex_ota_version', remoteVersion);
             showToast(`✅ New version ${remoteDisplay} detected! Refreshing...`);
             setTimeout(() => window.location.reload(), 1500);
@@ -506,6 +516,10 @@ export async function installSpecificOtaVersion(version, customUrl = null, custo
             }
 
             if (bundle && bundle.id) {
+                if (typeof window !== 'undefined') {
+                    window._isApplyingAppUpdate = true;
+                    if (typeof window.persistSessionVault === 'function') window.persistSessionVault();
+                }
                 localStorage.setItem('lokalex_ota_version', cleanVer);
                 showToast(`🎉 Downloaded v${cleanVer}! Applying bundle...`);
 
@@ -522,6 +536,10 @@ export async function installSpecificOtaVersion(version, customUrl = null, custo
                 throw new Error("No bundle ID returned from updater");
             }
         } else {
+            if (typeof window !== 'undefined') {
+                window._isApplyingAppUpdate = true;
+                if (typeof window.persistSessionVault === 'function') window.persistSessionVault();
+            }
             localStorage.setItem('lokalex_ota_version', cleanVer);
             showToast(`✅ Set to v${cleanVer}! Reloading...`);
             setTimeout(() => window.location.reload(), 1200);
@@ -543,6 +561,10 @@ export async function resetToBuiltinVersion() {
     showToast("⏳ Clearing live updates...");
 
     try {
+        if (typeof window !== 'undefined') {
+            window._isApplyingAppUpdate = true;
+            if (typeof window.persistSessionVault === 'function') window.persistSessionVault();
+        }
         if (isNativePlatform()) {
             await CapacitorUpdater.reset();
         }
@@ -552,6 +574,7 @@ export async function resetToBuiltinVersion() {
             window.location.reload();
         }, 800);
     } catch (err) {
+        if (typeof window !== 'undefined') window._isApplyingAppUpdate = false;
         console.error("[OTA] Reset error:", err);
         showToast(`⚠️ Reset error: ${err.message || 'Error'}`);
     }

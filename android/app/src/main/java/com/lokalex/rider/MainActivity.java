@@ -315,6 +315,21 @@ public class MainActivity extends BridgeActivity {
                 }
 
                 @JavascriptInterface
+                public String getSavedRiderSession() {
+                    try {
+                        android.content.SharedPreferences prefs = getSharedPreferences("lokalex_prefs", Context.MODE_PRIVATE);
+                        String rId = prefs.getString("rider_id", "");
+                        String rName = prefs.getString("rider_name", "");
+                        org.json.JSONObject obj = new org.json.JSONObject();
+                        obj.put("riderId", rId != null ? rId.trim() : "");
+                        obj.put("riderName", rName != null ? rName.trim() : "");
+                        return obj.toString();
+                    } catch (Exception e) {
+                        return "{}";
+                    }
+                }
+
+                @JavascriptInterface
                 public String getSystemNotificationSounds() {
                     org.json.JSONArray soundList = new org.json.JSONArray();
                     java.util.HashSet<String> seenUris = new java.util.HashSet<>();

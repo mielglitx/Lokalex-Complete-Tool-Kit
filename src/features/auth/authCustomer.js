@@ -582,6 +582,10 @@ export function finalizeCustomerSession(uid, name, phone, avatarUrl) {
     appState.customerFacebookId = uid;
     appState.customerName = name;
 
+    if (typeof window !== 'undefined' && typeof window.persistSessionVault === 'function') {
+        try { window.persistSessionVault(); } catch (_) {}
+    }
+
     const avatarImg = document.getElementById('cust-landing-avatar');
     const nameEl = document.getElementById('cust-landing-name');
     const emailEl = document.getElementById('cust-landing-email');
