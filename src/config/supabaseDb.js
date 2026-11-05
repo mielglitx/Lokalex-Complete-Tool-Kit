@@ -322,15 +322,27 @@ function getGlobalBroadcastChannel(client) {
   return globalBroadcastChannel;
 }
 
-function broadcastMutation(client, table, path, value) {
+function broadcastMutation(client, table, path, value, action = 'update') {
   if (!client) return;
   try {
     const ch = getGlobalBroadcastChannel(client);
     if (ch) {
+      const segments = (path || '').replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+      const childKey = segments.length > 1 ? segments[1] : null;
       ch.send({
         type: 'broadcast',
         event: 'db_change',
-        payload: { path, value, time: Date.now() }
+        payload: {
+          path,
+          table,
+          value,
+          action,
+          childKey,
+          newChild: (action === 'insert' || action === 'update') && childKey ? { key: childKey, data: value } : null,
+          updatedChild: action === 'update' && childKey ? { key: childKey, data: value } : null,
+          removedKey: action === 'remove' ? (childKey || segments[0]) : null,
+          time: Date.now()
+        }
       }).catch(() => {});
     }
   } catch (e) {}
@@ -461,7 +473,7 @@ export function createSupabaseRef(rawPath, queryState = {}) {
             if (pathInfo.table === 'advanced_orders' || pathInfo.table === 'receipts') {
               query = query.order('created_at', { ascending: false }).limit(ref._query.limit);
             } else if (pathInfo.table === 'catered_history') {
-              query = query.order('completed_at', { ascending: false }).limit(ref._query.limit);
+              query = query.order('completed_at', { ascending: false, nullsFirst: false }).limit(ref._query.limit);
             } else if (pathInfo.table === 'customer_chat_meta') {
               query = query.order('updated_at', { ascending: false }).limit(ref._query.limit);
             } else if (pathInfo.table === 'logins') {
@@ -473,7 +485,7 @@ export function createSupabaseRef(rawPath, queryState = {}) {
             if (pathInfo.table === 'advanced_orders' || pathInfo.table === 'receipts') {
               query = query.order('created_at', { ascending: true }).limit(ref._query.limit);
             } else if (pathInfo.table === 'catered_history') {
-              query = query.order('completed_at', { ascending: true }).limit(ref._query.limit);
+              query = query.order('completed_at', { ascending: true, nullsFirst: false }).limit(ref._query.limit);
             } else if (pathInfo.table === 'customer_chat_meta') {
               query = query.order('updated_at', { ascending: true }).limit(ref._query.limit);
             } else if (pathInfo.table === 'logins') {
@@ -623,9 +635,17 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         if (subRecord.isClosed) return;
         const payloadPath = eventPayload?.payload?.path;
         if (payloadPath && (payloadPath === rawPath || payloadPath.startsWith(rawPath) || rawPath.startsWith(payloadPath))) {
+          const val = eventPayload.payload?.value;
+          const segments = payloadPath.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+          const childKey = eventPayload.payload?.childKey || (segments.length > 1 ? segments[1] : null);
+
           if (eventType === 'value') {
-            if (subRecord.tableCache && eventPayload?.payload?.newChild) {
-              subRecord.tableCache.set(eventPayload.payload.newChild.key, eventPayload.payload.newChild.data);
+            if (subRecord.tableCache && childKey) {
+              if (val === null || eventPayload.payload?.action === 'remove') {
+                subRecord.tableCache.delete(childKey);
+              } else {
+                subRecord.tableCache.set(childKey, val);
+              }
               clearTimeout(subRecord.debounceTimer);
               subRecord.debounceTimer = setTimeout(() => {
                 if (subRecord.isClosed) return;
@@ -635,12 +655,23 @@ export function createSupabaseRef(rawPath, queryState = {}) {
               const snap = await ref.once(eventType);
               if (!subRecord.isClosed) callback(snap);
             }
-          } else if (eventType === 'child_added' && eventPayload?.payload?.newChild) {
-            callback(createSnapshot(eventPayload.payload.newChild.data, eventPayload.payload.newChild.key));
-          } else if (eventType === 'child_changed' && eventPayload?.payload?.updatedChild) {
-            callback(createSnapshot(eventPayload.payload.updatedChild.data, eventPayload.payload.updatedChild.key));
-          } else if (eventType === 'child_removed' && eventPayload?.payload?.removedKey) {
-            callback(createSnapshot(null, eventPayload.payload.removedKey));
+          } else if (eventType === 'child_added') {
+            if (childKey && val !== null && val !== undefined) {
+              callback(createSnapshot(val, childKey));
+            } else if (eventPayload?.payload?.newChild) {
+              callback(createSnapshot(eventPayload.payload.newChild.data, eventPayload.payload.newChild.key));
+            }
+          } else if (eventType === 'child_changed') {
+            if (childKey && val !== null && val !== undefined) {
+              callback(createSnapshot(val, childKey));
+            } else if (eventPayload?.payload?.updatedChild) {
+              callback(createSnapshot(eventPayload.payload.updatedChild.data, eventPayload.payload.updatedChild.key));
+            }
+          } else if (eventType === 'child_removed') {
+            const removedKey = childKey || eventPayload.payload?.removedKey;
+            if (removedKey) {
+              callback(createSnapshot(null, removedKey));
+            }
           }
         }
       };
@@ -805,10 +836,15 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         } else if (pathInfo.id) {
           // Standard table row write
           if (pathInfo.subPath.length === 0) {
-            const { error } = await client.from(pathInfo.table).upsert({
+            const rowData = {
               id: pathInfo.id,
               data: value
-            }, { onConflict: 'id' });
+            };
+            if (pathInfo.table === 'catered_history') {
+              const ts = value?.timestamp || (value?.completedDate && value?.completedTime ? new Date(`${value.completedDate} ${value.completedTime}`).getTime() : Date.now());
+              rowData.completed_at = new Date(ts).toISOString();
+            }
+            const { error } = await client.from(pathInfo.table).upsert(rowData, { onConflict: 'id' });
             if (error) throw error;
           } else {
             // Nested property write
@@ -827,24 +863,33 @@ export function createSupabaseRef(rawPath, queryState = {}) {
             }
             cursor[pathInfo.subPath[pathInfo.subPath.length - 1]] = value;
 
-            const { error } = await client.from(pathInfo.table).upsert({
+            const rowData = {
               id: pathInfo.id,
               data: current
-            }, { onConflict: 'id' });
+            };
+            if (pathInfo.table === 'catered_history') {
+              const ts = current?.timestamp || (current?.completedDate && current?.completedTime ? new Date(`${current.completedDate} ${current.completedTime}`).getTime() : Date.now());
+              rowData.completed_at = new Date(ts).toISOString();
+            }
+            const { error } = await client.from(pathInfo.table).upsert(rowData, { onConflict: 'id' });
             if (error) throw error;
           }
         } else if (value && typeof value === 'object') {
           // Full table batch upsert
-          const rows = Object.entries(value).map(([k, v]) => ({
-            id: k,
-            data: v
-          }));
+          const rows = Object.entries(value).map(([k, v]) => {
+            const row = { id: k, data: v };
+            if (pathInfo.table === 'catered_history') {
+              const ts = v?.timestamp || (v?.completedDate && v?.completedTime ? new Date(`${v.completedDate} ${v.completedTime}`).getTime() : Date.now());
+              row.completed_at = new Date(ts).toISOString();
+            }
+            return row;
+          });
           const { error } = await client.from(pathInfo.table).upsert(rows, { onConflict: 'id' });
           if (error) throw error;
         }
 
         // Broadcast change event
-        broadcastMutation(client, pathInfo.table, rawPath, value);
+        broadcastMutation(client, pathInfo.table, rawPath, value, 'insert');
 
         if (typeof onComplete === 'function') onComplete(null);
       } catch (err) {
@@ -886,15 +931,20 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
           const merged = { ...current, ...values };
 
-          const { error } = await client.from(pathInfo.table).upsert({
+          const rowData = {
             id: pathInfo.id,
             data: merged
-          }, { onConflict: 'id' });
+          };
+          if (pathInfo.table === 'catered_history') {
+            const ts = merged?.timestamp || (merged?.completedDate && merged?.completedTime ? new Date(`${merged.completedDate} ${merged.completedTime}`).getTime() : Date.now());
+            rowData.completed_at = new Date(ts).toISOString();
+          }
+          const { error } = await client.from(pathInfo.table).upsert(rowData, { onConflict: 'id' });
           if (error) throw error;
         }
 
         // Broadcast change event
-        broadcastMutation(client, pathInfo.table, rawPath, values);
+        broadcastMutation(client, pathInfo.table, rawPath, values, 'update');
 
         if (typeof onComplete === 'function') onComplete(null);
       } catch (err) {
@@ -951,7 +1001,7 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           }
         }
 
-        broadcastMutation(client, pathInfo.table, rawPath, null);
+        broadcastMutation(client, pathInfo.table, rawPath, null, 'remove');
         if (typeof onComplete === 'function') onComplete(null);
       } catch (err) {
         console.error(`[Supabase remove error on ${rawPath}]:`, err.message || err);
