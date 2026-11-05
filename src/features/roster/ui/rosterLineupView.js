@@ -722,7 +722,7 @@ export function updateRosterUI() {
 /**
  * Force refresh Roster Queue & Lineup on demand via fresh REST query and UI re-render.
  */
-export async function forceRefreshRosterList(btn = null) {
+export async function forceRefreshRosterList(btn = null, isSilent = false) {
     const icon = btn ? btn.querySelector('i') : null;
     if (icon) icon.classList.add('fa-spin');
     if (btn) btn.disabled = true;
@@ -773,10 +773,14 @@ export async function forceRefreshRosterList(btn = null) {
             loadGlobalCateredList();
         }
 
-        showToast("✓ Roster rotation updated!");
+        if (!isSilent) {
+            showToast("✓ Roster rotation updated!");
+        }
     } catch (err) {
         console.error("Force refresh roster error:", err);
-        showToast("⚠️ Failed to refresh roster list.");
+        if (!isSilent) {
+            showToast("⚠️ Failed to refresh roster list.");
+        }
     } finally {
         if (icon) {
             setTimeout(() => {

@@ -118,14 +118,71 @@ export function initSyncWatchdog() {
         updateNetworkStatus(false);
     });
 
-    // Gentle visibility & lifecycle handler: Do NOT drop Firebase or trigger heavy background loops
-    function handleAppVisibilityChange() {
+    let lastResumeSyncTime = 0;
+
+    function triggerLifecycleResync(isForced = false) {
+        const isVisible = typeof document !== 'undefined' ? (document.visibilityState === 'visible' && !document.hidden) : true;
         updateNetworkStatus(navigator.onLine);
+
+        if (!isVisible && !isForced) {
+            return;
+        }
+
+        const now = Date.now();
+        if (!isForced && (now - lastResumeSyncTime < 2500)) {
+            return;
+        }
+        lastResumeSyncTime = now;
+
         if (db && navigator.onLine) {
             try {
                 db.goOnline();
             } catch (_) {}
         }
+
+        // Silent resync of roster rotation lineup and catering states
+        if (typeof window !== 'undefined' && typeof window.forceRefreshRosterList === 'function') {
+            try {
+                window.forceRefreshRosterList(null, true);
+            } catch (err) {
+                console.warn('[SyncWatchdog] Roster refresh note:', err);
+            }
+        }
+
+        // Silent resync of live chat feed (inbox, catering, done, badges)
+        if (typeof window !== 'undefined' && typeof window.forceRefreshLiveChatsFeed === 'function') {
+            try {
+                window.forceRefreshLiveChatsFeed(null, true);
+            } catch (err) {
+                console.warn('[SyncWatchdog] Live chat feed refresh note:', err);
+            }
+        }
+
+        // If an active customer chat thread is currently open, refresh messages immediately
+        if (typeof window !== 'undefined') {
+            const activeCustId = typeof window.getActiveRiderChatCustId === 'function' ? window.getActiveRiderChatCustId() : null;
+            if (activeCustId) {
+                if (typeof window.reloadRiderChatFromFirebase === 'function') {
+                    try {
+                        window.reloadRiderChatFromFirebase(activeCustId);
+                    } catch (err) {
+                        console.warn('[SyncWatchdog] Active chat reload note:', err);
+                    }
+                }
+                if (typeof window.renderRiderCateredSwitcher === 'function') {
+                    try {
+                        window.renderRiderCateredSwitcher();
+                    } catch (_) {}
+                }
+            }
+        }
+    }
+
+    function handleAppVisibilityChange(e) {
+        if (e && e.type === 'appPausedToBackground') {
+            return;
+        }
+        triggerLifecycleResync(false);
     }
 
     document.addEventListener('visibilitychange', handleAppVisibilityChange);
@@ -152,11 +209,7 @@ export function initSyncWatchdog() {
         lastHeartbeatTime = now;
 
         if (drift > 20000 && navigator.onLine) {
-            if (db) {
-                try {
-                    db.goOnline();
-                } catch (_) {}
-            }
+            triggerLifecycleResync(true);
         }
     }, 10000);
 }

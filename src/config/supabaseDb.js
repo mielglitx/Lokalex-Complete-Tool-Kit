@@ -1706,21 +1706,56 @@ async function handleStoreRiderChatsRemove(client, pathInfo) {
 // DB COMPATIBILITY INTERFACE
 // ----------------------------------------------------------------------------
 
+export async function resyncActiveSubscriptions() {
+  const client = getSupabase();
+  if (!client) return;
+
+  const entries = Array.from(subscriptionsByPath.entries());
+  for (const [, subs] of entries) {
+    for (const sub of subs) {
+      if (!sub || sub.isClosed) continue;
+      if (sub.eventType === 'value') {
+        try {
+          const ref = createSupabaseRef(sub.path);
+          const snap = await ref.once('value');
+          if (sub.isClosed) continue;
+          if (sub.tableCache) {
+            const val = snap.val();
+            sub.tableCache = new Map(val && typeof val === 'object' ? Object.entries(val) : []);
+          }
+          if (typeof sub.callback === 'function') {
+            sub.callback(snap);
+          }
+        } catch (err) {
+          console.warn(`[Supabase Adapter] Resync failed for ${sub.path}:`, err);
+        }
+      }
+    }
+  }
+}
+
 export const supabaseDb = {
   ref(path = '') {
     return createSupabaseRef(path);
   },
-  goOnline() {
+  resyncSubscriptions() {
+    return resyncActiveSubscriptions();
+  },
+  goOnline(forceReconnect = false) {
     try {
       const client = getSupabase();
       if (client && client.realtime) {
         const state = typeof client.realtime.connectionState === 'function'
           ? client.realtime.connectionState()
           : (typeof client.realtime.isConnected === 'function' && client.realtime.isConnected() ? 'open' : 'closed');
-        if (state === 'closed') {
-          client.realtime.connect();
+        if (forceReconnect || state === 'closed' || state === 'error') {
+          try { client.realtime.disconnect(); } catch (_) {}
+          try { client.realtime.connect(); } catch (_) {}
+        } else if (state !== 'open') {
+          try { client.realtime.connect(); } catch (_) {}
         }
       }
+      resyncActiveSubscriptions().catch(() => {});
     } catch (_) {}
   },
   goOffline() {

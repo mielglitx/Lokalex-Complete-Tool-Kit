@@ -252,6 +252,12 @@ if (typeof window !== 'undefined') {
             const currentCustId = getActiveRiderChatCustId();
             if (!document.hidden && currentCustId) {
                 clearNativeNotification('chat_' + currentCustId);
+                try {
+                    reloadRiderChatFromFirebase(currentCustId);
+                } catch (_) {}
+                try {
+                    renderRiderCateredSwitcher();
+                } catch (_) {}
             }
         });
 

@@ -1089,7 +1089,7 @@ export function toggleCustomerChatUnread(targetCustId) {
 /**
  * Force refresh Live Chats Feed on demand via fresh REST query and UI re-render.
  */
-export async function forceRefreshLiveChatsFeed(btn = null) {
+export async function forceRefreshLiveChatsFeed(btn = null, isSilent = false) {
     const icon = btn ? btn.querySelector('i') : null;
     if (icon) icon.classList.add('fa-spin');
     if (btn) btn.disabled = true;
@@ -1126,10 +1126,14 @@ export async function forceRefreshLiveChatsFeed(btn = null) {
             renderRiderCustomerChatFeed();
         }
 
-        showToast("✓ Live Chat Feed updated!");
+        if (!isSilent) {
+            showToast("✓ Live Chat Feed updated!");
+        }
     } catch (err) {
         console.error("Force refresh live chat error:", err);
-        showToast("⚠️ Failed to refresh chat feed.");
+        if (!isSilent) {
+            showToast("⚠️ Failed to refresh chat feed.");
+        }
     } finally {
         if (icon) {
             setTimeout(() => {
