@@ -165,7 +165,12 @@ export function updateFullBookingUI() {
 
     // Admin quick action button in Admin Controls
     if (adminActionBtn) {
-        if (canManage) {
+        const adminToggle = document.getElementById('admin-controls-toggle');
+        const isAdminControlsOn = adminToggle ? adminToggle.checked : Boolean(globalState.adminControlsEnabled);
+        const hasFullBookingPerm = (typeof isAdmin === 'function' && isAdmin()) || (typeof hasTlPermission === 'function' && hasTlPermission('canManageFullBooking')) || canManage;
+        const showAdminBtn = Boolean(isAdminControlsOn && hasFullBookingPerm);
+
+        if (showAdminBtn) {
             adminActionBtn.classList.remove('hidden');
             if (fullBookingState.enabled) {
                 if (hasAvailableRider) {
