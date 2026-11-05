@@ -2826,7 +2826,9 @@ export async function quickSendStoreMenuToActiveChat(storeName, compositeKey, me
 
 export async function deleteMenuGalleryPage(pageId) {
     if (!activeGalleryStore || !pageId || !db) return;
-    if (!confirm("Are you sure you want to delete this page?")) return;
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        if (!window.confirm("Are you sure you want to delete this page?")) return;
+    }
 
     try {
         await db.ref(`directory/storeMenuGalleries/${activeGalleryStore.key}/pages/${pageId}`).remove();
