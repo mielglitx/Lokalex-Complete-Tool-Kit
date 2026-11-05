@@ -297,7 +297,32 @@ export function parsePath(rawPath) {
     };
   }
 
-  // 7. Standard Key-Value table (id, data)
+  // 7. Shift History (stored in settings table under id='shiftHistory')
+  if (rootNode === 'shiftHistory') {
+    return {
+      isRoot: false,
+      rootNode,
+      table: 'settings',
+      id: 'shiftHistory',
+      subPath: segments.slice(1)
+    };
+  }
+
+  // 8. Store Menu Galleries (partitioned per-store in store_menus table as id='smg__<storeKey>')
+  if (rootNode === 'directory' && segments[1] === 'storeMenuGalleries') {
+    const storeKey = segments[2] || null;
+    return {
+      isRoot: false,
+      rootNode: 'storeMenuGalleries',
+      isStoreMenuGalleries: true,
+      table: 'store_menus',
+      storeKey,
+      id: storeKey ? `smg__${storeKey}` : null,
+      subPath: segments.slice(3)
+    };
+  }
+
+  // 9. Standard Key-Value table (id, data)
   const id = segments[1] || null;
   const subPath = segments.slice(2);
 
@@ -502,6 +527,82 @@ function broadcastMutation(client, table, path, value, action = 'update') {
   } catch (e) {}
 }
 
+let storeMenuGalleriesCache = null;
+let storeMenuGalleriesFetchPromise = null;
+
+async function fetchAllStoreMenuGalleries(client, onPartialProgress = null) {
+  if (storeMenuGalleriesCache && Object.keys(storeMenuGalleriesCache).length > 0) {
+    return storeMenuGalleriesCache;
+  }
+  if (storeMenuGalleriesFetchPromise) {
+    return await storeMenuGalleriesFetchPromise;
+  }
+  storeMenuGalleriesFetchPromise = (async () => {
+    const result = {};
+    try {
+      // 1. Fast initial metadata index read (smg__meta_index)
+      const { data: metaRow } = await client
+        .from('store_menus')
+        .select('data')
+        .eq('id', 'smg__meta_index')
+        .maybeSingle();
+      if (metaRow && metaRow.data && typeof metaRow.data === 'object') {
+        for (const [k, m] of Object.entries(metaRow.data)) {
+          if (m && typeof m === 'object') {
+            const dummyPages = {};
+            const count = Number(m.pageCount) || 0;
+            for (let i = 1; i <= count; i++) {
+              dummyPages[`page_${i}`] = { id: `page_${i}`, pageNumber: i, updatedAt: m.updatedAt || 0 };
+            }
+            result[k] = {
+              storeName: m.storeName || k,
+              updatedAt: m.updatedAt || 0,
+              pages: dummyPages
+            };
+          }
+        }
+        if (typeof onPartialProgress === 'function' && Object.keys(result).length > 0) {
+          try { onPartialProgress({ ...result }); } catch (_) {}
+        }
+      }
+
+      // 2. Chunked fetch of full store gallery rows (5 stores per batch to prevent statement timeouts)
+      const { data: idRows } = await client
+        .from('store_menus')
+        .select('id')
+        .like('id', 'smg__%');
+      const storeIds = (idRows || [])
+        .map(r => r.id)
+        .filter(id => id && id !== 'smg__meta_index');
+
+      const CHUNK_SIZE = 5;
+      for (let i = 0; i < storeIds.length; i += CHUNK_SIZE) {
+        const chunk = storeIds.slice(i, i + CHUNK_SIZE);
+        const rows = await Promise.all(
+          chunk.map(id =>
+            client.from('store_menus').select('id, data').eq('id', id).maybeSingle()
+          )
+        );
+        for (const r of rows) {
+          if (r && r.data && r.data.id && r.data.data) {
+            const storeKey = r.data.id.slice(5);
+            result[storeKey] = r.data.data;
+          }
+        }
+      }
+      if (Object.keys(result).length > 0) {
+        storeMenuGalleriesCache = result;
+      }
+    } catch (err) {
+      console.warn('[Supabase storeMenuGalleries fetch warning]:', err.message || err);
+    } finally {
+      storeMenuGalleriesFetchPromise = null;
+    }
+    return result;
+  })();
+  return await storeMenuGalleriesFetchPromise;
+}
+
 const mutationQueues = new Map();
 function runExclusive(key, task) {
   if (!key) return task();
@@ -586,31 +687,8 @@ export function createSupabaseRef(rawPath, queryState = {}) {
       try {
         if (pathInfo.isRoot) {
           result = null;
-        } else if (pathInfo.rootNode === 'shiftHistory' || pathInfo.table === 'shift_history') {
-          // shiftHistory is maintained in Firebase RTDB
-          if (typeof window !== 'undefined' && window.firebaseDb && typeof window.firebaseDb.ref === 'function') {
-            try {
-              const fbSnap = await window.firebaseDb.ref(rawPath).once('value');
-              result = fbSnap ? fbSnap.val() : null;
-            } catch (_) {
-              result = {};
-            }
-          } else {
-            result = {};
-          }
-        } else if (rawPath === 'directory/storeMenuGalleries' || rawPath.startsWith('directory/storeMenuGalleries/')) {
-          // storeMenuGalleries is photo menu data maintained in Firebase RTDB to prevent statement timeouts
-          const fbDb = (typeof window !== 'undefined' && (window.primaryDb || window.firebaseDb)) ? (window.primaryDb || window.firebaseDb) : null;
-          if (fbDb && typeof fbDb.ref === 'function') {
-            try {
-              const fbSnap = await fbDb.ref(rawPath).once('value');
-              result = fbSnap ? fbSnap.val() : null;
-            } catch (_) {
-              result = {};
-            }
-          } else {
-            result = {};
-          }
+        } else if (pathInfo.isStoreMenuGalleries && !pathInfo.id) {
+          result = await fetchAllStoreMenuGalleries(client);
         } else if (pathInfo.isEphemeral) {
           result = readEphemeralNode(pathInfo);
         } else if (pathInfo.isCustomerChats) {
@@ -631,6 +709,10 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           }
 
           let nodeData = data ? (data.data !== undefined ? data.data : data) : null;
+          if (pathInfo.isStoreMenuGalleries && pathInfo.storeKey && nodeData && pathInfo.subPath.length === 0) {
+            if (!storeMenuGalleriesCache) storeMenuGalleriesCache = {};
+            storeMenuGalleriesCache[pathInfo.storeKey] = nodeData;
+          }
           if (nodeData && pathInfo.subPath.length > 0) {
             for (const seg of pathInfo.subPath) {
               nodeData = (nodeData && typeof nodeData === 'object') ? nodeData[seg] : null;
@@ -640,6 +722,9 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         } else {
           // Standard table full list read
           let query = client.from(pathInfo.table).select('id, data');
+          if (pathInfo.table === 'directory') {
+            query = query.neq('id', 'storeMenuGalleries');
+          }
 
           // 1. Push equalTo filter down to PostgREST so queries never hit the default 1000-row truncate
           if (ref._query.equalTo !== undefined && ref._query.orderBy) {
@@ -787,20 +872,12 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         return callback;
       }
 
-      if (pathInfo.rootNode === 'shiftHistory' || pathInfo.table === 'shift_history') {
-        if (typeof window !== 'undefined' && window.firebaseDb && typeof window.firebaseDb.ref === 'function') {
-          return window.firebaseDb.ref(rawPath).on(eventType, callback);
-        }
-        callback(createSnapshot({}, ref.key));
-        return callback;
-      }
-
-      if (rawPath === 'directory/storeMenuGalleries' || rawPath.startsWith('directory/storeMenuGalleries/')) {
-        const fbDb = (typeof window !== 'undefined' && (window.primaryDb || window.firebaseDb)) ? (window.primaryDb || window.firebaseDb) : null;
-        if (fbDb && typeof fbDb.ref === 'function') {
-          return fbDb.ref(rawPath).on(eventType, callback);
-        }
-        callback(createSnapshot({}, ref.key));
+      if (pathInfo.isStoreMenuGalleries && !pathInfo.id) {
+        fetchAllStoreMenuGalleries(client, (partial) => {
+          callback(createSnapshot(partial, ref.key));
+        }).then((full) => {
+          callback(createSnapshot(full, ref.key));
+        }).catch(() => {});
         return callback;
       }
 
@@ -1192,15 +1269,6 @@ export function createSupabaseRef(rawPath, queryState = {}) {
       }
 
       try {
-        if (rawPath === 'directory/storeMenuGalleries' || rawPath.startsWith('directory/storeMenuGalleries/')) {
-          const fbDb = (typeof window !== 'undefined' && (window.primaryDb || window.firebaseDb)) ? (window.primaryDb || window.firebaseDb) : null;
-          if (fbDb && typeof fbDb.ref === 'function') {
-            await fbDb.ref(rawPath).set(value);
-          }
-          if (typeof onComplete === 'function') onComplete(null);
-          return;
-        }
-
         let bPath = rawPath;
         let bVal = value;
         let bAction = 'insert';
@@ -1230,6 +1298,9 @@ export function createSupabaseRef(rawPath, queryState = {}) {
               }
               const { error } = await client.from(pathInfo.table).upsert(rowData, { onConflict: 'id' });
               if (error) throw error;
+              if (pathInfo.isStoreMenuGalleries && pathInfo.storeKey && storeMenuGalleriesCache) {
+                storeMenuGalleriesCache[pathInfo.storeKey] = value;
+              }
             } else {
               // Nested property write
               const { data: existing } = await client
@@ -1257,6 +1328,9 @@ export function createSupabaseRef(rawPath, queryState = {}) {
               }
               const { error } = await client.from(pathInfo.table).upsert(rowData, { onConflict: 'id' });
               if (error) throw error;
+              if (pathInfo.isStoreMenuGalleries && pathInfo.storeKey && storeMenuGalleriesCache) {
+                storeMenuGalleriesCache[pathInfo.storeKey] = current;
+              }
               bPath = `${pathInfo.rootNode}/${pathInfo.id}`;
               bVal = current;
               bAction = 'update';
@@ -1385,15 +1459,6 @@ export function createSupabaseRef(rawPath, queryState = {}) {
       }
 
       try {
-        if (rawPath === 'directory/storeMenuGalleries' || rawPath.startsWith('directory/storeMenuGalleries/')) {
-          const fbDb = (typeof window !== 'undefined' && (window.primaryDb || window.firebaseDb)) ? (window.primaryDb || window.firebaseDb) : null;
-          if (fbDb && typeof fbDb.ref === 'function') {
-            await fbDb.ref(rawPath).remove();
-          }
-          if (typeof onComplete === 'function') onComplete(null);
-          return;
-        }
-
         if (pathInfo.isEphemeral) {
           writeEphemeralNode(pathInfo, null, 'remove');
         } else if (pathInfo.isCustomerChats) {
@@ -1404,6 +1469,9 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           await runExclusive(`${pathInfo.table}:${pathInfo.id}`, async () => {
             if (pathInfo.subPath.length === 0) {
               await client.from(pathInfo.table).delete().eq('id', pathInfo.id);
+              if (pathInfo.isStoreMenuGalleries && pathInfo.storeKey && storeMenuGalleriesCache) {
+                delete storeMenuGalleriesCache[pathInfo.storeKey];
+              }
             } else {
               const { data: existing } = await client
                 .from(pathInfo.table)
@@ -1423,6 +1491,9 @@ export function createSupabaseRef(rawPath, queryState = {}) {
                     id: pathInfo.id,
                     data: current
                   }, { onConflict: 'id' });
+                  if (pathInfo.isStoreMenuGalleries && pathInfo.storeKey && storeMenuGalleriesCache) {
+                    storeMenuGalleriesCache[pathInfo.storeKey] = current;
+                  }
                 }
               }
             }
