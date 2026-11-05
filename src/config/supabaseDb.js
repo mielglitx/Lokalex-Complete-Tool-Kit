@@ -1653,8 +1653,10 @@ export const supabaseDb = {
     try {
       const client = getSupabase();
       if (client && client.realtime) {
-        if (typeof client.realtime.isConnected === 'function' && !client.realtime.isConnected()) {
-          console.log('[Supabase Adapter] Realtime disconnected; reconnecting...');
+        const state = typeof client.realtime.connectionState === 'function'
+          ? client.realtime.connectionState()
+          : (typeof client.realtime.isConnected === 'function' && client.realtime.isConnected() ? 'open' : 'closed');
+        if (state === 'closed') {
           client.realtime.connect();
         }
       }

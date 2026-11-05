@@ -105,34 +105,13 @@ export async function resolveFacebookCustomerName(custId, force = false) {
                         if (match && match.name) {
                             const realName = match.name.trim();
 
-                            // Retrieve real Facebook profile picture
-                            let realAvatar = (match.picture?.data && !match.picture.data.is_silhouette) ? match.picture.data.url : null;
-                            if (!realAvatar) {
-                                try {
-                                    const picResp = await fetch(`https://graph.facebook.com/v19.0/${psid}/picture?type=large&redirect=false&access_token=${token}`);
-                                    if (picResp.ok) {
-                                        const picJson = await picResp.json();
-                                        if (picJson?.data?.url && !picJson.data.is_silhouette) {
-                                            realAvatar = picJson.data.url;
-                                        }
-                                    }
-                                } catch (_) {}
-                            }
-                            if (!realAvatar) {
-                                try {
-                                    const profileResp = await fetch(`https://graph.facebook.com/v19.0/${psid}?fields=profile_pic,picture.type(large)&access_token=${token}`);
-                                    if (profileResp.ok) {
-                                        const profData = await profileResp.json();
-                                        realAvatar = (profData.picture?.data && !profData.picture.data.is_silhouette) ? profData.picture.data.url : (profData.profile_pic || null);
-                                    }
-                                } catch (_) {}
-                            }
-
+                            // Retrieve real Facebook profile picture directly from conversations participant/sender data
+                            const realAvatar = (match.picture?.data && !match.picture.data.is_silhouette) ? match.picture.data.url : null;
                             const avatar = realAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(realName)}&background=0084FF&color=fff`;
                             const resolved = { name: realName, avatarUrl: realAvatar || avatar };
                             fbNameResolutionCache.set(psid, resolved);
 
-                            // Update Firebase in the background
+                            // Update database in the background
                             if (db) {
                                 const updatePayload = {
                                     customerName: realName
@@ -151,47 +130,17 @@ export async function resolveFacebookCustomerName(custId, force = false) {
                 } catch (errConv) {
                     console.warn(`[FB Resolver] Conversations lookup error for PSID ${psid}:`, errConv);
                 }
-
-                // Method B: Direct PSID Node API (Fallback for app testers / admins with profile picture)
-                try {
-                    const profileResp = await fetch(
-                        `https://graph.facebook.com/v19.0/${psid}?fields=first_name,last_name,name,profile_pic,picture.type(large)&access_token=${token}`
-                    );
-                    if (profileResp.ok) {
-                        const profile = await profileResp.json();
-                        const fullName = (profile.name || `${profile.first_name || ''} ${profile.last_name || ''}`).trim();
-                        if (fullName) {
-                            const realAvatar = (profile.picture?.data && !profile.picture.data.is_silhouette) 
-                                ? profile.picture.data.url 
-                                : (profile.profile_pic || null);
-                            const avatar = realAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=0084FF&color=fff`;
-                            const resolved = { name: fullName, avatarUrl: realAvatar || avatar };
-                            fbNameResolutionCache.set(psid, resolved);
-
-                            if (db) {
-                                const updatePayload = {
-                                    customerName: fullName
-                                };
-                                if (realAvatar) {
-                                    updatePayload.avatarUrl = realAvatar;
-                                }
-                                await Promise.all([
-                                    db.ref(`customerChatMeta/${cleanId}`).update(updatePayload),
-                                    db.ref(`customerChats/${cleanId}/metadata`).update(updatePayload)
-                                ]).catch(() => {});
-                            }
-                            return resolved;
-                        }
-                    }
-                } catch (errProfile) {
-                    console.warn(`[FB Resolver] Profile lookup error for PSID ${psid}:`, errProfile);
-                }
             }
         } catch (e) {
             console.error(`[FB Resolver] Failed resolving customer ${cleanId}:`, e);
         } finally {
             inFlightFbResolutions.delete(psid);
         }
+        // Cache negative lookup to prevent hammering Graph API on repeated sync intervals
+        fbNameResolutionCache.set(psid, {
+            name: 'Facebook User',
+            avatarUrl: `https://ui-avatars.com/api/?name=FB&background=0084FF&color=fff`
+        });
         return null;
     })();
 
