@@ -117,6 +117,68 @@ export function createSnapshot(val, key = null, hasError = false) {
   };
 }
 
+const ephemeralStore = {
+  chatPresence: {},
+  chatTyping: {}
+};
+
+function readEphemeralNode(pathInfo) {
+  const rootMap = ephemeralStore[pathInfo.rootNode] || {};
+  if (!pathInfo.custId) return { ...rootMap };
+  const custMap = rootMap[pathInfo.custId];
+  if (!custMap || typeof custMap !== 'object') return null;
+  if (!pathInfo.subPath || pathInfo.subPath.length === 0) return { ...custMap };
+  let cursor = custMap;
+  for (const seg of pathInfo.subPath) {
+    cursor = (cursor && typeof cursor === 'object') ? cursor[seg] : null;
+  }
+  return cursor !== undefined ? cursor : null;
+}
+
+function writeEphemeralNode(pathInfo, value, mode = 'set') {
+  if (!ephemeralStore[pathInfo.rootNode]) ephemeralStore[pathInfo.rootNode] = {};
+  const rootMap = ephemeralStore[pathInfo.rootNode];
+  if (!pathInfo.custId) {
+    if (mode === 'remove' || value === null || value === undefined) {
+      ephemeralStore[pathInfo.rootNode] = {};
+    } else if (typeof value === 'object') {
+      ephemeralStore[pathInfo.rootNode] = mode === 'update' ? { ...rootMap, ...value } : { ...value };
+    }
+    return ephemeralStore[pathInfo.rootNode];
+  }
+  if (!rootMap[pathInfo.custId] || typeof rootMap[pathInfo.custId] !== 'object') {
+    if (mode === 'remove' || value === null || value === undefined) return null;
+    rootMap[pathInfo.custId] = {};
+  }
+  const custMap = rootMap[pathInfo.custId];
+  if (!pathInfo.subPath || pathInfo.subPath.length === 0) {
+    if (mode === 'remove' || value === null || value === undefined) {
+      delete rootMap[pathInfo.custId];
+      return null;
+    }
+    rootMap[pathInfo.custId] = (mode === 'update' && typeof value === 'object')
+      ? { ...custMap, ...value }
+      : value;
+    return rootMap[pathInfo.custId];
+  }
+  let cursor = custMap;
+  for (let i = 0; i < pathInfo.subPath.length - 1; i++) {
+    const seg = pathInfo.subPath[i];
+    if (!cursor[seg] || typeof cursor[seg] !== 'object') cursor[seg] = {};
+    cursor = cursor[seg];
+  }
+  const lastSeg = pathInfo.subPath[pathInfo.subPath.length - 1];
+  if (mode === 'remove' || value === null || value === undefined) {
+    delete cursor[lastSeg];
+    if (Object.keys(custMap).length === 0) delete rootMap[pathInfo.custId];
+  } else if (mode === 'update' && cursor[lastSeg] && typeof cursor[lastSeg] === 'object' && typeof value === 'object') {
+    cursor[lastSeg] = { ...cursor[lastSeg], ...value };
+  } else {
+    cursor[lastSeg] = value;
+  }
+  return rootMap[pathInfo.custId] || null;
+}
+
 export function parsePath(rawPath) {
   const clean = (rawPath || '').replace(/^\/+|\/+$/g, '');
   if (!clean) {
@@ -185,16 +247,19 @@ export function parsePath(rawPath) {
     };
   }
 
-  // 3. Ephemeral Presence & Typing (mapped to live_sessions with prefix)
+  // 3. Ephemeral Presence & Typing (in-memory + broadcast-only, zero DB queries)
   if (rootNode === 'chatPresence' || rootNode === 'chatTyping') {
-    const custId = segments[1] || 'all';
+    const custId = segments[1] || null;
     const riderId = segments[2] || null;
     const prefix = rootNode === 'chatPresence' ? 'presence_' : 'typing_';
     return {
       isRoot: false,
       rootNode,
+      isEphemeral: true,
       table: 'live_sessions',
-      id: prefix + custId,
+      id: custId ? (prefix + custId) : null,
+      custId,
+      riderId,
       subPath: riderId ? [riderId, ...segments.slice(3)] : segments.slice(3)
     };
   }
@@ -546,6 +611,8 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           } else {
             result = {};
           }
+        } else if (pathInfo.isEphemeral) {
+          result = readEphemeralNode(pathInfo);
         } else if (pathInfo.isCustomerChats) {
           result = await handleCustomerChatsOnce(client, pathInfo, ref._query);
         } else if (pathInfo.isStoreRiderChats) {
@@ -849,6 +916,10 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         const action = eventPayload?.payload?.action || 'update';
         const val = eventPayload?.payload?.value;
         const pInfo = parsePath(payloadPath || '');
+        if (pInfo.isEphemeral) {
+          const mode = action === 'remove' ? 'remove' : (action === 'update' ? 'update' : 'set');
+          writeEphemeralNode(pInfo, val, mode);
+        }
         const segments = (payloadPath || '').replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
 
         let rowKey = eventPayload?.payload?.childKey || null;
@@ -1065,7 +1136,9 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         }
       };
 
-      subRecord._unsubscribeCdc = subscribeTableCdc(client, targetTable, handleCdcEvent);
+      if (!pathInfo.isEphemeral) {
+        subRecord._unsubscribeCdc = subscribeTableCdc(client, targetTable, handleCdcEvent);
+      }
 
       // Register subscription for clean, leak-free removal
       registerSubscription(subRecord);
@@ -1132,7 +1205,9 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         let bVal = value;
         let bAction = 'insert';
 
-        if (pathInfo.isCustomerChats) {
+        if (pathInfo.isEphemeral) {
+          writeEphemeralNode(pathInfo, value, 'set');
+        } else if (pathInfo.isCustomerChats) {
           const res = await handleCustomerChatsSet(client, pathInfo, value);
           if (res && res.broadcastPath) {
             bPath = res.broadcastPath;
@@ -1233,7 +1308,9 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         let bVal = values;
 
         // Single-path object merge
-        if (pathInfo.isCustomerChats) {
+        if (pathInfo.isEphemeral) {
+          writeEphemeralNode(pathInfo, values, 'update');
+        } else if (pathInfo.isCustomerChats) {
           const res = await handleCustomerChatsUpdate(client, pathInfo, values);
           if (res && res.broadcastPath) {
             bPath = res.broadcastPath;
@@ -1308,7 +1385,9 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           return;
         }
 
-        if (pathInfo.isCustomerChats) {
+        if (pathInfo.isEphemeral) {
+          writeEphemeralNode(pathInfo, null, 'remove');
+        } else if (pathInfo.isCustomerChats) {
           await handleCustomerChatsRemove(client, pathInfo);
         } else if (pathInfo.isStoreRiderChats) {
           await handleStoreRiderChatsRemove(client, pathInfo);
@@ -2140,7 +2219,6 @@ export const supabaseDb = {
           try { client.realtime.connect(); } catch (_) {}
         }
       }
-      resyncActiveSubscriptions();
     } catch (_) {}
   },
   goOffline() {

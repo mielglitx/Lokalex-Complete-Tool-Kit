@@ -636,7 +636,11 @@ function executeRenderRiderCustomerChatFeed() {
         </div>`;
     }).join('');
 
-    feed.innerHTML = searchBannerHtml + cateringBannerHtml + cardsHtml + showMoreHtml;
+    const nextFeedHtml = searchBannerHtml + cateringBannerHtml + cardsHtml + showMoreHtml;
+    if (feed._lastRenderedHtml !== nextFeedHtml) {
+        feed.innerHTML = nextFeedHtml;
+        feed._lastRenderedHtml = nextFeedHtml;
+    }
 
     updateAllChatFolderBadges();
     updateFolderMuteIcons();

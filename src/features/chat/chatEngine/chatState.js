@@ -109,7 +109,31 @@ export function restoreThreadDraft(targetCustId) {
     }
 }
 
-export function handleRiderChatInputDraft(val) {
+let inputResizeRafId = null;
+
+export function handleRiderChatInputDraft(val, inputEl) {
+    if (inputEl) {
+        const str = typeof val === 'string' ? val : '';
+        const needsMultilineCheck = str.includes('\n') || str.length > 36 || inputEl._wasMultiline;
+        if (!str) {
+            if (inputEl._wasMultiline || inputEl.style.height) {
+                inputEl.style.height = '';
+                inputEl._wasMultiline = false;
+            }
+        } else if (needsMultilineCheck) {
+            if (inputResizeRafId) cancelAnimationFrame(inputResizeRafId);
+            inputResizeRafId = requestAnimationFrame(() => {
+                inputResizeRafId = null;
+                const sh = inputEl.scrollHeight;
+                if (sh > 42 || inputEl._wasMultiline) {
+                    inputEl.style.height = 'auto';
+                    const targetH = Math.min(inputEl.scrollHeight, 120);
+                    inputEl.style.height = targetH + 'px';
+                    inputEl._wasMultiline = targetH > 42;
+                }
+            });
+        }
+    }
     if (!activeRiderChatCustId) return;
     if (typeof val === 'string' && val.trim().length > 0) {
         threadDraftsMap.set(activeRiderChatCustId, val);

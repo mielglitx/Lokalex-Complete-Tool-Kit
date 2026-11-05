@@ -42,6 +42,52 @@
                 var custFbId = localStorage.getItem('lokalex_customer_fb_id');
                 var merchId = localStorage.getItem('lokalex_merchant_account_id');
 
+                if (!riderId && !riderName && !custFbId && !merchId) {
+                    try {
+                        var rawBackup = localStorage.getItem('lokalex_preserved_session_backup') || sessionStorage.getItem('lokalex_preserved_session_backup');
+                        if (rawBackup) {
+                            var b = JSON.parse(rawBackup);
+                            if (b && (b.telegramId || b.riderName)) {
+                                riderId = b.telegramId || '';
+                                riderName = b.riderName || '';
+                                role = b.role || 'rider';
+                                if (riderId) localStorage.setItem('telegramId', riderId);
+                                if (riderName) localStorage.setItem('riderName', riderName);
+                                localStorage.setItem('lokalex_active_role', role);
+                            } else if (b && b.merchantAccountId) {
+                                merchId = b.merchantAccountId;
+                                role = 'merchant';
+                                localStorage.setItem('lokalex_merchant_account_id', merchId);
+                                if (b.merchantStoreId) localStorage.setItem('lokalex_merchant_store_id', b.merchantStoreId);
+                                localStorage.setItem('lokalex_active_role', 'merchant');
+                            } else if (b && b.customerFbId) {
+                                custFbId = b.customerFbId;
+                                role = 'customer';
+                                localStorage.setItem('lokalex_customer_fb_id', custFbId);
+                                if (b.customerName) localStorage.setItem('lokalex_customer_name', b.customerName);
+                                localStorage.setItem('lokalex_active_role', 'customer');
+                            }
+                        }
+                    } catch (_) {}
+
+                    if (!riderId && !riderName && !custFbId && !merchId && window.NativePermissionsBridge && typeof window.NativePermissionsBridge.getSavedRiderSession === 'function') {
+                        try {
+                            var rawNative = window.NativePermissionsBridge.getSavedRiderSession();
+                            if (rawNative) {
+                                var n = JSON.parse(rawNative);
+                                if (n && (n.riderId || n.riderName)) {
+                                    riderId = n.riderId || '';
+                                    riderName = n.riderName || '';
+                                    role = 'rider';
+                                    if (riderId) localStorage.setItem('telegramId', riderId);
+                                    if (riderName) localStorage.setItem('riderName', riderName);
+                                    localStorage.setItem('lokalex_active_role', 'rider');
+                                }
+                            }
+                        } catch (_) {}
+                    }
+                }
+
                 if ((riderId || riderName) && (!role || role === 'rider')) {
                     document.documentElement.classList.add('instant-session-home');
                 } else if (custFbId && role === 'customer') {
@@ -317,12 +363,25 @@
         height: 100% !important;
     }
 
-    /* High-Performance Smart Cart Momentum Touch Scrolling */
-    #cart-items-list {
+    /* High-Performance Smart Cart & Feed Momentum Touch Scrolling (Snapdragon 450 / Adreno 506 Optimized) */
+    #cart-items-list,
+    #rider-cust-chats-feed,
+    #global-catered-list,
+    #global-logins-list,
+    #rider-chat-messages-container,
+    #rider-cust-chat-messages,
+    #store-rider-chat-messages {
         touch-action: pan-y !important;
         -webkit-overflow-scrolling: touch !important;
         overscroll-behavior-y: contain !important;
         will-change: scroll-position;
+    }
+
+    #rider-cust-chats-feed > div:not(.catering-glow-gold):not(.catering-glow-my),
+    #global-catered-list > div,
+    #global-logins-list > div {
+        content-visibility: auto;
+        contain-intrinsic-size: auto 76px;
     }
 
     /* ========================================================================== */
@@ -869,7 +928,9 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-gQPKIWoN.js"></script>
+  <script type="module" crossorigin src="./assets/index-CLPbTtFb.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-DK3Fl9T5.js">
+  <link rel="modulepreload" crossorigin href="./assets/vendor-BOVfQ4W4.js">
 <link rel="manifest" href="./manifest.webmanifest"></head>
 <body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
 

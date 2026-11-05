@@ -914,25 +914,31 @@ export function updatePipBadgeState(countsObj = null) {
         });
     }
 
+    const setClassIfChanged = (el, cls) => {
+        if (el && el.className !== cls) el.className = cls;
+    };
+    const setTextIfChanged = (el, txt) => {
+        if (el && el.textContent !== txt) el.textContent = txt;
+    };
+
     // 1. UPDATE RING COLOR:
     // "blue ring if no chat in inbox and not currently catering"
     // "yellow ring if currently catering"
     if (isCatering) {
-        ringContainer.className = 'relative w-[74px] h-[74px] rounded-full bg-slate-900 border-[3px] border-amber-400 dark:border-yellow-400 shadow-xl shadow-yellow-400/40 flex items-center justify-center transition-all duration-300 active:scale-90';
+        setClassIfChanged(ringContainer, 'relative w-[74px] h-[74px] rounded-full bg-slate-900 border-[3px] border-amber-400 dark:border-yellow-400 shadow-xl shadow-yellow-400/40 flex items-center justify-center transition-all duration-300 active:scale-90');
         if (pingRing) {
-            pingRing.className = 'absolute -inset-1 rounded-full border-2 border-amber-300 dark:border-yellow-300 animate-ping opacity-40 pointer-events-none';
+            setClassIfChanged(pingRing, 'absolute -inset-1 rounded-full border-2 border-amber-300 dark:border-yellow-300 animate-ping opacity-40 pointer-events-none');
         }
         if (statusPill) {
-            statusPill.textContent = 'Catering';
-            statusPill.className = 'absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap bg-amber-500/90 text-black font-black text-[8px] px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm pointer-events-none';
-            statusPill.classList.remove('hidden');
+            setTextIfChanged(statusPill, 'Catering');
+            setClassIfChanged(statusPill, 'absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap bg-amber-500/90 text-black font-black text-[8px] px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm pointer-events-none');
         }
     } else {
-        ringContainer.className = 'relative w-[74px] h-[74px] rounded-full bg-slate-900 border-[3px] border-sky-500 dark:border-blue-500 shadow-xl shadow-sky-500/30 flex items-center justify-center transition-all duration-300 active:scale-90';
+        setClassIfChanged(ringContainer, 'relative w-[74px] h-[74px] rounded-full bg-slate-900 border-[3px] border-sky-500 dark:border-blue-500 shadow-xl shadow-sky-500/30 flex items-center justify-center transition-all duration-300 active:scale-90');
         if (pingRing) {
-            pingRing.className = 'absolute -inset-1 rounded-full border-2 border-sky-400 dark:border-blue-400 animate-ping opacity-25 pointer-events-none';
+            setClassIfChanged(pingRing, 'absolute -inset-1 rounded-full border-2 border-sky-400 dark:border-blue-400 animate-ping opacity-25 pointer-events-none');
         }
-        if (statusPill) {
+        if (statusPill && !statusPill.classList.contains('hidden')) {
             statusPill.classList.add('hidden');
         }
     }
@@ -941,32 +947,32 @@ export function updatePipBadgeState(countsObj = null) {
     // Orange badge: Catering unread for rider's currently catered customer
     if (cateringBadge && cateringCountEl) {
         if (myCateringUnread > 0) {
-            cateringCountEl.textContent = myCateringUnread > 99 ? '99+' : myCateringUnread.toString();
-            cateringBadge.classList.remove('hidden');
+            setTextIfChanged(cateringCountEl, myCateringUnread > 99 ? '99+' : myCateringUnread.toString());
+            if (cateringBadge.classList.contains('hidden')) cateringBadge.classList.remove('hidden');
         } else {
-            cateringBadge.classList.add('hidden');
+            if (!cateringBadge.classList.contains('hidden')) cateringBadge.classList.add('hidden');
         }
     }
 
     // Green badge: Inbox unread
     if (inboxBadge && inboxCountEl) {
         if (inboxCount > 0) {
-            inboxCountEl.textContent = inboxCount > 99 ? '99+' : inboxCount.toString();
-            inboxBadge.classList.remove('hidden');
+            setTextIfChanged(inboxCountEl, inboxCount > 99 ? '99+' : inboxCount.toString());
+            if (inboxBadge.classList.contains('hidden')) inboxBadge.classList.remove('hidden');
         } else {
-            inboxBadge.classList.add('hidden');
+            if (!inboxBadge.classList.contains('hidden')) inboxBadge.classList.add('hidden');
         }
     }
 
     // Dynamic placement when both or single badge is visible
     if (cateringBadge && inboxBadge) {
         if (myCateringUnread > 0 && inboxCount > 0) {
-            cateringBadge.className = 'absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none animate-pulse z-20';
-            inboxBadge.className = 'absolute -bottom-1 -right-1 min-w-[20px] h-5 px-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none z-20';
+            setClassIfChanged(cateringBadge, 'absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none animate-pulse z-20');
+            setClassIfChanged(inboxBadge, 'absolute -bottom-1 -right-1 min-w-[20px] h-5 px-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none z-20');
         } else if (myCateringUnread > 0) {
-            cateringBadge.className = 'absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none animate-pulse z-20';
+            setClassIfChanged(cateringBadge, 'absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none animate-pulse z-20');
         } else if (inboxCount > 0) {
-            inboxBadge.className = 'absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none z-20';
+            setClassIfChanged(inboxBadge, 'absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none z-20');
         }
     }
 }
@@ -1220,11 +1226,21 @@ if (typeof window !== 'undefined') {
     window.handlePipBadgeClick = handlePipBadgeClick;
     window.isRiderCurrentlyCatering = isRiderCurrentlyCatering;
 
+    let lastRosterCateringSig = '';
     window.addEventListener('rosterUpdated', () => {
         try {
             updatePipBadgeState();
-            if (rawCustomerChatMetaData) {
-                processCustomerChatMetaData(rawCustomerChatMetaData, true);
+            const liveRoster = globalState.rosterMembers || [];
+            const nextCateringSig = liveRoster
+                .filter(m => m && m.status === 'Catering')
+                .map(m => `${m.telegramId || m.id || ''}:${m.customerName || ''}:${m.forcedCaters ? Object.keys(m.forcedCaters).sort().join(',') : ''}`)
+                .sort()
+                .join('|');
+            if (nextCateringSig !== lastRosterCateringSig) {
+                lastRosterCateringSig = nextCateringSig;
+                if (rawCustomerChatMetaData) {
+                    processCustomerChatMetaData(rawCustomerChatMetaData, true);
+                }
             }
         } catch (_) {}
     });

@@ -94,15 +94,25 @@ export function toggleRiderChatSearch() {
     }
 }
 
+let searchInputDebounceTimer = null;
+
 export function handleRiderChatSearchInput(val) {
     riderChatSearchQuery = (val || '').trim();
     currentFeedLimit = 50;
-    if (typeof window.renderRiderCustomerChatFeed === 'function') {
-        window.renderRiderCustomerChatFeed();
-    }
+    if (searchInputDebounceTimer) clearTimeout(searchInputDebounceTimer);
+    searchInputDebounceTimer = setTimeout(() => {
+        searchInputDebounceTimer = null;
+        if (typeof window.renderRiderCustomerChatFeed === 'function') {
+            window.renderRiderCustomerChatFeed();
+        }
+    }, 140);
 }
 
 export function clearRiderChatSearch() {
+    if (searchInputDebounceTimer) {
+        clearTimeout(searchInputDebounceTimer);
+        searchInputDebounceTimer = null;
+    }
     riderChatSearchQuery = '';
     const input = document.getElementById('rider-chat-search-input');
     if (input) input.value = '';

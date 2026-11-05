@@ -50,8 +50,7 @@ export function markChatThreadSeen(custId) {
         seenAt: now
     };
 
-    // Save to both metadata and root threadSeenBy paths
-    db.ref(`customerChats/${cleanCustKey}/metadata/threadSeenBy/${riderId}`).set(payload).catch(() => {});
+    // Save to both threadSeenBy and customerChatMeta paths
     db.ref(`customerChats/${cleanCustKey}/threadSeenBy/${riderId}`).set(payload).catch(() => {});
     db.ref(`customerChatMeta/${cleanCustKey}/threadSeenBy/${riderId}`).set(payload).catch(() => {});
 }
@@ -273,6 +272,9 @@ function updateChatViewersUi(otherViewers = []) {
     updateChatPresenceBanner();
 }
 
+let lastTypingSentTime = 0;
+let lastTypingSentCustKey = null;
+
 /**
  * Broadcasts typing activity when the rider types in the message input.
  */
@@ -285,14 +287,20 @@ export function handleChatTyping(custId, isTyping = true) {
     activeTypingCustId = cleanCustKey;
 
     if (isTyping) {
-        const myTypingRef = db.ref(`chatTyping/${cleanCustKey}/${riderId}`);
-        myTypingRef.set({
-            riderId,
-            riderName,
-            timestamp: Date.now()
-        }).catch(() => {});
-        if (typeof myTypingRef.onDisconnect === 'function') {
-            myTypingRef.onDisconnect().remove().catch(() => {});
+        const now = Date.now();
+        // Throttle network writes to at most once every 2.8s per thread while typing
+        if (cleanCustKey !== lastTypingSentCustKey || (now - lastTypingSentTime > 2800)) {
+            lastTypingSentTime = now;
+            lastTypingSentCustKey = cleanCustKey;
+            const myTypingRef = db.ref(`chatTyping/${cleanCustKey}/${riderId}`);
+            myTypingRef.set({
+                riderId,
+                riderName,
+                timestamp: now
+            }).catch(() => {});
+            if (typeof myTypingRef.onDisconnect === 'function') {
+                myTypingRef.onDisconnect().remove().catch(() => {});
+            }
         }
 
         // Reset auto-clear debounce timeout (3.5 seconds)
@@ -310,6 +318,9 @@ export function clearMyTypingStatus() {
         clearTimeout(typingDebounceTimeout);
         typingDebounceTimeout = null;
     }
+
+    lastTypingSentTime = 0;
+    lastTypingSentCustKey = null;
 
     if (activeTypingCustId && db) {
         const { riderId } = getMyRiderInfo();
