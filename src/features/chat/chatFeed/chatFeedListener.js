@@ -880,17 +880,17 @@ export function updatePipBadgeState(countsObj = null) {
     // "blue ring if no chat in inbox and not currently catering"
     // "yellow ring if currently catering"
     if (isCatering) {
-        ringContainer.className = 'relative w-16 h-16 rounded-full bg-slate-900 border-[3px] border-amber-400 dark:border-yellow-400 shadow-xl shadow-yellow-400/40 flex items-center justify-center transition-all duration-300 active:scale-90';
+        ringContainer.className = 'relative w-[74px] h-[74px] rounded-full bg-slate-900 border-[3px] border-amber-400 dark:border-yellow-400 shadow-xl shadow-yellow-400/40 flex items-center justify-center transition-all duration-300 active:scale-90';
         if (pingRing) {
             pingRing.className = 'absolute -inset-1 rounded-full border-2 border-amber-300 dark:border-yellow-300 animate-ping opacity-40 pointer-events-none';
         }
         if (statusPill) {
             statusPill.textContent = 'Catering';
-            statusPill.className = 'absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-amber-500/90 text-black font-black text-[8px] px-1.5 py-0.2 rounded-full uppercase tracking-wider shadow-sm pointer-events-none';
+            statusPill.className = 'absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap bg-amber-500/90 text-black font-black text-[8px] px-1.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm pointer-events-none';
             statusPill.classList.remove('hidden');
         }
     } else {
-        ringContainer.className = 'relative w-16 h-16 rounded-full bg-slate-900 border-[3px] border-sky-500 dark:border-blue-500 shadow-xl shadow-sky-500/30 flex items-center justify-center transition-all duration-300 active:scale-90';
+        ringContainer.className = 'relative w-[74px] h-[74px] rounded-full bg-slate-900 border-[3px] border-sky-500 dark:border-blue-500 shadow-xl shadow-sky-500/30 flex items-center justify-center transition-all duration-300 active:scale-90';
         if (pingRing) {
             pingRing.className = 'absolute -inset-1 rounded-full border-2 border-sky-400 dark:border-blue-400 animate-ping opacity-25 pointer-events-none';
         }
@@ -923,12 +923,12 @@ export function updatePipBadgeState(countsObj = null) {
     // Dynamic placement when both or single badge is visible
     if (cateringBadge && inboxBadge) {
         if (myCateringUnread > 0 && inboxCount > 0) {
-            cateringBadge.className = 'absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none animate-pulse z-20';
-            inboxBadge.className = 'absolute -bottom-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none z-20';
+            cateringBadge.className = 'absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none animate-pulse z-20';
+            inboxBadge.className = 'absolute -bottom-1 -right-1 min-w-[20px] h-5 px-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none z-20';
         } else if (myCateringUnread > 0) {
-            cateringBadge.className = 'absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none animate-pulse z-20';
+            cateringBadge.className = 'absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none animate-pulse z-20';
         } else if (inboxCount > 0) {
-            inboxBadge.className = 'absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none z-20';
+            inboxBadge.className = 'absolute -top-1 -right-1 min-w-[20px] h-5 px-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-[10px] rounded-full border-2 border-slate-900 shadow-lg flex items-center justify-center gap-0.5 pointer-events-none z-20';
         }
     }
 }
@@ -985,20 +985,18 @@ export function handlePipBadgeClick(e) {
         document.body.classList.remove('pip-stashed');
     }
 
+    // Restore app from PiP to fullscreen
+    if (typeof window.exitFloatingWindowMode === 'function') {
+        window.exitFloatingWindowMode();
+    }
+
     if (targetThread && typeof window.openRiderChatModal === 'function') {
         const threadKey = targetThread.custId || targetThread.id || targetThread.threadId;
         if (threadKey) {
-            window.openRiderChatModal(threadKey, targetThread.customerName || '', targetThread.avatarUrl || '');
-            if (typeof document !== 'undefined' && document.documentElement) {
-                document.documentElement.classList.add('has-chat-open');
-            }
-            return;
+            setTimeout(() => {
+                window.openRiderChatModal(threadKey, targetThread.customerName || '', targetThread.avatarUrl || '');
+            }, 120);
         }
-    }
-
-    // Fallback: bring app to full screen from PiP
-    if (typeof window.exitFloatingWindowMode === 'function') {
-        window.exitFloatingWindowMode();
     }
 }
 

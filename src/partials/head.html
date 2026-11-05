@@ -233,48 +233,21 @@
         }
     }
 
-    /* Floating Window / Picture-in-Picture (PiP) Adaptation */
-    html.in-floating-mode #app-header {
-        padding: 4px 6px !important;
-    }
-    html.in-floating-mode #header-clock-pill,
-    html.in-floating-mode #header-battery-pill,
-    html.in-floating-mode #network-status-pill {
+    /* Floating Window / Picture-in-Picture (PiP) Ultra-Minimal Mode */
+    html.in-floating-mode body > *:not(#pip-stashed-badge),
+    html.pip-stashed body > *:not(#pip-stashed-badge) {
         display: none !important;
     }
-    html.in-floating-mode #rider-chat-modal {
-        padding: 0 !important;
-        background: transparent !important;
-    }
-    html.in-floating-mode #rider-chat-modal > div {
-        max-height: 100vh !important;
-        height: 100vh !important;
-        border-radius: 0 !important;
-        border: none !important;
-    }
-    html.in-floating-mode #rider-chat-expand-btn {
+    html.in-floating-mode #pip-stashed-badge,
+    html.pip-stashed #pip-stashed-badge {
         display: flex !important;
     }
-
-    /* Stashed / Edge-Docked Floating Window Mode (Interactive Badge View) */
-    html.pip-stashed body > *:not(#pip-stashed-badge),
-    html.in-floating-mode.pip-stashed body > *:not(#pip-stashed-badge),
-    html.in-floating-mode:not(.has-chat-open) body > *:not(#pip-stashed-badge) {
-        display: none !important;
-    }
-    html.pip-stashed #pip-stashed-badge,
-    html.in-floating-mode.pip-stashed #pip-stashed-badge,
-    html.in-floating-mode:not(.has-chat-open) #pip-stashed-badge {
-        display: flex !important;
-    }
-
-    @media (max-width: 170px) {
-        html.in-floating-mode body > *:not(#pip-stashed-badge) {
-            display: none !important;
-        }
-        html.in-floating-mode #pip-stashed-badge {
-            display: flex !important;
-        }
+    html.in-floating-mode,
+    html.in-floating-mode body {
+        overflow: hidden !important;
+        background: #0c1421 !important;
+        width: 100% !important;
+        height: 100% !important;
     }
 
     /* High-Performance Smart Cart Momentum Touch Scrolling */

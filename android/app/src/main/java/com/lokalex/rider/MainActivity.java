@@ -551,9 +551,21 @@ public class MainActivity extends BridgeActivity {
     public void updatePipParams() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isPipSupported()) {
             try {
-                Rational aspectRatio = new Rational(9, 16);
+                // Ultra-minimal 1:1 compact aspect ratio
+                Rational aspectRatio = new Rational(1, 1);
                 PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder();
                 builder.setAspectRatio(aspectRatio);
+                try {
+                    View decor = getWindow() != null ? getWindow().getDecorView() : null;
+                    if (decor != null && decor.getWidth() > 0 && decor.getHeight() > 0) {
+                        int w = decor.getWidth();
+                        int h = decor.getHeight();
+                        int size = Math.min(w, h);
+                        int left = (w - size) / 2;
+                        int top = (h - size) / 2;
+                        builder.setSourceRectHint(new android.graphics.Rect(left, top, left + size, top + size));
+                    }
+                } catch (Exception ignored) {}
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     builder.setAutoEnterEnabled(true);
                     builder.setSeamlessResizeEnabled(true);
@@ -606,10 +618,21 @@ public class MainActivity extends BridgeActivity {
             }
             new Handler(Looper.getMainLooper()).post(() -> {
                 try {
-                    // 9:16 aspect ratio (standard smartphone portrait mini-window)
-                    Rational aspectRatio = new Rational(9, 16);
+                    // Ultra-minimal 1:1 compact aspect ratio
+                    Rational aspectRatio = new Rational(1, 1);
                     PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder();
                     builder.setAspectRatio(aspectRatio);
+                    try {
+                        View decor = getWindow() != null ? getWindow().getDecorView() : null;
+                        if (decor != null && decor.getWidth() > 0 && decor.getHeight() > 0) {
+                            int w = decor.getWidth();
+                            int h = decor.getHeight();
+                            int size = Math.min(w, h);
+                            int left = (w - size) / 2;
+                            int top = (h - size) / 2;
+                            builder.setSourceRectHint(new android.graphics.Rect(left, top, left + size, top + size));
+                        }
+                    } catch (Exception ignored) {}
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         builder.setAutoEnterEnabled(true);
                         builder.setSeamlessResizeEnabled(true);
