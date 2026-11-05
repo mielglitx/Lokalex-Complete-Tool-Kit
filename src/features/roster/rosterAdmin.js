@@ -348,7 +348,11 @@ export function toggleAdminControls(enabled) {
     });
 
     showToast(`Admin Safety Controls: ${enabled ? 'ENABLED' : 'DISABLED'}`);
-    updateRosterUI();
+    if (typeof window !== 'undefined' && typeof window.requestRosterUIRefresh === 'function') {
+        window.requestRosterUIRefresh();
+    } else {
+        updateRosterUI();
+    }
 }
 
 // ============================================================================

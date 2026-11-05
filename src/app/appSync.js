@@ -119,8 +119,10 @@ export function initSyncWatchdog() {
     });
 
     let lastResumeSyncTime = 0;
+    let isLifecycleResyncing = false;
+    let wasDocumentHidden = false;
 
-    function triggerLifecycleResync(isForced = false) {
+    async function triggerLifecycleResync(isForced = false) {
         const isVisible = typeof document !== 'undefined' ? (document.visibilityState === 'visible' && !document.hidden) : true;
         updateNetworkStatus(navigator.onLine);
 
@@ -128,78 +130,88 @@ export function initSyncWatchdog() {
             return;
         }
 
+        if (isLifecycleResyncing) {
+            return;
+        }
+
         const now = Date.now();
-        if (!isForced && (now - lastResumeSyncTime < 2500)) {
+        if (!isForced && (now - lastResumeSyncTime < 10000)) {
             return;
         }
         lastResumeSyncTime = now;
+        isLifecycleResyncing = true;
 
-        if (db && navigator.onLine) {
-            try {
-                db.goOnline();
-            } catch (_) {}
-        }
-
-        // Silent resync of roster rotation lineup and catering states
-        if (typeof window !== 'undefined' && typeof window.forceRefreshRosterList === 'function') {
-            try {
-                window.forceRefreshRosterList(null, true);
-            } catch (err) {
-                console.warn('[SyncWatchdog] Roster refresh note:', err);
+        try {
+            if (db && navigator.onLine) {
+                try {
+                    db.goOnline();
+                } catch (_) {}
             }
-        }
 
-        // Silent resync of live chat feed (inbox, catering, done, badges)
-        if (typeof window !== 'undefined' && typeof window.forceRefreshLiveChatsFeed === 'function') {
-            try {
-                window.forceRefreshLiveChatsFeed(null, true);
-            } catch (err) {
-                console.warn('[SyncWatchdog] Live chat feed refresh note:', err);
+            // Silent resync of roster rotation lineup and catering states
+            if (typeof window !== 'undefined' && typeof window.forceRefreshRosterList === 'function') {
+                try {
+                    await window.forceRefreshRosterList(null, true);
+                } catch (err) {
+                    console.warn('[SyncWatchdog] Roster refresh note:', err);
+                }
             }
-        }
 
-        // If an active customer chat thread is currently open, refresh messages immediately
-        if (typeof window !== 'undefined') {
-            const activeCustId = typeof window.getActiveRiderChatCustId === 'function' ? window.getActiveRiderChatCustId() : null;
-            if (activeCustId) {
-                if (typeof window.reloadRiderChatFromFirebase === 'function') {
-                    try {
-                        window.reloadRiderChatFromFirebase(activeCustId);
-                    } catch (err) {
-                        console.warn('[SyncWatchdog] Active chat reload note:', err);
+            // Silent resync of live chat feed (inbox, catering, done, badges)
+            if (typeof window !== 'undefined' && typeof window.forceRefreshLiveChatsFeed === 'function') {
+                try {
+                    await window.forceRefreshLiveChatsFeed(null, true);
+                } catch (err) {
+                    console.warn('[SyncWatchdog] Live chat feed refresh note:', err);
+                }
+            }
+
+            // If an active customer chat thread is currently open, refresh messages immediately
+            if (typeof window !== 'undefined') {
+                const activeCustId = typeof window.getActiveRiderChatCustId === 'function' ? window.getActiveRiderChatCustId() : null;
+                if (activeCustId) {
+                    if (typeof window.reloadRiderChatFromFirebase === 'function') {
+                        try {
+                            await window.reloadRiderChatFromFirebase(activeCustId);
+                        } catch (err) {
+                            console.warn('[SyncWatchdog] Active chat reload note:', err);
+                        }
+                    }
+                    if (typeof window.renderRiderCateredSwitcher === 'function') {
+                        try {
+                            window.renderRiderCateredSwitcher();
+                        } catch (_) {}
                     }
                 }
-                if (typeof window.renderRiderCateredSwitcher === 'function') {
-                    try {
-                        window.renderRiderCateredSwitcher();
-                    } catch (_) {}
-                }
             }
+        } finally {
+            isLifecycleResyncing = false;
         }
     }
 
-    function handleAppVisibilityChange(e) {
-        if (e && e.type === 'appPausedToBackground') {
+    document.addEventListener('visibilitychange', () => {
+        if (typeof document !== 'undefined' && document.hidden) {
+            wasDocumentHidden = true;
             return;
         }
+        if (wasDocumentHidden) {
+            wasDocumentHidden = false;
+            triggerLifecycleResync(false);
+        }
+    });
+
+    window.addEventListener('appResumedFromBackground', () => {
+        wasDocumentHidden = false;
         triggerLifecycleResync(false);
-    }
+    });
 
-    document.addEventListener('visibilitychange', handleAppVisibilityChange);
-    window.addEventListener('pageshow', handleAppVisibilityChange);
-    window.addEventListener('focus', handleAppVisibilityChange);
-    window.addEventListener('resume', handleAppVisibilityChange);
-    window.addEventListener('appResumedFromBackground', handleAppVisibilityChange);
-    window.addEventListener('appPausedToBackground', handleAppVisibilityChange);
+    window.addEventListener('appPausedToBackground', () => {
+        wasDocumentHidden = true;
+    });
 
-    // Continuous worker heartbeat tick
+    // Continuous worker heartbeat tick: updates timestamp without triggering heavy network queries
     window.addEventListener('lokalexHeartbeatTick', () => {
         lastHeartbeatTime = Date.now();
-        if (db && navigator.onLine) {
-            try {
-                db.goOnline();
-            } catch (_) {}
-        }
     });
 
     // Deep sleep drift watchdog: Reconnect immediately if time drifted/jumped while out of focus

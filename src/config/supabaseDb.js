@@ -1755,7 +1755,6 @@ export const supabaseDb = {
           try { client.realtime.connect(); } catch (_) {}
         }
       }
-      resyncActiveSubscriptions().catch(() => {});
     } catch (_) {}
   },
   goOffline() {
