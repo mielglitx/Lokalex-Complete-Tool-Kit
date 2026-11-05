@@ -408,21 +408,18 @@ export async function syncFacebookPageFolderStatus(showFeedback = false) {
                             existingMeta.status === 'completed' ||
                             existingMeta.status === 'done' ||
                             existingMeta.status === 'cancelled' ||
-                            (existingMeta.folder && existingMeta.folder.toLowerCase() === 'done')
+                            (existingMeta.folder && existingMeta.folder.toLowerCase() === 'done') ||
+                            existingMeta.completedAt ||
+                            existingMeta.completedByRiderId ||
+                            existingMeta.completedByRiderName
                         );
 
-                        if (isAlreadyDone) {
-                            const completedAt = Number(existingMeta.completedAt) || 0;
-                            const fbUpdatedTime = c.updated_time ? new Date(c.updated_time).getTime() : 0;
-                            const unreadCount = Number(c.unread_count) || 0;
-
-                            // Only reactivate from Done back to Inbox if Facebook received a genuine NEW incoming message
-                            // strictly after the completion timestamp!
-                            const hasNewCustomerMsg = completedAt > 0 && fbUpdatedTime > (completedAt + 5000) && unreadCount > 0;
-                            if (!hasNewCustomerMsg && (fbFolderParam === 'inbox' || targetFolder === 'inbox')) {
-                                // Keep it in done! Do not resurrect to inbox just because Facebook Page didn't mark it done
-                                continue;
-                            }
+                        if (isAlreadyDone && (fbFolderParam === 'inbox' || targetFolder === 'inbox')) {
+                            // Never resurrect a completed Lokalex thread back to Inbox during a Facebook Page folder poll.
+                            // Facebook's /conversations endpoint retains stale unread_count values for app-replied threads
+                            // and bumps updated_time on outbound Page/system events. Genuine new customer messages are
+                            // handled directly by the real-time webhook and chatFeedListener.
+                            continue;
                         }
 
                         const currentFolder = (existingMeta.folder || 'inbox').toLowerCase();

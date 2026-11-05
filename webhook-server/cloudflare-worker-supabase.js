@@ -1167,6 +1167,9 @@ async function processMetaEntries(entries, cfg, ctx) {
           messageText = `📄 ${docName}`;
         } else if (hasAttachment) {
           messageText = "[Facebook attachment]";
+        } else if (isEcho) {
+          // Ignore empty outbound Meta system/page echoes with no text and no media
+          continue;
         } else {
           messageText = "Facebook Message";
         }
@@ -1268,14 +1271,15 @@ async function processMetaEntries(entries, cfg, ctx) {
         lastSummary = `📄 ${docName}`;
       }
 
+      const isExistingDone = (existingFolder === 'done') || existingStatus === 'completed' || existingStatus === 'done';
       const threadMeta = {
         ...(existingCustomerMeta || {}),
         customerName: customerName,
         avatarUrl: avatarUrl,
         lastMessage: isEcho ? `You: ${lastSummary}` : lastSummary,
         lastUpdated: timestamp,
-        folder: isEcho ? (existingFolder || 'inbox') : resolvedFolder,
-        status: 'active',
+        folder: isEcho ? (isExistingDone ? 'done' : (existingFolder || 'inbox')) : resolvedFolder,
+        status: (isEcho && isExistingDone) ? 'completed' : 'active',
         channel: "messenger",
         apiId: cfg.defaultApiId,
         apiName: cfg.defaultApiName,

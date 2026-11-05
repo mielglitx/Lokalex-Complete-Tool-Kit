@@ -415,6 +415,11 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                 }
             }
 
+            // Skip empty Meta system/page events that have neither text nor attachments
+            if (!text && !imageUrl && !videoUrl && !audioUrl && !fileUrl && (!images || images.length === 0)) {
+                continue;
+            }
+
             const normText = (text || '').replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim().toLowerCase();
 
             const isGenericMsgPlaceholder = (t) => {
@@ -585,15 +590,23 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
         }
 
         if (sortedGraphMsgs.length > 0 && db) {
-            const absoluteLatestMsg = sortedGraphMsgs[sortedGraphMsgs.length - 1];
+            // Find the latest Graph message that actually has text or media attachments (skip empty system events)
+            let absoluteLatestMsg = null;
+            for (let i = sortedGraphMsgs.length - 1; i >= 0; i--) {
+                const candidate = sortedGraphMsgs[i];
+                if ((candidate?.message && candidate.message.trim()) || (candidate?.attachments?.data && candidate.attachments.data.length > 0)) {
+                    absoluteLatestMsg = candidate;
+                    break;
+                }
+            }
             const absTs = absoluteLatestMsg?.created_time ? new Date(absoluteLatestMsg.created_time).getTime() : 0;
             const isFromPage = Boolean(absoluteLatestMsg?.from && String(absoluteLatestMsg.from.id) !== psid);
-            const absText = lastMsgText || (absoluteLatestMsg?.message || '').trim() || (absoluteLatestMsg?.attachments ? '📷 Facebook Attachment' : 'Facebook Message');
-            const formattedLatestPreview = isFromPage ? `You: ${absText}` : absText;
+            const absText = (absoluteLatestMsg?.message || '').trim() || (absoluteLatestMsg?.attachments?.data?.length ? '📷 Facebook Attachment' : (lastMsgText || ''));
+            const formattedLatestPreview = absText ? (isFromPage ? `You: ${absText}` : absText) : '';
 
-            // Only update customerChatMeta if this graph message is newer or equal to current metadata timestamp
+            // Only update customerChatMeta if this graph message has real content and is newer or equal to current metadata timestamp
             const currentMetaTs = Number(currentRiderChatMeta?.lastUpdated) || 0;
-            if (absTs && absTs >= currentMetaTs) {
+            if (formattedLatestPreview && absTs && absTs >= currentMetaTs) {
                 db.ref(`customerChatMeta/${targetCustId}`).update({
                     lastMessage: formattedLatestPreview,
                     lastUpdated: absTs,
