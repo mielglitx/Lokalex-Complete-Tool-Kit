@@ -42,16 +42,17 @@ export function parseChangelogToHtml(markdown) {
             }
 
             const verText = line.replace('## ', '').trim();
-            const verMatch = verText.match(/Version\s+([\d\.]+)(?:\s*\((.*?)\))?/i);
-            const verNum = verMatch ? verMatch[1] : verText;
-            const verDate = verMatch && verMatch[2] ? verMatch[2] : '';
+            const verMatch = verText.match(/(?:Version\s+)?([^\(\n]+?)(?:\s*\((.*?)\))?$/i);
+            const verNum = verMatch ? verMatch[1].trim() : verText;
+            const verDate = verMatch && verMatch[2] ? verMatch[2].trim() : '';
+            const displayVer = /^\d/.test(verNum) ? `v${verNum}` : verNum;
 
             html += `
             <div class="bg-gray-50 dark:bg-zinc-900/70 border border-gray-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs transition mb-4">
                 <div class="flex items-center justify-between border-b border-gray-200 dark:border-zinc-800 pb-2.5 mb-3">
                     <div class="flex items-center gap-2">
                         <span class="px-2.5 py-1 rounded-xl text-xs font-black font-mono ${isFirstVersion ? 'bg-emerald-500 text-white shadow-sm' : 'bg-gray-200 dark:bg-zinc-800 text-gray-700 dark:text-gray-300'}">
-                            v${escapeHtml(verNum)}
+                            ${escapeHtml(displayVer)}
                         </span>
                         ${isFirstVersion ? '<span class="text-[9px] px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-bold rounded-md uppercase tracking-wider">Latest</span>' : ''}
                     </div>

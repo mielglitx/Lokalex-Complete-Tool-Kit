@@ -28,27 +28,43 @@ import { showToast } from '../ui/notifications.js';
 
 const OTA_MANIFEST_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/version.json';
 const OTA_CHECKSUMS_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/checksums.json';
-const CURRENT_BUILT_IN_VERSION = '1.0.96';
+const CURRENT_BUILT_IN_VERSION = '1.0.99';
 let isCheckingUpdate = false;
 let globalOtaChecksumsMap = {};
 
 /**
- * Safely compares two version strings (e.g. "1.0.2" vs "1.0.1").
+ * Safely compares two version strings (handles both semantic "1.0.99" and named food releases like "Adobo").
  * Returns 1 if v1 > v2, -1 if v1 < v2, 0 if equal.
  */
 function compareVersions(v1, v2) {
     if (!v1 || !v2) return 0;
-    const parts1 = v1.toString().replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
-    const parts2 = v2.toString().replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
-    const maxLen = Math.max(parts1.length, parts2.length);
+    const s1 = String(v1).trim().replace(/^v/i, '');
+    const s2 = String(v2).trim().replace(/^v/i, '');
+    if (s1.toLowerCase() === s2.toLowerCase()) return 0;
 
-    for (let i = 0; i < maxLen; i++) {
-        const num1 = parts1[i] || 0;
-        const num2 = parts2[i] || 0;
-        if (num1 > num2) return 1;
-        if (num1 < num2) return -1;
+    const isSemver1 = /^\d+(\.\d+)*/.test(s1);
+    const isSemver2 = /^\d+(\.\d+)*/.test(s2);
+
+    if (isSemver1 && isSemver2) {
+        const parts1 = s1.split('.').map(n => parseInt(n, 10) || 0);
+        const parts2 = s2.split('.').map(n => parseInt(n, 10) || 0);
+        const maxLen = Math.max(parts1.length, parts2.length);
+
+        for (let i = 0; i < maxLen; i++) {
+            const num1 = parts1[i] || 0;
+            const num2 = parts2[i] || 0;
+            if (num1 > num2) return 1;
+            if (num1 < num2) return -1;
+        }
+        return 0;
     }
-    return 0;
+
+    // Transitioning from numeric version to named food release
+    if (!isSemver1 && isSemver2) return 1;
+    if (isSemver1 && !isSemver2) return -1;
+
+    // Both are distinct named food releases (e.g. Adobo vs Sinigang)
+    return s1.toLowerCase() !== s2.toLowerCase() ? 1 : 0;
 }
 
 /**
@@ -159,13 +175,14 @@ export async function getCurrentAppVersion() {
 export async function syncVersionTrackerElements() {
     try {
         const version = await getCurrentAppVersion();
+        const displayVersion = /^\d/.test(version) ? `v${version}` : version;
         const els = document.querySelectorAll('.app-version-tracker');
         els.forEach(el => {
-            el.textContent = `v${version}`;
+            el.textContent = displayVersion;
         });
         const fullEls = document.querySelectorAll('.app-version-full-tracker');
         fullEls.forEach(el => {
-            el.textContent = `Lokalex Hub v${version}`;
+            el.textContent = `Lokalex Hub ${displayVersion}`;
         });
     } catch (_) {}
 }
@@ -268,13 +285,16 @@ export async function checkForOtaUpdate(isManual = false) {
 
         const currentVersion = await getCurrentAppVersion();
         const currentChecksum = localStorage.getItem('lokalex_ota_checksum') || '';
-        const hasVersionUpdate = compareVersions(remoteVersion, currentVersion) !== 0;
+        const hasVersionUpdate = String(remoteVersion).trim().toLowerCase() !== String(currentVersion).trim().toLowerCase() || compareVersions(remoteVersion, currentVersion) !== 0;
         const hasChecksumUpdate = Boolean(checksum && checksum !== currentChecksum);
         const hasUpdate = hasVersionUpdate || hasChecksumUpdate;
 
+        const remoteDisplay = /^\d/.test(remoteVersion) ? `v${remoteVersion}` : remoteVersion;
+        const currentDisplay = /^\d/.test(currentVersion) ? `v${currentVersion}` : currentVersion;
+
         if (!hasUpdate) {
             if (isManual) {
-                const force = confirm(`✅ Lokalex Hub is up to date (v${currentVersion}).\n\nWould you like to force re-download and re-apply the update from the server?`);
+                const force = confirm(`✅ Lokalex Hub is up to date (${currentDisplay}).\n\nWould you like to force re-download and re-apply the update from the server?`);
                 if (!force) return;
             } else {
                 return;
@@ -282,12 +302,12 @@ export async function checkForOtaUpdate(isManual = false) {
         } else {
             // Update is available!
             if (isManual) {
-                const proceed = confirm(`🚀 New update available!\n\nVersion: v${remoteVersion}\nCurrent: v${currentVersion}\n\nUpdates:\n${releaseNotes}\n\nDownload and apply now?`);
+                const proceed = confirm(`🚀 New update available!\n\nVersion: ${remoteDisplay}\nCurrent: ${currentDisplay}\n\nUpdates:\n${releaseNotes}\n\nDownload and apply now?`);
                 if (!proceed) return;
             }
         }
 
-        showToast(`⏳ Downloading v${remoteVersion} update...`);
+        showToast(`⏳ Downloading ${remoteDisplay} update...`);
 
         if (isNativePlatform()) {
             console.log(`[OTA] Initiating download from ${downloadUrl} (version ${remoteVersion}, checksum ${checksum || 'none'})...`);
@@ -319,7 +339,7 @@ export async function checkForOtaUpdate(isManual = false) {
             if (bundle && bundle.id) {
                 localStorage.setItem('lokalex_ota_version', remoteVersion);
                 if (checksum) localStorage.setItem('lokalex_ota_checksum', checksum);
-                showToast(`🎉 Downloaded v${remoteVersion}! Applying update...`);
+                showToast(`🎉 Downloaded ${remoteDisplay}! Applying update...`);
 
                 try {
                     await CapacitorUpdater.set({ id: bundle.id });
@@ -335,15 +355,15 @@ export async function checkForOtaUpdate(isManual = false) {
                     const chatOpen = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
                     const isChatting = chatOpen && !chatOpen.classList.contains('hidden');
                     if (!isChatting) {
-                        showToast(`✨ v${remoteVersion} is ready. Applying update...`);
+                        showToast(`✨ ${remoteDisplay} is ready. Applying update...`);
                         setTimeout(() => {
                             window.location.reload();
                         }, 1200);
                     } else {
-                        showToast(`✨ v${remoteVersion} is ready. Will apply on next restart.`);
+                        showToast(`✨ ${remoteDisplay} is ready. Will apply on next restart.`);
                     }
                 } else {
-                    console.log(`[OTA] v${remoteVersion} staged. App is minimized in background, will apply on next restart.`);
+                    console.log(`[OTA] ${remoteDisplay} staged. App is minimized in background, will apply on next restart.`);
                 }
             } else {
                 throw new Error("No bundle ID returned from updater");
@@ -351,7 +371,7 @@ export async function checkForOtaUpdate(isManual = false) {
         } else {
             // In web browser mode, service worker handles assets, but we still store version
             localStorage.setItem('lokalex_ota_version', remoteVersion);
-            showToast(`✅ New version v${remoteVersion} detected! Refreshing...`);
+            showToast(`✅ New version ${remoteDisplay} detected! Refreshing...`);
             setTimeout(() => window.location.reload(), 1500);
         }
     } catch (err) {
@@ -384,8 +404,8 @@ export async function fetchAvailableOtaVersions() {
             const files = await res.json();
             if (Array.isArray(files)) {
                 files.forEach(f => {
-                    const match = f.name && f.name.match(/^dist-v(\d+\.\d+\.\d+)\.zip$/);
-                    if (match) {
+                    const match = f.name && f.name.match(/^dist-(?:v)?([a-zA-Z0-9_\-\.]+)\.zip$/);
+                    if (match && match[1] && match[1] !== 'dist') {
                         const ver = match[1];
                         versions.push({
                             version: ver,
