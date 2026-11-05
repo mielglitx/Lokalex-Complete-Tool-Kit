@@ -518,7 +518,13 @@ export function openQueueNoticeModal(options = {}) {
     }
 
     try {
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        const hasUserActivation = typeof navigator !== 'undefined' && (
+            (navigator.userActivation && navigator.userActivation.hasBeenActive) ||
+            (!navigator.userActivation && (document.hasFocus ? document.hasFocus() : true))
+        );
+        if (hasUserActivation && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+            navigator.vibrate([100, 50, 100]);
+        }
     } catch {}
 
     modal.classList.remove('hidden');

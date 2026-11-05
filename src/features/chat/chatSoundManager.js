@@ -626,9 +626,13 @@ export function playChatChime(category = 'inbox') {
         }
     } catch (_) {}
 
-    // Haptic vibration feedback on supported mobile devices
+    // Haptic vibration feedback on supported mobile devices (guard against Chrome unactivated frame intervention)
     try {
-        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        const hasUserActivation = typeof navigator !== 'undefined' && (
+            (navigator.userActivation && navigator.userActivation.hasBeenActive) ||
+            (!navigator.userActivation && (document.hasFocus ? document.hasFocus() : true))
+        );
+        if (hasUserActivation && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
             if (folder === 'catering') {
                 navigator.vibrate([70, 50, 90, 50, 70]);
             } else if (folder === 'inbox') {

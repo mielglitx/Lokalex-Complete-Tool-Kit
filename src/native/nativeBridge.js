@@ -193,7 +193,11 @@ export async function initNativeBridge() {
 export async function triggerNativeHaptic(type = 'light') {
     if (!isNativePlatform()) {
         try {
-            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+            const hasUserActivation = typeof navigator !== 'undefined' && (
+                (navigator.userActivation && navigator.userActivation.hasBeenActive) ||
+                (!navigator.userActivation && (document.hasFocus ? document.hasFocus() : true))
+            );
+            if (hasUserActivation && typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
                 if (type === 'success') navigator.vibrate([60, 40, 60]);
                 else if (type === 'warning') navigator.vibrate([80, 50, 100]);
                 else navigator.vibrate(40);
