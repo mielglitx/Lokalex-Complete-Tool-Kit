@@ -83,8 +83,8 @@ const manifest = {
     fallbackUrl: `https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist.zip?v=${Date.now()}`,
     checksum: checksum,
     updatedAt: new Date().toISOString(),
-    notes: process.argv[3] || "Restored native Picture-in-Picture mode and in-app OTA APK self-updater",
-    nativeVersion: process.env.MIN_NATIVE_VERSION || '1.0.78',
+    notes: process.argv[3] || "Lokalex Base App & OTA Update",
+    nativeVersion: process.env.MIN_NATIVE_VERSION || targetVersion,
     apkUrl: "https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/app-release.apk"
 };
 
