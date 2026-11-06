@@ -250,11 +250,19 @@
         height: 100% !important;
     }
 
-    /* High-Performance Smart Cart & Feed Momentum Touch Scrolling */
+    /* High-Performance Feed & List Momentum Touch Scrolling */
     #cart-items-list,
     #rider-cust-chats-feed,
     #global-catered-list,
     #global-logins-list,
+    #login-list-feed,
+    #catered-customers-feed {
+        touch-action: pan-y !important;
+        -webkit-overflow-scrolling: touch !important;
+        overscroll-behavior-y: auto !important;
+    }
+
+    /* Modal dialog scroll containers maintain boundary containment */
     #rider-chat-messages-container,
     #rider-cust-chat-messages,
     #store-rider-chat-messages {

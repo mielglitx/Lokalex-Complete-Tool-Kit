@@ -37,6 +37,54 @@ import { openRiderBreakModal } from '../rosterBreakSettings.js';
 
 
 
+export function setStatusActionSyncingState(statusName, isSyncing, customLabel = null) {
+    const statusMap = {
+        'Available': ['modern-btn-status-avail', 'btn-status-avail'],
+        'Catering': ['modern-btn-status-cater', 'btn-status-cater'],
+        'Break': ['modern-btn-status-break', 'btn-status-break'],
+        'End': ['modern-btn-status-end', 'btn-status-end']
+    };
+
+    const targetIds = statusMap[statusName] || [];
+    targetIds.forEach(id => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+
+        if (isSyncing) {
+            if (!btn._originalHtml) btn._originalHtml = btn.innerHTML;
+            btn.setAttribute('data-syncing', 'true');
+            btn.disabled = true;
+            btn.style.opacity = '0.75';
+            btn.style.cursor = 'wait';
+            btn.innerHTML = `<span class="inline-block animate-spin mr-1 text-[10px]">⏳</span><span>${customLabel || 'Syncing...'}</span>`;
+        } else {
+            btn.disabled = false;
+            btn.removeAttribute('data-syncing');
+            btn.style.opacity = '';
+            btn.style.cursor = '';
+            if (btn._originalHtml) {
+                btn.innerHTML = btn._originalHtml;
+                delete btn._originalHtml;
+            }
+        }
+    });
+
+    const allIds = [
+        'modern-btn-status-avail', 'modern-btn-status-cater', 'modern-btn-status-break', 'modern-btn-status-end',
+        'btn-status-avail', 'btn-status-cater', 'btn-status-break', 'btn-status-end'
+    ];
+    allIds.forEach(id => {
+        if (!targetIds.includes(id)) {
+            const peerBtn = document.getElementById(id);
+            if (peerBtn && !peerBtn.hasAttribute('data-syncing')) {
+                peerBtn.disabled = isSyncing;
+                peerBtn.style.pointerEvents = isSyncing ? 'none' : '';
+                peerBtn.style.opacity = isSyncing ? '0.5' : '';
+            }
+        }
+    });
+}
+
 /**
  * Evaluates whether the rider has fulfilled their required shift duration.
  */
@@ -287,6 +335,11 @@ export async function triggerStatusWithSlide(targetStatus) {
             return;
         }
 
+        if (!navigator.onLine) {
+            showToast("⚠️ Cannot go Available: You are offline. Check internet connection and try again.");
+            return;
+        }
+
         const availableTimestamp = Date.now();
         const availableTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -301,60 +354,57 @@ export async function triggerStatusWithSlide(targetStatus) {
 
         dismissQueueAlarm();
 
-        if (db && myId) {
-            db.ref(`roster/${myId}/forcedCaters`).remove().catch(() => {});
-            db.ref(`roster/${myId}`).update({
-                forcedBy: null,
-                isForcedCater: false,
-                availableTimestamp: availableTimestamp,
-                availableTimeStr: availableTimeStr
-            }).catch(() => {});
-            db.ref(`roster/${myId}/availableLocation`).remove().catch(() => {});
-
-            // Auto-release any lingering customer chat threads that were locked to this rider in catering
-            db.ref('customerChatMeta').once('value', (snap) => {
-                const chats = snap.val() || {};
-                Object.entries(chats).forEach(([cId, meta]) => {
-                    const rId = (meta.cateredByRiderId || '').toString();
-                    const rName = (meta.cateredByRiderName || meta.cateredBy || '').trim().toLowerCase();
-                    if ((rId === myId || rName === myName.toLowerCase()) && meta.folder === 'catering') {
-                        const now = Date.now();
-                        const releasePayload = {
-                            folder: 'done',
-                            status: 'completed',
-                            completedAt: now,
-                            cateredByRiderId: null,
-                            cateredByRiderName: null,
-                            cateredBy: null,
-                            forcedBy: null,
-                            isForcedCater: false,
-                            unreadForRider: false,
-                            lastUpdated: now
-                        };
-                        db.ref(`customerChats/${cId}/metadata`).update(releasePayload).catch(() => {});
-                        db.ref(`customerChatMeta/${cId}`).update(releasePayload).catch(() => {});
-                    }
-                });
-            }).catch(() => {});
-        }
-        if (myRecord) {
-            myRecord.forcedCaters = null;
-            myRecord.forcedBy = null;
-            myRecord.isForcedCater = false;
-            myRecord.availableTimestamp = availableTimestamp;
-            myRecord.availableTimeStr = availableTimeStr;
-            myRecord.availableLocation = null;
+        // Release any lingering catering customer chat threads assigned to this rider using memory map (zero table download)
+        const threadMap = (typeof window.getCachedCustomerThreadsMap === 'function') ? window.getCachedCustomerThreadsMap() : null;
+        if (threadMap && threadMap.size > 0 && db && myId) {
+            const releaseUpdates = {};
+            const now = Date.now();
+            for (const [cId, meta] of threadMap.entries()) {
+                const rId = (meta.cateredByRiderId || '').toString();
+                const rName = (meta.cateredByRiderName || meta.cateredBy || '').trim().toLowerCase();
+                if ((rId === myId || (myName && rName === myName.toLowerCase())) && meta.folder === 'catering') {
+                    const releasePayload = {
+                        folder: 'done',
+                        status: 'completed',
+                        completedAt: now,
+                        cateredByRiderId: null,
+                        cateredByRiderName: null,
+                        cateredBy: null,
+                        forcedBy: null,
+                        isForcedCater: false,
+                        unreadForRider: false,
+                        lastUpdated: now
+                    };
+                    releaseUpdates[`customerChats/${cId}/metadata`] = releasePayload;
+                    releaseUpdates[`customerChatMeta/${cId}`] = releasePayload;
+                }
+            }
+            if (Object.keys(releaseUpdates).length > 0) {
+                db.ref().update(releaseUpdates).catch(() => {});
+            }
         }
 
-        await updateRosterStatus('Available', myId, myName, lockedQueueTime);
+        // Lock button into visual syncing state and wait for server confirmation
+        setStatusActionSyncingState('Available', true, 'Connecting...');
+        try {
+            await updateRosterStatus('Available', myId, myName, lockedQueueTime);
 
-        if (window.clearAllCartSlots) {
-            window.clearAllCartSlots();
-        } else if (window.clearCartSlot) {
-            window.clearCartSlot();
+            if (window.clearAllCartSlots) {
+                window.clearAllCartSlots();
+            } else if (window.clearCartSlot) {
+                window.clearCartSlot();
+            }
+
+            showToast("✅ Now Available!");
+        } catch (err) {
+            console.error('[triggerStatusWithSlide] Available sync error:', err);
+            try {
+                if (navigator.vibrate) navigator.vibrate([120, 80, 120]);
+            } catch (_) {}
+            showToast(`⚠️ Connection Failed: ${err.message || 'Server did not confirm status update.'} Check signal and tap again.`);
+        } finally {
+            setStatusActionSyncingState('Available', false);
         }
-
-        showToast("✅ Now Available!");
 
     } else if (targetStatus === 'End') {
         const penaltyInfo = await evaluateEarlyShiftPenalty(myId, myRecord);
@@ -371,62 +421,77 @@ export async function triggerStatusWithSlide(targetStatus) {
         }
 
         openSlideDeleteModal(promptTitle, promptDesc, async () => {
+            if (!navigator.onLine) {
+                showToast("⚠️ Cannot end shift: You are offline. Please check your signal and try again.");
+                return;
+            }
+
             dismissQueueAlarm();
+            setStatusActionSyncingState('End', true, 'Ending Shift...');
+            try {
+                if (db && myId) {
+                    const updates = {
+                        forcedBy: null,
+                        isForcedCater: false
+                    };
 
-            if (db && myId) {
-                db.ref(`roster/${myId}/forcedCaters`).remove().catch(() => {});
-                
-                const updates = {
-                    forcedBy: null,
-                    isForcedCater: false
-                };
+                    if (penaltyInfo.hasPenalty && !penaltyInfo.isExempted) {
+                        updates.commissionSurcharge = penaltyInfo.penaltyPercent;
+                        updates.earlyShiftDeficitHours = penaltyInfo.deficitHours;
 
-                if (penaltyInfo.hasPenalty && !penaltyInfo.isExempted) {
-                    updates.commissionSurcharge = penaltyInfo.penaltyPercent;
-                    updates.earlyShiftDeficitHours = penaltyInfo.deficitHours;
+                        db.ref(`logins/${myId}`).update({
+                            earlyShiftPenaltyPercent: penaltyInfo.penaltyPercent,
+                            deficitHours: penaltyInfo.deficitHours,
+                            workedMinutes: penaltyInfo.netWorkedMins,
+                            totalBreakMinutes: penaltyInfo.totalBreakMins
+                        }).catch(() => {});
 
-                    db.ref(`logins/${myId}`).update({
-                        earlyShiftPenaltyPercent: penaltyInfo.penaltyPercent,
-                        deficitHours: penaltyInfo.deficitHours,
-                        workedMinutes: penaltyInfo.netWorkedMins,
-                        totalBreakMinutes: penaltyInfo.totalBreakMins
-                    }).catch(() => {});
+                        showSideNotification("EARLY OUT PENALTY", `+${penaltyInfo.penaltyPercent}% penalty applied to commission (Break excluded)`, "fa-triangle-exclamation", "text-red-400", "border-red-500");
+                    } else if (penaltyInfo.isExempted) {
+                        updates.commissionSurcharge = 0;
+                        updates.earlyShiftDeficitHours = 0;
 
-                    showSideNotification("EARLY OUT PENALTY", `+${penaltyInfo.penaltyPercent}% penalty applied to commission (Break excluded)`, "fa-triangle-exclamation", "text-red-400", "border-red-500");
-                } else if (penaltyInfo.isExempted) {
-                    updates.commissionSurcharge = 0;
-                    updates.earlyShiftDeficitHours = 0;
+                        db.ref(`logins/${myId}`).update({
+                            earlyShiftPenaltyPercent: 0,
+                            deficitHours: 0,
+                            isExemptedEarlyOut: true
+                        }).catch(() => {});
+                    }
 
-                    db.ref(`logins/${myId}`).update({
-                        earlyShiftPenaltyPercent: 0,
-                        deficitHours: 0,
-                        isExemptedEarlyOut: true
-                    }).catch(() => {});
+                    db.ref(`roster/${myId}`).update(updates).catch(() => {});
                 }
 
-                db.ref(`roster/${myId}`).update(updates).catch(() => {});
+                await clockOutRider(myId);
+                showToast("👋 Shift ended successfully.");
+            } catch (err) {
+                console.error('[triggerStatusWithSlide] End shift sync error:', err);
+                try {
+                    if (navigator.vibrate) navigator.vibrate([120, 80, 120]);
+                } catch (_) {}
+                showToast(`⚠️ Connection Failed: ${err.message || 'Could not end shift.'} Check signal and tap again.`);
+            } finally {
+                setStatusActionSyncingState('End', false);
             }
-
-            if (myRecord) {
-                myRecord.forcedCaters = null;
-                myRecord.forcedBy = null;
-                myRecord.isForcedCater = false;
-                if (penaltyInfo.hasPenalty && !penaltyInfo.isExempted) {
-                    myRecord.commissionSurcharge = penaltyInfo.penaltyPercent;
-                } else {
-                    myRecord.commissionSurcharge = 0;
-                }
-            }
-
-            await clockOutRider(myId);
-            await updateRosterStatus('End', myId, myName);
         });
     } else if (targetStatus === 'Break') {
         openRiderBreakModal();
     } else {
         openSlideDeleteModal(`Are you sure you want to change status to [${targetStatus}]?`, async () => {
+            if (!navigator.onLine) {
+                showToast("⚠️ You are offline. Check internet connection and try again.");
+                return;
+            }
             dismissQueueAlarm();
-            await updateRosterStatus(targetStatus, myId, myName);
+            setStatusActionSyncingState(targetStatus, true);
+            try {
+                await updateRosterStatus(targetStatus, myId, myName);
+                showToast(`✅ Status changed to ${targetStatus}`);
+            } catch (err) {
+                console.error('[triggerStatusWithSlide] Error:', err);
+                showToast(`⚠️ Connection Failed: ${err.message || 'Server did not confirm status update.'}`);
+            } finally {
+                setStatusActionSyncingState(targetStatus, false);
+            }
         });
     }
 }

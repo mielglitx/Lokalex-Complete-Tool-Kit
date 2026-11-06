@@ -19,18 +19,12 @@
     <!-- CONTENT SECURITY POLICY ENABLING TESSERACT OCR WORKERS & NETWORK FETCHING -->
     <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' blob:; worker-src * blob: data: 'unsafe-inline' 'unsafe-eval'; child-src * blob: data:; connect-src * blob: data:; style-src * 'unsafe-inline'; font-src * data:; img-src * data: blob:;">
 
-    <!-- FIREBASE CDN SCRIPTS -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
-
     <!-- QR CODE SCANNER (DECODER) & GENERATOR FOR GCASH INSTAPAY INTEGRATION -->
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 
     <!-- OCR ENGINE FOR AUTO-DETECTING CUSTOMER NAMES FROM CHAT SCREENSHOTS -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
     <!-- ULTRA-FAST ZERO-LATENCY SESSION PRE-ROUTER (INSTANT DASHBOARD PAINT) -->
     <script>
@@ -363,25 +357,25 @@
         height: 100% !important;
     }
 
-    /* High-Performance Smart Cart & Feed Momentum Touch Scrolling (Snapdragon 450 / Adreno 506 Optimized) */
+    /* High-Performance Feed & List Momentum Touch Scrolling */
     #cart-items-list,
     #rider-cust-chats-feed,
     #global-catered-list,
     #global-logins-list,
+    #login-list-feed,
+    #catered-customers-feed {
+        touch-action: pan-y !important;
+        -webkit-overflow-scrolling: touch !important;
+        overscroll-behavior-y: auto !important;
+    }
+
+    /* Modal dialog scroll containers maintain boundary containment */
     #rider-chat-messages-container,
     #rider-cust-chat-messages,
     #store-rider-chat-messages {
         touch-action: pan-y !important;
         -webkit-overflow-scrolling: touch !important;
         overscroll-behavior-y: contain !important;
-        will-change: scroll-position;
-    }
-
-    #rider-cust-chats-feed > div:not(.catering-glow-gold):not(.catering-glow-my),
-    #global-catered-list > div,
-    #global-logins-list > div {
-        content-visibility: auto;
-        contain-intrinsic-size: auto 76px;
     }
 
     /* ========================================================================== */
@@ -928,11 +922,11 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-CLPbTtFb.js"></script>
+  <script type="module" crossorigin src="./assets/index-CGvHXSZh.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-DK3Fl9T5.js">
   <link rel="modulepreload" crossorigin href="./assets/vendor-BOVfQ4W4.js">
 <link rel="manifest" href="./manifest.webmanifest"></head>
-<body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A;">
+<body onclick="window.unlockAudioContext && window.unlockAudioContext()" class="bg-[#EDF7F2] text-slate-900 min-h-screen flex flex-col font-sans select-none overflow-x-hidden relative" style="background-color: #EDF7F2; color: #0F172A; touch-action: pan-y; -webkit-overflow-scrolling: touch;">
 
     <!-- PIP / FLOATING WINDOW INTERACTIVE BADGE -->
     <div id="pip-stashed-badge" class="hidden fixed inset-0 z-[999999] bg-[#0c1421] flex items-center justify-center select-none overflow-hidden cursor-pointer" onclick="window.handlePipBadgeClick && window.handlePipBadgeClick(event);" title="Lokalex - Tap to open">
@@ -995,7 +989,7 @@
         </div>
     </div>
 
-    <!-- RIGHT: LIVE DIGITAL CLOCK, BATTERY INDICATOR, THEME TOGGLE & NETWORK STATUS PILL -->
+    <!-- RIGHT: LIVE DIGITAL CLOCK, BATTERY INDICATOR, THEME TOGGLE, PIP & SWITCH TO NEW UI BUTTON -->
     <div class="flex items-center gap-1.5 shrink-0">
         <!-- FLOATING WINDOW (PIP) MODE BUTTON -->
         <button id="header-floating-window-btn" type="button" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" class="flex items-center justify-center w-7 h-7 rounded-xl bg-gray-100 dark:bg-black/40 hover:bg-sky-50 dark:hover:bg-gray-800 border border-gray-300 dark:border-gray-700/60 text-sky-600 dark:text-sky-400 transition active:scale-95 shadow-2xs cursor-pointer" title="Float App as Mini Window over Other Apps (PiP)">
@@ -1020,10 +1014,11 @@
             <span id="header-battery-text">--%</span>
         </div>
 
-        <!-- COLOR-COORDINATED NETWORK STATUS INDICATOR (Only visible in Rider views) -->
-        <div id="network-status-pill" class="hidden flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/40 shadow-xs transition-all duration-300 shrink-0" title="Network: Online">
-            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
-        </div>
+        <!-- SWITCH TO NEW UI BUTTON (AT UPPER RIGHT CORNER OF APP) -->
+        <button id="header-ui-mode-switch-btn" type="button" onclick="window.toggleLokalexUiMode && window.toggleLokalexUiMode('modern')" class="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white border border-emerald-400/40 text-[10px] font-black transition active:scale-95 shadow-xs cursor-pointer shrink-0" title="Switch to New Split-Screen UI">
+            <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
+            <span>New UI</span>
+        </button>
     </div>
 </header>
 
@@ -1033,11 +1028,11 @@
 <section id="view-login" class="flex-1 flex flex-col justify-center items-center p-4 sm:p-6 gap-4 min-h-full">
     <!-- BRAND LOGO & HEADER -->
     <div class="text-center mb-1">
-        <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600/10 border border-blue-500/20 text-blue-500 mb-2 shadow-sm">
-            <i class="fa-solid fa-bag-shopping text-2xl"></i>
+        <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-500/20 mb-2 shadow-md overflow-hidden p-1.5">
+            <img src="./Logo.png" alt="Lokalex Logo" class="w-full h-full object-contain select-none">
         </div>
         <h2 class="text-2xl font-black text-gray-900 dark:text-white tracking-tight">L<i class="fa-solid fa-location-dot text-red-500"></i>kalex Hub</h2>
-        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Delivery & Operations Portal</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">Fast & Reliable Local Delivery</p>
     </div>
 
     <!-- UNIFIED AUTH CONTAINER -->
@@ -1079,30 +1074,35 @@
         </div>
 
         <!-- 1. UNIFIED LOGIN FORM -->
-        <div id="unified-login-section" class="flex flex-col gap-3">
+        <div id="unified-login-section" class="flex flex-col gap-3.5">
             <div>
-                <h3 class="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center justify-center gap-1.5">
-                    <i class="fa-solid fa-right-to-bracket"></i> Account Login
+                <h3 class="text-base font-black tracking-tight text-gray-900 dark:text-white flex items-center justify-center gap-1.5">
+                    Welcome Back!
                 </h3>
-                <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Enter Rider ID, Mobile No. (09...), or Store Username</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Sign in to continue to Lokalex</p>
             </div>
 
-            <div class="flex flex-col gap-2.5 text-left mt-1">
+            <div class="flex flex-col gap-3 text-left mt-1">
                 <!-- Identifier Input -->
                 <div class="flex flex-col gap-1">
-                    <label class="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Account Identifier</label>
+                    <label for="unified-login-identifier" class="text-[11px] font-bold text-gray-600 dark:text-gray-300">Mobile Number, Rider ID, or Username</label>
                     <div class="relative">
-                        <i class="fa-solid fa-user-shield absolute left-3.5 top-3.5 text-gray-400 text-xs"></i>
-                        <input type="text" id="unified-login-identifier" autocomplete="username" placeholder="Rider ID / Mobile / Username" onkeydown="if(event.key === 'Enter') document.getElementById('unified-login-password')?.focus()" class="w-full bg-inputBg text-xs rounded-xl pl-9 pr-3 py-3 outline-none border border-gray-300 dark:border-gray-700 focus:border-blue-500 transition font-mono font-bold text-gray-900 dark:text-white">
+                        <i class="fa-solid fa-user absolute left-3.5 top-3.5 text-gray-400 text-xs"></i>
+                        <input type="text" id="unified-login-identifier" autocomplete="username" placeholder="e.g. 09123456789 or Rider ID" onkeydown="if(event.key === 'Enter') document.getElementById('unified-login-password')?.focus()" class="w-full bg-inputBg text-xs rounded-xl pl-9 pr-3 py-3 outline-none border border-gray-300 dark:border-gray-700 focus:border-blue-500 transition font-semibold text-gray-900 dark:text-white">
                     </div>
                 </div>
 
                 <!-- Password Input -->
                 <div class="flex flex-col gap-1">
-                    <label class="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Password</label>
+                    <div class="flex items-center justify-between">
+                        <label for="unified-login-password" class="text-[11px] font-bold text-gray-600 dark:text-gray-300">Password</label>
+                        <button type="button" onclick="window.triggerForgotPassword && window.triggerForgotPassword()" class="text-blue-600 dark:text-blue-400 hover:underline font-semibold transition text-[11px] cursor-pointer">
+                            Forgot password?
+                        </button>
+                    </div>
                     <div class="relative">
                         <i class="fa-solid fa-lock absolute left-3.5 top-3.5 text-gray-400 text-xs"></i>
-                        <input type="password" id="unified-login-password" autocomplete="current-password" placeholder="Enter Password" onkeydown="if(event.key === 'Enter') window.processUnifiedLogin && window.processUnifiedLogin()" class="w-full bg-inputBg text-xs rounded-xl pl-9 pr-10 py-3 outline-none border border-gray-300 dark:border-gray-700 focus:border-blue-500 transition font-bold text-gray-900 dark:text-white">
+                        <input type="password" id="unified-login-password" autocomplete="current-password" placeholder="Enter your password" onkeydown="if(event.key === 'Enter') window.processUnifiedLogin && window.processUnifiedLogin()" class="w-full bg-inputBg text-xs rounded-xl pl-9 pr-10 py-3 outline-none border border-gray-300 dark:border-gray-700 focus:border-blue-500 transition font-semibold text-gray-900 dark:text-white">
                         <button type="button" onclick="window.togglePasswordVisibility && window.togglePasswordVisibility('unified-login-password', 'unified-pass-eye')" class="absolute right-3 top-3 text-gray-400 hover:text-gray-600 dark:hover:text-white transition cursor-pointer">
                             <i id="unified-pass-eye" class="fa-solid fa-eye text-xs"></i>
                         </button>
@@ -1111,17 +1111,15 @@
 
                 <!-- Login Button -->
                 <button type="button" id="unified-login-btn" onclick="window.processUnifiedLogin && window.processUnifiedLogin()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-extrabold py-3.5 rounded-xl shadow-lg transition active:scale-95 flex items-center justify-center gap-2 text-xs cursor-pointer mt-1">
-                    <i class="fa-solid fa-right-to-bracket"></i> LOGIN
+                    <i class="fa-solid fa-right-to-bracket"></i> Sign In
                 </button>
             </div>
 
             <!-- Action Links -->
-            <div class="flex flex-col items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800 text-[11px] mt-1">
-                <button type="button" onclick="window.toggleCustomerRegisterSection && window.toggleCustomerRegisterSection(true)" class="text-emerald-600 dark:text-emerald-400 hover:underline font-bold flex items-center gap-1.5 cursor-pointer">
-                    <i class="fa-solid fa-user-plus text-xs"></i> New Customer? Register Here
-                </button>
-                <button type="button" onclick="window.triggerForgotPassword && window.triggerForgotPassword()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition text-[10px] cursor-pointer">
-                    Forgot Password?
+            <div class="flex flex-col items-center gap-1.5 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs mt-0.5">
+                <span class="text-[11px] text-gray-500 dark:text-gray-400">Don't have an account yet?</span>
+                <button type="button" onclick="window.toggleCustomerRegisterSection && window.toggleCustomerRegisterSection(true)" class="text-emerald-600 dark:text-emerald-400 hover:underline font-extrabold flex items-center gap-1.5 cursor-pointer text-xs">
+                    <i class="fa-solid fa-user-plus text-xs"></i> Create a Customer Account
                 </button>
             </div>
         </div>
@@ -1731,7 +1729,7 @@
   pill, daily shift logins, catered customer feeds, and administrative lineup,
   credit settings, and early shift-out penalty configuration tools.
 -->
-<section id="view-home" class="hidden flex-1 flex flex-col p-3 gap-3 py-3">
+<section id="view-home" class="hidden flex-1 flex flex-col p-3 gap-3 py-3" style="touch-action: pan-y; -webkit-overflow-scrolling: touch;">
     <!-- LIGHT MODE HIGH CONTRAST & CARD STYLING ENFORCEMENT -->
     <style>
         html:not(.dark) #view-home {
@@ -3423,6 +3421,547 @@
         </button>
     </div>
 </section>
+        <!-- src/partials/views/modern-workspace.html -->
+<div id="modern-ui-workspace" class="hidden fixed inset-0 z-30 flex flex-col bg-[#0b1114] text-slate-100 select-none overflow-hidden" style="height: 100dvh; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);">
+
+    <!-- ===================================================================== -->
+    <!-- 1. TOP HEADER BAR                                                     -->
+    <!-- ===================================================================== -->
+    <header class="bg-[#121a1f] border-b border-slate-800 px-2.5 sm:px-3.5 py-2 flex items-center justify-between gap-2 shrink-0 relative z-40">
+        <!-- LEFT: HAMBURGER ICON + PROFILE PIC + 2-LINE WELCOME GREETING -->
+        <div class="flex items-center gap-2 min-w-0">
+            <button id="modern-hamburger-btn" type="button" onclick="window.toggleModernHamburgerMenu && window.toggleModernHamburgerMenu(event)" class="w-9 h-9 rounded-xl bg-[#18232a] hover:bg-slate-800 border border-slate-700/80 text-slate-100 flex items-center justify-center text-base font-bold transition active:scale-95 cursor-pointer shrink-0 shadow-xs" title="Menu">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+
+            <div onclick="window.handleHeaderUserClick && window.handleHeaderUserClick()" class="flex items-center gap-2 min-w-0 cursor-pointer group transition active:scale-95" title="Tap to edit profile settings">
+                <img id="modern-header-avatar" src="https://ui-avatars.com/api/?name=Rider&background=10b981&color=ffffff&bold=true&size=128" alt="Profile" class="w-9 h-9 rounded-full object-cover border-2 border-emerald-500 shadow-sm shrink-0">
+                <div class="flex flex-col min-w-0 leading-tight">
+                    <span class="text-[10px] text-slate-400 font-semibold">Welcome!</span>
+                    <span id="modern-header-rider-name" class="text-xs sm:text-sm font-extrabold text-white truncate max-w-[150px] sm:max-w-[220px] group-hover:text-emerald-400 transition">Rider</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: UI SWITCHER + CLOCK + BATTERY + [PiP] -->
+        <div class="flex items-center gap-1.5 shrink-0">
+            <!-- REALTIME SYNC STATUS PILL (Optimistic Background Handshake) -->
+            <div id="modern-header-sync-pill" class="hidden px-2 py-1 rounded-xl text-[10px] sm:text-[11px] font-mono font-bold items-center gap-1.5 shrink-0 transition-all duration-300">
+                <span id="modern-header-sync-dot" class="w-2 h-2 rounded-full"></span>
+                <span id="modern-header-sync-text">Synced</span>
+            </div>
+
+            <button type="button" onclick="window.toggleLokalexUiMode && window.toggleLokalexUiMode('classic')" class="px-2 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-[10px] font-black flex items-center gap-1 transition active:scale-95 cursor-pointer" title="Switch back to Classic / Original UI">
+                <i class="fa-solid fa-rotate-left text-[9px]"></i>
+                <span class="hidden xs:inline">Classic UI</span>
+            </button>
+
+            <div class="px-2 py-1 rounded-xl bg-[#18232a] border border-slate-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-slate-200 flex items-center gap-1 shrink-0" title="Current Time">
+                <span>🕒</span>
+                <span id="modern-header-clock">--:--</span>
+            </div>
+
+            <div class="px-2 py-1 rounded-xl bg-[#18232a] border border-slate-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-emerald-400 flex items-center gap-1 shrink-0" title="Battery Status">
+                <span>🔋</span>
+                <span id="modern-header-battery">--%</span>
+            </div>
+
+            <button type="button" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" class="px-2 py-1 rounded-xl bg-[#18232a] hover:bg-sky-950/60 border border-slate-700/80 hover:border-sky-500/50 text-[10px] sm:text-[11px] font-mono font-bold text-sky-400 transition active:scale-95 cursor-pointer shrink-0" title="Picture-in-Picture Floating Mode">
+                [PiP]
+            </button>
+        </div>
+
+        <!-- ================================================================= -->
+        <!-- FACEBOOK-STYLE FLOATING DRILL-DOWN HAMBURGER MENU                 -->
+        <!-- ================================================================= -->
+        <div id="modern-hamburger-popover" class="hidden absolute top-[calc(100%+6px)] left-2.5 w-[310px] sm:w-[340px] max-h-[82dvh] overflow-y-auto bg-[#182229] border border-slate-700 rounded-2xl shadow-2xl p-2.5 z-50 text-slate-100">
+            <!-- Profile Summary Card inside Menu -->
+            <div class="bg-[#11191e] border border-slate-800 rounded-xl p-2.5 mb-2 flex items-center justify-between gap-2">
+                <div onclick="window.closeModernHamburgerMenu(); window.handleHeaderUserClick && window.handleHeaderUserClick();" class="flex items-center gap-2.5 min-w-0 cursor-pointer flex-1">
+                    <img id="modern-menu-avatar" src="https://ui-avatars.com/api/?name=Rider&background=10b981&color=ffffff&bold=true&size=128" class="w-9 h-9 rounded-full object-cover border border-emerald-500 shrink-0" alt="Avatar">
+                    <div class="min-w-0 flex-1">
+                        <div id="modern-menu-rider-name" class="text-xs font-extrabold text-white truncate">Rider</div>
+                        <div id="modern-menu-rider-role" class="text-[10px] text-emerald-400 font-mono">Lokalex Rider</div>
+                    </div>
+                </div>
+                <button type="button" onclick="window.closeModernHamburgerMenu(); window.toggleLokalexUiMode && window.toggleLokalexUiMode('classic');" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-[10px] font-bold text-amber-300 shrink-0 cursor-pointer">
+                    Classic UI
+                </button>
+            </div>
+
+            <!-- MAIN CATEGORIES VIEW -->
+            <div id="modern-menu-main-view" class="flex flex-col gap-1">
+                <button type="button" onclick="window.openModernMenuCategory('settings')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-white/5 transition text-left cursor-pointer">
+                    <span class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-sm">⚙️</span>
+                        <span>
+                            <span class="block text-xs font-bold text-white">Settings</span>
+                            <span class="block text-[10px] text-slate-400">View / Font size, Profile, Security, GCash</span>
+                        </span>
+                    </span>
+                    <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+                </button>
+
+                <button type="button" onclick="window.openModernMenuCategory('actions')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-white/5 transition text-left cursor-pointer">
+                    <span class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-sm">⚡</span>
+                        <span>
+                            <span class="block text-xs font-bold text-white">Actions</span>
+                            <span class="block text-[10px] text-slate-400">Smart Cart, Advance Order, Commission</span>
+                        </span>
+                    </span>
+                    <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+                </button>
+
+                <button type="button" onclick="window.openModernMenuCategory('directories')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-white/5 transition text-left cursor-pointer">
+                    <span class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-sm">📂</span>
+                        <span>
+                            <span class="block text-xs font-bold text-white">Directories</span>
+                            <span class="block text-[10px] text-slate-400">Store, Riders, Customers, Rates</span>
+                        </span>
+                    </span>
+                    <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+                </button>
+
+                <button type="button" onclick="window.openModernMenuCategory('pathfinder')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-white/5 transition text-left cursor-pointer">
+                    <span class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-sm">🧭</span>
+                        <span>
+                            <span class="block text-xs font-bold text-white">Pathfinder</span>
+                            <span class="block text-[10px] text-slate-400">Map Calc, Live GPS, Share Location</span>
+                        </span>
+                    </span>
+                    <i class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
+                </button>
+
+                <button id="modern-menu-admin-row" type="button" onclick="window.openModernMenuCategory('admin')" class="hidden w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30 transition text-left cursor-pointer">
+                    <span class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center text-sm">🛡️</span>
+                        <span>
+                            <span class="block text-xs font-bold text-rose-400">Admin Settings (A–Z)</span>
+                            <span class="block text-[10px] text-slate-400">All 24 Admin & Dispatch Controls</span>
+                        </span>
+                    </span>
+                    <i class="fa-solid fa-chevron-right text-rose-400 text-xs"></i>
+                </button>
+
+                <div class="border-t border-slate-800 my-1"></div>
+
+                <button type="button" onclick="window.closeModernHamburgerMenu(); window.checkForOtaUpdate && window.checkForOtaUpdate(true);" class="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/5 transition text-left cursor-pointer">
+                    <span class="flex items-center gap-2.5">
+                        <span class="w-7 h-7 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center text-xs"><i class="fa-solid fa-cloud-arrow-down"></i></span>
+                        <span class="text-xs font-bold text-slate-200">Check OTA Update <span class="app-version-tracker text-[10px] font-mono text-emerald-400 ml-1"></span></span>
+                    </span>
+                </button>
+
+                <button type="button" onclick="window.closeModernHamburgerMenu(); window.openChangelogModal && window.openChangelogModal();" class="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white/5 transition text-left cursor-pointer">
+                    <span class="flex items-center gap-2.5">
+                        <span class="w-7 h-7 rounded-full bg-amber-500/15 text-amber-400 flex items-center justify-center text-xs"><i class="fa-solid fa-scroll"></i></span>
+                        <span class="text-xs font-bold text-slate-200">Release Notes / Change Log</span>
+                    </span>
+                </button>
+
+                <button type="button" onclick="window.closeModernHamburgerMenu(); window.logout && window.logout();" class="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-red-500/15 text-red-400 transition text-left cursor-pointer">
+                    <span class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-full bg-red-500/15 flex items-center justify-center text-sm">🚪</span>
+                        <span class="text-xs font-bold">Log out</span>
+                    </span>
+                </button>
+            </div>
+
+            <!-- SUBMENU VIEW (NESTED ITEMS ONLY SHOWN WHEN CATEGORY IS SELECTED) -->
+            <div id="modern-menu-sub-view" class="hidden flex-col gap-1">
+                <div class="flex items-center gap-2 pb-2 mb-1 border-b border-slate-800">
+                    <button type="button" onclick="window.backToModernMenuMain()" class="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center text-xs cursor-pointer">
+                        <i class="fa-solid fa-arrow-left"></i>
+                    </button>
+                    <span id="modern-menu-sub-title" class="text-xs font-extrabold text-white">Category</span>
+                </div>
+                <div id="modern-menu-sub-items" class="flex flex-col gap-1 max-h-[60dvh] overflow-y-auto pr-0.5"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ===================================================================== -->
+    <!-- 2. MAIN 4-TAB WORKSPACE BAR                                           -->
+    <!-- ===================================================================== -->
+    <nav class="bg-[#10181d] border-b border-slate-800 grid grid-cols-4 shrink-0">
+        <!-- TAB 1: LIVE CHATS FEED (5 COLOR-CODED COUNT CIRCLES) -->
+        <button id="modern-main-tab-chats" type="button" onclick="window.switchModernWorkspaceTab('chats')" class="px-2 py-2 border-r border-slate-800/90 border-b-2 border-b-emerald-400 bg-emerald-500/10 text-emerald-400 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-left transition cursor-pointer">
+            <span class="text-[11px] sm:text-xs font-extrabold leading-tight">Live Chats Feed</span>
+            <div id="modern-tab-chats-circles" class="flex items-center gap-1 flex-wrap">
+                <span id="modern-circle-inbox" class="hidden w-4 h-4 rounded-full bg-emerald-500 text-black font-mono font-black text-[9px] inline-flex items-center justify-center shadow-xs" title="Uncatered Customers in Inbox">0</span>
+                <span id="modern-circle-catering" class="hidden w-4 h-4 rounded-full bg-amber-400 text-black font-mono font-black text-[9px] inline-flex items-center justify-center shadow-xs" title="Customers Catered by You">0</span>
+                <span id="modern-circle-store" class="hidden w-4 h-4 rounded-full bg-blue-500 text-white font-mono font-black text-[9px] inline-flex items-center justify-center shadow-xs" title="Store Messages">0</span>
+                <span id="modern-circle-applicant" class="hidden w-4 h-4 rounded-full bg-purple-500 text-white font-mono font-black text-[9px] inline-flex items-center justify-center shadow-xs" title="Applicant Messages">0</span>
+                <span id="modern-circle-followup" class="hidden w-4 h-4 rounded-full bg-rose-500 text-white font-mono font-black text-[9px] inline-flex items-center justify-center shadow-xs" title="Follow-Up Messages">0</span>
+            </div>
+        </button>
+
+        <!-- TAB 2: LOKALEX RIDER ROTATIONS (EXACT LINE # POSITION) -->
+        <button id="modern-main-tab-rotations" type="button" onclick="window.switchModernWorkspaceTab('rotations')" class="px-2 py-2 border-r border-slate-800/90 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex items-center justify-between gap-1 text-left transition cursor-pointer">
+            <span class="text-[11px] sm:text-xs font-extrabold leading-tight">Lokalex Rider Rotations</span>
+            <span id="modern-tab-rotations-badge" class="px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 font-mono font-black text-[10px] shrink-0" title="Your exact line position in rotation">--</span>
+        </button>
+
+        <!-- TAB 3: RIDER LOGIN LIST (LOGGED IN / NOT LOGGED IN RATIO) -->
+        <button id="modern-main-tab-logins" type="button" onclick="window.switchModernWorkspaceTab('logins')" class="px-2 py-2 border-r border-slate-800/90 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex items-center justify-between gap-1 text-left transition cursor-pointer">
+            <span class="text-[11px] sm:text-xs font-extrabold leading-tight">Rider Login List</span>
+            <span id="modern-tab-logins-badge" class="px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 font-mono font-black text-[10px] shrink-0" title="Logged In / Not Logged In">
+                <span class="text-emerald-400">0</span>/<span class="text-rose-400">0</span>
+            </span>
+        </button>
+
+        <!-- TAB 4: CATERED CUSTOMER LIST -->
+        <button id="modern-main-tab-catered" type="button" onclick="window.switchModernWorkspaceTab('catered')" class="px-2 py-2 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex items-center justify-between gap-1 text-left transition cursor-pointer">
+            <span class="text-[11px] sm:text-xs font-extrabold leading-tight">Catered Customer List</span>
+            <span id="modern-tab-catered-badge" class="px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-200 font-mono font-black text-[10px] shrink-0">0</span>
+        </button>
+    </nav>
+
+    <!-- ===================================================================== -->
+    <!-- 3. WORKSPACE BODY (4 PANELS)                                          -->
+    <!-- ===================================================================== -->
+    <div class="flex-1 min-h-0 flex flex-col overflow-hidden relative">
+
+        <!-- ================================================================= -->
+        <!-- PANEL 1: LIVE CHATS FEED (CATEGORIES + SPLIT LEFT/RIGHT PANE)     -->
+        <!-- ================================================================= -->
+        <div id="modern-panel-chats" class="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <!-- Message Categories Bar -->
+            <div class="bg-[#121a1f] border-b border-slate-800 px-2.5 py-1.5 flex flex-col gap-1.5 shrink-0">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[10px] font-black uppercase tracking-wider text-sky-400">Message Categories</span>
+                        <button type="button" onclick="window.openRiderChatSourcesModal && window.openRiderChatSourcesModal()" class="px-1.5 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[9.5px] font-bold text-slate-300 flex items-center gap-1 cursor-pointer" title="Filter Chat Sources">
+                            <i class="fa-solid fa-sliders text-[9px] text-sky-400"></i> Sources
+                        </button>
+                        <button id="modern-sources-lock-btn" type="button" onclick="window.toggleRiderChannelBarLock && window.toggleRiderChannelBarLock(event)" class="px-1.5 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-400 text-[9.5px] font-bold flex items-center gap-1 cursor-pointer transition active:scale-95 shrink-0" title="Toggle Lock for Sources & Filters">
+                            <i id="modern-sources-lock-icon" class="fa-solid fa-lock text-[8.5px]"></i>
+                            <span id="modern-sources-lock-text">Locked</span>
+                        </button>
+                        <button type="button" onclick="window.forceRefreshLiveChatsFeed && window.forceRefreshLiveChatsFeed()" class="px-1.5 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[9.5px] font-bold text-emerald-400 flex items-center gap-1 cursor-pointer" title="Refresh Chats">
+                            <i class="fa-solid fa-arrows-rotate text-[9px]"></i>
+                        </button>
+                    </div>
+                    <div class="relative flex-1 max-w-[230px] sm:max-w-[280px]">
+                        <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]"></i>
+                        <input id="modern-chat-search-input" type="text" oninput="window.handleModernChatSearch && window.handleModernChatSearch(this.value)" placeholder="Search customer, phone, message..." class="w-full bg-[#0b1114] border border-slate-700 focus:border-emerald-500 rounded-lg pl-7 pr-6 py-1 text-[11px] text-white outline-none">
+                        <button id="modern-chat-search-clear" type="button" onclick="window.handleModernChatSearch && window.handleModernChatSearch('')" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-[10px] cursor-pointer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 6 Category Pills -->
+                <div class="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5" style="touch-action: pan-x; -webkit-overflow-scrolling: touch;">
+                    <button id="modern-cat-inbox" type="button" onclick="window.selectModernChatCategory('inbox')" class="px-2.5 py-1 rounded-lg border border-emerald-500/50 bg-emerald-500/15 text-white text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
+                        <span>Inbox</span>
+                        <span id="modern-cat-badge-inbox" class="hidden w-4 h-4 rounded-full bg-emerald-500 text-black font-mono font-black text-[9px] inline-flex items-center justify-center">0</span>
+                    </button>
+
+                    <button id="modern-cat-catering" type="button" onclick="window.selectModernChatCategory('catering')" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
+                        <span>Catering</span>
+                        <span id="modern-cat-badge-catering" class="hidden w-4 h-4 rounded-full bg-amber-400 text-black font-mono font-black text-[9px] inline-flex items-center justify-center">0</span>
+                    </button>
+
+                    <button id="modern-cat-stores" type="button" onclick="window.selectModernChatCategory('stores')" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
+                        <span>Store</span>
+                        <span id="modern-cat-badge-stores" class="hidden w-4 h-4 rounded-full bg-blue-500 text-white font-mono font-black text-[9px] inline-flex items-center justify-center">0</span>
+                    </button>
+
+                    <button id="modern-cat-followup" type="button" onclick="window.selectModernChatCategory('followup')" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
+                        <span>Follow Up</span>
+                        <span id="modern-cat-badge-followup" class="hidden w-4 h-4 rounded-full bg-rose-500 text-white font-mono font-black text-[9px] inline-flex items-center justify-center">0</span>
+                    </button>
+
+                    <!-- Done has NO badge count per specification (any customer messaging from Done moves to Inbox) -->
+                    <button id="modern-cat-done" type="button" onclick="window.selectModernChatCategory('done')" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
+                        <span>Done</span>
+                    </button>
+
+                    <button id="modern-cat-applicant" type="button" onclick="window.selectModernChatCategory('applicant')" class="px-2.5 py-1 rounded-lg border border-transparent hover:border-slate-700 text-slate-300 text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
+                        <span>Applicant</span>
+                        <span id="modern-cat-badge-applicant" class="hidden w-4 h-4 rounded-full bg-purple-500 text-white font-mono font-black text-[9px] inline-flex items-center justify-center">0</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Split Grid: Left Customer List + Right Active Chat Room -->
+            <div class="flex-1 min-h-0 grid grid-cols-[135px_1fr] sm:grid-cols-[210px_1fr] md:grid-cols-[250px_1fr] overflow-hidden">
+                <!-- LEFT COLUMN: CUSTOMER TITLE CARDS WITH SECRET SWIPE MENU -->
+                <div id="modern-chat-left-list" class="border-r border-slate-800 bg-[#0e1519] overflow-y-auto flex flex-col divide-y divide-slate-800/70" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;">
+                    <div class="text-slate-500 italic text-center py-8 px-2 text-[11px]">Loading chats...</div>
+                </div>
+
+                <!-- RIGHT COLUMN: EMBEDDED LIVE CUSTOMER CHAT ROOM -->
+                <div id="modern-chat-right-room" class="flex-1 min-h-0 flex flex-col bg-[#0b1114] relative overflow-hidden">
+                    <!-- Chat Room Header -->
+                    <div class="bg-[#121a1f] border-b border-slate-800 px-3 py-2 flex items-center justify-between gap-2 shrink-0 relative z-20">
+                        <div class="flex items-center gap-2 min-w-0 flex-1">
+                            <div id="modern-chat-room-avatar" onclick="window.viewCurrentCustomerPhoto && window.viewCurrentCustomerPhoto()" class="w-8 h-8 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center overflow-hidden shrink-0 cursor-pointer border border-emerald-400/50" title="View customer photo">
+                                CU
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-1.5 min-w-0">
+                                    <span id="modern-chat-room-title" onclick="window.promptRenameCustomerChat && window.promptRenameCustomerChat()" class="font-extrabold text-xs sm:text-sm text-white truncate cursor-pointer hover:text-emerald-400 transition" title="Tap to rename customer">Select a customer</span>
+                                    <button id="modern-chat-info-btn" type="button" onclick="window.showCustomerDetails && window.showCustomerDetails()" class="hidden w-5 h-5 rounded-full bg-sky-500/20 text-sky-400 hover:bg-sky-500 hover:text-white text-[10px] items-center justify-center transition cursor-pointer shrink-0" title="Customer Details & Directory Link">
+                                        <i class="fa-solid fa-circle-info"></i>
+                                    </button>
+                                </div>
+                                <div id="modern-chat-room-subtitle" class="text-[10px] text-slate-400 truncate">Tap any customer on the left to read & reply</div>
+                            </div>
+                        </div>
+
+                        <!-- Top-Right [chat menu ▾] Dropdown -->
+                        <div class="relative shrink-0">
+                            <button id="modern-chat-menu-btn" type="button" onclick="window.toggleModernChatMenuDropdown && window.toggleModernChatMenuDropdown(event)" class="px-2.5 py-1 rounded-xl bg-[#18232a] hover:bg-slate-800 border border-slate-600 text-slate-100 text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition active:scale-95">
+                                <span>chat menu</span>
+                                <i class="fa-solid fa-caret-down text-[10px]"></i>
+                            </button>
+
+                            <div id="modern-chat-menu-dropdown" class="hidden absolute right-0 top-[calc(100%+6px)] w-44 bg-[#182229] border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-0.5">
+                                <div class="text-[9.5px] font-bold text-slate-400 px-2.5 py-1 border-b border-slate-800 mb-0.5">Chat Menu Options</div>
+                                <button type="button" onclick="window.closeModernPopovers(); window.caterCurrentChatCustomer && window.caterCurrentChatCustomer();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-extrabold text-emerald-400 flex items-center gap-2 cursor-pointer">
+                                    <span>• Cater</span>
+                                </button>
+                                <button type="button" id="modern-chat-force-cater-btn" onclick="window.closeModernPopovers(); window.openAdminForceCaterFromChat && window.openAdminForceCaterFromChat();" class="hidden w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-amber-500/15 text-xs font-extrabold text-amber-400 flex items-center gap-2 cursor-pointer">
+                                    <span>• Force Cater to Rider</span>
+                                </button>
+                                <button type="button" onclick="window.closeModernPopovers(); window.markCustomerChatAsUnread && window.markCustomerChatAsUnread();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-bold text-slate-200 flex items-center gap-2 cursor-pointer">
+                                    <span>• Unread</span>
+                                </button>
+                                <button type="button" onclick="window.closeModernPopovers(); window.markThreadUndone && window.markThreadUndone();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-bold text-slate-200 flex items-center gap-2 cursor-pointer">
+                                    <span>• Undone</span>
+                                </button>
+                                <button type="button" onclick="window.closeModernPopovers(); window.toggleThreadApplicant && window.toggleThreadApplicant();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-bold text-purple-300 flex items-center gap-2 cursor-pointer">
+                                    <span>• Applicant</span>
+                                </button>
+                                <button type="button" onclick="window.closeModernPopovers(); window.markThreadFollowUp && window.markThreadFollowUp();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-bold text-amber-300 flex items-center gap-2 cursor-pointer">
+                                    <span>• Follow up</span>
+                                </button>
+                                <button type="button" onclick="window.closeModernPopovers(); window.completeCatering && window.completeCatering();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-extrabold text-sky-400 flex items-center gap-2 cursor-pointer">
+                                    <span>• Done</span>
+                                </button>
+                                <button type="button" onclick="window.closeModernPopovers(); window.cancelCatering && window.cancelCatering();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-red-500/15 text-xs font-extrabold text-rose-400 flex items-center gap-2 cursor-pointer">
+                                    <span>• Cancel</span>
+                                </button>
+                                <button type="button" onclick="window.closeModernPopovers(); window.clearModernChatRightRoom && window.clearModernChatRightRoom();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-bold text-slate-400 hover:text-white flex items-center gap-2 cursor-pointer border-t border-slate-800/80 mt-0.5 pt-1">
+                                    <span>• Close Thread</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Moveable Floating Cart Button (Bounded inside Right-Hand Chat Room) -->
+                    <button id="modern-floating-cart-btn" type="button" style="right: 14px; bottom: 68px;" class="absolute z-30 px-3 py-2 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-black font-black text-xs shadow-[0_8px_20px_rgba(245,158,11,0.45)] border-2 border-amber-200 flex items-center gap-1.5 cursor-grab active:cursor-grabbing select-none touch-none" title="Drag to move • Tap to open Smart Cart for this customer">
+                        <span>🛒</span>
+                        <span>Cart</span>
+                    </button>
+
+                    <!-- Docked Live Messages Container Host -->
+                    <div id="modern-chat-messages-dock" class="flex-1 min-h-0 flex flex-col overflow-hidden relative">
+                        <!-- Re-parented live chat elements (#rider-chat-presence-banner, #rider-chat-lock-banner, #quick-replies-drawer, #rider-chat-messages-container) mount here when Modern UI is active -->
+                    </div>
+
+                    <!-- Bottom Unified Composer Bar: [menu] + Multi-line Textarea + [Send] -->
+                    <div class="p-2 bg-[#121a1f] border-t border-slate-800 shrink-0 relative z-20">
+                        <!-- Composer [menu] Pop-up -->
+                        <div id="modern-composer-menu-popup" class="hidden absolute left-2.5 bottom-[calc(100%+6px)] w-56 bg-[#182229] border border-slate-700 rounded-xl shadow-2xl p-1.5 z-50 flex flex-col gap-0.5">
+                            <div class="text-[9.5px] font-bold text-slate-400 px-2.5 py-1 border-b border-slate-800 mb-0.5">Composer Tools</div>
+                            <button type="button" onclick="window.closeModernPopovers(); window.toggleQuickReplies && window.toggleQuickReplies();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-bold text-amber-300 flex items-center gap-2 cursor-pointer">
+                                <span>• Quick Response</span>
+                            </button>
+                            <button type="button" onclick="window.closeModernPopovers(); window.openStoreMenuPickerFromChat && window.openStoreMenuPickerFromChat();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-bold text-orange-300 flex items-center gap-2 cursor-pointer">
+                                <span>• Store Menu</span>
+                            </button>
+                            <button type="button" onclick="window.closeModernPopovers(); window.openFareRatePickerFromChat && window.openFareRatePickerFromChat();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-bold text-emerald-300 flex items-center gap-2 cursor-pointer">
+                                <span>• Delivery Rates</span>
+                            </button>
+                            <button type="button" onclick="window.closeModernPopovers(); window.promptImageAttachmentSource && window.promptImageAttachmentSource();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-bold text-sky-300 flex items-center gap-2 cursor-pointer">
+                                <span>• Upload Photo/Video/File</span>
+                            </button>
+                            <button type="button" onclick="window.closeModernPopovers(); window.sendChatLocationPin && window.sendChatLocationPin();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-bold text-rose-300 flex items-center gap-2 cursor-pointer">
+                                <span>• Send rider location pin</span>
+                            </button>
+                        </div>
+
+                        <div class="flex items-end gap-1.5 border border-slate-600 rounded-xl p-1.5 bg-[#0b1114]">
+                            <button id="modern-composer-menu-btn" type="button" onclick="window.toggleModernComposerMenu && window.toggleModernComposerMenu(event)" class="px-2.5 py-1.5 rounded-lg bg-[#18232a] hover:bg-slate-800 border border-slate-600 text-slate-200 text-xs font-bold shrink-0 cursor-pointer transition active:scale-95">
+                                menu
+                            </button>
+
+                            <textarea id="rider-cust-chat-input" rows="1" placeholder="Type message..." oninput="window.handleRiderChatInputDraft && window.handleRiderChatInputDraft(this.value, this); window.handleChatTyping && window.handleChatTyping(window.getActiveRiderChatCustId && window.getActiveRiderChatCustId(), this.value.trim().length > 0);" onblur="window.handleChatTyping && window.handleChatTyping(window.getActiveRiderChatCustId && window.getActiveRiderChatCustId(), false);" onkeydown="if((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.sendRiderChatMessage && window.sendRiderChatMessage(); }" class="flex-1 min-w-0 bg-transparent text-xs text-white placeholder-slate-500 outline-none resize-none max-h-24 overflow-y-auto px-1.5 py-1 leading-relaxed"></textarea>
+
+                            <button type="button" onclick="window.sendRiderChatMessage && window.sendRiderChatMessage()" class="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs shrink-0 cursor-pointer transition active:scale-95 shadow-xs">
+                                Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================================================================= -->
+        <!-- PANEL 2: LOKALEX RIDER ROTATIONS (3 COLUMNS: AVAIL, CATER, BREAK) -->
+        <!-- ================================================================= -->
+        <div id="modern-panel-rotations" class="hidden flex-1 min-h-0 flex flex-col p-2.5 gap-2.5 overflow-hidden">
+            <!-- Modern Lineup Supervisory Toolbar (Rendered dynamically for Admin or TLs with permissions) -->
+            <div id="modern-rot-admin-toolbar" class="hidden shrink-0 flex items-center justify-between gap-2 p-2 bg-[#121a1f] border border-slate-800 rounded-2xl overflow-x-auto no-scrollbar shadow-xs" style="touch-action: pan-x; -webkit-overflow-scrolling: touch;"></div>
+
+            <div class="flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-3 gap-2.5 overflow-y-auto sm:overflow-hidden pr-0.5" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;">
+                <!-- Column 1: Available -->
+                <div class="bg-[#121a1f] border border-emerald-500/40 rounded-2xl p-3 flex flex-col sm:min-h-0 sm:h-full shrink-0 sm:shrink">
+                    <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 shrink-0">
+                        <span class="text-xs font-black text-emerald-400 uppercase tracking-wide flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Available
+                        </span>
+                        <span id="modern-rot-avail-count" class="text-[10px] font-mono font-bold text-slate-400">0 riders</span>
+                    </div>
+                    <div id="modern-rot-avail-list" class="flex flex-col gap-1.5 sm:flex-1 sm:min-h-0 sm:overflow-y-auto pr-0.5" style="touch-action: pan-y; -webkit-overflow-scrolling: touch;"></div>
+                </div>
+
+                <!-- Column 2: Catering -->
+                <div class="bg-[#121a1f] border border-amber-500/40 rounded-2xl p-3 flex flex-col sm:min-h-0 sm:h-full shrink-0 sm:shrink">
+                    <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 shrink-0">
+                        <span class="text-xs font-black text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-amber-400"></span> Catering
+                        </span>
+                        <span id="modern-rot-cater-count" class="text-[10px] font-mono font-bold text-slate-400">0 active</span>
+                    </div>
+                    <div id="modern-rot-cater-list" class="flex flex-col gap-2 sm:flex-1 sm:min-h-0 sm:overflow-y-auto pr-0.5" style="touch-action: pan-y; -webkit-overflow-scrolling: touch;"></div>
+                </div>
+
+                <!-- Column 3: Break -->
+                <div class="bg-[#121a1f] border border-sky-500/40 rounded-2xl p-3 flex flex-col sm:min-h-0 sm:h-full shrink-0 sm:shrink">
+                    <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 shrink-0">
+                        <span class="text-xs font-black text-sky-400 uppercase tracking-wide flex items-center gap-1.5">
+                            <span>☕</span> Break
+                        </span>
+                        <span id="modern-rot-break-count" class="text-[10px] font-mono font-bold text-slate-400">0 on break</span>
+                    </div>
+                    <div id="modern-rot-break-list" class="flex flex-col gap-1.5 sm:flex-1 sm:min-h-0 sm:overflow-y-auto pr-0.5" style="touch-action: pan-y; -webkit-overflow-scrolling: touch;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================================================================= -->
+        <!-- PANEL 3: RIDER LOGIN LIST (LOGGED IN vs NOT LOGGED IN + PROFILE)  -->
+        <!-- ================================================================= -->
+        <div id="modern-panel-logins" class="hidden flex-1 min-h-0 flex flex-col p-2.5 gap-2.5 overflow-y-auto sm:overflow-hidden" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;">
+            <div class="flex flex-col sm:grid sm:grid-cols-[1.45fr_1fr] gap-2.5 sm:flex-1 sm:min-h-0">
+                <!-- Left Box: Logged IN -->
+                <div class="bg-[#121a1f] border-2 border-rose-500/40 rounded-2xl p-3 flex flex-col sm:min-h-0 sm:h-full shrink-0 sm:shrink">
+                    <div class="grid grid-cols-[1.8fr_0.9fr_0.9fr] sm:grid-cols-[2fr_1fr_1fr] text-[11px] font-black text-rose-400 pb-2 mb-2 border-b border-slate-800 shrink-0">
+                        <span id="modern-login-in-header">Logged IN (0)</span>
+                        <span>Time In</span>
+                        <span>Time Out</span>
+                    </div>
+                    <div id="modern-login-in-list" class="flex flex-col gap-1.5 sm:flex-1 sm:min-h-0 sm:overflow-y-auto pr-0.5" style="touch-action: pan-y; -webkit-overflow-scrolling: touch;"></div>
+                    <div id="modern-login-in-footer" class="pt-2 mt-2 border-t border-slate-800/80 text-[10px] text-slate-400 shrink-0">
+                        Click any rider name to inspect full profile & daily time served.
+                    </div>
+                </div>
+
+                <!-- Right Box: Not Logged In -->
+                <div class="bg-[#121a1f] border-2 border-rose-500/40 rounded-2xl p-3 flex flex-col sm:min-h-0 sm:h-full shrink-0 sm:shrink">
+                    <div class="text-[11px] font-black text-rose-400 pb-2 mb-2 border-b border-slate-800 shrink-0">
+                        <span id="modern-login-out-header">Not Logged In (0):</span>
+                    </div>
+                    <div id="modern-login-out-list" class="flex flex-col gap-1.5 sm:flex-1 sm:min-h-0 sm:overflow-y-auto pr-0.5" style="touch-action: pan-y; -webkit-overflow-scrolling: touch;"></div>
+                    <div id="modern-login-out-footer" class="pt-2 mt-2 border-t border-slate-800/80 text-[10px] text-slate-400 shrink-0">
+                        Not Logged In: 0 Riders
+                    </div>
+                </div>
+            </div>
+
+            <!-- Clickable Rider Profile Inspector Card -->
+            <div id="modern-rider-profile-card" class="bg-[#121a1f] border border-emerald-500/40 rounded-2xl p-3 shrink-0">
+                <div class="text-[11px] text-slate-400 text-center py-1">
+                    👆 Tap any rider name in <strong>Logged IN</strong> or <strong>Not Logged In</strong> above to view their profile picture, contact number, address, catered customers, actual gross income, and daily time served (excluding break time).
+                </div>
+            </div>
+        </div>
+
+        <!-- ================================================================= -->
+        <!-- PANEL 4: CATERED CUSTOMER LIST (TIMESTAMPS + ADMIN VOID + TOTAL)  -->
+        <!-- ================================================================= -->
+        <div id="modern-panel-catered" class="hidden flex-1 min-h-0 flex flex-col p-2.5 overflow-hidden">
+            <div id="modern-catered-list" class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 pr-0.5" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;">
+                <div class="text-slate-500 italic text-center py-8 text-xs">No completed catered customers yet today.</div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- 4. PERSISTENT BOTTOM RIDER STATUS DOCK                                -->
+    <!-- ===================================================================== -->
+    <footer class="bg-[#121a1f] border-t border-slate-800 px-2.5 py-2 flex items-center justify-between gap-1.5 shrink-0 z-30">
+        <div class="grid grid-cols-4 gap-1.5 flex-1">
+            <button id="modern-btn-status-avail" type="button" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('Available')" class="py-1.5 px-2 rounded-xl bg-[#18232a] hover:bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-black text-[11px] flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span>Available</span>
+            </button>
+            <button id="modern-btn-status-cater" type="button" onclick="window.promptCateringStatus && window.promptCateringStatus()" class="py-1.5 px-2 rounded-xl bg-[#18232a] hover:bg-amber-500/20 border border-amber-500/40 text-amber-300 font-black text-[11px] flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer">
+                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span>Catering</span>
+            </button>
+            <button id="modern-btn-status-break" type="button" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('Break')" class="py-1.5 px-2 rounded-xl bg-[#18232a] hover:bg-sky-500/20 border border-sky-500/40 text-sky-300 font-black text-[11px] flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer">
+                <span>☕</span>
+                <span>Break</span>
+            </button>
+            <button id="modern-btn-status-end" type="button" onclick="window.triggerStatusWithSlide && window.triggerStatusWithSlide('End')" class="py-1.5 px-2 rounded-xl bg-[#18232a] hover:bg-rose-500/20 border border-rose-500/40 text-rose-400 font-black text-[11px] flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer">
+                <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                <span>End</span>
+            </button>
+        </div>
+
+        <button type="button" onclick="window.openCommissionScreen && window.openCommissionScreen()" class="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 font-mono font-black text-[11px] shrink-0 cursor-pointer transition active:scale-95" title="View Today's Commission & Gross">
+            Gross: <span id="modern-footer-gross">₱0</span>
+        </button>
+    </footer>
+
+    <!-- QUICK DAY-OFF SELECTOR MODAL FOR MODERN UI -->
+    <div id="modern-quick-dayoff-modal" class="hidden fixed inset-0 z-[99999] bg-black/80 backdrop-blur-xs flex items-center justify-center p-3">
+        <div class="bg-[#182229] border border-teal-500/50 rounded-2xl p-4 w-full max-w-xs shadow-2xl flex flex-col gap-3 animate-in fade-in zoom-in duration-150">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div class="flex items-center gap-2">
+                    <span class="text-base">🏖️</span>
+                    <div>
+                        <h4 class="font-extrabold text-xs text-white">Set Day-Off</h4>
+                        <p id="modern-dayoff-rider-label" class="text-[10px] text-teal-400 font-semibold truncate max-w-[190px]">Rider Name</p>
+                    </div>
+                </div>
+                <button type="button" onclick="window.closeModernQuickDayOffModal && window.closeModernQuickDayOffModal()" class="w-6 h-6 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-xs cursor-pointer">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-1.5">
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(0)" class="modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500/60 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center cursor-pointer">Sunday</button>
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(1)" class="modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500/60 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center cursor-pointer">Monday</button>
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(2)" class="modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500/60 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center cursor-pointer">Tuesday</button>
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(3)" class="modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500/60 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center cursor-pointer">Wednesday</button>
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(4)" class="modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500/60 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center cursor-pointer">Thursday</button>
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(5)" class="modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500/60 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center cursor-pointer">Friday</button>
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(6)" class="modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500/60 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center col-span-2 cursor-pointer">Saturday</button>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-slate-800 gap-2">
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(-1)" class="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 font-bold text-[11px] cursor-pointer">
+                    Clear Day-Off
+                </button>
+                <button type="button" onclick="window.closeModernQuickDayOffModal && window.closeModernQuickDayOffModal(); window.openAdminDayOffSettingsModal && window.openAdminDayOffSettingsModal();" class="text-[10px] text-teal-400 font-bold hover:underline cursor-pointer">
+                    Quotas & Rules ↗
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
 
         <!-- PUBLIC CUSTOMER RESTAURANT MENUS CATALOG VIEW -->
         <section id="view-customer-menus" class="hidden flex flex-col gap-3 pt-2">
@@ -3787,8 +4326,8 @@
         </div>
     </div>
 
-    <!-- DRAGGABLE FLOATING TRIGGER BUBBLE (EDGE-DOCKED) -->
-    <div id="chat-bubble" class="pointer-events-auto relative bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-l-2xl shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing transition-all border-l-2 border-t-2 border-b-2 border-white/20 select-none touch-none">
+    <!-- DRAGGABLE FLOATING TRIGGER BUBBLE (EDGE-DOCKED - HIDDEN) -->
+    <div id="chat-bubble" style="display: none !important;" class="hidden pointer-events-auto relative bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-l-2xl shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing transition-all border-l-2 border-t-2 border-b-2 border-white/20 select-none touch-none">
         <i class="fa-solid fa-comments text-base pointer-events-none"></i>
         <div id="chat-tag-badge" class="hidden absolute -top-1.5 -left-1.5 w-4 h-4 bg-amber-500 text-black text-[9px] font-black rounded-full flex items-center justify-center border-2 border-darkBg animate-bounce shadow-md pointer-events-none">!</div>
         <div id="chat-unread-badge" class="hidden absolute -top-1.5 -left-1.5 min-w-[18px] h-4 px-1 bg-red-600 text-white text-[8px] font-bold rounded-full flex items-center justify-center border-2 border-darkBg shadow-md pointer-events-none">0</div>
@@ -4043,7 +4582,7 @@
         </div>
 
         <!-- CHAT MESSAGES BODY -->
-        <div id="rider-chat-messages-container" class="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain flex flex-col gap-3 bg-gray-50 dark:bg-black/30">
+        <div id="rider-chat-messages-container" class="flex-1 min-h-0 p-4 overflow-y-auto overscroll-contain flex flex-col gap-3 bg-gray-50 dark:bg-black/30" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;">
             <div class="text-center text-gray-400 dark:text-gray-500 italic text-xs py-8">Loading real-time chat history...</div>
         </div>
 
@@ -4097,7 +4636,7 @@
 
             <!-- MESSAGE INPUT ROW: MULTI-LINE TEXTAREA + ALWAYS VISIBLE DEDICATED SEND BUTTON -->
             <div class="flex items-end gap-2 w-full">
-                <textarea id="rider-chat-input" rows="1" placeholder="Type reply..." oninput="this.style.height='auto'; this.style.height=Math.min(this.scrollHeight, 120)+'px'; window.handleRiderChatInputDraft && window.handleRiderChatInputDraft(this.value); window.handleChatTyping && window.handleChatTyping(window.getActiveRiderChatCustId && window.getActiveRiderChatCustId(), this.value.trim().length > 0);" onblur="window.handleChatTyping && window.handleChatTyping(window.getActiveRiderChatCustId && window.getActiveRiderChatCustId(), false);" onkeydown="if((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.sendRiderChatMessage && window.sendRiderChatMessage(); }" class="flex-1 min-w-0 bg-inputBg text-xs rounded-xl px-3 py-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-blue-500 resize-none max-h-28 overflow-y-auto leading-relaxed"></textarea>
+                <textarea id="rider-chat-input" rows="1" placeholder="Type reply..." oninput="window.handleRiderChatInputDraft && window.handleRiderChatInputDraft(this.value, this); window.handleChatTyping && window.handleChatTyping(window.getActiveRiderChatCustId && window.getActiveRiderChatCustId(), this.value.trim().length > 0);" onblur="window.handleChatTyping && window.handleChatTyping(window.getActiveRiderChatCustId && window.getActiveRiderChatCustId(), false);" onkeydown="if((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.sendRiderChatMessage && window.sendRiderChatMessage(); }" class="flex-1 min-w-0 bg-inputBg text-xs rounded-xl px-3 py-2.5 border border-gray-300 dark:border-gray-700 outline-none text-gray-900 dark:text-white focus:border-blue-500 resize-none max-h-28 overflow-y-auto leading-relaxed"></textarea>
 
                 <button type="button" id="rider-cust-send-btn" onclick="window.sendRiderChatMessage && window.sendRiderChatMessage()" class="w-10 h-10 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-md transition active:scale-90 flex items-center justify-center text-sm shrink-0 cursor-pointer" title="Send Message">
                     <i class="fa-solid fa-paper-plane"></i>
@@ -5894,6 +6433,7 @@
                 <select id="edit-rider-usertype-select" class="w-full bg-inputBg text-xs font-bold text-amber-600 dark:text-amber-300 rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none mt-1">
                     <option value="rider">Rider (Standard Member)</option>
                     <option value="tl">TL (Team Lead)</option>
+                    <option value="inspector">Inspector (Admin Access / Not in Rotation)</option>
                     <option value="admin">Admin (Full Access)</option>
                 </select>
             </div>
@@ -6039,6 +6579,13 @@
                         <i class="fa-solid fa-phone-flip text-[9px]"></i> Call
                     </a>
                 </div>
+            </div>
+
+            <div class="flex justify-between items-center bg-darkBg/50 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800/80 gap-2">
+                <span class="text-gray-500 dark:text-gray-400 font-bold flex items-center gap-1.5 shrink-0">
+                    <i class="fa-solid fa-location-dot text-rose-500"></i> Address:
+                </span>
+                <span id="rider-info-address" class="font-bold text-right text-gray-900 dark:text-gray-200 truncate">Not Set</span>
             </div>
 
             <div class="bg-darkBg/50 p-2.5 rounded-xl border border-gray-200 dark:border-gray-800/80 flex flex-col gap-1">
@@ -7099,6 +7646,12 @@
         <input type="hidden" id="admin-cater-target-rider-name" value="">
 
         <div class="flex flex-col gap-2.5 text-left text-xs">
+            <div>
+                <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase tracking-wider block mb-1">Target Rider</label>
+                <select id="admin-cater-rider-select" onchange="const opt = this.options[this.selectedIndex]; if (opt && opt.value) { document.getElementById('admin-cater-target-rider-id').value = opt.value; document.getElementById('admin-cater-target-rider-name').value = opt.dataset.name || ''; }" class="w-full bg-inputBg text-xs rounded-xl p-2.5 outline-none border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white font-bold">
+                    <option value="">-- Select Target Rider --</option>
+                </select>
+            </div>
             <div>
                 <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase tracking-wider block mb-1">Select Customer (Inbox)</label>
                 <select id="admin-cater-customer-select" onchange="if(this.value) document.getElementById('admin-cater-cust-name').value = this.value;" class="w-full bg-inputBg text-xs rounded-xl p-2.5 outline-none border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white font-bold">
@@ -8356,6 +8909,21 @@
             <div id="prof-username-wrapper">
                 <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Username *</label>
                 <input type="text" id="prof-username-input" placeholder="e.g. store_name or user123" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-blue-600 dark:text-blue-400 font-mono font-bold mt-1">
+            </div>
+
+            <!-- ACCOUNT TYPE (ROLE & PERMISSIONS) -->
+            <div id="prof-usertype-wrapper" class="hidden">
+                <div class="flex justify-between items-center">
+                    <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Account Type</label>
+                    <span id="prof-usertype-badge" class="text-[9px] font-bold px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-700">Rider</span>
+                </div>
+                <select id="prof-usertype-select" class="w-full bg-inputBg text-xs font-bold text-amber-600 dark:text-amber-300 rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none mt-1">
+                    <option value="rider">Rider (Standard Member)</option>
+                    <option value="tl">TL (Team Lead)</option>
+                    <option value="inspector">Inspector (Admin Access / Not in Rotation)</option>
+                    <option value="admin">Admin (Full Access)</option>
+                </select>
+                <p id="prof-usertype-hint" class="text-[9.5px] text-gray-400 mt-0.5 hidden">Only Admins can modify account roles.</p>
             </div>
 
             <!-- CONTACT NUMBER (WITH OTP ENFORCEMENT) -->

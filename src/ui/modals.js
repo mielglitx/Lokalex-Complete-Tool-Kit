@@ -89,7 +89,9 @@ import {
     handleConfirmTypeInput,
     submitConfirmTypeModal,
     onSlideProgress,
-    onSlideEnd
+    onSlideEnd,
+    showCustomPrompt,
+    closeCustomPromptModal
 } from './modals/systemModals.js';
 
 import {
@@ -160,7 +162,9 @@ export {
     handleConfirmTypeInput,
     submitConfirmTypeModal,
     onSlideProgress,
-    onSlideEnd
+    onSlideEnd,
+    showCustomPrompt,
+    closeCustomPromptModal
 };
 
 // ============================================================================
@@ -224,4 +228,6 @@ if (typeof window !== 'undefined') {
     window.submitConfirmTypeModal = submitConfirmTypeModal;
     window.onSlideProgress = onSlideProgress;
     window.onSlideEnd = onSlideEnd;
+    window.showCustomPrompt = showCustomPrompt;
+    window.closeCustomPromptModal = closeCustomPromptModal;
 }

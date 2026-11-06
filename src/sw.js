@@ -54,6 +54,29 @@ registerRoute(
     })
 );
 
+// 5. Cache static images, icons, and audio assets locally (Zero cellular data on repeat views)
+registerRoute(
+    ({ request, url }) => request.destination === 'image' || 
+                          request.destination === 'audio' ||
+                          url.pathname.endsWith('.png') ||
+                          url.pathname.endsWith('.jpg') ||
+                          url.pathname.endsWith('.jpeg') ||
+                          url.pathname.endsWith('.webp') ||
+                          url.pathname.endsWith('.svg'),
+    new CacheFirst({
+        cacheName: 'static-media-cache',
+        plugins: [
+            new CacheableResponsePlugin({
+                statuses: [0, 200]
+            }),
+            new ExpirationPlugin({
+                maxEntries: 150,
+                maxAgeSeconds: 30 * 24 * 60 * 60 // 30 days
+            })
+        ]
+    })
+);
+
 // 4. Firebase Background Messaging & Push Notifications
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');

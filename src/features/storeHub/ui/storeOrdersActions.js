@@ -2,6 +2,7 @@
 import { db } from '../../../config/firebase.js';
 import { appState } from '../../../store/state.js';
 import { showToast, showSideNotification } from '../../../ui/notifications.js';
+import { showCustomPrompt } from '../../../ui/modals.js';
 import { 
     storeHubState, 
     cleanFirebasePathKey, 
@@ -97,9 +98,21 @@ export async function acceptStoreOrderWithPrepTime(orderId, prepMinutes) {
     }
 }
 
-export function promptCustomPrepTime(orderId) {
-    const customTime = prompt("Enter preparation time in minutes (e.g. 20):", "20");
-    const parsed = parseInt(customTime);
+export async function promptCustomPrepTime(orderId) {
+    const promptFn = typeof showCustomPrompt === 'function' ? showCustomPrompt : (typeof window !== 'undefined' && window.showCustomPrompt);
+    const customTime = promptFn
+        ? await promptFn({
+            title: "Preparation Time",
+            subtitle: "Enter kitchen preparation time in minutes:",
+            defaultValue: "20",
+            placeholder: "20",
+            inputType: "number",
+            icon: "fa-stopwatch",
+            confirmText: "Accept Order"
+        })
+        : prompt("Enter preparation time in minutes (e.g. 20):", "20");
+
+    const parsed = parseInt(customTime, 10);
     if (!isNaN(parsed) && parsed > 0) {
         acceptStoreOrderWithPrepTime(orderId, parsed);
     }

@@ -43,9 +43,9 @@ export function promptCateringStatus() {
 
     const myRecord = rosterMembers.find(m => {
         const mId = (m.telegramId || m.id || "").toString().trim();
-        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        const mName = (m.riderName || m.name || "").toString().trim();
         if (currentId && mId && mId === currentId) return true;
-        if (currentName && mName && mName === currentName.toLowerCase()) return true;
+        if (currentName && mName && (currentName.toLowerCase() === mName.toLowerCase() || isRiderMatch(currentName, mName, currentId, mId))) return true;
         return false;
     });
 
@@ -68,8 +68,10 @@ export function promptCateringStatus() {
     if (!canManageRoster() && liveAvailableRiders.length > 0) {
         const firstAvailable = liveAvailableRiders[0];
         const firstId = (firstAvailable?.telegramId || firstAvailable?.id || "").toString().trim();
-        const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
-        const firstRiderName = firstAvailable.riderName || firstAvailable.name || 'Rider';
+        const firstName = (firstAvailable?.riderName || firstAvailable?.name || "").toString().trim();
+        const firstGross = getRiderTodayGross(firstName, firstId);
+        const firstRiderName = firstName || 'Rider';
+        const isFirstAvailable = (firstId && myId && firstId === myId) || isRiderMatch(myName, firstName, myId, firstId);
 
         if (amIAlreadyCatering) {
             showToast(`🚫 There is an available rider in queue: ${firstRiderName} (₱${firstGross.toFixed(0)}) is 1st in line.`);
@@ -83,9 +85,13 @@ export function promptCateringStatus() {
             });
             return;
         }
-        if (firstId !== myId) {
-            const myGross = getRiderTodayGross(myRecord?.riderName || myRecord?.name, myId);
-            const myIndex = liveAvailableRiders.findIndex(m => (m.telegramId || m.id || "").toString().trim() === myId);
+        if (!isFirstAvailable) {
+            const myGross = getRiderTodayGross(myName, myId);
+            const myIndex = liveAvailableRiders.findIndex(m => {
+                const mId = (m.telegramId || m.id || "").toString().trim();
+                const mName = (m.riderName || m.name || "").toString().trim();
+                return (mId && myId && mId === myId) || isRiderMatch(myName, mName, myId, mId);
+            });
             showToast(`⚠️ 1st in line: ${firstRiderName} (Gross: ₱${firstGross.toFixed(0)}) vs Yours (₱${myGross.toFixed(0)}).`);
             openQueueNoticeModal({
                 firstRiderName: firstRiderName,
@@ -195,7 +201,10 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
 
         const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
         const liveAvailableRiders = sortAvailableRidersByGross(liveRoster.filter(m => m.status === 'Available'));
-        const isFirstAvailable = liveAvailableRiders.length > 0 && (liveAvailableRiders[0]?.telegramId || liveAvailableRiders[0]?.id || "").toString().trim() === resolvedId;
+        const firstAvailable = liveAvailableRiders.length > 0 ? liveAvailableRiders[0] : null;
+        const firstId = (firstAvailable?.telegramId || firstAvailable?.id || "").toString().trim();
+        const firstName = (firstAvailable?.riderName || firstAvailable?.name || "").toString().trim();
+        const isFirstAvailable = Boolean(firstAvailable && ((firstId && resolvedId && firstId === resolvedId) || isRiderMatch(myName, firstName, resolvedId, firstId)));
 
         const hasPenalty = penaltySelect && parseInt(penaltySelect.value) > 0;
 
@@ -205,9 +214,8 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
 
         if (!isPrivileged && !isAlreadyInList && liveAvailableRiders.length > 0) {
             closeCateringModal();
-            const firstAvailable = liveAvailableRiders[0];
-            const firstGross = getRiderTodayGross(firstAvailable.riderName || firstAvailable.name, firstAvailable.telegramId || firstAvailable.id);
-            const firstRiderName = firstAvailable.riderName || firstAvailable.name || 'Rider';
+            const firstGross = getRiderTodayGross(firstName, firstId);
+            const firstRiderName = firstName || 'Rider';
 
             if (amIAlreadyCatering) {
                 showToast(`🚫 There is an available rider in queue: ${firstRiderName} (₱${firstGross.toFixed(0)}) is 1st in line. Additional bookings cannot be taken while other riders are available.`);
@@ -224,7 +232,11 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
 
             if (!isFirstAvailable) {
                 const myGross = getRiderTodayGross(myName, resolvedId);
-                const myIndex = liveAvailableRiders.findIndex(m => (m.telegramId || m.id || "").toString().trim() === resolvedId);
+                const myIndex = liveAvailableRiders.findIndex(m => {
+                    const mId = (m.telegramId || m.id || "").toString().trim();
+                    const mName = (m.riderName || m.name || "").toString().trim();
+                    return (mId && resolvedId && mId === resolvedId) || isRiderMatch(myName, mName, resolvedId, mId);
+                });
                 showToast(`🚫 Someone is ahead of you in queue: ${firstRiderName} (₱${firstGross.toFixed(0)}) is 1st in line.`);
                 openQueueNoticeModal({
                     firstRiderName: firstRiderName,
@@ -244,6 +256,11 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                 showToast(`⚠️ Reached maximum limit of ${limitCheck.maxAllowed} active catering customer(s)${modeLabel}!`);
                 return false;
             }
+        }
+
+        if (!navigator.onLine) {
+            showToast("⚠️ Cannot cater: You are offline. Check internet connection and try again.");
+            return false;
         }
 
         closeCateringModal();
@@ -276,68 +293,37 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
             };
 
             forcedCatersMap[cleanCustKey] = forcedPayload;
-
-            if (myRecord) {
-                myRecord.forcedCaters = forcedCatersMap;
-                myRecord.forcedBy = myName;
-                myRecord.isForcedCater = true;
-            }
-
-            if (db) {
-                db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustKey}`).set(forcedPayload).catch(() => {});
-                db.ref(`roster/${resolvedId}`).update({
-                    forcedBy: myName,
-                    isForcedCater: true
-                }).catch(() => {});
-            }
         } else if (!isForcedByRole && resolvedId && cleanCustKey) {
             delete forcedCatersMap[cleanCustKey];
-
-            if (db) {
-                db.ref(`roster/${resolvedId}/forcedCaters/${cleanCustKey}`).remove().catch(() => {});
-            }
         }
 
         const hasAnyForcedCaters = Object.keys(forcedCatersMap).length > 0;
-        if (!hasAnyForcedCaters && myRecord) {
-            myRecord.forcedCaters = null;
-            myRecord.forcedBy = null;
-            myRecord.isForcedCater = false;
-            if (db && resolvedId) {
-                db.ref(`roster/${resolvedId}`).update({
-                    forcedBy: null,
-                    isForcedCater: false
-                }).catch(() => {});
-            }
+
+        try {
+            await updateRosterStatusData(
+                'Catering', 
+                existingCustomers.join(', '), 
+                existingTimes.join(', '), 
+                myRecord ? parseQueueTime(myRecord.queueTime) : Date.now(),
+                resolvedId,
+                myName,
+                [],
+                false,
+                "",
+                { 
+                    forcedCaters: hasAnyForcedCaters ? forcedCatersMap : null,
+                    forcedBy: hasAnyForcedCaters ? (myRecord?.forcedBy || myName) : null,
+                    isForcedCater: hasAnyForcedCaters
+                }
+            );
+        } catch (err) {
+            console.error('[confirmCateringStatus] Server update failed:', err);
+            try {
+                if (navigator.vibrate) navigator.vibrate([120, 80, 120]);
+            } catch (_) {}
+            showToast(`⚠️ Connection Failed: ${err.message || 'Server did not confirm catering.'} Check signal and try again.`);
+            return false;
         }
-
-        const isStartingShift = !myRecord || !myRecord.status || myRecord.status === 'End';
-
-        if (myRecord) {
-            myRecord.status = 'Catering';
-            myRecord.customerName = existingCustomers.join(', ');
-            myRecord.startTime = existingTimes.join(', ');
-            myRecord.forcedCaters = hasAnyForcedCaters ? forcedCatersMap : null;
-            myRecord.forcedBy = hasAnyForcedCaters ? (myRecord?.forcedBy || myName) : null;
-            myRecord.isForcedCater = hasAnyForcedCaters;
-        }
-
-        await updateRosterStatusData(
-            'Catering', 
-            existingCustomers.join(', '), 
-            existingTimes.join(', '), 
-            myRecord ? parseQueueTime(myRecord.queueTime) : Date.now(),
-            resolvedId,
-            myName,
-            [],
-            isStartingShift,
-            "",
-            { 
-                forcedCaters: hasAnyForcedCaters ? forcedCatersMap : null,
-                forcedBy: hasAnyForcedCaters ? (myRecord?.forcedBy || myName) : null,
-                isForcedCater: hasAnyForcedCaters
-            }
-        );
 
         saveRosterCache();
         updateRosterUI();
@@ -397,37 +383,33 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                     window.renderRiderCustomerChatFeed();
                 }
             } else {
-                db.ref('customerChatMeta').once('value', (snapshot) => {
-                    const chats = snapshot.val();
-                    if (chats) {
-                        Object.keys(chats).forEach(custId => {
-                            const meta = chats[custId]?.metadata || chats[custId] || {};
-                            // If returning customer was previously done or completed, reactivate into catering!
-                            if (meta.status === 'voided') {
-                                const lastVoid = Number(meta.lastUpdated || meta.completedAt || 0);
-                                if (Date.now() - lastVoid < 60000) return;
+                const threadMap = (typeof window.getCachedCustomerThreadsMap === 'function') ? window.getCachedCustomerThreadsMap() : null;
+                if (threadMap && threadMap.size > 0) {
+                    for (const [custId, meta] of threadMap.entries()) {
+                        if (meta.status === 'voided') {
+                            const lastVoid = Number(meta.lastUpdated || meta.completedAt || 0);
+                            if (Date.now() - lastVoid < 60000) continue;
+                        }
+
+                        const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
+                        const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
+                        const fbName = (resolvedFb?.name || "").toLowerCase().trim();
+                        const hasFbName = Boolean(fbName && fbName !== 'customer');
+
+                        const matchesFb = hasFbName && (fbName === cleanSearchName || isCustomerMatch(fbName, cleanSearchName));
+                        const matchesMeta = !hasFbName && (chatCustName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName));
+
+                        if (matchesFb || matchesMeta) {
+                            applyChatCaterUpdate(custId);
+                            if (typeof window.triggerAutoMessageOnCater === 'function') {
+                                window.triggerAutoMessageOnCater(custId, custName, myName);
                             }
-
-                            const chatCustName = (meta.customerName || meta.name || "").toLowerCase().trim();
-                            const resolvedFb = typeof window.getResolvedFbName === 'function' ? window.getResolvedFbName(custId) : null;
-                            const fbName = (resolvedFb?.name || "").toLowerCase().trim();
-                            const hasFbName = Boolean(fbName && fbName !== 'customer');
-
-                            const matchesFb = hasFbName && (fbName === cleanSearchName || isCustomerMatch(fbName, cleanSearchName));
-                            const matchesMeta = !hasFbName && (chatCustName === cleanSearchName || isCustomerMatch(chatCustName, cleanSearchName));
-
-                            if (matchesFb || matchesMeta) {
-                                applyChatCaterUpdate(custId);
-                                if (typeof window.triggerAutoMessageOnCater === 'function') {
-                                    window.triggerAutoMessageOnCater(custId, custName, myName);
-                                }
-                            }
-                        });
-                        if (typeof window.renderRiderCustomerChatFeed === 'function') {
-                            window.renderRiderCustomerChatFeed();
                         }
                     }
-                });
+                    if (typeof window.renderRiderCustomerChatFeed === 'function') {
+                        window.renderRiderCustomerChatFeed();
+                    }
+                }
             }
         }
 

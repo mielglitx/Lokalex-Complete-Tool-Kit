@@ -263,10 +263,19 @@ export function stopFbGraphPolling() {
  * Fetches the newest 15 messages directly from the Facebook Page / Meta edge servers
  * in parallel with Firebase RTDB. Guarantees 0-latency message retrieval even if webhook was delayed.
  */
+export const lastGraphSyncTimeMap = new Map(); // targetCustId -> timestamp
+
 export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = false) {
     const targetCustId = custId || activeRiderChatCustId;
     if (!targetCustId || !String(targetCustId).startsWith('fb_')) return;
     if (isSyncingGraphMessages) return;
+
+    // Throttle automatic Graph API fetches (minimum 3 minutes interval per thread) unless user clicked manual Sync button
+    const now = Date.now();
+    const lastSyncTime = lastGraphSyncTimeMap.get(targetCustId) || 0;
+    if (!showFeedback && (now - lastSyncTime < 180000)) {
+        return;
+    }
 
     const psid = String(targetCustId).replace(/^(?:fb_|messenger_)+/i, '').trim();
     if (!psid || !/^\d+$/.test(psid)) return;
@@ -648,6 +657,7 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
         }
     } finally {
         isSyncingGraphMessages = false;
+        lastGraphSyncTimeMap.set(targetCustId, Date.now());
         if (syncBtn) {
             syncBtn.querySelector('i')?.classList.remove('animate-spin');
         }
@@ -667,7 +677,6 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
     setIsLoadingRiderHistory(false);
     setIsInitialScrollDone(false);
     setLastPaginationRequestTime(0);
-    loadedRiderMsgsMap.clear();
 
     // Clean up any previous chat listeners
     if (activeRiderChatListener) {
@@ -752,153 +761,10 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         syncCurrentThreadFromMetaGraph(custId, false).catch(() => {});
     }
 
-    // Realtime Firebase connection: strictly load only the last 10 messages for lightning-fast startup ordered by timestamp
-    const messagesQuery = db.ref(`customerChats/${custId}/messages`).orderByChild('timestamp').limitToLast(RIDER_CHAT_BATCH_SIZE);
-    setActiveRiderChatListener(messagesQuery);
-
-    let skeletonTimeout = setTimeout(() => {
-        if (activeRiderChatCustId === custId && loadedRiderMsgsMap.size === 0) {
-            const skel = document.getElementById('rider-chat-loading-skeleton');
-            if (skel) {
-                db.ref(`customerChats/${custId}/messages`).limitToLast(RIDER_CHAT_BATCH_SIZE).once('value').then(fallbackSnap => {
-                    if (activeRiderChatCustId !== custId) return;
-                    const fData = fallbackSnap.val();
-                    if (fData && Object.keys(fData).length > 0 && loadedRiderMsgsMap.size === 0) {
-                        const allF = Object.entries(fData).map(([k, m]) => ({ id: k, ...m })).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-                        allF.forEach(m => loadedRiderMsgsMap.set(m.id, m));
-                        renderRiderMessages(container, loadedRiderMsgsMap, false, true, 0, activeCustData);
-                        setIsInitialScrollDone(true);
-                    } else if (loadedRiderMsgsMap.size === 0) {
-                        container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
-                    }
-                }).catch(() => {
-                    if (loadedRiderMsgsMap.size === 0) {
-                        container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
-                    }
-                });
-            }
-        }
-    }, 3000);
-
-    // Authoritative check & synchronization of newest incoming messages on thread open
-    messagesQuery.once('value', (snapshot) => {
-        if (skeletonTimeout) {
-            clearTimeout(skeletonTimeout);
-            skeletonTimeout = null;
-        }
-        if (activeRiderChatCustId !== custId) return;
-        const data = snapshot.val();
-        if (!data || Object.keys(data).length === 0) {
-            if (loadedRiderMsgsMap.size === 0) {
-                container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
-            }
-            setHasMoreRiderMsgs(false);
-        } else {
-            const allMsgs = Object.entries(data)
-                .map(([key, msg]) => {
-                    const full = { id: key, ...msg };
-                    if (!full.timestamp) {
-                        const resolvedTs = getMessageTimestamp(full);
-                        if (resolvedTs > 0) {
-                            full.timestamp = resolvedTs;
-                            if (db && custId) {
-                                db.ref(`customerChats/${custId}/messages/${key}/timestamp`).set(resolvedTs).catch(() => {});
-                            }
-                        }
-                    }
-                    return full;
-                })
-                .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-
-            // Merge into persistent cache without wiping older history
-            let memCached = riderChatMemoryCache.get(custId) || [];
-            const map = new Map(memCached.map(m => [m.id, m]));
-            allMsgs.forEach(m => {
-                const prev = map.get(m.id);
-                if (prev && prev.isEdited && (!m.isEdited || m.text === prev.originalText)) {
-                    map.set(m.id, {
-                        ...m,
-                        text: prev.text,
-                        message: prev.text,
-                        originalText: prev.originalText,
-                        isEdited: true,
-                        editedAt: prev.editedAt,
-                        numEdit: prev.numEdit
-                    });
-                } else {
-                    map.set(m.id, m);
-                }
-            });
-            const merged = Array.from(map.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
-            riderChatMemoryCache.set(custId, merged);
-            idbSet('chats', custId, merged).catch(() => {});
-
-            const latestMsgInAll = allMsgs[allMsgs.length - 1];
-            const lastLoadedMsg = Array.from(loadedRiderMsgsMap.values()).pop();
-            const hasNewerMessages = !lastLoadedMsg || 
-                (latestMsgInAll && !loadedRiderMsgsMap.has(latestMsgInAll.id)) ||
-                (latestMsgInAll && lastLoadedMsg && getMessageTimestamp(latestMsgInAll) > getMessageTimestamp(lastLoadedMsg));
-
-            // Sync latest message to customerChatMeta and feed cards if metadata is behind
-            if (latestMsgInAll) {
-                const latestTs = getMessageTimestamp(latestMsgInAll);
-                const metaTs = Number(currentRiderChatMeta?.lastUpdated) || 0;
-                if (latestTs > metaTs) {
-                    const isFromCust = !latestMsgInAll.isRider && latestMsgInAll.senderType !== 'admin';
-                    const preview = latestMsgInAll.text || (latestMsgInAll.videoUrl ? "🎥 Video" : (latestMsgInAll.imageUrl ? "📷 Photo" : (latestMsgInAll.audioUrl ? "🎤 Voice message" : (latestMsgInAll.locationCoords ? "📍 Location" : "Message"))));
-                    const formattedPreview = isFromCust ? preview : `You: ${preview}`;
-
-                    try {
-                        if (typeof getCachedCustomerThreadsMap === 'function') {
-                            const threadsMap = getCachedCustomerThreadsMap();
-                            const dedupKey = getThreadDedupKey(custId, currentRiderChatMeta || {});
-                            const existingThread = threadsMap.get(dedupKey) || threadsMap.get(custId);
-                            if (existingThread && latestTs >= (existingThread.lastUpdated || 0)) {
-                                existingThread.lastMessage = formattedPreview;
-                                existingThread.lastUpdated = latestTs;
-                                existingThread.hasRealMessages = true;
-                            }
-                        }
-                    } catch (_) {}
-
-                    if (db) {
-                        db.ref(`customerChatMeta/${custId}`).update({
-                            lastMessage: formattedPreview,
-                            lastUpdated: latestTs
-                        }).catch(() => {});
-                    }
-                }
-            }
-
-            if (!hasLocalRecord || loadedRiderMsgsMap.size === 0 || hasNewerMessages) {
-                // Strictly display only the last 10 messages on initial open
-                const displayChunk = allMsgs.slice(-RIDER_CHAT_BATCH_SIZE);
-                loadedRiderMsgsMap.clear();
-                displayChunk.forEach(m => loadedRiderMsgsMap.set(m.id, m));
-                setHasMoreRiderMsgs(merged.length > displayChunk.length || allMsgs.length >= RIDER_CHAT_BATCH_SIZE);
-                if (displayChunk.length > 0) {
-                    setOldestRiderMsgTimestamp(getMessageTimestamp(displayChunk[0]));
-                    setOldestRiderMsgKey(displayChunk[0].id || null);
-                }
-                renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
-                setIsInitialScrollDone(true);
-                requestAnimationFrame(() => {
-                    container.scrollTop = container.scrollHeight;
-                    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 60);
-                    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 180);
-                });
-                autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
-                autoResolveRecentFbCustomerAttachments(custId, container, activeCustData);
-            } else {
-                setHasMoreRiderMsgs(merged.length > loadedRiderMsgsMap.size || allMsgs.length >= RIDER_CHAT_BATCH_SIZE);
-            }
-        }
-    });
-
-    // 1. Lightning-fast child_added: streams each incoming/sent message individually in milliseconds (<50ms)
-    const childListener = messagesQuery;
-    setActiveRiderChatChildListener(childListener);
-    childListener.on('child_added', (childSnap) => {
+    // =========================================================================
+    // HELPER: Realtime live incoming child_added event processor
+    // =========================================================================
+    function handleIncomingLiveChild(childSnap) {
         if (activeRiderChatCustId !== custId) return;
         const key = childSnap.key;
         const msg = childSnap.val();
@@ -1032,7 +898,7 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
             return;
         }
 
-        // If initial 10-message slice is already rendered, ignore any older historical message
+        // If initial slice is already rendered, ignore any older historical message
         if (isInitialScrollDone && oldestRiderMsgTimestamp && msgTs > 0 && msgTs < oldestRiderMsgTimestamp) {
             setHasMoreRiderMsgs(true);
             return;
@@ -1063,10 +929,6 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         const shouldScroll = isNearBottom || isRecentlyOpened;
 
         if (!isInitialScrollDone) {
-            if (skeletonTimeout) {
-                clearTimeout(skeletonTimeout);
-                skeletonTimeout = null;
-            }
             renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
             setIsInitialScrollDone(true);
             requestAnimationFrame(() => {
@@ -1180,7 +1042,144 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 });
             }
         }
-    });
+    }
+
+    // =========================================================================
+    // INTELLIGENT DELTA SYNC vs INITIAL BATCH LOAD
+    // =========================================================================
+    const latestCachedTs = hasLocalRecord 
+        ? Math.max(...localMessages.map(m => getMessageTimestamp(m) || 0), 0)
+        : 0;
+
+    if (hasLocalRecord && latestCachedTs > 0) {
+        // CASE A: Thread is already in local memory/IndexedDB cache!
+        // Instant 0ms visual display is already rendered on screen.
+        // Strictly fetch ONLY messages that were posted after our latest cached timestamp.
+        const deltaQuery = db.ref(`customerChats/${custId}/messages`)
+            .orderByChild('timestamp')
+            .startAt(latestCachedTs + 1);
+
+        setActiveRiderChatListener(deltaQuery);
+
+        deltaQuery.once('value', (snap) => {
+            if (activeRiderChatCustId !== custId) return;
+            const data = snap.val();
+            if (data && typeof data === 'object') {
+                const newDeltas = Object.entries(data)
+                    .map(([k, m]) => ({ id: k, ...m }))
+                    .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+
+                if (newDeltas.length > 0) {
+                    let mem = riderChatMemoryCache.get(custId) || [];
+                    const map = new Map(mem.map(m => [m.id, m]));
+                    newDeltas.forEach(m => map.set(m.id, m));
+                    const updated = Array.from(map.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+                    riderChatMemoryCache.set(custId, updated);
+                    idbSet('chats', custId, updated).catch(() => {});
+
+                    newDeltas.forEach(m => {
+                        loadedRiderMsgsMap.set(m.id, m);
+                        appendOrUpdateSingleRiderMessage(container, m, activeCustData);
+                    });
+                    requestAnimationFrame(() => {
+                        container.scrollTop = container.scrollHeight;
+                    });
+                }
+            }
+        });
+
+        // Attach live listener starting strictly after cached timestamp
+        // Prevents re-firing child_added for pre-existing messages!
+        setActiveRiderChatChildListener(deltaQuery);
+        deltaQuery.on('child_added', handleIncomingLiveChild);
+
+    } else {
+        // CASE B: First-time open / Cache miss.
+        // Atomically fetch the last 10 messages in ONE pass with .once('value')
+        const initialQuery = db.ref(`customerChats/${custId}/messages`)
+            .orderByChild('timestamp')
+            .limitToLast(RIDER_CHAT_BATCH_SIZE);
+
+        setActiveRiderChatListener(initialQuery);
+
+        let skeletonTimeout = setTimeout(() => {
+            if (activeRiderChatCustId === custId && loadedRiderMsgsMap.size === 0) {
+                const skel = document.getElementById('rider-chat-loading-skeleton');
+                if (skel) {
+                    container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
+                }
+            }
+        }, 3000);
+
+        initialQuery.once('value', (snapshot) => {
+            if (skeletonTimeout) {
+                clearTimeout(skeletonTimeout);
+                skeletonTimeout = null;
+            }
+            if (activeRiderChatCustId !== custId) return;
+            const data = snapshot.val();
+            if (!data || Object.keys(data).length === 0) {
+                if (loadedRiderMsgsMap.size === 0) {
+                    container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
+                }
+                setHasMoreRiderMsgs(false);
+                setIsInitialScrollDone(true);
+
+                // Listen for future messages only
+                const liveQuery = db.ref(`customerChats/${custId}/messages`)
+                    .orderByChild('timestamp')
+                    .startAt(Date.now());
+                setActiveRiderChatChildListener(liveQuery);
+                liveQuery.on('child_added', handleIncomingLiveChild);
+            } else {
+                const allMsgs = Object.entries(data)
+                    .map(([key, msg]) => {
+                        const full = { id: key, ...msg };
+                        if (!full.timestamp) {
+                            const resolvedTs = getMessageTimestamp(full);
+                            if (resolvedTs > 0) {
+                                full.timestamp = resolvedTs;
+                                if (db && custId) {
+                                    db.ref(`customerChats/${custId}/messages/${key}/timestamp`).set(resolvedTs).catch(() => {});
+                                }
+                            }
+                        }
+                        return full;
+                    })
+                    .sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
+
+                riderChatMemoryCache.set(custId, allMsgs);
+                idbSet('chats', custId, allMsgs).catch(() => {});
+
+                const displayChunk = allMsgs.slice(-RIDER_CHAT_BATCH_SIZE);
+                loadedRiderMsgsMap.clear();
+                displayChunk.forEach(m => loadedRiderMsgsMap.set(m.id, m));
+                setHasMoreRiderMsgs(allMsgs.length >= RIDER_CHAT_BATCH_SIZE);
+                if (displayChunk.length > 0) {
+                    setOldestRiderMsgTimestamp(getMessageTimestamp(displayChunk[0]));
+                    setOldestRiderMsgKey(displayChunk[0].id || null);
+                }
+
+                // Render ALL initial messages atomically at once - ZERO one-by-one popping!
+                renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderMsgs, true, 0, activeCustData);
+                setIsInitialScrollDone(true);
+                requestAnimationFrame(() => {
+                    container.scrollTop = container.scrollHeight;
+                    setTimeout(() => { container.scrollTop = container.scrollHeight; }, 60);
+                });
+                autoResolveRecentFbCustomerReplies(custId, container, activeCustData);
+                autoResolveRecentFbCustomerAttachments(custId, container, activeCustData);
+
+                // Now attach live query strictly starting AFTER the newest loaded message timestamp
+                const maxTs = Math.max(...allMsgs.map(m => getMessageTimestamp(m) || 0), 0);
+                const liveQuery = db.ref(`customerChats/${custId}/messages`)
+                    .orderByChild('timestamp')
+                    .startAt(maxTs + 1);
+                setActiveRiderChatChildListener(liveQuery);
+                liveQuery.on('child_added', handleIncomingLiveChild);
+            }
+        });
+    }
 
     // 2. Immediate child_changed for reactions, status, or edited text on base messages ref
     const changedListener = db.ref(`customerChats/${custId}/messages`);

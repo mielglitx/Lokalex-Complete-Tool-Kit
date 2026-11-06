@@ -10,6 +10,7 @@ import {
     openExternalLink
 } from '../native/nativeBridge.js';
 import { showToast } from '../ui/notifications.js';
+import { showCustomPrompt } from '../ui/modals.js';
 
 /**
  * ============================================================================
@@ -28,12 +29,12 @@ import { showToast } from '../ui/notifications.js';
 
 const OTA_MANIFEST_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/version.json';
 const OTA_CHECKSUMS_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/checksums.json';
-const CURRENT_BUILT_IN_VERSION = 'Sinigang';
+const CURRENT_BUILT_IN_VERSION = '1.1.0';
 let isCheckingUpdate = false;
 let globalOtaChecksumsMap = {};
 
 /**
- * Safely compares two version strings (handles both semantic "1.0.99" and named food releases like "Adobo").
+ * Safely compares two version strings (handles both semantic "1.1.0" and named legacy food releases like "Adobo").
  * Returns 1 if v1 > v2, -1 if v1 < v2, 0 if equal.
  */
 function compareVersions(v1, v2) {
@@ -59,9 +60,9 @@ function compareVersions(v1, v2) {
         return 0;
     }
 
-    // Transitioning from numeric version to named food release
-    if (!isSemver1 && isSemver2) return 1;
-    if (isSemver1 && !isSemver2) return -1;
+    // Version 1.1.0 onwards is newer than all previous legacy releases (including named food releases)
+    if (isSemver1 && !isSemver2) return 1;
+    if (!isSemver1 && isSemver2) return -1;
 
     // Both are distinct named food releases (e.g. Adobo vs Sinigang)
     return s1.toLowerCase() !== s2.toLowerCase() ? 1 : 0;
@@ -619,7 +620,7 @@ export function closeOtaUpdateSelectorModal() {
     if (modal) modal.classList.add('hidden');
 }
 
-export function applyCustomOtaInput() {
+export async function applyCustomOtaInput() {
     const input = document.getElementById('ota-custom-version-input');
     const val = input ? input.value.trim() : "";
     if (!val) {
@@ -628,7 +629,17 @@ export function applyCustomOtaInput() {
     }
 
     if (val.startsWith('http://') || val.startsWith('https://')) {
-        const verName = prompt("Enter the label/version name for the custom bundle (e.g. 1.0.28-custom):", "custom");
+        const promptFn = typeof showCustomPrompt === 'function' ? showCustomPrompt : (typeof window !== 'undefined' && window.showCustomPrompt);
+        const verName = promptFn
+            ? await promptFn({
+                title: "Custom Bundle Label",
+                subtitle: "Enter the label/version name for this custom bundle:",
+                defaultValue: "custom",
+                placeholder: "e.g. 1.0.28-custom",
+                confirmText: "Install"
+            })
+            : prompt("Enter the label/version name for the custom bundle (e.g. 1.0.28-custom):", "custom");
+
         if (!verName) return;
         installSpecificOtaVersion(verName, val);
     } else {

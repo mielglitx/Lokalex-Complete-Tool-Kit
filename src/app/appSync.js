@@ -148,6 +148,15 @@ export function initSyncWatchdog() {
                 } catch (_) {}
             }
 
+            // Flush any offline status or login mutations that were pending
+            if (typeof window !== 'undefined' && typeof window.flushOfflineRosterOutbox === 'function') {
+                try {
+                    await window.flushOfflineRosterOutbox();
+                } catch (err) {
+                    console.warn('[SyncWatchdog] Outbox flush note:', err);
+                }
+            }
+
             // Silent resync of roster rotation lineup and catering states
             if (typeof window !== 'undefined' && typeof window.forceRefreshRosterList === 'function') {
                 try {

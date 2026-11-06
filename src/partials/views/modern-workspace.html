@@ -15,13 +15,19 @@
                 <img id="modern-header-avatar" src="https://ui-avatars.com/api/?name=Rider&background=10b981&color=ffffff&bold=true&size=128" alt="Profile" class="w-9 h-9 rounded-full object-cover border-2 border-emerald-500 shadow-sm shrink-0">
                 <div class="flex flex-col min-w-0 leading-tight">
                     <span class="text-[10px] text-slate-400 font-semibold">Welcome!</span>
-                    <span id="modern-header-rider-name" class="text-xs sm:text-sm font-extrabold text-white truncate max-w-[115px] sm:max-w-[180px] group-hover:text-emerald-400 transition">Rider</span>
+                    <span id="modern-header-rider-name" class="text-xs sm:text-sm font-extrabold text-white truncate max-w-[150px] sm:max-w-[220px] group-hover:text-emerald-400 transition">Rider</span>
                 </div>
             </div>
         </div>
 
         <!-- RIGHT: UI SWITCHER + CLOCK + BATTERY + [PiP] -->
         <div class="flex items-center gap-1.5 shrink-0">
+            <!-- REALTIME SYNC STATUS PILL (Optimistic Background Handshake) -->
+            <div id="modern-header-sync-pill" class="hidden px-2 py-1 rounded-xl text-[10px] sm:text-[11px] font-mono font-bold items-center gap-1.5 shrink-0 transition-all duration-300">
+                <span id="modern-header-sync-dot" class="w-2 h-2 rounded-full"></span>
+                <span id="modern-header-sync-text">Synced</span>
+            </div>
+
             <button type="button" onclick="window.toggleLokalexUiMode && window.toggleLokalexUiMode('classic')" class="px-2 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-[10px] font-black flex items-center gap-1 transition active:scale-95 cursor-pointer" title="Switch back to Classic / Original UI">
                 <i class="fa-solid fa-rotate-left text-[9px]"></i>
                 <span class="hidden xs:inline">Classic UI</span>
@@ -226,7 +232,7 @@
                 </div>
 
                 <!-- 6 Category Pills -->
-                <div class="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
+                <div class="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5" style="touch-action: pan-x; -webkit-overflow-scrolling: touch;">
                     <button id="modern-cat-inbox" type="button" onclick="window.selectModernChatCategory('inbox')" class="px-2.5 py-1 rounded-lg border border-emerald-500/50 bg-emerald-500/15 text-white text-[11px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer transition">
                         <span>Inbox</span>
                         <span id="modern-cat-badge-inbox" class="hidden w-4 h-4 rounded-full bg-emerald-500 text-black font-mono font-black text-[9px] inline-flex items-center justify-center">0</span>
@@ -262,7 +268,7 @@
             <!-- Split Grid: Left Customer List + Right Active Chat Room -->
             <div class="flex-1 min-h-0 grid grid-cols-[135px_1fr] sm:grid-cols-[210px_1fr] md:grid-cols-[250px_1fr] overflow-hidden">
                 <!-- LEFT COLUMN: CUSTOMER TITLE CARDS WITH SECRET SWIPE MENU -->
-                <div id="modern-chat-left-list" class="border-r border-slate-800 bg-[#0e1519] overflow-y-auto flex flex-col divide-y divide-slate-800/70">
+                <div id="modern-chat-left-list" class="border-r border-slate-800 bg-[#0e1519] overflow-y-auto flex flex-col divide-y divide-slate-800/70" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;">
                     <div class="text-slate-500 italic text-center py-8 px-2 text-[11px]">Loading chats...</div>
                 </div>
 
@@ -296,6 +302,9 @@
                                 <div class="text-[9.5px] font-bold text-slate-400 px-2.5 py-1 border-b border-slate-800 mb-0.5">Chat Menu Options</div>
                                 <button type="button" onclick="window.closeModernPopovers(); window.caterCurrentChatCustomer && window.caterCurrentChatCustomer();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-extrabold text-emerald-400 flex items-center gap-2 cursor-pointer">
                                     <span>• Cater</span>
+                                </button>
+                                <button type="button" id="modern-chat-force-cater-btn" onclick="window.closeModernPopovers(); window.openAdminForceCaterFromChat && window.openAdminForceCaterFromChat();" class="hidden w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-amber-500/15 text-xs font-extrabold text-amber-400 flex items-center gap-2 cursor-pointer">
+                                    <span>• Force Cater to Rider</span>
                                 </button>
                                 <button type="button" onclick="window.closeModernPopovers(); window.markCustomerChatAsUnread && window.markCustomerChatAsUnread();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-bold text-slate-200 flex items-center gap-2 cursor-pointer">
                                     <span>• Unread</span>
@@ -374,39 +383,42 @@
         <!-- ================================================================= -->
         <!-- PANEL 2: LOKALEX RIDER ROTATIONS (3 COLUMNS: AVAIL, CATER, BREAK) -->
         <!-- ================================================================= -->
-        <div id="modern-panel-rotations" class="hidden flex-1 min-h-0 flex-col p-2.5 gap-2.5 overflow-hidden">
-            <div class="flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-3 gap-2.5 overflow-y-auto sm:overflow-hidden">
+        <div id="modern-panel-rotations" class="hidden flex-1 min-h-0 flex flex-col p-2.5 gap-2.5 overflow-hidden">
+            <!-- Modern Lineup Supervisory Toolbar (Rendered dynamically for Admin or TLs with permissions) -->
+            <div id="modern-rot-admin-toolbar" class="hidden shrink-0 flex items-center justify-between gap-2 p-2 bg-[#121a1f] border border-slate-800 rounded-2xl overflow-x-auto no-scrollbar shadow-xs" style="touch-action: pan-x; -webkit-overflow-scrolling: touch;"></div>
+
+            <div class="flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-3 gap-2.5 overflow-y-auto sm:overflow-hidden pr-0.5" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;">
                 <!-- Column 1: Available -->
-                <div class="bg-[#121a1f] border border-emerald-500/40 rounded-2xl p-3 flex flex-col min-h-[180px] sm:min-h-0 overflow-hidden">
+                <div class="bg-[#121a1f] border border-emerald-500/40 rounded-2xl p-3 flex flex-col sm:min-h-0 sm:h-full shrink-0 sm:shrink">
                     <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 shrink-0">
                         <span class="text-xs font-black text-emerald-400 uppercase tracking-wide flex items-center gap-1.5">
                             <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Available
                         </span>
                         <span id="modern-rot-avail-count" class="text-[10px] font-mono font-bold text-slate-400">0 riders</span>
                     </div>
-                    <div id="modern-rot-avail-list" class="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5"></div>
+                    <div id="modern-rot-avail-list" class="flex flex-col gap-1.5 sm:flex-1 sm:min-h-0 sm:overflow-y-auto pr-0.5" style="touch-action: pan-y; -webkit-overflow-scrolling: touch;"></div>
                 </div>
 
                 <!-- Column 2: Catering -->
-                <div class="bg-[#121a1f] border border-amber-500/40 rounded-2xl p-3 flex flex-col min-h-[180px] sm:min-h-0 overflow-hidden">
+                <div class="bg-[#121a1f] border border-amber-500/40 rounded-2xl p-3 flex flex-col sm:min-h-0 sm:h-full shrink-0 sm:shrink">
                     <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 shrink-0">
                         <span class="text-xs font-black text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
                             <span class="w-2 h-2 rounded-full bg-amber-400"></span> Catering
                         </span>
                         <span id="modern-rot-cater-count" class="text-[10px] font-mono font-bold text-slate-400">0 active</span>
                     </div>
-                    <div id="modern-rot-cater-list" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-0.5"></div>
+                    <div id="modern-rot-cater-list" class="flex flex-col gap-2 sm:flex-1 sm:min-h-0 sm:overflow-y-auto pr-0.5" style="touch-action: pan-y; -webkit-overflow-scrolling: touch;"></div>
                 </div>
 
                 <!-- Column 3: Break -->
-                <div class="bg-[#121a1f] border border-sky-500/40 rounded-2xl p-3 flex flex-col min-h-[180px] sm:min-h-0 overflow-hidden">
+                <div class="bg-[#121a1f] border border-sky-500/40 rounded-2xl p-3 flex flex-col sm:min-h-0 sm:h-full shrink-0 sm:shrink">
                     <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 shrink-0">
                         <span class="text-xs font-black text-sky-400 uppercase tracking-wide flex items-center gap-1.5">
                             <span>☕</span> Break
                         </span>
                         <span id="modern-rot-break-count" class="text-[10px] font-mono font-bold text-slate-400">0 on break</span>
                     </div>
-                    <div id="modern-rot-break-list" class="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5"></div>
+                    <div id="modern-rot-break-list" class="flex flex-col gap-1.5 sm:flex-1 sm:min-h-0 sm:overflow-y-auto pr-0.5" style="touch-action: pan-y; -webkit-overflow-scrolling: touch;"></div>
                 </div>
             </div>
         </div>
@@ -414,27 +426,27 @@
         <!-- ================================================================= -->
         <!-- PANEL 3: RIDER LOGIN LIST (LOGGED IN vs NOT LOGGED IN + PROFILE)  -->
         <!-- ================================================================= -->
-        <div id="modern-panel-logins" class="hidden flex-1 min-h-0 flex-col p-2.5 gap-2.5 overflow-y-auto">
-            <div class="flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-[1.45fr_1fr] gap-2.5">
+        <div id="modern-panel-logins" class="hidden flex-1 min-h-0 flex flex-col p-2.5 gap-2.5 overflow-y-auto sm:overflow-hidden" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;">
+            <div class="flex flex-col sm:grid sm:grid-cols-[1.45fr_1fr] gap-2.5 sm:flex-1 sm:min-h-0">
                 <!-- Left Box: Logged IN -->
-                <div class="bg-[#121a1f] border-2 border-rose-500/40 rounded-2xl p-3 flex flex-col min-h-[200px] overflow-hidden">
+                <div class="bg-[#121a1f] border-2 border-rose-500/40 rounded-2xl p-3 flex flex-col sm:min-h-0 sm:h-full shrink-0 sm:shrink">
                     <div class="grid grid-cols-[1.8fr_0.9fr_0.9fr] sm:grid-cols-[2fr_1fr_1fr] text-[11px] font-black text-rose-400 pb-2 mb-2 border-b border-slate-800 shrink-0">
                         <span id="modern-login-in-header">Logged IN (0)</span>
                         <span>Time In</span>
                         <span>Time Out</span>
                     </div>
-                    <div id="modern-login-in-list" class="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5"></div>
+                    <div id="modern-login-in-list" class="flex flex-col gap-1.5 sm:flex-1 sm:min-h-0 sm:overflow-y-auto pr-0.5" style="touch-action: pan-y; -webkit-overflow-scrolling: touch;"></div>
                     <div id="modern-login-in-footer" class="pt-2 mt-2 border-t border-slate-800/80 text-[10px] text-slate-400 shrink-0">
                         Click any rider name to inspect full profile & daily time served.
                     </div>
                 </div>
 
                 <!-- Right Box: Not Logged In -->
-                <div class="bg-[#121a1f] border-2 border-rose-500/40 rounded-2xl p-3 flex flex-col min-h-[200px] overflow-hidden">
+                <div class="bg-[#121a1f] border-2 border-rose-500/40 rounded-2xl p-3 flex flex-col sm:min-h-0 sm:h-full shrink-0 sm:shrink">
                     <div class="text-[11px] font-black text-rose-400 pb-2 mb-2 border-b border-slate-800 shrink-0">
                         <span id="modern-login-out-header">Not Logged In (0):</span>
                     </div>
-                    <div id="modern-login-out-list" class="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5"></div>
+                    <div id="modern-login-out-list" class="flex flex-col gap-1.5 sm:flex-1 sm:min-h-0 sm:overflow-y-auto pr-0.5" style="touch-action: pan-y; -webkit-overflow-scrolling: touch;"></div>
                     <div id="modern-login-out-footer" class="pt-2 mt-2 border-t border-slate-800/80 text-[10px] text-slate-400 shrink-0">
                         Not Logged In: 0 Riders
                     </div>
@@ -452,8 +464,8 @@
         <!-- ================================================================= -->
         <!-- PANEL 4: CATERED CUSTOMER LIST (TIMESTAMPS + ADMIN VOID + TOTAL)  -->
         <!-- ================================================================= -->
-        <div id="modern-panel-catered" class="hidden flex-1 min-h-0 flex-col p-2.5 overflow-hidden">
-            <div id="modern-catered-list" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-0.5">
+        <div id="modern-panel-catered" class="hidden flex-1 min-h-0 flex flex-col p-2.5 overflow-hidden">
+            <div id="modern-catered-list" class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 pr-0.5" style="touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;">
                 <div class="text-slate-500 italic text-center py-8 text-xs">No completed catered customers yet today.</div>
             </div>
         </div>

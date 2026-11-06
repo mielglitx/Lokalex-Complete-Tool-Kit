@@ -1693,10 +1693,7 @@ async function handleMultiPathUpdate(client, rawPath, values) {
             }
           }
         }
-        await Promise.all([
-          client.from('customer_chat_meta').upsert({ id: group.custId, data: current, updated_at: new Date().toISOString() }, { onConflict: 'id' }),
-          client.from('customer_chats').upsert({ id: `${group.custId}_metadata`, room_id: group.custId, data: current }, { onConflict: 'id' })
-        ]);
+        await client.from('customer_chat_meta').upsert({ id: group.custId, data: current, updated_at: new Date().toISOString() }, { onConflict: 'id' });
         broadcastMutation(client, 'customer_chat_meta', `customerChatMeta/${group.custId}`, current, 'update');
       }));
     } else if (group.type === 'cust_msg') {
@@ -1996,20 +1993,14 @@ async function handleCustomerChatsSet(client, pathInfo, value) {
           current[targetId] = value;
         }
 
-        await Promise.all([
-          client.from('customer_chat_meta').upsert({ id: custId, data: current, updated_at: new Date().toISOString() }, { onConflict: 'id' }),
-          client.from('customer_chats').upsert({ id: `${custId}_metadata`, room_id: custId, data: current }, { onConflict: 'id' })
-        ]);
+        await client.from('customer_chat_meta').upsert({ id: custId, data: current, updated_at: new Date().toISOString() }, { onConflict: 'id' });
         return {
           broadcastPath: `customerChatMeta/${custId}`,
           broadcastValue: current,
           broadcastAction: 'update'
         };
       } else {
-        await Promise.all([
-          client.from('customer_chat_meta').upsert({ id: custId, data: value, updated_at: new Date().toISOString() }, { onConflict: 'id' }),
-          client.from('customer_chats').upsert({ id: `${custId}_metadata`, room_id: custId, data: value }, { onConflict: 'id' })
-        ]);
+        await client.from('customer_chat_meta').upsert({ id: custId, data: value, updated_at: new Date().toISOString() }, { onConflict: 'id' });
         return {
           broadcastPath: `customerChatMeta/${custId}`,
           broadcastValue: value,
@@ -2091,10 +2082,7 @@ async function handleCustomerChatsUpdate(client, pathInfo, values) {
       const current = (existing && existing.data) ? { ...existing.data } : {};
       const merged = { ...current, ...values };
 
-      await Promise.all([
-        client.from('customer_chat_meta').upsert({ id: custId, data: merged, updated_at: new Date().toISOString() }, { onConflict: 'id' }),
-        client.from('customer_chats').upsert({ id: `${custId}_metadata`, room_id: custId, data: merged }, { onConflict: 'id' })
-      ]);
+      await client.from('customer_chat_meta').upsert({ id: custId, data: merged, updated_at: new Date().toISOString() }, { onConflict: 'id' });
       recentCustomerMetaCache.set(custId, { data: merged, time: Date.now() });
       return {
         broadcastPath: `customerChatMeta/${custId}`,

@@ -13,13 +13,29 @@ export let isHdMode = typeof localStorage !== 'undefined'
 // 1. BODY SCROLL LOCK HELPER
 // ============================================================================
 export function toggleBodyScroll(lock) {
-    if (typeof document !== 'undefined') {
+    if (typeof document !== 'undefined' && document.body) {
         if (lock) {
             document.body.classList.add('overflow-hidden', 'touch-none');
         } else {
-            const activeModals = document.querySelectorAll('.fixed.inset-0:not(.hidden):not(.pointer-events-none)');
-            if (activeModals.length === 0) {
+            // Only consider actual open dialog/modal overlays, never the full-screen workspace views
+            const activeModals = document.querySelectorAll('.fixed.inset-0:not(.hidden):not(.pointer-events-none):not(#modern-ui-workspace):not(#view-map)');
+            const hasVisibleModal = Array.from(activeModals).some(el => {
+                try {
+                    const style = window.getComputedStyle(el);
+                    return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+                } catch (_) {
+                    return true;
+                }
+            });
+            if (!hasVisibleModal) {
                 document.body.classList.remove('overflow-hidden', 'touch-none');
+                document.body.style.overflow = '';
+                document.body.style.touchAction = '';
+                if (document.documentElement) {
+                    document.documentElement.classList.remove('overflow-hidden', 'touch-none', 'has-chat-open');
+                    document.documentElement.style.overflow = '';
+                    document.documentElement.style.touchAction = '';
+                }
             }
         }
     }

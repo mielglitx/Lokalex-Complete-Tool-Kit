@@ -19,7 +19,7 @@ import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { getLocalTodayStr, escapeHtml } from '../../utils/helpers.js';
 import { showToast } from '../../ui/notifications.js';
-import { openSlideDeleteModal } from '../../ui/modals.js';
+import { openSlideDeleteModal, showCustomPrompt } from '../../ui/modals.js';
 import { isAdmin as checkIsAdmin, isCustomerMatch, isSameDateStr, saveRosterCache, isRiderMatch } from '../roster/rosterUtils.js';
 import { getCleanRiderList, refreshCommissionView, viewSettings } from './commissionUI.js';
 
@@ -689,11 +689,23 @@ export async function executeDeleteCommissionRecord(riderName, customerName, dat
     window.dispatchEvent(new CustomEvent('receiptsUpdated'));
 }
 
-export function promptAdminEditCustomerFee(riderName, customerName, dateVal, currentGross) {
+export async function promptAdminEditCustomerFee(riderName, customerName, dateVal, currentGross) {
     if (!checkIsAdmin()) return showToast("⚠️ Admin access required to update fees.");
 
-    const newFeeInput = prompt(`Update Gross Fee for [${customerName}] (${riderName}):`, currentGross || "0.00");
-    if (newFeeInput === null) return;
+    const promptFn = typeof showCustomPrompt === 'function' ? showCustomPrompt : (typeof window !== 'undefined' && window.showCustomPrompt);
+    const newFeeInput = promptFn
+        ? await promptFn({
+            title: "Update Gross Fee",
+            subtitle: `Customer: ${customerName}\nRider: ${riderName}`,
+            defaultValue: currentGross || "0.00",
+            placeholder: "0.00",
+            inputType: "number",
+            icon: "fa-peso-sign",
+            confirmText: "Save Fee"
+        })
+        : prompt(`Update Gross Fee for [${customerName}] (${riderName}):`, currentGross || "0.00");
+
+    if (newFeeInput === null || newFeeInput === '') return;
 
     const parsedFee = parseFloat(newFeeInput);
     if (isNaN(parsedFee) || parsedFee < 0) return showToast("⚠️ Invalid fee amount entered.");

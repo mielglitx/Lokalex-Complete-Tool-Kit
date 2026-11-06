@@ -2,6 +2,7 @@
 import { db } from '../../../config/firebase.js';
 import { appState, globalState } from '../../../store/state.js';
 import { escapeHtml } from '../../../utils/helpers.js';
+import { showCustomPrompt } from '../../../ui/modals.js';
 import { toggleBodyScroll } from '../chatUtils.js';
 import { clearNativeNotification } from '../../../ui/notifications.js';
 import { isAdmin, canManageRoster, isCustomerMatch, isRiderMatch } from '../../roster/rosterUtils.js';
@@ -33,8 +34,11 @@ import {
     setOldestRiderMsgTimestamp,
     setHasMoreRiderMsgs,
     setIsLoadingRiderHistory,
-    loadedRiderMsgsMap
+    loadedRiderMsgsMap,
+    riderChatMemoryCache,
+    RIDER_CHAT_BATCH_SIZE
 } from './chatState.js';
+import { renderRiderMessages } from '../riderChatRender.js';
 import {
     cancelRiderReply,
     listenToRiderChatMessages,
@@ -77,10 +81,22 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         setActiveRiderChatMetaListener(null);
     }
 
-    // Immediately clear loaded messages & show skeleton to prevent any cross-customer message mixing
+    // Immediately clear loaded messages & show instant RAM cache or skeleton
     loadedRiderMsgsMap.clear();
     const msgContainer = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
-    if (msgContainer) {
+    const memCached = custId ? riderChatMemoryCache.get(custId) : null;
+
+    if (Array.isArray(memCached) && memCached.length > 0) {
+        // Instant 0ms cache render: display pre-cached messages immediately without any skeleton flash!
+        const initialChunk = memCached.slice(-RIDER_CHAT_BATCH_SIZE);
+        initialChunk.forEach(m => loadedRiderMsgsMap.set(m.id, m));
+        if (msgContainer) {
+            renderRiderMessages(msgContainer, loadedRiderMsgsMap, memCached.length > initialChunk.length, true, 0, activeCustData);
+            requestAnimationFrame(() => {
+                msgContainer.scrollTop = msgContainer.scrollHeight;
+            });
+        }
+    } else if (msgContainer) {
         msgContainer.innerHTML = `
         <div id="rider-chat-loading-skeleton" class="flex flex-col gap-3 py-6 px-4 animate-pulse">
             <div class="flex items-end gap-2 self-start w-3/4">
@@ -815,7 +831,17 @@ export async function promptRenameCustomerChat() {
         currentName = currentRiderChatMeta?.customerName || currentName;
     }
 
-    const newName = prompt("Edit customer name:", currentName);
+    const promptFn = typeof showCustomPrompt === 'function' ? showCustomPrompt : (typeof window !== 'undefined' && window.showCustomPrompt);
+    const newName = promptFn
+        ? await promptFn({
+            title: "Edit Customer Name",
+            subtitle: "Enter updated customer display name:",
+            defaultValue: currentName,
+            placeholder: "Customer name...",
+            icon: "fa-user-pen",
+            confirmText: "Save Name"
+        })
+        : prompt("Edit customer name:", currentName);
     if (!newName || !newName.trim() || newName.trim() === currentName.trim()) return;
 
     const cleanName = newName.trim();

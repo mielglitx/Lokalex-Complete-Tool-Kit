@@ -3,12 +3,13 @@ import { db } from '../../config/firebase.js';
 import { appState, globalState } from '../../store/state.js';
 import { API_URL } from '../../config/constants.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
-import { openSlideDeleteModal, closeAdminCateringModal } from '../../ui/modals.js';
-import { isSameDate, escapeHtml, sanitizeFirebaseKey } from '../../utils/helpers.js';
+import { openSlideDeleteModal, closeAdminCateringModal, showCustomPrompt } from '../../ui/modals.js';
+import { isSameDate, escapeHtml, formatTitleCase, sanitizeFirebaseKey } from '../../utils/helpers.js';
 import { populateCateringCustomerDropdown } from '../chat/index.js';
 import { 
     loadRosterCache,
     parseQueueTime, 
+    parseTimeToMinutes,
     isAdmin, 
     isTL,
     canManageRoster,
@@ -113,11 +114,33 @@ export function openAdminCateringModal(id, name) {
     const custInput = document.getElementById('admin-cater-cust-name') || document.getElementById('catering-customer-name');
     const custSelect = document.getElementById('admin-cater-customer-select') || document.getElementById('catering-customer-select');
     const penaltySelect = document.getElementById('admin-cater-penalty-select') || document.getElementById('catering-penalty-select');
+    const riderSelect = document.getElementById('admin-cater-rider-select');
 
     if (idInput) idInput.value = id || "";
     if (nameInputHidden) nameInputHidden.value = name || "";
     if (custInput) custInput.value = "";
     if (penaltySelect) penaltySelect.value = "0";
+
+    if (riderSelect) {
+        const isUserAdmin = isAdmin();
+        const roster = (globalState.rosterMembers || []).filter(m => {
+            const uType = (m.userType || globalState.userTypesMap?.[m.telegramId || m.id] || globalState.userTypesMap?.[(m.riderName || m.name || '').toLowerCase()] || '').toString().toLowerCase().trim();
+            return uType !== 'inspector';
+        });
+        let optionsHtml = '<option value="">-- Select Target Rider --</option>';
+        roster.forEach(m => {
+            const mId = (m.telegramId || m.id || "").toString();
+            const mName = m.riderName || m.name || "Rider";
+            const mType = (m.userType || globalState.userTypesMap?.[mId] || '').toString().toLowerCase();
+            if (!isUserAdmin && !canForceCaterTarget(mType, mId)) return;
+            const isSelected = (id && mId === id.toString()) || (name && mName.toLowerCase() === name.toLowerCase());
+            optionsHtml += `<option value="${escapeHtml(mId)}" data-name="${escapeHtml(mName)}" ${isSelected ? 'selected' : ''}>${escapeHtml(formatTitleCase(mName))} (${m.status || 'Offline'})</option>`;
+        });
+        riderSelect.innerHTML = optionsHtml;
+        if (id) {
+            riderSelect.value = id.toString();
+        }
+    }
 
     if (custSelect) {
         try {
@@ -144,9 +167,10 @@ export async function submitAdminForceCatering() {
     const custInput = document.getElementById('admin-cater-cust-name') || document.getElementById('catering-customer-name');
     const custSelect = document.getElementById('admin-cater-customer-select') || document.getElementById('catering-customer-select');
     const penaltySelect = document.getElementById('admin-cater-penalty-select') || document.getElementById('catering-penalty-select');
+    const riderSelect = document.getElementById('admin-cater-rider-select');
 
-    let targetId = (idInput ? idInput.value.trim() : "") || (pendingAdminTarget ? pendingAdminTarget.id : "");
-    let targetName = (nameInputHidden ? nameInputHidden.value.trim() : "") || (pendingAdminTarget ? pendingAdminTarget.name : "");
+    let targetId = (riderSelect && riderSelect.value ? riderSelect.value.trim() : "") || (idInput ? idInput.value.trim() : "") || (pendingAdminTarget ? pendingAdminTarget.id : "");
+    let targetName = (riderSelect && riderSelect.selectedIndex >= 0 && riderSelect.options[riderSelect.selectedIndex]?.dataset?.name ? riderSelect.options[riderSelect.selectedIndex].dataset.name.trim() : "") || (nameInputHidden ? nameInputHidden.value.trim() : "") || (pendingAdminTarget ? pendingAdminTarget.name : "");
     const penaltyMins = penaltySelect ? parseInt(penaltySelect.value) || 0 : 0;
 
     if (!targetId) {
@@ -946,6 +970,261 @@ export async function forceAllEndShift() {
     });
 }
 
+// ============================================================================
+// ADMIN MANUAL RIDER TIME-IN OVERRIDE / BAD SIGNAL RESCUE
+// ============================================================================
+
+export function parseAdminCustomTime(rawInput) {
+    if (!rawInput) return null;
+    let s = String(rawInput).trim().toLowerCase();
+    s = s.replace(/[\u202f\u00a0]/g, ' ');
+
+    if (/noon|12nn|12:00nn|12:00\s*nn/.test(s)) {
+        return { hours: 12, minutes: 0 };
+    }
+    if (/midnight|12mn|12:00mn|12:00\s*mn/.test(s)) {
+        return { hours: 0, minutes: 0 };
+    }
+
+    // e.g. "12pm", "1pm", "8am"
+    const simpleMatch = s.match(/^(\d{1,2})\s*([ap]m)$/i);
+    if (simpleMatch) {
+        let h = parseInt(simpleMatch[1], 10);
+        const ampm = simpleMatch[2].toUpperCase();
+        if (ampm === 'PM' && h < 12) h += 12;
+        if (ampm === 'AM' && h === 12) h = 0;
+        return { hours: h, minutes: 0 };
+    }
+
+    // e.g. "12:00 PM", "08:30 AM", "12:00"
+    const match = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*([ap]m))?$/i);
+    if (match) {
+        let h = parseInt(match[1], 10);
+        const m = parseInt(match[2], 10);
+        const ampm = match[3] ? match[3].toUpperCase() : null;
+        if (ampm === 'PM' && h < 12) h += 12;
+        if (ampm === 'AM' && h === 12) h = 0;
+        return { hours: h, minutes: m };
+    }
+
+    const mins = parseTimeToMinutes(s);
+    if (mins !== null) {
+        return { hours: Math.floor(mins / 60), minutes: mins % 60 };
+    }
+    return null;
+}
+
+export async function adminSetRiderTimeIn(riderId, riderName, customTimeStr) {
+    const isUserAdmin = isAdmin();
+    const isUserTL = isTL();
+    const canManage = isUserAdmin || hasTlPermission('canManageRoster') || hasTlPermission('canForceStatus');
+    if (!canManage) {
+        showToast("🚫 Permission Denied: Admin or TL rights required.");
+        return;
+    }
+
+    const tId = (riderId || "").toString().trim();
+    const tName = (riderName || "").trim();
+    if (!tId && !tName) return;
+
+    const parsed = parseAdminCustomTime(customTimeStr);
+    if (!parsed) {
+        showToast("⚠️ Invalid time format. Please use e.g. 12:00 PM, 08:30 AM, or 12:00nn");
+        return;
+    }
+
+    const todayStr = getLocalTodayStr();
+    const targetDate = new Date();
+    targetDate.setHours(parsed.hours, parsed.minutes, 0, 0);
+    const targetTimestamp = targetDate.getTime();
+    const formattedTime = targetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // 1. Prepare login entry
+    const loginEntry = {
+        riderId: tId,
+        id: tId,
+        riderName: tName,
+        loginTime: formattedTime,
+        loginTimestamp: targetTimestamp,
+        firstLoginTime: formattedTime,
+        firstLoginTimestamp: targetTimestamp,
+        clockOutTime: "",
+        clockOutTimestamp: null,
+        date: todayStr,
+        location: "",
+        earlyShiftPenaltyPercent: 0,
+        deficitHours: 0,
+        totalBreakMinutes: 0,
+        totalBreakSeconds: 0,
+        accumulatedWorkedMinutes: 0,
+        workedMinutes: 0
+    };
+
+    // 2. Write to logins and shiftHistory in DB
+    if (db) {
+        try {
+            await db.ref(`logins/${tId}`).set(loginEntry);
+            db.ref(`shiftHistory/${todayStr}_${tId}`).set(loginEntry).catch(() => {});
+        } catch (err) {
+            console.warn('[adminSetRiderTimeIn] DB write note:', err);
+        }
+    }
+
+    // 3. Update globalState.globalLogins
+    if (!globalState.globalLogins) globalState.globalLogins = [];
+    const exLoginIdx = globalState.globalLogins.findIndex(l => 
+        (l.riderId || l.id || "").toString() === tId || isRiderMatch(tName, l.riderName || '', tId, (l.riderId || l.id || '').toString())
+    );
+    if (exLoginIdx !== -1) {
+        globalState.globalLogins[exLoginIdx] = { ...globalState.globalLogins[exLoginIdx], ...loginEntry };
+    } else {
+        globalState.globalLogins.push(loginEntry);
+    }
+
+    // 4. Update rider in roster if currently offline / not on duty
+    const roster = globalState.rosterMembers || [];
+    let member = roster.find(m => (m.telegramId || m.id || "").toString() === tId || isRiderMatch(tName, m.riderName || m.name || '', tId, (m.telegramId || m.id || '').toString()));
+    if (!member || member.status === 'End' || !member.status) {
+        if (typeof updateRosterStatusData === 'function') {
+            await updateRosterStatusData('Available', "", "", targetTimestamp, tId, tName, [], false, "", {
+                availableTimestamp: targetTimestamp
+            });
+        }
+    } else {
+        if (member.status === 'Available') {
+            member.availableTimestamp = targetTimestamp;
+            if (db) {
+                db.ref(`roster/${tId}`).update({ availableTimestamp: targetTimestamp }).catch(() => {});
+            }
+        }
+    }
+
+    saveRosterCache();
+    window.dispatchEvent(new CustomEvent('loginsUpdated'));
+    window.dispatchEvent(new Event('rosterUpdated'));
+
+    if (typeof window.renderModernLoginsTab === 'function') window.renderModernLoginsTab();
+    if (typeof window.renderModernRotationsTab === 'function') window.renderModernRotationsTab();
+    if (typeof window.updateRosterUI === 'function') window.updateRosterUI();
+    if (typeof window.loadGlobalLoginList === 'function') window.loadGlobalLoginList();
+    if (typeof window.openModernRiderProfile === 'function') window.openModernRiderProfile(tId, tName);
+
+    showToast(`✓ Time In for ${tName} set to ${formattedTime}!`);
+}
+
+export async function promptAdminSetRiderTimeIn(riderId, riderName, existingTime = '') {
+    const isUserAdmin = isAdmin();
+    const isUserTL = isTL();
+    const canManage = isUserAdmin || hasTlPermission('canManageRoster') || hasTlPermission('canForceStatus');
+    if (!canManage) {
+        showToast("🚫 Permission Denied: Admin or TL rights required.");
+        return;
+    }
+
+    const defaultVal = existingTime && existingTime !== '--:--' ? existingTime : "12:00 PM";
+    const promptFn = typeof showCustomPrompt === 'function' ? showCustomPrompt : (typeof window !== 'undefined' && window.showCustomPrompt);
+    
+    let userVal = null;
+    if (promptFn) {
+        userVal = await promptFn({
+            title: `Set Time In: ${riderName}`,
+            subtitle: `Enter Time In for ${riderName} today\n(e.g. 12:00 PM, 08:30 AM, 12:00nn):`,
+            defaultValue: defaultVal,
+            placeholder: "12:00 PM",
+            icon: "fa-clock",
+            confirmText: "Save Time In"
+        });
+    } else {
+        userVal = prompt(`Set Time In for ${riderName} today:\n(e.g. 12:00 PM, 08:30 AM, 12:00nn)`, defaultVal);
+    }
+
+    if (!userVal || !userVal.trim()) return;
+    adminSetRiderTimeIn(riderId, riderName, userVal.trim());
+}
+
+export async function promptAdminSelectRiderForTimeIn() {
+    const isUserAdmin = isAdmin();
+    const isUserTL = isTL();
+    const canManage = isUserAdmin || hasTlPermission('canManageRoster') || hasTlPermission('canForceStatus');
+    if (!canManage) {
+        showToast("🚫 Permission Denied: Admin or TL rights required.");
+        return;
+    }
+
+    const roster = globalState.rosterMembers || [];
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const todayLogins = (globalState.globalLogins || []).filter(l => isSameDateStr(l?.date, todayStr));
+    const loggedInNames = new Set(todayLogins.map(l => (l.riderName || '').trim().toLowerCase()).filter(Boolean));
+
+    const offlineRiders = roster.filter(m => {
+        const uType = (m?.userType || globalState.userTypesMap?.[m?.telegramId] || '').toString().toLowerCase();
+        if (uType === 'inspector') return false;
+        const n = (m?.riderName || m?.name || '').trim().toLowerCase();
+        return n && !loggedInNames.has(n);
+    });
+
+    const promptFn = typeof showCustomPrompt === 'function' ? showCustomPrompt : (typeof window !== 'undefined' && window.showCustomPrompt);
+
+    if (offlineRiders.length === 0) {
+        let anyRiderName = null;
+        if (promptFn) {
+            anyRiderName = await promptFn({
+                title: "Override Rider Time In",
+                subtitle: "All registered riders currently have a Time In record today.\nEnter rider name if you wish to adjust/override:",
+                placeholder: "Rider Name...",
+                icon: "fa-user-pen",
+                confirmText: "Continue"
+            });
+        } else {
+            anyRiderName = prompt("All registered riders currently have a Time In record today.\nEnter rider name if you wish to adjust/override:");
+        }
+        if (!anyRiderName || !anyRiderName.trim()) return;
+        const found = roster.find(m => isRiderMatch(anyRiderName.trim(), m.riderName || m.name || '', '', (m.telegramId || m.id || '').toString()));
+        if (found) {
+            promptAdminSetRiderTimeIn(found.telegramId || found.id, found.riderName || found.name);
+        } else {
+            promptAdminSetRiderTimeIn('', anyRiderName.trim());
+        }
+        return;
+    }
+
+    const options = offlineRiders.map((r, i) => ({
+        label: `${i + 1}. ${formatTitleCase(r.riderName || r.name)}`,
+        value: r.riderName || r.name,
+        sub: `ID: ${r.telegramId || r.id || 'N/A'}`
+    }));
+
+    let input = null;
+    if (promptFn) {
+        input = await promptFn({
+            title: "Select Offline Rider",
+            subtitle: "Tap a rider below or type their name to set Time In:",
+            placeholder: "Type rider name...",
+            icon: "fa-user-clock",
+            options: options,
+            confirmText: "Select"
+        });
+    } else {
+        const riderListStr = offlineRiders.map((r, i) => `${i + 1}. ${formatTitleCase(r.riderName || r.name)}`).join('\n');
+        input = prompt(`Select offline rider to set Time In today:\n\n${riderListStr}\n\n(Enter number 1-${offlineRiders.length} or type rider name):`);
+    }
+    if (!input || !input.trim()) return;
+
+    const num = parseInt(input.trim(), 10);
+    let chosenRider = null;
+    if (!isNaN(num) && num >= 1 && num <= offlineRiders.length) {
+        chosenRider = offlineRiders[num - 1];
+    } else {
+        chosenRider = roster.find(m => isRiderMatch(input.trim(), m.riderName || m.name || '', '', (m.telegramId || m.id || '').toString()));
+    }
+
+    if (chosenRider) {
+        promptAdminSetRiderTimeIn(chosenRider.telegramId || chosenRider.id, chosenRider.riderName || chosenRider.name);
+    } else {
+        showToast("⚠️ Rider not found.");
+    }
+}
+
 if (typeof window !== 'undefined') {
     window.toggleAdminControls = toggleAdminControls;
     window.openAdminCateringModal = openAdminCateringModal;
@@ -960,6 +1239,10 @@ if (typeof window !== 'undefined') {
     window.executeVoidCateredCustomer = executeVoidCateredCustomer;
     window.adminShiftRiderQueue = adminShiftRiderQueue;
     window.forceAllEndShift = forceAllEndShift;
+    window.adminSetRiderTimeIn = adminSetRiderTimeIn;
+    window.promptAdminSetRiderTimeIn = promptAdminSetRiderTimeIn;
+    window.promptAdminSelectRiderForTimeIn = promptAdminSelectRiderForTimeIn;
+    window.parseAdminCustomTime = parseAdminCustomTime;
 
     window.openAdminAutoEndShiftModal = openAdminAutoEndShiftModal;
     window.closeAdminAutoEndShiftModal = closeAdminAutoEndShiftModal;

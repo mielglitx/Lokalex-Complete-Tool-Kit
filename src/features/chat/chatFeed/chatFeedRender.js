@@ -5,7 +5,7 @@ import { escapeHtml, sanitizeFirebaseKey } from '../../../utils/helpers.js';
 import { showToast } from '../../../ui/notifications.js';
 import { globalThreadTypingMap, globalThreadViewingMap } from '../chatEngine/chatPresence.js';
 import { formatChatDateParts } from '../chatUtils.js';
-import { isAdmin, canManageRoster, hasTlPermission, isCustomerMatch } from '../../roster/rosterUtils.js';
+import { isAdmin, canManageRoster, hasTlPermission, isCustomerMatch, isRiderMatch, loadRosterCache } from '../../roster/rosterUtils.js';
 import { 
     isAllSourcesSelected, 
     isSourceSelected, 
@@ -962,11 +962,14 @@ export function handleThreadSwipeCater(btnOrCustId, optionalName) {
         return;
     }
 
+    if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
+        loadRosterCache();
+    }
     const liveRoster = globalState.rosterMembers || [];
     const myRecord = liveRoster.find(m => {
         const mId = (m.telegramId || m.id || "").toString().trim();
-        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
-        return (currentId && mId === currentId) || (currentName && mName === currentName.toLowerCase());
+        const mName = (m.riderName || m.name || "").toString().trim();
+        return (currentId && mId && mId === currentId) || (currentName && mName && (currentName.toLowerCase() === mName.toLowerCase() || isRiderMatch(currentName, mName, currentId, mId)));
     });
 
     if (!isAdminUser && !canManage) {
@@ -985,7 +988,7 @@ export function handleThreadSwipeCater(btnOrCustId, optionalName) {
     if (myRecord && myRecord.status === 'Catering' && myRecord.customerName) {
         existingCustomers = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
     }
-    const isAlreadyInList = custName && existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase());
+    const isAlreadyInList = custName && existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase() || isCustomerMatch(c, custName));
 
     if (!isAdminUser && !canManage && !isAlreadyInList) {
         const liveAvailableRiders = typeof window.sortAvailableRidersByGross === 'function'
@@ -995,7 +998,8 @@ export function handleThreadSwipeCater(btnOrCustId, optionalName) {
         if (liveAvailableRiders.length > 0) {
             const firstAvailable = liveAvailableRiders[0];
             const firstId = (firstAvailable?.telegramId || firstAvailable?.id || "").toString().trim();
-            const isFirstAvailable = firstId === currentId;
+            const firstName = (firstAvailable?.riderName || firstAvailable?.name || "").toString().trim();
+            const isFirstAvailable = (firstId && currentId && firstId === currentId) || isRiderMatch(currentName, firstName, currentId, firstId);
             const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
 
             if (!isFirstAvailable || amIAlreadyCatering) {
@@ -1005,7 +1009,11 @@ export function handleThreadSwipeCater(btnOrCustId, optionalName) {
                 const myGross = typeof window.getRiderTodayGross === 'function'
                     ? window.getRiderTodayGross(currentName, currentId)
                     : 0;
-                const myIndex = liveAvailableRiders.findIndex(m => (m.telegramId || m.id || "").toString().trim() === currentId);
+                const myIndex = liveAvailableRiders.findIndex(m => {
+                    const mId = (m.telegramId || m.id || "").toString().trim();
+                    const mName = (m.riderName || m.name || "").toString().trim();
+                    return (mId && currentId && mId === currentId) || isRiderMatch(currentName, mName, currentId, mId);
+                });
 
                 if (typeof window.openQueueNoticeModal === 'function') {
                     window.openQueueNoticeModal({
@@ -1028,7 +1036,18 @@ export function handleThreadSwipeCater(btnOrCustId, optionalName) {
     }
 
     if (window.confirmCateringStatus && custId) {
-        window.confirmCateringStatus(custName || 'Customer', custId);
+        let clickBtn = (btnOrCustId && btnOrCustId.tagName === 'BUTTON') ? btnOrCustId : null;
+        let oldHtml = clickBtn ? clickBtn.innerHTML : null;
+        if (clickBtn) {
+            clickBtn.disabled = true;
+            clickBtn.innerHTML = `<span class="inline-block animate-spin mr-1">⏳</span> Assigning...`;
+        }
+        Promise.resolve(window.confirmCateringStatus(custName || 'Customer', custId)).finally(() => {
+            if (clickBtn && oldHtml) {
+                clickBtn.disabled = false;
+                clickBtn.innerHTML = oldHtml;
+            }
+        });
     }
 }
 

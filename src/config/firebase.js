@@ -22,9 +22,16 @@ export function isSupabaseSelected() {
     return true;
 }
 
-export function queueOfflineMutation() {}
+export function queueOfflineMutation(type, id, data, action) {
+    if (typeof window !== 'undefined' && typeof window.queueOfflineRosterMutation === 'function') {
+        window.queueOfflineRosterMutation(type, id, data, action);
+    }
+}
 
 export function processOutbox() {
+    if (typeof window !== 'undefined' && typeof window.flushOfflineRosterOutbox === 'function') {
+        return window.flushOfflineRosterOutbox();
+    }
     return Promise.resolve();
 }
 

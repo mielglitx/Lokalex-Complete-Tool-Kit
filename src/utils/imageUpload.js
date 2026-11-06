@@ -47,6 +47,57 @@ export function dataUrlToBlob(dataUrl) {
 let isStorageAvailable = true;
 
 /**
+ * Downsamples and compresses an image (File, Blob, or DataURL) via an offscreen canvas
+ * ensuring the resulting JPEG payload never exceeds mobile data budgets (~35KB-50KB).
+ */
+export async function compressImageToDataUrl(fileOrBlobOrDataUrl, maxDim = 720, quality = 0.45) {
+    if (!fileOrBlobOrDataUrl || typeof window === 'undefined') return fileOrBlobOrDataUrl;
+
+    if (typeof fileOrBlobOrDataUrl === 'string' && (fileOrBlobOrDataUrl.startsWith('http://') || fileOrBlobOrDataUrl.startsWith('https://'))) {
+        return fileOrBlobOrDataUrl;
+    }
+
+    return new Promise((resolve) => {
+        let rawDataUrl = null;
+        if (typeof fileOrBlobOrDataUrl === 'string' && fileOrBlobOrDataUrl.startsWith('data:')) {
+            rawDataUrl = fileOrBlobOrDataUrl;
+            processImage(rawDataUrl);
+        } else {
+            const reader = new FileReader();
+            reader.onload = (e) => processImage(e.target.result);
+            reader.onerror = () => resolve("");
+            reader.readAsDataURL(fileOrBlobOrDataUrl);
+        }
+
+        function processImage(src) {
+            if (!src) return resolve("");
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+                if (width > maxDim || height > maxDim) {
+                    if (width > height) {
+                        height = Math.round((height * maxDim) / width);
+                        width = maxDim;
+                    } else {
+                        width = Math.round((width * maxDim) / height);
+                        height = maxDim;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = () => resolve(src);
+            img.src = src;
+        }
+    });
+}
+
+/**
  * Uploads an image (File, Blob, or base64 DataURL) to Firebase Storage
  * and returns the public HTTPS download URL.
  * 
@@ -90,10 +141,18 @@ export async function uploadImage(fileOrBlobOrDataUrl, storagePath, metadata = {
         }
     }
 
-    // Fallback: Return the original string (or read blob to base64)
-    // Note: Temporary upload services (like Litterbox 72h) are deliberately avoided
-    // because their files get purged after 72 hours, resulting in broken profile images.
-    // Permanent storage or compressed base64 (<20KB) in RTDB ensures images never expire.
+    // Fallback: Return a lightweight compressed base64 JPEG (<45KB)
+    // Ensures heavy 5MB photos never congest Supabase or waste mobile data
+    try {
+        const isHd = (typeof localStorage !== 'undefined') && localStorage.getItem('lokalex_hd_mode') === 'true';
+        const maxDim = isHd ? 1080 : 720;
+        const quality = isHd ? 0.70 : 0.45;
+        const compressed = await compressImageToDataUrl(fileOrBlobOrDataUrl, maxDim, quality);
+        if (compressed) return compressed;
+    } catch (compErr) {
+        console.warn('[ImageUpload] Compression error, fallback to raw reader:', compErr);
+    }
+
     if (typeof fileOrBlobOrDataUrl === 'string') {
         return fileOrBlobOrDataUrl;
     }

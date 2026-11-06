@@ -30,6 +30,122 @@ import {
 } from './rosterUtils.js';
 import { updateRosterUI } from './rosterUI.js';
 
+// ============================================================================
+// OFFLINE MUTATION OUTBOX ENGINE FOR ROSTER & LOGIN WRITE RESILIENCE
+// ============================================================================
+const STATUS_OUTBOX_STORAGE_KEY = 'lokalex_status_mutation_outbox';
+
+export function withTimeout(promise, timeoutMs = 5500, timeoutMessage = 'Server request timed out') {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => {
+            setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+        })
+    ]);
+}
+
+export function getOfflineRosterOutbox() {
+    try {
+        const raw = localStorage.getItem(STATUS_OUTBOX_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+export function saveOfflineRosterOutbox(outbox) {
+    try {
+        localStorage.setItem(STATUS_OUTBOX_STORAGE_KEY, JSON.stringify(outbox.slice(-60)));
+    } catch (_) {}
+}
+
+export function queueOfflineRosterMutation(type, targetId, payload, action = 'update') {
+    if (!type || !targetId || !payload) return;
+    try {
+        const outbox = getOfflineRosterOutbox();
+        const key = `${type}:${targetId}`;
+        const filtered = outbox.filter(item => `${item.type}:${item.targetId}` !== key);
+        filtered.push({
+            id: `${key}_${Date.now()}`,
+            type, // 'roster' | 'logins' | 'shiftHistory'
+            targetId: targetId.toString(),
+            payload,
+            action, // 'update' | 'set'
+            queuedAt: Date.now()
+        });
+        saveOfflineRosterOutbox(filtered);
+    } catch (e) {
+        console.warn('[queueOfflineRosterMutation] Save failed:', e);
+    }
+}
+
+let isFlushingOutbox = false;
+let fastRetryTimer = null;
+
+export function startFastOutboxRetry() {
+    if (fastRetryTimer) return;
+    fastRetryTimer = setInterval(async () => {
+        const outbox = getOfflineRosterOutbox();
+        if (!outbox || outbox.length === 0) {
+            clearInterval(fastRetryTimer);
+            fastRetryTimer = null;
+            if (typeof window.setModernSyncState === 'function') {
+                window.setModernSyncState('synced', 'All Synced');
+            }
+            return;
+        }
+        if (navigator.onLine) {
+            try {
+                await flushOfflineRosterOutbox();
+                const remaining = getOfflineRosterOutbox();
+                if (remaining.length === 0) {
+                    clearInterval(fastRetryTimer);
+                    fastRetryTimer = null;
+                    if (typeof window.setModernSyncState === 'function') {
+                        window.setModernSyncState('synced', 'All Synced');
+                    }
+                    showToast("✅ Outbox synced to cloud database!");
+                }
+            } catch (_) {}
+        }
+    }, 4000);
+}
+
+export async function flushOfflineRosterOutbox() {
+    if (isFlushingOutbox || !navigator.onLine || !db) return;
+    const outbox = getOfflineRosterOutbox();
+    if (!outbox || outbox.length === 0) return;
+
+    isFlushingOutbox = true;
+    const remaining = [];
+
+    for (const item of outbox) {
+        try {
+            let ref = null;
+            if (item.type === 'roster') {
+                ref = db.ref(`roster/${item.targetId}`);
+            } else if (item.type === 'logins') {
+                ref = db.ref(`logins/${item.targetId}`);
+            } else if (item.type === 'shiftHistory') {
+                ref = db.ref(`shiftHistory/${item.targetId}`);
+            }
+            if (ref) {
+                if (item.action === 'set') {
+                    await ref.set(item.payload);
+                } else {
+                    await ref.update(item.payload);
+                }
+            }
+        } catch (err) {
+            console.warn('[flushOfflineRosterOutbox] Item sync failed, retaining in outbox:', item.id, err);
+            remaining.push(item);
+        }
+    }
+
+    saveOfflineRosterOutbox(remaining);
+    isFlushingOutbox = false;
+}
+
 export async function updateRosterStatus(status, targetId = null, targetName = null, precalculatedQueueTime = null, skipArchive = false, customExtraData = {}) {
     const tId = (targetId || appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
     const tName = targetName || appState.riderName || localStorage.getItem('riderName') || "Rider";
@@ -50,7 +166,7 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
     }
 
     if (status === 'End') {
-        await clockOutRider(tId);
+        return await clockOutRider(tId);
     }
 
     const isStartingShift = !targetRecord || !targetRecord.status || targetRecord.status === 'End';
@@ -170,17 +286,29 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
         };
     }
 
-    await updateRosterStatusData(status, "", "", newQueueTime, tId, tName, [], recordLogin, locationLink, { ...extraData, ...customExtraData });
+    return await updateRosterStatusData(status, "", "", newQueueTime, tId, tName, [], recordLogin, locationLink, { ...extraData, ...customExtraData });
 }
 
 export async function updateRosterStatusData(status, customerName, startTime, queueTime = 0, specificId = null, specificName = null, completedHistory = [], recordLogin = false, locationLink = "", extraData = {}) {
-    const tId = (specificId || appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
-    const tName = specificName || appState.riderName || localStorage.getItem('riderName') || "Rider";
+    let tId = (specificId || appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    let tName = specificName || appState.riderName || localStorage.getItem('riderName') || "Rider";
 
-    if (!tId) return;
+    if (!tId) return { success: false, error: 'Missing rider ID' };
+
+    // Connection Check: If offline, we commit locally and queue for background sync rather than failing
+    const isDeviceOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
     if (!globalState.rosterMembers) globalState.rosterMembers = [];
-    const existingRec = globalState.rosterMembers.find(m => (m.telegramId || m.id || "").toString() === tId);
+    let existingRec = globalState.rosterMembers.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim();
+        return (mId && mId === tId) || isRiderMatch(tName, mName, tId, mId);
+    });
+
+    if (existingRec) {
+        tId = (existingRec.telegramId || existingRec.id || tId).toString().trim();
+        tName = existingRec.riderName || existingRec.name || tName;
+    }
 
     const nowTimestamp = Date.now();
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
@@ -341,55 +469,17 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         totalBreakSeconds: currentTotalBreakSeconds
     };
 
-    if (!globalState.rosterMembers) globalState.rosterMembers = [];
-    const existingIdx = globalState.rosterMembers.findIndex(m => (m.telegramId || m.id || "").toString() === tId);
-    if (existingIdx !== -1) {
-        globalState.rosterMembers[existingIdx] = {
-            ...globalState.rosterMembers[existingIdx],
-            ...rosterData
-        };
-    } else {
-        globalState.rosterMembers.push(rosterData);
+    const sanitizedRosterData = {};
+    for (const [k, v] of Object.entries(rosterData)) {
+        if (v !== undefined) {
+            sanitizedRosterData[k] = v;
+        }
     }
 
-    saveRosterCache();
-    updateRosterUI();
+    const todayStr = getLocalTodayStr();
+    let loginEntry = null;
 
-    if (db) {
-        const rosterRef = db.ref('roster/' + tId);
-        
-        // Sanitize object so no undefined property ever reaches Firebase RTDB
-        const sanitizedRosterData = {};
-        for (const [k, v] of Object.entries(rosterData)) {
-            if (v !== undefined) {
-                sanitizedRosterData[k] = v;
-            }
-        }
-
-        await rosterRef.update(sanitizedRosterData);
-
-        const fb = window.firebase || (typeof firebase !== 'undefined' ? firebase : null);
-        if (typeof rosterRef?.onDisconnect === 'function') {
-            try {
-                rosterRef.onDisconnect().update({
-                    lastActiveTimestamp: fb?.database?.ServerValue?.TIMESTAMP || Date.now()
-                }).catch(() => {});
-            } catch (_) {}
-        }
-
-        db.ref(`logins/${tId}`).update({
-            totalBreakMinutes: currentTotalBreak,
-            totalBreakSeconds: currentTotalBreakSeconds
-        }).catch(() => {});
-        const todayStr = getLocalTodayStr();
-        db.ref(`shiftHistory/${todayStr}_${tId}`).update({
-            totalBreakMinutes: currentTotalBreak,
-            totalBreakSeconds: currentTotalBreakSeconds
-        }).catch(() => {});
-    }
-
-    if (recordLogin && db) {
-        const todayStr = getLocalTodayStr();
+    if (recordLogin) {
         let finalLoginTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         let finalLoginTimestamp = nowTimestamp;
         let preservedBreakMins = currentTotalBreak;
@@ -398,43 +488,33 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         let firstLoginTime = finalLoginTime;
         let firstLoginTimestamp = finalLoginTimestamp;
 
-        try {
-            const loginSnap = await db.ref('logins/' + tId).once('value');
-            const existingLogin = loginSnap.val();
-            if (existingLogin && isSameDateStr(existingLogin.date, todayStr)) {
-                const exMins = Number(existingLogin.totalBreakMinutes) || 0;
-                const exSecs = Number(existingLogin.totalBreakSeconds) || (exMins * 60);
-                preservedBreakSecs = Math.max(preservedBreakSecs, exSecs);
-                preservedBreakMins = Math.max(preservedBreakMins, exMins, Math.ceil(preservedBreakSecs / 60));
+        // Instant 0ms memory lookup for existing login today (avoids slow network query)
+        const existingLogin = (globalState.globalLogins || []).find(l => 
+            (l.riderId || l.id || "").toString() === tId && isSameDateStr(l.date, todayStr)
+        );
 
-                firstLoginTime = existingLogin.firstLoginTime || existingLogin.loginTime || finalLoginTime;
-                firstLoginTimestamp = existingLogin.firstLoginTimestamp || existingLogin.loginTimestamp || finalLoginTimestamp;
+        if (existingLogin && isSameDateStr(existingLogin.date, todayStr)) {
+            const exMins = Number(existingLogin.totalBreakMinutes) || 0;
+            const exSecs = Number(existingLogin.totalBreakSeconds) || (exMins * 60);
+            preservedBreakSecs = Math.max(preservedBreakSecs, exSecs);
+            preservedBreakMins = Math.max(preservedBreakMins, exMins, Math.ceil(preservedBreakSecs / 60));
 
-                // CHECK IF RIDER PREVIOUSLY CLOCKED OUT TODAY
-                if (existingLogin.clockOutTimestamp || existingLogin.clockOutTime) {
-                    // Rider previously clocked out today and is now continuing/starting a new session!
-                    // Time counting was STOPPED during the clocked-out period.
-                    // Preserve the previously worked minutes from past sessions today:
-                    const prevWorked = Number(existingLogin.workedMinutes) || Number(existingLogin.accumulatedWorkedMinutes) || 0;
-                    accumulatedWorkedMinutes = prevWorked;
+            firstLoginTime = existingLogin.firstLoginTime || existingLogin.loginTime || finalLoginTime;
+            firstLoginTimestamp = existingLogin.firstLoginTimestamp || existingLogin.loginTimestamp || finalLoginTimestamp;
 
-                    // This new session's clock starts NOW (when they signed in/continued):
-                    finalLoginTime = new Date(nowTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    finalLoginTimestamp = nowTimestamp;
-                } else {
-                    // Ongoing session reconnect / refresh without clock out:
-                    if (existingLogin.loginTime) {
-                        finalLoginTime = existingLogin.loginTime;
-                    }
-                    if (existingLogin.loginTimestamp) {
-                        finalLoginTimestamp = existingLogin.loginTimestamp;
-                    }
-                    accumulatedWorkedMinutes = Number(existingLogin.accumulatedWorkedMinutes) || 0;
-                }
+            if (existingLogin.clockOutTimestamp || existingLogin.clockOutTime) {
+                const prevWorked = Number(existingLogin.workedMinutes) || Number(existingLogin.accumulatedWorkedMinutes) || 0;
+                accumulatedWorkedMinutes = prevWorked;
+                finalLoginTime = new Date(nowTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                finalLoginTimestamp = nowTimestamp;
+            } else {
+                if (existingLogin.loginTime) finalLoginTime = existingLogin.loginTime;
+                if (existingLogin.loginTimestamp) finalLoginTimestamp = existingLogin.loginTimestamp;
+                accumulatedWorkedMinutes = Number(existingLogin.accumulatedWorkedMinutes) || 0;
             }
-        } catch(e) {}
+        }
 
-        const loginEntry = {
+        loginEntry = {
             riderId: tId,
             id: tId,
             riderName: tName,
@@ -453,9 +533,26 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
             accumulatedWorkedMinutes: accumulatedWorkedMinutes,
             workedMinutes: 0
         };
-        await db.ref('logins/' + tId).set(loginEntry);
-        db.ref('shiftHistory/' + todayStr + '_' + tId).set(loginEntry).catch(() => {});
+    }
 
+    // ========================================================================
+    // 1. INSTANT OPTIMISTIC LOCAL COMMIT (0ms Local Execution & Fluid UI)
+    // ========================================================================
+    const existingIdx = globalState.rosterMembers.findIndex(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim();
+        return (mId && mId === tId) || isRiderMatch(tName, mName, tId, mId);
+    });
+    if (existingIdx !== -1) {
+        globalState.rosterMembers[existingIdx] = {
+            ...globalState.rosterMembers[existingIdx],
+            ...rosterData
+        };
+    } else {
+        globalState.rosterMembers.push(rosterData);
+    }
+
+    if (recordLogin && loginEntry) {
         if (!globalState.globalLogins) globalState.globalLogins = [];
         const exIdx = globalState.globalLogins.findIndex(l => (l.riderId || l.id || "").toString() === tId);
         if (exIdx !== -1) {
@@ -463,9 +560,82 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         } else {
             globalState.globalLogins.push(loginEntry);
         }
-        saveRosterCache();
         window.dispatchEvent(new CustomEvent('loginsUpdated'));
     }
+
+    saveRosterCache();
+    updateRosterUI();
+    window.dispatchEvent(new Event('rosterUpdated'));
+    if (typeof window.refreshAllModernViews === 'function') {
+        window.refreshAllModernViews();
+    }
+
+    // ========================================================================
+    // 2. BACKGROUND SERVER HANDSHAKE & RESILIENT OUTBOX RETRY
+    // ========================================================================
+    if (isDeviceOffline) {
+        queueOfflineRosterMutation('roster', tId, sanitizedRosterData, 'set');
+        if (recordLogin && loginEntry) {
+            queueOfflineRosterMutation('logins', tId, loginEntry, 'set');
+            queueOfflineRosterMutation('shiftHistory', `${todayStr}_${tId}`, loginEntry, 'set');
+        }
+        if (typeof window.setModernSyncState === 'function') {
+            window.setModernSyncState('queued', 'Saved (Offline)');
+        }
+        showToast(recordLogin ? "⏱️ Time-In saved on device! Auto-syncing when online..." : "☁️ Status saved! Auto-syncing...", 3000);
+        startFastOutboxRetry();
+        return { success: true, status, riderId: tId, queuedOffline: true };
+    }
+
+    if (typeof window.setModernSyncState === 'function') {
+        window.setModernSyncState('syncing', recordLogin ? 'Syncing Time-In...' : 'Syncing Status...');
+    }
+
+    if (db) {
+        const rosterRef = db.ref('roster/' + tId);
+        // Use direct single-roundtrip .set() since sanitizedRosterData has the full merged record
+        const networkTasks = [
+            rosterRef.set(sanitizedRosterData)
+        ];
+
+        if (recordLogin && loginEntry) {
+            networkTasks.push(db.ref('logins/' + tId).set(loginEntry));
+            // Shift history audit record saved asynchronously in background so it never slows down the handshake
+            db.ref(`shiftHistory/${todayStr}_${tId}`).set(loginEntry).catch(() => {});
+        } else {
+            networkTasks.push(db.ref(`logins/${tId}`).update({
+                totalBreakMinutes: currentTotalBreak,
+                totalBreakSeconds: currentTotalBreakSeconds
+            }).catch(() => {}));
+            db.ref(`shiftHistory/${todayStr}_${tId}`).update({
+                totalBreakMinutes: currentTotalBreak,
+                totalBreakSeconds: currentTotalBreakSeconds
+            }).catch(() => {});
+        }
+
+        try {
+            // Await cloud commit with 6.5s timeout guard for resilient mobile cellular handshakes
+            await withTimeout(Promise.all(networkTasks), 6500, "Connection timeout: Server took too long to confirm status update.");
+            if (typeof window.setModernSyncState === 'function') {
+                window.setModernSyncState('synced', recordLogin ? 'Time-In Confirmed' : 'Status Confirmed');
+            }
+        } catch (serverErr) {
+            console.warn('[updateRosterStatusData] Server handshake delayed/offline, saving to outbox:', serverErr);
+            // Save mutation to outbox as backup
+            queueOfflineRosterMutation('roster', tId, sanitizedRosterData, 'set');
+            if (recordLogin && loginEntry) {
+                queueOfflineRosterMutation('logins', tId, loginEntry, 'set');
+                queueOfflineRosterMutation('shiftHistory', `${todayStr}_${tId}`, loginEntry, 'set');
+            }
+            if (typeof window.setModernSyncState === 'function') {
+                window.setModernSyncState('queued', 'Saved (Syncing)');
+            }
+            showToast(recordLogin ? "⏱️ Time-In saved! Auto-syncing to cloud..." : "☁️ Status saved! Auto-syncing...", 3000);
+            startFastOutboxRetry();
+        }
+    }
+
+    return { success: true, status, riderId: tId };
 }
 
 export async function clockOutRider(targetId = null) {
@@ -473,6 +643,14 @@ export async function clockOutRider(targetId = null) {
     const nowTimestamp = Date.now();
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const todayStr = getLocalTodayStr();
+
+    if (!tId) {
+        throw new Error('Rider ID not found for clock out.');
+    }
+
+    if (!navigator.onLine) {
+        throw new Error('Offline: Cannot end shift without internet connection.');
+    }
 
     let finalBreakSecs = 0;
     const rMem = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === tId);
@@ -497,105 +675,100 @@ export async function clockOutRider(targetId = null) {
     }
     const finalBreakMins = Math.ceil(finalBreakSecs / 60);
 
-    if (db && tId) {
-        let grossMins = 0;
-        let netWorkedMins = 0;
-        let totalWorkedToday = 0;
-        try {
-            const loginSnap = await db.ref('logins/' + tId).once('value');
-            const existingLogin = loginSnap.val();
+    let grossMins = 0;
+    let netWorkedMins = 0;
+    let totalWorkedToday = 0;
 
-            if (existingLogin) {
-                if (existingLogin.loginTimestamp) {
-                    grossMins = Math.max(0, Math.floor((nowTimestamp - existingLogin.loginTimestamp) / 60000));
-                    netWorkedMins = Math.max(0, grossMins - finalBreakMins);
-                }
-                const prevAccum = Number(existingLogin.accumulatedWorkedMinutes) || 0;
-                totalWorkedToday = prevAccum + netWorkedMins;
+    let shiftClockOutPayload = null;
+    let initialClockOutEntry = null;
 
-                const shiftClockOutPayload = { 
-                    clockOutTime: timeStr,
-                    clockOutTimestamp: nowTimestamp,
-                    totalBreakMinutes: finalBreakMins,
-                    totalBreakSeconds: finalBreakSecs,
-                    grossMinutes: grossMins,
-                    sessionWorkedMinutes: netWorkedMins,
-                    workedMinutes: totalWorkedToday,
-                    accumulatedWorkedMinutes: totalWorkedToday,
-                    date: todayStr
-                };
-                await db.ref('logins/' + tId).update(shiftClockOutPayload);
-                db.ref('shiftHistory/' + todayStr + '_' + tId).update(shiftClockOutPayload).catch(() => {});
-            } else {
-                const rName = rMem ? (rMem.riderName || rMem.name || "Rider") : (appState.riderName || "Rider");
-                await db.ref('logins/' + tId).set({
-                    riderId: tId,
-                    id: tId,
-                    riderName: rName,
-                    loginTime: timeStr,
-                    loginTimestamp: nowTimestamp,
-                    clockOutTime: timeStr,
-                    clockOutTimestamp: nowTimestamp,
-                    date: todayStr,
-                    location: "",
-                    totalBreakMinutes: finalBreakMins,
-                    totalBreakSeconds: finalBreakSecs,
-                    grossMinutes: 0,
-                    sessionWorkedMinutes: 0,
-                    workedMinutes: 0,
-                    accumulatedWorkedMinutes: 0
-                });
-            }
-        } catch(e) {}
+    if (existingLoginToday) {
+        if (existingLoginToday.loginTimestamp) {
+            grossMins = Math.max(0, Math.floor((nowTimestamp - existingLoginToday.loginTimestamp) / 60000));
+            netWorkedMins = Math.max(0, grossMins - finalBreakMins);
+        }
+        const prevAccum = Number(existingLoginToday.accumulatedWorkedMinutes) || 0;
+        totalWorkedToday = prevAccum + netWorkedMins;
 
-        await db.ref('roster/' + tId).update({ 
-            status: 'End',
-            customerName: '',
-            forcedCaters: null,
-            forcedBy: null,
-            isForcedCater: false,
-            breakTimestamp: null,
-            breakStartTime: null,
-            breakDurationMinutes: null,
-            breakDurationLabel: null,
-            breakTargetTimestamp: null,
-            isUnlimitedBreak: false,
-            breakDate: todayStr,
-            availableTimestamp: null,
+        shiftClockOutPayload = { 
+            clockOutTime: timeStr,
+            clockOutTimestamp: nowTimestamp,
             totalBreakMinutes: finalBreakMins,
             totalBreakSeconds: finalBreakSecs,
-            lastActiveTimestamp: nowTimestamp,
-            lastUpdated: timeStr
-        }).catch(() => {});
-
-        // Clean up any lingering catering chats assigned to this rider so they return to inbox/done
-        try {
-            const rName = rMem ? (rMem.riderName || rMem.name || "").trim().toLowerCase() : (appState.riderName || "").trim().toLowerCase();
-            const snap = await db.ref('customerChatMeta').once('value');
-            const chats = snap.val() || {};
-            const chatUpdates = {};
-            Object.entries(chats).forEach(([cId, meta]) => {
-                const cRiderId = (meta.cateredByRiderId || '').toString();
-                const cRiderName = (meta.cateredByRiderName || meta.cateredBy || '').trim().toLowerCase();
-                if ((tId && cRiderId === tId) || (rName && (cRiderName === rName || isRiderMatch(cRiderName, rName)))) {
-                    const isDone = (meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled');
-                    const targetFolder = isDone ? 'done' : (meta.isApplicant ? 'applicant' : 'inbox');
-                    chatUpdates[`customerChatMeta/${cId}/cateredByRiderId`] = null;
-                    chatUpdates[`customerChatMeta/${cId}/cateredByRiderName`] = null;
-                    chatUpdates[`customerChatMeta/${cId}/cateredBy`] = null;
-                    chatUpdates[`customerChatMeta/${cId}/folder`] = targetFolder;
-                    chatUpdates[`customerChats/${cId}/metadata/cateredByRiderId`] = null;
-                    chatUpdates[`customerChats/${cId}/metadata/cateredByRiderName`] = null;
-                    chatUpdates[`customerChats/${cId}/metadata/cateredBy`] = null;
-                    chatUpdates[`customerChats/${cId}/metadata/folder`] = targetFolder;
-                }
-            });
-            if (Object.keys(chatUpdates).length > 0) {
-                await db.ref().update(chatUpdates);
-            }
-        } catch (_) {}
+            grossMinutes: grossMins,
+            sessionWorkedMinutes: netWorkedMins,
+            workedMinutes: totalWorkedToday,
+            accumulatedWorkedMinutes: totalWorkedToday,
+            date: todayStr
+        };
+    } else {
+        const rName = rMem ? (rMem.riderName || rMem.name || "Rider") : (appState.riderName || "Rider");
+        initialClockOutEntry = {
+            riderId: tId,
+            id: tId,
+            riderName: rName,
+            loginTime: timeStr,
+            loginTimestamp: nowTimestamp,
+            clockOutTime: timeStr,
+            clockOutTimestamp: nowTimestamp,
+            date: todayStr,
+            location: "",
+            totalBreakMinutes: finalBreakMins,
+            totalBreakSeconds: finalBreakSecs,
+            grossMinutes: 0,
+            sessionWorkedMinutes: 0,
+            workedMinutes: 0,
+            accumulatedWorkedMinutes: 0
+        };
     }
 
+    const endStatusPayload = { 
+        status: 'End',
+        customerName: '',
+        forcedCaters: null,
+        forcedBy: null,
+        isForcedCater: false,
+        breakTimestamp: null,
+        breakStartTime: null,
+        breakDurationMinutes: null,
+        breakDurationLabel: null,
+        breakTargetTimestamp: null,
+        isUnlimitedBreak: false,
+        breakDate: todayStr,
+        availableTimestamp: null,
+        totalBreakMinutes: finalBreakMins,
+        totalBreakSeconds: finalBreakSecs,
+        lastActiveTimestamp: nowTimestamp,
+        lastUpdated: timeStr
+    };
+
+    // Clean up any lingering catering chats assigned to this rider in memory (zero network table download)
+    const chatUpdates = {};
+    const threadMap = (typeof window.getCachedCustomerThreadsMap === 'function') ? window.getCachedCustomerThreadsMap() : null;
+    const rName = rMem ? (rMem.riderName || rMem.name || "").trim().toLowerCase() : (appState.riderName || "").trim().toLowerCase();
+
+    if (threadMap && threadMap.size > 0) {
+        for (const [cId, meta] of threadMap.entries()) {
+            const cRiderId = (meta.cateredByRiderId || '').toString();
+            const cRiderName = (meta.cateredByRiderName || meta.cateredBy || '').trim().toLowerCase();
+            if ((tId && cRiderId === tId) || (rName && (cRiderName === rName || isRiderMatch(cRiderName, rName)))) {
+                const isDone = (meta.status === 'completed' || meta.status === 'done' || meta.status === 'cancelled');
+                const targetFolder = isDone ? 'done' : (meta.isApplicant ? 'applicant' : 'inbox');
+                chatUpdates[`customerChatMeta/${cId}/cateredByRiderId`] = null;
+                chatUpdates[`customerChatMeta/${cId}/cateredByRiderName`] = null;
+                chatUpdates[`customerChatMeta/${cId}/cateredBy`] = null;
+                chatUpdates[`customerChatMeta/${cId}/folder`] = targetFolder;
+                chatUpdates[`customerChats/${cId}/metadata/cateredByRiderId`] = null;
+                chatUpdates[`customerChats/${cId}/metadata/cateredByRiderName`] = null;
+                chatUpdates[`customerChats/${cId}/metadata/cateredBy`] = null;
+                chatUpdates[`customerChats/${cId}/metadata/folder`] = targetFolder;
+            }
+        }
+    }
+
+    // ========================================================================
+    // 1. INSTANT OPTIMISTIC IN-MEMORY COMMIT (0ms Local Execution & Fluid UI)
+    // ========================================================================
     if (rMem) {
         rMem.status = 'End';
         rMem.customerName = '';
@@ -618,26 +791,117 @@ export async function clockOutRider(targetId = null) {
         const lIdx = globalState.globalLogins.findIndex(l => (l.riderId || l.id || "").toString() === tId);
         if (lIdx !== -1) {
             const loginRec = globalState.globalLogins[lIdx];
-            let gross = 0;
-            if (loginRec.loginTimestamp) {
-                gross = Math.max(0, Math.floor((nowTimestamp - loginRec.loginTimestamp) / 60000));
-            }
-            const prevAccum = Number(loginRec.accumulatedWorkedMinutes) || 0;
-            const netMins = Math.max(0, gross - finalBreakMins);
-            const totalWorked = prevAccum + netMins;
-
             loginRec.clockOutTime = timeStr;
             loginRec.clockOutTimestamp = nowTimestamp;
             loginRec.totalBreakMinutes = finalBreakMins;
             loginRec.totalBreakSeconds = finalBreakSecs;
-            loginRec.grossMinutes = gross;
-            loginRec.sessionWorkedMinutes = netMins;
-            loginRec.workedMinutes = totalWorked;
-            loginRec.accumulatedWorkedMinutes = totalWorked;
+            loginRec.grossMinutes = grossMins;
+            loginRec.sessionWorkedMinutes = netWorkedMins;
+            loginRec.workedMinutes = totalWorkedToday;
+            loginRec.accumulatedWorkedMinutes = totalWorkedToday;
         }
     }
+
     saveRosterCache();
+    updateRosterUI();
     window.dispatchEvent(new CustomEvent('loginsUpdated'));
+    window.dispatchEvent(new Event('rosterUpdated'));
+    if (typeof window.refreshAllModernViews === 'function') {
+        window.refreshAllModernViews();
+    }
+
+    // ========================================================================
+    // 2. BACKGROUND SERVER SYNC & RESILIENT OUTBOX RETRY
+    // ========================================================================
+    if (typeof window.setModernSyncState === 'function') {
+        window.setModernSyncState('syncing', 'Clocking Out...');
+    }
+
+    const isDeviceOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isDeviceOffline) {
+        if (shiftClockOutPayload) {
+            queueOfflineRosterMutation('logins', tId, shiftClockOutPayload, 'update');
+        } else if (initialClockOutEntry) {
+            queueOfflineRosterMutation('logins', tId, initialClockOutEntry, 'set');
+        }
+        queueOfflineRosterMutation('roster', tId, endStatusPayload, 'update');
+        if (typeof window.setModernSyncState === 'function') {
+            window.setModernSyncState('queued', 'Clock-Out Saved');
+        }
+        startFastOutboxRetry();
+        return { success: true, status: 'End', riderId: tId, queuedOffline: true };
+    }
+
+    if (db) {
+        const networkTasks = [];
+        if (shiftClockOutPayload) {
+            networkTasks.push(db.ref('logins/' + tId).update(shiftClockOutPayload));
+        } else if (initialClockOutEntry) {
+            networkTasks.push(db.ref('logins/' + tId).set(initialClockOutEntry));
+        }
+        networkTasks.push(db.ref('roster/' + tId).update(endStatusPayload));
+        if (Object.keys(chatUpdates).length > 0) {
+            networkTasks.push(db.ref().update(chatUpdates));
+        }
+
+        try {
+            await withTimeout(Promise.all(networkTasks), 6500, 'Server took too long to confirm clock-out.');
+            if (typeof window.setModernSyncState === 'function') {
+                window.setModernSyncState('synced', 'Clock-Out Confirmed');
+            }
+        } catch (serverErr) {
+            console.warn('[clockOutRider] Server handshake delayed/offline, saving to outbox:', serverErr);
+            if (shiftClockOutPayload) {
+                queueOfflineRosterMutation('logins', tId, shiftClockOutPayload, 'update');
+            } else if (initialClockOutEntry) {
+                queueOfflineRosterMutation('logins', tId, initialClockOutEntry, 'set');
+            }
+            queueOfflineRosterMutation('roster', tId, endStatusPayload, 'update');
+            if (typeof window.setModernSyncState === 'function') {
+                window.setModernSyncState('queued', 'Saved (Syncing)');
+            }
+            startFastOutboxRetry();
+        }
+
+        // Shift history recorded asynchronously in background
+        if (shiftClockOutPayload) {
+            db.ref('shiftHistory/' + todayStr + '_' + tId).update(shiftClockOutPayload).catch(() => {});
+        }
+    }
+
+    return { success: true, status: 'End', riderId: tId };
+}
+
+if (typeof window !== 'undefined') {
+    window.updateRosterStatus = updateRosterStatus;
+    window.updateRosterStatusData = updateRosterStatusData;
+    window.clockOutRider = clockOutRider;
+    window.flushOfflineRosterOutbox = flushOfflineRosterOutbox;
+    window.getOfflineRosterOutbox = getOfflineRosterOutbox;
+    window.queueOfflineRosterMutation = queueOfflineRosterMutation;
+    window.startFastOutboxRetry = startFastOutboxRetry;
+
+    // Check if there are lingering items from previous session on boot
+    const pendingOutbox = getOfflineRosterOutbox();
+    if (pendingOutbox && pendingOutbox.length > 0) {
+        startFastOutboxRetry();
+    }
+
+    // Automatically flush outbox whenever connectivity recovers
+    window.addEventListener('online', () => {
+        flushOfflineRosterOutbox().catch(() => {});
+    });
+    window.addEventListener('appResumedFromBackground', () => {
+        flushOfflineRosterOutbox().catch(() => {});
+    });
+
+    // Periodic safety flush for pending offline outbox items
+    setInterval(() => {
+        if (typeof document !== 'undefined' && document.hidden) return;
+        if (navigator.onLine) {
+            flushOfflineRosterOutbox().catch(() => {});
+        }
+    }, 30000);
 }
 
 // REMARKS: ROSTER_STATUS_CORE_UNCONDITIONAL_IDEMPOTENT_AVAILABLE_V4_COMPLETE

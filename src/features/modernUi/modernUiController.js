@@ -36,6 +36,7 @@ import {
     canManageRoster, 
     hasTlPermission, 
     isTL,
+    canForceCaterTarget,
     isRiderMatch, 
     isCustomerMatch,
     sortAvailableRiders, 
@@ -141,6 +142,17 @@ export function applyLokalexUiMode(mode = null, notify = false) {
         if (currentActiveView === 'view-home') {
             if (appHeader) appHeader.classList.remove('hidden');
             if (homeView) homeView.classList.remove('hidden');
+        }
+        // Force release any lingering body scroll lock when switching to Classic UI
+        if (typeof document !== 'undefined' && document.body) {
+            document.body.classList.remove('overflow-hidden', 'touch-none');
+            document.body.style.overflow = '';
+            document.body.style.touchAction = '';
+            if (document.documentElement) {
+                document.documentElement.classList.remove('overflow-hidden', 'touch-none', 'has-chat-open');
+                document.documentElement.style.overflow = '';
+                document.documentElement.style.touchAction = '';
+            }
         }
         if (notify) showToast("🔄 Switched to Classic UI");
     }
@@ -254,6 +266,53 @@ export function updateModernHeaderClock() {
     }
 }
 
+let syncBadgeHideTimeout = null;
+
+/**
+ * Updates the modern header sync status pill with optimistic feedback:
+ * - 'syncing': Handshake in flight over cellular network (yellow pulsing dot)
+ * - 'synced': Successfully confirmed by Supabase (green dot, auto-hides after 3s)
+ * - 'queued': Offline or poor signal, safely saved locally in outbox (sky dot)
+ */
+export function setModernSyncState(state, customLabel = null) {
+    const pill = document.getElementById('modern-header-sync-pill');
+    const dot = document.getElementById('modern-header-sync-dot');
+    const text = document.getElementById('modern-header-sync-text');
+    if (!pill || !dot || !text) return;
+
+    if (syncBadgeHideTimeout) {
+        clearTimeout(syncBadgeHideTimeout);
+        syncBadgeHideTimeout = null;
+    }
+
+    if (state === 'syncing') {
+        pill.classList.remove('hidden');
+        pill.classList.add('flex');
+        pill.className = "px-2 py-1 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] sm:text-[11px] font-mono font-bold flex items-center gap-1.5 shrink-0 transition-all duration-300";
+        dot.className = "w-2 h-2 rounded-full bg-amber-400 animate-pulse";
+        text.innerText = customLabel || "Syncing...";
+    } else if (state === 'synced') {
+        pill.classList.remove('hidden');
+        pill.classList.add('flex');
+        pill.className = "px-2 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[10px] sm:text-[11px] font-mono font-bold flex items-center gap-1.5 shrink-0 transition-all duration-300";
+        dot.className = "w-2 h-2 rounded-full bg-emerald-400";
+        text.innerText = customLabel || "Synced";
+        syncBadgeHideTimeout = setTimeout(() => {
+            pill.classList.remove('flex');
+            pill.classList.add('hidden');
+        }, 3000);
+    } else if (state === 'queued') {
+        pill.classList.remove('hidden');
+        pill.classList.add('flex');
+        pill.className = "px-2 py-1 rounded-xl bg-sky-500/15 border border-sky-500/40 text-sky-300 text-[10px] sm:text-[11px] font-mono font-bold flex items-center gap-1.5 shrink-0 transition-all duration-300";
+        dot.className = "w-2 h-2 rounded-full bg-sky-400 animate-ping";
+        text.innerText = customLabel || "Saved (Syncing)";
+    } else {
+        pill.classList.remove('flex');
+        pill.classList.add('hidden');
+    }
+}
+
 // ============================================================================
 // 4. FACEBOOK-STYLE FLOATING DRILL-DOWN MENU
 // ============================================================================
@@ -266,6 +325,27 @@ export function toggleModernHamburgerMenu(event) {
     closeModernPopovers();
     if (isHidden) {
         backToModernMenuMain();
+        const adminRow = document.getElementById('modern-menu-admin-row');
+        if (adminRow) {
+            const isUserAdmin = isAdmin();
+            const isUserTL = isTL();
+            const canManage = typeof canManageRoster === 'function' ? canManageRoster() : (isUserAdmin || isUserTL);
+            if (isUserAdmin) {
+                adminRow.classList.remove('hidden');
+                const titleEl = adminRow.querySelector('span.text-rose-400');
+                const subEl = adminRow.querySelector('span.text-slate-400');
+                if (titleEl) titleEl.innerText = "Admin Settings (A–Z)";
+                if (subEl) subEl.innerText = "All 24 Admin & Dispatch Controls";
+            } else if (isUserTL && canManage) {
+                adminRow.classList.remove('hidden');
+                const titleEl = adminRow.querySelector('span.text-rose-400');
+                const subEl = adminRow.querySelector('span.text-slate-400');
+                if (titleEl) titleEl.innerText = "TL Supervisory Controls";
+                if (subEl) subEl.innerText = "Assigned Team Leader Dispatch Tools";
+            } else {
+                adminRow.classList.add('hidden');
+            }
+        }
         popover.classList.remove('hidden');
     } else {
         popover.classList.add('hidden');
@@ -328,32 +408,39 @@ export function openModernMenuCategory(catKey) {
             { icon: "fa-share-nodes text-blue-400", label: "Share Location", desc: "Generate map pin link for customer", action: () => { closeModernHamburgerMenu(); window.openLiveCustomerMap && window.openLiveCustomerMap(); } }
         ];
     } else if (catKey === 'admin') {
-        title = "Admin Settings (A–Z)";
-        items = [
-            { icon: "fa-toggle-on text-amber-400", label: "Admin Mode Toggle", desc: "Toggle supervisory action buttons", action: () => { closeModernHamburgerMenu(); window.toggleAdminControls && window.toggleAdminControls(!globalState.adminControlsEnabled); } },
-            { icon: "fa-clock-rotate-left text-purple-400", label: "Auto End", desc: "Automatic shift termination cutoff", action: () => { closeModernHamburgerMenu(); window.openAdminAutoEndShiftModal && window.openAdminAutoEndShiftModal(); } },
-            { icon: "fa-robot text-purple-400", label: "Auto-Msg", desc: "Automated catering & done responses", action: () => { closeModernHamburgerMenu(); window.openAutoMessageSettingsModal && window.openAutoMessageSettingsModal(); } },
-            { icon: "fa-user-slash text-rose-400", label: "Ban List", desc: "Blocked users and blacklisted accounts", action: () => { closeModernHamburgerMenu(); window.openAdminBlockModal && window.openAdminBlockModal(); } },
-            { icon: "fa-mug-hot text-amber-400", label: "Breaks", desc: "Break allowances and durations", action: () => { closeModernHamburgerMenu(); window.openAdminBreakSettingsModal && window.openAdminBreakSettingsModal(); } },
-            { icon: "fa-bell text-yellow-400", label: "Chimes", desc: "Audio alerts & notification tones", action: () => { closeModernHamburgerMenu(); window.openChatSoundSettingsModal && window.openChatSoundSettingsModal(); } },
-            { icon: "fa-broom text-sky-400", label: "Clear Inbox", desc: "Move active inbox threads to done", action: () => { closeModernHamburgerMenu(); window.clearAllInboxThreads && window.clearAllInboxThreads(); } },
-            { icon: "fa-percent text-amber-400", label: "Commission (% Commission)", desc: "Daily commission fees and tier rates", action: () => { closeModernHamburgerMenu(); window.openAdminCommissionSettingsModal && window.openAdminCommissionSettingsModal(); } },
-            { icon: "fa-coins text-amber-400", label: "Credits", desc: "Directory search credit balances", action: () => { closeModernHamburgerMenu(); window.openAdminDirectoryCreditsModal && window.openAdminDirectoryCreditsModal(); } },
-            { icon: "fa-umbrella-beach text-teal-400", label: "Day Off", desc: "Weekly scheduled day-off view", action: () => { closeModernHamburgerMenu(); window.openRiderDayOffModal && window.openRiderDayOffModal(); } },
-            { icon: "fa-sliders text-teal-400", label: "Day-Off Rules", desc: "Quotas and day-off change limits", action: () => { closeModernHamburgerMenu(); window.openAdminDayOffSettingsModal && window.openAdminDayOffSettingsModal(); } },
-            { icon: "fa-user-clock text-rose-400", label: "Early Out", desc: "Shift duration & early exit penalty rules", action: () => { closeModernHamburgerMenu(); window.openAdminEarlyShiftModal && window.openAdminEarlyShiftModal(); } },
-            { icon: "fa-brands fa-facebook-messenger text-blue-400", label: "FB APIs", desc: "Facebook Messenger webhook tokens", action: () => { closeModernHamburgerMenu(); window.openAdminFbApiModal && window.openAdminFbApiModal(); } },
-            { icon: "fa-map-location-dot text-indigo-400", label: "Find", desc: "Geospatial rider locations map", action: () => { closeModernHamburgerMenu(); if (window.openFindRidersModal) window.openFindRidersModal(); else if (window.openFindRidersMap) window.openFindRidersMap(); } },
-            { icon: "fa-power-off text-rose-500", label: "Force All End", desc: "Terminate shifts for all riders", action: () => { closeModernHamburgerMenu(); window.forceAllEndShift && window.forceAllEndShift(); } },
-            { icon: "fa-ban text-rose-400", label: "Full Booking", desc: "Full booking auto-responder toggle", action: () => { closeModernHamburgerMenu(); window.openFullBookingModal && window.openFullBookingModal(); } },
-            { icon: "fa-arrow-down-short-wide text-purple-400", label: "Lineup Rules", desc: "Queue rotation mode & cooldown buffer", action: () => { closeModernHamburgerMenu(); window.openAdminQueueSettingsModal && window.openAdminQueueSettingsModal(); } },
-            { icon: "fa-users-gear text-blue-400", label: "Manage (Riders)", desc: "Accounts, roles, and privileges", action: () => { closeModernHamburgerMenu(); window.openAdminManageRidersModal && window.openAdminManageRidersModal(); } },
-            { icon: "fa-layer-group text-rose-400", label: "Max Orders", desc: "Active catering order capacity caps", action: () => { closeModernHamburgerMenu(); window.openAdminBookingLimitsModal && window.openAdminBookingLimitsModal(); } },
-            { icon: "fa-trophy text-amber-400", label: "Performance", desc: "Weekly & monthly rider performance reports", action: () => { closeModernHamburgerMenu(); window.openAdminPerformanceTrackerModal && window.openAdminPerformanceTrackerModal(); } },
-            { icon: "fa-clock text-purple-400", label: "Schedule", desc: "Rider time-in schedules & early passes", action: () => { closeModernHamburgerMenu(); window.openAdminTimeInScheduleModal && window.openAdminTimeInScheduleModal(); } },
-            { icon: "fa-bullhorn text-sky-400", label: "Send to Many", desc: "Mass broadcast customer announcement", action: () => { closeModernHamburgerMenu(); window.openBroadcastModal && window.openBroadcastModal(); } },
-            { icon: "fa-shop text-orange-400", label: "Store Hub", desc: "Store accounts & menu administration", action: () => { closeModernHamburgerMenu(); window.openAdminStoreAccountModal && window.openAdminStoreAccountModal(); } }
+        const isUserAdmin = isAdmin();
+        title = isUserAdmin ? "Admin Settings (A–Z)" : "TL Supervisory Controls";
+        const allAdminItems = [
+            { icon: "fa-toggle-on text-amber-400", label: "Admin Mode Toggle", desc: "Toggle supervisory action buttons", permKey: null, adminOnly: true, action: () => { closeModernHamburgerMenu(); window.toggleAdminControls && window.toggleAdminControls(!globalState.adminControlsEnabled); } },
+            { icon: "fa-clock-rotate-left text-purple-400", label: "Auto End", desc: "Automatic shift termination cutoff", permKey: "canManageAutoEndShift", action: () => { closeModernHamburgerMenu(); window.openAdminAutoEndShiftModal && window.openAdminAutoEndShiftModal(); } },
+            { icon: "fa-robot text-purple-400", label: "Auto-Msg", desc: "Automated catering & done responses", permKey: null, adminOnly: true, action: () => { closeModernHamburgerMenu(); window.openAutoMessageSettingsModal && window.openAutoMessageSettingsModal(); } },
+            { icon: "fa-user-slash text-rose-400", label: "Ban List", desc: "Blocked users and blacklisted accounts", permKey: "canManageBanList", action: () => { closeModernHamburgerMenu(); window.openAdminBlockModal && window.openAdminBlockModal(); } },
+            { icon: "fa-mug-hot text-amber-400", label: "Breaks", desc: "Break allowances and durations", permKey: "canManageBreakSettings", action: () => { closeModernHamburgerMenu(); window.openAdminBreakSettingsModal && window.openAdminBreakSettingsModal(); } },
+            { icon: "fa-bell text-yellow-400", label: "Chimes", desc: "Audio alerts & notification tones", permKey: null, adminOnly: false, action: () => { closeModernHamburgerMenu(); window.openChatSoundSettingsModal && window.openChatSoundSettingsModal(); } },
+            { icon: "fa-broom text-sky-400", label: "Clear Inbox", desc: "Move active inbox threads to done", permKey: "canClearInbox", action: () => { closeModernHamburgerMenu(); window.clearAllInboxThreads && window.clearAllInboxThreads(); } },
+            { icon: "fa-percent text-amber-400", label: "Commission (% Commission)", desc: "Daily commission fees and tier rates", permKey: "canManageCommission", action: () => { closeModernHamburgerMenu(); window.openAdminCommissionSettingsModal && window.openAdminCommissionSettingsModal(); } },
+            { icon: "fa-coins text-amber-400", label: "Credits", desc: "Directory search credit balances", permKey: "canManageCredits", action: () => { closeModernHamburgerMenu(); window.openAdminDirectoryCreditsModal && window.openAdminDirectoryCreditsModal(); } },
+            { icon: "fa-umbrella-beach text-teal-400", label: "Day Off", desc: "Weekly scheduled day-off view", permKey: null, adminOnly: false, action: () => { closeModernHamburgerMenu(); window.openRiderDayOffModal && window.openRiderDayOffModal(); } },
+            { icon: "fa-sliders text-teal-400", label: "Day-Off Rules", desc: "Quotas and day-off change limits", permKey: "canManageDayOff", action: () => { closeModernHamburgerMenu(); window.openAdminDayOffSettingsModal && window.openAdminDayOffSettingsModal(); } },
+            { icon: "fa-user-clock text-rose-400", label: "Early Out", desc: "Shift duration & early exit penalty rules", permKey: "canManageEarlyShift", action: () => { closeModernHamburgerMenu(); window.openAdminEarlyShiftModal && window.openAdminEarlyShiftModal(); } },
+            { icon: "fa-brands fa-facebook-messenger text-blue-400", label: "FB APIs", desc: "Facebook Messenger webhook tokens", permKey: "canManageFbApis", action: () => { closeModernHamburgerMenu(); window.openAdminFbApiModal && window.openAdminFbApiModal(); } },
+            { icon: "fa-map-location-dot text-indigo-400", label: "Find", desc: "Geospatial rider locations map", permKey: null, adminOnly: false, action: () => { closeModernHamburgerMenu(); if (window.openFindRidersModal) window.openFindRidersModal(); else if (window.openFindRidersMap) window.openFindRidersMap(); } },
+            { icon: "fa-power-off text-rose-500", label: "Force All End", desc: "Terminate shifts for all riders", permKey: "canEndAllShifts", action: () => { closeModernHamburgerMenu(); window.forceAllEndShift && window.forceAllEndShift(); } },
+            { icon: "fa-ban text-rose-400", label: "Full Booking", desc: "Full booking auto-responder toggle", permKey: "canManageFullBooking", action: () => { closeModernHamburgerMenu(); window.openFullBookingModal && window.openFullBookingModal(); } },
+            { icon: "fa-arrow-down-short-wide text-purple-400", label: "Lineup Rules", desc: "Queue rotation mode & cooldown buffer", permKey: "canManageQueueSettings", action: () => { closeModernHamburgerMenu(); window.openAdminQueueSettingsModal && window.openAdminQueueSettingsModal(); } },
+            { icon: "fa-users-gear text-blue-400", label: "Manage (Riders)", desc: "Accounts, roles, and privileges", permKey: "canManageRiderAccounts", action: () => { closeModernHamburgerMenu(); window.openAdminManageRidersModal && window.openAdminManageRidersModal(); } },
+            { icon: "fa-layer-group text-rose-400", label: "Max Orders", desc: "Active catering order capacity caps", permKey: "canManageBookingLimits", action: () => { closeModernHamburgerMenu(); window.openAdminBookingLimitsModal && window.openAdminBookingLimitsModal(); } },
+            { icon: "fa-trophy text-amber-400", label: "Performance", desc: "Weekly & monthly rider performance reports", permKey: null, adminOnly: false, action: () => { closeModernHamburgerMenu(); window.openAdminPerformanceTrackerModal && window.openAdminPerformanceTrackerModal(); } },
+            { icon: "fa-clock text-purple-400", label: "Schedule", desc: "Rider time-in schedules & early passes", permKey: "canManageSchedules", action: () => { closeModernHamburgerMenu(); window.openAdminTimeInScheduleModal && window.openAdminTimeInScheduleModal(); } },
+            { icon: "fa-bullhorn text-sky-400", label: "Send to Many", desc: "Mass broadcast customer announcement", permKey: "canManageBroadcast", action: () => { closeModernHamburgerMenu(); window.openBroadcastModal && window.openBroadcastModal(); } },
+            { icon: "fa-shop text-orange-400", label: "Store Hub", desc: "Store accounts & menu administration", permKey: "canManageStoreAccounts", action: () => { closeModernHamburgerMenu(); window.openAdminStoreAccountModal && window.openAdminStoreAccountModal(); } }
         ];
+
+        items = isUserAdmin ? allAdminItems : allAdminItems.filter(it => {
+            if (it.adminOnly) return false;
+            if (!it.permKey) return true;
+            return hasTlPermission(it.permKey);
+        });
     }
 
     subTitle.innerText = title;
@@ -520,11 +607,11 @@ export function updateModernTabBadges() {
     // 3. Tab 2 Badge: Exact line # position in queue
     const roster = globalState.rosterMembers || [];
     const myId = (appState.telegramId || localStorage.getItem('telegramId') || '').toString().trim();
-    const myName = (appState.riderName || localStorage.getItem('riderName') || '').toString().trim().toLowerCase();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || '').toString().trim();
     const myRecord = roster.find(m => {
         const mId = (m.telegramId || m.id || '').toString().trim();
-        const mName = (m.riderName || m.name || '').toString().trim().toLowerCase();
-        return (myId && mId === myId) || (myName && mName === myName);
+        const mName = (m.riderName || m.name || '').toString().trim();
+        return (myId && mId && mId === myId) || isRiderMatch(myName, mName, myId, mId);
     });
 
     const rotBadge = document.getElementById('modern-tab-rotations-badge');
@@ -542,8 +629,8 @@ export function updateModernTabBadges() {
             const availables = sortAvailableRiders(roster.filter(m => m.status === 'Available'));
             const idx = availables.findIndex(m => {
                 const mId = (m.telegramId || m.id || '').toString().trim();
-                const mName = (m.riderName || m.name || '').toString().trim().toLowerCase();
-                return (myId && mId === myId) || (myName && mName === myName);
+                const mName = (m.riderName || m.name || '').toString().trim();
+                return (myId && mId && mId === myId) || isRiderMatch(myName, mName, myId, mId);
             });
             const posText = idx !== -1 ? `#${idx + 1}` : '#1';
             rotBadge.innerText = posText;
@@ -911,7 +998,52 @@ export function toggleModernChatMenuDropdown(event) {
     if (!dropdown) return;
     const isHidden = dropdown.classList.contains('hidden');
     closeModernPopovers();
-    if (isHidden) dropdown.classList.remove('hidden');
+    if (isHidden) {
+        const forceCaterBtn = document.getElementById('modern-chat-force-cater-btn');
+        if (forceCaterBtn) {
+            const canForceCater = isAdmin() || hasTlPermission('canForceCater');
+            if (canForceCater) forceCaterBtn.classList.remove('hidden');
+            else forceCaterBtn.classList.add('hidden');
+        }
+        dropdown.classList.remove('hidden');
+    }
+}
+
+export function openAdminForceCaterFromChat() {
+    const isUserAdmin = isAdmin();
+    const canForceCater = isUserAdmin || hasTlPermission('canForceCater');
+    if (!canForceCater) {
+        return showToast("⚠️ Unauthorized: You do not have permission to Force Cater.");
+    }
+
+    const titleEl = document.getElementById('modern-chat-room-title');
+    const meta = (window.getCurrentRiderChatMeta ? window.getCurrentRiderChatMeta() : {}) || {};
+    let custName = titleEl?.innerText?.trim();
+    if (!custName || custName === 'Customer Name' || custName === 'Select a customer' || custName.startsWith('FB Customer (')) {
+        custName = meta.customerName || meta.name || custName || "";
+    }
+    if (!custName || custName === 'Select a customer' || custName === 'Customer Name') {
+        return showToast("⚠️ Please select an active customer chat first.");
+    }
+
+    if (typeof window.openAdminCateringModal === 'function') {
+        window.openAdminCateringModal(null, null);
+        const custInput = document.getElementById('admin-cater-cust-name') || document.getElementById('catering-customer-name');
+        if (custInput) {
+            custInput.value = custName;
+        }
+        const custSelect = document.getElementById('admin-cater-customer-select') || document.getElementById('catering-customer-select');
+        if (custSelect) {
+            for (let i = 0; i < custSelect.options.length; i++) {
+                if (custSelect.options[i].value.toLowerCase() === custName.toLowerCase()) {
+                    custSelect.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+    } else {
+        showToast("⚠️ Admin catering modal unavailable.");
+    }
 }
 
 // Bottom Composer [menu] Pop-up
@@ -1019,7 +1151,77 @@ export function initFloatingCartDrag() {
 // 9. TAB 2: LOKALEX RIDER ROTATIONS (AVAILABLE, CATERING, BREAK)
 // ============================================================================
 
+export function renderModernRotationsToolbar() {
+    const toolbar = document.getElementById('modern-rot-admin-toolbar');
+    if (!toolbar) return;
+
+    const isUserAdmin = isAdmin();
+    const isUserTL = isTL();
+    const canManage = typeof canManageRoster === 'function' ? canManageRoster() : (isUserAdmin || isUserTL);
+
+    if (!isUserAdmin && (!isUserTL || !canManage)) {
+        toolbar.classList.add('hidden');
+        toolbar.innerHTML = '';
+        return;
+    }
+
+    const toolbarButtons = [
+        { label: "Lineup Rules", icon: "fa-arrow-down-short-wide text-purple-400", permKey: "canManageQueueSettings", action: "window.openAdminQueueSettingsModal && window.openAdminQueueSettingsModal()" },
+        { label: "Max Orders", icon: "fa-layer-group text-rose-400", permKey: "canManageBookingLimits", action: "window.openAdminBookingLimitsModal && window.openAdminBookingLimitsModal()" },
+        { label: "Breaks", icon: "fa-mug-hot text-amber-400", permKey: "canManageBreakSettings", action: "window.openAdminBreakSettingsModal && window.openAdminBreakSettingsModal()" },
+        { label: "Day-Off Rules", icon: "fa-sliders text-teal-400", permKey: "canManageDayOff", action: "window.openAdminDayOffSettingsModal && window.openAdminDayOffSettingsModal()" },
+        { label: "Schedules", icon: "fa-clock text-purple-400", permKey: "canManageSchedules", action: "window.openAdminTimeInScheduleModal && window.openAdminTimeInScheduleModal()" },
+        { label: "Full Booking", icon: "fa-ban text-rose-400", permKey: "canManageFullBooking", action: "window.openFullBookingModal && window.openFullBookingModal()" },
+        { label: "Early Out", icon: "fa-user-clock text-rose-400", permKey: "canManageEarlyShift", action: "window.openAdminEarlyShiftModal && window.openAdminEarlyShiftModal()" },
+        { label: "Auto End", icon: "fa-clock-rotate-left text-purple-400", permKey: "canManageAutoEndShift", action: "window.openAdminAutoEndShiftModal && window.openAdminAutoEndShiftModal()" },
+        { label: "Force All End", icon: "fa-power-off text-rose-500", permKey: "canEndAllShifts", action: "window.forceAllEndShift && window.forceAllEndShift()" },
+        { label: "Performance", icon: "fa-trophy text-amber-400", permKey: null, action: "window.openAdminPerformanceTrackerModal && window.openAdminPerformanceTrackerModal()" },
+        { label: "Radar", icon: "fa-map-location-dot text-indigo-400", permKey: null, action: "if (window.openFindRidersModal) window.openFindRidersModal(); else if (window.openFindRidersMap) window.openFindRidersMap();" },
+        { label: "Manage Riders", icon: "fa-users-gear text-blue-400", permKey: "canManageRiderAccounts", action: "window.openAdminManageRidersModal && window.openAdminManageRidersModal()" },
+        { label: "Store Hub", icon: "fa-shop text-orange-400", permKey: "canManageStoreAccounts", action: "window.openAdminStoreAccountModal && window.openAdminStoreAccountModal()" },
+        { label: "Ban List", icon: "fa-user-slash text-rose-400", permKey: "canManageBanList", action: "window.openAdminBlockModal && window.openAdminBlockModal()" },
+        { label: "Commission", icon: "fa-percent text-amber-400", permKey: "canManageCommission", action: "window.openAdminCommissionSettingsModal && window.openAdminCommissionSettingsModal()" },
+        { label: "Credits", icon: "fa-coins text-amber-400", permKey: "canManageCredits", action: "window.openAdminDirectoryCreditsModal && window.openAdminDirectoryCreditsModal()" },
+        { label: "Clear Inbox", icon: "fa-broom text-sky-400", permKey: "canClearInbox", action: "window.clearAllInboxThreads && window.clearAllInboxThreads()" },
+        { label: "Broadcast", icon: "fa-bullhorn text-sky-400", permKey: "canManageBroadcast", action: "window.openBroadcastModal && window.openBroadcastModal()" },
+        { label: "FB APIs", icon: "fa-brands fa-facebook-messenger text-blue-400", permKey: "canManageFbApis", action: "window.openAdminFbApiModal && window.openAdminFbApiModal()" }
+    ];
+
+    const visibleButtons = toolbarButtons.filter(btn => isUserAdmin || (btn.permKey ? hasTlPermission(btn.permKey) : true));
+
+    if (!isUserAdmin && visibleButtons.length === 0) {
+        toolbar.classList.add('hidden');
+        toolbar.innerHTML = '';
+        return;
+    }
+
+    toolbar.classList.remove('hidden');
+
+    const roleBadgeHtml = isUserAdmin
+        ? `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 text-[10px] font-black shrink-0"><i class="fa-solid fa-shield-halved"></i> Admin Powers</span>`
+        : `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-black shrink-0"><i class="fa-solid fa-star"></i> TL Supervisory</span>`;
+
+    toolbar.innerHTML = `
+        <div class="flex items-center gap-1.5 shrink-0">
+            ${roleBadgeHtml}
+        </div>
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-1 min-w-0">
+            ${visibleButtons.map(btn => `
+                <button type="button" onclick="${btn.action}" class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#182229] hover:bg-white/10 border border-slate-700/80 rounded-xl text-[10px] font-bold text-slate-200 hover:text-white transition active:scale-95 shrink-0 cursor-pointer shadow-xs whitespace-nowrap">
+                    <i class="fa-solid ${btn.icon}"></i>
+                    <span>${escapeHtml(btn.label)}</span>
+                </button>
+            `).join('')}
+        </div>
+        <button type="button" onclick="window.renderModernRotationsTab && window.renderModernRotationsTab(); window.showToast && window.showToast('Lineup refreshed');" class="p-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold shrink-0 transition active:scale-95 cursor-pointer" title="Refresh Rotations">
+            <i class="fa-solid fa-rotate"></i>
+        </button>
+    `;
+}
+
 export function renderModernRotationsTab() {
+    renderModernRotationsToolbar();
+
     const availList = document.getElementById('modern-rot-avail-list');
     const caterList = document.getElementById('modern-rot-cater-list');
     const breakList = document.getElementById('modern-rot-break-list');
@@ -1034,7 +1236,11 @@ export function renderModernRotationsTab() {
     const breaks = roster.filter(m => m.status === 'Break');
 
     const isUserAdmin = isAdmin();
-    const canManage = typeof canManageRoster === 'function' ? canManageRoster() : (isUserAdmin || isTL());
+    const isUserTL = isTL();
+    const canShift = isUserAdmin || hasTlPermission('canShiftQueue');
+    const canStatus = isUserAdmin || hasTlPermission('canForceStatus');
+    const canCater = isUserAdmin || hasTlPermission('canForceCater');
+    const canVoidCust = isUserAdmin || hasTlPermission('canVoidCustomer');
 
     if (availCountEl) availCountEl.innerText = `${availables.length} riders`;
     if (caterCountEl) caterCountEl.innerText = `${caterings.length} active`;
@@ -1053,6 +1259,8 @@ export function renderModernRotationsTab() {
             const rawName = m.riderName || m.name || "Rider";
             const mId = (m.telegramId || m.id || "").toString();
             const gross = getRiderTodayGross(rawName, mId);
+            const mUserType = (m.userType || globalState.userTypesMap?.[mId] || globalState.userTypesMap?.[rawName.toLowerCase()] || '').toString().toLowerCase().trim();
+            const canTarget = isUserAdmin || canForceCaterTarget(mUserType, mId);
 
             const rawTs = m.availableTimestamp || (typeof parseQueueTime === 'function' ? parseQueueTime(m.queueTime) : (Number(m.queueTime) || 0)) || 0;
             const cooldownUntil = m.cooldownUntil || (rawTs > 0 && cooldownMs > 0 ? (rawTs + cooldownMs) : 0);
@@ -1067,23 +1275,36 @@ export function renderModernRotationsTab() {
             }
 
             let controlsHtml = "";
-            if (isUserAdmin || canManage) {
-                controlsHtml = `
-                <div class="inline-flex items-center gap-1 shrink-0">
+            if (canTarget) {
+                let actionSelectHtml = "";
+                if (canStatus || canCater) {
+                    let optionsHtml = `<option value="" selected>⚡ Action</option>`;
+                    if (canStatus) optionsHtml += `<option value="Available">Available</option>`;
+                    if (canCater) optionsHtml += `<option value="Catering">Catering</option>`;
+                    if (canStatus) {
+                        optionsHtml += `<option value="Break">Break</option>`;
+                        optionsHtml += `<option value="End">End Shift</option>`;
+                    }
+                    actionSelectHtml = `
                     <select onchange="const sel = this; const val = sel.value; if (val) { sel.selectedIndex = 0; sel.value = ''; setTimeout(() => { try { sel.selectedIndex = 0; sel.value = ''; } catch(_) {} }, 100); window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeJsAttr(rawName)}', val); }" class="bg-black/60 text-[9px] text-amber-400 border border-slate-700 rounded px-1 py-0.5 cursor-pointer">
-                        <option value="" selected>⚡ Action</option>
-                        <option value="Available">Available</option>
-                        <option value="Catering">Catering</option>
-                        <option value="Break">Break</option>
-                        <option value="End">End Shift</option>
-                    </select>
+                        ${optionsHtml}
+                    </select>`;
+                }
+
+                let shiftBtnsHtml = "";
+                if (canShift) {
+                    shiftBtnsHtml = `
                     <div class="inline-flex gap-0.5 text-[9px]">
-                        <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_top')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-1 py-0.5 rounded font-bold transition active:scale-95" title="Move Top">⬆️</button>
-                        <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_up')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-1 py-0.5 rounded font-bold transition active:scale-95" title="Move Up (+1)">▲</button>
-                        <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_down')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-1 py-0.5 rounded font-bold transition active:scale-95" title="Move Down (-1)">▼</button>
-                        <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_bottom')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-1 py-0.5 rounded font-bold transition active:scale-95" title="Move Bottom">⬇️</button>
-                    </div>
-                </div>`;
+                        <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_top')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-1 py-0.5 rounded font-bold transition active:scale-95 cursor-pointer" title="Move Top">⬆️</button>
+                        <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_up')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-1 py-0.5 rounded font-bold transition active:scale-95 cursor-pointer" title="Move Up (+1)">▲</button>
+                        <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_down')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-1 py-0.5 rounded font-bold transition active:scale-95 cursor-pointer" title="Move Down (-1)">▼</button>
+                        <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_bottom')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-1 py-0.5 rounded font-bold transition active:scale-95 cursor-pointer" title="Move Bottom">⬇️</button>
+                    </div>`;
+                }
+
+                if (actionSelectHtml || shiftBtnsHtml) {
+                    controlsHtml = `<div class="inline-flex items-center gap-1 shrink-0">${actionSelectHtml}${shiftBtnsHtml}</div>`;
+                }
             }
 
             return `
@@ -1114,27 +1335,34 @@ export function renderModernRotationsTab() {
             const mId = (m.telegramId || m.id || "").toString();
             const mName = formatTitleCase(rawName);
             const gross = getRiderTodayGross(rawName, mId);
+            const mUserType = (m.userType || globalState.userTypesMap?.[mId] || globalState.userTypesMap?.[rawName.toLowerCase()] || '').toString().toLowerCase().trim();
 
             const isMyLine = (myId && mId === myId) || (myName && (mName.toLowerCase() === myName || rawName.toLowerCase() === myName || isRiderMatch(rawName, myName)));
-            const canComplete = isMyLine || isUserAdmin || canManage;
-            const canSwap = isMyLine || isUserAdmin || canManage;
-            const canVoid = isMyLine || isUserAdmin || canManage;
-            const canEdit = isUserAdmin || canManage;
-            const canGet = !isMyLine && !isUserAdmin && !canManage;
+            const canTarget = isUserAdmin || canForceCaterTarget(mUserType, mId);
+
+            const canComplete = isMyLine || (canTarget && (canCater || canVoidCust));
+            const canSwap = isMyLine || (canTarget && canCater);
+            const canVoid = isMyLine || (canTarget && canVoidCust);
+            const canEdit = isUserAdmin || (canTarget && (canCater || canVoidCust));
+            const canGet = !isMyLine && !isUserAdmin && !isUserTL;
 
             const custs = m.customerName ? m.customerName.split(', ').map(c => c.trim()).filter(Boolean) : [];
             const times = m.startTime ? m.startTime.split(', ').map(t => t.trim()) : [];
 
             let forceActionSelect = "";
-            if (isUserAdmin || canManage) {
+            if (canTarget && (canStatus || canCater || canVoidCust)) {
+                let optionsHtml = `<option value="" selected>⚡ Action</option>`;
+                if (canStatus) optionsHtml += `<option value="Available">Available</option>`;
+                if (canCater) optionsHtml += `<option value="Catering">Catering</option>`;
+                if (canStatus) {
+                    optionsHtml += `<option value="Break">Break</option>`;
+                    optionsHtml += `<option value="End">End Shift</option>`;
+                }
+                if (canVoidCust) optionsHtml += `<option value="VoidActive">🚫 Void All Orders</option>`;
+
                 forceActionSelect = `
                 <select onchange="const sel = this; const val = sel.value; if (val) { sel.selectedIndex = 0; sel.value = ''; setTimeout(() => { try { sel.selectedIndex = 0; sel.value = ''; } catch(_) {} }, 100); window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeJsAttr(mName)}', val); }" class="bg-black/60 text-[9px] text-amber-400 border border-slate-700 rounded px-1 py-0.5 cursor-pointer shrink-0">
-                    <option value="" selected>⚡ Action</option>
-                    <option value="Available">Available</option>
-                    <option value="Catering">Catering</option>
-                    <option value="Break">Break</option>
-                    <option value="End">End Shift</option>
-                    <option value="VoidActive">🚫 Void All Orders</option>
+                    ${optionsHtml}
                 </select>`;
             }
 
@@ -1166,7 +1394,7 @@ export function renderModernRotationsTab() {
                                 </button>
                             ` : ''}
 
-                            ${(isMyLine || isUserAdmin || canManage) ? `
+                            ${(isMyLine || isUserAdmin || canTarget) ? `
                                 <button type="button" onclick="window.copyCustomerTrackingLink && window.copyCustomerTrackingLink('${escapeJsAttr(cName)}')" class="bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Copy tracking link">
                                     🔗 Link
                                 </button>
@@ -1229,15 +1457,19 @@ export function renderModernRotationsTab() {
             const gross = getRiderTodayGross(rawName, mId);
             const elapsed = getElapsedBreakTime(m);
             const plannedMins = m.breakDurationMinutes ? parseInt(m.breakDurationMinutes, 10) : null;
+            const mUserType = (m.userType || globalState.userTypesMap?.[mId] || globalState.userTypesMap?.[rawName.toLowerCase()] || '').toString().toLowerCase().trim();
+            const canTarget = isUserAdmin || canForceCaterTarget(mUserType, mId);
 
             let breakActionSelect = "";
-            if (isUserAdmin || canManage) {
+            if (canTarget && (canStatus || canCater)) {
+                let optionsHtml = `<option value="" selected>⚡ Action</option>`;
+                if (canStatus) optionsHtml += `<option value="Available">Available</option>`;
+                if (canCater) optionsHtml += `<option value="Catering">Catering</option>`;
+                if (canStatus) optionsHtml += `<option value="End">End Shift</option>`;
+
                 breakActionSelect = `
                 <select onchange="const sel = this; const val = sel.value; if (val) { sel.selectedIndex = 0; sel.value = ''; setTimeout(() => { try { sel.selectedIndex = 0; sel.value = ''; } catch(_) {} }, 100); window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeJsAttr(rawName)}', val); }" class="bg-black/60 text-[9px] text-amber-400 border border-slate-700 rounded px-1 py-0.5 cursor-pointer shrink-0">
-                    <option value="" selected>⚡ Action</option>
-                    <option value="Available">Available</option>
-                    <option value="Catering">Catering</option>
-                    <option value="End">End Shift</option>
+                    ${optionsHtml}
                 </select>`;
             }
 
@@ -1400,6 +1632,10 @@ export function renderModernLoginsTab() {
             return n && !loggedInNames.has(n);
         });
 
+        const isUserAdmin = isAdmin();
+        const isUserTL = isTL();
+        const canManage = isUserAdmin || hasTlPermission('canManageRoster') || hasTlPermission('canForceStatus');
+
         if (inHeader) inHeader.innerText = `Logged IN (${todayLogins.length})`;
         if (outHeader) outHeader.innerText = `Not Logged In (${notLoggedInRiders.length}):`;
         if (inFooter) inFooter.innerHTML = `Logged In: <span class="text-emerald-400 font-bold">${todayLogins.length} Riders</span> (out of ${eligibleRoster.length} total → ${todayLogins.length}/${notLoggedInRiders.length})`;
@@ -1442,7 +1678,12 @@ export function renderModernLoginsTab() {
                             <span class="font-bold text-xs text-white hover:text-emerald-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
                             ${dayOffBadge}
                         </div>
-                        <span class="font-mono text-xs text-slate-300">${escapeHtml(timeIn)}</span>
+                        <div class="flex items-center gap-1 min-w-0">
+                            <span class="font-mono text-xs text-slate-300">${escapeHtml(timeIn)}</span>
+                            ${canManage ? `
+                                <button type="button" onclick="event.stopPropagation(); window.promptAdminSetRiderTimeIn && window.promptAdminSetRiderTimeIn('${escapeHtml(rId)}', '${escapeHtml(rawName)}', '${escapeHtml(timeIn)}')" class="text-[9px] text-slate-500 hover:text-amber-400 px-0.5 transition active:scale-90 cursor-pointer" title="Edit Time In">✏️</button>
+                            ` : ''}
+                        </div>
                         <span class="font-mono text-xs text-slate-300">${timeOut}</span>
                     </div>`;
                 } catch (rowErr) {
@@ -1468,7 +1709,12 @@ export function renderModernLoginsTab() {
                             <span class="font-bold text-xs text-slate-300 hover:text-rose-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
                             ${dayOffBadge}
                         </div>
-                        <span class="text-[10px] text-slate-500 font-mono shrink-0">Offline</span>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            ${canManage ? `
+                                <button type="button" onclick="event.stopPropagation(); window.promptAdminSetRiderTimeIn && window.promptAdminSetRiderTimeIn('${escapeHtml(mId)}', '${escapeHtml(rawName)}')" class="px-1.5 py-0.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400 text-[9px] font-black transition active:scale-95 cursor-pointer" title="Manually Set Time In for ${escapeHtml(rawName)}">+ Time In</button>
+                            ` : ''}
+                            <span class="text-[10px] text-slate-500 font-mono">Offline</span>
+                        </div>
                     </div>`;
                 } catch (rowErr) {
                     console.error('[ModernNotLogin] Error rendering row:', rowErr);
@@ -1570,6 +1816,10 @@ export async function openModernRiderProfile(riderId, riderName) {
         </a>`;
     }
 
+    const isUserAdmin = isAdmin();
+    const isUserTL = isTL();
+    const canManage = isUserAdmin || hasTlPermission('canManageRoster') || hasTlPermission('canForceStatus');
+
     card.innerHTML = `
     <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
         <span class="text-xs font-black text-emerald-400 uppercase tracking-wide">Rider Profile Inspector</span>
@@ -1586,6 +1836,14 @@ export async function openModernRiderProfile(riderId, riderName) {
             <div><span class="text-slate-400">Gross:</span> <span class="text-emerald-400 font-bold">₱${gross.toFixed(2)}</span></div>
             <div><span class="text-slate-400">Orders:</span> <span class="text-white font-bold">${deliveriesCount}</span></div>
             <div class="col-span-2"><span class="text-slate-400">Duty Served:</span> <span class="text-amber-300 font-bold">${timeServedStr}</span></div>
+            ${canManage ? `
+                <div class="col-span-2 pt-1.5 mt-0.5 border-t border-slate-800/80 flex items-center justify-between">
+                    <span class="text-slate-400">Time In:</span>
+                    <button type="button" onclick="window.promptAdminSetRiderTimeIn && window.promptAdminSetRiderTimeIn('${escapeHtml(riderId)}', '${escapeHtml(riderName)}', '${escapeHtml(loginRec?.loginTime || '')}')" class="px-2 py-0.5 rounded-md bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 font-sans font-bold text-[10px] transition active:scale-95 cursor-pointer shadow-2xs">
+                        ⏱️ ${loginRec?.loginTime ? `Edit Time In (${escapeHtml(loginRec.loginTime)})` : `+ Set Time In`}
+                    </button>
+                </div>
+            ` : ''}
         </div>
     </div>`;
 
@@ -1707,29 +1965,41 @@ export function renderModernCateredTab() {
         }
 
         return `
-        <div class="flex items-center justify-between p-3 rounded-2xl bg-[#121a1f] border border-slate-800 gap-2">
-            <div class="flex flex-col gap-1 min-w-0 flex-1">
-                <div class="text-xs font-extrabold text-white truncate">
-                    <span>Customer Name:</span> <span class="text-white font-black">${escapeHtml(custName)}</span>
-                    <span class="text-slate-500 mx-1">|</span>
-                    <span class="text-slate-400">Rider Name:</span> <span class="text-emerald-400 font-black">${escapeHtml(riderName)}</span>
+        <div class="flex flex-col p-3 rounded-2xl bg-[#121a1f] border border-slate-800 gap-2 shadow-xs transition hover:border-slate-700">
+            <!-- Top Row: Customer Name & Rider Name & Void Button -->
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                    <span class="text-[11px] text-slate-400 font-semibold shrink-0">Customer:</span>
+                    <span class="text-xs font-black text-amber-300 truncate" title="${escapeHtml(custName)}">${escapeHtml(custName)}</span>
                 </div>
-                <div class="flex items-center gap-2 text-[10px] font-mono text-slate-400 flex-wrap">
-                    <span>Time Start: ${escapeHtml(sTime)}</span>
-                    <span class="text-slate-600">|</span>
-                    <span>Time Receipt Created: ${escapeHtml(rTime)}</span>
-                    <span class="text-slate-600">|</span>
-                    <span>Time Marked as done: ${escapeHtml(dTime)}</span>
+
+                <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+                    <div class="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-black text-xs shrink-0 whitespace-nowrap shadow-2xs" title="Delivering Rider">
+                        <i class="fa-solid fa-motorcycle text-[10px]"></i>
+                        <span>${escapeHtml(riderName)}</span>
+                    </div>
+
+                    ${isUserAdmin ? `
+                        <button type="button" onclick="window.promptAdminDeleteCommissionRecord && window.promptAdminDeleteCommissionRecord('${escapeHtml(rc.riderName || '')}', '${escapeHtml(rc.customerName || '')}', '${escapeHtml(cDate)}', '${escapeHtml(txId)}')" class="px-2 py-0.5 rounded-lg border border-red-500/50 hover:bg-red-500/20 text-rose-400 font-black text-[10px] transition active:scale-95 cursor-pointer shrink-0" title="Void Customer Record">
+                            <i class="fa-solid fa-ban text-[9px]"></i> Void
+                        </button>
+                    ` : ''}
                 </div>
             </div>
 
-            <div class="flex flex-col items-end gap-1 shrink-0">
-                ${isUserAdmin ? `
-                    <button type="button" onclick="window.promptAdminDeleteCommissionRecord && window.promptAdminDeleteCommissionRecord('${escapeHtml(rc.riderName || '')}', '${escapeHtml(rc.customerName || '')}', '${escapeHtml(cDate)}', '${escapeHtml(txId)}')" class="px-2 py-0.5 rounded-lg border border-red-500/50 hover:bg-red-500/20 text-rose-400 font-black text-[10px] transition active:scale-95 cursor-pointer">
-                        [void button]
-                    </button>
-                ` : ''}
-                <span class="text-xs font-mono font-black text-emerald-400">Total Time: ${escapeHtml(totalTimeText || 'N/A')}</span>
+            <!-- Bottom Row: Timeline & Total Time Duration -->
+            <div class="flex items-center justify-between gap-2 flex-wrap pt-1.5 border-t border-slate-800/80 text-[10px] font-mono">
+                <div class="flex items-center gap-1.5 text-slate-400 flex-wrap">
+                    <span class="inline-flex items-center gap-1 text-slate-300"><i class="fa-solid fa-play text-blue-400 text-[8px]"></i> Start: ${escapeHtml(sTime)}</span>
+                    <span class="text-slate-600 select-none">•</span>
+                    <span class="inline-flex items-center gap-1 text-slate-300"><i class="fa-solid fa-receipt text-amber-400 text-[8px]"></i> Receipt: ${escapeHtml(rTime)}</span>
+                    <span class="text-slate-600 select-none">•</span>
+                    <span class="inline-flex items-center gap-1 text-emerald-400 font-bold"><i class="fa-solid fa-circle-check text-emerald-400 text-[8px]"></i> Done: ${escapeHtml(dTime)}</span>
+                </div>
+
+                <div class="shrink-0 ml-auto">
+                    <span class="text-xs font-mono font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-lg whitespace-nowrap">⏱️ ${escapeHtml(totalTimeText || 'N/A')}</span>
+                </div>
             </div>
         </div>`;
     }).join('');
@@ -1751,7 +2021,7 @@ export function syncModernFooterDock() {
 
     const roster = globalState.rosterMembers || [];
     const myRecord = roster.find(m => isRiderMatch(myName, m.riderName || m.name || '', myId, (m.telegramId || m.id || '').toString()));
-    const status = myRecord?.status || 'End';
+    const status = myRecord?.status || (myRecord ? 'End' : (localStorage.getItem('lokalex_active_role') === 'rider' ? '' : 'End'));
 
     const btnAvail = document.getElementById('modern-btn-status-avail');
     const btnCater = document.getElementById('modern-btn-status-cater');
@@ -1905,5 +2175,8 @@ if (typeof window !== 'undefined') {
     window.refreshModernChatsView = refreshModernChatsView;
     window.refreshAllModernViews = refreshAllModernViews;
     window.renderModernRotationsTab = renderModernRotationsTab;
+    window.renderModernRotationsToolbar = renderModernRotationsToolbar;
+    window.openAdminForceCaterFromChat = openAdminForceCaterFromChat;
+    window.setModernSyncState = setModernSyncState;
 }
 

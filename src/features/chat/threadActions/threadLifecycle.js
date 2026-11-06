@@ -6,7 +6,7 @@ import { openSlideDeleteModal } from '../../../ui/modals.js';
 import { toggleBodyScroll } from '../chatUtils.js';
 import { voidSingleCateringCustomer } from '../../roster/rosterStatus.js';
 import { escapeHtml } from '../../../utils/helpers.js';
-import { isCustomerMatch, isAdmin, canManageRoster, hasTlPermission, hasReceiptForActiveSession } from '../../roster/rosterUtils.js';
+import { isCustomerMatch, isAdmin, canManageRoster, hasTlPermission, hasReceiptForActiveSession, isRiderMatch, loadRosterCache } from '../../roster/rosterUtils.js';
 import { completeSingleCateringCustomer, checkCustomerReceiptExists } from '../../roster/actions/rosterCateringCompletion.js';
 import { updateOrderMilestone } from './threadMilestonesPod.js';
 import { openQueueNoticeModal } from '../../roster/actions/rosterCateringPrompts.js';
@@ -795,11 +795,14 @@ export async function caterCurrentChatCustomer() {
         return;
     }
 
+    if (!globalState.rosterMembers || globalState.rosterMembers.length === 0) {
+        loadRosterCache();
+    }
     const liveRoster = globalState.rosterMembers || [];
     const myRecord = liveRoster.find(m => {
         const mId = (m.telegramId || m.id || "").toString().trim();
-        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
-        return (currentId && mId === currentId) || (currentName && mName === currentName.toLowerCase());
+        const mName = (m.riderName || m.name || "").toString().trim();
+        return (currentId && mId && mId === currentId) || (currentName && mName && (currentName.toLowerCase() === mName.toLowerCase() || isRiderMatch(currentName, mName, currentId, mId)));
     });
 
     if (!isAdminUser && !canManage) {
@@ -817,7 +820,7 @@ export async function caterCurrentChatCustomer() {
     const cateredRiderId = (meta.cateredByRiderId || "").toString().trim();
     const cateredRiderName = (meta.cateredByRiderName || meta.cateredBy || "").toString().trim().toLowerCase();
 
-    if ((cateredRiderId && cateredRiderId === currentId) || (cateredRiderName && currentName && cateredRiderName === currentName.toLowerCase())) {
+    if ((cateredRiderId && cateredRiderId === currentId) || (cateredRiderName && currentName && (cateredRiderName === currentName.toLowerCase() || isRiderMatch(currentName, cateredRiderName, currentId, cateredRiderId)))) {
         return showToast("🛵 You are already catering to this customer!");
     }
 
@@ -829,7 +832,7 @@ export async function caterCurrentChatCustomer() {
     if (myRecord && myRecord.status === 'Catering' && myRecord.customerName) {
         existingCustomers = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
     }
-    const isAlreadyInList = custName && existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase());
+    const isAlreadyInList = custName && existingCustomers.some(c => c.toLowerCase() === custName.toLowerCase() || isCustomerMatch(c, custName));
 
     if (!isAdminUser && !canManage && !isAlreadyInList) {
         const liveAvailableRiders = typeof window.sortAvailableRidersByGross === 'function'
@@ -839,7 +842,8 @@ export async function caterCurrentChatCustomer() {
         if (liveAvailableRiders.length > 0) {
             const firstAvailable = liveAvailableRiders[0];
             const firstId = (firstAvailable?.telegramId || firstAvailable?.id || "").toString().trim();
-            const isFirstAvailable = firstId === currentId;
+            const firstName = (firstAvailable?.riderName || firstAvailable?.name || "").toString().trim();
+            const isFirstAvailable = (firstId && currentId && firstId === currentId) || isRiderMatch(currentName, firstName, currentId, firstId);
             const amIAlreadyCatering = myRecord && myRecord.status === 'Catering';
 
             if (!isFirstAvailable || amIAlreadyCatering) {
@@ -849,7 +853,11 @@ export async function caterCurrentChatCustomer() {
                 const myGross = typeof window.getRiderTodayGross === 'function'
                     ? window.getRiderTodayGross(currentName, currentId)
                     : 0;
-                const myIndex = liveAvailableRiders.findIndex(m => (m.telegramId || m.id || "").toString().trim() === currentId);
+                const myIndex = liveAvailableRiders.findIndex(m => {
+                    const mId = (m.telegramId || m.id || "").toString().trim();
+                    const mName = (m.riderName || m.name || "").toString().trim();
+                    return (mId && currentId && mId === currentId) || isRiderMatch(currentName, mName, currentId, mId);
+                });
 
                 if (typeof openQueueNoticeModal === 'function') {
                     openQueueNoticeModal({

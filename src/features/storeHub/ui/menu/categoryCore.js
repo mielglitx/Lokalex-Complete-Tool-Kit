@@ -1,6 +1,7 @@
 // src/features/storeHub/ui/menu/categoryCore.js
 import { appState } from '../../../../store/state.js';
 import { showToast } from '../../../../ui/notifications.js';
+import { showCustomPrompt } from '../../../../ui/modals.js';
 import { escapeHtml } from '../../../../utils/helpers.js';
 import { 
     RESERVED_ADDONS_CATEGORY, 
@@ -102,7 +103,15 @@ export function selectCategoryFilter(catName) {
 export async function promptQuickAddCategory() {
     const rawStoreId = appState.merchantStoreId || localStorage.getItem('lokalex_merchant_store_id');
     const storeId = cleanFirebasePathKey(rawStoreId);
-    const newCatName = window.prompt("Enter new category name:");
+    const promptFn = typeof showCustomPrompt === 'function' ? showCustomPrompt : (typeof window !== 'undefined' && window.showCustomPrompt);
+    const newCatName = promptFn
+        ? await promptFn({
+            title: "Add Category",
+            placeholder: "Enter new category name...",
+            icon: "fa-layer-group",
+            confirmText: "Create Category"
+        })
+        : window.prompt("Enter new category name:");
 
     if (!newCatName || !newCatName.trim()) return;
 

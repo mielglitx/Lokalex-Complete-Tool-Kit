@@ -12,6 +12,12 @@
 
         <div class="flex flex-col gap-2.5 text-left text-xs">
             <div>
+                <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase tracking-wider block mb-1">Target Rider</label>
+                <select id="admin-cater-rider-select" onchange="const opt = this.options[this.selectedIndex]; if (opt && opt.value) { document.getElementById('admin-cater-target-rider-id').value = opt.value; document.getElementById('admin-cater-target-rider-name').value = opt.dataset.name || ''; }" class="w-full bg-inputBg text-xs rounded-xl p-2.5 outline-none border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white font-bold">
+                    <option value="">-- Select Target Rider --</option>
+                </select>
+            </div>
+            <div>
                 <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase tracking-wider block mb-1">Select Customer (Inbox)</label>
                 <select id="admin-cater-customer-select" onchange="if(this.value) document.getElementById('admin-cater-cust-name').value = this.value;" class="w-full bg-inputBg text-xs rounded-xl p-2.5 outline-none border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white font-bold">
                     <option value="">-- Select Active Customer --</option>

@@ -27,6 +27,8 @@ import { escapeHtml, formatTitleCase, getLocalTodayStr } from '../../../utils/he
 import { 
     loadRosterCache, 
     isAdmin, 
+    isTL,
+    hasTlPermission,
     calculateSplitDuration, 
     parseTimeToMinutes, 
     getMergedDeduplicatedCommissionList, 
@@ -280,10 +282,20 @@ export function loadGlobalLoginList() {
     };
     const todayLogins = globalState.globalLogins ? globalState.globalLogins.filter(isLoginToday) : [];
 
-    if (badge) badge.innerText = `${todayLogins.length} ${todayLogins.length === 1 ? 'login' : 'logins'}`;
+    const isUserAdmin = isAdmin();
+    const isUserTL = isTL();
+    const canManage = isUserAdmin || hasTlPermission('canManageRoster') || hasTlPermission('canForceStatus');
+
+    if (badge) {
+        badge.innerHTML = `<span>${todayLogins.length} ${todayLogins.length === 1 ? 'login' : 'logins'}</span>` + 
+            (canManage ? ` <button type="button" onclick="event.stopPropagation(); window.promptAdminSelectRiderForTimeIn && window.promptAdminSelectRiderForTimeIn();" class="ml-1 text-[9px] bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-bold cursor-pointer transition active:scale-95" title="Manually set Time In for an offline rider">+ Time In</button>` : '');
+    }
 
     if (todayLogins.length === 0) {
-        const emptyLoginHtml = `<div class="text-gray-500 dark:text-gray-400 italic text-center py-2 text-xs">No logins recorded yet today.</div>`;
+        const emptyLoginHtml = `<div class="text-gray-500 dark:text-gray-400 italic text-center py-2 text-xs flex flex-col items-center gap-1.5">
+            <span>No logins recorded yet today.</span>
+            ${canManage ? `<button type="button" onclick="window.promptAdminSelectRiderForTimeIn && window.promptAdminSelectRiderForTimeIn();" class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded-md cursor-pointer transition active:scale-95">+ Set Time In for Rider</button>` : ''}
+        </div>`;
         if (feed._lastRenderedHtml !== emptyLoginHtml || feed.children.length === 0) {
             feed.innerHTML = emptyLoginHtml;
             feed._lastRenderedHtml = emptyLoginHtml;
@@ -306,8 +318,11 @@ export function loadGlobalLoginList() {
                 <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${escapeHtml(rId)}', '${escapeHtml(riderFormatted)}')" class="font-black text-xs text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 hover:underline truncate flex items-center gap-1.5 text-left cursor-pointer" title="View Rider Profile"><i class="fa-solid fa-motorcycle text-blue-600 dark:text-blue-400 text-[10px]"></i> <span>${escapeHtml(riderFormatted)}</span></button>
                 ${mapBtn}
             </div>
-            <div class="text-[10px] text-gray-800 dark:text-gray-200 font-mono text-right shrink-0 font-medium">
+            <div class="text-[10px] text-gray-800 dark:text-gray-200 font-mono text-right shrink-0 font-medium flex items-center gap-1 justify-end">
                 <span>In: ${escapeHtml(l.loginTime || 'N/A')}</span>
+                ${canManage ? `
+                    <button type="button" onclick="event.stopPropagation(); window.promptAdminSetRiderTimeIn && window.promptAdminSetRiderTimeIn('${escapeHtml(rId)}', '${escapeHtml(riderFormatted)}', '${escapeHtml(l.loginTime || '')}');" class="text-[9px] text-gray-400 hover:text-amber-500 p-0.5 cursor-pointer transition active:scale-90" title="Edit Time In">✏️</button>
+                ` : ''}
                 ${clockOutTxt}
             </div>
         </div>`;

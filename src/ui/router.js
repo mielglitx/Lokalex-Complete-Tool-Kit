@@ -355,6 +355,17 @@ export function renderViewUI(targetViewId) {
         document.documentElement.classList.add('app-mounted');
         document.documentElement.classList.remove('instant-session-home', 'instant-session-customer', 'instant-session-merchant');
     }
+    // Release any lingering body scroll locks from previous modals or view switches
+    if (typeof document !== 'undefined' && document.body) {
+        document.body.classList.remove('overflow-hidden', 'touch-none');
+        document.body.style.overflow = '';
+        document.body.style.touchAction = '';
+        if (document.documentElement) {
+            document.documentElement.classList.remove('overflow-hidden', 'touch-none', 'has-chat-open');
+            document.documentElement.style.overflow = '';
+            document.documentElement.style.touchAction = '';
+        }
+    }
     document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
     const targetEl = document.getElementById(targetViewId);
     if (targetEl) targetEl.classList.remove('hidden');

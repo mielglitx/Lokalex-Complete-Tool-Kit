@@ -713,15 +713,16 @@ export function listenToAllCustomerChatsForRider() {
         console.error("Firebase customerChatMeta listener error:", error);
     });
 
-    // 3. Background safety sync watchdog: only polls when Realtime WebSocket has been silent > 18s
+    // 3. Background safety sync watchdog: only polls when Realtime WebSocket has been silent > 30s
     if (!window._chatMetaPollingInterval) {
         window._chatMetaPollingInterval = setInterval(() => {
+            if (typeof document !== 'undefined' && document.hidden) return;
             const isVisible = typeof document !== 'undefined' ? (!document.hidden && document.visibilityState === 'visible') : true;
             const silentMs = Date.now() - getLastRealtimeActivityTime();
-            if (isVisible && navigator.onLine && silentMs > 18000 && typeof forceRefreshLiveChatsFeed === 'function') {
+            if (isVisible && navigator.onLine && silentMs > 30000 && typeof forceRefreshLiveChatsFeed === 'function') {
                 forceRefreshLiveChatsFeed(null, true).catch(() => {});
             }
-        }, 25000);
+        }, 45000);
     }
 }
 
@@ -1167,9 +1168,10 @@ export async function forceRefreshLiveChatsFeed(btn = null, isSilent = false) {
 
     try {
         let chatData = null;
+        const queryLimit = isSilent ? 60 : 250;
         if (db) {
             try {
-                const snap = await db.ref('customerChatMeta').orderByChild('lastUpdated').limitToLast(350).once('value');
+                const snap = await db.ref('customerChatMeta').orderByChild('lastUpdated').limitToLast(queryLimit).once('value');
                 chatData = snap.val();
             } catch (dbErr) {
                 console.warn('[ForceRefreshChat] db.ref fetch failed:', dbErr);
@@ -1178,7 +1180,7 @@ export async function forceRefreshLiveChatsFeed(btn = null, isSilent = false) {
 
         if (!chatData && !isSupabaseSelected()) {
             try {
-                const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?orderBy=%22lastUpdated%22&limitToLast=350&t=${Date.now()}`;
+                const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/customerChatMeta.json?orderBy=%22lastUpdated%22&limitToLast=${queryLimit}&t=${Date.now()}`;
                 const res = await fetch(directRestUrl, { cache: 'no-store' });
                 if (res.ok) {
                     chatData = await res.json();
