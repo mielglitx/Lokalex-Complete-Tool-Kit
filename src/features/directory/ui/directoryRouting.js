@@ -267,6 +267,36 @@ function getOrCreateChatFareRatePickerModal() {
     return modal;
 }
 
+function getEffectiveChatCustomerName() {
+    const isModern = typeof window !== 'undefined' && window.isModernUiActive && window.isModernUiActive();
+    if (isModern) {
+        const modernTitle = document.getElementById('modern-chat-room-title')?.innerText?.trim();
+        if (modernTitle && !modernTitle.toLowerCase().includes('select a customer')) {
+            return modernTitle;
+        }
+    }
+    const classicName = document.getElementById('rider-chat-cust-name')?.innerText?.trim();
+    if (classicName && !classicName.toLowerCase().includes('customer name')) {
+        return classicName;
+    }
+    return "Customer";
+}
+
+function isChatCurrentlyActive() {
+    const isModern = typeof window !== 'undefined' && window.isModernUiActive && window.isModernUiActive();
+    const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') 
+        ? window.getActiveRiderChatCustId() 
+        : window.activeRiderChatCustId;
+    const validCustId = (activeCustId && activeCustId !== 'undefined' && activeCustId !== 'null') ? String(activeCustId).trim() : null;
+
+    if (isModern && validCustId) return true;
+
+    const chatModal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
+    if (chatModal && !chatModal.classList.contains('hidden') && validCustId) return true;
+
+    return false;
+}
+
 export function openFareRatePickerFromChat() {
     const modal = getOrCreateChatFareRatePickerModal();
     if (modal.parentElement !== document.body) {
@@ -274,7 +304,7 @@ export function openFareRatePickerFromChat() {
     }
     modal.style.zIndex = '1000005';
 
-    const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
+    const custName = getEffectiveChatCustomerName();
     const subtitle = document.getElementById('chat-rate-picker-subtitle');
     if (subtitle) {
         subtitle.innerHTML = `Sending rate to <strong class="text-emerald-600 dark:text-emerald-400">${escapeHtml(custName)}</strong>`;
@@ -538,13 +568,12 @@ export function askFareRateSendConfirmation({ barangay = "", destMun = "", origi
 }
 
 export async function quickSendFareRateToActiveChat(barangay, rawAmount, destMun, originMun) {
-    const chatModal = document.getElementById('rider-chat-modal');
-    const isChatOpen = chatModal && !chatModal.classList.contains('hidden');
+    const isChatOpen = isChatCurrentlyActive();
     const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') 
         ? window.getActiveRiderChatCustId() 
         : window.activeRiderChatCustId;
     const validCustId = (activeCustId && activeCustId !== 'undefined' && activeCustId !== 'null') ? String(activeCustId).trim() : null;
-    const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
+    const custName = getEffectiveChatCustomerName();
 
     if (!isChatOpen || !validCustId) {
         showToast("⚠️ Chat is not active. Please open a customer chat first.");
@@ -572,7 +601,7 @@ export async function quickSendFareRateToActiveChat(barangay, rawAmount, destMun
 
 export function insertFareRateToChatInput(barangay, rawAmount, destMun, originMun) {
     const formattedMessage = formatFareRateMessage(barangay, rawAmount, destMun, originMun);
-    const input = document.getElementById('rider-chat-input');
+    const input = document.getElementById('rider-cust-chat-input') || document.getElementById('rider-chat-input');
     if (input) {
         input.value = formattedMessage;
         input.style.height = 'auto';

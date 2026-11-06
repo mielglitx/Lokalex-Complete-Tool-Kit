@@ -86,7 +86,8 @@ export function showToast(message, duration = 2500) {
     if (!toastContainer) {
         toastContainer = document.createElement('div');
         toastContainer.id = 'toast-container';
-        toastContainer.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 z-[99999] flex flex-col items-center gap-1.5 pointer-events-none px-3 w-full max-w-xs';
+        toastContainer.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 z-[10000050] flex flex-col items-center gap-1.5 pointer-events-none px-3 w-full max-w-xs';
+        toastContainer.style.zIndex = '10000050';
         document.body.appendChild(toastContainer);
     }
 

@@ -1849,14 +1849,43 @@ export function sendAllMenuPagesToCustomer() {
     dispatchMenuPagesToSend(pages, storeName);
 }
 
+export function getEffectiveChatCustomerName() {
+    const isModern = typeof window !== 'undefined' && window.isModernUiActive && window.isModernUiActive();
+    if (isModern) {
+        const modernTitle = document.getElementById('modern-chat-room-title')?.innerText?.trim();
+        if (modernTitle && !modernTitle.toLowerCase().includes('select a customer')) {
+            return modernTitle;
+        }
+    }
+    const classicName = document.getElementById('rider-chat-cust-name')?.innerText?.trim();
+    if (classicName && !classicName.toLowerCase().includes('customer name')) {
+        return classicName;
+    }
+    return "Customer";
+}
+
+export function isChatCurrentlyActive() {
+    const isModern = typeof window !== 'undefined' && window.isModernUiActive && window.isModernUiActive();
+    const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') 
+        ? window.getActiveRiderChatCustId() 
+        : window.activeRiderChatCustId;
+    const validCustId = (activeCustId && activeCustId !== 'undefined' && activeCustId !== 'null') ? String(activeCustId).trim() : null;
+
+    if (isModern && validCustId) return true;
+
+    const chatModal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
+    if (chatModal && !chatModal.classList.contains('hidden') && validCustId) return true;
+
+    return false;
+}
+
 export async function dispatchMenuPagesToSend(pagesToSend, storeName = "") {
     if (!pagesToSend || pagesToSend.length === 0) return;
 
     const resolvedStoreName = storeName || activeGalleryStore?.name || "Store";
 
-    // Check if rider is currently chatting inside rider-chat-modal
-    const chatModal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
-    const isChatOpen = chatModal && !chatModal.classList.contains('hidden');
+    // Check if rider is currently chatting inside rider-chat-modal or Modern UI workspace
+    const isChatOpen = isChatCurrentlyActive();
     const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') 
         ? window.getActiveRiderChatCustId() 
         : window.activeRiderChatCustId;
@@ -1864,7 +1893,7 @@ export async function dispatchMenuPagesToSend(pagesToSend, storeName = "") {
     const validActiveCustId = (activeCustId && activeCustId !== 'undefined' && activeCustId !== 'null') ? String(activeCustId).trim() : null;
 
     if (isChatOpen && validActiveCustId) {
-        const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
+        const custName = getEffectiveChatCustomerName();
         const confirmed = await askMenuSendConfirmation({
             storeName: resolvedStoreName,
             pageCount: pagesToSend.length,
@@ -2450,7 +2479,7 @@ export function openStoreMenuPickerFromChat() {
     }
     modal.style.zIndex = '1000005';
     const subtitle = document.getElementById('chat-store-picker-subtitle');
-    const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
+    const custName = getEffectiveChatCustomerName();
     if (subtitle) {
         subtitle.innerHTML = `Sending menu to <strong class="text-orange-600 dark:text-orange-400">${escapeHtml(custName)}</strong>`;
     }
@@ -2680,13 +2709,12 @@ export function handleSelectStoreFromChatPicker(storeName, compositeKey, metaKey
 export async function quickSendStoreMenuToActiveChat(storeName, compositeKey, metadataKey = '') {
     const cleanName = (storeName || "Store").trim();
 
-    const chatModal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
-    const isChatOpen = chatModal && !chatModal.classList.contains('hidden');
+    const isChatOpen = isChatCurrentlyActive();
     const activeCustId = (typeof window.getActiveRiderChatCustId === 'function') 
         ? window.getActiveRiderChatCustId() 
         : window.activeRiderChatCustId;
     const validActiveCustId = (activeCustId && activeCustId !== 'undefined' && activeCustId !== 'null') ? String(activeCustId).trim() : null;
-    const custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
+    const custName = getEffectiveChatCustomerName();
 
     if (!isChatOpen || !validActiveCustId) {
         showToast("⚠️ Chat is not active. Please open a customer chat first.");

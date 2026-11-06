@@ -186,6 +186,9 @@ export function initQueueCooldownTicker() {
 
         if (needsResort) {
             requestRosterUIRefresh();
+            if (typeof window.refreshAllModernViews === 'function') {
+                window.refreshAllModernViews();
+            }
         }
     }, 1000);
 }

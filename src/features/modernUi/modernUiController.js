@@ -29,12 +29,13 @@
 
 import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
-import { escapeHtml, formatTitleCase, getLocalTodayStr } from '../../utils/helpers.js';
+import { escapeHtml, escapeJsAttr, formatTitleCase, getLocalTodayStr } from '../../utils/helpers.js';
 import { showToast } from '../../ui/notifications.js';
 import { 
     isAdmin, 
     canManageRoster, 
     hasTlPermission, 
+    isTL,
     isRiderMatch, 
     isCustomerMatch,
     sortAvailableRiders, 
@@ -45,8 +46,11 @@ import {
     isSameDateStr,
     normalizeToDateStr,
     calculateSplitDuration,
-    parseTimeToMinutes
+    parseTimeToMinutes,
+    parseQueueTime
 } from '../roster/rosterUtils.js';
+import { getQueueLineupSettings } from '../roster/rosterQueueSettings.js';
+import { getForcedCaterBadgeHtml } from '../roster/ui/rosterBadge.js';
 import { openRiderInfoModal } from '../roster/ui/rosterRiderModal.js';
 import { 
     getActiveRiderChatCustId, 
@@ -1029,9 +1033,17 @@ export function renderModernRotationsTab() {
     const caterings = roster.filter(m => m.status === 'Catering');
     const breaks = roster.filter(m => m.status === 'Break');
 
+    const isUserAdmin = isAdmin();
+    const canManage = typeof canManageRoster === 'function' ? canManageRoster() : (isUserAdmin || isTL());
+
     if (availCountEl) availCountEl.innerText = `${availables.length} riders`;
     if (caterCountEl) caterCountEl.innerText = `${caterings.length} active`;
     if (breakCountEl) breakCountEl.innerText = `${breaks.length} on break`;
+
+    const queueSettings = typeof getQueueLineupSettings === 'function' ? getQueueLineupSettings() : { mode: 'lowest_gross', cooldownMinutes: 10 };
+    const cooldownMins = parseInt(queueSettings?.cooldownMinutes, 10) || 10;
+    const cooldownMs = cooldownMins * 60 * 1000;
+    const now = Date.now();
 
     // 1. Available Column
     if (availables.length === 0) {
@@ -1041,13 +1053,50 @@ export function renderModernRotationsTab() {
             const rawName = m.riderName || m.name || "Rider";
             const mId = (m.telegramId || m.id || "").toString();
             const gross = getRiderTodayGross(rawName, mId);
+
+            const rawTs = m.availableTimestamp || (typeof parseQueueTime === 'function' ? parseQueueTime(m.queueTime) : (Number(m.queueTime) || 0)) || 0;
+            const cooldownUntil = m.cooldownUntil || (rawTs > 0 && cooldownMs > 0 ? (rawTs + cooldownMs) : 0);
+            let cooldownBadge = "";
+
+            if (cooldownUntil > now) {
+                const remSecs = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
+                const mins = Math.floor(remSecs / 60);
+                const secs = remSecs % 60;
+                const timeTag = `${mins}:${String(secs).padStart(2, '0')}`;
+                cooldownBadge = ` <span class="queue-cooldown-timer inline-flex items-center gap-1 text-[9px] font-mono font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded cursor-default select-none shrink-0" data-cooldown-until="${cooldownUntil}" title="Queue Cooldown Active: Placed at the end of the line for ${cooldownMins}m">⏳ <span class="timer-digits">${timeTag}</span></span>`;
+            }
+
+            let controlsHtml = "";
+            if (isUserAdmin || canManage) {
+                controlsHtml = `
+                <div class="inline-flex items-center gap-1 shrink-0">
+                    <select onchange="const sel = this; const val = sel.value; if (val) { sel.selectedIndex = 0; sel.value = ''; setTimeout(() => { try { sel.selectedIndex = 0; sel.value = ''; } catch(_) {} }, 100); window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeJsAttr(rawName)}', val); }" class="bg-black/60 text-[9px] text-amber-400 border border-slate-700 rounded px-1 py-0.5 cursor-pointer">
+                        <option value="" selected>⚡ Action</option>
+                        <option value="Available">Available</option>
+                        <option value="Catering">Catering</option>
+                        <option value="Break">Break</option>
+                        <option value="End">End Shift</option>
+                    </select>
+                    <div class="inline-flex gap-0.5 text-[9px]">
+                        <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_top')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-1 py-0.5 rounded font-bold transition active:scale-95" title="Move Top">⬆️</button>
+                        <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_up')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-1 py-0.5 rounded font-bold transition active:scale-95" title="Move Up (+1)">▲</button>
+                        <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_down')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-1 py-0.5 rounded font-bold transition active:scale-95" title="Move Down (-1)">▼</button>
+                        <button onclick="window.adminShiftRiderQueue && window.adminShiftRiderQueue('${mId}', 'move_bottom')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-1 py-0.5 rounded font-bold transition active:scale-95" title="Move Bottom">⬇️</button>
+                    </div>
+                </div>`;
+            }
+
             return `
-            <div class="flex items-center justify-between p-2 rounded-xl bg-black/40 border border-slate-800 hover:border-emerald-500/50 transition">
-                <div class="flex items-center gap-1.5 min-w-0">
-                    <span class="font-black text-emerald-400 font-mono text-xs">#${idx + 1}</span>
+            <div class="flex items-center justify-between p-2 rounded-xl bg-black/40 border border-slate-800 hover:border-emerald-500/50 transition gap-1.5">
+                <div class="flex items-center gap-1.5 min-w-0 flex-1 flex-wrap">
+                    <span class="font-black text-emerald-400 font-mono text-xs shrink-0">#${idx + 1}</span>
                     <button type="button" onclick="window.openModernRiderProfile('${escapeHtml(mId)}', '${escapeHtml(rawName)}')" class="font-bold text-xs text-white hover:text-emerald-400 truncate text-left cursor-pointer">${escapeHtml(formatTitleCase(rawName))}</button>
+                    ${cooldownBadge}
                 </div>
-                <span class="text-[10px] font-mono font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded shrink-0">₱${gross.toFixed(0)}</span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    ${controlsHtml}
+                    <span class="text-[10px] font-mono font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded shrink-0">₱${gross.toFixed(0)}</span>
+                </div>
             </div>`;
         }).join('');
     }
@@ -1056,25 +1105,115 @@ export function renderModernRotationsTab() {
     if (caterings.length === 0) {
         caterList.innerHTML = `<div class="text-slate-500 italic text-center py-6 text-xs">No active deliveries</div>`;
     } else {
+        const loggedIn = getLoggedInRiderInfo();
+        const myId = loggedIn?.myId || (appState.telegramId || localStorage.getItem('telegramId') || '').toString().trim();
+        const myName = loggedIn?.myName || (appState.riderName || localStorage.getItem('riderName') || '').trim().toLowerCase();
+
         caterList.innerHTML = caterings.map(m => {
             const rawName = m.riderName || m.name || "Rider";
             const mId = (m.telegramId || m.id || "").toString();
+            const mName = formatTitleCase(rawName);
             const gross = getRiderTodayGross(rawName, mId);
+
+            const isMyLine = (myId && mId === myId) || (myName && (mName.toLowerCase() === myName || rawName.toLowerCase() === myName || isRiderMatch(rawName, myName)));
+            const canComplete = isMyLine || isUserAdmin || canManage;
+            const canSwap = isMyLine || isUserAdmin || canManage;
+            const canVoid = isMyLine || isUserAdmin || canManage;
+            const canEdit = isUserAdmin || canManage;
+            const canGet = !isMyLine && !isUserAdmin && !canManage;
+
             const custs = m.customerName ? m.customerName.split(', ').map(c => c.trim()).filter(Boolean) : [];
+            const times = m.startTime ? m.startTime.split(', ').map(t => t.trim()) : [];
+
+            let forceActionSelect = "";
+            if (isUserAdmin || canManage) {
+                forceActionSelect = `
+                <select onchange="const sel = this; const val = sel.value; if (val) { sel.selectedIndex = 0; sel.value = ''; setTimeout(() => { try { sel.selectedIndex = 0; sel.value = ''; } catch(_) {} }, 100); window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeJsAttr(mName)}', val); }" class="bg-black/60 text-[9px] text-amber-400 border border-slate-700 rounded px-1 py-0.5 cursor-pointer shrink-0">
+                    <option value="" selected>⚡ Action</option>
+                    <option value="Available">Available</option>
+                    <option value="Catering">Catering</option>
+                    <option value="Break">Break</option>
+                    <option value="End">End Shift</option>
+                    <option value="VoidActive">🚫 Void All Orders</option>
+                </select>`;
+            }
+
+            let custCardsHtml = "";
+            if (custs.length === 0) {
+                custCardsHtml = `<span class="text-[10px] text-slate-500 italic">No customer name assigned</span>`;
+            } else {
+                custCardsHtml = custs.map((cName, idx) => {
+                    const formattedCustName = formatTitleCase(cName);
+                    const cTime = times[idx] || times[0] || '';
+                    const timeDetails = getElapsedCateringTime(cTime);
+                    const forcedBadge = typeof getForcedCaterBadgeHtml === 'function' ? getForcedCaterBadgeHtml(m, cName, mName) : "";
+
+                    return `
+                    <div class="flex flex-col gap-1.5 bg-[#182229] p-2 rounded-xl border border-slate-700/60 shadow-xs transition">
+                        <div class="flex items-center justify-between gap-1 flex-wrap min-w-0">
+                            <button type="button" onclick="window.selectModernCustomerChat('${escapeJsAttr(cName)}', '${escapeJsAttr(cName)}'); window.switchModernWorkspaceTab('chats');" class="text-left font-black text-xs text-amber-300 hover:text-white flex items-center gap-1 truncate cursor-pointer transition" title="Open chat with ${escapeHtml(formattedCustName)}">
+                                <span>👤</span>
+                                <span class="truncate">${escapeHtml(formattedCustName)}</span>
+                                <span class="text-slate-400 text-[10px] font-normal font-mono">(${timeDetails})</span>
+                            </button>
+                            ${forcedBadge ? `<div class="shrink-0">${forcedBadge}</div>` : ''}
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-1 shrink-0 pt-1 border-t border-slate-800/80">
+                            ${canComplete ? `
+                                <button type="button" onclick="window.completeSingleCateringCustomer && window.completeSingleCateringCustomer('${mId}', '${escapeJsAttr(mName)}', '${escapeJsAttr(cName)}')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[10px] px-2 py-1 rounded-lg shadow-sm transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Mark this customer delivery as completed">
+                                    <i class="fa-solid fa-check"></i> Done
+                                </button>
+                            ` : ''}
+
+                            ${(isMyLine || isUserAdmin || canManage) ? `
+                                <button type="button" onclick="window.copyCustomerTrackingLink && window.copyCustomerTrackingLink('${escapeJsAttr(cName)}')" class="bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Copy tracking link">
+                                    🔗 Link
+                                </button>
+                                <button type="button" onclick="window.openLiveCustomerMap && window.openLiveCustomerMap('${escapeJsAttr(cName)}')" class="bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Open Live Map">
+                                    🗺️ Map
+                                </button>
+                            ` : ''}
+
+                            ${canSwap ? `
+                                <button type="button" onclick="window.openSwapCustomerModal && window.openSwapCustomerModal('${mId}', '${escapeJsAttr(mName)}', '${escapeJsAttr(cName)}')" class="bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Swap customer with another rider">
+                                    🔀 Swap
+                                </button>
+                            ` : ''}
+
+                            ${canGet ? `
+                                <button type="button" onclick="window.claimCustomerFromRider && window.claimCustomerFromRider('${mId}', '${escapeJsAttr(mName)}', '${escapeJsAttr(cName)}')" class="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Request to get this customer">
+                                    📥 Get
+                                </button>
+                            ` : ''}
+
+                            ${canEdit ? `
+                                <button type="button" onclick="window.openEditCateringCustomerModal && window.openEditCateringCustomerModal('${mId}', '${escapeJsAttr(mName)}', '${escapeJsAttr(cName)}')" class="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Edit Customer Name">
+                                    <i class="fa-solid fa-pen text-[9px]"></i> Edit
+                                </button>
+                            ` : ''}
+
+                            ${canVoid ? `
+                                <button type="button" onclick="window.adminVoidSpecificCustomer && window.adminVoidSpecificCustomer('${mId}', '${escapeJsAttr(mName)}', '${escapeJsAttr(cName)}')" class="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-bold text-[10px] px-2 py-1 rounded-lg transition active:scale-95 flex items-center gap-1 cursor-pointer" title="Void specific customer">
+                                    <i class="fa-solid fa-ban text-[9px]"></i> Void
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>`;
+                }).join('');
+            }
 
             return `
             <div class="flex flex-col p-2.5 rounded-xl bg-black/40 border border-slate-800 gap-1.5">
-                <div class="flex items-center justify-between">
-                    <button type="button" onclick="window.openModernRiderProfile('${escapeHtml(mId)}', '${escapeHtml(rawName)}')" class="font-black text-xs text-amber-300 hover:underline truncate text-left cursor-pointer">${escapeHtml(formatTitleCase(rawName))}</button>
+                <div class="flex items-center justify-between gap-1 flex-wrap">
+                    <div class="flex items-center gap-1.5 min-w-0">
+                        <button type="button" onclick="window.openModernRiderProfile('${escapeHtml(mId)}', '${escapeHtml(rawName)}')" class="font-black text-xs text-amber-300 hover:underline truncate text-left cursor-pointer">${escapeHtml(formatTitleCase(rawName))}</button>
+                        ${forceActionSelect}
+                    </div>
                     <span class="text-[10px] font-mono font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded shrink-0">₱${gross.toFixed(0)}</span>
                 </div>
-                <div class="flex flex-col gap-1 pl-1">
-                    ${custs.length > 0 ? custs.map(c => `
-                        <button type="button" onclick="window.selectModernCustomerChat('${escapeHtml(c)}', '${escapeHtml(c)}'); window.switchModernWorkspaceTab('chats');" class="text-left text-[11px] font-bold text-slate-200 hover:text-amber-400 flex items-center gap-1.5 truncate cursor-pointer bg-[#182229] px-2 py-1 rounded-lg border border-slate-700/60">
-                            <span>👤</span>
-                            <span class="truncate">${escapeHtml(c)}</span>
-                        </button>
-                    `).join('') : '<span class="text-[10px] text-slate-500 italic">No customer name assigned</span>'}
+                <div class="flex flex-col gap-1.5 pl-1">
+                    ${custCardsHtml}
                 </div>
             </div>`;
         }).join('');
@@ -1090,13 +1229,28 @@ export function renderModernRotationsTab() {
             const gross = getRiderTodayGross(rawName, mId);
             const elapsed = getElapsedBreakTime(m);
             const plannedMins = m.breakDurationMinutes ? parseInt(m.breakDurationMinutes, 10) : null;
+
+            let breakActionSelect = "";
+            if (isUserAdmin || canManage) {
+                breakActionSelect = `
+                <select onchange="const sel = this; const val = sel.value; if (val) { sel.selectedIndex = 0; sel.value = ''; setTimeout(() => { try { sel.selectedIndex = 0; sel.value = ''; } catch(_) {} }, 100); window.adminForceStatus && window.adminForceStatus('${mId}', '${escapeJsAttr(rawName)}', val); }" class="bg-black/60 text-[9px] text-amber-400 border border-slate-700 rounded px-1 py-0.5 cursor-pointer shrink-0">
+                    <option value="" selected>⚡ Action</option>
+                    <option value="Available">Available</option>
+                    <option value="Catering">Catering</option>
+                    <option value="End">End Shift</option>
+                </select>`;
+            }
+
             return `
-            <div class="flex items-center justify-between p-2 rounded-xl bg-black/40 border border-slate-800">
-                <div class="flex items-center gap-1.5 min-w-0">
+            <div class="flex items-center justify-between p-2 rounded-xl bg-black/40 border border-slate-800 gap-1.5">
+                <div class="flex items-center gap-1.5 min-w-0 flex-1 flex-wrap">
                     <button type="button" onclick="window.openModernRiderProfile('${escapeHtml(mId)}', '${escapeHtml(rawName)}')" class="font-bold text-xs text-sky-300 hover:underline truncate text-left cursor-pointer">${escapeHtml(formatTitleCase(rawName))}</button>
                     <span class="text-[10px] font-mono text-sky-400 bg-sky-500/10 border border-sky-500/30 px-1.5 py-0.5 rounded shrink-0">${elapsed}${plannedMins ? ` / ${plannedMins}m` : ''}</span>
                 </div>
-                <span class="text-[10px] font-mono font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded shrink-0">₱${gross.toFixed(0)}</span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                    ${breakActionSelect}
+                    <span class="text-[10px] font-mono font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-1.5 py-0.5 rounded shrink-0">₱${gross.toFixed(0)}</span>
+                </div>
             </div>`;
         }).join('');
     }
@@ -1217,89 +1371,113 @@ export function renderModernLoginsTab() {
     const outFooter = document.getElementById('modern-login-out-footer');
     if (!inList || !outList) return;
 
-    const todayStr = getLocalTodayStr();
-    const eligibleRoster = (globalState.rosterMembers || []).filter(m => !isInspectorUser(m.userType, m.telegramId || m.id, m.riderName || m.name));
+    try {
+        const todayStr = getLocalTodayStr();
+        const roster = globalState.rosterMembers || [];
+        const eligibleRoster = roster.filter(m => !isInspectorUser(m?.userType, m?.telegramId || m?.id, m?.riderName || m?.name));
 
-    const todayLogins = (globalState.globalLogins || []).filter(l => {
-        if (!l) return false;
-        const rawName = l.riderName || "";
-        const rId = (l.riderId || l.telegramId || '').toString();
-        const member = (globalState.rosterMembers || []).find(m => isRiderMatch(rawName, m.riderName || m.name || '', rId, (m.telegramId || m.id || '').toString()));
-        if (isInspectorUser(l.userType || member?.userType, rId, rawName)) return false;
-
-        if (isSameDateStr(l.date, todayStr)) return true;
-        if (l.loginTimestamp && isSameDateStr(new Date(l.loginTimestamp).toLocaleDateString('en-CA'), todayStr)) return true;
-        if (l.clockOutTimestamp && isSameDateStr(new Date(l.clockOutTimestamp).toLocaleDateString('en-CA'), todayStr)) return true;
-        return false;
-    });
-
-    const loggedInNames = new Set();
-    todayLogins.forEach(l => {
-        const n = (l.riderName || '').trim().toLowerCase();
-        if (n) loggedInNames.add(n);
-    });
-
-    const notLoggedInRiders = eligibleRoster.filter(m => {
-        const n = (m.riderName || m.name || '').trim().toLowerCase();
-        return n && !loggedInNames.has(n);
-    });
-
-    if (inHeader) inHeader.innerText = `Logged IN (${todayLogins.length})`;
-    if (outHeader) outHeader.innerText = `Not Logged In (${notLoggedInRiders.length}):`;
-    if (inFooter) inFooter.innerHTML = `Logged In: <span class="text-emerald-400 font-bold">${todayLogins.length} Riders</span> (out of ${eligibleRoster.length} total → ${todayLogins.length}/${notLoggedInRiders.length})`;
-    if (outFooter) outFooter.innerHTML = `Not Logged In: <span class="text-rose-400 font-bold">${notLoggedInRiders.length} Riders</span>`;
-
-    // Render Logged IN
-    if (todayLogins.length === 0) {
-        inList.innerHTML = `<div class="text-slate-500 italic text-center py-4 text-xs">No logins recorded yet today.</div>`;
-    } else {
-        inList.innerHTML = todayLogins.map((l, idx) => {
-            const rawName = l.riderName || "Rider";
+        const todayLogins = (globalState.globalLogins || []).filter(l => {
+            if (!l) return false;
+            const rawName = l.riderName || "";
             const rId = (l.riderId || l.telegramId || '').toString();
-            const member = roster.find(m => isRiderMatch(rawName, m.riderName || m.name || '', rId, (m.telegramId || m.id || '').toString()));
-            let timeIn = l.loginTime || '--:--';
+            const member = roster.find(m => isRiderMatch(rawName, m?.riderName || m?.name || '', rId, (m?.telegramId || m?.id || '').toString()));
+            if (isInspectorUser(l.userType || member?.userType, rId, rawName)) return false;
 
-            // If rider resumed duty later today, display their current resumed session timeIn:
-            if (member && member.status && member.status !== 'End' && member.availableTimestamp && l.loginTimestamp && (member.availableTimestamp - l.loginTimestamp) > 1800000 && !l.accumulatedWorkedMinutes) {
-                timeIn = new Date(member.availableTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            }
+            if (isSameDateStr(l.date, todayStr)) return true;
+            if (l.loginTimestamp && isSameDateStr(new Date(l.loginTimestamp).toLocaleDateString('en-CA'), todayStr)) return true;
+            if (l.clockOutTimestamp && isSameDateStr(new Date(l.clockOutTimestamp).toLocaleDateString('en-CA'), todayStr)) return true;
+            return false;
+        });
 
-            const isCurrentlyOnDuty = member ? (member.status && member.status !== 'End') : !l.clockOutTime;
-            const timeOut = isCurrentlyOnDuty 
-                ? '<span class="text-emerald-400 font-bold">On Duty</span>' 
-                : (l.clockOutTime ? escapeHtml(l.clockOutTime) : '<span class="text-slate-500 font-bold">Ended</span>');
-            const dayOffBadge = renderModernDayOffBadgeHtml(rId, rawName);
+        const loggedInNames = new Set();
+        todayLogins.forEach(l => {
+            const n = (l.riderName || '').trim().toLowerCase();
+            if (n) loggedInNames.add(n);
+        });
 
-            return `
-            <div class="grid grid-cols-[1.8fr_0.9fr_0.9fr] sm:grid-cols-[2fr_1fr_1fr] items-center p-2 rounded-xl bg-black/40 border border-slate-800 hover:border-slate-700 transition cursor-pointer" onclick="window.openModernRiderProfile('${escapeHtml(rId)}', '${escapeHtml(rawName)}')">
-                <div class="flex items-center gap-1.5 min-w-0 flex-wrap pr-1">
-                    <span class="font-bold text-xs text-white hover:text-emerald-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
-                    ${dayOffBadge}
-                </div>
-                <span class="font-mono text-xs text-slate-300">${escapeHtml(timeIn)}</span>
-                <span class="font-mono text-xs text-slate-300">${timeOut}</span>
-            </div>`;
-        }).join('');
-    }
+        const notLoggedInRiders = eligibleRoster.filter(m => {
+            const n = (m?.riderName || m?.name || '').trim().toLowerCase();
+            return n && !loggedInNames.has(n);
+        });
 
-    // Render Not Logged In
-    if (notLoggedInRiders.length === 0) {
-        outList.innerHTML = `<div class="text-slate-500 italic text-center py-4 text-xs">All registered riders are logged in!</div>`;
-    } else {
-        outList.innerHTML = notLoggedInRiders.map((m, idx) => {
-            const rawName = m.riderName || m.name || "Rider";
-            const mId = (m.telegramId || m.id || '').toString();
-            const dayOffBadge = renderModernDayOffBadgeHtml(mId, rawName);
+        if (inHeader) inHeader.innerText = `Logged IN (${todayLogins.length})`;
+        if (outHeader) outHeader.innerText = `Not Logged In (${notLoggedInRiders.length}):`;
+        if (inFooter) inFooter.innerHTML = `Logged In: <span class="text-emerald-400 font-bold">${todayLogins.length} Riders</span> (out of ${eligibleRoster.length} total → ${todayLogins.length}/${notLoggedInRiders.length})`;
+        if (outFooter) outFooter.innerHTML = `Not Logged In: <span class="text-rose-400 font-bold">${notLoggedInRiders.length} Riders</span>`;
 
-            return `
-            <div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-black/40 border border-slate-800 hover:border-slate-700 transition cursor-pointer" onclick="window.openModernRiderProfile('${escapeHtml(mId)}', '${escapeHtml(rawName)}')">
-                <div class="flex items-center gap-1.5 min-w-0 flex-wrap pr-1">
-                    <span class="font-bold text-xs text-slate-300 hover:text-rose-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
-                    ${dayOffBadge}
-                </div>
-                <span class="text-[10px] text-slate-500 font-mono shrink-0">Offline</span>
-            </div>`;
-        }).join('');
+        // Render Logged IN
+        if (todayLogins.length === 0) {
+            inList.innerHTML = `<div class="text-slate-500 italic text-center py-4 text-xs">No logins recorded yet today.</div>`;
+        } else {
+            inList.innerHTML = todayLogins.map((l, idx) => {
+                try {
+                    const rawName = l.riderName || "Rider";
+                    const rId = (l.riderId || l.telegramId || '').toString();
+                    const member = roster.find(m => isRiderMatch(rawName, m?.riderName || m?.name || '', rId, (m?.telegramId || m?.id || '').toString()));
+                    let timeIn = l.loginTime || '--:--';
+
+                    // If rider resumed duty later today, display their current resumed session timeIn:
+                    if (member && member.status && member.status !== 'End' && member.availableTimestamp) {
+                        const availTs = Number(member.availableTimestamp) || (typeof parseQueueTime === 'function' ? parseQueueTime(member.availableTimestamp) : 0);
+                        const logTs = Number(l.loginTimestamp) || 0;
+                        if (availTs > 0 && logTs > 0 && (availTs - logTs) > 1800000 && !l.accumulatedWorkedMinutes) {
+                            try {
+                                const d = new Date(availTs);
+                                if (!isNaN(d.getTime())) {
+                                    timeIn = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                }
+                            } catch (_) {}
+                        }
+                    }
+
+                    const isCurrentlyOnDuty = member ? (member.status && member.status !== 'End') : !l.clockOutTime;
+                    const timeOut = isCurrentlyOnDuty 
+                        ? '<span class="text-emerald-400 font-bold">On Duty</span>' 
+                        : (l.clockOutTime ? escapeHtml(l.clockOutTime) : '<span class="text-slate-500 font-bold">Ended</span>');
+                    const dayOffBadge = renderModernDayOffBadgeHtml(rId, rawName);
+
+                    return `
+                    <div class="grid grid-cols-[1.8fr_0.9fr_0.9fr] sm:grid-cols-[2fr_1fr_1fr] items-center p-2 rounded-xl bg-black/40 border border-slate-800 hover:border-slate-700 transition cursor-pointer" onclick="window.openModernRiderProfile('${escapeHtml(rId)}', '${escapeHtml(rawName)}')">
+                        <div class="flex items-center gap-1.5 min-w-0 flex-wrap pr-1">
+                            <span class="font-bold text-xs text-white hover:text-emerald-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
+                            ${dayOffBadge}
+                        </div>
+                        <span class="font-mono text-xs text-slate-300">${escapeHtml(timeIn)}</span>
+                        <span class="font-mono text-xs text-slate-300">${timeOut}</span>
+                    </div>`;
+                } catch (rowErr) {
+                    console.error('[ModernLogin] Error rendering row:', rowErr);
+                    return '';
+                }
+            }).join('');
+        }
+
+        // Render Not Logged In
+        if (notLoggedInRiders.length === 0) {
+            outList.innerHTML = `<div class="text-slate-500 italic text-center py-4 text-xs">All registered riders are logged in!</div>`;
+        } else {
+            outList.innerHTML = notLoggedInRiders.map((m, idx) => {
+                try {
+                    const rawName = m?.riderName || m?.name || "Rider";
+                    const mId = (m?.telegramId || m?.id || '').toString();
+                    const dayOffBadge = renderModernDayOffBadgeHtml(mId, rawName);
+
+                    return `
+                    <div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-black/40 border border-slate-800 hover:border-slate-700 transition cursor-pointer" onclick="window.openModernRiderProfile('${escapeHtml(mId)}', '${escapeHtml(rawName)}')">
+                        <div class="flex items-center gap-1.5 min-w-0 flex-wrap pr-1">
+                            <span class="font-bold text-xs text-slate-300 hover:text-rose-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
+                            ${dayOffBadge}
+                        </div>
+                        <span class="text-[10px] text-slate-500 font-mono shrink-0">Offline</span>
+                    </div>`;
+                } catch (rowErr) {
+                    console.error('[ModernNotLogin] Error rendering row:', rowErr);
+                    return '';
+                }
+            }).join('');
+        }
+    } catch (err) {
+        console.error('[ModernLoginsTab] Render error:', err);
     }
 }
 
@@ -1584,6 +1762,25 @@ export function syncModernFooterDock() {
         if (b) b.classList.remove('ring-2', 'ring-emerald-400', 'ring-amber-400', 'ring-sky-400', 'ring-rose-400', 'bg-white/10');
     });
 
+    if (btnAvail) {
+        const queueSettings = typeof getQueueLineupSettings === 'function' ? getQueueLineupSettings() : { cooldownMinutes: 10 };
+        const cooldownMins = parseInt(queueSettings?.cooldownMinutes, 10) || 10;
+        const cooldownMs = cooldownMins * 60 * 1000;
+        const myAvailableTs = myRecord?.availableTimestamp || (myRecord?.queueTime ? parseQueueTime(myRecord.queueTime) : 0) || 0;
+        const myCooldownUntil = myRecord?.cooldownUntil || (myAvailableTs > 0 && cooldownMs > 0 ? (myAvailableTs + cooldownMs) : 0);
+        const now = Date.now();
+
+        if (status === 'Available' && myCooldownUntil > now) {
+            const remSecs = Math.max(0, Math.ceil((myCooldownUntil - now) / 1000));
+            const mins = Math.floor(remSecs / 60);
+            const secs = remSecs % 60;
+            const timeTag = `${mins}:${String(secs).padStart(2, '0')}`;
+            btnAvail.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> <span class="queue-cooldown-timer flex items-center gap-1 font-black text-[11px]" data-cooldown-until="${myCooldownUntil}">Available <span class="text-amber-400 font-mono text-[10px]">⏳<span class="timer-digits">${timeTag}</span></span></span>`;
+        } else {
+            btnAvail.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> <span>Available</span>`;
+        }
+    }
+
     if (status === 'Available' && btnAvail) btnAvail.classList.add('ring-2', 'ring-emerald-400', 'bg-white/10');
     else if (status === 'Catering' && btnCater) btnCater.classList.add('ring-2', 'ring-amber-400', 'bg-white/10');
     else if (status === 'Break' && btnBreak) btnBreak.classList.add('ring-2', 'ring-sky-400', 'bg-white/10');
@@ -1706,5 +1903,7 @@ if (typeof window !== 'undefined') {
     window.getModernFilteredThreads = getModernFilteredThreads;
     window.getModernChatCategory = getModernChatCategory;
     window.refreshModernChatsView = refreshModernChatsView;
+    window.refreshAllModernViews = refreshAllModernViews;
+    window.renderModernRotationsTab = renderModernRotationsTab;
 }
 
