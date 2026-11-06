@@ -7,6 +7,7 @@ import { renderViewUI } from '../../ui/router.js';
 import { calibrateGPS, startBackgroundRosterGpsTracker, stopBackgroundRosterGpsTracker } from './authGps.js';
 import { isUserBlocked } from './authAdmin.js';
 import { finalizeCustomerSession } from './authCustomer.js';
+import { clockOutRider } from '../roster/rosterStatusCore.js';
 
 let deferredPwaPrompt = null;
 
@@ -352,8 +353,15 @@ export async function executeRiderLoginSequence(idInput, cleanName, cleanUserTyp
     }
 }
 
-export function logout() { 
+export async function logout() { 
     stopBackgroundRosterGpsTracker();
+
+    const tId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    if (tId) {
+        try {
+            await clockOutRider(tId);
+        } catch (_) {}
+    }
 
     if (typeof document !== 'undefined' && document.documentElement) {
         document.documentElement.classList.remove('instant-session-home', 'instant-session-customer', 'instant-session-merchant');

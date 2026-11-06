@@ -220,11 +220,18 @@ export async function openRiderInfoModal(targetId, targetName = "") {
         }
 
         const breakNote = totalBreakMins > 0 ? ` (Break: ${Math.floor(totalBreakMins / 60)}h ${totalBreakMins % 60}m)` : '';
+        const accumulated = Number(loginRec.accumulatedWorkedMinutes) || 0;
+
+        // HEURISTIC REPAIR FOR SESSIONS WHERE RIDER LOGGED OUT & RESUMED LATER TODAY:
+        if (member && member.status && member.status !== 'End' && member.availableTimestamp && loginTs && (member.availableTimestamp - loginTs) > 1800000 && !accumulated) {
+            loginTs = member.availableTimestamp;
+        }
 
         if (status === 'END') {
-            const clockOutTs = loginRec.clockOutTimestamp || now;
+            const clockOutTs = loginRec.clockOutTimestamp || loginTs || now;
             grossMins = loginTs ? Math.max(0, Math.floor((clockOutTs - loginTs) / 60000)) : 0;
-            const netMins = Math.max(0, grossMins - totalBreakMins);
+            const sessionMins = Math.max(0, grossMins - totalBreakMins);
+            const netMins = Math.max(accumulated, Number(loginRec.workedMinutes) || (accumulated + sessionMins));
             const netHoursText = `${Math.floor(netMins / 60)}h ${netMins % 60}m`;
 
             const penaltyPerc = loginRec.earlyShiftPenaltyPercent || member?.commissionSurcharge || 0;
@@ -257,7 +264,8 @@ export async function openRiderInfoModal(targetId, targetName = "") {
             }
         } else {
             grossMins = loginTs ? Math.max(0, Math.floor((now - loginTs) / 60000)) : 0;
-            const netMins = Math.max(0, grossMins - totalBreakMins);
+            const currentSessionMins = Math.max(0, grossMins - totalBreakMins);
+            const netMins = accumulated + currentSessionMins;
             const netHoursText = `${Math.floor(netMins / 60)}h ${netMins % 60}m`;
 
             if (isExemptToday) {

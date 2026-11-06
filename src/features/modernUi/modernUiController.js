@@ -1234,8 +1234,18 @@ export function renderModernLoginsTab() {
         inList.innerHTML = todayLogins.map((l, idx) => {
             const rawName = l.riderName || "Rider";
             const rId = (l.riderId || l.telegramId || '').toString();
-            const timeIn = l.loginTime || '--:--';
-            const timeOut = l.clockOutTime ? l.clockOutTime : '<span class="text-emerald-400 font-bold">On Duty</span>';
+            const member = roster.find(m => isRiderMatch(rawName, m.riderName || m.name || '', rId, (m.telegramId || m.id || '').toString()));
+            let timeIn = l.loginTime || '--:--';
+
+            // If rider resumed duty later today, display their current resumed session timeIn:
+            if (member && member.status && member.status !== 'End' && member.availableTimestamp && l.loginTimestamp && (member.availableTimestamp - l.loginTimestamp) > 1800000 && !l.accumulatedWorkedMinutes) {
+                timeIn = new Date(member.availableTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+
+            const isCurrentlyOnDuty = member ? (member.status && member.status !== 'End') : !l.clockOutTime;
+            const timeOut = isCurrentlyOnDuty 
+                ? '<span class="text-emerald-400 font-bold">On Duty</span>' 
+                : (l.clockOutTime ? escapeHtml(l.clockOutTime) : '<span class="text-slate-500 font-bold">Ended</span>');
             const dayOffBadge = renderModernDayOffBadgeHtml(rId, rawName);
 
             return `
@@ -1308,11 +1318,11 @@ export async function openModernRiderProfile(riderId, riderName) {
     // Time served net of break time
     let timeServedStr = "Not shifted in";
     const loginRec = (globalState.globalLogins || []).find(l => isSameDateStr(l.date, todayStr) && isRiderMatch(riderName, l.riderName || '', riderId, (l.riderId || l.id || '').toString()));
-    if (loginRec && loginRec.loginTime) {
+    if (loginRec && (loginRec.loginTime || loginRec.loginTimestamp)) {
         let grossMins = 0;
         let loginTs = loginRec.loginTimestamp;
         const totalBreakMins = loginRec.totalBreakMinutes || member?.totalBreakMinutes || 0;
-        if (!loginTs) {
+        if (!loginTs && loginRec.loginTime) {
             const parsed = parseTimeToMinutes(loginRec.loginTime);
             if (parsed !== null) {
                 const d = new Date();
@@ -1320,11 +1330,31 @@ export async function openModernRiderProfile(riderId, riderName) {
                 loginTs = d.getTime();
             }
         }
+
+        // HEURISTIC REPAIR FOR SESSIONS WHERE RIDER LOGGED OUT & RESUMED LATER TODAY:
+        // If member.availableTimestamp is significantly later than loginTs (e.g. rider resumed at 7:09 AM vs initial 4:04 AM)
+        // and member is currently on duty without accumulatedWorkedMinutes set yet:
+        if (member && member.status && member.status !== 'End' && member.availableTimestamp && loginTs && (member.availableTimestamp - loginTs) > 1800000 && !loginRec.accumulatedWorkedMinutes) {
+            loginTs = member.availableTimestamp;
+        }
+
+        const isCurrentlyOnDuty = member ? (member.status && member.status !== 'End') : !loginRec.clockOutTime;
+        const accumulated = Number(loginRec.accumulatedWorkedMinutes) || 0;
+
         if (loginTs) {
-            const endTs = loginRec.clockOutTimestamp || Date.now();
-            grossMins = Math.max(0, Math.floor((endTs - loginTs) / 60000));
-            const netMins = Math.max(0, grossMins - totalBreakMins);
-            timeServedStr = `${Math.floor(netMins / 60)}h ${netMins % 60}m (Break: ${totalBreakMins}m)`;
+            if (isCurrentlyOnDuty && !loginRec.clockOutTimestamp) {
+                grossMins = Math.max(0, Math.floor((Date.now() - loginTs) / 60000));
+                const currentSessionNet = Math.max(0, grossMins - totalBreakMins);
+                const totalNetMins = accumulated + currentSessionNet;
+                timeServedStr = `${Math.floor(totalNetMins / 60)}h ${totalNetMins % 60}m (Break: ${totalBreakMins}m)`;
+            } else {
+                // Rider is signed out / ended: time counting has stopped!
+                const endTs = loginRec.clockOutTimestamp || loginTs;
+                grossMins = Math.max(0, Math.floor((endTs - loginTs) / 60000));
+                const sessionNet = Math.max(0, grossMins - totalBreakMins);
+                const totalNetMins = Math.max(accumulated, Number(loginRec.workedMinutes) || (accumulated + sessionNet));
+                timeServedStr = `${Math.floor(totalNetMins / 60)}h ${totalNetMins % 60}m (Break: ${totalBreakMins}m, Ended)`;
+            }
         }
     }
 

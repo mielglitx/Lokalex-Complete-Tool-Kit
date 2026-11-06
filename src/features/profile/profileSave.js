@@ -30,6 +30,7 @@ import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { stopBackgroundRosterGpsTracker } from '../auth/authGps.js';
 import { closeProfileSettingsModal } from './profileUI.js';
 import { uploadImage } from '../../utils/imageUpload.js';
+import { clockOutRider } from '../roster/rosterStatusCore.js';
 
 export async function submitSaveProfileSettings() {
     const name = document.getElementById('prof-name-input')?.value.trim();
@@ -217,12 +218,19 @@ export async function submitSaveProfileSettings() {
     }
 }
 
-export function executeUniversalLogout() {
+export async function executeUniversalLogout() {
     try {
         if (stopBackgroundRosterGpsTracker && typeof stopBackgroundRosterGpsTracker === 'function') {
             stopBackgroundRosterGpsTracker();
         }
     } catch(e) {}
+
+    const tId = (localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    if (tId) {
+        try {
+            await clockOutRider(tId);
+        } catch (_) {}
+    }
 
     // Clear Customer session keys
     localStorage.removeItem('lokalex_customer_fb_id');

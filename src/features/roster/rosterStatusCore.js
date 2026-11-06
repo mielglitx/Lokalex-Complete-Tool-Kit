@@ -394,21 +394,43 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         let finalLoginTimestamp = nowTimestamp;
         let preservedBreakMins = currentTotalBreak;
         let preservedBreakSecs = currentTotalBreakSeconds;
+        let accumulatedWorkedMinutes = 0;
+        let firstLoginTime = finalLoginTime;
+        let firstLoginTimestamp = finalLoginTimestamp;
 
         try {
             const loginSnap = await db.ref('logins/' + tId).once('value');
             const existingLogin = loginSnap.val();
             if (existingLogin && isSameDateStr(existingLogin.date, todayStr)) {
-                if (existingLogin.loginTime) {
-                    finalLoginTime = existingLogin.loginTime;
-                }
-                if (existingLogin.loginTimestamp) {
-                    finalLoginTimestamp = existingLogin.loginTimestamp;
-                }
                 const exMins = Number(existingLogin.totalBreakMinutes) || 0;
                 const exSecs = Number(existingLogin.totalBreakSeconds) || (exMins * 60);
                 preservedBreakSecs = Math.max(preservedBreakSecs, exSecs);
                 preservedBreakMins = Math.max(preservedBreakMins, exMins, Math.ceil(preservedBreakSecs / 60));
+
+                firstLoginTime = existingLogin.firstLoginTime || existingLogin.loginTime || finalLoginTime;
+                firstLoginTimestamp = existingLogin.firstLoginTimestamp || existingLogin.loginTimestamp || finalLoginTimestamp;
+
+                // CHECK IF RIDER PREVIOUSLY CLOCKED OUT TODAY
+                if (existingLogin.clockOutTimestamp || existingLogin.clockOutTime) {
+                    // Rider previously clocked out today and is now continuing/starting a new session!
+                    // Time counting was STOPPED during the clocked-out period.
+                    // Preserve the previously worked minutes from past sessions today:
+                    const prevWorked = Number(existingLogin.workedMinutes) || Number(existingLogin.accumulatedWorkedMinutes) || 0;
+                    accumulatedWorkedMinutes = prevWorked;
+
+                    // This new session's clock starts NOW (when they signed in/continued):
+                    finalLoginTime = new Date(nowTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    finalLoginTimestamp = nowTimestamp;
+                } else {
+                    // Ongoing session reconnect / refresh without clock out:
+                    if (existingLogin.loginTime) {
+                        finalLoginTime = existingLogin.loginTime;
+                    }
+                    if (existingLogin.loginTimestamp) {
+                        finalLoginTimestamp = existingLogin.loginTimestamp;
+                    }
+                    accumulatedWorkedMinutes = Number(existingLogin.accumulatedWorkedMinutes) || 0;
+                }
             }
         } catch(e) {}
 
@@ -418,6 +440,8 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
             riderName: tName,
             loginTime: finalLoginTime,
             loginTimestamp: finalLoginTimestamp,
+            firstLoginTime: firstLoginTime,
+            firstLoginTimestamp: firstLoginTimestamp,
             clockOutTime: "",
             clockOutTimestamp: null,
             date: todayStr,
@@ -425,7 +449,9 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
             earlyShiftPenaltyPercent: 0,
             deficitHours: 0,
             totalBreakMinutes: preservedBreakMins,
-            totalBreakSeconds: preservedBreakSecs
+            totalBreakSeconds: preservedBreakSecs,
+            accumulatedWorkedMinutes: accumulatedWorkedMinutes,
+            workedMinutes: 0
         };
         await db.ref('logins/' + tId).set(loginEntry);
         db.ref('shiftHistory/' + todayStr + '_' + tId).set(loginEntry).catch(() => {});
@@ -474,6 +500,7 @@ export async function clockOutRider(targetId = null) {
     if (db && tId) {
         let grossMins = 0;
         let netWorkedMins = 0;
+        let totalWorkedToday = 0;
         try {
             const loginSnap = await db.ref('logins/' + tId).once('value');
             const existingLogin = loginSnap.val();
@@ -483,13 +510,18 @@ export async function clockOutRider(targetId = null) {
                     grossMins = Math.max(0, Math.floor((nowTimestamp - existingLogin.loginTimestamp) / 60000));
                     netWorkedMins = Math.max(0, grossMins - finalBreakMins);
                 }
+                const prevAccum = Number(existingLogin.accumulatedWorkedMinutes) || 0;
+                totalWorkedToday = prevAccum + netWorkedMins;
+
                 const shiftClockOutPayload = { 
                     clockOutTime: timeStr,
                     clockOutTimestamp: nowTimestamp,
                     totalBreakMinutes: finalBreakMins,
                     totalBreakSeconds: finalBreakSecs,
                     grossMinutes: grossMins,
-                    workedMinutes: netWorkedMins,
+                    sessionWorkedMinutes: netWorkedMins,
+                    workedMinutes: totalWorkedToday,
+                    accumulatedWorkedMinutes: totalWorkedToday,
                     date: todayStr
                 };
                 await db.ref('logins/' + tId).update(shiftClockOutPayload);
@@ -509,7 +541,9 @@ export async function clockOutRider(targetId = null) {
                     totalBreakMinutes: finalBreakMins,
                     totalBreakSeconds: finalBreakSecs,
                     grossMinutes: 0,
-                    workedMinutes: 0
+                    sessionWorkedMinutes: 0,
+                    workedMinutes: 0,
+                    accumulatedWorkedMinutes: 0
                 });
             }
         } catch(e) {}
@@ -588,12 +622,18 @@ export async function clockOutRider(targetId = null) {
             if (loginRec.loginTimestamp) {
                 gross = Math.max(0, Math.floor((nowTimestamp - loginRec.loginTimestamp) / 60000));
             }
+            const prevAccum = Number(loginRec.accumulatedWorkedMinutes) || 0;
+            const netMins = Math.max(0, gross - finalBreakMins);
+            const totalWorked = prevAccum + netMins;
+
             loginRec.clockOutTime = timeStr;
             loginRec.clockOutTimestamp = nowTimestamp;
             loginRec.totalBreakMinutes = finalBreakMins;
             loginRec.totalBreakSeconds = finalBreakSecs;
             loginRec.grossMinutes = gross;
-            loginRec.workedMinutes = Math.max(0, gross - finalBreakMins);
+            loginRec.sessionWorkedMinutes = netMins;
+            loginRec.workedMinutes = totalWorked;
+            loginRec.accumulatedWorkedMinutes = totalWorked;
         }
     }
     saveRosterCache();
