@@ -727,6 +727,9 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           if (pathInfo.table === 'directory') {
             query = query.neq('id', 'storeMenuGalleries');
           }
+          if (pathInfo.table === 'store_menus') {
+            query = query.not('id', 'like', 'smg__%');
+          }
 
           // 1. Push equalTo filter down to PostgREST so queries never hit the default 1000-row truncate
           if (ref._query.equalTo !== undefined && ref._query.orderBy) {
