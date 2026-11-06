@@ -408,6 +408,10 @@ export function getLastRealtimeActivityTime() {
   return lastRealtimeActivityTime;
 }
 
+export function isRealtimeConnected() {
+  return isBroadcastChannelSubscribed;
+}
+
 function computeFastSignature(val) {
   if (val === null || val === undefined) return 'null';
   if (typeof val !== 'object') return `${typeof val}:${String(val)}`;
@@ -587,30 +591,7 @@ async function fetchAllStoreMenuGalleries(client, onPartialProgress = null) {
         }
       }
 
-      // 2. Chunked fetch of full store gallery rows (5 stores per batch to prevent statement timeouts)
-      const { data: idRows } = await client
-        .from('store_menus')
-        .select('id')
-        .like('id', 'smg__%');
-      const storeIds = (idRows || [])
-        .map(r => r.id)
-        .filter(id => id && id !== 'smg__meta_index');
-
-      const CHUNK_SIZE = 5;
-      for (let i = 0; i < storeIds.length; i += CHUNK_SIZE) {
-        const chunk = storeIds.slice(i, i + CHUNK_SIZE);
-        const rows = await Promise.all(
-          chunk.map(id =>
-            client.from('store_menus').select('id, data').eq('id', id).maybeSingle()
-          )
-        );
-        for (const r of rows) {
-          if (r && r.data && r.data.id && r.data.data) {
-            const storeKey = r.data.id.slice(5);
-            result[storeKey] = r.data.data;
-          }
-        }
-      }
+      // Memory cache: Individual store galleries are lazy-loaded on-demand when a user views that store
       if (Object.keys(result).length > 0) {
         storeMenuGalleriesCache = result;
       }

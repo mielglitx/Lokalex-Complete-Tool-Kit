@@ -713,16 +713,10 @@ export function listenToAllCustomerChatsForRider() {
         console.error("Firebase customerChatMeta listener error:", error);
     });
 
-    // 3. Background safety sync watchdog: only polls when Realtime WebSocket has been silent > 30s
-    if (!window._chatMetaPollingInterval) {
-        window._chatMetaPollingInterval = setInterval(() => {
-            if (typeof document !== 'undefined' && document.hidden) return;
-            const isVisible = typeof document !== 'undefined' ? (!document.hidden && document.visibilityState === 'visible') : true;
-            const silentMs = Date.now() - getLastRealtimeActivityTime();
-            if (isVisible && navigator.onLine && silentMs > 30000 && typeof forceRefreshLiveChatsFeed === 'function') {
-                forceRefreshLiveChatsFeed(null, true).catch(() => {});
-            }
-        }, 45000);
+    // 3. Ensure no runaway background polling intervals are active (WebSocket pushes live updates)
+    if (window._chatMetaPollingInterval) {
+        clearInterval(window._chatMetaPollingInterval);
+        window._chatMetaPollingInterval = null;
     }
 }
 

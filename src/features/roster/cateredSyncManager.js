@@ -115,7 +115,7 @@ export function initCateredDeltaSync() {
     if (!db || isCateredSyncListening) return;
     isCateredSyncListening = true;
 
-    const cateredRef = db.ref('cateredHistory').limitToLast(120);
+    const cateredRef = db.ref('cateredHistory').limitToLast(40);
 
     // 1. Child Added: New delivery completed by any rider
     cateredRef.on('child_added', (snapshot) => {
@@ -197,7 +197,7 @@ export function initReceiptsDeltaSync() {
     if (!db || isReceiptsSyncListening) return;
     isReceiptsSyncListening = true;
 
-    const receiptsRef = db.ref('receipts').limitToLast(120);
+    const receiptsRef = db.ref('receipts').limitToLast(40);
 
     receiptsRef.on('child_added', (snapshot) => {
         const key = snapshot.key;

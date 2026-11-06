@@ -9,6 +9,7 @@ import * as directory from '../features/directory.js';
 import * as commission from '../features/commission/index.js';
 import * as authFeature from '../features/auth/index.js';
 import { updateNetworkStatus } from './appMonitors.js';
+import { isRealtimeConnected } from '../config/supabaseDb.js';
 
 let isReconnecting = false;
 let lastHeartbeatTime = Date.now();
@@ -121,6 +122,7 @@ export function initSyncWatchdog() {
     let lastResumeSyncTime = 0;
     let isLifecycleResyncing = false;
     let wasDocumentHidden = false;
+    let documentHiddenAt = 0;
 
     async function triggerLifecycleResync(isForced = false) {
         const isVisible = typeof document !== 'undefined' ? (document.visibilityState === 'visible' && !document.hidden) : true;
@@ -135,7 +137,8 @@ export function initSyncWatchdog() {
         }
 
         const now = Date.now();
-        if (!isForced && (now - lastResumeSyncTime < 10000)) {
+        // Generous throttle: do not trigger automated background resyncs more than once every 60 seconds
+        if (!isForced && (now - lastResumeSyncTime < 60000)) {
             return;
         }
         lastResumeSyncTime = now;
@@ -155,6 +158,13 @@ export function initSyncWatchdog() {
                 } catch (err) {
                     console.warn('[SyncWatchdog] Outbox flush note:', err);
                 }
+            }
+
+            // Data Saver: If Realtime WebSocket is connected & healthy, changes are already pushed live!
+            // Skip redundant heavy PostgREST REST table downloads on momentary lock/unlock.
+            const isWsHealthy = typeof isRealtimeConnected === 'function' ? isRealtimeConnected() : true;
+            if (isWsHealthy && !isForced) {
+                return;
             }
 
             // Silent resync of roster rotation lineup and catering states
@@ -201,21 +211,32 @@ export function initSyncWatchdog() {
     document.addEventListener('visibilitychange', () => {
         if (typeof document !== 'undefined' && document.hidden) {
             wasDocumentHidden = true;
+            documentHiddenAt = Date.now();
             return;
         }
         if (wasDocumentHidden) {
             wasDocumentHidden = false;
-            triggerLifecycleResync(true);
+            const awayDuration = Date.now() - (documentHiddenAt || 0);
+            // Only trigger resync if the screen was off or app was backgrounded for > 3 minutes (180s)
+            if (awayDuration > 180000) {
+                triggerLifecycleResync(false);
+            }
         }
     });
 
     window.addEventListener('appResumedFromBackground', () => {
-        wasDocumentHidden = false;
-        triggerLifecycleResync(true);
+        if (wasDocumentHidden) {
+            wasDocumentHidden = false;
+            const awayDuration = Date.now() - (documentHiddenAt || 0);
+            if (awayDuration > 180000) {
+                triggerLifecycleResync(false);
+            }
+        }
     });
 
     window.addEventListener('appPausedToBackground', () => {
         wasDocumentHidden = true;
+        documentHiddenAt = Date.now();
     });
 
     // Continuous worker heartbeat tick: updates timestamp without triggering heavy network queries
@@ -223,14 +244,14 @@ export function initSyncWatchdog() {
         lastHeartbeatTime = Date.now();
     });
 
-    // Deep sleep drift watchdog: Reconnect immediately if time drifted/jumped while out of focus
+    // Deep sleep drift watchdog: check every 30s instead of 10s, drift threshold 60s
     setInterval(() => {
         const now = Date.now();
         const drift = now - lastHeartbeatTime;
         lastHeartbeatTime = now;
 
-        if (drift > 20000 && navigator.onLine) {
-            triggerLifecycleResync(true);
+        if (drift > 60000 && navigator.onLine) {
+            triggerLifecycleResync(false);
         }
-    }, 10000);
+    }, 30000);
 }

@@ -286,16 +286,10 @@ export function initRealtimeFirebaseListeners() {
             }
         });
 
-        // Background safety sync watchdog for roster: only polls when Realtime WebSocket has been silent > 30s
-        if (!window._rosterPollingInterval) {
-            window._rosterPollingInterval = setInterval(() => {
-                if (typeof document !== 'undefined' && document.hidden) return;
-                const isVisible = typeof document !== 'undefined' ? (!document.hidden && document.visibilityState === 'visible') : true;
-                const silentMs = Date.now() - getLastRealtimeActivityTime();
-                if (isVisible && navigator.onLine && silentMs > 30000 && typeof window.forceRefreshRosterList === 'function') {
-                    window.forceRefreshRosterList(null, true).catch(() => {});
-                }
-            }, 45000);
+        // Ensure no runaway background roster polling intervals are active (WebSocket pushes live updates)
+        if (window._rosterPollingInterval) {
+            clearInterval(window._rosterPollingInterval);
+            window._rosterPollingInterval = null;
         }
 
         db.ref('blockedUsers').on('value', (snapshot) => {

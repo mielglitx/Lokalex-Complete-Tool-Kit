@@ -183,12 +183,12 @@ export function startChatPresence(custId) {
         myPresenceRef.onDisconnect().remove().catch(() => {});
     }
 
-    // 2. Keepalive heartbeat every 15 seconds
+    // 2. Keepalive heartbeat every 25 seconds (optimized write frequency; expiry window is 45s)
     presenceHeartbeatInterval = setInterval(() => {
         if (activePresenceCustId === cleanCustKey && navigator.onLine) {
             myPresenceRef.update({ lastActive: Date.now() }).catch(() => {});
         }
-    }, 15000);
+    }, 25000);
 
     // 3. Listen to all viewers of this thread
     const allPresenceRef = db.ref(`chatPresence/${cleanCustKey}`);
