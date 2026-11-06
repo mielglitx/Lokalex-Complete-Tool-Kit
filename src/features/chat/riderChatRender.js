@@ -746,26 +746,33 @@ export function handleMsgContextMenu(e, msgId, chatType, text, sender) {
 }
 
 export function renderRiderMessageStatusIndicator(msg, forceSeen = false) {
-    const isSeen = Boolean(forceSeen || msg.status === 'seen' || msg.seenAt);
-    const sentTime = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+    const currentCustId = (typeof window !== 'undefined' && (window.activeRiderChatCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null))) || null;
+    const isFb = msg.channel === 'messenger' || String(msg.custId || currentCustId || '').startsWith('fb_');
+    const hasFbMid = isFb ? Boolean(msg.mid || msg.metaMid) : true;
+    const msgTs = Number(msg.timestamp || 0);
+    const isTimedOut = isFb && !hasFbMid && msgTs > 0 && (Date.now() - msgTs > 25000);
+    const isFailed = Boolean(msg.status === 'failed' || msg.failed || isTimedOut);
+    const isSeen = !isFailed && hasFbMid && Boolean(forceSeen || msg.status === 'seen' || msg.seenAt);
+    const sentTime = msgTs ? new Date(msgTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
     const seenTime = msg.seenAt 
         ? new Date(msg.seenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-        : (isSeen && msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "");
+        : (isSeen && msgTs ? new Date(msgTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "");
     
     let iconHtml = '<i class="fa-regular fa-clock text-blue-200" title="Sending..."></i>';
-    let titleAttr = `Sent ${sentTime}`;
+    let titleAttr = `Sending...`;
 
-    if (msg.status === 'failed' || msg.failed) {
-        iconHtml = '<i class="fa-solid fa-circle-exclamation text-rose-300 animate-pulse" title="Sending failed"></i>';
-        titleAttr = `Sending failed`;
+    if (isFailed) {
+        iconHtml = '<i class="fa-solid fa-circle-exclamation text-rose-300 animate-pulse" title="Sending failed • Tap to retry"></i>';
+        titleAttr = `Sending failed • Tap to retry`;
     } else if (isSeen) {
         iconHtml = '<i class="fa-solid fa-check-double text-cyan-200" title="Seen"></i>';
-        titleAttr += ` • Seen${seenTime ? ` at ${seenTime}` : ''}`;
+        titleAttr = `Sent ${sentTime} • Seen${seenTime ? ` at ${seenTime}` : ''}`;
     } else if (msg.status === 'delivered') {
         iconHtml = '<i class="fa-solid fa-check-double text-blue-200" title="Delivered"></i>';
-        titleAttr += ` • Delivered`;
-    } else if (msg.status === 'sent') {
+        titleAttr = `Sent ${sentTime} • Delivered`;
+    } else if (msg.status === 'sent' && hasFbMid) {
         iconHtml = '<i class="fa-solid fa-check text-blue-200" title="Sent"></i>';
+        titleAttr = `Sent ${sentTime}`;
     }
 
     return `<span class="inline-flex items-center gap-1 ml-1 cursor-help" title="${titleAttr}">
@@ -943,16 +950,19 @@ function getMessageSenderAvatar(m, isRider, custAvatar) {
 
 export function buildSingleMessageHtml(m, activeCustData = null) {
     const isRider = !!m.isRider || m.senderType === 'rider';
-    const isFailed = Boolean(m.status === 'failed' || m.failed === true || m.error);
+    const currentCustId = (typeof window !== 'undefined' && (window.activeRiderChatCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null))) || null;
+    const isFb = m.channel === 'messenger' || String(currentCustId || m.custId || '').startsWith('fb_');
+    const hasFbMid = isFb ? Boolean(m.mid || m.metaMid) : true;
+    const msgTs = getMessageTimestamp(m);
+    const isTimedOut = isRider && isFb && !hasFbMid && msgTs > 0 && (Date.now() - msgTs > 25000);
+    const isFailed = Boolean(m.status === 'failed' || m.failed === true || m.error || isTimedOut);
     const dimClass = isFailed ? "opacity-60 saturate-50 border border-rose-500/70 ring-1 ring-rose-500/30" : "shadow-xs";
     const alignClass = isRider 
         ? `self-end bg-[#076B57] text-white rounded-tr-none ${dimClass}` 
         : `self-start bg-white dark:bg-cardBg border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-200 rounded-tl-none ${dimClass}`;
-    const msgTs = getMessageTimestamp(m);
     const timeStr = formatChatDateTime(msgTs || m.timestamp || m.createdAt || m.time || m.created_time || m.date);
 
     const riderName = appState.riderName || "Rider";
-    const currentCustId = (typeof window !== 'undefined' && (window.activeRiderChatCustId || (window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null))) || null;
     let custName = document.getElementById('rider-chat-cust-name')?.innerText || "Customer";
     if (currentCustId && currentCustId.startsWith('fb_')) {
         const cached = (typeof window !== 'undefined' && typeof window.getResolvedFbName === 'function') ? window.getResolvedFbName(currentCustId) : null;
@@ -983,7 +993,7 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const senderName = cleanSenderName;
     const senderAvatar = getMessageSenderAvatar(m, isRider, custAvatar);
     const customerLastSeenTs = Number(meta?.customerLastSeenTimestamp || activeCustData?.customerLastSeenTimestamp || meta?.watermark || 0) || 0;
-    const isSeen = !isFailed && (m.status === 'seen' || Boolean(m.seenAt) || (customerLastSeenTs > 0 && msgTs > 0 && msgTs <= customerLastSeenTs));
+    const isSeen = !isFailed && hasFbMid && (m.status === 'seen' || Boolean(m.seenAt) || (customerLastSeenTs > 0 && msgTs > 0 && msgTs <= customerLastSeenTs));
 
     const statusIndicator = isRider ? renderRiderMessageStatusIndicator(m, isSeen) : '';
     const replyBlockHtml = renderReplyPreviewInsideMessage(m.replyTo);

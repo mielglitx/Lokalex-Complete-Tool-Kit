@@ -615,6 +615,8 @@ app.post('/webhook', async (req, res) => {
                 const updates = {};
                 for (const [mKey, mVal] of Object.entries(msgs)) {
                   if (mVal && (mVal.isRider || mVal.senderType === 'rider') && mVal.status !== 'seen') {
+                    if (!mVal.mid && !mVal.metaMid) continue;
+                    if (mVal.status === 'failed' || mVal.failed) continue;
                     updates[`/customerChats/${custId}/messages/${mKey}/status`] = "seen";
                     updates[`/customerChats/${custId}/messages/${mKey}/seenAt`] = watermark;
                   }

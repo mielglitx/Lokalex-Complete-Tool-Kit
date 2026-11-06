@@ -923,6 +923,10 @@ async function processMetaEntries(entries, cfg, ctx) {
                 const toUpdate = [];
                 for (const m of msgs) {
                   if (m.data && (m.data.isRider || m.data.senderType === 'rider') && m.data.status !== 'seen') {
+                    // Safety check: Never mark an unsent or failed message as seen by the customer
+                    if (!m.data.mid && !m.data.metaMid) continue;
+                    if (m.data.status === 'failed' || m.data.failed) continue;
+
                     const msgTime = Number(m.data.timestamp || 0);
                     if (!msgTime || msgTime <= watermark) {
                       m.data.status = 'seen';

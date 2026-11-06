@@ -254,7 +254,7 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
         text: text,
         timestamp: now,
         isRider: true,
-        status: 'sent',
+        status: isFb ? 'sending' : 'sent',
         channel: targetChannel,
         apiId: targetApiId,
         deliveredAt: null,
@@ -480,7 +480,7 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
         type: 'image',
         timestamp: now,
         isRider: true,
-        status: 'sent',
+        status: isFb ? 'sending' : 'sent',
         channel: targetChannel,
         apiId: targetApiId,
         deliveredAt: null,
@@ -614,6 +614,17 @@ function compressDataUrlForBridge(dataUrl, maxDim = 800, quality = 0.65) {
         img.onerror = () => resolve(dataUrl);
         img.src = dataUrl;
     });
+}
+
+function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const existingSignal = options.signal;
+    if (existingSignal) {
+        existingSignal.addEventListener('abort', () => controller.abort());
+    }
+    return fetch(url, { ...options, signal: controller.signal })
+        .finally(() => clearTimeout(timeoutId));
 }
 
 /**
@@ -988,17 +999,17 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                 if (replyToMid) {
                     sendPayload.reply_to = { mid: replyToMid };
                 }
-                let sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                let sendResp = await fetchWithTimeout(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(sendPayload)
-                });
+                }, 10000);
                 let sendData = await sendResp.json().catch(() => ({}));
 
                 // If Meta rejects the reply_to parameter (e.g. invalid mid or outside threading context), retry without reply_to
                 if (!sendResp.ok && replyToMid && (sendData?.error?.message?.toLowerCase().includes('reply_to') || sendData?.error?.code === 100)) {
                     console.warn("Direct reply_to rejected by Meta, retrying without reply_to:", sendData?.error?.message);
-                    sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                    sendResp = await fetchWithTimeout(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -1006,7 +1017,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                             recipient: { id: cleanPsid },
                             message: { text: sendText }
                         })
-                    });
+                    }, 10000);
                     sendData = await sendResp.json().catch(() => ({}));
                 }
 
@@ -1020,18 +1031,18 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                     if (replyToMid) {
                         tagPayload.reply_to = { mid: replyToMid };
                     }
-                    sendResp = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
+                    sendResp = await fetchWithTimeout(`https://graph.facebook.com/v19.0/me/messages?access_token=${token}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(tagPayload)
-                    });
+                    }, 10000);
                     sendData = await sendResp.json().catch(() => ({}));
                 }
                 if (sendResp.ok) {
                     recordFbMid(sendData?.message_id || null);
                     console.log("✅ Text reply delivered directly to Facebook Messenger!");
                     if (!suppressToast) showToast("✅ Delivered to customer Messenger!");
-                    return;
+                    return { success: true, messageId: sendData?.message_id };
                 }
             } catch (err) {
                 console.warn("Direct text send to Meta failed, falling back to endpoint:", err);
@@ -1079,7 +1090,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
         }
         const safeFbImageUrl = finalFbImageUrl || null;
 
-        const resp = await fetch(sendEndpoint, {
+        const resp = await fetchWithTimeout(sendEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1096,7 +1107,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                 replyToMid: replyToMid || null,
                 replyToText: replyToText || null
             })
-        });
+        }, 15000);
 
         if (!resp.ok) {
             const errText = await resp.text().catch(() => "");
@@ -1112,7 +1123,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                 }
             }
             console.warn("Facebook send reply error:", errMsg);
-            showToast(`⚠️ Messenger delivery issue: ${errMsg}`);
+            if (!suppressToast) showToast(`⚠️ Messenger delivery issue: ${errMsg}`);
 
             if (newMsgKey && custId && db) {
                 db.ref(`customerChats/${custId}/messages/${newMsgKey}`).update({
@@ -1125,32 +1136,47 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                 const targetMsg = loadedRiderMsgsMap.get(newMsgKey);
                 targetMsg.status = 'failed';
                 targetMsg.failed = true;
+                targetMsg.failedReason = errMsg;
                 const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
                 if (container) appendOrUpdateSingleRiderMessage(container, targetMsg, activeCustData);
             }
+            throw new Error(errMsg);
         } else {
             const respData = await resp.json().catch(() => ({}));
-            recordFbMid(respData?.message_id || respData?.mid || null);
-            console.log("✅ Rider reply delivered to Facebook Messenger!");
-            showToast("✅ Delivered to customer Messenger!");
+            const returnedMid = respData?.message_id || respData?.mid || null;
+            if (returnedMid) {
+                recordFbMid(returnedMid);
+                console.log("✅ Rider reply delivered to Facebook Messenger!");
+                if (!suppressToast) showToast("✅ Delivered to customer Messenger!");
+                return { success: true, messageId: returnedMid };
+            } else if (respData?.error) {
+                const errMsg = respData.error?.message || respData.error || 'Messenger delivery failed';
+                throw new Error(errMsg);
+            } else {
+                recordFbMid(null);
+                return { success: true };
+            }
         }
     } catch (err) {
         console.error("Failed to forward rider reply to Messenger:", err);
-        showToast("⚠️ Delivery failed. Check internet connection.");
+        const errMsg = err?.name === 'AbortError' ? 'Connection timed out. Tap retry.' : (err?.message || 'Network error');
+        if (!suppressToast) showToast(`⚠️ Delivery failed: ${errMsg}`);
         if (newMsgKey && custId && db) {
             db.ref(`customerChats/${custId}/messages/${newMsgKey}`).update({
                 status: 'failed',
                 failed: true,
-                failedReason: (err?.message || 'Network error')
+                failedReason: errMsg
             }).catch(() => {});
         }
         if (newMsgKey && loadedRiderMsgsMap.has(newMsgKey)) {
             const targetMsg = loadedRiderMsgsMap.get(newMsgKey);
             targetMsg.status = 'failed';
             targetMsg.failed = true;
+            targetMsg.failedReason = errMsg;
             const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
             if (container) appendOrUpdateSingleRiderMessage(container, targetMsg, activeCustData);
         }
+        throw err;
     }
 }
 
@@ -1185,27 +1211,9 @@ export async function retryRiderChatMessage(msgId) {
                 newMsgKey: msgId
             });
 
-            // Double ensure status is persisted as sent & failure fields removed
-            if (db && targetCustId) {
-                await db.ref(`customerChats/${targetCustId}/messages/${msgId}`).update({
-                    status: 'sent',
-                    failed: null,
-                    failedReason: null
-                }).catch(() => {});
-            }
             msg.status = 'sent';
             msg.failed = false;
             msg.failedReason = null;
-
-            let memCached = riderChatMemoryCache.get(targetCustId) || [];
-            const memItem = memCached.find(m => m.id === msgId);
-            if (memItem) {
-                memItem.status = 'sent';
-                memItem.failed = false;
-                memItem.failedReason = null;
-                idbSet('chats', targetCustId, memCached).catch(() => {});
-            }
-
             if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
         } catch (err) {
             console.error("retryRiderChatMessage failed:", err);
