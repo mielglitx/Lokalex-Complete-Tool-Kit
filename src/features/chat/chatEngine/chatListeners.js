@@ -327,20 +327,20 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                 || Array.from(loadedRiderMsgsMap.values()).find(prev => prev.id === safeMid || prev.id === rawMid || prev.mid === safeMid || prev.metaMid === rawMid || prev.mid === rawMid || prev.metaMid === safeMid);
 
             if (existingLoaded) {
-                // If message text was edited on Facebook, update existing bubble!
-                if (m.message && existingLoaded.text && m.message.trim() !== existingLoaded.text.trim()) {
-                    existingLoaded.originalText = existingLoaded.originalText || existingLoaded.text;
+                // If message is already loaded or rendered:
+                // NEVER allow Meta Graph API's static historical body to overwrite an edited message!
+                // Meta Graph API GET /messages returns the original pre-edit text for historical messages.
+                if (existingLoaded.isEdited) {
+                    continue;
+                }
+                // If existingLoaded already has text, do not overwrite it with Graph API historical text
+                if (existingLoaded.text) {
+                    continue;
+                }
+                // If existingLoaded was a placeholder lacking text, populate it
+                if (m.message && !existingLoaded.text) {
                     existingLoaded.text = m.message.trim();
-                    existingLoaded.isEdited = true;
-                    existingLoaded.editedAt = Date.now();
                     if (container) appendOrUpdateSingleRiderMessage(container, existingLoaded, activeCustData);
-                    const updateKey = existingLoaded.id || safeMid;
-                    if (db) db.ref(`customerChats/${targetCustId}/messages/${updateKey}`).update({
-                        text: existingLoaded.text,
-                        originalText: existingLoaded.originalText,
-                        isEdited: true,
-                        editedAt: existingLoaded.editedAt
-                    }).catch(() => {});
                 }
                 continue;
             }
@@ -813,7 +813,22 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
             // Merge into persistent cache without wiping older history
             let memCached = riderChatMemoryCache.get(custId) || [];
             const map = new Map(memCached.map(m => [m.id, m]));
-            allMsgs.forEach(m => map.set(m.id, m));
+            allMsgs.forEach(m => {
+                const prev = map.get(m.id);
+                if (prev && prev.isEdited && (!m.isEdited || m.text === prev.originalText)) {
+                    map.set(m.id, {
+                        ...m,
+                        text: prev.text,
+                        message: prev.text,
+                        originalText: prev.originalText,
+                        isEdited: true,
+                        editedAt: prev.editedAt,
+                        numEdit: prev.numEdit
+                    });
+                } else {
+                    map.set(m.id, m);
+                }
+            });
             const merged = Array.from(map.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
             riderChatMemoryCache.set(custId, merged);
             idbSet('chats', custId, merged).catch(() => {});
@@ -902,6 +917,15 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         let memCached = riderChatMemoryCache.get(custId) || [];
         const existingIdx = memCached.findIndex(m => m.id === key);
         if (existingIdx >= 0) {
+            const prev = memCached[existingIdx];
+            if (prev && prev.isEdited && (!fullMsg.isEdited || fullMsg.text === prev.originalText)) {
+                fullMsg.text = prev.text;
+                fullMsg.message = prev.text;
+                fullMsg.originalText = prev.originalText;
+                fullMsg.isEdited = true;
+                fullMsg.editedAt = prev.editedAt;
+                fullMsg.numEdit = prev.numEdit;
+            }
             memCached[existingIdx] = fullMsg;
         } else {
             memCached.push(fullMsg);
@@ -912,6 +936,15 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
 
         // If message is already rendered in the current DOM view:
         if (loadedRiderMsgsMap.has(key)) {
+            const prev = loadedRiderMsgsMap.get(key);
+            if (prev && prev.isEdited && (!fullMsg.isEdited || fullMsg.text === prev.originalText)) {
+                fullMsg.text = prev.text;
+                fullMsg.message = prev.text;
+                fullMsg.originalText = prev.originalText;
+                fullMsg.isEdited = true;
+                fullMsg.editedAt = prev.editedAt;
+                fullMsg.numEdit = prev.numEdit;
+            }
             loadedRiderMsgsMap.set(key, fullMsg);
             appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
             const needsRes = String(custId).startsWith('fb_') && 
@@ -1163,7 +1196,17 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         let memCached = riderChatMemoryCache.get(custId) || [];
         const existingIdx = memCached.findIndex(m => m.id === key || m.mid === key || m.metaMid === key || (fullMsg.mid && m.mid === fullMsg.mid));
         if (existingIdx >= 0) {
-            memCached[existingIdx] = { ...memCached[existingIdx], ...fullMsg };
+            const prev = memCached[existingIdx];
+            let updated = { ...prev, ...fullMsg };
+            if (prev && prev.isEdited && (!fullMsg.isEdited || fullMsg.text === prev.originalText)) {
+                updated.text = prev.text;
+                updated.message = prev.text;
+                updated.originalText = prev.originalText;
+                updated.isEdited = true;
+                updated.editedAt = prev.editedAt;
+                updated.numEdit = prev.numEdit;
+            }
+            memCached[existingIdx] = updated;
         } else {
             memCached.push(fullMsg);
         }
@@ -1190,7 +1233,15 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
 
         if (isKnown) {
             const existingLoaded = loadedRiderMsgsMap.get(targetKey) || {};
-            const mergedMsg = { ...existingLoaded, ...fullMsg, id: targetKey };
+            let mergedMsg = { ...existingLoaded, ...fullMsg, id: targetKey };
+            if (existingLoaded && existingLoaded.isEdited && (!fullMsg.isEdited || fullMsg.text === existingLoaded.originalText)) {
+                mergedMsg.text = existingLoaded.text;
+                mergedMsg.message = existingLoaded.text;
+                mergedMsg.originalText = existingLoaded.originalText;
+                mergedMsg.isEdited = true;
+                mergedMsg.editedAt = existingLoaded.editedAt;
+                mergedMsg.numEdit = existingLoaded.numEdit;
+            }
             loadedRiderMsgsMap.set(targetKey, mergedMsg);
             appendOrUpdateSingleRiderMessage(container, mergedMsg, activeCustData);
             const needsRes = String(custId).startsWith('fb_') && 
@@ -1249,7 +1300,22 @@ export function syncIncomingMessageFromMeta(custId, meta) {
 
                 let memCached = riderChatMemoryCache.get(custId) || [];
                 const map = new Map(memCached.map(m => [m.id, m]));
-                recentMsgs.forEach(m => map.set(m.id, m));
+                recentMsgs.forEach(m => {
+                    const prev = map.get(m.id);
+                    if (prev && prev.isEdited && (!m.isEdited || m.text === prev.originalText)) {
+                        map.set(m.id, {
+                            ...m,
+                            text: prev.text,
+                            message: prev.text,
+                            originalText: prev.originalText,
+                            isEdited: true,
+                            editedAt: prev.editedAt,
+                            numEdit: prev.numEdit
+                        });
+                    } else {
+                        map.set(m.id, m);
+                    }
+                });
                 const merged = Array.from(map.values()).sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
                 riderChatMemoryCache.set(custId, merged);
                 idbSet('chats', custId, merged).catch(() => {});
@@ -1271,6 +1337,15 @@ export function syncIncomingMessageFromMeta(custId, meta) {
                         }
                     }
 
+                    if (existing && existing.isEdited && (!fullMsg.isEdited || fullMsg.text === existing.originalText)) {
+                        fullMsg.text = existing.text;
+                        fullMsg.message = existing.text;
+                        fullMsg.originalText = existing.originalText;
+                        fullMsg.isEdited = true;
+                        fullMsg.editedAt = existing.editedAt;
+                        fullMsg.numEdit = existing.numEdit;
+                    }
+
                     const isChanged = existing && (
                         (existing.text || '') !== (fullMsg.text || '') ||
                         Boolean(existing.isEdited) !== Boolean(fullMsg.isEdited) ||
@@ -1283,7 +1358,15 @@ export function syncIncomingMessageFromMeta(custId, meta) {
                         appendOrUpdateSingleRiderMessage(container, fullMsg, activeCustData);
                         hasAppended = true;
                     } else if (isChanged) {
-                        const mergedMsg = { ...existing, ...fullMsg, id: existingKey };
+                        let mergedMsg = { ...existing, ...fullMsg, id: existingKey };
+                        if (existing && existing.isEdited && (!fullMsg.isEdited || fullMsg.text === existing.originalText)) {
+                            mergedMsg.text = existing.text;
+                            mergedMsg.message = existing.text;
+                            mergedMsg.originalText = existing.originalText;
+                            mergedMsg.isEdited = true;
+                            mergedMsg.editedAt = existing.editedAt;
+                            mergedMsg.numEdit = existing.numEdit;
+                        }
                         loadedRiderMsgsMap.set(existingKey, mergedMsg);
                         appendOrUpdateSingleRiderMessage(container, mergedMsg, activeCustData);
                     }

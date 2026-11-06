@@ -16,6 +16,7 @@ let pendingDoneData = null;
 export function markThreadUndone() {
     const custId = window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null;
     if (!custId) return;
+    const now = Date.now();
 
     if (db) {
         const payload = {
@@ -23,10 +24,33 @@ export function markThreadUndone() {
             cateredByRiderId: null,
             cateredByRiderName: null,
             cateredBy: null,
-            status: 'active'
+            status: 'active',
+            completedAt: null,
+            lastUpdated: now
         };
         db.ref(`customerChats/${custId}/metadata`).update(payload).catch(() => {});
         db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
+    }
+
+    if (typeof window.getCachedCustomerThreadsMap === 'function') {
+        const threadMap = window.getCachedCustomerThreadsMap();
+        if (threadMap) {
+            const t = threadMap.get(custId) || threadMap.get(`fb_${custId}`) || threadMap.get(custId.toString().replace(/^fb_/, ''));
+            if (t) {
+                t.folder = 'inbox';
+                t.status = 'active';
+                t.isApplicant = false;
+                t.cateredByRiderId = null;
+                t.cateredByRiderName = null;
+                t.cateredBy = null;
+                t.completedAt = null;
+                t.lastUpdated = now;
+            }
+        }
+    }
+
+    if (typeof window.renderRiderCustomerChatFeed === 'function') {
+        window.renderRiderCustomerChatFeed();
     }
 
     showToast("↩️ Moved thread back to Inbox!");
@@ -683,6 +707,7 @@ export function cancelCustomerThread() {
         `Cancel & Void Customer?`,
         `Are you sure you want to void [${custName || 'Customer'}]?\nIf you have other catered customers, you will remain in Catering.`,
         async () => {
+            const now = Date.now();
             if (db && custId) {
                 const cancelPayload = {
                     cateredByRiderId: null,
@@ -691,14 +716,34 @@ export function cancelCustomerThread() {
                     folder: 'done',
                     status: 'cancelled',
                     unreadForRider: false,
-                    lastUpdated: Date.now()
+                    lastUpdated: now
                 };
                 db.ref(`customerChats/${custId}/metadata`).update(cancelPayload).catch(() => {});
                 db.ref(`customerChatMeta/${custId}`).update(cancelPayload).catch(() => {});
             }
 
+            if (typeof window.getCachedCustomerThreadsMap === 'function') {
+                const threadMap = window.getCachedCustomerThreadsMap();
+                if (threadMap) {
+                    const t = threadMap.get(custId) || threadMap.get(`fb_${custId}`) || threadMap.get(custId?.toString().replace(/^fb_/, ''));
+                    if (t) {
+                        t.folder = 'done';
+                        t.status = 'cancelled';
+                        t.cateredByRiderId = null;
+                        t.cateredByRiderName = null;
+                        t.cateredBy = null;
+                        t.completedAt = now;
+                        t.lastUpdated = now;
+                    }
+                }
+            }
+
             if (custName && targetRiderId) {
                 await voidSingleCateringCustomer(targetRiderId, targetRiderName, custName);
+            }
+
+            if (typeof window.renderRiderCustomerChatFeed === 'function') {
+                window.renderRiderCustomerChatFeed();
             }
 
             document.getElementById('rider-chat-cancel-btn')?.classList.add('hidden');

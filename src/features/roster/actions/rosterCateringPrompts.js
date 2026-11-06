@@ -366,6 +366,23 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                 }
                 db.ref(`customerChats/${targetChatId}/metadata`).update(updateObj).catch(() => {});
                 db.ref(`customerChatMeta/${targetChatId}`).update(updateObj).catch(() => {});
+
+                // Immediately synchronize in-memory cachedCustomerThreadsMap
+                if (typeof window.getCachedCustomerThreadsMap === 'function') {
+                    const threadMap = window.getCachedCustomerThreadsMap();
+                    if (threadMap) {
+                        const t = threadMap.get(targetChatId) || threadMap.get(`fb_${targetChatId}`) || threadMap.get(targetChatId.toString().replace(/^fb_/, ''));
+                        if (t) {
+                            t.folder = 'catering';
+                            t.status = 'active';
+                            t.cateredByRiderId = resolvedId;
+                            t.cateredByRiderName = myName;
+                            t.cateredBy = myName;
+                            if (updateObj.customerName) t.customerName = updateObj.customerName;
+                            t.lastUpdated = updateObj.lastUpdated;
+                        }
+                    }
+                }
             };
 
             const targetChatId = overrideCustId || (custSelect && custSelect.value.trim().toLowerCase() === cleanSearchName ? (custSelect.selectedOptions?.[0]?.dataset?.custId || null) : null);
@@ -374,6 +391,9 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                 applyChatCaterUpdate(targetChatId);
                 if (typeof window.triggerAutoMessageOnCater === 'function') {
                     window.triggerAutoMessageOnCater(targetChatId, custName, myName);
+                }
+                if (typeof window.renderRiderCustomerChatFeed === 'function') {
+                    window.renderRiderCustomerChatFeed();
                 }
             } else {
                 db.ref('customerChatMeta').once('value', (snapshot) => {
@@ -402,6 +422,9 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
                                 }
                             }
                         });
+                        if (typeof window.renderRiderCustomerChatFeed === 'function') {
+                            window.renderRiderCustomerChatFeed();
+                        }
                     }
                 });
             }

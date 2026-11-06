@@ -800,6 +800,11 @@ export function closeRiderCustomerChatModal() {
     if (typeof window !== 'undefined' && typeof window.renderRiderCustomerChatFeed === 'function') {
         window.renderRiderCustomerChatFeed();
     }
+    if (typeof window !== 'undefined' && window.isModernUiActive && window.isModernUiActive()) {
+        if (typeof window.clearModernChatRightRoom === 'function') {
+            window.clearModernChatRightRoom();
+        }
+    }
 }
 
 export async function promptRenameCustomerChat() {

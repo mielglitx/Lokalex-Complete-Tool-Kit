@@ -62,6 +62,8 @@ import {
 import { storeChatState } from '../chat/storeChat/storeChatState.js';
 import { getSupabase } from '../../config/supabaseClient.js';
 import { processCustomerChatMetaData } from '../chat/riderChatFeed.js';
+import { adminReassignRiderDayOff, openRiderDayOffModal } from '../roster/rosterDayOff.js';
+import { getRiderStorageKey } from '../roster/rosterSchedule.js';
 
 let modernActiveTab = 'chats'; // 'chats' | 'rotations' | 'logins' | 'catered'
 let modernChatCategory = 'inbox'; // 'inbox' | 'catering' | 'stores' | 'followup' | 'done' | 'applicant'
@@ -398,8 +400,25 @@ export function refreshAllModernViews() {
 
 export function refreshCurrentTab() {
     if (modernActiveTab === 'chats') {
-        renderModernChatLeftList();
-        syncModernRightChatRoom();
+        const activeCustId = getActiveRiderChatCustId();
+        const filtered = getModernFilteredThreads();
+        const stillExists = activeCustId && filtered.some(t => (t.custId || t.id) === activeCustId);
+
+        if (stillExists) {
+            renderModernChatLeftList();
+            syncModernRightChatRoom();
+        } else {
+            if (filtered.length > 0) {
+                const first = filtered[0];
+                const cid = first.custId || first.id;
+                const name = formatTitleCase(first.customerName || first.name || "Customer");
+                const avatar = first.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0084FF&color=fff`;
+                selectModernCustomerChat(cid, name, avatar);
+            } else {
+                clearModernChatRightRoom();
+                renderModernChatLeftList();
+            }
+        }
     } else if (modernActiveTab === 'rotations') {
         renderModernRotationsTab();
     } else if (modernActiveTab === 'logins') {
@@ -554,6 +573,47 @@ export function updateModernTabBadges() {
 // 7. TAB 1: LIVE CHATS FEED & SPLIT CHAT ROOM
 // ============================================================================
 
+export function getModernFilteredThreads(customCategory = null) {
+    const allThreads = Array.from(cachedCustomerThreadsMap?.values() || []);
+    const searchQ = modernSearchQuery;
+    const cat = customCategory || modernChatCategory || 'inbox';
+
+    let filtered = allThreads.filter(t => {
+        if (searchQ) {
+            const name = (t.customerName || t.name || '').toLowerCase();
+            const msg = (t.lastMessage || '').toLowerCase();
+            const cid = (t.custId || '').toLowerCase();
+            return name.includes(searchQ) || msg.includes(searchQ) || cid.includes(searchQ);
+        }
+
+        const folder = (t.folder || 'inbox').toLowerCase();
+        const isDone = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
+        const isCatered = folder === 'catering' || Boolean(t.cateredByRiderName || t.cateredByRiderId || t.cateredBy);
+
+        if (cat === 'done') {
+            return folder === 'done' || isDone;
+        }
+        if (isDone) return false;
+
+        if (cat === 'inbox') {
+            return !isCatered && folder !== 'applicant' && folder !== 'followup' && folder !== 'stores';
+        } else if (cat === 'catering') {
+            return isCatered;
+        } else if (cat === 'applicant') {
+            return folder === 'applicant' || t.isApplicant === true;
+        } else if (cat === 'followup') {
+            return folder === 'followup';
+        } else if (cat === 'stores') {
+            return folder === 'stores';
+        }
+        return true;
+    });
+
+    // Sort by latest message timestamp descending
+    filtered.sort((a, b) => (Number(b.lastUpdated || b.timestamp) || 0) - (Number(a.lastUpdated || a.timestamp) || 0));
+    return filtered;
+}
+
 export function selectModernChatCategory(category) {
     modernChatCategory = category;
     const categories = ['inbox', 'catering', 'stores', 'followup', 'done', 'applicant'];
@@ -567,12 +627,26 @@ export function selectModernChatCategory(category) {
         }
     });
 
-    renderModernChatLeftList();
+    const filtered = getModernFilteredThreads(category);
+    if (filtered && filtered.length > 0) {
+        // Auto open the first chat card in this folder
+        const first = filtered[0];
+        const cid = first.custId || first.id;
+        const name = formatTitleCase(first.customerName || first.name || "Customer");
+        const avatar = first.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0084FF&color=fff`;
+        selectModernCustomerChat(cid, name, avatar);
+    } else {
+        // If no chat card exists or is open in this folder, clear out the chat thread section
+        clearModernChatRightRoom();
+        renderModernChatLeftList();
+    }
 }
 
 export async function handleModernChatSearch(val) {
     modernSearchQuery = (val || '').trim().toLowerCase();
     const clearBtn = document.getElementById('modern-chat-search-clear');
+    const searchInput = document.getElementById('modern-chat-search-input');
+    if (searchInput && val === '') searchInput.value = '';
     if (clearBtn) {
         if (modernSearchQuery) clearBtn.classList.remove('hidden');
         else clearBtn.classList.add('hidden');
@@ -606,51 +680,16 @@ export function renderModernChatLeftList() {
     const listContainer = document.getElementById('modern-chat-left-list');
     if (!listContainer) return;
 
-    const allThreads = Array.from(cachedCustomerThreadsMap?.values() || []);
-    const searchQ = modernSearchQuery;
+    const filtered = getModernFilteredThreads();
     const activeCustId = getActiveRiderChatCustId();
 
-    let filtered = allThreads.filter(t => {
-        if (searchQ) {
-            const name = (t.customerName || t.name || '').toLowerCase();
-            const msg = (t.lastMessage || '').toLowerCase();
-            const cid = (t.custId || '').toLowerCase();
-            return name.includes(searchQ) || msg.includes(searchQ) || cid.includes(searchQ);
-        }
-
-        const folder = (t.folder || 'inbox').toLowerCase();
-        const isDone = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
-        const isCatered = folder === 'catering' || Boolean(t.cateredByRiderName || t.cateredByRiderId || t.cateredBy);
-
-        if (modernChatCategory === 'done') {
-            return folder === 'done' || isDone;
-        }
-        if (isDone) return false;
-
-        if (modernChatCategory === 'inbox') {
-            return !isCatered && folder !== 'applicant' && folder !== 'followup' && folder !== 'stores';
-        } else if (modernChatCategory === 'catering') {
-            return isCatered;
-        } else if (modernChatCategory === 'applicant') {
-            return folder === 'applicant' || t.isApplicant === true;
-        } else if (modernChatCategory === 'followup') {
-            return folder === 'followup';
-        } else if (modernChatCategory === 'stores') {
-            return folder === 'stores';
-        }
-        return true;
-    });
-
-    // Sort by latest message timestamp descending
-    filtered.sort((a, b) => (Number(b.lastUpdated || b.timestamp) || 0) - (Number(a.lastUpdated || a.timestamp) || 0));
-
     if (filtered.length === 0) {
-        listContainer.innerHTML = `<div class="text-slate-500 italic text-center py-8 px-2 text-[11px]">No threads in ${modernChatCategory}</div>`;
+        listContainer.innerHTML = `<div class="text-slate-500 italic text-center py-8 px-2 text-[11px]">No threads in ${escapeHtml(modernChatCategory)}</div>`;
         return;
     }
 
     listContainer.innerHTML = filtered.map(t => {
-        const isSelected = activeCustId && t.custId === activeCustId;
+        const isSelected = activeCustId && (t.custId === activeCustId || t.id === activeCustId);
         const name = formatTitleCase(t.customerName || t.name || "Customer");
         const msg = (t.lastMessage || 'No messages yet').replace(/\[Facebook.*?\]/g, '📷 Photo');
         const cid = t.custId || t.id;
@@ -719,20 +758,104 @@ export function toggleModernCardSwipe(cid) {
     }
 }
 
+let isClearingModernChat = false;
+export function clearModernChatRightRoom() {
+    if (isClearingModernChat) return;
+    isClearingModernChat = true;
+    try {
+        // 1. Close any active customer chat session
+        try {
+            if (typeof closeRiderCustomerChatModal === 'function') {
+                closeRiderCustomerChatModal();
+            } else if (typeof window.closeRiderCustomerChatModal === 'function') {
+                window.closeRiderCustomerChatModal();
+            }
+        } catch (_) {}
+
+        if (typeof setActiveRiderChatCustId === 'function') {
+            setActiveRiderChatCustId(null);
+        }
+        if (typeof window !== 'undefined') {
+            window.activeRiderChatCustId = null;
+        }
+
+        dockChatMessagesToModern();
+
+        // 2. Clear message thread container
+        const msgContainer = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
+        if (msgContainer) {
+            msgContainer.innerHTML = `
+            <div class="h-full w-full flex flex-col items-center justify-center text-center p-6 text-slate-500 select-none">
+                <div class="w-14 h-14 rounded-2xl bg-[#121a1f] border border-slate-800 flex items-center justify-center text-2xl mb-3 shadow-inner">
+                    💬
+                </div>
+                <p class="font-extrabold text-xs sm:text-sm text-slate-300">No Chat Selected</p>
+                <p class="text-[11px] text-slate-500 mt-1 max-w-[240px]">No conversation open. Select a customer from the left or switch folders.</p>
+            </div>`;
+        }
+
+        // 3. Clear/hide all banners and ancillary drawers
+        const presenceBanner = document.getElementById('rider-chat-presence-banner');
+        if (presenceBanner) {
+            presenceBanner.classList.add('hidden');
+            presenceBanner.innerHTML = '';
+        }
+        const lockBanner = document.getElementById('rider-chat-lock-banner');
+        if (lockBanner) {
+            lockBanner.classList.add('hidden');
+            lockBanner.innerHTML = '';
+        }
+        const milestoneBar = document.getElementById('rider-chat-milestone-bar');
+        if (milestoneBar) {
+            milestoneBar.classList.add('hidden');
+        }
+        const quickReplies = document.getElementById('quick-replies-drawer');
+        if (quickReplies) {
+            quickReplies.classList.add('hidden');
+        }
+
+        // 4. Reset Header elements
+        const avatarEl = document.getElementById('modern-chat-room-avatar');
+        const titleEl = document.getElementById('modern-chat-room-title');
+        const subtitleEl = document.getElementById('modern-chat-room-subtitle');
+        const infoBtn = document.getElementById('modern-chat-info-btn');
+        if (titleEl) titleEl.innerText = "Select a customer";
+        if (subtitleEl) subtitleEl.innerText = "Tap any customer on the left to read & reply";
+        if (avatarEl) {
+            avatarEl.className = "w-8 h-8 rounded-full bg-slate-800 text-slate-400 font-black text-xs flex items-center justify-center overflow-hidden shrink-0 border border-slate-700 select-none";
+            avatarEl.innerHTML = "CU";
+            avatarEl.title = "No customer selected";
+        }
+        if (infoBtn) infoBtn.classList.add('hidden');
+
+        // 5. Hide floating cart button
+        const cartBtn = document.getElementById('modern-floating-cart-btn');
+        if (cartBtn) cartBtn.classList.add('hidden');
+
+        // 6. Reset composer input
+        const input = document.getElementById('rider-cust-chat-input') || document.getElementById('rider-chat-input');
+        if (input) {
+            input.value = "";
+            input.placeholder = "Select a customer to reply...";
+            input.disabled = true;
+        }
+    } finally {
+        isClearingModernChat = false;
+    }
+}
+
 export function syncModernRightChatRoom() {
     const custId = getActiveRiderChatCustId();
+
+    if (!custId) {
+        clearModernChatRightRoom();
+        return;
+    }
+
     const avatarEl = document.getElementById('modern-chat-room-avatar');
     const titleEl = document.getElementById('modern-chat-room-title');
     const subtitleEl = document.getElementById('modern-chat-room-subtitle');
     const infoBtn = document.getElementById('modern-chat-info-btn');
-
-    if (!custId) {
-        if (titleEl) titleEl.innerText = "Select a customer";
-        if (subtitleEl) subtitleEl.innerText = "Tap any customer on the left to read & reply";
-        if (avatarEl) avatarEl.innerHTML = "CU";
-        if (infoBtn) infoBtn.classList.add('hidden');
-        return;
-    }
 
     const t = cachedCustomerThreadsMap?.get(custId) || cachedCustomerThreadsMap?.get(`fb_${custId}`) || null;
     const name = formatTitleCase(t?.customerName || t?.name || "Customer");
@@ -744,9 +867,20 @@ export function syncModernRightChatRoom() {
         subtitleEl.innerText = `${channelName} • Real-time Connected`;
     }
     if (avatarEl) {
+        avatarEl.className = "w-8 h-8 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center overflow-hidden shrink-0 cursor-pointer border border-emerald-400/50";
         avatarEl.innerHTML = `<img src="${avatar}" class="w-full h-full object-cover rounded-full">`;
+        avatarEl.title = "View customer photo";
     }
     if (infoBtn) infoBtn.classList.remove('hidden');
+
+    const cartBtn = document.getElementById('modern-floating-cart-btn');
+    if (cartBtn) cartBtn.classList.remove('hidden');
+
+    const input = document.getElementById('rider-cust-chat-input') || document.getElementById('rider-chat-input');
+    if (input) {
+        input.disabled = false;
+        input.placeholder = "Type message...";
+    }
 }
 
 // Top-Right [chat menu ▾] Dropdown
@@ -955,6 +1089,108 @@ export function renderModernRotationsTab() {
 // 10. TAB 3: RIDER LOGIN LIST (LOGGED IN vs NOT LOGGED IN + PROFILE CARD)
 // ============================================================================
 
+const DAYS_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export function getRiderDayOffDetails(riderId, riderName) {
+    const allDayOffs = globalState.riderDayOffs || {};
+    const rId = (riderId || '').toString().trim();
+    const rName = (riderName || '').trim();
+    const cleanName = rName.toLowerCase();
+    const storageKey = getRiderStorageKey(rId, rName);
+
+    const roster = globalState.rosterMembers || [];
+    const member = roster.find(m => isRiderMatch(rName, m.riderName || m.name || '', rId, (m.telegramId || m.id || '').toString()));
+
+    const rec = allDayOffs[rId] || (storageKey ? allDayOffs[storageKey] : null) || allDayOffs[cleanName] || null;
+
+    let dayOfWeek = null;
+    if (rec && rec.dayOfWeek !== undefined && rec.dayOfWeek !== null && parseInt(rec.dayOfWeek) >= 0) {
+        dayOfWeek = parseInt(rec.dayOfWeek);
+    } else if (member && member.dayOff !== undefined && member.dayOff !== null && parseInt(member.dayOff) >= 0) {
+        dayOfWeek = parseInt(member.dayOff);
+    }
+
+    const todayDayOfWeek = new Date().getDay();
+    const isToday = dayOfWeek !== null && dayOfWeek === todayDayOfWeek;
+
+    const specificDate = rec?.dateStr || rec?.dayOffDate || rec?.date || null;
+    const isSpecificDateToday = specificDate && isSameDateStr(specificDate, getLocalTodayStr());
+
+    const isVacationToday = isToday || isSpecificDateToday;
+
+    let label = null;
+    if (dayOfWeek !== null && DAYS_NAMES[dayOfWeek]) {
+        label = `Every ${SHORT_DAYS[dayOfWeek] || DAYS_NAMES[dayOfWeek]}`;
+    } else if (specificDate) {
+        label = specificDate;
+    }
+
+    return {
+        hasDayOff: !!label,
+        dayOfWeek,
+        label,
+        isToday: isVacationToday
+    };
+}
+
+export function renderModernDayOffBadgeHtml(riderId, rawName) {
+    const info = getRiderDayOffDetails(riderId, rawName);
+
+    const loggedIn = getLoggedInRiderInfo();
+    const myId = loggedIn?.myId || (appState.telegramId || localStorage.getItem('telegramId') || '').toString().trim();
+    const myName = loggedIn?.myName || (appState.riderName || localStorage.getItem('riderName') || '').trim();
+    const isMe = isRiderMatch(rawName, myName, riderId, myId);
+    const isUserAdmin = isAdmin() || hasTlPermission('canManageDayOff');
+    const canSetDayOff = isUserAdmin || isMe;
+
+    if (info.isToday) {
+        // Vacation animation when rider's day off is today
+        if (canSetDayOff) {
+            return `
+            <span onclick="event.stopPropagation(); window.promptSetRiderDayOff && window.promptSetRiderDayOff('${escapeHtml(riderId)}', '${escapeHtml(rawName)}', event);" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/60 text-teal-300 font-extrabold text-[9.5px] shadow-[0_0_12px_rgba(20,184,166,0.35)] animate-pulse shrink-0 cursor-pointer" title="Day-off is TODAY! (${escapeHtml(info.label)}) • Tap to edit">
+                <span class="inline-block animate-bounce text-xs" style="animation-duration: 1.1s;">🏖️</span>
+                <span class="uppercase tracking-wider font-black text-[9px] text-teal-200">Day Off</span>
+            </span>`;
+        } else {
+            return `
+            <span onclick="event.stopPropagation();" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-teal-500/20 border border-teal-400/60 text-teal-300 font-extrabold text-[9.5px] shadow-[0_0_12px_rgba(20,184,166,0.35)] animate-pulse shrink-0 cursor-default select-none" title="Day-off is TODAY! (${escapeHtml(info.label)})">
+                <span class="inline-block animate-bounce text-xs" style="animation-duration: 1.1s;">🏖️</span>
+                <span class="uppercase tracking-wider font-black text-[9px] text-teal-200">Day Off</span>
+            </span>`;
+        }
+    }
+
+    if (info.hasDayOff) {
+        // Scheduled day-off date/day
+        if (canSetDayOff) {
+            return `
+            <button type="button" onclick="event.stopPropagation(); window.promptSetRiderDayOff && window.promptSetRiderDayOff('${escapeHtml(riderId)}', '${escapeHtml(rawName)}', event);" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#18232a] hover:bg-slate-800 border border-slate-700 hover:border-teal-500/50 text-slate-300 hover:text-teal-300 font-bold text-[9.5px] transition active:scale-95 cursor-pointer shrink-0" title="Scheduled Day-Off: ${escapeHtml(info.label)} • Tap to edit">
+                <i class="fa-solid fa-umbrella-beach text-[9px] text-teal-400"></i>
+                <span>${escapeHtml(info.label)}</span>
+            </button>`;
+        } else {
+            return `
+            <span onclick="event.stopPropagation();" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[#18232a] border border-slate-800 text-slate-400 font-bold text-[9.5px] shrink-0 cursor-default select-none" title="Scheduled Day-Off: ${escapeHtml(info.label)}">
+                <i class="fa-solid fa-umbrella-beach text-[9px] text-teal-500/70"></i>
+                <span>${escapeHtml(info.label)}</span>
+            </span>`;
+        }
+    }
+
+    // Set day-off button when not set: ONLY rendered for Admin or the actual rider themselves!
+    if (canSetDayOff) {
+        return `
+        <button type="button" onclick="event.stopPropagation(); window.promptSetRiderDayOff && window.promptSetRiderDayOff('${escapeHtml(riderId)}', '${escapeHtml(rawName)}', event);" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-teal-500/10 hover:bg-teal-500/25 border border-teal-500/40 hover:border-teal-400 text-teal-400 hover:text-teal-300 font-bold text-[9.5px] transition active:scale-95 cursor-pointer shrink-0 shadow-2xs" title="Set Day-Off for ${escapeHtml(rawName)}">
+            <i class="fa-solid fa-plus text-[8.5px]"></i>
+            <span>Set Day-Off</span>
+        </button>`;
+    }
+
+    // Other riders without a day-off set show nothing to non-admins
+    return '';
+}
+
 export function renderModernLoginsTab() {
     const inList = document.getElementById('modern-login-in-list');
     const outList = document.getElementById('modern-login-out-list');
@@ -1000,10 +1236,14 @@ export function renderModernLoginsTab() {
             const rId = (l.riderId || l.telegramId || '').toString();
             const timeIn = l.loginTime || '--:--';
             const timeOut = l.clockOutTime ? l.clockOutTime : '<span class="text-emerald-400 font-bold">On Duty</span>';
+            const dayOffBadge = renderModernDayOffBadgeHtml(rId, rawName);
 
             return `
-            <div class="grid grid-cols-[1.3fr_1fr_1fr] items-center p-2 rounded-xl bg-black/40 border border-slate-800 hover:border-slate-700 transition cursor-pointer" onclick="window.openModernRiderProfile('${escapeHtml(rId)}', '${escapeHtml(rawName)}')">
-                <span class="font-bold text-xs text-white hover:text-emerald-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
+            <div class="grid grid-cols-[1.8fr_0.9fr_0.9fr] sm:grid-cols-[2fr_1fr_1fr] items-center p-2 rounded-xl bg-black/40 border border-slate-800 hover:border-slate-700 transition cursor-pointer" onclick="window.openModernRiderProfile('${escapeHtml(rId)}', '${escapeHtml(rawName)}')">
+                <div class="flex items-center gap-1.5 min-w-0 flex-wrap pr-1">
+                    <span class="font-bold text-xs text-white hover:text-emerald-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
+                    ${dayOffBadge}
+                </div>
                 <span class="font-mono text-xs text-slate-300">${escapeHtml(timeIn)}</span>
                 <span class="font-mono text-xs text-slate-300">${timeOut}</span>
             </div>`;
@@ -1017,25 +1257,25 @@ export function renderModernLoginsTab() {
         outList.innerHTML = notLoggedInRiders.map((m, idx) => {
             const rawName = m.riderName || m.name || "Rider";
             const mId = (m.telegramId || m.id || '').toString();
+            const dayOffBadge = renderModernDayOffBadgeHtml(mId, rawName);
 
             return `
-            <div class="flex items-center p-2 rounded-xl bg-black/40 border border-slate-800 hover:border-slate-700 transition cursor-pointer" onclick="window.openModernRiderProfile('${escapeHtml(mId)}', '${escapeHtml(rawName)}')">
-                <span class="font-bold text-xs text-slate-300 hover:text-rose-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
+            <div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-black/40 border border-slate-800 hover:border-slate-700 transition cursor-pointer" onclick="window.openModernRiderProfile('${escapeHtml(mId)}', '${escapeHtml(rawName)}')">
+                <div class="flex items-center gap-1.5 min-w-0 flex-wrap pr-1">
+                    <span class="font-bold text-xs text-slate-300 hover:text-rose-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
+                    ${dayOffBadge}
+                </div>
+                <span class="text-[10px] text-slate-500 font-mono shrink-0">Offline</span>
             </div>`;
         }).join('');
     }
 }
 
-// Clickable Profile Inspector (Both inline card and opens detailed profile modal)
+// Clickable Profile Inspector (Populates inline card and scrolls down immediately)
 export async function openModernRiderProfile(riderId, riderName) {
     if (!riderId && !riderName) return;
 
-    // Open detailed system modal
-    if (window.openRiderInfoModal) {
-        window.openRiderInfoModal(riderId, riderName);
-    }
-
-    // Also populate inline modern card
+    // Populate inline modern card (Do not open modal - bottom inspector is enough)
     const card = document.getElementById('modern-rider-profile-card');
     if (!card) return;
 
@@ -1088,16 +1328,28 @@ export async function openModernRiderProfile(riderId, riderName) {
         }
     }
 
+    // Clickable phone number for phone calls
+    let phoneHtml = `<span class="text-slate-400 text-[11px]">📞 Not Set</span>`;
+    if (phone && phone !== "Not Set") {
+        const cleanPhone = phone.replace(/[^0-9+]/g, '');
+        phoneHtml = `
+        <a href="tel:${escapeHtml(cleanPhone)}" class="text-emerald-400 hover:text-emerald-300 hover:underline inline-flex items-center gap-1 font-mono text-[11px] font-bold transition active:scale-95" title="Tap to call ${escapeHtml(riderName)}">
+            <span>📞</span>
+            <span>${escapeHtml(phone)}</span>
+            <span class="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1 py-0.2 rounded font-sans font-bold ml-1">Call</span>
+        </a>`;
+    }
+
     card.innerHTML = `
     <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
         <span class="text-xs font-black text-emerald-400 uppercase tracking-wide">Rider Profile Inspector</span>
-        <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${escapeHtml(riderId)}', '${escapeHtml(riderName)}')" class="text-[10px] text-sky-400 font-bold hover:underline">Full Details ↗</button>
+        <button type="button" onclick="window.openRiderInfoModal && window.openRiderInfoModal('${escapeHtml(riderId)}', '${escapeHtml(riderName)}')" class="text-[10px] text-sky-400 font-bold hover:underline cursor-pointer">Full Details ↗</button>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-[auto_1fr_1fr] items-center gap-3">
         <img src="${photoUrl}" class="w-14 h-14 rounded-full object-cover border-2 border-emerald-500 shadow-md mx-auto sm:mx-0">
         <div class="flex flex-col gap-0.5 text-xs">
             <span class="font-extrabold text-white text-sm">${escapeHtml(formatTitleCase(riderName))}</span>
-            <span class="text-slate-400 text-[11px]">📞 ${escapeHtml(phone)}</span>
+            ${phoneHtml}
             <span class="text-slate-400 text-[11px]">📍 ${escapeHtml(address)}</span>
         </div>
         <div class="grid grid-cols-2 gap-1.5 text-[10px] font-mono bg-black/40 p-2 rounded-xl border border-slate-800">
@@ -1106,6 +1358,86 @@ export async function openModernRiderProfile(riderId, riderName) {
             <div class="col-span-2"><span class="text-slate-400">Duty Served:</span> <span class="text-amber-300 font-bold">${timeServedStr}</span></div>
         </div>
     </div>`;
+
+    // Immediately scroll down to the rider profile inspector for faster viewing
+    try {
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        card.classList.add('ring-2', 'ring-emerald-400');
+        setTimeout(() => {
+            card.classList.remove('ring-2', 'ring-emerald-400');
+        }, 1200);
+    } catch (_) {}
+}
+
+let currentDayOffTargetRiderKey = null;
+let currentDayOffTargetRiderName = null;
+
+export function promptSetRiderDayOff(riderId, riderName, event) {
+    if (event) event.stopPropagation();
+
+    const loggedIn = getLoggedInRiderInfo();
+    const myId = loggedIn?.myId || (appState.telegramId || localStorage.getItem('telegramId') || '').toString().trim();
+    const myName = loggedIn?.myName || (appState.riderName || localStorage.getItem('riderName') || '').trim();
+    const isMe = isRiderMatch(riderName, myName, riderId, myId);
+
+    if (!isAdmin() && !hasTlPermission('canManageDayOff')) {
+        if (isMe) {
+            if (typeof openRiderDayOffModal === 'function') {
+                openRiderDayOffModal();
+                return;
+            } else if (typeof window.openRiderDayOffModal === 'function') {
+                window.openRiderDayOffModal();
+                return;
+            }
+        }
+        showToast("⚠️ Only Admins can set day-off for other riders.");
+        return;
+    }
+
+    currentDayOffTargetRiderKey = getRiderStorageKey(riderId, riderName);
+    currentDayOffTargetRiderName = riderName;
+
+    const modal = document.getElementById('modern-quick-dayoff-modal');
+    const labelEl = document.getElementById('modern-dayoff-rider-label');
+    if (labelEl) {
+        labelEl.innerText = `${formatTitleCase(riderName)} (${riderId || currentDayOffTargetRiderKey})`;
+    }
+
+    // Highlight currently selected day if any
+    const info = getRiderDayOffDetails(riderId, riderName);
+    const dayButtons = document.querySelectorAll('.modern-dayoff-opt-btn');
+    dayButtons.forEach((btn, idx) => {
+        if (info.hasDayOff && info.dayOfWeek === idx) {
+            btn.className = "modern-dayoff-opt-btn p-2 rounded-xl bg-teal-500/25 border-2 border-teal-400 text-xs font-black text-teal-300 transition text-center cursor-pointer shadow-xs";
+        } else {
+            btn.className = "modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/15 border border-slate-700 hover:border-teal-500/50 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center cursor-pointer";
+        }
+    });
+
+    if (modal) modal.classList.remove('hidden');
+}
+
+export function closeModernQuickDayOffModal() {
+    const modal = document.getElementById('modern-quick-dayoff-modal');
+    if (modal) modal.classList.add('hidden');
+    currentDayOffTargetRiderKey = null;
+    currentDayOffTargetRiderName = null;
+}
+
+export async function selectQuickDayOff(dayIndex) {
+    if (!currentDayOffTargetRiderKey && !currentDayOffTargetRiderName) return;
+    const rKey = currentDayOffTargetRiderKey;
+    const rName = currentDayOffTargetRiderName;
+
+    closeModernQuickDayOffModal();
+
+    if (typeof adminReassignRiderDayOff === 'function') {
+        await adminReassignRiderDayOff(rKey, rName, dayIndex);
+    } else if (typeof window.adminReassignRiderDayOff === 'function') {
+        await window.adminReassignRiderDayOff(rKey, rName, dayIndex);
+    }
+
+    renderModernLoginsTab();
 }
 
 // ============================================================================
@@ -1252,11 +1584,7 @@ export function initModernUiController() {
     });
     window.addEventListener('customerChatsUpdated', () => {
         if (isModernUiActive()) {
-            updateModernTabBadges();
-            if (modernActiveTab === 'chats') {
-                renderModernChatLeftList();
-                syncModernRightChatRoom();
-            }
+            refreshModernChatsView();
         }
     });
     window.addEventListener('viewChanged', (e) => {
@@ -1270,6 +1598,35 @@ export function initModernUiController() {
             if (modernWorkspace) modernWorkspace.classList.add('hidden');
         }
     });
+}
+
+export function getModernChatCategory() {
+    return modernChatCategory;
+}
+
+export function refreshModernChatsView() {
+    updateModernTabBadges();
+    if (modernActiveTab === 'chats') {
+        const activeCustId = getActiveRiderChatCustId();
+        const filtered = getModernFilteredThreads();
+        const stillExists = activeCustId && filtered.some(t => (t.custId || t.id) === activeCustId);
+
+        if (!stillExists) {
+            if (filtered.length > 0) {
+                const first = filtered[0];
+                const cid = first.custId || first.id;
+                const name = formatTitleCase(first.customerName || first.name || "Customer");
+                const avatar = first.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0084FF&color=fff`;
+                selectModernCustomerChat(cid, name, avatar);
+            } else {
+                clearModernChatRightRoom();
+                renderModernChatLeftList();
+            }
+        } else {
+            renderModernChatLeftList();
+            syncModernRightChatRoom();
+        }
+    }
 }
 
 // Window Attachments
@@ -1290,5 +1647,12 @@ if (typeof window !== 'undefined') {
     window.toggleModernComposerMenu = toggleModernComposerMenu;
     window.closeModernPopovers = closeModernPopovers;
     window.openModernRiderProfile = openModernRiderProfile;
+    window.promptSetRiderDayOff = promptSetRiderDayOff;
+    window.closeModernQuickDayOffModal = closeModernQuickDayOffModal;
+    window.selectQuickDayOff = selectQuickDayOff;
+    window.clearModernChatRightRoom = clearModernChatRightRoom;
+    window.getModernFilteredThreads = getModernFilteredThreads;
+    window.getModernChatCategory = getModernChatCategory;
+    window.refreshModernChatsView = refreshModernChatsView;
 }
 

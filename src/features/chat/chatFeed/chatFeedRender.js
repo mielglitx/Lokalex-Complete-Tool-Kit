@@ -50,6 +50,10 @@ function executeRenderRiderCustomerChatFeed() {
     if (chatModal && !chatModal.classList.contains('hidden')) {
         updateAllChatFolderBadges();
         updateFolderMuteIcons();
+        try { window.dispatchEvent(new CustomEvent('customerChatsUpdated')); } catch (_) {}
+        if (typeof window !== 'undefined' && typeof window.refreshModernChatsView === 'function') {
+            window.refreshModernChatsView();
+        }
         return;
     }
 
@@ -343,6 +347,13 @@ function executeRenderRiderCustomerChatFeed() {
 
     updateAllChatFolderBadges();
     updateFolderMuteIcons();
+
+    try {
+        window.dispatchEvent(new CustomEvent('customerChatsUpdated'));
+    } catch (_) {}
+    if (typeof window !== 'undefined' && typeof window.refreshModernChatsView === 'function') {
+        window.refreshModernChatsView();
+    }
 
     if (badge) {
         if (isSearching) {
@@ -644,6 +655,13 @@ function executeRenderRiderCustomerChatFeed() {
 
     updateAllChatFolderBadges();
     updateFolderMuteIcons();
+
+    try {
+        window.dispatchEvent(new CustomEvent('customerChatsUpdated'));
+    } catch (_) {}
+    if (typeof window !== 'undefined' && typeof window.refreshModernChatsView === 'function') {
+        window.refreshModernChatsView();
+    }
 }
 
 // ============================================================================
@@ -1045,6 +1063,13 @@ export function reopenThreadToInbox(custId) {
     }
     updateAllChatFolderBadges();
     updateFolderMuteIcons();
+
+    try {
+        window.dispatchEvent(new CustomEvent('customerChatsUpdated'));
+    } catch (_) {}
+    if (typeof window !== 'undefined' && typeof window.refreshModernChatsView === 'function') {
+        window.refreshModernChatsView();
+    }
     renderRiderCustomerChatFeed();
     showToast("📥 Chat moved back to Inbox");
 }
@@ -1065,7 +1090,7 @@ export function handleThreadSwipeDone(btnOrCustId) {
     if (fg) resetSwipeCard(fg);
     if (!custId) return;
 
-    if (activeRiderChatFilter === 'done') {
+    if (activeRiderChatFilter === 'done' || (typeof window !== 'undefined' && window.isModernUiActive && window.isModernUiActive() && window.getModernChatCategory && window.getModernChatCategory() === 'done')) {
         reopenThreadToInbox(custId);
     } else {
         if (window.markThreadDone) {

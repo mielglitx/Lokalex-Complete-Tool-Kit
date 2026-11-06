@@ -314,6 +314,16 @@ export async function sendRiderToCustomerChat(customText = "", customImageUrl = 
                 // Always update persistent cache for this customer
                 let targetMemCached = riderChatMemoryCache.get(targetCustId);
                 if (!Array.isArray(targetMemCached)) targetMemCached = [];
+                // Preserve edited message fields from currently loaded memory
+                if (activeRiderChatCustId === targetCustId) {
+                    targetMemCached = targetMemCached.map(m => {
+                        const live = loadedRiderMsgsMap.get(m.id);
+                        if (live && live.isEdited) {
+                            return { ...m, text: live.text, message: live.text, originalText: live.originalText, isEdited: true, editedAt: live.editedAt, numEdit: live.numEdit };
+                        }
+                        return m;
+                    });
+                }
                 targetMemCached.push(fullNewMsg);
                 targetMemCached.sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
                 riderChatMemoryCache.set(targetCustId, targetMemCached);

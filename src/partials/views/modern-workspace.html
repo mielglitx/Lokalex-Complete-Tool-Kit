@@ -315,6 +315,9 @@
                                 <button type="button" onclick="window.closeModernPopovers(); window.cancelCatering && window.cancelCatering();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-red-500/15 text-xs font-extrabold text-rose-400 flex items-center gap-2 cursor-pointer">
                                     <span>• Cancel</span>
                                 </button>
+                                <button type="button" onclick="window.closeModernPopovers(); window.clearModernChatRightRoom && window.clearModernChatRightRoom();" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-bold text-slate-400 hover:text-white flex items-center gap-2 cursor-pointer border-t border-slate-800/80 mt-0.5 pt-1">
+                                    <span>• Close Thread</span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -415,7 +418,7 @@
             <div class="flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-[1.45fr_1fr] gap-2.5">
                 <!-- Left Box: Logged IN -->
                 <div class="bg-[#121a1f] border-2 border-rose-500/40 rounded-2xl p-3 flex flex-col min-h-[200px] overflow-hidden">
-                    <div class="grid grid-cols-[1.3fr_1fr_1fr] text-[11px] font-black text-rose-400 pb-2 mb-2 border-b border-slate-800 shrink-0">
+                    <div class="grid grid-cols-[1.8fr_0.9fr_0.9fr] sm:grid-cols-[2fr_1fr_1fr] text-[11px] font-black text-rose-400 pb-2 mb-2 border-b border-slate-800 shrink-0">
                         <span id="modern-login-in-header">Logged IN (0)</span>
                         <span>Time In</span>
                         <span>Time Out</span>
@@ -484,5 +487,42 @@
             Gross: <span id="modern-footer-gross">₱0</span>
         </button>
     </footer>
+
+    <!-- QUICK DAY-OFF SELECTOR MODAL FOR MODERN UI -->
+    <div id="modern-quick-dayoff-modal" class="hidden fixed inset-0 z-[99999] bg-black/80 backdrop-blur-xs flex items-center justify-center p-3">
+        <div class="bg-[#182229] border border-teal-500/50 rounded-2xl p-4 w-full max-w-xs shadow-2xl flex flex-col gap-3 animate-in fade-in zoom-in duration-150">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div class="flex items-center gap-2">
+                    <span class="text-base">🏖️</span>
+                    <div>
+                        <h4 class="font-extrabold text-xs text-white">Set Day-Off</h4>
+                        <p id="modern-dayoff-rider-label" class="text-[10px] text-teal-400 font-semibold truncate max-w-[190px]">Rider Name</p>
+                    </div>
+                </div>
+                <button type="button" onclick="window.closeModernQuickDayOffModal && window.closeModernQuickDayOffModal()" class="w-6 h-6 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-xs cursor-pointer">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-1.5">
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(0)" class="modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500/60 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center cursor-pointer">Sunday</button>
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(1)" class="modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500/60 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center cursor-pointer">Monday</button>
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(2)" class="modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500/60 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center cursor-pointer">Tuesday</button>
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(3)" class="modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500/60 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center cursor-pointer">Wednesday</button>
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(4)" class="modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500/60 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center cursor-pointer">Thursday</button>
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(5)" class="modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500/60 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center cursor-pointer">Friday</button>
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(6)" class="modern-dayoff-opt-btn p-2 rounded-xl bg-[#0b1114] hover:bg-teal-500/20 border border-slate-700 hover:border-teal-500/60 text-xs font-bold text-slate-200 hover:text-teal-300 transition text-center col-span-2 cursor-pointer">Saturday</button>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-slate-800 gap-2">
+                <button type="button" onclick="window.selectQuickDayOff && window.selectQuickDayOff(-1)" class="px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 font-bold text-[11px] cursor-pointer">
+                    Clear Day-Off
+                </button>
+                <button type="button" onclick="window.closeModernQuickDayOffModal && window.closeModernQuickDayOffModal(); window.openAdminDayOffSettingsModal && window.openAdminDayOffSettingsModal();" class="text-[10px] text-teal-400 font-bold hover:underline cursor-pointer">
+                    Quotas & Rules ↗
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 

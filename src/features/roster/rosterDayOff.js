@@ -354,6 +354,7 @@ export async function adminReassignRiderDayOff(riderKey, riderName, newDayIndex)
 
     renderAdminDayOffSettingsList();
     updateRosterUI();
+    try { window.dispatchEvent(new CustomEvent('rosterUpdated')); } catch (_) {}
 }
 
 export async function saveAdminDayOffSettings() {
@@ -420,4 +421,10 @@ export function listenToDayOffData() {
         globalState.riderDayOffs = snap.val() || {};
         updateRosterUI();
     });
+}
+
+if (typeof window !== 'undefined') {
+    window.openRiderDayOffModal = openRiderDayOffModal;
+    window.closeRiderDayOffModal = closeRiderDayOffModal;
+    window.adminReassignRiderDayOff = adminReassignRiderDayOff;
 }

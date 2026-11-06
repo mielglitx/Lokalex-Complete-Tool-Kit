@@ -862,6 +862,8 @@ async function processMetaEntries(entries, cfg, ctx) {
               const editPatch = {
                 [`customerChats/${custId}/messages/${targetKey}/text`]: newText,
                 [`customerChats/${custId}/messages/${targetKey}/message`]: newText,
+                [`customerChats/${custId}/messages/${targetKey}/originalText`]: origText,
+                [`customerChats/${custId}/messages/${targetKey}/previousText`]: row?.data?.previousText || origText,
                 [`customerChats/${custId}/messages/${targetKey}/isEdited`]: true,
                 [`customerChats/${custId}/messages/${targetKey}/editedAt`]: editTimestamp,
                 [`customerChats/${custId}/messages/${targetKey}/numEdit`]: numEdit,
