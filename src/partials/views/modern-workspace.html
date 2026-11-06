@@ -20,18 +20,13 @@
             </div>
         </div>
 
-        <!-- RIGHT: UI SWITCHER + CLOCK + BATTERY + [PiP] -->
+        <!-- RIGHT: SYNC PILL + CLOCK + BATTERY + CLASSIC UI BUTTON -->
         <div class="flex items-center gap-1.5 shrink-0">
             <!-- REALTIME SYNC STATUS PILL (Optimistic Background Handshake) -->
             <div id="modern-header-sync-pill" class="hidden px-2 py-1 rounded-xl text-[10px] sm:text-[11px] font-mono font-bold items-center gap-1.5 shrink-0 transition-all duration-300">
                 <span id="modern-header-sync-dot" class="w-2 h-2 rounded-full"></span>
                 <span id="modern-header-sync-text">Synced</span>
             </div>
-
-            <button type="button" onclick="window.toggleLokalexUiMode && window.toggleLokalexUiMode('classic')" class="px-2 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-[10px] font-black flex items-center gap-1 transition active:scale-95 cursor-pointer" title="Switch back to Classic / Original UI">
-                <i class="fa-solid fa-rotate-left text-[9px]"></i>
-                <span class="hidden xs:inline">Classic UI</span>
-            </button>
 
             <div class="px-2 py-1 rounded-xl bg-[#18232a] border border-slate-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-slate-200 flex items-center gap-1 shrink-0" title="Current Time">
                 <span>🕒</span>
@@ -43,8 +38,8 @@
                 <span id="modern-header-battery">--%</span>
             </div>
 
-            <button type="button" onclick="window.enterFloatingWindowMode && window.enterFloatingWindowMode()" class="px-2 py-1 rounded-xl bg-[#18232a] hover:bg-sky-950/60 border border-slate-700/80 hover:border-sky-500/50 text-[10px] sm:text-[11px] font-mono font-bold text-sky-400 transition active:scale-95 cursor-pointer shrink-0" title="Picture-in-Picture Floating Mode">
-                [PiP]
+            <button type="button" onclick="window.toggleLokalexUiMode && window.toggleLokalexUiMode('classic')" class="px-2.5 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-[10px] sm:text-[11px] font-mono font-bold flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0 shadow-2xs" title="Switch back to Classic / Original UI">
+                Classic
             </button>
         </div>
 
@@ -114,7 +109,7 @@
 
                 <button id="modern-menu-admin-row" type="button" onclick="window.openModernMenuCategory('admin')" class="hidden w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30 transition text-left cursor-pointer">
                     <span class="flex items-center gap-2.5">
-                        <span class="w-8 h-8 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center text-sm">🛡️</span>
+                        <span class="w-8 h-8 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center text-sm shadow-xs"><i class="fa-solid fa-user-shield"></i></span>
                         <span>
                             <span class="block text-xs font-bold text-rose-400">Admin Settings (A–Z)</span>
                             <span class="block text-[10px] text-slate-400">All 24 Admin & Dispatch Controls</span>
