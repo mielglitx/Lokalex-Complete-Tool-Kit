@@ -93,27 +93,31 @@ export function renderCartCustomerSelector() {
     const myCustomers = getMyCateringCustomers();
     const slotIdx = activeCartSlot - 1;
 
-    const assignedCustomerForSlot = myCustomers[slotIdx];
+    const assignedCustomerForSlot = myCustomers[slotIdx] || (myCustomers.length === 1 ? myCustomers[0] : null);
 
-    if (assignedCustomerForSlot && !currentCartObj.isManual) {
-        if (!currentCartObj.customerName || currentCartObj.customerName === "Sample" || currentCartObj.customerName !== assignedCustomerForSlot) {
-            currentCartObj.customerName = assignedCustomerForSlot;
+    if (myCustomers.length > 0 && !currentCartObj.isManual) {
+        if (!currentCartObj.customerName || currentCartObj.customerName === "Sample" || (assignedCustomerForSlot && currentCartObj.customerName !== assignedCustomerForSlot)) {
+            currentCartObj.customerName = assignedCustomerForSlot || myCustomers[0];
             saveCartState();
         }
     }
 
-    const selectedVal = currentCartObj.customerName || (assignedCustomerForSlot ? assignedCustomerForSlot : "Sample");
+    const selectedVal = currentCartObj.customerName || (assignedCustomerForSlot ? assignedCustomerForSlot : (myCustomers[0] || "Sample"));
 
-    let optionsHtml = `<option value="Sample" ${selectedVal === "Sample" ? "selected" : ""}>Sample Receipt</option>`;
+    let optionsHtml = "";
 
+    // Show actively catered customers FIRST
     myCustomers.forEach(clientName => {
-        const isSel = selectedVal === clientName ? "selected" : "";
+        const isSel = selectedVal.toLowerCase() === clientName.toLowerCase() ? "selected" : "";
         optionsHtml += `<option value="${escapeHtml(clientName)}" ${isSel}>${escapeHtml(clientName)}</option>`;
     });
 
-    if (currentCartObj.isManual && selectedVal && !myCustomers.includes(selectedVal) && selectedVal !== "Sample") {
+    if (currentCartObj.isManual && selectedVal && !myCustomers.some(c => c.toLowerCase() === selectedVal.toLowerCase()) && selectedVal.toLowerCase() !== "sample") {
         optionsHtml += `<option value="${escapeHtml(selectedVal)}" selected>${escapeHtml(selectedVal)} (Manual)</option>`;
     }
+
+    // Fallback Sample Receipt option at the bottom
+    optionsHtml += `<option value="Sample" ${selectedVal === "Sample" ? "selected" : ""}>Sample Receipt (No Commission)</option>`;
 
     container.innerHTML = `
         <select onchange="onCartCustomerSelected(this.value)" class="w-full bg-inputBg text-xs text-amber-300 font-bold rounded-lg p-2 outline-none border border-gray-700 focus:border-amber-500">

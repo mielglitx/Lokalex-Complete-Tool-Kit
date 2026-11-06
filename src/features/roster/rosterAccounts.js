@@ -371,6 +371,7 @@ export function renderAdminRidersList() {
             const currentType = r.userType || 'rider';
             let typeBadgeClass = "text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-500/20 border-emerald-300 dark:border-emerald-500/40 font-bold";
             if (currentType === 'admin') typeBadgeClass = "text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-500/20 border-amber-300 dark:border-amber-500/40 font-bold";
+            else if (currentType === 'inspector') typeBadgeClass = "text-purple-800 dark:text-purple-300 bg-purple-100 dark:bg-purple-500/20 border-purple-300 dark:border-purple-500/40 font-bold";
             else if (currentType === 'tl') typeBadgeClass = "text-blue-800 dark:text-blue-300 bg-blue-100 dark:bg-blue-500/20 border-blue-300 dark:border-blue-500/40 font-bold";
             else if (currentType === 'rider') typeBadgeClass = "text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-500/20 border-emerald-300 dark:border-emerald-500/40 font-bold";
 
@@ -384,7 +385,7 @@ export function renderAdminRidersList() {
             }
 
             let appAccessBtn = "";
-            if (currentType !== 'admin') {
+            if (currentType !== 'admin' && currentType !== 'inspector') {
                 const allowedCount = APP_FEATURE_DEFINITIONS.filter(def => r.allowedFeatures ? r.allowedFeatures[def.key] !== false : true).length;
                 appAccessBtn = `
                 <button onclick="window.openRiderAppAccessModal && window.openRiderAppAccessModal('${r.id}', '${escapeHtml(r.name)}')" class="px-2 py-1 rounded-xl text-[10px] font-bold border border-purple-500/40 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 transition active:scale-95 flex items-center gap-1 shadow-xs shrink-0 cursor-pointer" title="Control app sections accessible to this rider">
@@ -394,11 +395,11 @@ export function renderAdminRidersList() {
 
             const riderCredits = r.directoryCredits !== undefined ? r.directoryCredits : 20;
 
-            // Admin accounts display an Exempt badge clarifying they are not affected by credit costs
+            // Admin and Inspector accounts display an Exempt badge clarifying they are not affected by credit costs
             let creditsBadgeHtml = "";
-            if (currentType === 'admin') {
+            if (currentType === 'admin' || currentType === 'inspector') {
                 creditsBadgeHtml = `
-                <button onclick="window.openAdjustRiderCreditsModal && window.openAdjustRiderCreditsModal('${r.id}', '${escapeHtml(r.name)}', ${riderCredits})" class="bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 px-2 py-1 rounded-lg text-[10px] font-bold font-mono transition active:scale-90 flex items-center gap-1 cursor-pointer" title="Admin is exempt from credit limits. Click to manage backup balance.">
+                <button onclick="window.openAdjustRiderCreditsModal && window.openAdjustRiderCreditsModal('${r.id}', '${escapeHtml(r.name)}', ${riderCredits})" class="bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 px-2 py-1 rounded-lg text-[10px] font-bold font-mono transition active:scale-90 flex items-center gap-1 cursor-pointer" title="Admin/Inspector is exempt from credit limits. Click to manage backup balance.">
                     <i class="fa-solid fa-crown text-amber-400"></i> Exempt (∞)
                 </button>`;
             } else {
@@ -444,6 +445,7 @@ export function renderAdminRidersList() {
                         <select onchange="window.quickChangeRiderUserType && window.quickChangeRiderUserType('${r.id}', this.value)" class="bg-white dark:bg-gray-900 text-[10px] font-bold border border-gray-300 dark:border-gray-700 rounded-lg px-2 py-1 text-gray-800 dark:text-gray-200 cursor-pointer outline-none">
                             <option value="rider" ${currentType === 'rider' ? 'selected' : ''}>Rider</option>
                             <option value="tl" ${currentType === 'tl' ? 'selected' : ''}>TL</option>
+                            <option value="inspector" ${currentType === 'inspector' ? 'selected' : ''}>Inspector</option>
                             <option value="admin" ${currentType === 'admin' ? 'selected' : ''}>Admin</option>
                         </select>
 
@@ -1279,7 +1281,7 @@ export async function submitSaveRiderAccount() {
             userType: userType,
             tlAdminPower: userType === 'tl' ? existingPower : false,
             tlPermissions: userType === 'tl' ? existingPerms : null,
-            allowedFeatures: userType === 'admin' ? null : existingAllowed,
+            allowedFeatures: (userType === 'admin' || userType === 'inspector') ? null : existingAllowed,
             directoryCredits: startingCredits,
             updatedAt: Date.now()
         };
@@ -1292,7 +1294,7 @@ export async function submitSaveRiderAccount() {
             userType: userType,
             tlAdminPower: userType === 'tl' ? existingPower : false,
             tlPermissions: userType === 'tl' ? existingPerms : null,
-            allowedFeatures: userType === 'admin' ? null : existingAllowed,
+            allowedFeatures: (userType === 'admin' || userType === 'inspector') ? null : existingAllowed,
             directoryCredits: startingCredits,
             lastActiveTimestamp: Date.now()
         };

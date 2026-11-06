@@ -327,6 +327,7 @@ export async function openRiderInfoModal(targetId, targetName = "") {
     if (roleEl) {
         roleEl.innerText = userType;
         if (userType === 'ADMIN') roleEl.className = "px-2 py-0.5 rounded-full font-bold text-[9px] bg-amber-500/20 text-amber-400 border border-amber-500/40 uppercase";
+        else if (userType === 'INSPECTOR') roleEl.className = "px-2 py-0.5 rounded-full font-bold text-[9px] bg-purple-500/20 text-purple-400 border border-purple-500/40 uppercase";
         else if (userType === 'TL') roleEl.className = "px-2 py-0.5 rounded-full font-bold text-[9px] bg-blue-500/20 text-blue-400 border border-blue-500/40 uppercase";
         else roleEl.className = "px-2 py-0.5 rounded-full font-bold text-[9px] bg-gray-500/20 text-gray-400 border border-gray-500/40 uppercase";
     }

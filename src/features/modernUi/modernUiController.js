@@ -76,6 +76,17 @@ let floatingCartElemInitialLeft = 0;
 let floatingCartElemInitialTop = 0;
 let modernClockInterval = null;
 
+// Helper to detect inspector accounts (excluded from rider lists & rotation)
+export function isInspectorUser(uType, rId = '', rName = '') {
+    const cleanType = (uType || '').toString().toLowerCase().trim();
+    if (cleanType === 'inspector') return true;
+    const cleanId = (rId || '').toString().trim();
+    const cleanName = (rName || '').toString().toLowerCase().trim();
+    if (cleanId && globalState.userTypesMap?.[cleanId]?.toString().toLowerCase().trim() === 'inspector') return true;
+    if (cleanName && globalState.userTypesMap?.[cleanName]?.toString().toLowerCase().trim() === 'inspector') return true;
+    return false;
+}
+
 // ============================================================================
 // 1. DUAL UI MODE CONTROLLER (CLASSIC <-> MODERN)
 // ============================================================================
@@ -540,6 +551,11 @@ export function updateModernTabBadges() {
     const todayStr = getLocalTodayStr();
     const todayLogins = (globalState.globalLogins || []).filter(l => {
         if (!l) return false;
+        const rawName = l.riderName || "";
+        const rId = (l.riderId || l.telegramId || '').toString();
+        const member = roster.find(m => isRiderMatch(rawName, m.riderName || m.name || '', rId, (m.telegramId || m.id || '').toString()));
+        if (isInspectorUser(l.userType || member?.userType, rId, rawName)) return false;
+
         if (isSameDateStr(l.date, todayStr)) return true;
         if (l.loginTimestamp && isSameDateStr(new Date(l.loginTimestamp).toLocaleDateString('en-CA'), todayStr)) return true;
         if (l.clockOutTimestamp && isSameDateStr(new Date(l.clockOutTimestamp).toLocaleDateString('en-CA'), todayStr)) return true;
@@ -552,8 +568,9 @@ export function updateModernTabBadges() {
         if (name) activeRidersSet.add(name);
     });
 
-    const totalRosterRiders = roster.length > 0 ? roster : (todayLogins.length > 0 ? todayLogins : [{ name: 'Rider' }]);
-    const notLoggedInCount = Math.max(0, totalRosterRiders.length - activeRidersSet.size);
+    const eligibleRoster = roster.filter(m => !isInspectorUser(m.userType, m.telegramId || m.id, m.riderName || m.name));
+    const totalRosterRiders = eligibleRoster.length > 0 ? eligibleRoster : (todayLogins.length > 0 ? todayLogins : [{ name: 'Rider' }]);
+    const notLoggedInCount = Math.max(0, eligibleRoster.length - activeRidersSet.size);
 
     const loginBadge = document.getElementById('modern-tab-logins-badge');
     if (loginBadge) {
@@ -1007,7 +1024,7 @@ export function renderModernRotationsTab() {
     const breakCountEl = document.getElementById('modern-rot-break-count');
     if (!availList || !caterList || !breakList) return;
 
-    const roster = globalState.rosterMembers || [];
+    const roster = (globalState.rosterMembers || []).filter(m => !isInspectorUser(m.userType, m.telegramId || m.id, m.riderName || m.name));
     const availables = sortAvailableRiders(roster.filter(m => m.status === 'Available'));
     const caterings = roster.filter(m => m.status === 'Catering');
     const breaks = roster.filter(m => m.status === 'Break');
@@ -1201,10 +1218,15 @@ export function renderModernLoginsTab() {
     if (!inList || !outList) return;
 
     const todayStr = getLocalTodayStr();
-    const roster = globalState.rosterMembers || [];
+    const eligibleRoster = (globalState.rosterMembers || []).filter(m => !isInspectorUser(m.userType, m.telegramId || m.id, m.riderName || m.name));
 
     const todayLogins = (globalState.globalLogins || []).filter(l => {
         if (!l) return false;
+        const rawName = l.riderName || "";
+        const rId = (l.riderId || l.telegramId || '').toString();
+        const member = (globalState.rosterMembers || []).find(m => isRiderMatch(rawName, m.riderName || m.name || '', rId, (m.telegramId || m.id || '').toString()));
+        if (isInspectorUser(l.userType || member?.userType, rId, rawName)) return false;
+
         if (isSameDateStr(l.date, todayStr)) return true;
         if (l.loginTimestamp && isSameDateStr(new Date(l.loginTimestamp).toLocaleDateString('en-CA'), todayStr)) return true;
         if (l.clockOutTimestamp && isSameDateStr(new Date(l.clockOutTimestamp).toLocaleDateString('en-CA'), todayStr)) return true;
@@ -1217,14 +1239,14 @@ export function renderModernLoginsTab() {
         if (n) loggedInNames.add(n);
     });
 
-    const notLoggedInRiders = roster.filter(m => {
+    const notLoggedInRiders = eligibleRoster.filter(m => {
         const n = (m.riderName || m.name || '').trim().toLowerCase();
         return n && !loggedInNames.has(n);
     });
 
     if (inHeader) inHeader.innerText = `Logged IN (${todayLogins.length})`;
     if (outHeader) outHeader.innerText = `Not Logged In (${notLoggedInRiders.length}):`;
-    if (inFooter) inFooter.innerHTML = `Logged In: <span class="text-emerald-400 font-bold">${todayLogins.length} Riders</span> (out of ${roster.length} total → ${todayLogins.length}/${notLoggedInRiders.length})`;
+    if (inFooter) inFooter.innerHTML = `Logged In: <span class="text-emerald-400 font-bold">${todayLogins.length} Riders</span> (out of ${eligibleRoster.length} total → ${todayLogins.length}/${notLoggedInRiders.length})`;
     if (outFooter) outFooter.innerHTML = `Not Logged In: <span class="text-rose-400 font-bold">${notLoggedInRiders.length} Riders</span>`;
 
     // Render Logged IN

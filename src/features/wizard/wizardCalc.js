@@ -21,7 +21,7 @@ import { appState, globalState, wizState, multiCarts } from '../../store/state.j
 import { getLocalTodayStr, escapeHtml } from '../../utils/helpers.js';
 import { showToast } from '../../ui/notifications.js';
 import { switchView } from '../../ui/router.js';
-import { getCurrentCart, getEffectiveCartClient } from '../cart.js';
+import { getCurrentCart, getEffectiveCartClient, getMyCateringCustomers } from '../cart.js';
 import { getActiveCateringCustomersWithTimes } from '../roster/rosterUtils.js';
 
 export function getDailyRiderId() {
@@ -96,27 +96,27 @@ export function setupWizardClientDetails() {
     if (!rcptInput || !btnBox || !toggleManual) return;
 
     const activeCartIdx = globalState.activeCartIndex || 0;
+    const activeSlot = activeCartIdx + 1;
     let currentClient = getEffectiveCartClient(activeCartIdx);
 
     const activeCateringList = (typeof getActiveCateringCustomersWithTimes === 'function')
         ? getActiveCateringCustomersWithTimes()
         : [];
 
-    // Validate that current client is not a lingering voided customer
+    // If active catering list has customers, prioritize active catering customer over "Sample"
     if (activeCateringList.length > 0) {
         const isClientActive = activeCateringList.some(c => c.name.trim().toLowerCase() === (currentClient || '').trim().toLowerCase());
-        if (!isClientActive && currentClient.toLowerCase() !== 'sample') {
-            currentClient = activeCateringList[0].name;
-            const activeSlot = activeCartIdx + 1;
+        if (!isClientActive || !currentClient || currentClient.trim().toLowerCase() === 'sample') {
+            currentClient = activeCateringList[activeCartIdx]?.name || activeCateringList[0].name;
             if (multiCarts && multiCarts[activeSlot]) {
                 multiCarts[activeSlot].customerName = currentClient;
+                multiCarts[activeSlot].isManual = false;
             }
         }
     } else if (currentClient && currentClient.toLowerCase() !== 'sample') {
-        const myRecord = (globalState.rosterMembers || []).find(m => (m.telegramId || m.id || "").toString() === (appState.telegramId || "").toString());
-        if (!myRecord || myRecord.status !== 'Catering') {
+        const myCustomers = (typeof getMyCateringCustomers === 'function') ? getMyCateringCustomers() : [];
+        if (myCustomers.length === 0) {
             currentClient = "Sample";
-            const activeSlot = activeCartIdx + 1;
             if (multiCarts && multiCarts[activeSlot]) {
                 multiCarts[activeSlot].customerName = "Sample";
             }
@@ -173,6 +173,10 @@ export function selectCateredClientName(cName) {
     let targetSlot = 1;
     if (typeof window.getCartSlotForCustomer === 'function') {
         targetSlot = window.getCartSlotForCustomer(cName);
+    }
+    if (multiCarts && multiCarts[targetSlot]) {
+        multiCarts[targetSlot].customerName = cName;
+        multiCarts[targetSlot].isManual = false;
     }
     if (typeof window.switchCartTab === 'function') {
         window.switchCartTab(targetSlot);

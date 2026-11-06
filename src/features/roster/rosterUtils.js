@@ -146,7 +146,7 @@ export function isAdmin() {
     if (myName && (myName.includes("amiel") || ADMIN_IDS.some(id => (id.toString().toLowerCase().trim() === myName || myName.includes(id.toString().toLowerCase().trim())) && id.toString().toLowerCase().trim() !== "regular"))) return true;
 
     const t = getUserType();
-    const validAdminTypes = ['admin', 'owner', 'manager', 'superadmin', 'administrator'];
+    const validAdminTypes = ['admin', 'owner', 'manager', 'superadmin', 'administrator', 'inspector'];
     if (validAdminTypes.includes(t)) return true;
 
     const storedType = (appState.userType || localStorage.getItem('userType') || "").toString().trim().toLowerCase();
@@ -1121,17 +1121,52 @@ export function getElapsedBreakTime(rider) {
 }
 
 export function getActiveCateringCustomersWithTimes() {
-    const myId = (appState.telegramId || "").toString();
-    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === myId) : null;
-    if (!myRecord || myRecord.status !== 'Catering' || !myRecord.customerName) return [];
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+    const rosterMembers = globalState.rosterMembers || [];
 
-    const custs = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
-    const times = myRecord.startTime ? myRecord.startTime.split(', ').map(t => t.trim()) : [];
+    const myRecord = rosterMembers.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        if (myId && mId && mId === myId) return true;
+        if (myName && mName && (mName === myName || isRiderMatch(myName, mName, myId, mId))) return true;
+        return false;
+    });
 
-    return custs.map((c, idx) => ({
-        name: c,
-        startTime: times[idx] || times[0] || ""
-    }));
+    if (!myRecord || (myRecord.status || '').toLowerCase() !== 'catering') return [];
+
+    const list = [];
+    const times = myRecord.startTime ? myRecord.startTime.split(/\s*,\s*/).map(t => t.trim()) : [];
+
+    const addCust = (name, sTime = "") => {
+        const trimmed = (name || '').trim();
+        const lc = trimmed.toLowerCase();
+        if (trimmed && lc !== 'customer' && lc !== 'customer name' && lc !== 'undefined' && lc !== 'null') {
+            if (!list.some(item => item.name.toLowerCase() === lc)) {
+                list.push({
+                    name: trimmed,
+                    startTime: sTime
+                });
+            }
+        }
+    };
+
+    if (myRecord.customerName) {
+        const custs = myRecord.customerName.split(/\s*,\s*/).map(c => c.trim()).filter(Boolean);
+        custs.forEach((c, idx) => {
+            addCust(c, times[idx] || times[0] || "");
+        });
+    }
+
+    if (myRecord.forcedCaters && typeof myRecord.forcedCaters === 'object') {
+        Object.entries(myRecord.forcedCaters).forEach(([fKey, fVal]) => {
+            const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
+            const fTime = (fVal && typeof fVal === 'object' && fVal.startTime) ? fVal.startTime : (times[0] || "");
+            addCust(fName, fTime);
+        });
+    }
+
+    return list;
 }
 
 export function hasReceiptForActiveSession(custName, custStartTime) {

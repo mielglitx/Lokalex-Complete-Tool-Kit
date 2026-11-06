@@ -20,9 +20,10 @@
  */
 
 import { profileState, getActiveSessionRole } from './profileState.js';
-import { appState } from '../../store/state.js';
+import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { openMapPicker } from '../maps.js';
+import { isAdmin } from '../roster/rosterUtils.js';
 
 export async function openProfileSettingsModal() {
     profileState.activeRole = getActiveSessionRole();
@@ -54,6 +55,10 @@ export async function openProfileSettingsModal() {
     const gcashSection = document.getElementById('prof-rider-gcash-section');
     const gcashNameInput = document.getElementById('prof-gcash-name-input');
     const gcashNoInput = document.getElementById('prof-gcash-no-input');
+    const userTypeWrapper = document.getElementById('prof-usertype-wrapper');
+    const userTypeSelect = document.getElementById('prof-usertype-select');
+    const userTypeBadge = document.getElementById('prof-usertype-badge');
+    const userTypeHint = document.getElementById('prof-usertype-hint');
 
     if (passwordInput) passwordInput.value = '';
     if (sendOtpBtn) sendOtpBtn.classList.add('hidden');
@@ -76,6 +81,7 @@ export async function openProfileSettingsModal() {
     let initialGcashNo = '';
 
     if (profileState.activeRole === 'customer') {
+        if (userTypeWrapper) userTypeWrapper.classList.add('hidden');
         if (roleIcon) roleIcon.innerHTML = `<i class="fa-solid fa-user text-blue-500"></i>`;
         if (modalTitle) modalTitle.innerText = "Customer Account Settings";
         if (modalSubtitle) modalSubtitle.innerText = "Update profile, mobile number & delivery location";
@@ -106,6 +112,7 @@ export async function openProfileSettingsModal() {
         }
         initialUsername = initialPhone;
     } else if (profileState.activeRole === 'merchant') {
+        if (userTypeWrapper) userTypeWrapper.classList.add('hidden');
         if (roleIcon) roleIcon.innerHTML = `<i class="fa-solid fa-shop text-orange-500"></i>`;
         if (modalTitle) modalTitle.innerText = "Merchant Store Settings";
         if (modalSubtitle) modalSubtitle.innerText = "Manage store name, username, contact, and map pin";
@@ -142,15 +149,60 @@ export async function openProfileSettingsModal() {
             } catch (e) {}
         }
     } else {
-        // Rider
-        if (roleIcon) roleIcon.innerHTML = `<i class="fa-solid fa-motorcycle text-emerald-500"></i>`;
-        if (modalTitle) modalTitle.innerText = "Rider Profile Settings";
-        if (modalSubtitle) modalSubtitle.innerText = "Manage your rider details, contact, and settings";
+        // Operational account: Rider, TL, Inspector, or Admin
+        const riderId = appState.telegramId || localStorage.getItem('telegramId') || '';
+        let currentRole = (appState.userType || localStorage.getItem('userType') || 'rider').toLowerCase().trim();
+        if (globalState.userTypesMap) {
+            if (riderId && globalState.userTypesMap[riderId]) {
+                currentRole = globalState.userTypesMap[riderId].toLowerCase().trim();
+            }
+        }
+
+        if (currentRole === 'inspector') {
+            if (roleIcon) roleIcon.innerHTML = `<i class="fa-solid fa-user-secret text-purple-400"></i>`;
+            if (modalTitle) modalTitle.innerText = "Inspector Profile Settings";
+            if (modalSubtitle) modalSubtitle.innerText = "Manage inspector credentials, contact & administrative settings";
+        } else if (currentRole === 'admin') {
+            if (roleIcon) roleIcon.innerHTML = `<i class="fa-solid fa-user-shield text-amber-400"></i>`;
+            if (modalTitle) modalTitle.innerText = "Admin Profile Settings";
+            if (modalSubtitle) modalSubtitle.innerText = "Manage admin credentials, contact & settings";
+        } else if (currentRole === 'tl') {
+            if (roleIcon) roleIcon.innerHTML = `<i class="fa-solid fa-user-tie text-blue-400"></i>`;
+            if (modalTitle) modalTitle.innerText = "Team Lead Profile Settings";
+            if (modalSubtitle) modalSubtitle.innerText = "Manage team lead details, contact, and settings";
+        } else {
+            if (roleIcon) roleIcon.innerHTML = `<i class="fa-solid fa-motorcycle text-emerald-500"></i>`;
+            if (modalTitle) modalTitle.innerText = "Rider Profile Settings";
+            if (modalSubtitle) modalSubtitle.innerText = "Manage your rider details, contact, and settings";
+        }
+
+        if (userTypeWrapper) {
+            userTypeWrapper.classList.remove('hidden');
+            if (userTypeSelect) {
+                userTypeSelect.value = currentRole;
+                userTypeSelect.disabled = !isAdmin();
+            }
+            if (userTypeHint) {
+                if (isAdmin()) userTypeHint.classList.add('hidden');
+                else userTypeHint.classList.remove('hidden');
+            }
+            if (userTypeBadge) {
+                userTypeBadge.innerText = currentRole.toUpperCase();
+                if (currentRole === 'admin') {
+                    userTypeBadge.className = "text-[9px] font-bold px-1.5 py-0.5 rounded border border-amber-400/50 text-amber-400 bg-amber-500/10";
+                } else if (currentRole === 'inspector') {
+                    userTypeBadge.className = "text-[9px] font-bold px-1.5 py-0.5 rounded border border-purple-400/50 text-purple-400 bg-purple-500/10";
+                } else if (currentRole === 'tl') {
+                    userTypeBadge.className = "text-[9px] font-bold px-1.5 py-0.5 rounded border border-blue-400/50 text-blue-400 bg-blue-500/10";
+                } else {
+                    userTypeBadge.className = "text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-400/50 text-emerald-400 bg-emerald-500/10";
+                }
+            }
+        }
 
         if (usernameWrapper) usernameWrapper.classList.remove('hidden');
         if (phoneLabel) phoneLabel.innerText = "Mobile Number (10 digits) *";
 
-        const riderId = appState.telegramId || localStorage.getItem('telegramId') || '';
         initialName = appState.riderName || localStorage.getItem('riderName') || 'Rider';
         initialUsername = riderId;
         initialPhone = appState.phoneNumber || localStorage.getItem('lokalex_rider_phone') || '';

@@ -914,7 +914,7 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-pp6TgJE0.js"></script>
+  <script type="module" crossorigin src="./assets/index-DaKvHQQl.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-DK3Fl9T5.js">
   <link rel="modulepreload" crossorigin href="./assets/vendor-BOVfQ4W4.js">
 <link rel="manifest" href="./manifest.webmanifest"></head>
@@ -6413,6 +6413,7 @@
                 <select id="edit-rider-usertype-select" class="w-full bg-inputBg text-xs font-bold text-amber-600 dark:text-amber-300 rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none mt-1">
                     <option value="rider">Rider (Standard Member)</option>
                     <option value="tl">TL (Team Lead)</option>
+                    <option value="inspector">Inspector (Admin Access / Not in Rotation)</option>
                     <option value="admin">Admin (Full Access)</option>
                 </select>
             </div>
@@ -8882,6 +8883,21 @@
             <div id="prof-username-wrapper">
                 <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Username *</label>
                 <input type="text" id="prof-username-input" placeholder="e.g. store_name or user123" class="w-full bg-inputBg text-xs rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none text-blue-600 dark:text-blue-400 font-mono font-bold mt-1">
+            </div>
+
+            <!-- ACCOUNT TYPE (ROLE & PERMISSIONS) -->
+            <div id="prof-usertype-wrapper" class="hidden">
+                <div class="flex justify-between items-center">
+                    <label class="text-[10px] text-gray-600 dark:text-gray-400 font-bold uppercase">Account Type</label>
+                    <span id="prof-usertype-badge" class="text-[9px] font-bold px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-700">Rider</span>
+                </div>
+                <select id="prof-usertype-select" class="w-full bg-inputBg text-xs font-bold text-amber-600 dark:text-amber-300 rounded-xl p-2.5 border border-gray-300 dark:border-gray-700 outline-none mt-1">
+                    <option value="rider">Rider (Standard Member)</option>
+                    <option value="tl">TL (Team Lead)</option>
+                    <option value="inspector">Inspector (Admin Access / Not in Rotation)</option>
+                    <option value="admin">Admin (Full Access)</option>
+                </select>
+                <p id="prof-usertype-hint" class="text-[9.5px] text-gray-400 mt-0.5 hidden">Only Admins can modify account roles.</p>
             </div>
 
             <!-- CONTACT NUMBER (WITH OTP ENFORCEMENT) -->

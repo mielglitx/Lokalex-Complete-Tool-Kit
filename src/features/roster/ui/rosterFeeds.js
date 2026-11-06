@@ -32,7 +32,8 @@ import {
     getMergedDeduplicatedCommissionList, 
     isSameDateStr,
     normalizeToDateStr,
-    isCustomerMatch
+    isCustomerMatch,
+    isRiderMatch
 } from '../rosterUtils.js';
 import { getForcedCaterBadgeHtml } from './rosterBadge.js';
 
@@ -259,6 +260,13 @@ export function loadGlobalLoginList() {
     const todayStr = getLocalTodayStr();
     const isLoginToday = (l) => {
         if (!l) return false;
+        const rawName = l.riderName || "";
+        const rId = (l.riderId || l.telegramId || l.id || '').toString().trim();
+        const roster = globalState.rosterMembers || [];
+        const member = roster.find(m => isRiderMatch(rawName, m.riderName || m.name || '', rId, (m.telegramId || m.id || '').toString()));
+        const uType = (l.userType || member?.userType || globalState.userTypesMap?.[rId] || globalState.userTypesMap?.[rawName.toLowerCase()] || '').toString().toLowerCase().trim();
+        if (uType === 'inspector') return false;
+
         if (isSameDateStr(l.date, todayStr)) return true;
         if (l.clockOutTimestamp) {
             const coDate = new Date(l.clockOutTimestamp).toLocaleDateString('en-CA');

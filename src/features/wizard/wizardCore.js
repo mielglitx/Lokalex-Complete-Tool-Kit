@@ -12,14 +12,42 @@ import { renderFinalReceiptText } from './wizardTextReceipt.js';
 import { renderReceiptCanvas, formatShortRef } from './wizardImageReceipt.js';
 
 export function isRiderActivelyCatering() {
-    const myId = (appState.telegramId || "").toString();
-    const myRecord = globalState.rosterMembers ? globalState.rosterMembers.find(m => (m.telegramId || "").toString() === myId) : null;
-    return myRecord && myRecord.status === 'Catering';
+    const activeCateringList = (typeof getActiveCateringCustomersWithTimes === 'function')
+        ? getActiveCateringCustomersWithTimes()
+        : [];
+    if (activeCateringList.length > 0) return true;
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+    const rosterMembers = globalState.rosterMembers || [];
+    const myRecord = rosterMembers.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        return (myId && mId === myId) || (myName && mName === myName);
+    });
+    return Boolean(myRecord && (myRecord.status || '').toLowerCase() === 'catering');
 }
 
 export function generateFinalReceipt() {
     const rcptNameInput = document.getElementById('rcpt-name');
-    const customerName = rcptNameInput ? rcptNameInput.value.trim() : "";
+    let customerName = rcptNameInput ? rcptNameInput.value.trim() : "";
+
+    // If customer name is empty or "Sample", check if rider is actively catering
+    if (!customerName || customerName.toLowerCase() === 'sample') {
+        const activeCateringList = (typeof getActiveCateringCustomersWithTimes === 'function')
+            ? getActiveCateringCustomersWithTimes()
+            : [];
+        const activeCartIdx = globalState.activeCartIndex || 0;
+        if (activeCateringList.length > 0) {
+            customerName = activeCateringList[activeCartIdx]?.name || activeCateringList[0].name;
+            if (rcptNameInput) rcptNameInput.value = customerName;
+            appState.selectedCateringClient = customerName;
+            const activeSlot = activeCartIdx + 1;
+            if (multiCarts && multiCarts[activeSlot]) {
+                multiCarts[activeSlot].customerName = customerName;
+                multiCarts[activeSlot].isManual = false;
+            }
+        }
+    }
 
     if (!customerName) {
         const sampleModal = document.getElementById('sample-receipt-modal');
@@ -94,7 +122,7 @@ export async function saveReceiptToDatabase(customerName) {
 
     if (!match && globalState.rosterMembers && Array.isArray(globalState.rosterMembers)) {
         const cateringMember = globalState.rosterMembers.find(m => {
-            if (!m || m.status !== 'Catering') return false;
+            if (!m || (m.status || '').toLowerCase() !== 'catering') return false;
             if (m.customerName) {
                 const names = m.customerName.split(',').map(s => s.trim()).filter(Boolean);
                 if (names.some(n => n.toLowerCase() === cName.toLowerCase() || isCustomerMatch(n, cName))) return true;
@@ -222,7 +250,17 @@ export function completeReceiptDone(customerNameOverride = null) {
     }
 
     const totalFees = Math.max(0, (wizState.finalHFee || 0) + (wizState.finalMFee || 0) + (wizState.finalMulti || 0) + (wizState.deliveryFee || 0) - (wizState.discount || 0));
-    const resolvedCustName = (customerNameOverride || document.getElementById('rcpt-name')?.value.trim() || appState.selectedCateringClient || multiCarts[activeSlot]?.customerName || "Customer").trim();
+    let resolvedCustName = (customerNameOverride || document.getElementById('rcpt-name')?.value.trim() || appState.selectedCateringClient || multiCarts[activeSlot]?.customerName || "").trim();
+    if (!resolvedCustName || resolvedCustName.toLowerCase() === 'sample') {
+        const activeCateringList = (typeof getActiveCateringCustomersWithTimes === 'function')
+            ? getActiveCateringCustomersWithTimes()
+            : [];
+        if (activeCateringList.length > 0) {
+            resolvedCustName = activeCateringList[activeCartIdx]?.name || activeCateringList[0].name;
+        } else {
+            resolvedCustName = resolvedCustName || "Customer";
+        }
+    }
 
     multiCarts[activeSlot].receiptSummary = {
         subtotal: wizState.subtotal || 0,

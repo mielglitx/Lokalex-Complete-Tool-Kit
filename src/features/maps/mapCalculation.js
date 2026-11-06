@@ -271,7 +271,7 @@ export function renderMapCalcBoardList() {
         return;
     }
 
-    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || ["4547425", "5548562"].includes(appState.telegramId);
+    const isAdmin = (appState.userType || "").toLowerCase() === "admin" || (appState.userType || "").toLowerCase() === "inspector" || ["4547425", "5548562"].includes(appState.telegramId);
 
     const cardsHtml = list.slice().reverse().map(item => {
         const itemKey = item.key || item.id;

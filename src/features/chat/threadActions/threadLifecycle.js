@@ -1,6 +1,6 @@
 // src/features/chat/threadActions/threadLifecycle.js
 import { db } from '../../../config/firebase.js';
-import { appState, globalState } from '../../../store/state.js';
+import { appState, globalState, multiCarts } from '../../../store/state.js';
 import { showToast } from '../../../ui/notifications.js';
 import { openSlideDeleteModal } from '../../../ui/modals.js';
 import { toggleBodyScroll } from '../chatUtils.js';
@@ -73,13 +73,22 @@ export function findCateringRiderForCustomer(custName, meta = {}) {
     });
 
     if (myRecord && myRecord.customerName) {
-        const custs = myRecord.customerName.split(', ').map(c => c.trim()).filter(Boolean);
+        const custs = myRecord.customerName.split(/\s*,\s*/).map(c => c.trim()).filter(Boolean);
         if (custName) {
             const match = custs.find(c => isCustomerMatch(c, custName) || c.toLowerCase() === custName.toLowerCase() || c.toLowerCase().includes(custName.toLowerCase()) || custName.toLowerCase().includes(c.toLowerCase()));
             if (match) return { record: myRecord, matchingCustName: match };
         }
         if (custs.length === 1 && meta && (meta.cateredByRiderId === myId || (meta.cateredByRiderName && meta.cateredByRiderName.trim().toLowerCase() === myName))) {
             return { record: myRecord, matchingCustName: custs[0] };
+        }
+    }
+
+    if (myRecord && myRecord.forcedCaters && typeof myRecord.forcedCaters === 'object') {
+        for (const [fKey, fVal] of Object.entries(myRecord.forcedCaters)) {
+            const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
+            if (fName && custName && (isCustomerMatch(fName, custName) || fName.toLowerCase() === custName.toLowerCase())) {
+                return { record: myRecord, matchingCustName: fName };
+            }
         }
     }
 
@@ -755,12 +764,12 @@ export function cancelCustomerThread() {
 export async function caterCurrentChatCustomer() {
     const custId = window.getActiveRiderChatCustId ? window.getActiveRiderChatCustId() : null;
     const meta = (window.getCurrentRiderChatMeta ? window.getCurrentRiderChatMeta() : {}) || {};
-    const nameEl = document.getElementById('rider-chat-cust-name');
+    const nameEl = document.getElementById('rider-chat-cust-name') || document.getElementById('modern-chat-room-title');
     let custName = nameEl?.innerText?.trim();
-    if (!custName || custName === 'Customer Name' || custName === 'Customer' || custName.startsWith('FB Customer (')) {
+    if (!custName || custName === 'Customer Name' || custName === 'Customer' || custName === 'Select a customer' || custName.startsWith('FB Customer (')) {
         custName = meta.customerName || meta.name || custName || "";
     }
-    if (!custName || custName === 'Customer Name' || custName.toLowerCase() === 'customer') {
+    if (!custName || custName === 'Customer Name' || custName.toLowerCase() === 'customer' || custName === 'Select a customer') {
         custName = (meta.customerName || meta.name || "").trim();
     }
 
@@ -1046,8 +1055,9 @@ export function goToCustomerCartFromChat() {
         const threadMap = window.getCachedCustomerThreadsMap();
         if (threadMap && threadMap.has(custId)) meta = { ...threadMap.get(custId), ...meta };
     }
-    let custName = (document.getElementById('rider-chat-cust-name')?.innerText || '').trim();
-    if (!custName || custName === 'Customer Name' || custName.toLowerCase() === 'customer' || custName.startsWith('FB Customer (')) {
+    const nameEl = document.getElementById('rider-chat-cust-name') || document.getElementById('modern-chat-room-title');
+    let custName = (nameEl?.innerText || '').trim();
+    if (!custName || custName === 'Customer Name' || custName.toLowerCase() === 'customer' || custName === 'Select a customer' || custName.startsWith('FB Customer (')) {
         custName = meta.customerName || meta.name || "";
     }
     const { record: cateringRiderRecord, matchingCustName } = findCateringRiderForCustomer(custName, meta);
@@ -1063,6 +1073,11 @@ export function goToCustomerCartFromChat() {
     if (typeof window.getCartSlotForCustomer === 'function') {
         targetSlot = window.getCartSlotForCustomer(resolvedName);
     }
+    if (multiCarts && multiCarts[targetSlot]) {
+        multiCarts[targetSlot].customerName = resolvedName;
+        multiCarts[targetSlot].isManual = false;
+    }
+    appState.selectedCateringClient = resolvedName;
     if (typeof window.switchCartTab === 'function') {
         window.switchCartTab(targetSlot);
     }

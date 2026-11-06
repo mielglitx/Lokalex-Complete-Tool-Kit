@@ -15,7 +15,7 @@ export function getMyCateringCustomers() {
         return false;
     });
 
-    if (!myRecord || myRecord.status !== 'Catering') {
+    if (!myRecord || (myRecord.status || '').toLowerCase() !== 'catering') {
         return [];
     }
 
@@ -142,12 +142,22 @@ export function loadCartState() {
 export function getEffectiveCartClient(slotIdx) {
     const slotNum = slotIdx + 1;
     const cartObj = multiCarts[slotNum];
-    if (cartObj && cartObj.customerName && cartObj.customerName !== "Sample") return cartObj.customerName;
-
     const myCustomers = getMyCateringCustomers();
-    if (myCustomers[slotIdx]) return myCustomers[slotIdx];
 
-    return "Sample";
+    if (cartObj && cartObj.customerName && cartObj.customerName.trim().toLowerCase() !== "sample") {
+        return cartObj.customerName;
+    }
+
+    if (myCustomers.length > 0) {
+        const assigned = myCustomers[slotIdx] || myCustomers[0];
+        if (cartObj) {
+            cartObj.customerName = assigned;
+            cartObj.isManual = false;
+        }
+        return assigned;
+    }
+
+    return (cartObj && cartObj.customerName) ? cartObj.customerName : "Sample";
 }
 
 /**

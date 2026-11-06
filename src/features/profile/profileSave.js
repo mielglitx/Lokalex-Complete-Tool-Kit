@@ -24,13 +24,14 @@
  */
 
 import { profileState } from './profileState.js';
-import { appState } from '../../store/state.js';
+import { appState, globalState } from '../../store/state.js';
 import { db } from '../../config/firebase.js';
 import { showToast, showSideNotification } from '../../ui/notifications.js';
 import { stopBackgroundRosterGpsTracker } from '../auth/authGps.js';
 import { closeProfileSettingsModal } from './profileUI.js';
 import { uploadImage } from '../../utils/imageUpload.js';
 import { clockOutRider } from '../roster/rosterStatusCore.js';
+import { isAdmin } from '../roster/rosterUtils.js';
 
 export async function submitSaveProfileSettings() {
     const name = document.getElementById('prof-name-input')?.value.trim();
@@ -161,6 +162,21 @@ export async function submitSaveProfileSettings() {
             }
 
             if (riderId) {
+                const userTypeSelect = document.getElementById('prof-usertype-select');
+                const selectedUserType = userTypeSelect ? userTypeSelect.value.toLowerCase().trim() : '';
+                if (selectedUserType && (isAdmin() || appState.userType === 'admin' || appState.userType === 'inspector')) {
+                    updates.userType = selectedUserType;
+                    appState.userType = selectedUserType;
+                    localStorage.setItem('userType', selectedUserType);
+                    if (db) {
+                        db.ref(`settings/userTypes/${riderId}`).set(selectedUserType).catch(() => {});
+                        if (name) db.ref(`settings/userTypes/${name.toLowerCase()}`).set(selectedUserType).catch(() => {});
+                    }
+                    if (!globalState.userTypesMap) globalState.userTypesMap = {};
+                    globalState.userTypesMap[riderId] = selectedUserType;
+                    if (name) globalState.userTypesMap[name.toLowerCase()] = selectedUserType;
+                }
+
                 await db.ref(`riders/${riderId}`).update(updates);
                 const rosterUpdates = {
                     name,
@@ -169,9 +185,22 @@ export async function submitSaveProfileSettings() {
                     phone: formattedPhone,
                     photoUrl: profileState.currentAvatarUrl
                 };
+                if (updates.userType) rosterUpdates.userType = updates.userType;
                 if (gcashName) rosterUpdates.gcashName = gcashName;
                 if (gcashNo) rosterUpdates.gcashNo = gcashNo;
                 await db.ref(`roster/${riderId}`).update(rosterUpdates).catch(() => {});
+
+                if (globalState.rosterMembers) {
+                    const m = globalState.rosterMembers.find(mem => (mem.telegramId || mem.id || '').toString() === riderId.toString());
+                    if (m) {
+                        m.riderName = name;
+                        m.name = name;
+                        m.phone = formattedPhone;
+                        m.phoneNumber = formattedPhone;
+                        m.photoUrl = profileState.currentAvatarUrl;
+                        if (updates.userType) m.userType = updates.userType;
+                    }
+                }
 
                 if (gcashName || gcashNo) {
                     const riderKey = (riderId || name).toString().replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -183,6 +212,10 @@ export async function submitSaveProfileSettings() {
                     if (gcashName) gcashUpdates.gcashName = gcashName;
                     if (gcashNo) gcashUpdates.gcashNo = gcashNo;
                     db.ref(`gcash/${riderKey}`).update(gcashUpdates).catch(() => {});
+                }
+
+                if (updates.userType) {
+                    window.dispatchEvent(new CustomEvent('rosterUpdated'));
                 }
             }
 

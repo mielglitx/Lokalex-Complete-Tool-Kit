@@ -1,9 +1,10 @@
 // src/features/roster/actions/rosterCateringPrompts.js
 import { db } from '../../../config/firebase.js';
-import { appState, globalState } from '../../../store/state.js';
+import { appState, globalState, multiCarts } from '../../../store/state.js';
 import { showToast } from '../../../ui/notifications.js';
 import { closeCateringModal } from '../../../ui/modals.js';
 import { populateCateringCustomerDropdown } from '../../chat/index.js';
+import { syncSmartCartsWithCateringCustomers, getCartSlotForCustomer, saveCartState } from '../../cart/cartState.js';
 import { 
     loadRosterCache,
     parseQueueTime, 
@@ -433,6 +434,20 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
         // Switch to the catering filter so rider immediately sees customer thread
         if (typeof window.setRiderChatFilter === 'function') {
             window.setRiderChatFilter('catering');
+        }
+
+        // Immediately sync smart carts and bind customer to their dedicated cart slot
+        try {
+            syncSmartCartsWithCateringCustomers();
+            const targetSlot = getCartSlotForCustomer(custName);
+            if (multiCarts && multiCarts[targetSlot]) {
+                multiCarts[targetSlot].customerName = custName;
+                multiCarts[targetSlot].isManual = false;
+            }
+            appState.selectedCateringClient = custName;
+            saveCartState();
+        } catch(e) {
+            console.warn("Cart sync on cater warning:", e);
         }
 
         if (input) input.value = "";

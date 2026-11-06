@@ -149,7 +149,7 @@ export function isFeatureAllowed(featureKey) {
     if (!riderId && activeRole !== 'rider') return true;
 
     const userType = (appState.userType || localStorage.getItem('userType') || "").toLowerCase().trim();
-    if (userType === 'admin') return true;
+    if (userType === 'admin' || userType === 'inspector') return true;
 
     let allowedFeatures = null;
 
@@ -335,7 +335,13 @@ export function syncHeaderAndWidgets(targetViewId) {
             avatarEl.src = riderAvatar;
         }
         if (nameEl) nameEl.innerText = riderName;
-        if (roleEl) roleEl.innerText = "Welcome!";
+        if (roleEl) {
+            const currentUtype = (appState.userType || localStorage.getItem('userType') || "").toLowerCase().trim();
+            if (currentUtype === 'inspector') roleEl.innerText = "Inspector";
+            else if (currentUtype === 'admin') roleEl.innerText = "Admin";
+            else if (currentUtype === 'tl') roleEl.innerText = "TL";
+            else roleEl.innerText = "Welcome!";
+        }
         if (badgeIcon) badgeIcon.className = "fa-solid fa-camera";
         if (userSection) userSection.title = "Click to change rider profile";
 

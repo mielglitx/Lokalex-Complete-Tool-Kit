@@ -443,13 +443,18 @@ export function updateRosterUI() {
         btnBreak.style.opacity = isEnded ? '0.3' : '1';
     }
 
-    const availableRiders = sortAvailableRiders(rosterMembers.filter(m => m.status === 'Available'));
+    const nonInspectorMembers = rosterMembers.filter(m => {
+        const uType = (m.userType || globalState.userTypesMap?.[m.telegramId || m.id] || globalState.userTypesMap?.[(m.riderName || m.name || '').toLowerCase()] || '').toString().toLowerCase().trim();
+        return uType !== 'inspector';
+    });
+
+    const availableRiders = sortAvailableRiders(nonInspectorMembers.filter(m => m.status === 'Available'));
 
     checkFirstInLineAlarm(availableRiders);
 
-    const cateringRiders = rosterMembers.filter(m => m.status === 'Catering');
-    const breakRiders = rosterMembers.filter(m => m.status === 'Break');
-    const cooldownRiders = rosterMembers.filter(m => m.status === 'Cooldown');
+    const cateringRiders = nonInspectorMembers.filter(m => m.status === 'Catering');
+    const breakRiders = nonInspectorMembers.filter(m => m.status === 'Break');
+    const cooldownRiders = nonInspectorMembers.filter(m => m.status === 'Cooldown');
 
     const allDayOffs = globalState.riderDayOffs || {};
     const todayDayOfWeek = new Date().getDay();
