@@ -175,10 +175,33 @@ export function initRealtimeFirebaseListeners() {
         safeCall(chat?.listenToAdminFbApis, 'listenToAdminFbApis');
         safeCall(chat?.listenToFirebaseChat, 'listenToFirebaseChat');
 
+        function enrichRosterMembersWithAccounts() {
+            if (!globalState.rosterMembers || !globalState.ridersAccountMap) return;
+            const accs = globalState.ridersAccountMap;
+            globalState.rosterMembers.forEach(item => {
+                const mId = (item.telegramId || item.id || "").toString().trim();
+                const mName = (item.riderName || item.name || "").toLowerCase().trim();
+                const acc = accs[mId] || accs[mName] || Object.values(accs).find(r => {
+                    const rId = (r.telegramId || r.id || "").toString().trim();
+                    const rName = (r.riderName || r.name || "").toLowerCase().trim();
+                    return (mId && rId === mId) || (mName && (rName === mName || (roster?.isRiderMatch && roster.isRiderMatch(rName, mName))));
+                });
+                if (acc) {
+                    item.userType = acc.userType || acc.type || item.userType || "rider";
+                    item.isTL = acc.isTL === true || item.userType === 'tl';
+                    if (acc.tlPermissions) item.tlPermissions = { ...(item.tlPermissions || {}), ...acc.tlPermissions };
+                    if (acc.tlAdminPower !== undefined) item.tlAdminPower = acc.tlAdminPower;
+                }
+            });
+        }
+
         db.ref('riders').on('value', (snapshot) => {
             const val = snapshot.val();
-            const myId = (appState.telegramId || "").toString().trim();
+            const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+            const myName = (appState.riderName || localStorage.getItem('riderName') || "").toLowerCase().trim();
             let userTypes = {};
+
+            globalState.ridersAccountMap = val || {};
 
             if (val) {
                 Object.entries(val).forEach(([id, rider]) => {
@@ -189,16 +212,27 @@ export function initRealtimeFirebaseListeners() {
                     if (name) userTypes[name] = type;
                     if (cleanId) userTypes[cleanId] = type;
 
-                    if (myId && cleanId === myId) {
+                    const isMe = (myId && cleanId === myId) || (myName && (name === myName || (roster?.isRiderMatch && roster.isRiderMatch(name, myName))));
+                    if (isMe) {
                         appState.userType = type;
                         localStorage.setItem('userType', type);
+                        if (rider.tlPermissions) {
+                            localStorage.setItem(`tl_permissions_${cleanId}`, JSON.stringify(rider.tlPermissions));
+                            if (myId) localStorage.setItem(`tl_permissions_${myId}`, JSON.stringify(rider.tlPermissions));
+                        }
+                        if (rider.tlAdminPower !== undefined) {
+                            localStorage.setItem(`tl_admin_power_${cleanId}`, String(rider.tlAdminPower));
+                            if (myId) localStorage.setItem(`tl_admin_power_${myId}`, String(rider.tlAdminPower));
+                        }
                     }
                 });
             }
 
             globalState.userTypesMap = userTypes;
+            enrichRosterMembersWithAccounts();
 
             if (roster && roster.updateRosterUI) roster.updateRosterUI();
+            if (typeof window.renderModernRotationsTab === 'function') window.renderModernRotationsTab();
             if (commission && commission.refreshCommissionView) commission.refreshCommissionView();
             if (chat && chat.updateFullBookingUI) chat.updateFullBookingUI();
         });
@@ -213,6 +247,7 @@ export function initRealtimeFirebaseListeners() {
                     telegramId: (item.telegramId || item.id || key).toString().trim(),
                     id: (item.telegramId || item.id || key).toString().trim()
                 }));
+                enrichRosterMembersWithAccounts();
                 storageEngine.idbSet('roster', 'active_roster', val).catch(() => {});
             } else {
                 globalState.rosterMembers = [];

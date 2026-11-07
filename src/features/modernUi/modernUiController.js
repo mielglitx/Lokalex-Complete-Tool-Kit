@@ -970,11 +970,7 @@ export function clearModernChatRightRoom() {
         }
         if (infoBtn) infoBtn.classList.add('hidden');
 
-        // 5. Hide floating cart button
-        const cartBtn = document.getElementById('modern-floating-cart-btn');
-        if (cartBtn) cartBtn.classList.add('hidden');
-
-        // 6. Reset composer input
+        // 5. Reset composer input
         const input = document.getElementById('rider-cust-chat-input') || document.getElementById('rider-chat-input');
         if (input) {
             input.value = "";
@@ -1014,9 +1010,6 @@ export function syncModernRightChatRoom() {
         avatarEl.title = "View customer photo";
     }
     if (infoBtn) infoBtn.classList.remove('hidden');
-
-    const cartBtn = document.getElementById('modern-floating-cart-btn');
-    if (cartBtn) cartBtn.classList.remove('hidden');
 
     const input = document.getElementById('rider-cust-chat-input') || document.getElementById('rider-chat-input');
     if (input) {
@@ -1104,81 +1097,7 @@ export function closeModernPopovers() {
 // ============================================================================
 
 export function initFloatingCartDrag() {
-    const cartBtn = document.getElementById('modern-floating-cart-btn');
-    const container = document.getElementById('modern-chat-right-room');
-    if (!cartBtn || !container || cartBtn._isDragInitialized) return;
-    cartBtn._isDragInitialized = true;
-
-    const onStart = (clientX, clientY) => {
-        isFloatingCartDragging = true;
-        floatingCartHasMoved = false;
-        floatingCartStartX = clientX;
-        floatingCartStartY = clientY;
-        const rect = cartBtn.getBoundingClientRect();
-        const cRect = container.getBoundingClientRect();
-        floatingCartElemInitialLeft = rect.left - cRect.left;
-        floatingCartElemInitialTop = rect.top - cRect.top;
-    };
-
-    const onMove = (clientX, clientY) => {
-        if (!isFloatingCartDragging) return;
-        const dx = clientX - floatingCartStartX;
-        const dy = clientY - floatingCartStartY;
-
-        if (Math.hypot(dx, dy) > 6) {
-            floatingCartHasMoved = true;
-        }
-
-        const cRect = container.getBoundingClientRect();
-        const btnW = cartBtn.offsetWidth;
-        const btnH = cartBtn.offsetHeight;
-
-        let nextLeft = floatingCartElemInitialLeft + dx;
-        let nextTop = floatingCartElemInitialTop + dy;
-
-        // Strict clamp inside container bounds
-        nextLeft = Math.max(8, Math.min(nextLeft, cRect.width - btnW - 8));
-        nextTop = Math.max(48, Math.min(nextTop, cRect.height - btnH - 60));
-
-        cartBtn.style.left = `${nextLeft}px`;
-        cartBtn.style.top = `${nextTop}px`;
-        cartBtn.style.right = 'auto';
-        cartBtn.style.bottom = 'auto';
-    };
-
-    const onEnd = () => {
-        if (!isFloatingCartDragging) return;
-        isFloatingCartDragging = false;
-        if (!floatingCartHasMoved) {
-            // It's a clean tap/click -> open customer's cart
-            if (window.goToCustomerCartFromChat) {
-                window.goToCustomerCartFromChat();
-            } else if (window.switchView) {
-                window.switchView('view-cart');
-            }
-        }
-    };
-
-    // Mouse listeners
-    cartBtn.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        onStart(e.clientX, e.clientY);
-    });
-    window.addEventListener('mousemove', (e) => onMove(e.clientX, e.clientY));
-    window.addEventListener('mouseup', onEnd);
-
-    // Touch listeners
-    cartBtn.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 1) {
-            onStart(e.touches[0].clientX, e.touches[0].clientY);
-        }
-    }, { passive: true });
-    window.addEventListener('touchmove', (e) => {
-        if (isFloatingCartDragging && e.touches.length === 1) {
-            onMove(e.touches[0].clientX, e.touches[0].clientY);
-        }
-    }, { passive: true });
-    window.addEventListener('touchend', onEnd);
+    // Deprecated: floating cart button removed
 }
 
 // ============================================================================

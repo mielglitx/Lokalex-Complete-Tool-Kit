@@ -164,13 +164,27 @@ export function isTL() {
     const validTlTypes = ['tl', 'lead', 'teamlead', 'leader'];
     if (validTlTypes.includes(t)) return true;
 
-    const storedType = (appState.userType || localStorage.getItem('userType') || "").toString().trim().toLowerCase();
+    const storedType = (appState.userType || (typeof localStorage !== 'undefined' ? localStorage.getItem('userType') : '') || "").toString().trim().toLowerCase();
     if (validTlTypes.includes(storedType)) return true;
 
-    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
-    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
-    const rosterMembers = globalState.rosterMembers || [];
+    const myId = (appState.telegramId || (typeof localStorage !== 'undefined' ? (localStorage.getItem('telegramId') || localStorage.getItem('riderId')) : '') || "").toString().trim();
+    const myName = (appState.riderName || (typeof localStorage !== 'undefined' ? localStorage.getItem('riderName') : '') || "").toString().trim().toLowerCase();
 
+    // 1. Direct check in ridersAccountMap
+    const accs = globalState.ridersAccountMap || {};
+    const myAcc = accs[myId] || accs[myName] || Object.values(accs).find(r => {
+        const rId = (r.telegramId || r.id || "").toString().trim();
+        const rName = (r.riderName || r.name || "").toLowerCase().trim();
+        return (myId && rId === myId) || (myName && (rName === myName || isRiderMatch(rName, myName)));
+    });
+    if (myAcc) {
+        const accType = (myAcc.userType || myAcc.type || "").toString().toLowerCase().trim();
+        if (validTlTypes.includes(accType) || myAcc.isTL === true || myAcc.tlAdminPower === true) return true;
+        if (myAcc.tlPermissions && Object.values(myAcc.tlPermissions).some(v => v === true)) return true;
+    }
+
+    // 2. Direct check in rosterMembers
+    const rosterMembers = globalState.rosterMembers || [];
     const myRecord = rosterMembers.find(m => {
         const mId = (m.telegramId || m.id || "").toString().trim();
         const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
@@ -185,6 +199,7 @@ export function isTL() {
         }
     }
 
+    // 3. Check localStorage cache
     if (myId) {
         const cachedPower = localStorage.getItem(`tl_admin_power_${myId}`);
         if (cachedPower === 'true') return true;
@@ -204,10 +219,27 @@ export function hasTlPermission(permissionKey) {
     if (isAdmin()) return true;
     if (!isTL()) return false;
 
-    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
-    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
-    const rosterMembers = globalState.rosterMembers || [];
+    const myId = (appState.telegramId || (typeof localStorage !== 'undefined' ? (localStorage.getItem('telegramId') || localStorage.getItem('riderId')) : '') || "").toString().trim();
+    const myName = (appState.riderName || (typeof localStorage !== 'undefined' ? localStorage.getItem('riderName') : '') || "").toString().trim().toLowerCase();
 
+    // 1. Direct check in ridersAccountMap
+    const accs = globalState.ridersAccountMap || {};
+    const myAcc = accs[myId] || accs[myName] || Object.values(accs).find(r => {
+        const rId = (r.telegramId || r.id || "").toString().trim();
+        const rName = (r.riderName || r.name || "").toLowerCase().trim();
+        return (myId && rId === myId) || (myName && (rName === myName || isRiderMatch(rName, myName)));
+    });
+    if (myAcc) {
+        if (myAcc.tlPermissions && myAcc.tlPermissions[permissionKey] !== undefined) {
+            return myAcc.tlPermissions[permissionKey] === true;
+        }
+        if (myAcc.tlAdminPower !== undefined) {
+            return myAcc.tlAdminPower === true;
+        }
+    }
+
+    // 2. Direct check in rosterMembers
+    const rosterMembers = globalState.rosterMembers || [];
     const myRecord = rosterMembers.find(m => {
         const mId = (m.telegramId || m.id || "").toString().trim();
         const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
@@ -223,6 +255,7 @@ export function hasTlPermission(permissionKey) {
         return myRecord.tlAdminPower === true;
     }
 
+    // 3. Check localStorage cache
     if (myId) {
         const cachedPermsStr = localStorage.getItem(`tl_permissions_${myId}`);
         if (cachedPermsStr) {
