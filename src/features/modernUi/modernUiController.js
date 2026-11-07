@@ -835,7 +835,7 @@ export function renderModernChatLeftList() {
             : '';
 
         const myCustomerBadge = isMyCateredCustomer
-            ? `<span class="bg-emerald-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider inline-flex items-center gap-1 shadow-xs shrink-0" title="Your Catering Customer"><i class="fa-solid fa-motorcycle text-[7px]"></i> <span class="hidden sm:inline">Your </span>Cust</span>`
+            ? `<span class="bg-emerald-500 text-black text-[8px] font-black px-1 py-0.5 rounded uppercase tracking-wider inline-flex items-center gap-0.5 shadow-xs shrink-0" title="Your Catering Customer"><i class="fa-solid fa-motorcycle text-[7px]"></i> YOU</span>`
             : '';
 
         // Distinctive green border highlight around card for the rider's own catering customer
@@ -887,7 +887,27 @@ export function renderModernChatLeftList() {
 
 export function selectModernCustomerChat(custId, custName, avatarUrl) {
     if (!custId) return;
-    openRiderCustomerChatModal(custId, custName, avatarUrl);
+
+    let targetCustId = custId;
+    let targetName = custName || custId;
+    let targetAvatar = avatarUrl;
+
+    // Resolve true thread custId if a customer name or raw name was passed (e.g., from Rider Rotation tab)
+    const allThreads = Array.from(cachedCustomerThreadsMap?.values() || []);
+    if (!allThreads.some(t => (t.custId || t.id) === targetCustId)) {
+        const normTarget = String(targetCustId).trim().toLowerCase();
+        const matched = allThreads.find(t => {
+            const tName = (t.customerName || t.name || '').trim().toLowerCase();
+            return tName && (tName === normTarget || tName.includes(normTarget) || normTarget.includes(tName));
+        });
+        if (matched) {
+            targetCustId = matched.custId || matched.id;
+            targetName = matched.customerName || matched.name || targetName;
+            targetAvatar = targetAvatar || matched.avatarUrl;
+        }
+    }
+
+    openRiderCustomerChatModal(targetCustId, targetName, targetAvatar);
     dockChatMessagesToModern();
     syncModernRightChatRoom();
     renderModernChatLeftList();

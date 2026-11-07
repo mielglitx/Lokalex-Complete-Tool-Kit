@@ -46,11 +46,20 @@ export function indexGalleryEntry(rawKey, data) {
     const normName = normalizeKey(cleanStoreName);
     const normKey = normalizeKey(rawKey);
 
+    const hasReal = pages.some(p => p && (p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image));
+
+    // Guard: Never overwrite downloaded real pages with dummy metadata!
+    const existing = storeMenuGalleriesMemoryMap.get(rawKey) || storeMenuGalleriesMemoryMap.get(normKey) || storeMenuGalleriesMemoryMap.get(normName);
+    if (existing && existing.hasRealPages && !hasReal) {
+        return existing;
+    }
+
     const entry = {
         firebaseKey: rawKey,
         storeName: cleanStoreName,
         pages: pages,
         pageCount: pages.length,
+        hasRealPages: hasReal,
         updatedAt: data.updatedAt || 0
     };
 
@@ -98,9 +107,16 @@ export function getStoreMenuGallery(storeName = "", compositeKey = "", metaKey =
         if (storeMenuGalleriesMemoryMap.has(k)) {
             const item = storeMenuGalleriesMemoryMap.get(k);
             if (item && Array.isArray(item.pages) && item.pages.length > 0) {
-                return item;
+                // Return ONLY if it contains at least one real image URL!
+                const hasReal = item.pages.some(p => p && (p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image));
+                if (hasReal) {
+                    return item;
+                }
             } else if (Array.isArray(item) && item.length > 0) {
-                return { firebaseKey: k, pages: item, storeName: cleanName, pageCount: item.length };
+                const hasReal = item.some(p => p && (p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image));
+                if (hasReal) {
+                    return { firebaseKey: k, pages: item, storeName: cleanName, pageCount: item.length, hasRealPages: true };
+                }
             }
         }
     }
@@ -1379,27 +1395,29 @@ export async function openStoreMenuGalleryModal(storeName, compositeKey) {
     modal.style.zIndex = '1000010';
 
     const cleanName = (storeName || "Store").trim();
-    const galleryEntry = getStoreMenuGallery(cleanName, compositeKey);
-    const normName = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    let galleryKey = galleryEntry?.firebaseKey || (compositeKey || cleanName).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normName = normalizeKey(cleanName);
+    const normComposite = normalizeKey(compositeKey);
 
-    // Resolve true gallery key if present in metadata or candidate forms
-    if (!galleryEntry?.firebaseKey) {
-        const candidateKeys = [
-            galleryKey,
-            normName,
-            'stores' + normName,
-            'stores_' + normName,
-            (compositeKey || '').replace(/^[a-z0-9]+_stores_?/, ''),
-            (compositeKey || '').replace(/^[a-z0-9]+_/, '')
-        ].map(k => (k || '').trim()).filter(Boolean);
+    const candidateKeys = Array.from(new Set([
+        compositeKey,
+        normComposite,
+        normName,
+        'stores_' + normName,
+        'stores' + normName,
+        cleanName,
+        (compositeKey || '').replace(/^[a-z0-9]+_stores_?/, ''),
+        (compositeKey || '').replace(/^[a-z0-9]+_/, '')
+    ])).map(k => (k || '').trim()).filter(Boolean);
 
-        for (const k of candidateKeys) {
-            if (storeMenuMetadataMap[k] && storeMenuMetadataMap[k].pageCount > 0) {
-                galleryKey = k;
-                break;
-            }
+    let galleryKey = '';
+    for (const k of candidateKeys) {
+        if (storeMenuMetadataMap[k] && storeMenuMetadataMap[k].pageCount > 0) {
+            galleryKey = k;
+            break;
         }
+    }
+    if (!galleryKey && candidateKeys.length > 0) {
+        galleryKey = candidateKeys[0];
     }
 
     activeGalleryStore = {
@@ -1415,33 +1433,86 @@ export async function openStoreMenuGalleryModal(storeName, compositeKey) {
     if (subEl) subEl.innerText = `Complete physical menu for ${cleanName}`;
     if (dlBtn) dlBtn.classList.add('hidden');
 
-    // 0ms INSTANT RENDER FROM IN-MEMORY CACHE
-    if (galleryEntry && Array.isArray(galleryEntry.pages) && galleryEntry.pages.length > 0) {
-        renderMenuPages(galleryEntry.pages, cleanName);
-    }
-
     modal.classList.remove('hidden');
 
-    // If not in memory yet, check IndexedDB
-    if (!galleryEntry || !galleryEntry.pages || galleryEntry.pages.length === 0) {
-        try {
-            const cached = await idbGet('storeMenuGalleries', galleryKey);
-            if (cached && cached.pages && cached.pages.length > 0) {
-                renderMenuPages(cached.pages, cleanName);
-            }
-        } catch(e) {}
+    const galleryEntry = getStoreMenuGallery(cleanName, compositeKey, galleryKey);
+    const hasValidMemPages = galleryEntry && Array.isArray(galleryEntry.pages) && galleryEntry.pages.some(p => p && (p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image));
+
+    if (hasValidMemPages) {
+        renderMenuPages(galleryEntry.pages, cleanName, false);
+    } else {
+        // Show loading state while downloading menu photos
+        renderMenuPages([], cleanName, true);
     }
 
-    if (db) {
+    let loadedPages = hasValidMemPages ? galleryEntry.pages : null;
+
+    // 1. Check IndexedDB across all candidate keys
+    if (!loadedPages) {
+        for (const k of candidateKeys) {
+            try {
+                const cached = await idbGet('storeMenuGalleries', k);
+                const cPages = cached ? (Array.isArray(cached) ? cached : (cached.pages ? (Array.isArray(cached.pages) ? cached.pages : Object.values(cached.pages)) : [])) : [];
+                if (cPages.some(p => p && (p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image))) {
+                    cPages.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+                    loadedPages = cPages;
+                    galleryKey = k;
+                    activeGalleryStore.key = k;
+                    indexGalleryEntry(k, { pages: loadedPages, storeName: cleanName });
+                    renderMenuPages(loadedPages, cleanName, false);
+                    break;
+                }
+            } catch (_) {}
+        }
+    }
+
+    // 2. Fetch from Database across all candidate keys
+    if (!loadedPages && db) {
+        for (const k of candidateKeys) {
+            try {
+                const snap = await db.ref(`directory/storeMenuGalleries/${k}`).once('value');
+                const val = snap.val();
+                if (val && typeof val === 'object') {
+                    const rawPages = val.pages || (Array.isArray(val) ? val : null);
+                    let fPages = [];
+                    if (rawPages) {
+                        fPages = Array.isArray(rawPages) ? rawPages : Object.entries(rawPages).map(([id, item]) => ({ id, ...(item || {}) }));
+                    }
+                    if (fPages.some(p => p && (p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image))) {
+                        fPages.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+                        loadedPages = fPages;
+                        galleryKey = k;
+                        activeGalleryStore.key = k;
+                        indexGalleryEntry(k, { pages: loadedPages, storeName: cleanName, updatedAt: val.updatedAt });
+                        idbSet('storeMenuGalleries', k, { pages: loadedPages, updatedAt: val.updatedAt || Date.now() }).catch(() => {});
+                        renderMenuPages(loadedPages, cleanName, false);
+                        break;
+                    }
+                }
+            } catch (err) {
+                console.warn(`[MenuGallery] Fetch error on key ${k}:`, err);
+            }
+        }
+    }
+
+    // If completely empty after checking all sources
+    if (!loadedPages || loadedPages.length === 0) {
+        renderMenuPages([], cleanName, false);
+    }
+
+    // Real-time listener on the active key
+    if (db && galleryKey) {
         db.ref(`directory/storeMenuGalleries/${galleryKey}`).on('value', (snap) => {
             const val = snap.val() || {};
-            const pages = val.pages ? Object.values(val.pages) : (Array.isArray(val) ? val : []);
-
-            pages.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
-
-            indexGalleryEntry(galleryKey, { pages, storeName: cleanName, updatedAt: val.updatedAt });
-            idbSet('storeMenuGalleries', galleryKey, { pages, updatedAt: val.updatedAt || Date.now() }).catch(() => {});
-            renderMenuPages(pages, cleanName);
+            const rawPages = val.pages || (Array.isArray(val) ? val : null);
+            if (!rawPages) return;
+            const pages = Array.isArray(rawPages) ? rawPages : Object.values(rawPages);
+            if (pages.some(p => p && (p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image))) {
+                pages.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
+                indexGalleryEntry(galleryKey, { pages, storeName: cleanName, updatedAt: val.updatedAt });
+                idbSet('storeMenuGalleries', galleryKey, { pages, updatedAt: val.updatedAt || Date.now() }).catch(() => {});
+                renderMenuPages(pages, cleanName, false);
+            }
         });
     }
 }
@@ -1458,7 +1529,7 @@ export function closeStoreMenuGalleryModal() {
     currentGalleryPages = [];
 }
 
-function renderMenuPages(pages = [], storeName = "Store") {
+function renderMenuPages(pages = [], storeName = "Store", isLoading = false) {
     currentGalleryPages = pages || [];
     selectedMenuPageIndices.clear();
 
@@ -1468,6 +1539,18 @@ function renderMenuPages(pages = [], storeName = "Store") {
     updateMenuSelectionBar();
 
     if (!container) return;
+
+    if (isLoading) {
+        if (dlBtn) dlBtn.classList.add('hidden');
+        if (sendAllBtn) sendAllBtn.classList.add('hidden');
+        container.innerHTML = `
+        <div class="col-span-full text-center text-gray-500 dark:text-gray-400 italic py-12 text-xs flex flex-col items-center gap-2">
+            <i class="fa-solid fa-spinner fa-spin text-2xl text-amber-500/80 mb-1"></i>
+            <span class="font-bold text-gray-700 dark:text-gray-200">Downloading ${escapeHtml(storeName)} menu photos...</span>
+            <span class="text-[10px] text-gray-400">Please wait while the menu images are loaded from the cloud.</span>
+        </div>`;
+        return;
+    }
 
     if (pages.length === 0) {
         if (dlBtn) dlBtn.classList.add('hidden');
@@ -2723,99 +2806,85 @@ export async function quickSendStoreMenuToActiveChat(storeName, compositeKey, me
 
     let pages = [];
 
-    // 1. FASTEST (0ms): Look up directly from in-memory galleries cache!
+    // 1. FASTEST (0ms): Look up directly from in-memory galleries cache if real image URLs exist
     const memEntry = getStoreMenuGallery(cleanName, compositeKey, metadataKey);
     if (memEntry && Array.isArray(memEntry.pages) && memEntry.pages.length > 0) {
-        pages = [...memEntry.pages];
+        const validMemPages = memEntry.pages.filter(p => p && (p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image));
+        if (validMemPages.length > 0) {
+            pages = [...validMemPages];
+        }
     }
 
-    // 2. Active gallery fallback if open
+    // 2. Active gallery fallback if open with real image URLs
     if (pages.length === 0 && activeGalleryStore && activeGalleryStore.name === cleanName && Array.isArray(currentGalleryPages) && currentGalleryPages.length > 0) {
-        pages = [...currentGalleryPages];
+        const validCurPages = currentGalleryPages.filter(p => p && (p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image));
+        if (validCurPages.length > 0) {
+            pages = [...validCurPages];
+        }
     }
 
-    // 3. Fallback to IndexedDB / Firebase ONLY on rare cache miss
+    // 3. Fallback to IndexedDB / Database on cache miss or when only dummy metadata exists
     if (pages.length === 0) {
-        showToast(`⏳ Loading ${cleanName} menu photos...`);
+        showToast(`⏳ Downloading ${cleanName} menu photos...`);
 
         const normName = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
         const normComposite = (compositeKey || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normMeta = (metadataKey || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
         const candidateKeys = Array.from(new Set([
             metadataKey,
-            normComposite,
+            normMeta,
             compositeKey,
+            normComposite,
             'stores_' + normName,
             'stores' + normName,
             normName,
+            cleanName,
             (compositeKey || '').replace(/^[a-z0-9]+_stores_?/, ''),
             (compositeKey || '').replace(/^[a-z0-9]+_/, '')
         ])).map(k => (k || '').trim()).filter(Boolean);
 
-        let primaryKey = metadataKey || compositeKey || '';
+        // Check IndexedDB across all candidate keys
         for (const k of candidateKeys) {
-            if (storeMenuMetadataMap[k] && storeMenuMetadataMap[k].pageCount > 0) {
-                primaryKey = k;
-                break;
-            }
-        }
-        if (!primaryKey && candidateKeys.length > 0) {
-            primaryKey = candidateKeys[0];
-        }
-
-        // Direct IndexedDB check
-        if (primaryKey) {
             try {
-                const cached = await idbGet('storeMenuGalleries', primaryKey);
+                const cached = await idbGet('storeMenuGalleries', k);
                 if (cached) {
-                    if (Array.isArray(cached) && cached.length > 0) {
-                        pages = cached;
-                    } else if (cached.pages && Array.isArray(cached.pages) && cached.pages.length > 0) {
-                        pages = cached.pages;
+                    const cPages = Array.isArray(cached) ? cached : (cached.pages ? (Array.isArray(cached.pages) ? cached.pages : Object.values(cached.pages)) : []);
+                    const validCPages = cPages.filter(p => p && (p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image));
+                    if (validCPages.length > 0) {
+                        pages = validCPages;
+                        indexGalleryEntry(k, { pages, storeName: cleanName });
+                        break;
                     }
                 }
             } catch (_) {}
         }
 
-        // Parallel fallback across candidate keys in IndexedDB
-        if (pages.length === 0) {
-            const otherKeys = candidateKeys.filter(k => k !== primaryKey);
-            for (const k of otherKeys) {
+        // Database query across all candidate keys until real image URLs are found
+        if (pages.length === 0 && db) {
+            for (const k of candidateKeys) {
                 try {
-                    const cached = await idbGet('storeMenuGalleries', k);
-                    if (cached) {
-                        if (Array.isArray(cached) && cached.length > 0) {
-                            pages = cached;
-                            primaryKey = k;
-                            break;
-                        } else if (cached.pages && Array.isArray(cached.pages) && cached.pages.length > 0) {
-                            pages = cached.pages;
-                            primaryKey = k;
+                    const snap = await db.ref(`directory/storeMenuGalleries/${k}`).once('value');
+                    const val = snap.val();
+                    if (val && typeof val === 'object') {
+                        const rawPages = val.pages || (Array.isArray(val) ? val : null);
+                        let candidatePages = [];
+                        if (rawPages) {
+                            candidatePages = Array.isArray(rawPages) 
+                                ? rawPages 
+                                : Object.entries(rawPages).map(([id, item]) => ({ id, ...(item || {}) }));
+                        }
+                        const validCandidate = candidatePages.filter(p => p && (p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image));
+                        if (validCandidate.length > 0) {
+                            pages = validCandidate;
+                            indexGalleryEntry(k, { pages, storeName: cleanName, updatedAt: val?.updatedAt });
+                            idbSet('storeMenuGalleries', k, { pages, updatedAt: val?.updatedAt || Date.now() }).catch(() => {});
                             break;
                         }
                     }
-                } catch (_) {}
-            }
-        }
-
-        // Firebase RTDB fallback query
-        if (pages.length === 0 && db && primaryKey) {
-            try {
-                const snap = await db.ref(`directory/storeMenuGalleries/${primaryKey}`).once('value');
-                const val = snap.val();
-                if (val && typeof val === 'object') {
-                    if (val.pages && typeof val.pages === 'object') {
-                        pages = Object.entries(val.pages).map(([id, item]) => ({ id, ...(item || {}) }));
-                    } else if (Array.isArray(val)) {
-                        pages = val;
-                    }
+                } catch (err) {
+                    console.warn(`[QuickSendMenu] Fetch error on candidate key ${k}:`, err);
                 }
-                if (pages.length > 0) {
-                    indexGalleryEntry(primaryKey, { pages, storeName: cleanName });
-                    idbSet('storeMenuGalleries', primaryKey, { pages, updatedAt: val?.updatedAt || Date.now() }).catch(() => {});
-                }
-            } catch (err) {
-                console.warn('[QuickSendMenu] Firebase fetch error on primary key ' + primaryKey + ':', err);
             }
         }
     }

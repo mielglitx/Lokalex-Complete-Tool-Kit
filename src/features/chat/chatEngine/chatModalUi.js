@@ -59,6 +59,38 @@ export function viewCurrentCustomerPhoto() {
 }
 
 export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
+    if (!custId) return;
+
+    // Resolve true thread custId if customer name was passed (e.g. from Rotations tab)
+    let targetCustId = custId;
+    let targetCustName = custName || custId;
+    let targetAvatar = avatarUrl;
+
+    if (typeof window !== 'undefined' && typeof window.getCachedCustomerThreadsMap === 'function') {
+        const map = window.getCachedCustomerThreadsMap();
+        if (map && !map.has(targetCustId)) {
+            const cleanTarget = String(targetCustId).trim().toLowerCase();
+            for (const t of map.values()) {
+                const tName = (t.customerName || t.name || '').trim().toLowerCase();
+                const tId = t.custId || t.id;
+                if (tId === targetCustId) {
+                    targetCustId = tId;
+                    break;
+                }
+                if (tName && (tName === cleanTarget || tName.includes(cleanTarget) || cleanTarget.includes(tName))) {
+                    targetCustId = tId;
+                    if (!targetCustName || targetCustName === custId) targetCustName = t.customerName || t.name;
+                    if (!targetAvatar) targetAvatar = t.avatarUrl;
+                    break;
+                }
+            }
+        }
+    }
+
+    custId = targetCustId;
+    custName = targetCustName;
+    avatarUrl = targetAvatar;
+
     if (activeRiderChatCustId && activeRiderChatCustId !== custId) {
         saveCurrentThreadDraft(activeRiderChatCustId);
     }
