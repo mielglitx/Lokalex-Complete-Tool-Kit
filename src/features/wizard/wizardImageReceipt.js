@@ -5,6 +5,7 @@ import { getCurrentCart } from '../cart.js';
 import { getDailyRiderId } from './wizardCalc.js';
 import { getDevicePlatform } from '../../utils/helpers.js';
 import { saveImageToDevice } from '../../utils/imageSaver.js';
+import QRCode from 'qrcode';
 
 export let currentReceiptCanvas = null;
 export let currentReceiptDataUrl = "";
@@ -63,15 +64,19 @@ export function ensureQrCodeLibraryLoaded() {
 
 export async function generatePureQrImage(payload, size = 600) {
     if (!payload) return null;
-    await ensureQrCodeLibraryLoaded();
+    let qrLib = (QRCode && typeof QRCode.toCanvas === 'function') ? QRCode : (typeof window !== 'undefined' ? window.QRCode : null);
+    if (!qrLib) {
+        await ensureQrCodeLibraryLoaded();
+        qrLib = (QRCode && typeof QRCode.toCanvas === 'function') ? QRCode : (typeof window !== 'undefined' ? window.QRCode : null);
+    }
 
     return new Promise((resolve) => {
-        if (!window.QRCode) return resolve(null);
+        if (!qrLib || typeof qrLib.toCanvas !== 'function') return resolve(null);
 
         const tempCanvas = document.createElement('canvas');
-        window.QRCode.toCanvas(tempCanvas, payload, {
+        qrLib.toCanvas(tempCanvas, payload, {
             width: size,
-            margin: 2,
+            margin: 4, // standard 4-module quiet zone ensures 100% detectability on GCash & banking scanners
             errorCorrectionLevel: 'M',
             color: {
                 dark: '#000000',
@@ -598,7 +603,7 @@ export async function renderReceiptCanvas() {
     ctx.fillText("Lokalex Logistics • On-Demand Express Delivery", width / 2, y);
 
     currentReceiptCanvas = canvas;
-    currentReceiptDataUrl = canvas.toDataURL('image/jpeg', 0.90);
+    currentReceiptDataUrl = canvas.toDataURL('image/jpeg', 0.94);
 
     if (receiptImg) {
         receiptImg.src = currentReceiptDataUrl;
@@ -618,7 +623,7 @@ function triggerDirectAnchorDownload(url, fileName) {
 }
 
 export async function downloadReceiptImage() {
-    const rawData = currentReceiptDataUrl || (currentReceiptCanvas ? currentReceiptCanvas.toDataURL('image/jpeg', 0.90) : null);
+    const rawData = currentReceiptDataUrl || (currentReceiptCanvas ? currentReceiptCanvas.toDataURL('image/jpeg', 0.94) : null);
     if (!rawData) {
         return showToast("⚠️ Image receipt not ready yet.");
     }

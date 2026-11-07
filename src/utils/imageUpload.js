@@ -75,6 +75,23 @@ export async function compressImageToDataUrl(fileOrBlobOrDataUrl, maxDim = 720, 
             img.onload = () => {
                 let width = img.width;
                 let height = img.height;
+                const isTallDocument = (height / width) >= 1.6;
+
+                if (isTallDocument) {
+                    // For tall documents/receipts, never crush width below 900px
+                    const targetWidth = Math.min(Math.max(width, 920), 1200);
+                    if (width > targetWidth) {
+                        height = Math.round((height * targetWidth) / width);
+                        width = targetWidth;
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    return resolve(canvas.toDataURL('image/jpeg', Math.max(quality, 0.90)));
+                }
+
                 if (width > maxDim || height > maxDim) {
                     if (width > height) {
                         height = Math.round((height * maxDim) / width);
@@ -104,14 +121,28 @@ export async function compressImageToDataUrl(fileOrBlobOrDataUrl, maxDim = 720, 
  * @param {File|Blob|string} fileOrBlobOrDataUrl 
  * @param {string} storagePath - Destination path in bucket (e.g. 'chat/img_123.jpg')
  * @param {Object} metadata - Optional custom metadata
- * @returns {Promise<string>} Download URL (or fallback compressed data URL if storage is unavailable)
+ * @param {Object} options - Optional upload options (e.g. { isReceipt: true })
+ * @returns {Promise<string>} Download URL (or fallback data URL if storage is unavailable)
  */
-export async function uploadImage(fileOrBlobOrDataUrl, storagePath, metadata = {}) {
+export async function uploadImage(fileOrBlobOrDataUrl, storagePath, metadata = {}, options = {}) {
     if (!fileOrBlobOrDataUrl) return "";
 
     // If it's already an HTTP / HTTPS URL, no need to upload
     if (typeof fileOrBlobOrDataUrl === 'string' && (fileOrBlobOrDataUrl.startsWith('http://') || fileOrBlobOrDataUrl.startsWith('https://'))) {
         return fileOrBlobOrDataUrl;
+    }
+
+    const isReceipt = options?.isReceipt === true || 
+                      (metadata && metadata.isReceipt === true) ||
+                      (typeof storagePath === 'string' && storagePath.toLowerCase().includes('receipt'));
+
+    // SPECIAL HANDLING FOR OFFICIAL RECEIPTS & TRANSACTION INVOICES:
+    // If it's an official receipt and already rendered to a base64 data URL,
+    // preserve the crisp high-resolution image without downscaling when storage is null/unavailable.
+    if (isReceipt && typeof fileOrBlobOrDataUrl === 'string' && fileOrBlobOrDataUrl.startsWith('data:image')) {
+        if (!storage || !isStorageAvailable) {
+            return fileOrBlobOrDataUrl;
+        }
     }
 
     let blob = fileOrBlobOrDataUrl;
@@ -139,6 +170,11 @@ export async function uploadImage(fileOrBlobOrDataUrl, storagePath, metadata = {
             console.warn('[ImageUpload] Firebase Storage upload failed/timed out, falling back to base64:', err.message || err);
             isStorageAvailable = false;
         }
+    }
+
+    // Receipts are already rendered with optimal typography and QR modules: preserve them directly
+    if (isReceipt && typeof fileOrBlobOrDataUrl === 'string') {
+        return fileOrBlobOrDataUrl;
     }
 
     // Fallback: Return a lightweight compressed base64 JPEG (<45KB)

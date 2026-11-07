@@ -506,13 +506,13 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName, op
         let finalImageUrl = currentReceiptDataUrl;
         if (!finalImageUrl && currentReceiptCanvas) {
             try {
-                finalImageUrl = currentReceiptCanvas.toDataURL('image/jpeg', 0.85);
+                finalImageUrl = currentReceiptCanvas.toDataURL('image/jpeg', 0.94);
             } catch (_) {}
         }
         if (!finalImageUrl) {
             renderFinalReceiptText();
             await renderReceiptCanvas();
-            finalImageUrl = currentReceiptDataUrl || (currentReceiptCanvas ? currentReceiptCanvas.toDataURL('image/jpeg', 0.85) : null);
+            finalImageUrl = currentReceiptDataUrl || (currentReceiptCanvas ? currentReceiptCanvas.toDataURL('image/jpeg', 0.94) : null);
         }
 
         if (!options?.alreadyClosedModal) {
@@ -544,11 +544,11 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName, op
         const targetApiId = targetMeta?.apiId || targetMeta?.channelId || cachedRecipient?.apiId || null;
         const targetApiName = targetMeta?.apiName || cachedRecipient?.apiName || 'Facebook';
 
-        // 3. Upload image to Firebase Storage for ultra-fast and reliable delivery (fallback to data URL)
+        // 3. Upload image to Storage (or preserve crisp high-resolution base64 data URL)
         let hostedImageUrl = finalImageUrl;
         if (finalImageUrl.startsWith('data:')) {
             try {
-                hostedImageUrl = await uploadImage(finalImageUrl, `chats/${targetCustId}/receipt_${now}.jpg`);
+                hostedImageUrl = await uploadImage(finalImageUrl, `chats/${targetCustId}/receipt_${now}.jpg`, { isReceipt: true }, { isReceipt: true });
             } catch (upErr) {
                 console.warn("[Receipt] Storage upload fallback to data URL:", upErr);
                 hostedImageUrl = finalImageUrl;

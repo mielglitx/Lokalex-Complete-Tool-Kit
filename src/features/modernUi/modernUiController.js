@@ -717,8 +717,17 @@ export function getModernFilteredThreads(customCategory = null) {
         return true;
     });
 
-    // Sort by latest message timestamp descending
-    filtered.sort((a, b) => (Number(b.lastUpdated || b.timestamp) || 0) - (Number(a.lastUpdated || a.timestamp) || 0));
+    // In the Catering category, prioritize the rider's own active customers at the very top
+    const loggedInAuth = getLoggedInRiderInfo();
+    filtered.sort((a, b) => {
+        if (cat === 'catering') {
+            const aMine = isMyCustomerThread(a, loggedInAuth);
+            const bMine = isMyCustomerThread(b, loggedInAuth);
+            if (aMine && !bMine) return -1;
+            if (!aMine && bMine) return 1;
+        }
+        return (Number(b.lastUpdated || b.timestamp) || 0) - (Number(a.lastUpdated || a.timestamp) || 0);
+    });
     return filtered;
 }
 
@@ -790,6 +799,7 @@ export function renderModernChatLeftList() {
 
     const filtered = getModernFilteredThreads();
     const activeCustId = getActiveRiderChatCustId();
+    const loggedInAuth = getLoggedInRiderInfo();
 
     if (filtered.length === 0) {
         listContainer.innerHTML = `<div class="text-slate-500 italic text-center py-8 px-2 text-[11px]">No threads in ${escapeHtml(modernChatCategory)}</div>`;
@@ -798,6 +808,9 @@ export function renderModernChatLeftList() {
 
     listContainer.innerHTML = filtered.map(t => {
         const isSelected = activeCustId && (t.custId === activeCustId || t.id === activeCustId);
+        const isMine = isMyCustomerThread(t, loggedInAuth);
+        const isCateringCategory = modernChatCategory === 'catering';
+        const isMyCateredCustomer = isMine && (isCateringCategory || t.folder === 'catering' || (t.cateredByRiderName && t.status !== 'completed' && t.status !== 'done'));
         const name = formatTitleCase(t.customerName || t.name || "Customer");
         const msg = (t.lastMessage || 'No messages yet').replace(/\[Facebook.*?\]/g, '📷 Photo');
         const cid = t.custId || t.id;
@@ -821,12 +834,31 @@ export function renderModernChatLeftList() {
             ? `<span class="w-4 h-4 rounded-full ${badgeColorClass} font-mono font-black text-[9px] inline-flex items-center justify-center shrink-0">1</span>`
             : '';
 
+        const myCustomerBadge = isMyCateredCustomer
+            ? `<span class="bg-emerald-500 text-black text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider inline-flex items-center gap-1 shadow-xs shrink-0"><i class="fa-solid fa-motorcycle text-[8px]"></i> Your Customer</span>`
+            : '';
+
+        // Distinctive green border highlight around card for the rider's own catering customer
+        let cardContainerClass = "group relative flex flex-col p-2.5 transition cursor-pointer select-none rounded-xl mx-1 my-1 ";
+        if (isMyCateredCustomer) {
+            if (isSelected) {
+                cardContainerClass += "border-2 border-emerald-400 bg-emerald-500/25 shadow-[0_0_16px_rgba(52,211,153,0.35)] ring-2 ring-emerald-500/40";
+            } else {
+                cardContainerClass += "border-2 border-emerald-500/90 bg-emerald-950/40 hover:bg-emerald-900/50 shadow-[0_0_12px_rgba(16,185,129,0.25)]";
+            }
+        } else if (isSelected) {
+            cardContainerClass += "border border-emerald-500/40 bg-emerald-500/15 border-l-4 border-l-emerald-400";
+        } else {
+            cardContainerClass += "border border-transparent hover:bg-white/5";
+        }
+
         return `
-        <div id="modern-card-${cid}" class="group relative flex flex-col p-2 transition cursor-pointer select-none ${isSelected ? 'bg-emerald-500/15 border-l-4 border-emerald-400' : 'hover:bg-white/5'}" onclick="window.selectModernCustomerChat('${escapeHtml(cid)}', '${escapeHtml(name)}', '${escapeHtml(avatar)}')">
+        <div id="modern-card-${cid}" class="${cardContainerClass}" onclick="window.selectModernCustomerChat('${escapeHtml(cid)}', '${escapeHtml(name)}', '${escapeHtml(avatar)}')">
             <div class="flex items-center justify-between gap-1.5 mb-1">
                 <div class="flex items-center gap-1.5 min-w-0 flex-1">
                     ${countBadgeHtml}
                     <span class="font-extrabold text-xs text-white truncate">${escapeHtml(name)}</span>
+                    ${myCustomerBadge}
                 </div>
                 <!-- Secret Swipe Menu Toggle Button -->
                 <button type="button" onclick="event.stopPropagation(); window.toggleModernCardSwipe('${escapeHtml(cid)}')" class="px-1 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-mono shrink-0 cursor-pointer" title="Reveal Cater / Unread / Done actions">

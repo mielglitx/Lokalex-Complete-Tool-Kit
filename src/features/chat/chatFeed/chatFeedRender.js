@@ -521,10 +521,10 @@ function executeRenderRiderCustomerChatFeed() {
         let nameClass = "font-black text-gray-900 dark:text-white text-xs";
 
         if (isCurrentlyCatering) {
-            // Radiant, unmistakable GOLD glowing border ONLY for MY CUSTOMER!
-            cardBorderClass = "catering-glow-gold bg-[#FFFBEB] dark:bg-[#261608]";
-            avatarBorderClass = "border-amber-400";
-            nameClass = "font-black text-gray-900 dark:text-white text-xs";
+            // Radiant, unmistakable GREEN glowing border around the card for MY CUSTOMER!
+            cardBorderClass = "border-2 border-emerald-500 dark:border-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 shadow-[0_0_14px_rgba(16,185,129,0.35)] ring-2 ring-emerald-500/30";
+            avatarBorderClass = "border-emerald-500 ring-2 ring-emerald-400/50";
+            nameClass = "font-black text-emerald-900 dark:text-emerald-300 text-xs";
         } else if (isOtherRiderCatering) {
             // Other riders' customers do NOT glow on my side to make a clear distinction
             cardBorderClass = "border border-gray-200 dark:border-gray-800 bg-white dark:bg-cardBg";

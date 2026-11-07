@@ -592,6 +592,23 @@ function compressDataUrlForBridge(dataUrl, maxDim = 800, quality = 0.65) {
             try {
                 let w = img.width;
                 let h = img.height;
+                const isTallDoc = (h / w) >= 1.6;
+
+                if (isTallDoc) {
+                    // For receipts & tall documents, preserve width >= 1000px so text & QR codes stay crystal clear
+                    const targetWidth = Math.min(Math.max(w, 1000), 1200);
+                    if (w > targetWidth) {
+                        h = Math.round((h * targetWidth) / w);
+                        w = targetWidth;
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
+                    return resolve(canvas.toDataURL('image/jpeg', Math.max(quality, 0.92)));
+                }
+
                 if (w > maxDim || h > maxDim) {
                     if (w > h) {
                         h = Math.round((h * maxDim) / w);
@@ -1079,13 +1096,22 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
 
         let finalFbImageUrl = imageUrl;
         if (finalFbImageUrl && finalFbImageUrl.startsWith('data:')) {
-            try {
-                finalFbImageUrl = await uploadImage(finalFbImageUrl, `chats/${custId}/${Date.now()}.jpg`);
-            } catch (err) {
-                console.warn("[RiderChat] uploadImage before Messenger send failed:", err);
-            }
-            if (finalFbImageUrl && finalFbImageUrl.startsWith('data:')) {
-                finalFbImageUrl = await compressDataUrlForBridge(finalFbImageUrl, 800, 0.65);
+            const isReceiptImg = (typeof text === 'string' && /receipt|resibo|invoice/i.test(text)) ||
+                                 (typeof fileName === 'string' && /receipt|resibo/i.test(fileName)) ||
+                                 (typeof newMsgKey === 'string' && newMsgKey.includes('receipt'));
+
+            if (!isReceiptImg) {
+                try {
+                    finalFbImageUrl = await uploadImage(finalFbImageUrl, `chats/${custId}/${Date.now()}.jpg`);
+                } catch (err) {
+                    console.warn("[RiderChat] uploadImage before Messenger send failed:", err);
+                }
+                if (finalFbImageUrl && finalFbImageUrl.startsWith('data:')) {
+                    finalFbImageUrl = await compressDataUrlForBridge(finalFbImageUrl, 800, 0.65);
+                }
+            } else {
+                // Receipts: Keep crisp typography & high-frequency QR code modules (1200px max, 0.92 quality)
+                finalFbImageUrl = await compressDataUrlForBridge(finalFbImageUrl, 1200, 0.92);
             }
         }
         const safeFbImageUrl = finalFbImageUrl || null;
