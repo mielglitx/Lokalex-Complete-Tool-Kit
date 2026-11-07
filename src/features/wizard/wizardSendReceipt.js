@@ -605,6 +605,7 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName, op
                         imageUrl: hostedImageUrl || finalImageUrl,
                         riderName: riderName,
                         newMsgKey: newMsgKey,
+                        skipSeparateCaption: true,
                         suppressToast: true
                     });
                 }

@@ -120,10 +120,14 @@ export function getUserType(targetId = null, targetName = null) {
         }
     }
 
-    if (!isSpecific && globalState.rosterMembers && myId) {
-        const myRosterRec = globalState.rosterMembers.find(m => (m.telegramId || "").toString().trim() === myId);
-        if (myRosterRec && myRosterRec.userType) {
-            return myRosterRec.userType.toString().trim().toLowerCase();
+    if (!isSpecific && globalState.rosterMembers && (myId || myName)) {
+        const myRosterRec = globalState.rosterMembers.find(m => {
+            const mId = (m.telegramId || m.id || "").toString().trim();
+            const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+            return (myId && mId === myId) || (myName && (mName === myName || isRiderMatch(mName, myName)));
+        });
+        if (myRosterRec && (myRosterRec.userType || myRosterRec.type || myRosterRec.role)) {
+            return (myRosterRec.userType || myRosterRec.type || myRosterRec.role).toString().trim().toLowerCase();
         }
     }
 
@@ -158,21 +162,56 @@ export function isAdmin() {
 export function isTL() {
     const t = getUserType();
     const validTlTypes = ['tl', 'lead', 'teamlead', 'leader'];
-    return validTlTypes.includes(t);
-}
+    if (validTlTypes.includes(t)) return true;
 
-export function hasTlPermission(permissionKey) {
-    if (isAdmin()) return true;
-    if (!isTL()) return false;
+    const storedType = (appState.userType || localStorage.getItem('userType') || "").toString().trim().toLowerCase();
+    if (validTlTypes.includes(storedType)) return true;
 
-    const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
     const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
     const rosterMembers = globalState.rosterMembers || [];
 
     const myRecord = rosterMembers.find(m => {
         const mId = (m.telegramId || m.id || "").toString().trim();
         const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
-        return (myId && mId === myId) || (myName && mName === myName);
+        return (myId && mId === myId) || (myName && (mName === myName || isRiderMatch(mName, myName)));
+    });
+
+    if (myRecord) {
+        const recType = (myRecord.userType || myRecord.type || myRecord.role || "").toString().toLowerCase().trim();
+        if (validTlTypes.includes(recType) || myRecord.isTL === true) return true;
+        if (myRecord.tlAdminPower === true || (myRecord.tlPermissions && Object.values(myRecord.tlPermissions).some(v => v === true))) {
+            return true;
+        }
+    }
+
+    if (myId) {
+        const cachedPower = localStorage.getItem(`tl_admin_power_${myId}`);
+        if (cachedPower === 'true') return true;
+        const cachedPerms = localStorage.getItem(`tl_permissions_${myId}`);
+        if (cachedPerms) {
+            try {
+                const parsed = JSON.parse(cachedPerms);
+                if (parsed && Object.values(parsed).some(v => v === true)) return true;
+            } catch (_) {}
+        }
+    }
+
+    return false;
+}
+
+export function hasTlPermission(permissionKey) {
+    if (isAdmin()) return true;
+    if (!isTL()) return false;
+
+    const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
+    const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
+    const rosterMembers = globalState.rosterMembers || [];
+
+    const myRecord = rosterMembers.find(m => {
+        const mId = (m.telegramId || m.id || "").toString().trim();
+        const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+        return (myId && mId === myId) || (myName && (mName === myName || isRiderMatch(mName, myName)));
     });
 
     const perms = myRecord?.tlPermissions || {};
@@ -184,19 +223,21 @@ export function hasTlPermission(permissionKey) {
         return myRecord.tlAdminPower === true;
     }
 
-    const cachedPermsStr = localStorage.getItem(`tl_permissions_${myId}`);
-    if (cachedPermsStr) {
-        try {
-            const parsed = JSON.parse(cachedPermsStr);
-            if (parsed && parsed[permissionKey] !== undefined) {
-                return parsed[permissionKey] === true;
-            }
-        } catch(e) {}
-    }
+    if (myId) {
+        const cachedPermsStr = localStorage.getItem(`tl_permissions_${myId}`);
+        if (cachedPermsStr) {
+            try {
+                const parsed = JSON.parse(cachedPermsStr);
+                if (parsed && parsed[permissionKey] !== undefined) {
+                    return parsed[permissionKey] === true;
+                }
+            } catch(e) {}
+        }
 
-    const cachedPower = localStorage.getItem(`tl_admin_power_${myId}`);
-    if (cachedPower !== null) {
-        return cachedPower === 'true';
+        const cachedPower = localStorage.getItem(`tl_admin_power_${myId}`);
+        if (cachedPower !== null) {
+            return cachedPower === 'true';
+        }
     }
 
     return false;
@@ -207,14 +248,14 @@ export function canManageRoster() {
     if (Boolean(globalState.adminControlsEnabled) || (typeof localStorage !== 'undefined' && localStorage.getItem('adminControlsEnabled') === 'true')) return true;
 
     if (isTL()) {
-        const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+        const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
         const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
         const rosterMembers = globalState.rosterMembers || [];
 
         const myRecord = rosterMembers.find(m => {
             const mId = (m.telegramId || m.id || "").toString().trim();
             const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
-            return (myId && mId === myId) || (myName && mName === myName);
+            return (myId && mId === myId) || (myName && (mName === myName || isRiderMatch(mName, myName)));
         });
 
         const perms = myRecord?.tlPermissions || {};
@@ -225,9 +266,11 @@ export function canManageRoster() {
             return myRecord.tlAdminPower === true;
         }
 
-        const cachedPower = localStorage.getItem(`tl_admin_power_${myId}`);
-        if (cachedPower !== null) {
-            return cachedPower === 'true';
+        if (myId) {
+            const cachedPower = localStorage.getItem(`tl_admin_power_${myId}`);
+            if (cachedPower !== null) {
+                return cachedPower === 'true';
+            }
         }
 
         return false;
@@ -244,19 +287,20 @@ if (typeof window !== 'undefined') {
 export function canForceCaterTarget(targetType, targetId = "") {
     if (isAdmin()) return true;
     if (isTL()) {
-        if (!hasTlPermission('canForceCater')) return false;
+        const hasAnyManagePower = hasTlPermission('canForceCater') || hasTlPermission('canForceStatus') || hasTlPermission('canShiftQueue') || hasTlPermission('canVoidCustomer');
+        if (!hasAnyManagePower) return false;
 
-        const myId = (appState.telegramId || localStorage.getItem('telegramId') || "").toString().trim();
+        const myId = (appState.telegramId || localStorage.getItem('telegramId') || localStorage.getItem('riderId') || "").toString().trim();
         const myName = (appState.riderName || localStorage.getItem('riderName') || "").toString().trim().toLowerCase();
         const tId = (targetId || "").toString().trim();
 
-        if ((tId && myId && tId === myId) || (tId && myName && tId.toLowerCase() === myName)) {
+        if ((tId && myId && tId === myId) || (tId && myName && (tId.toLowerCase() === myName || isRiderMatch(tId, myName)))) {
             return true;
         }
 
         const t = (targetType || "").toString().toLowerCase().trim();
-        const adminTypes = ['admin', 'owner', 'manager', 'superadmin', 'administrator', 'tl', 'lead', 'teamlead', 'leader'];
-        return !adminTypes.includes(t);
+        const topAdminTypes = ['admin', 'owner', 'manager', 'superadmin', 'administrator'];
+        return !topAdminTypes.includes(t);
     }
     return false;
 }

@@ -1777,19 +1777,42 @@ async function handleCustomerChatsOnce(client, pathInfo, query) {
       let q = client
         .from('customer_chats')
         .select('id, data, timestamp')
-        .or(`room_id.eq.${custId},room_id.eq.${altCust}`)
+        .or(`room_id.eq.${custId},room_id.eq.${altCust},id.like.${custId}_*,id.like.${cleanCust}_*`)
         .not('id', 'like', '%_metadata')
         .not('id', 'like', '%_threadSeenBy')
         .not('id', 'like', '%_midIndex')
         .not('id', 'like', '%_messages');
 
-      if (query.limit && query.limitType === 'last') {
-        q = q.order('timestamp', { ascending: false }).limit(query.limit * 2);
-      } else {
-        q = q.order('timestamp', { ascending: true });
+      if (query.startAt) {
+        const startTs = typeof query.startAt === 'number' ? new Date(query.startAt).toISOString() : query.startAt;
+        q = q.gte('timestamp', startTs);
+      }
+      if (query.endAt) {
+        const endTs = typeof query.endAt === 'number' ? new Date(query.endAt).toISOString() : query.endAt;
+        q = q.lte('timestamp', endTs);
       }
 
-      const { data } = await q;
+      if (query.limit && query.limitType === 'last') {
+        const fetchLimit = Math.max(query.limit * 3, 50);
+        q = q.order('timestamp', { ascending: false, nullsFirst: false }).limit(fetchLimit);
+      } else if (query.limit && query.limitType === 'first') {
+        q = q.order('timestamp', { ascending: true, nullsFirst: false }).limit(query.limit);
+      } else {
+        q = q.order('timestamp', { ascending: true, nullsFirst: false });
+      }
+
+      let { data, error } = await q;
+      if (error) {
+        console.warn(`[Supabase handleCustomerChatsOnce error on ${custId}]:`, error.message);
+        try {
+          const fallback = await client
+            .from('customer_chats')
+            .select('id, data, timestamp')
+            .or(`room_id.eq.${custId},room_id.eq.${altCust}`)
+            .limit(50);
+          if (fallback.data) data = fallback.data;
+        } catch (_) {}
+      }
       const messages = {};
       if (data && Array.isArray(data)) {
         // Sort chronologically by internal message timestamp or row timestamp

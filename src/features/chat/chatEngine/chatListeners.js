@@ -1104,12 +1104,21 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
 
         let skeletonTimeout = setTimeout(() => {
             if (activeRiderChatCustId === custId && loadedRiderMsgsMap.size === 0) {
+                // If taking more than 8s, offer a manual sync button instead of falsely showing "No messages yet"
                 const skel = document.getElementById('rider-chat-loading-skeleton');
                 if (skel) {
-                    container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
+                    skel.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-8 text-center text-xs text-gray-500 dark:text-gray-400">
+                        <i class="fa-solid fa-spinner fa-spin text-lg text-emerald-500 mb-2"></i>
+                        <span>Loading conversation...</span>
+                        ${String(custId).startsWith('fb_') ? `
+                        <button type="button" onclick="window.syncCurrentThreadFromMetaGraph && window.syncCurrentThreadFromMetaGraph('${escapeHtml(custId)}', true)" class="mt-2 text-blue-500 hover:underline text-[11px] font-bold cursor-pointer">
+                            Sync from Facebook
+                        </button>` : ''}
+                    </div>`;
                 }
             }
-        }, 3000);
+        }, 8000);
 
         initialQuery.once('value', (snapshot) => {
             if (skeletonTimeout) {
@@ -1119,16 +1128,51 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
             if (activeRiderChatCustId !== custId) return;
             const data = snapshot.val();
             if (!data || Object.keys(data).length === 0) {
+                // Check if this thread has an existing lastMessage or conversation from cache or metadata
+                let hasKnownConversation = false;
+                let lastKnownText = "";
+                if (typeof getCachedCustomerThreadsMap === 'function') {
+                    const tMap = getCachedCustomerThreadsMap();
+                    const rawPsid = custId.replace(/^(?:fb_|messenger_)+/i, '');
+                    const t = tMap ? (tMap.get(custId) || tMap.get(`fb_${rawPsid}`) || tMap.get(rawPsid)) : null;
+                    if (t && (t.hasRealMessages || (t.lastMessage && t.lastMessage !== 'No messages yet'))) {
+                        hasKnownConversation = true;
+                        lastKnownText = t.lastMessage;
+                    }
+                }
+                if (!hasKnownConversation && currentRiderChatMeta && (currentRiderChatMeta.lastMessage && currentRiderChatMeta.lastMessage !== 'No messages yet')) {
+                    hasKnownConversation = true;
+                    lastKnownText = currentRiderChatMeta.lastMessage;
+                }
+
+                if (hasKnownConversation && String(custId).startsWith('fb_')) {
+                    // Instantly trigger Graph API sync to pull messages directly from Facebook
+                    syncCurrentThreadFromMetaGraph(custId, false).catch(() => {});
+                }
+
                 if (loadedRiderMsgsMap.size === 0) {
-                    container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
+                    if (hasKnownConversation) {
+                        container.innerHTML = `
+                        <div class="flex flex-col items-center justify-center py-10 px-4 text-center">
+                            <div class="w-10 h-10 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center text-lg mb-2">
+                                <i class="fa-solid fa-comments"></i>
+                            </div>
+                            <span class="text-xs font-bold text-gray-700 dark:text-gray-300">${escapeHtml(lastKnownText || 'Existing Conversation')}</span>
+                            <button type="button" onclick="window.syncCurrentThreadFromMetaGraph && window.syncCurrentThreadFromMetaGraph('${escapeHtml(custId)}', true)" class="mt-3 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-md">
+                                <i class="fa-solid fa-arrows-rotate"></i> Sync Messages
+                            </button>
+                        </div>`;
+                    } else {
+                        container.innerHTML = `<div class="text-center text-gray-500 dark:text-gray-400 italic py-10 text-xs">No messages yet.</div>`;
+                    }
                 }
                 setHasMoreRiderMsgs(false);
                 setIsInitialScrollDone(true);
 
-                // Listen for future messages only
+                // Listen for incoming messages with a 60s buffer
                 const liveQuery = db.ref(`customerChats/${custId}/messages`)
                     .orderByChild('timestamp')
-                    .startAt(Date.now());
+                    .startAt(Date.now() - 60000);
                 setActiveRiderChatChildListener(liveQuery);
                 liveQuery.on('child_added', handleIncomingLiveChild);
             } else {

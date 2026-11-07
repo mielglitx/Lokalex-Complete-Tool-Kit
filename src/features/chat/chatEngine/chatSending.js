@@ -547,16 +547,16 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
             }
         }
 
-        // Forward to Messenger if thread is from Facebook
+        // Forward to Messenger if thread is from Facebook (pure image without preceding/separate text)
         let fbSendResult = null;
         if (isFb) {
             const fbTask = forwardRiderReplyToMessenger({
                 custId: cleanCustId,
                 apiId: targetApiId,
-                text: textPayload,
+                text: "", // Never send text before or alongside menu photo to Messenger
                 imageUrl: imageUrl,
                 attachmentId: attachmentId,
-                skipSeparateCaption: skipSeparateCaption,
+                skipSeparateCaption: true,
                 riderName: riderName,
                 newMsgKey: newMsgKey,
                 suppressToast: true
@@ -651,6 +651,14 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
     try {
         const cleanPsid = String(custId || '').replace(/^(?:fb_|messenger_)+/i, '');
         if (!cleanPsid || !/^\d+$/.test(cleanPsid)) return;
+
+        // Pure photo protection: Never send separate or preceding text for menu or receipt dispatches
+        const isPureImage = Boolean(
+            skipSeparateCaption || 
+            !text || 
+            /receipt|resibo|menu/i.test(String(text || '')) || 
+            (newMsgKey && /receipt|menu/i.test(String(newMsgKey)))
+        );
 
         const markDeliverySuccess = async (rawMid = null) => {
             if (!newMsgKey || !custId) return;
@@ -802,7 +810,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                 if (sendResp.ok) {
                     recordFbMid(sendData?.message_id || null);
                     console.log("⚡ Photo delivered instantly from Meta CDN cache via attachment_id!");
-                    if (text && typeof text === 'string' && text.trim() && !skipSeparateCaption) {
+                    if (text && typeof text === 'string' && text.trim() && !isPureImage) {
                         await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey, suppressToast });
                     }
                     if (!suppressToast) showToast("✅ Delivered to customer on Messenger!");
@@ -939,7 +947,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                         recordFbMid(sendData?.message_id || null);
                         const returnedAttachmentId = sendData?.attachment_id || null;
                         console.log("✅ HTTPS Photo delivered directly to Facebook Messenger!");
-                        if (text && typeof text === 'string' && text.trim() && !skipSeparateCaption) {
+                        if (text && typeof text === 'string' && text.trim() && !isPureImage) {
                             await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey, suppressToast });
                         }
                         if (!suppressToast) showToast("✅ Photo sent to customer on Messenger!");
@@ -992,7 +1000,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
 
                 if (sendResp.ok) {
                     recordFbMid(sendData?.message_id || null);
-                    if (text && typeof text === 'string' && text.trim() && !skipSeparateCaption) {
+                    if (text && typeof text === 'string' && text.trim() && !isPureImage) {
                         await forwardRiderReplyToMessenger({ custId, apiId, text: text.trim(), riderName, replyToMid, replyToText, newMsgKey, suppressToast });
                     }
                     if (!suppressToast) showToast("🎥 Video sent to customer on Messenger!");
@@ -1121,7 +1129,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 recipientId: cleanPsid,
-                text: text || (videoUrl ? `🎥 Video: ${videoUrl}` : (fileUrl ? `📄 ${fileName || 'Document'}: ${fileUrl}` : "")),
+                text: (safeFbImageUrl && isPureImage) ? "" : (text || (videoUrl ? `🎥 Video: ${videoUrl}` : (fileUrl ? `📄 ${fileName || 'Document'}: ${fileUrl}` : ""))),
                 imageUrl: safeFbImageUrl,
                 videoUrl: videoUrl || null,
                 fileUrl: fileUrl || null,
