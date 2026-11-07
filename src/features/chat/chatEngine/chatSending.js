@@ -1141,7 +1141,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                 replyToMid: replyToMid || null,
                 replyToText: replyToText || null
             })
-        }, 15000);
+        }, 35000);
 
         if (!resp.ok) {
             const errText = await resp.text().catch(() => "");
@@ -1177,7 +1177,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
             throw new Error(errMsg);
         } else {
             const respData = await resp.json().catch(() => ({}));
-            const returnedMid = respData?.message_id || respData?.mid || null;
+            const returnedMid = respData?.message_id || respData?.mid || respData?.messageId || respData?.id || null;
             if (returnedMid) {
                 recordFbMid(returnedMid);
                 console.log("✅ Rider reply delivered to Facebook Messenger!");
@@ -1214,73 +1214,90 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
     }
 }
 
-export async function retryRiderChatMessage(msgId) {
+export async function retryRiderChatMessage(msgId, btn = null) {
     if (!msgId || !loadedRiderMsgsMap.has(msgId)) return;
     const msg = loadedRiderMsgsMap.get(msgId);
     const targetCustId = msg.custId || activeRiderChatCustId;
     if (!targetCustId) return;
 
-    // 1. Instantly display sending state in DOM & memory (clear failure badge immediately)
-    msg.status = 'sending';
-    msg.failed = false;
-    msg.failedReason = null;
-    const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
-    if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
+    const icon = btn ? btn.querySelector('i') : null;
+    if (icon) icon.classList.add('fa-spin');
+    if (btn) {
+        btn.disabled = true;
+        btn.style.pointerEvents = 'none';
+        btn.classList.add('opacity-70');
+    }
 
-    const isFb = msg.channel === 'messenger' || String(targetCustId).startsWith('fb_');
+    try {
+        // 1. Instantly display sending state in DOM & memory (clear failure badge immediately)
+        msg.status = 'sending';
+        msg.failed = false;
+        msg.failedReason = null;
+        const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
+        if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
 
-    if (isFb) {
-        try {
-            await forwardRiderReplyToMessenger({
-                custId: targetCustId,
-                apiId: msg.apiId,
-                text: msg.text,
-                imageUrl: msg.imageUrl,
-                fileUrl: msg.fileUrl || null,
-                fileName: msg.fileName || null,
-                locationCoords: msg.locationCoords || null,
-                riderName: msg.sender || appState.riderName,
-                replyToMid: msg.replyTo?.id || msg.replyToMid || null,
-                replyToText: msg.replyTo?.text || msg.replyToText || null,
-                newMsgKey: msgId
-            });
+        const isFb = msg.channel === 'messenger' || String(targetCustId).startsWith('fb_');
 
-            msg.status = 'sent';
-            msg.failed = false;
-            msg.failedReason = null;
-            if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
-        } catch (err) {
-            console.error("retryRiderChatMessage failed:", err);
-            msg.status = 'failed';
-            msg.failed = true;
-            msg.failedReason = err?.message || 'Send failed';
-            if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
-        }
-    } else if (db && targetCustId) {
-        try {
-            await db.ref(`customerChats/${targetCustId}/messages/${msgId}`).update({
-                status: 'sent',
-                failed: null,
-                failedReason: null
-            });
-            msg.status = 'sent';
-            msg.failed = false;
-            msg.failedReason = null;
+        if (isFb) {
+            try {
+                await forwardRiderReplyToMessenger({
+                    custId: targetCustId,
+                    apiId: msg.apiId,
+                    text: msg.text,
+                    imageUrl: msg.imageUrl,
+                    fileUrl: msg.fileUrl || null,
+                    fileName: msg.fileName || null,
+                    locationCoords: msg.locationCoords || null,
+                    riderName: msg.sender || appState.riderName,
+                    replyToMid: msg.replyTo?.id || msg.replyToMid || null,
+                    replyToText: msg.replyTo?.text || msg.replyToText || null,
+                    newMsgKey: msgId
+                });
 
-            let memCached = riderChatMemoryCache.get(targetCustId) || [];
-            const memItem = memCached.find(m => m.id === msgId);
-            if (memItem) {
-                memItem.status = 'sent';
-                memItem.failed = false;
-                memItem.failedReason = null;
-                idbSet('chats', targetCustId, memCached).catch(() => {});
+                msg.status = 'sent';
+                msg.failed = false;
+                msg.failedReason = null;
+                if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
+            } catch (err) {
+                console.error("retryRiderChatMessage failed:", err);
+                msg.status = 'failed';
+                msg.failed = true;
+                msg.failedReason = err?.message || 'Send failed';
+                if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
             }
+        } else if (db && targetCustId) {
+            try {
+                await db.ref(`customerChats/${targetCustId}/messages/${msgId}`).update({
+                    status: 'sent',
+                    failed: null,
+                    failedReason: null
+                });
+                msg.status = 'sent';
+                msg.failed = false;
+                msg.failedReason = null;
 
-            if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
-        } catch (_) {
-            msg.status = 'failed';
-            msg.failed = true;
-            if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
+                let memCached = riderChatMemoryCache.get(targetCustId) || [];
+                const memItem = memCached.find(m => m.id === msgId);
+                if (memItem) {
+                    memItem.status = 'sent';
+                    memItem.failed = false;
+                    memItem.failedReason = null;
+                    idbSet('chats', targetCustId, memCached).catch(() => {});
+                }
+
+                if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
+            } catch (_) {
+                msg.status = 'failed';
+                msg.failed = true;
+                if (container) appendOrUpdateSingleRiderMessage(container, msg, activeCustData);
+            }
+        }
+    } finally {
+        if (icon) icon.classList.remove('fa-spin');
+        if (btn) {
+            btn.disabled = false;
+            btn.style.pointerEvents = '';
+            btn.classList.remove('opacity-70');
         }
     }
 }

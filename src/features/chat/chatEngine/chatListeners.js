@@ -496,6 +496,26 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                 existingMatch.metaMid = rawMid;
                 existingMatch.mid = safeMid;
 
+                // Heal failed or sending status if confirmed present on Meta Graph API
+                if (existingMatch.status === 'failed' || existingMatch.failed || existingMatch.status === 'sending') {
+                    existingMatch.status = 'sent';
+                    existingMatch.failed = false;
+                    existingMatch.failedReason = null;
+                    if (db) {
+                        db.ref(`customerChats/${targetCustId}/messages/${existingMatch.id}`).update({
+                            status: 'sent',
+                            failed: null,
+                            failedReason: null,
+                            metaMid: rawMid,
+                            mid: safeMid
+                        }).catch(() => {});
+                    }
+                    const container = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
+                    if (container && typeof appendOrUpdateSingleRiderMessage === 'function') {
+                        appendOrUpdateSingleRiderMessage(container, existingMatch, activeCustData);
+                    }
+                }
+
                 // Refresh image URL if fresh attachment was retrieved from Graph API
                 if (imageUrl && (!existingMatch.imageUrl || existingMatch.imageUrl !== imageUrl)) {
                     existingMatch.imageUrl = imageUrl;

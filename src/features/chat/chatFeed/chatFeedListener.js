@@ -1156,9 +1156,16 @@ function computeChatFeedSignature(chatData) {
  * Force refresh Live Chats Feed on demand via fresh REST query and UI re-render.
  */
 export async function forceRefreshLiveChatsFeed(btn = null, isSilent = false) {
+    if (!btn && typeof document !== 'undefined') {
+        btn = document.getElementById('modern-refresh-chats-btn') || document.getElementById('btn-force-refresh-chat-feed');
+    }
     const icon = btn ? btn.querySelector('i') : null;
     if (icon) icon.classList.add('fa-spin');
-    if (btn) btn.disabled = true;
+    if (btn) {
+        btn.disabled = true;
+        btn.classList.add('opacity-75');
+    }
+    const startTime = Date.now();
 
     try {
         let chatData = null;
@@ -1212,16 +1219,15 @@ export async function forceRefreshLiveChatsFeed(btn = null, isSilent = false) {
             showToast("⚠️ Failed to refresh chat feed.");
         }
     } finally {
-        if (icon) {
-            setTimeout(() => {
-                icon.classList.remove('fa-spin');
-            }, 400);
-        }
-        if (btn) {
-            setTimeout(() => {
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, 700 - elapsed);
+        setTimeout(() => {
+            if (icon) icon.classList.remove('fa-spin');
+            if (btn) {
                 btn.disabled = false;
-            }, 500);
-        }
+                btn.classList.remove('opacity-75');
+            }
+        }, remaining);
     }
 }
 

@@ -750,9 +750,11 @@ export function renderRiderMessageStatusIndicator(msg, forceSeen = false) {
     const isFb = msg.channel === 'messenger' || String(msg.custId || currentCustId || '').startsWith('fb_');
     const hasFbMid = isFb ? Boolean(msg.mid || msg.metaMid) : true;
     const msgTs = Number(msg.timestamp || 0);
-    const isTimedOut = isFb && !hasFbMid && msgTs > 0 && (Date.now() - msgTs > 25000);
-    const isFailed = Boolean(msg.status === 'failed' || msg.failed || isTimedOut);
-    const isSeen = !isFailed && hasFbMid && Boolean(forceSeen || msg.status === 'seen' || msg.seenAt);
+    const isSending = msg.status === 'sending';
+    const isDeliveredOrSent = Boolean(msg.status === 'sent' || msg.status === 'delivered' || msg.status === 'seen' || msg.seenAt);
+    const isTimedOut = isFb && isSending && !hasFbMid && msgTs > 0 && (Date.now() - msgTs > 45000);
+    const isFailed = !isDeliveredOrSent && Boolean(msg.status === 'failed' || msg.failed || isTimedOut);
+    const isSeen = !isFailed && Boolean(forceSeen || msg.status === 'seen' || msg.seenAt);
     const sentTime = msgTs ? new Date(msgTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
     const seenTime = msg.seenAt 
         ? new Date(msg.seenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
@@ -770,7 +772,7 @@ export function renderRiderMessageStatusIndicator(msg, forceSeen = false) {
     } else if (msg.status === 'delivered') {
         iconHtml = '<i class="fa-solid fa-check-double text-blue-200" title="Delivered"></i>';
         titleAttr = `Sent ${sentTime} • Delivered`;
-    } else if (msg.status === 'sent' && hasFbMid) {
+    } else if (msg.status === 'sent') {
         iconHtml = '<i class="fa-solid fa-check text-blue-200" title="Sent"></i>';
         titleAttr = `Sent ${sentTime}`;
     }
@@ -954,8 +956,10 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     const isFb = m.channel === 'messenger' || String(currentCustId || m.custId || '').startsWith('fb_');
     const hasFbMid = isFb ? Boolean(m.mid || m.metaMid) : true;
     const msgTs = getMessageTimestamp(m);
-    const isTimedOut = isRider && isFb && !hasFbMid && msgTs > 0 && (Date.now() - msgTs > 25000);
-    const isFailed = Boolean(m.status === 'failed' || m.failed === true || m.error || isTimedOut);
+    const isSending = m.status === 'sending';
+    const isDeliveredOrSent = Boolean(m.status === 'sent' || m.status === 'delivered' || m.status === 'seen' || m.seenAt);
+    const isTimedOut = isRider && isFb && isSending && !hasFbMid && msgTs > 0 && (Date.now() - msgTs > 45000);
+    const isFailed = !isDeliveredOrSent && Boolean(m.status === 'failed' || m.failed === true || m.error || isTimedOut);
     const dimClass = isFailed ? "opacity-60 saturate-50 border border-rose-500/70 ring-1 ring-rose-500/30" : "shadow-xs";
     const alignClass = isRider 
         ? `self-end bg-[#076B57] text-white rounded-tr-none ${dimClass}` 
@@ -1149,7 +1153,10 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
         <div class="flex items-center gap-1 text-[9.5px] font-black text-rose-500 dark:text-rose-400 mt-0.5 ${isRider ? 'justify-end mr-8' : 'justify-start ml-8'} select-none">
             <i class="fa-solid fa-circle-exclamation text-[9px] text-rose-500"></i>
             <span>Sending failed</span>
-            ${isRider && m.id ? `<button type="button" onclick="event.stopPropagation(); window.retryRiderChatMessage && window.retryRiderChatMessage('${m.id}')" class="underline hover:text-rose-700 dark:hover:text-rose-300 ml-1.5 font-bold cursor-pointer">Retry</button>` : ''}
+            ${isRider && m.id ? `<button type="button" onclick="event.stopPropagation(); window.retryRiderChatMessage && window.retryRiderChatMessage('${m.id}', this)" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/40 text-rose-300 border border-rose-500/40 text-[9px] font-bold cursor-pointer transition active:scale-90 ml-1.5 shadow-xs">
+                <i class="fa-solid fa-arrows-rotate text-[8.5px]"></i>
+                <span>Retry</span>
+            </button>` : ''}
         </div>` : '';
 
     if (!cleanMsgText && !hasMedia && !locationHtml && !isResolvingFbMedia) {
@@ -1513,6 +1520,27 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
             const timeDiff = Math.abs(prevTs - mTs);
 
             if (isMRider && isPrevRider && (sameMid || (sameText && timeDiff < 300000))) {
+                // If prev was marked failed or sending, echo/sync confirms successful FB delivery! Heal prev!
+                if (prev.status === 'failed' || prev.failed || prev.status === 'sending') {
+                    prev.status = 'sent';
+                    prev.failed = false;
+                    prev.failedReason = null;
+                    const resolvedMid = m.mid || m.metaMid || (String(m.id).startsWith('m_') ? m.id : null);
+                    if (resolvedMid) {
+                        prev.mid = resolvedMid;
+                        prev.metaMid = m.metaMid || resolvedMid;
+                    }
+                    if (db && currentCustId) {
+                        db.ref(`customerChats/${currentCustId}/messages/${prev.id}`).update({
+                            status: 'sent',
+                            failed: null,
+                            failedReason: null,
+                            mid: prev.mid || null,
+                            metaMid: prev.metaMid || null
+                        }).catch(() => {});
+                    }
+                }
+
                 // Duplicate detected! Prioritize the authentic rider over generic page echo
                 if (isPageSender(prev) && !isPageSender(m)) {
                     // Replace generic page echo with the named rider message!
@@ -1523,6 +1551,8 @@ export function renderRiderMessages(container, loadedRiderMsgsMap, hasMoreRiderM
                 } else {
                     // Keep prev, discard m
                     if (String(m.id).startsWith('m_')) staleKeysToDelete.push(m.id);
+                    if (!prev.mid && m.mid) prev.mid = m.mid;
+                    if (!prev.metaMid && (m.metaMid || String(m.id).startsWith('m_'))) prev.metaMid = m.metaMid || m.id;
                     isDup = true;
                     break;
                 }

@@ -1133,8 +1133,16 @@ export function renderModernRotationsToolbar() {
     const canManage = typeof canManageRoster === 'function' ? canManageRoster() : (isUserAdmin || isUserTL);
 
     if (!isUserAdmin && (!isUserTL || !canManage)) {
-        toolbar.classList.add('hidden');
-        toolbar.innerHTML = '';
+        toolbar.classList.remove('hidden');
+        toolbar.innerHTML = `
+            <div class="flex items-center gap-1.5 shrink-0">
+                <span class="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-black shrink-0"><i class="fa-solid fa-motorcycle"></i> Rider Lineup</span>
+            </div>
+            <div class="flex-1"></div>
+            <button id="modern-refresh-rotations-btn" type="button" onclick="window.handleModernRefreshRotations && window.handleModernRefreshRotations(this)" class="p-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold shrink-0 transition active:scale-95 cursor-pointer shadow-xs" title="Refresh Rotations">
+                <i class="fa-solid fa-rotate"></i>
+            </button>
+        `;
         return;
     }
 
@@ -1186,10 +1194,42 @@ export function renderModernRotationsToolbar() {
                 </button>
             `).join('')}
         </div>
-        <button type="button" onclick="window.renderModernRotationsTab && window.renderModernRotationsTab(); window.showToast && window.showToast('Lineup refreshed');" class="p-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold shrink-0 transition active:scale-95 cursor-pointer" title="Refresh Rotations">
+        <button id="modern-refresh-rotations-btn" type="button" onclick="window.handleModernRefreshRotations && window.handleModernRefreshRotations(this)" class="p-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold shrink-0 transition active:scale-95 cursor-pointer shadow-xs" title="Refresh Rotations">
             <i class="fa-solid fa-rotate"></i>
         </button>
     `;
+}
+
+export async function handleModernRefreshRotations(btn = null) {
+    if (!btn && typeof document !== 'undefined') {
+        btn = document.getElementById('modern-refresh-rotations-btn');
+    }
+    const icon = btn ? btn.querySelector('i') : null;
+    if (icon) icon.classList.add('fa-spin');
+    if (btn) {
+        btn.disabled = true;
+        btn.classList.add('opacity-75');
+    }
+    const startTime = Date.now();
+    try {
+        if (typeof window.forceRefreshRosterList === 'function') {
+            await window.forceRefreshRosterList(null, true);
+        }
+        renderModernRotationsTab();
+        if (typeof window.showToast === 'function') window.showToast('✓ Rotations lineup refreshed');
+    } catch (e) {
+        console.warn('Rotations refresh error:', e);
+    } finally {
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, 700 - elapsed);
+        setTimeout(() => {
+            if (icon) icon.classList.remove('fa-spin');
+            if (btn) {
+                btn.disabled = false;
+                btn.classList.remove('opacity-75');
+            }
+        }, remaining);
+    }
 }
 
 export function renderModernRotationsTab() {
@@ -2149,6 +2189,7 @@ if (typeof window !== 'undefined') {
     window.refreshAllModernViews = refreshAllModernViews;
     window.renderModernRotationsTab = renderModernRotationsTab;
     window.renderModernRotationsToolbar = renderModernRotationsToolbar;
+    window.handleModernRefreshRotations = handleModernRefreshRotations;
     window.openAdminForceCaterFromChat = openAdminForceCaterFromChat;
     window.setModernSyncState = setModernSyncState;
 }
