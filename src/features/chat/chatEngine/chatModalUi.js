@@ -47,6 +47,64 @@ import {
 } from './chatListeners.js';
 import { startChatPresence, stopChatPresence, startChatTypingListener } from './chatPresence.js';
 
+export function renderClassicLockedChatModal(custId, custName, avatarUrl) {
+    const modal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');
+    if (!modal) return;
+
+    modal.classList.remove('hidden');
+    toggleBodyScroll(true);
+
+    const nameEl = document.getElementById('rider-chat-cust-name');
+    const avatarEl = document.getElementById('rider-chat-avatar') || document.getElementById('rider-chat-cust-avatar');
+    if (nameEl) nameEl.innerText = custName || "Customer";
+    if (avatarEl) {
+        const resolvedAvatar = avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(custName || "Customer")}&background=0084FF&color=fff`;
+        if (avatarEl.tagName === 'IMG') avatarEl.src = resolvedAvatar;
+        else avatarEl.innerHTML = `<img src="${resolvedAvatar}" class="w-full h-full rounded-full object-cover">`;
+    }
+
+    let catererName = "Another Rider";
+    if (typeof window.getCachedCustomerThreadsMap === 'function') {
+        const map = window.getCachedCustomerThreadsMap();
+        const t = map ? (map.get(custId) || map.get(`fb_${String(custId).replace(/^fb_/, '')}`)) : null;
+        if (t) {
+            const activeCaterer = typeof getActiveRosterCaterer === 'function' ? getActiveRosterCaterer(t.customerName, t.custId, t) : null;
+            catererName = activeCaterer ? (activeCaterer.riderName || activeCaterer.name) : (t.cateredByRiderName || t.cateredBy || "Another Rider");
+        }
+    }
+
+    const msgContainer = document.getElementById('rider-cust-chat-messages') || document.getElementById('rider-chat-messages-container');
+    if (msgContainer) {
+        msgContainer.innerHTML = `
+        <div class="h-full w-full flex flex-col items-center justify-center text-center p-6 my-auto select-none min-h-[300px]">
+            <div class="w-16 h-16 rounded-3xl bg-amber-500/10 border-2 border-amber-500/30 flex items-center justify-center text-amber-500 text-2xl mb-3 shadow-md shadow-amber-500/10">
+                <i class="fa-solid fa-lock"></i>
+            </div>
+            <h3 class="text-base font-extrabold text-slate-800 dark:text-white mb-1">Chat Room Locked</h3>
+            <p class="text-xs text-slate-600 dark:text-slate-400 max-w-xs mb-3">
+                This customer is currently being catered by <span class="font-extrabold text-amber-600 dark:text-amber-400">${escapeHtml(formatTitleCase(catererName))}</span>.
+            </p>
+            <div class="p-3 mb-5 rounded-xl bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 max-w-xs text-left">
+                <div class="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                    <i class="fa-solid fa-shield-halved text-emerald-500"></i> Mobile Data Saver Active
+                </div>
+                Messages and receipt photos are not downloaded while locked to save your mobile data.
+            </div>
+            <button type="button" onclick="window.unlockCateringChatRoom('${escapeHtml(custId)}', '${escapeHtml(custName || '')}', '${escapeHtml(avatarUrl || '')}')" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-md shadow-emerald-600/30 active:scale-95 transition flex items-center gap-2 cursor-pointer">
+                <i class="fa-solid fa-lock-open text-xs"></i>
+                <span>Unlock & Load Chat</span>
+            </button>
+        </div>`;
+    }
+
+    const input = document.getElementById('rider-chat-input') || document.getElementById('rider-cust-chat-input');
+    if (input) {
+        input.value = "";
+        input.placeholder = `🔒 Locked (Catered by ${formatTitleCase(catererName)})`;
+        input.disabled = true;
+    }
+}
+
 export function openRiderChatModal(custId, custName, avatarUrl) {
     openRiderCustomerChatModal(custId, custName, avatarUrl);
 }
@@ -90,6 +148,18 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
     custId = targetCustId;
     custName = targetCustName;
     avatarUrl = targetAvatar;
+
+    // Check if catering chat room is locked (belongs to another rider in Catering folder)
+    if (typeof window !== 'undefined' && typeof window.isCateringChatRoomLocked === 'function' && window.isCateringChatRoomLocked(custId)) {
+        if (typeof window.isModernUiActive === 'function' && window.isModernUiActive()) {
+            if (typeof window.renderModernLockedCateringRoom === 'function') {
+                window.renderModernLockedCateringRoom(custId, custName, avatarUrl);
+                return;
+            }
+        }
+        renderClassicLockedChatModal(custId, custName, avatarUrl);
+        return;
+    }
 
     if (activeRiderChatCustId && activeRiderChatCustId !== custId) {
         saveCurrentThreadDraft(activeRiderChatCustId);

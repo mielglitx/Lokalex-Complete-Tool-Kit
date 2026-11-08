@@ -62,7 +62,8 @@ import {
     activeRiderChatFilter, 
     cachedCustomerThreadsMap, 
     getLoggedInRiderInfo, 
-    isMyCustomerThread 
+    isMyCustomerThread,
+    getActiveRosterCaterer
 } from '../chat/chatFeed/chatFeedState.js';
 import { storeChatState } from '../chat/storeChat/storeChatState.js';
 import { getSupabase } from '../../config/supabaseClient.js';
@@ -473,6 +474,7 @@ export function openModernMenuCategory(catKey) {
 export function switchModernWorkspaceTab(tabId) {
     modernActiveTab = tabId;
     const tabs = ['chats', 'rotations', 'logins', 'catered'];
+    const isLight = document.getElementById('modern-ui-workspace')?.classList.contains('modern-theme-light') || (typeof getModernTheme === 'function' && getModernTheme() === 'light');
 
     tabs.forEach(t => {
         const tabBtn = document.getElementById(`modern-main-tab-${t}`);
@@ -480,13 +482,20 @@ export function switchModernWorkspaceTab(tabId) {
 
         if (t === tabId) {
             if (tabBtn) {
-                tabBtn.classList.remove('border-b-transparent', 'text-slate-400');
-                tabBtn.classList.add('border-b-emerald-400', 'bg-emerald-500/10', 'text-emerald-400');
+                tabBtn.classList.remove('border-b-transparent', 'text-slate-400', 'text-slate-500');
+                tabBtn.classList.add('border-b-emerald-400', 'bg-emerald-500/10');
+                if (isLight) {
+                    tabBtn.classList.add('text-emerald-800', 'font-black');
+                    tabBtn.classList.remove('text-emerald-400');
+                } else {
+                    tabBtn.classList.add('text-emerald-400');
+                    tabBtn.classList.remove('text-emerald-800');
+                }
             }
             if (panel) panel.classList.remove('hidden');
         } else {
             if (tabBtn) {
-                tabBtn.classList.remove('border-b-emerald-400', 'bg-emerald-500/10', 'text-emerald-400');
+                tabBtn.classList.remove('border-b-emerald-400', 'bg-emerald-500/10', 'text-emerald-400', 'text-emerald-800', 'font-black');
                 tabBtn.classList.add('border-b-transparent', 'text-slate-400');
             }
             if (panel) panel.classList.add('hidden');
@@ -843,6 +852,11 @@ export function renderModernChatLeftList() {
             badgeColorClass = "bg-rose-500 text-white";
         }
 
+        const isLocked = isCateringCategory && !isMyCateredCustomer && isCateringChatRoomLocked(cid, t);
+        const lockBadge = isLocked 
+            ? `<span class="bg-amber-500/20 text-amber-500 dark:text-amber-400 border border-amber-500/30 text-[8px] font-black px-1 py-0.5 rounded uppercase tracking-wider inline-flex items-center gap-0.5 shrink-0" title="Locked to save data"><i class="fa-solid fa-lock text-[7px]"></i> LOCKED</span>`
+            : '';
+
         const countBadgeHtml = hasNewMessage 
             ? `<span class="w-4 h-4 rounded-full ${badgeColorClass} font-mono font-black text-[9px] inline-flex items-center justify-center shrink-0">1</span>`
             : '';
@@ -873,6 +887,7 @@ export function renderModernChatLeftList() {
                     <span class="font-extrabold text-xs text-white truncate flex-1 min-w-0">${escapeHtml(name)}</span>
                 </div>
                 <div class="flex items-center gap-1 shrink-0">
+                    ${lockBadge}
                     ${myCustomerBadge}
                     <!-- Secret Swipe Menu Toggle Button -->
                     <button type="button" onclick="event.stopPropagation(); window.toggleModernCardSwipe('${escapeHtml(cid)}')" class="px-1 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-mono shrink-0 cursor-pointer" title="Reveal Cater / Unread / Done actions">
@@ -898,6 +913,118 @@ export function renderModernChatLeftList() {
     }).join('');
 }
 
+export const unlockedCateringChatRooms = new Set();
+if (typeof window !== 'undefined') {
+    window.unlockedCateringChatRooms = unlockedCateringChatRooms;
+}
+
+export function isCateringChatRoomLocked(custId, thread = null) {
+    if (!custId) return false;
+    if (unlockedCateringChatRooms.has(custId)) return false;
+
+    let t = thread;
+    if (!t && cachedCustomerThreadsMap) {
+        t = cachedCustomerThreadsMap.get(custId) || cachedCustomerThreadsMap.get(`fb_${custId}`) || cachedCustomerThreadsMap.get(String(custId).replace(/^fb_/, ''));
+    }
+    if (!t) return false;
+
+    // Check if the thread is in catering folder
+    const isCatering = t.folder === 'catering' || (typeof modernChatCategory !== 'undefined' && modernChatCategory === 'catering');
+    if (!isCatering) return false;
+
+    // Check if it belongs to another rider
+    const loggedInAuth = getLoggedInRiderInfo();
+    const isMine = isMyCustomerThread(t, loggedInAuth);
+    if (isMine) return false;
+
+    return true;
+}
+
+export function renderModernLockedCateringRoom(targetCustId, targetName, targetAvatar) {
+    try {
+        if (typeof closeRiderCustomerChatModal === 'function') {
+            closeRiderCustomerChatModal();
+        } else if (typeof window.closeRiderCustomerChatModal === 'function') {
+            window.closeRiderCustomerChatModal();
+        }
+    } catch (_) {}
+
+    if (typeof setActiveRiderChatCustId === 'function') {
+        setActiveRiderChatCustId(targetCustId);
+    }
+    if (typeof window !== 'undefined') {
+        window.activeRiderChatCustId = targetCustId;
+    }
+
+    const allThreads = Array.from(cachedCustomerThreadsMap?.values() || []);
+    const t = cachedCustomerThreadsMap?.get(targetCustId) || cachedCustomerThreadsMap?.get(`fb_${targetCustId}`) || allThreads.find(th => (th.custId || th.id) === targetCustId);
+    const activeCaterer = t ? getActiveRosterCaterer(t.customerName, t.custId, t) : null;
+    const catererName = activeCaterer ? (activeCaterer.riderName || activeCaterer.name) : (t?.cateredByRiderName || t?.cateredBy || "Another Rider");
+
+    const effectiveName = formatTitleCase(targetName || t?.customerName || t?.name || "Customer");
+    const effectiveAvatar = targetAvatar || t?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(effectiveName)}&background=0084FF&color=fff`;
+
+    const avatarEl = document.getElementById('modern-chat-room-avatar');
+    const titleEl = document.getElementById('modern-chat-room-title');
+    const subtitleEl = document.getElementById('modern-chat-room-subtitle');
+    const infoBtn = document.getElementById('modern-chat-info-btn');
+
+    if (titleEl) titleEl.innerText = effectiveName;
+    if (subtitleEl) {
+        subtitleEl.innerHTML = `<span class="text-amber-500 font-bold flex items-center gap-1"><i class="fa-solid fa-lock text-[10px]"></i> Locked • Catered by ${escapeHtml(formatTitleCase(catererName))}</span>`;
+    }
+    if (avatarEl) {
+        avatarEl.className = "w-8 h-8 rounded-full bg-slate-800 text-white font-black text-xs flex items-center justify-center overflow-hidden shrink-0 border border-slate-700 select-none";
+        avatarEl.innerHTML = `<img src="${effectiveAvatar}" class="w-full h-full object-cover rounded-full">`;
+    }
+    if (infoBtn) infoBtn.classList.add('hidden');
+
+    ['rider-chat-presence-banner', 'rider-chat-lock-banner', 'rider-chat-milestone-bar', 'quick-replies-drawer'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.add('hidden');
+            el.innerHTML = '';
+        }
+    });
+
+    const msgContainer = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
+    if (msgContainer) {
+        msgContainer.innerHTML = `
+        <div class="h-full w-full flex flex-col items-center justify-center text-center p-6 my-auto select-none">
+            <div class="w-16 h-16 rounded-3xl bg-amber-500/10 border-2 border-amber-500/30 flex items-center justify-center text-amber-500 text-2xl mb-3 shadow-md shadow-amber-500/10">
+                <i class="fa-solid fa-lock"></i>
+            </div>
+            <h3 class="text-base font-extrabold text-slate-800 dark:text-white mb-1">Chat Room Locked</h3>
+            <p class="text-xs text-slate-600 dark:text-slate-400 max-w-xs mb-3">
+                This customer is currently being catered by <span class="font-extrabold text-amber-600 dark:text-amber-400">${escapeHtml(formatTitleCase(catererName))}</span>.
+            </p>
+            <div class="p-3 mb-5 rounded-xl bg-slate-100 dark:bg-[#11191e] border border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 max-w-xs text-left">
+                <div class="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                    <i class="fa-solid fa-shield-halved text-emerald-500"></i> Mobile Data Saver Active
+                </div>
+                Messages and receipt photos are not downloaded while locked to save your mobile data.
+            </div>
+            <button type="button" onclick="window.unlockCateringChatRoom('${escapeHtml(targetCustId)}', '${escapeHtml(effectiveName)}', '${escapeHtml(effectiveAvatar)}')" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-md shadow-emerald-600/30 active:scale-95 transition flex items-center gap-2 cursor-pointer">
+                <i class="fa-solid fa-lock-open text-xs"></i>
+                <span>Unlock & Load Chat</span>
+            </button>
+        </div>`;
+    }
+
+    const input = document.getElementById('rider-cust-chat-input') || document.getElementById('rider-chat-input');
+    if (input) {
+        input.value = "";
+        input.placeholder = `🔒 Locked (Catered by ${formatTitleCase(catererName)})`;
+        input.disabled = true;
+    }
+}
+
+export function unlockCateringChatRoom(custId, name, avatar) {
+    if (!custId) return;
+    unlockedCateringChatRooms.add(custId);
+    selectModernCustomerChat(custId, name, avatar);
+}
+
 export function selectModernCustomerChat(custId, custName, avatarUrl) {
     if (!custId) return;
 
@@ -918,6 +1045,12 @@ export function selectModernCustomerChat(custId, custName, avatarUrl) {
             targetName = matched.customerName || matched.name || targetName;
             targetAvatar = targetAvatar || matched.avatarUrl;
         }
+    }
+
+    if (isCateringChatRoomLocked(targetCustId)) {
+        renderModernLockedCateringRoom(targetCustId, targetName, targetAvatar);
+        renderModernChatLeftList();
+        return;
     }
 
     openRiderCustomerChatModal(targetCustId, targetName, targetAvatar);
@@ -1704,8 +1837,8 @@ export function renderModernLoginsTab() {
 
         if (inHeader) inHeader.innerText = `Logged IN (${todayLogins.length})`;
         if (outHeader) outHeader.innerText = `Not Logged In (${notLoggedInRiders.length}):`;
-        if (inFooter) inFooter.innerHTML = `Logged In: <span class="text-emerald-400 font-bold">${todayLogins.length} Riders</span> (out of ${eligibleRoster.length} total → ${todayLogins.length}/${notLoggedInRiders.length})`;
-        if (outFooter) outFooter.innerHTML = `Not Logged In: <span class="text-rose-400 font-bold">${notLoggedInRiders.length} Riders</span>`;
+        if (inFooter) inFooter.innerHTML = `Logged In: <span class="text-emerald-700 dark:text-emerald-400 font-black">${todayLogins.length} Riders</span> (out of ${eligibleRoster.length} total → ${todayLogins.length}/${notLoggedInRiders.length})`;
+        if (outFooter) outFooter.innerHTML = `Not Logged In: <span class="text-rose-700 dark:text-rose-400 font-black">${notLoggedInRiders.length} Riders</span>`;
 
         // Render Logged IN
         if (todayLogins.length === 0) {
@@ -1720,23 +1853,23 @@ export function renderModernLoginsTab() {
 
                     const isCurrentlyOnDuty = member ? (member.status && member.status !== 'End') : !l.clockOutTime;
                     const timeOut = isCurrentlyOnDuty 
-                        ? '<span class="text-emerald-400 font-bold">On Duty</span>' 
+                        ? '<span class="text-emerald-700 dark:text-emerald-400 font-black">On Duty</span>' 
                         : (l.clockOutTime ? escapeHtml(l.clockOutTime) : '<span class="text-slate-500 font-bold">Ended</span>');
                     const dayOffBadge = renderModernDayOffBadgeHtml(rId, rawName);
 
                     return `
-                    <div class="grid grid-cols-[1.8fr_0.9fr_0.9fr] sm:grid-cols-[2fr_1fr_1fr] items-center p-2 rounded-xl bg-black/40 border border-slate-800 hover:border-slate-700 transition cursor-pointer" onclick="window.openModernRiderProfile('${escapeHtml(rId)}', '${escapeHtml(rawName)}')">
+                    <div class="grid grid-cols-[1.8fr_0.9fr_0.9fr] sm:grid-cols-[2fr_1fr_1fr] items-center p-2 rounded-xl bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs transition cursor-pointer" onclick="window.openModernRiderProfile('${escapeHtml(rId)}', '${escapeHtml(rawName)}')">
                         <div class="flex items-center gap-1.5 min-w-0 flex-wrap pr-1">
-                            <span class="font-bold text-xs text-white hover:text-emerald-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
+                            <span class="font-extrabold text-xs text-slate-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
                             ${dayOffBadge}
                         </div>
                         <div class="flex items-center gap-1 min-w-0">
-                            <span class="font-mono text-xs text-slate-300">${escapeHtml(timeIn)}</span>
+                            <span class="font-mono text-xs font-bold text-slate-800 dark:text-slate-300">${escapeHtml(timeIn)}</span>
                             ${canManage ? `
-                                <button type="button" onclick="event.stopPropagation(); window.promptAdminSetRiderTimeIn && window.promptAdminSetRiderTimeIn('${escapeHtml(rId)}', '${escapeHtml(rawName)}', '${escapeHtml(timeIn)}')" class="text-[9px] text-slate-500 hover:text-amber-400 px-0.5 transition active:scale-90 cursor-pointer" title="Edit Time In">✏️</button>
+                                <button type="button" onclick="event.stopPropagation(); window.promptAdminSetRiderTimeIn && window.promptAdminSetRiderTimeIn('${escapeHtml(rId)}', '${escapeHtml(rawName)}', '${escapeHtml(timeIn)}')" class="text-[9px] text-slate-500 hover:text-amber-500 px-0.5 transition active:scale-90 cursor-pointer" title="Edit Time In">✏️</button>
                             ` : ''}
                         </div>
-                        <span class="font-mono text-xs text-slate-300">${timeOut}</span>
+                        <span class="font-mono text-xs font-bold text-slate-800 dark:text-slate-300">${timeOut}</span>
                     </div>`;
                 } catch (rowErr) {
                     console.error('[ModernLogin] Error rendering row:', rowErr);
@@ -1756,16 +1889,16 @@ export function renderModernLoginsTab() {
                     const dayOffBadge = renderModernDayOffBadgeHtml(mId, rawName);
 
                     return `
-                    <div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-black/40 border border-slate-800 hover:border-slate-700 transition cursor-pointer" onclick="window.openModernRiderProfile('${escapeHtml(mId)}', '${escapeHtml(rawName)}')">
+                    <div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-xs transition cursor-pointer" onclick="window.openModernRiderProfile('${escapeHtml(mId)}', '${escapeHtml(rawName)}')">
                         <div class="flex items-center gap-1.5 min-w-0 flex-wrap pr-1">
-                            <span class="font-bold text-xs text-slate-300 hover:text-rose-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
+                            <span class="font-extrabold text-xs text-slate-900 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 truncate">${idx + 1}. ${escapeHtml(formatTitleCase(rawName))}</span>
                             ${dayOffBadge}
                         </div>
                         <div class="flex items-center gap-1.5 shrink-0">
                             ${canManage ? `
-                                <button type="button" onclick="event.stopPropagation(); window.promptAdminSetRiderTimeIn && window.promptAdminSetRiderTimeIn('${escapeHtml(mId)}', '${escapeHtml(rawName)}')" class="px-1.5 py-0.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400 text-[9px] font-black transition active:scale-95 cursor-pointer" title="Manually Set Time In for ${escapeHtml(rawName)}">+ Time In</button>
+                                <button type="button" onclick="event.stopPropagation(); window.promptAdminSetRiderTimeIn && window.promptAdminSetRiderTimeIn('${escapeHtml(mId)}', '${escapeHtml(rawName)}')" class="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/15 hover:bg-emerald-100 dark:hover:bg-emerald-500/25 border border-emerald-300 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-400 text-[10px] font-black transition active:scale-95 cursor-pointer" title="Manually Set Time In for ${escapeHtml(rawName)}">+ Time In</button>
                             ` : ''}
-                            <span class="text-[10px] text-slate-500 font-mono">Offline</span>
+                            <span class="text-[10px] text-slate-600 dark:text-slate-500 font-mono font-semibold">Offline</span>
                         </div>
                     </div>`;
                 } catch (rowErr) {
@@ -2010,22 +2143,22 @@ export function renderModernCateredTab() {
         }
 
         return `
-        <div class="flex flex-col p-3 rounded-2xl bg-[#121a1f] border border-slate-800 gap-2 shadow-xs transition hover:border-slate-700">
+        <div class="flex flex-col p-3 rounded-2xl bg-white dark:bg-[#121a1f] border border-slate-200 dark:border-slate-800 gap-2 shadow-xs transition hover:border-slate-300 dark:hover:border-slate-700">
             <!-- Top Row: Customer Name & Rider Name & Void Button -->
             <div class="flex items-center justify-between gap-2 flex-wrap">
                 <div class="flex items-center gap-1.5 min-w-0 flex-1">
-                    <span class="text-[11px] text-slate-400 font-semibold shrink-0">Customer:</span>
-                    <span class="text-xs font-black text-amber-300 truncate" title="${escapeHtml(custName)}">${escapeHtml(custName)}</span>
+                    <span class="text-[11px] text-slate-600 dark:text-slate-400 font-bold shrink-0">Customer:</span>
+                    <span class="text-xs font-black text-slate-900 dark:text-amber-300 truncate" title="${escapeHtml(custName)}">${escapeHtml(custName)}</span>
                 </div>
 
                 <div class="flex items-center gap-1.5 shrink-0 ml-auto">
-                    <div class="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-black text-xs shrink-0 whitespace-nowrap shadow-2xs" title="Delivering Rider">
+                    <div class="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-300 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-400 font-black text-xs shrink-0 whitespace-nowrap shadow-2xs" title="Delivering Rider">
                         <i class="fa-solid fa-motorcycle text-[10px]"></i>
                         <span>${escapeHtml(riderName)}</span>
                     </div>
 
                     ${isUserAdmin ? `
-                        <button type="button" onclick="window.promptAdminDeleteCommissionRecord && window.promptAdminDeleteCommissionRecord('${escapeHtml(rc.riderName || '')}', '${escapeHtml(rc.customerName || '')}', '${escapeHtml(cDate)}', '${escapeHtml(txId)}')" class="px-2 py-0.5 rounded-lg border border-red-500/50 hover:bg-red-500/20 text-rose-400 font-black text-[10px] transition active:scale-95 cursor-pointer shrink-0" title="Void Customer Record">
+                        <button type="button" onclick="window.promptAdminDeleteCommissionRecord && window.promptAdminDeleteCommissionRecord('${escapeHtml(rc.riderName || '')}', '${escapeHtml(rc.customerName || '')}', '${escapeHtml(cDate)}', '${escapeHtml(txId)}')" class="px-2 py-0.5 rounded-lg border border-red-500/50 hover:bg-red-500/20 text-rose-600 dark:text-rose-400 font-black text-[10px] transition active:scale-95 cursor-pointer shrink-0" title="Void Customer Record">
                             <i class="fa-solid fa-ban text-[9px]"></i> Void
                         </button>
                     ` : ''}
@@ -2033,17 +2166,17 @@ export function renderModernCateredTab() {
             </div>
 
             <!-- Bottom Row: Timeline & Total Time Duration -->
-            <div class="flex items-center justify-between gap-2 flex-wrap pt-1.5 border-t border-slate-800/80 text-[10px] font-mono">
-                <div class="flex items-center gap-1.5 text-slate-400 flex-wrap">
-                    <span class="inline-flex items-center gap-1 text-slate-300"><i class="fa-solid fa-play text-blue-400 text-[8px]"></i> Start: ${escapeHtml(sTime)}</span>
-                    <span class="text-slate-600 select-none">•</span>
-                    <span class="inline-flex items-center gap-1 text-slate-300"><i class="fa-solid fa-receipt text-amber-400 text-[8px]"></i> Receipt: ${escapeHtml(rTime)}</span>
-                    <span class="text-slate-600 select-none">•</span>
-                    <span class="inline-flex items-center gap-1 text-emerald-400 font-bold"><i class="fa-solid fa-circle-check text-emerald-400 text-[8px]"></i> Done: ${escapeHtml(dTime)}</span>
+            <div class="flex items-center justify-between gap-2 flex-wrap pt-1.5 border-t border-slate-200 dark:border-slate-800/80 text-[10px] font-mono">
+                <div class="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 flex-wrap">
+                    <span class="inline-flex items-center gap-1 text-slate-800 dark:text-slate-300 font-bold"><i class="fa-solid fa-play text-blue-600 dark:text-blue-400 text-[8px]"></i> Start: ${escapeHtml(sTime)}</span>
+                    <span class="text-slate-400 dark:text-slate-600 select-none">•</span>
+                    <span class="inline-flex items-center gap-1 text-slate-800 dark:text-slate-300 font-bold"><i class="fa-solid fa-receipt text-amber-600 dark:text-amber-400 text-[8px]"></i> Receipt: ${escapeHtml(rTime)}</span>
+                    <span class="text-slate-400 dark:text-slate-600 select-none">•</span>
+                    <span class="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-black"><i class="fa-solid fa-circle-check text-emerald-600 dark:text-emerald-400 text-[8px]"></i> Done: ${escapeHtml(dTime)}</span>
                 </div>
 
                 <div class="shrink-0 ml-auto">
-                    <span class="text-xs font-mono font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-lg whitespace-nowrap">⏱️ ${escapeHtml(totalTimeText || 'N/A')}</span>
+                    <span class="text-xs font-mono font-black text-emerald-800 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-300 dark:border-emerald-500/30 px-2 py-0.5 rounded-lg whitespace-nowrap">⏱️ ${escapeHtml(totalTimeText || 'N/A')}</span>
                 </div>
             </div>
         </div>`;
@@ -2279,5 +2412,8 @@ if (typeof window !== 'undefined') {
     window.toggleModernTheme = toggleModernTheme;
     window.applyModernTheme = applyModernTheme;
     window.getModernTheme = getModernTheme;
+    window.isCateringChatRoomLocked = isCateringChatRoomLocked;
+    window.renderModernLockedCateringRoom = renderModernLockedCateringRoom;
+    window.unlockCateringChatRoom = unlockCateringChatRoom;
 }
 

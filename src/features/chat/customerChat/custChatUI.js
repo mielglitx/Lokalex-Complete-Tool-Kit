@@ -199,23 +199,65 @@ export function renderCustomerMessages(container, isInitialLoad = false, oldScro
         ) : [];
 
         let imageMarkup = '';
+        const loadedSet = (typeof window !== 'undefined' && window.loadedFullImagesCache) ? window.loadedFullImagesCache : null;
         if (imageList.length > 1) {
-            const gridCols = imageList.length === 2 ? 'grid-cols-2' : (imageList.length === 3 ? 'grid-cols-3' : 'grid-cols-2');
-            const imgElements = imageList.map(imgUrl => `
-                <div class="relative overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 border border-black/10 dark:border-white/10 aspect-square group/img">
-                    <img src="${escapeHtml(imgUrl)}" loading="lazy" decoding="async" referrerpolicy="no-referrer"
-                        onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgUrl)}', 'customer')" 
-                        class="w-full h-full object-cover cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200">
-                </div>
-            `).join('');
+            const allLoaded = loadedSet && imageList.every(url => loadedSet.has(url));
+            if (allLoaded) {
+                const gridCols = imageList.length === 2 ? 'grid-cols-2' : (imageList.length === 3 ? 'grid-cols-3' : 'grid-cols-2');
+                const imgElements = imageList.map(imgUrl => `
+                    <div class="relative overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 border border-black/10 dark:border-white/10 aspect-square group/img">
+                        <img src="${escapeHtml(imgUrl)}" loading="lazy" decoding="async" referrerpolicy="no-referrer"
+                            onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgUrl)}', 'customer')" 
+                            class="w-full h-full object-cover cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200">
+                    </div>
+                `).join('');
 
-            imageMarkup = `
-            <div class="grid ${gridCols} gap-1.5 mt-1.5 max-w-full w-64 rounded-xl overflow-hidden" onclick="event.stopPropagation()">
-                ${imgElements}
-            </div>`;
+                imageMarkup = `
+                <div class="grid ${gridCols} gap-1.5 mt-1.5 max-w-full w-64 rounded-xl overflow-hidden" onclick="event.stopPropagation()">
+                    ${imgElements}
+                </div>`;
+            } else {
+                const safeUrlsJson = escapeHtml(JSON.stringify(imageList));
+                imageMarkup = `
+                <div class="rider-chat-thumb-card flex items-center gap-2.5 p-2 rounded-xl bg-slate-100 dark:bg-black/40 border border-slate-300 dark:border-slate-700 hover:border-teal-500/50 transition cursor-pointer max-w-[240px] my-1 shadow-xs group"
+                     onclick="event.stopPropagation(); window.revealAndOpenChatImages && window.revealAndOpenChatImages(JSON.parse(this.dataset.urls), this, '${escapeHtml(m.id || '')}', '')"
+                     data-urls="${safeUrlsJson}">
+                    <div class="w-10 h-10 rounded-lg bg-teal-500/10 dark:bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-teal-600 dark:text-teal-400 group-hover:scale-105 transition-transform shrink-0">
+                        <i class="fa-solid fa-images text-base"></i>
+                    </div>
+                    <div class="flex flex-col min-w-0 flex-1">
+                        <span class="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition truncate">📷 ${imageList.length} Photos</span>
+                        <span class="text-[10px] text-teal-700 dark:text-teal-400 font-semibold flex items-center gap-1">
+                            <i class="fa-solid fa-arrow-down text-[8px]"></i> Tap to load & view
+                        </span>
+                    </div>
+                    <span class="px-2 py-0.5 rounded-md bg-teal-500/15 text-teal-800 dark:text-teal-300 text-[9px] font-black shrink-0 uppercase tracking-wide">
+                        LOAD
+                    </span>
+                </div>`;
+            }
         } else if (imageList.length === 1) {
             const imageSrc = imageList[0];
-            imageMarkup = `<img src="${escapeHtml(imageSrc)}" referrerpolicy="no-referrer" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imageSrc)}', 'customer')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">`;
+            if (loadedSet && loadedSet.has(imageSrc)) {
+                imageMarkup = `<img src="${escapeHtml(imageSrc)}" referrerpolicy="no-referrer" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imageSrc)}', 'customer')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-90 transition">`;
+            } else {
+                imageMarkup = `
+                <div class="rider-chat-thumb-card flex items-center gap-2.5 p-2 rounded-xl bg-slate-100 dark:bg-black/40 border border-slate-300 dark:border-slate-700 hover:border-emerald-500/50 transition cursor-pointer max-w-[240px] my-1 shadow-xs group"
+                     onclick="event.stopPropagation(); window.revealAndOpenChatImage && window.revealAndOpenChatImage('${escapeHtml(imageSrc)}', this, '${escapeHtml(m.id || '')}', '')">
+                    <div class="w-10 h-10 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 group-hover:scale-105 transition-transform shrink-0">
+                        <i class="fa-solid fa-image text-base"></i>
+                    </div>
+                    <div class="flex flex-col min-w-0 flex-1">
+                        <span class="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition truncate">📷 Attached Photo</span>
+                        <span class="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                            <i class="fa-solid fa-arrow-down text-[8px]"></i> Tap to load & view
+                        </span>
+                    </div>
+                    <span class="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 text-[9px] font-black shrink-0 uppercase tracking-wide">
+                        LOAD
+                    </span>
+                </div>`;
+            }
         }
         
         let senderName = m.sender || "Lokalex";

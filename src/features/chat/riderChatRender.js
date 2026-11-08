@@ -103,6 +103,82 @@ export function formatFileSize(bytes) {
     return `${(num / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+export const loadedFullImagesCache = new Set();
+if (typeof window !== 'undefined') {
+    window.loadedFullImagesCache = loadedFullImagesCache;
+}
+
+export function revealAndOpenChatImage(imgUrl, el, msgId = '', midArg = '') {
+    if (!imgUrl) return;
+    loadedFullImagesCache.add(imgUrl);
+
+    if (el && el.parentNode) {
+        const img = document.createElement('img');
+        img.src = imgUrl;
+        img.loading = 'eager';
+        img.decoding = 'async';
+        img.fetchPriority = 'high';
+        img.referrerPolicy = 'no-referrer';
+        img.className = 'w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-95 transition bg-gray-100 dark:bg-gray-800 min-h-[120px] object-cover';
+        img.onclick = (e) => {
+            e.stopPropagation();
+            if (window.openImageViewerModal) window.openImageViewerModal(imgUrl, 'rider');
+        };
+        img.onerror = () => {
+            if (window.handleChatImageLoadError) window.handleChatImageLoadError(img, msgId, midArg);
+        };
+        el.replaceWith(img);
+    }
+
+    if (window.openImageViewerModal) {
+        window.openImageViewerModal(imgUrl, 'rider');
+    }
+}
+if (typeof window !== 'undefined') {
+    window.revealAndOpenChatImage = revealAndOpenChatImage;
+}
+
+export function revealAndOpenChatImages(urls, el, msgId = '', midArg = '') {
+    if (!Array.isArray(urls) || urls.length === 0) return;
+    urls.forEach(u => loadedFullImagesCache.add(u));
+
+    if (el && el.parentNode) {
+        const gridCols = urls.length === 2 ? 'grid-cols-2' : (urls.length === 3 ? 'grid-cols-3' : 'grid-cols-2');
+        const container = document.createElement('div');
+        container.className = `grid ${gridCols} gap-1.5 mt-1.5 max-w-full w-64 rounded-xl overflow-hidden`;
+        container.onclick = (e) => e.stopPropagation();
+
+        urls.forEach(imgUrl => {
+            const wrap = document.createElement('div');
+            wrap.className = 'relative overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 border border-black/10 dark:border-white/10 aspect-square group/img';
+            const img = document.createElement('img');
+            img.src = imgUrl;
+            img.loading = 'lazy';
+            img.decoding = 'async';
+            img.referrerPolicy = 'no-referrer';
+            img.className = 'w-full h-full object-cover cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200';
+            img.onclick = (e) => {
+                e.stopPropagation();
+                if (window.openImageViewerModal) window.openImageViewerModal(imgUrl, 'rider');
+            };
+            img.onerror = () => {
+                if (window.handleChatImageLoadError) window.handleChatImageLoadError(img, msgId, midArg);
+            };
+            wrap.appendChild(img);
+            container.appendChild(wrap);
+        });
+
+        el.replaceWith(container);
+    }
+
+    if (window.openImageViewerModal && urls[0]) {
+        window.openImageViewerModal(urls[0], 'rider');
+    }
+}
+if (typeof window !== 'undefined') {
+    window.revealAndOpenChatImages = revealAndOpenChatImages;
+}
+
 export function isDocumentUrlOrType(msg) {
     if (!msg) return false;
     if (msg.type === 'file' || msg.type === 'document' || msg.fileUrl) return true;
@@ -1042,26 +1118,85 @@ export function buildSingleMessageHtml(m, activeCustData = null) {
     
     let imageMarkup = '';
     const midArg = m.mid || m.metaMid || (String(m.id).startsWith('m_') ? m.id : '');
-    if (imageList.length > 1) {
-        const gridCols = imageList.length === 2 ? 'grid-cols-2' : (imageList.length === 3 ? 'grid-cols-3' : 'grid-cols-2');
-        const imgElements = imageList.map(imgUrl => `
-            <div class="relative overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 border border-black/10 dark:border-white/10 aspect-square group/img">
-                <img src="${escapeHtml(imgUrl)}" loading="lazy" decoding="async" referrerpolicy="no-referrer"
-                    onerror="window.handleChatImageLoadError && window.handleChatImageLoadError(this, '${escapeHtml(m.id || '')}', '${escapeHtml(midArg)}')"
-                    onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgUrl)}', 'rider')" 
-                    class="w-full h-full object-cover cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200">
-            </div>
-        `).join('');
+    
+    // Automatically pre-load photos freshly dispatched by this rider session (within 2 mins)
+    if (isRider && m.timestamp && (Date.now() - Number(m.timestamp) < 120000)) {
+        imageList.forEach(url => loadedFullImagesCache.add(url));
+    }
 
-        imageMarkup = `
-        <div class="grid ${gridCols} gap-1.5 mt-1.5 max-w-full w-64 rounded-xl overflow-hidden" onclick="event.stopPropagation()">
-            ${imgElements}
-        </div>`;
+    if (imageList.length > 1) {
+        const allLoaded = imageList.every(url => loadedFullImagesCache.has(url));
+        if (allLoaded) {
+            const gridCols = imageList.length === 2 ? 'grid-cols-2' : (imageList.length === 3 ? 'grid-cols-3' : 'grid-cols-2');
+            const imgElements = imageList.map(imgUrl => `
+                <div class="relative overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 border border-black/10 dark:border-white/10 aspect-square group/img">
+                    <img src="${escapeHtml(imgUrl)}" loading="lazy" decoding="async" referrerpolicy="no-referrer"
+                        onerror="window.handleChatImageLoadError && window.handleChatImageLoadError(this, '${escapeHtml(m.id || '')}', '${escapeHtml(midArg)}')"
+                        onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgUrl)}', 'rider')" 
+                        class="w-full h-full object-cover cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200">
+                </div>
+            `).join('');
+
+            imageMarkup = `
+            <div class="grid ${gridCols} gap-1.5 mt-1.5 max-w-full w-64 rounded-xl overflow-hidden" onclick="event.stopPropagation()">
+                ${imgElements}
+            </div>`;
+        } else {
+            const safeUrlsJson = escapeHtml(JSON.stringify(imageList));
+            imageMarkup = `
+            <div class="rider-chat-thumb-card flex items-center gap-2.5 p-2 rounded-xl bg-slate-100 dark:bg-black/40 border border-slate-300 dark:border-slate-700 hover:border-teal-500/50 transition cursor-pointer max-w-[240px] my-1 shadow-xs group"
+                 onclick="event.stopPropagation(); window.revealAndOpenChatImages(JSON.parse(this.dataset.urls), this, '${escapeHtml(m.id || '')}', '${escapeHtml(midArg)}')"
+                 data-urls="${safeUrlsJson}">
+                <div class="w-10 h-10 rounded-lg bg-teal-500/10 dark:bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-teal-600 dark:text-teal-400 group-hover:scale-105 transition-transform shrink-0">
+                    <i class="fa-solid fa-images text-base"></i>
+                </div>
+                <div class="flex flex-col min-w-0 flex-1">
+                    <span class="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition truncate">📷 ${imageList.length} Photos</span>
+                    <span class="text-[10px] text-teal-700 dark:text-teal-400 font-semibold flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-down text-[8px]"></i> Tap to load & view
+                    </span>
+                </div>
+                <span class="px-2 py-0.5 rounded-md bg-teal-500/15 text-teal-800 dark:text-teal-300 text-[9px] font-black shrink-0 uppercase tracking-wide">
+                    LOAD
+                </span>
+            </div>`;
+        }
     } else if (imageList.length === 1) {
         const imgHtml = imageList[0];
-        imageMarkup = isLikeSticker 
-            ? `<div class="p-0.5 select-none flex items-center justify-start"><img src="${escapeHtml(imgHtml)}" alt="👍" referrerpolicy="no-referrer" class="w-10 h-10 object-contain hover:scale-110 active:scale-90 transition-transform cursor-pointer" onclick="event.stopPropagation()"></div>`
-            : `<img src="${escapeHtml(imgHtml)}" loading="eager" decoding="async" fetchpriority="high" referrerpolicy="no-referrer" onerror="window.handleChatImageLoadError && window.handleChatImageLoadError(this, '${escapeHtml(m.id || '')}', '${escapeHtml(midArg)}')" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgHtml)}', 'rider')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-95 transition bg-gray-100 dark:bg-gray-800 min-h-[120px] object-cover">`;
+        if (isLikeSticker) {
+            imageMarkup = `<div class="p-0.5 select-none flex items-center justify-start"><img src="${escapeHtml(imgHtml)}" alt="👍" referrerpolicy="no-referrer" class="w-10 h-10 object-contain hover:scale-110 active:scale-90 transition-transform cursor-pointer" onclick="event.stopPropagation()"></div>`;
+        } else if (loadedFullImagesCache.has(imgHtml)) {
+            imageMarkup = `<img src="${escapeHtml(imgHtml)}" loading="eager" decoding="async" fetchpriority="high" referrerpolicy="no-referrer" onerror="window.handleChatImageLoadError && window.handleChatImageLoadError(this, '${escapeHtml(m.id || '')}', '${escapeHtml(midArg)}')" onclick="event.stopPropagation(); window.openImageViewerModal && window.openImageViewerModal('${escapeHtml(imgHtml)}', 'rider')" class="w-52 max-w-full rounded-xl mt-1.5 border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-95 transition bg-gray-100 dark:bg-gray-800 min-h-[120px] object-cover">`;
+        } else if (m.thumbnailUrl || m.thumbUrl) {
+            const thumbSrc = m.thumbnailUrl || m.thumbUrl;
+            imageMarkup = `
+            <div class="rider-chat-thumb-card relative inline-block mt-1.5 rounded-xl overflow-hidden border border-gray-300 dark:border-gray-700 group cursor-pointer max-w-xs shadow-xs"
+                 onclick="event.stopPropagation(); window.revealAndOpenChatImage('${escapeHtml(imgHtml)}', this, '${escapeHtml(m.id || '')}', '${escapeHtml(midArg)}')">
+                <img src="${escapeHtml(thumbSrc)}" class="w-48 max-w-full rounded-xl object-cover filter blur-[1px] brightness-90 group-hover:brightness-100 transition">
+                <div class="absolute inset-0 bg-black/35 flex items-center justify-center p-2">
+                    <span class="px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1.5 shadow-md">
+                        <i class="fa-solid fa-arrow-down text-[9px] text-emerald-400"></i> Tap to load photo
+                    </span>
+                </div>
+            </div>`;
+        } else {
+            imageMarkup = `
+            <div class="rider-chat-thumb-card flex items-center gap-2.5 p-2 rounded-xl bg-slate-100 dark:bg-black/40 border border-slate-300 dark:border-slate-700 hover:border-emerald-500/50 transition cursor-pointer max-w-[240px] my-1 shadow-xs group"
+                 onclick="event.stopPropagation(); window.revealAndOpenChatImage('${escapeHtml(imgHtml)}', this, '${escapeHtml(m.id || '')}', '${escapeHtml(midArg)}')">
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 group-hover:scale-105 transition-transform shrink-0">
+                    <i class="fa-solid fa-image text-base"></i>
+                </div>
+                <div class="flex flex-col min-w-0 flex-1">
+                    <span class="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition truncate">📷 Attached Photo</span>
+                    <span class="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-down text-[8px]"></i> Tap to load & view
+                    </span>
+                </div>
+                <span class="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 text-[9px] font-black shrink-0 uppercase tracking-wide">
+                    LOAD
+                </span>
+            </div>`;
+        }
     } else if (m.attachmentFailed) {
         imageMarkup = `
         <div class="flex items-center gap-2 py-2 px-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-600 dark:text-amber-400 text-xs mt-1 font-medium select-none" onclick="event.stopPropagation()">
@@ -1746,4 +1881,7 @@ if (typeof window !== 'undefined') {
     window.handleChatLinkClick = handleChatLinkClick;
     window.downloadChatDocument = downloadChatDocument;
     window.updateRiderChatSeenAvatar = updateRiderChatSeenAvatar;
+    window.revealAndOpenChatImage = revealAndOpenChatImage;
+    window.revealAndOpenChatImages = revealAndOpenChatImages;
+    window.loadedFullImagesCache = loadedFullImagesCache;
 }
