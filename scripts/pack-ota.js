@@ -77,6 +77,10 @@ if (fs.existsSync(releaseApkSource)) {
     apkCopied = true;
 }
 
+// Minimum native APK version required to run this web bundle.
+// Should stay at '1.2.0' unless a breaking native Android Java plugin/permission is introduced.
+const minNativeVersion = process.env.MIN_NATIVE_VERSION || '1.2.0';
+
 const manifest = {
     version: targetVersion,
     url: `https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/dist-v${targetVersion}.zip?v=${Date.now()}`,
@@ -84,7 +88,7 @@ const manifest = {
     checksum: checksum,
     updatedAt: new Date().toISOString(),
     notes: process.argv[3] || "Lokalex Base App & OTA Update",
-    nativeVersion: process.env.MIN_NATIVE_VERSION || targetVersion,
+    nativeVersion: minNativeVersion,
     apkUrl: "https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/app-release.apk"
 };
 

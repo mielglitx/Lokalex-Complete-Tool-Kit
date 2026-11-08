@@ -29,7 +29,7 @@ import { showCustomPrompt } from '../ui/modals.js';
 
 const OTA_MANIFEST_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/version.json';
 const OTA_CHECKSUMS_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/checksums.json';
-const CURRENT_BUILT_IN_VERSION = '1.1.6';
+const CURRENT_BUILT_IN_VERSION = '1.2.5';
 let isCheckingUpdate = false;
 let globalOtaChecksumsMap = {};
 
@@ -159,15 +159,27 @@ if (typeof window !== 'undefined') {
  * Retrieves the currently running version (from Capgo bundle or default).
  */
 export async function getCurrentAppVersion() {
+    const otaStored = localStorage.getItem('lokalex_ota_version');
     if (isNativePlatform()) {
         try {
             const current = await CapacitorUpdater.current();
-            if (current?.bundle?.version) {
+            // If Capgo has an active downloaded bundle (non-builtin) with a version, use it
+            if (current?.bundle?.version && current.bundle.id && current.bundle.id !== 'builtin') {
                 return current.bundle.version;
+            }
+            // If running builtin, check if stored OTA or builtin constant is newer than the native APK version
+            if (otaStored) {
+                if (current?.bundle?.version) {
+                    return compareVersions(otaStored, current.bundle.version) >= 0 ? otaStored : current.bundle.version;
+                }
+                return otaStored;
+            }
+            if (current?.bundle?.version) {
+                return compareVersions(CURRENT_BUILT_IN_VERSION, current.bundle.version) >= 0 ? CURRENT_BUILT_IN_VERSION : current.bundle.version;
             }
         } catch (_) {}
     }
-    return localStorage.getItem('lokalex_ota_version') || CURRENT_BUILT_IN_VERSION;
+    return otaStored || CURRENT_BUILT_IN_VERSION;
 }
 
 /**
@@ -265,29 +277,35 @@ export async function checkForOtaUpdate(isManual = false) {
         // Check if a newer native Base APK is available (for native Android features like Picture-in-Picture)
         const nativeVersion = manifest.nativeVersion;
         const apkUrl = manifest.apkUrl;
-        const currentNativeVersion = getNativeVersionName() || (isNativePlatform() ? "1.0.50" : null);
+        const currentNativeVersion = getNativeVersionName() || (isNativePlatform() ? "1.2.0" : null);
 
         if (isNativePlatform() && nativeVersion && apkUrl && currentNativeVersion) {
             const hasNativeUpdate = compareVersions(nativeVersion, currentNativeVersion) > 0;
             if (hasNativeUpdate) {
-                const proceedApk = confirm(
-                    `🚀 May Mahalagang Base App Update (APK)!\n\n` +
-                    `Bagong Bersyon: v${nativeVersion}\n` +
-                    `Kasalukuyang APK: v${currentNativeVersion}\n\n` +
-                    `Mga Pagbabago:\n${releaseNotes}\n\n` +
-                    `I-download at i-install ang APK ngayon?\n(Hindi mawawala ang iyong login at data)`
-                );
-                if (proceedApk) {
-                    installBaseApk(apkUrl, nativeVersion);
-                    return;
+                // If the user already has the current/newer web bundle running, do not block with native update prompt on background check!
+                const currentWebVersion = await getCurrentAppVersion();
+                const isAlreadyOnCurrentWeb = compareVersions(currentWebVersion, remoteVersion) >= 0;
+
+                if (isManual || !isAlreadyOnCurrentWeb) {
+                    const proceedApk = confirm(
+                        `🚀 May Mahalagang Base App Update (APK)!\n\n` +
+                        `Bagong Bersyon: v${nativeVersion}\n` +
+                        `Kasalukuyang APK: v${currentNativeVersion}\n\n` +
+                        `Mga Pagbabago:\n${releaseNotes}\n\n` +
+                        `I-download at i-install ang APK ngayon?\n(Hindi mawawala ang iyong login at data)`
+                    );
+                    if (proceedApk) {
+                        installBaseApk(apkUrl, nativeVersion);
+                        return;
+                    }
                 }
             }
         }
 
         const currentVersion = await getCurrentAppVersion();
         const currentChecksum = localStorage.getItem('lokalex_ota_checksum') || '';
-        const hasVersionUpdate = String(remoteVersion).trim().toLowerCase() !== String(currentVersion).trim().toLowerCase() || compareVersions(remoteVersion, currentVersion) !== 0;
-        const hasChecksumUpdate = Boolean(checksum && checksum !== currentChecksum);
+        const hasVersionUpdate = compareVersions(remoteVersion, currentVersion) > 0;
+        const hasChecksumUpdate = Boolean(checksum && currentChecksum && checksum !== currentChecksum && compareVersions(remoteVersion, currentVersion) >= 0);
         const hasUpdate = hasVersionUpdate || hasChecksumUpdate;
 
         const remoteDisplay = /^\d/.test(remoteVersion) ? `v${remoteVersion}` : remoteVersion;
