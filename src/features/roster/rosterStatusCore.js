@@ -169,8 +169,13 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
         return await clockOutRider(tId);
     }
 
+    const todayStr = getLocalTodayStr();
     const isStartingShift = !targetRecord || !targetRecord.status || targetRecord.status === 'End';
-    if (status === 'Available' && isStartingShift) {
+    const hasLoginToday = (globalState.globalLogins || []).some(
+        l => (l.riderId || l.id || "").toString() === tId && isSameDateStr(l.date, todayStr) && !l.clockOutTime
+    );
+
+    if ((status === 'Available' || status === 'Catering') && (isStartingShift || !hasLoginToday)) {
         recordLogin = true;
     }
 
@@ -192,7 +197,6 @@ export async function updateRosterStatus(status, targetId = null, targetName = n
     }
 
     const nowTimestamp = Date.now();
-    const todayStr = getLocalTodayStr();
     let accumulatedBreakSeconds = 0;
     if (targetRecord && isSameDateStr(targetRecord.breakDate, todayStr)) {
         const recSecs = Number(targetRecord.totalBreakSeconds) || 0;
@@ -479,6 +483,18 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
     const todayStr = getLocalTodayStr();
     let loginEntry = null;
 
+    // AUTO-HEALING & LOOPHOLE GUARD:
+    // If rider is becoming Available or Catering, ensure they are registered in logins for today
+    if (!recordLogin && (status === 'Available' || status === 'Catering')) {
+        const wasEnded = !existingRec || !existingRec.status || existingRec.status === 'End';
+        const hasActiveLoginToday = (globalState.globalLogins || []).some(l => 
+            (l.riderId || l.id || "").toString() === tId && isSameDateStr(l.date, todayStr) && !l.clockOutTime
+        );
+        if (wasEnded || !hasActiveLoginToday) {
+            recordLogin = true;
+        }
+    }
+
     if (recordLogin) {
         let finalLoginTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         let finalLoginTimestamp = nowTimestamp;
@@ -487,6 +503,7 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
         let accumulatedWorkedMinutes = 0;
         let firstLoginTime = finalLoginTime;
         let firstLoginTimestamp = finalLoginTimestamp;
+        let sessionLoginTimestamp = finalLoginTimestamp;
 
         // Instant 0ms memory lookup for existing login today (avoids slow network query)
         const existingLogin = (globalState.globalLogins || []).find(l => 
@@ -499,18 +516,20 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
             preservedBreakSecs = Math.max(preservedBreakSecs, exSecs);
             preservedBreakMins = Math.max(preservedBreakMins, exMins, Math.ceil(preservedBreakSecs / 60));
 
+            // CRITICAL BUG FIX: ALWAYS preserve the rider's original shift Time-In for today!
+            // Never reset their time-in when resuming duty or ending shift for a couple minutes!
             firstLoginTime = existingLogin.firstLoginTime || existingLogin.loginTime || finalLoginTime;
             firstLoginTimestamp = existingLogin.firstLoginTimestamp || existingLogin.loginTimestamp || finalLoginTimestamp;
+            finalLoginTime = firstLoginTime;
+            finalLoginTimestamp = firstLoginTimestamp;
 
             if (existingLogin.clockOutTimestamp || existingLogin.clockOutTime) {
                 const prevWorked = Number(existingLogin.workedMinutes) || Number(existingLogin.accumulatedWorkedMinutes) || 0;
                 accumulatedWorkedMinutes = prevWorked;
-                finalLoginTime = new Date(nowTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                finalLoginTimestamp = nowTimestamp;
+                sessionLoginTimestamp = nowTimestamp;
             } else {
-                if (existingLogin.loginTime) finalLoginTime = existingLogin.loginTime;
-                if (existingLogin.loginTimestamp) finalLoginTimestamp = existingLogin.loginTimestamp;
                 accumulatedWorkedMinutes = Number(existingLogin.accumulatedWorkedMinutes) || 0;
+                sessionLoginTimestamp = existingLogin.sessionLoginTimestamp || firstLoginTimestamp;
             }
         }
 
@@ -518,20 +537,21 @@ export async function updateRosterStatusData(status, customerName, startTime, qu
             riderId: tId,
             id: tId,
             riderName: tName,
-            loginTime: finalLoginTime,
-            loginTimestamp: finalLoginTimestamp,
+            loginTime: finalLoginTime, // ALWAYS the rider's original time-in (e.g. 08:00 AM)
+            loginTimestamp: finalLoginTimestamp, // ALWAYS the rider's original time-in timestamp
             firstLoginTime: firstLoginTime,
             firstLoginTimestamp: firstLoginTimestamp,
+            sessionLoginTimestamp: sessionLoginTimestamp,
             clockOutTime: "",
             clockOutTimestamp: null,
             date: todayStr,
-            location: locationLink || "",
+            location: locationLink || existingLogin?.location || "",
             earlyShiftPenaltyPercent: 0,
             deficitHours: 0,
             totalBreakMinutes: preservedBreakMins,
             totalBreakSeconds: preservedBreakSecs,
             accumulatedWorkedMinutes: accumulatedWorkedMinutes,
-            workedMinutes: 0
+            workedMinutes: accumulatedWorkedMinutes
         };
     }
 
@@ -683,8 +703,9 @@ export async function clockOutRider(targetId = null) {
     let initialClockOutEntry = null;
 
     if (existingLoginToday) {
-        if (existingLoginToday.loginTimestamp) {
-            grossMins = Math.max(0, Math.floor((nowTimestamp - existingLoginToday.loginTimestamp) / 60000));
+        const sessionStart = existingLoginToday.sessionLoginTimestamp || existingLoginToday.loginTimestamp;
+        if (sessionStart) {
+            grossMins = Math.max(0, Math.floor((nowTimestamp - sessionStart) / 60000));
             netWorkedMins = Math.max(0, grossMins - finalBreakMins);
         }
         const prevAccum = Number(existingLoginToday.accumulatedWorkedMinutes) || 0;

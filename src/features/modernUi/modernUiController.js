@@ -1634,6 +1634,46 @@ export function renderModernLoginsTab() {
             return false;
         });
 
+        // AUTO-HEALING: If any rider is currently on duty (Available or Catering)
+        // but has no login record today, synthesize and persist their login record immediately!
+        eligibleRoster.forEach(m => {
+            const rawName = (m?.riderName || m?.name || '').trim();
+            const rId = (m?.telegramId || m?.id || '').toString().trim();
+            const n = rawName.toLowerCase();
+            const isOnDuty = m && (m.status === 'Available' || m.status === 'Catering');
+            if (isOnDuty && n && !todayLogins.some(l => (l.riderId || l.id || '').toString() === rId || isRiderMatch(rawName, l.riderName || '', rId, (l.riderId || l.id || '').toString()))) {
+                const nowTs = Date.now();
+                const timeStr = m.startTime || m.lastUpdated || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const autoEntry = {
+                    riderId: rId,
+                    id: rId,
+                    riderName: rawName,
+                    loginTime: timeStr,
+                    loginTimestamp: nowTs,
+                    firstLoginTime: timeStr,
+                    firstLoginTimestamp: nowTs,
+                    sessionLoginTimestamp: nowTs,
+                    clockOutTime: "",
+                    clockOutTimestamp: null,
+                    date: todayStr,
+                    location: "",
+                    earlyShiftPenaltyPercent: 0,
+                    deficitHours: 0,
+                    totalBreakMinutes: m.totalBreakMinutes || 0,
+                    totalBreakSeconds: m.totalBreakSeconds || 0,
+                    accumulatedWorkedMinutes: 0,
+                    workedMinutes: 0
+                };
+                todayLogins.push(autoEntry);
+                if (!globalState.globalLogins) globalState.globalLogins = [];
+                globalState.globalLogins.push(autoEntry);
+                if (db && rId) {
+                    db.ref(`logins/${rId}`).set(autoEntry).catch(() => {});
+                    db.ref(`shiftHistory/${todayStr}_${rId}`).set(autoEntry).catch(() => {});
+                }
+            }
+        });
+
         const loggedInNames = new Set();
         todayLogins.forEach(l => {
             const n = (l.riderName || '').trim().toLowerCase();
@@ -1663,21 +1703,7 @@ export function renderModernLoginsTab() {
                     const rawName = l.riderName || "Rider";
                     const rId = (l.riderId || l.telegramId || '').toString();
                     const member = roster.find(m => isRiderMatch(rawName, m?.riderName || m?.name || '', rId, (m?.telegramId || m?.id || '').toString()));
-                    let timeIn = l.loginTime || '--:--';
-
-                    // If rider resumed duty later today, display their current resumed session timeIn:
-                    if (member && member.status && member.status !== 'End' && member.availableTimestamp) {
-                        const availTs = Number(member.availableTimestamp) || (typeof parseQueueTime === 'function' ? parseQueueTime(member.availableTimestamp) : 0);
-                        const logTs = Number(l.loginTimestamp) || 0;
-                        if (availTs > 0 && logTs > 0 && (availTs - logTs) > 1800000 && !l.accumulatedWorkedMinutes) {
-                            try {
-                                const d = new Date(availTs);
-                                if (!isNaN(d.getTime())) {
-                                    timeIn = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                }
-                            } catch (_) {}
-                        }
-                    }
+                    let timeIn = l.firstLoginTime || l.loginTime || '--:--';
 
                     const isCurrentlyOnDuty = member ? (member.status && member.status !== 'End') : !l.clockOutTime;
                     const timeOut = isCurrentlyOnDuty 
@@ -1777,24 +1803,17 @@ export async function openModernRiderProfile(riderId, riderName) {
     // Time served net of break time
     let timeServedStr = "Not shifted in";
     const loginRec = (globalState.globalLogins || []).find(l => isSameDateStr(l.date, todayStr) && isRiderMatch(riderName, l.riderName || '', riderId, (l.riderId || l.id || '').toString()));
-    if (loginRec && (loginRec.loginTime || loginRec.loginTimestamp)) {
+    if (loginRec && (loginRec.loginTime || loginRec.loginTimestamp || loginRec.firstLoginTime)) {
         let grossMins = 0;
-        let loginTs = loginRec.loginTimestamp;
+        let loginTs = loginRec.sessionLoginTimestamp || loginRec.firstLoginTimestamp || loginRec.loginTimestamp;
         const totalBreakMins = loginRec.totalBreakMinutes || member?.totalBreakMinutes || 0;
-        if (!loginTs && loginRec.loginTime) {
-            const parsed = parseTimeToMinutes(loginRec.loginTime);
+        if (!loginTs && (loginRec.firstLoginTime || loginRec.loginTime)) {
+            const parsed = parseTimeToMinutes(loginRec.firstLoginTime || loginRec.loginTime);
             if (parsed !== null) {
                 const d = new Date();
                 d.setHours(Math.floor(parsed / 60), parsed % 60, 0, 0);
                 loginTs = d.getTime();
             }
-        }
-
-        // HEURISTIC REPAIR FOR SESSIONS WHERE RIDER LOGGED OUT & RESUMED LATER TODAY:
-        // If member.availableTimestamp is significantly later than loginTs (e.g. rider resumed at 7:09 AM vs initial 4:04 AM)
-        // and member is currently on duty without accumulatedWorkedMinutes set yet:
-        if (member && member.status && member.status !== 'End' && member.availableTimestamp && loginTs && (member.availableTimestamp - loginTs) > 1800000 && !loginRec.accumulatedWorkedMinutes) {
-            loginTs = member.availableTimestamp;
         }
 
         const isCurrentlyOnDuty = member ? (member.status && member.status !== 'End') : !loginRec.clockOutTime;

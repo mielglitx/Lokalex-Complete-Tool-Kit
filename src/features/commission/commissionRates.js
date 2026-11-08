@@ -243,8 +243,8 @@ export function checkRiderIsOvertime(dateStr, riderName = "", telegramId = "", r
     const totalBreakMins = Math.max(standardBreakMins, validLoggedBreak);
 
     // 3. Determine login / start time
-    let loginTimestamp = shiftRec?.loginTimestamp || loginRec?.loginTimestamp || (rosterMem?.loginTimestamp && isSameDateStr(rosterMem.breakDate, dateFormatted) ? rosterMem.loginTimestamp : null);
-    let loginTimeStr = shiftRec?.loginTime || loginRec?.loginTime || "";
+    let loginTimestamp = shiftRec?.firstLoginTimestamp || shiftRec?.loginTimestamp || loginRec?.firstLoginTimestamp || loginRec?.loginTimestamp || (rosterMem?.loginTimestamp && isSameDateStr(rosterMem.breakDate, dateFormatted) ? rosterMem.loginTimestamp : null);
+    let loginTimeStr = shiftRec?.firstLoginTime || shiftRec?.loginTime || loginRec?.firstLoginTime || loginRec?.loginTime || "";
     if (!loginTimeStr && rosterMem && isSameDateStr(rosterMem.breakDate, dateFormatted)) {
         loginTimeStr = rosterMem.loginTime || rosterMem.startTime || rosterMem.timeIn || "";
     }

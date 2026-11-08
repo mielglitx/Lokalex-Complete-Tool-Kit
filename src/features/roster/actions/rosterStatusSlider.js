@@ -127,9 +127,9 @@ async function evaluateEarlyShiftPenalty(riderId, myRecord = null) {
             const loginSnap = await db.ref(`logins/${riderId}`).once('value');
             const data = loginSnap.val();
             if (data && (data.date === todayStr || !data.date)) {
-                loginTimeStr = data.loginTime || "";
-                if (data.loginTimestamp) {
-                    loginTimestamp = data.loginTimestamp;
+                loginTimeStr = data.firstLoginTime || data.loginTime || "";
+                if (data.firstLoginTimestamp || data.loginTimestamp) {
+                    loginTimestamp = data.firstLoginTimestamp || data.loginTimestamp;
                 }
                 if (data.totalBreakMinutes !== undefined) {
                     totalBreakMins = parseInt(data.totalBreakMinutes, 10) || 0;

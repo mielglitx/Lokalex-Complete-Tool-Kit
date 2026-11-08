@@ -198,13 +198,13 @@ export async function openRiderInfoModal(targetId, targetName = "") {
         } catch(e) {}
     }
 
-    if (loginRec && loginRec.loginTime) {
+    if (loginRec && (loginRec.loginTime || loginRec.firstLoginTime)) {
         let grossMins = 0;
-        let loginTs = loginRec.loginTimestamp;
+        let loginTs = loginRec.sessionLoginTimestamp || loginRec.firstLoginTimestamp || loginRec.loginTimestamp;
         let totalBreakMins = loginRec.totalBreakMinutes || member?.totalBreakMinutes || 0;
 
-        if (!loginTs && loginRec.loginTime) {
-            const parsed = parseTimeToMinutes(loginRec.loginTime);
+        if (!loginTs && (loginRec.firstLoginTime || loginRec.loginTime)) {
+            const parsed = parseTimeToMinutes(loginRec.firstLoginTime || loginRec.loginTime);
             if (parsed !== null) {
                 const d = new Date();
                 d.setHours(Math.floor(parsed / 60), parsed % 60, 0, 0);
@@ -221,11 +221,6 @@ export async function openRiderInfoModal(targetId, targetName = "") {
 
         const breakNote = totalBreakMins > 0 ? ` (Break: ${Math.floor(totalBreakMins / 60)}h ${totalBreakMins % 60}m)` : '';
         const accumulated = Number(loginRec.accumulatedWorkedMinutes) || 0;
-
-        // HEURISTIC REPAIR FOR SESSIONS WHERE RIDER LOGGED OUT & RESUMED LATER TODAY:
-        if (member && member.status && member.status !== 'End' && member.availableTimestamp && loginTs && (member.availableTimestamp - loginTs) > 1800000 && !accumulated) {
-            loginTs = member.availableTimestamp;
-        }
 
         if (status === 'END') {
             const clockOutTs = loginRec.clockOutTimestamp || loginTs || now;
