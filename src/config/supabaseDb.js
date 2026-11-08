@@ -450,6 +450,13 @@ function subscribeTableCdc(client, targetTable, handler, filter = null) {
     if (filter) pgConfig.filter = filter;
     channel.on('postgres_changes', pgConfig, (payload) => {
       lastRealtimeActivityTime = Date.now();
+      try {
+        if (typeof window !== 'undefined' && typeof window.recordRealtimeTraffic === 'function') {
+          const approxBytes = JSON.stringify(payload).length;
+          const cat = typeof window.classifyNetworkUrl === 'function' ? window.classifyNetworkUrl(targetTable) : 'chats';
+          window.recordRealtimeTraffic(approxBytes, cat, `cdc_${targetTable}`);
+        }
+      } catch (_) {}
       for (const fn of handlers) {
         try {
           fn(payload);
@@ -481,6 +488,12 @@ function getGlobalBroadcastChannel(client) {
       globalBroadcastChannel = client.channel('lokalex_broadcast');
       globalBroadcastChannel.on('broadcast', { event: 'db_change' }, (eventPayload) => {
         lastRealtimeActivityTime = Date.now();
+        try {
+          if (typeof window !== 'undefined' && typeof window.recordRealtimeTraffic === 'function') {
+            const approxBytes = JSON.stringify(eventPayload).length;
+            window.recordRealtimeTraffic(approxBytes, 'chats', 'broadcast_db_change');
+          }
+        } catch (_) {}
         for (const handler of globalBroadcastSubscribers) {
           try {
             handler(eventPayload);

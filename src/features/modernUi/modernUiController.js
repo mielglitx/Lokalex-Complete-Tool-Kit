@@ -131,6 +131,7 @@ export function applyLokalexUiMode(mode = null, notify = false) {
         syncModernHeaderUser();
         initModernHeaderClock();
         initModernTheme();
+        if (typeof window.updateHeaderDataUsagePill === 'function') window.updateHeaderDataUsagePill();
         initFloatingCartDrag();
         refreshAllModernViews();
         if (typeof window.syncChannelBarLockUI === 'function') window.syncChannelBarLockUI();
@@ -381,6 +382,7 @@ export function openModernMenuCategory(catKey) {
     if (catKey === 'settings') {
         title = "Settings";
         items = [
+            { icon: "fa-chart-simple text-emerald-400", label: "Data Usage Monitor", desc: "Track mobile data (10m, 30m, 1h, 1d, 1mo)", action: () => { closeModernHamburgerMenu(); window.openDataUsageModal && window.openDataUsageModal(); } },
             { icon: "fa-text-height text-sky-400", label: "View / Font size", desc: "Adjust app display scale & font size", action: () => { closeModernHamburgerMenu(); window.openProfileSettingsModal && window.openProfileSettingsModal(); } },
             { icon: "fa-user-pen text-emerald-400", label: "Profile", desc: "Edit personal details & avatar", action: () => { closeModernHamburgerMenu(); window.handleHeaderUserClick && window.handleHeaderUserClick(); } },
             { icon: "fa-key text-amber-400", label: "Security", desc: "Change PIN code & password", action: () => { closeModernHamburgerMenu(); window.openRiderPasswordModal && window.openRiderPasswordModal(); } },

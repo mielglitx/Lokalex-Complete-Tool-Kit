@@ -922,7 +922,7 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-Bj4Qdbph.js"></script>
+  <script type="module" crossorigin src="./assets/index-5XZZsh3O.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-hePW80VL.js">
   <link rel="modulepreload" crossorigin href="./assets/vendor-CBNqoVD9.js">
 <link rel="manifest" href="./manifest.webmanifest"></head>
@@ -3461,6 +3461,12 @@
                 <span id="modern-header-battery">--%</span>
             </div>
 
+            <!-- DATA USAGE MONITOR PILL -->
+            <button id="modern-header-data-pill" type="button" onclick="window.openDataUsageModal && window.openDataUsageModal()" class="px-2 py-1 rounded-xl bg-[#18232a] hover:bg-slate-800 border border-slate-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-sky-400 flex items-center gap-1 shrink-0 transition active:scale-95 cursor-pointer shadow-2xs" title="Tap to view App Data Usage Monitor">
+                <i class="fa-solid fa-chart-simple text-[10px] text-sky-400"></i>
+                <span id="modern-header-data-usage">0.0 MB</span>
+            </button>
+
             <!-- LIGHT / DARK MODE TOGGLE BUTTON -->
             <button id="modern-theme-toggle-btn" type="button" onclick="window.toggleModernTheme && window.toggleModernTheme()" class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-[#18232a] hover:bg-slate-800 border border-slate-700/80 text-amber-400 flex items-center justify-center text-xs transition active:scale-95 cursor-pointer shrink-0 shadow-2xs" title="Toggle Light / Dark Mode">
                 <i id="modern-theme-icon" class="fa-solid fa-sun"></i>
@@ -4001,11 +4007,16 @@
             color: #0F172A !important;
             background-color: #F8FAFC !important;
         }
+        #modern-ui-workspace.modern-theme-light nav button.border-b-emerald-400,
+        #modern-ui-workspace.modern-theme-light nav button.border-b-emerald-600,
         #modern-ui-workspace.modern-theme-light #modern-main-tab-chats.border-b-emerald-400,
-        #modern-ui-workspace.modern-theme-light #modern-main-tab-chats.border-b-emerald-600 {
+        #modern-ui-workspace.modern-theme-light #modern-main-tab-rotations.border-b-emerald-400,
+        #modern-ui-workspace.modern-theme-light #modern-main-tab-logins.border-b-emerald-400,
+        #modern-ui-workspace.modern-theme-light #modern-main-tab-catered.border-b-emerald-400 {
             background-color: #ECFDF5 !important;
             border-bottom-color: #059669 !important;
             color: #065F46 !important;
+            font-weight: 800 !important;
         }
         #modern-ui-workspace.modern-theme-light #modern-tab-rotations-badge {
             background-color: #FEF3C7 !important;
@@ -4145,42 +4156,183 @@
         #modern-ui-workspace.modern-theme-light #modern-panel-rotations .text-white {
             color: #0F172A !important;
         }
-        #modern-ui-workspace.modern-theme-light #modern-panel-logins .bg-\[\#121a1f\] {
+        /* Logins Tab Light Mode Overrides */
+        #modern-ui-workspace.modern-theme-light #modern-panel-logins .bg-\[\#121a1f\],
+        #modern-ui-workspace.modern-theme-light #modern-panel-logins > div > div {
             background-color: #FFFFFF !important;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+            border-color: #E2E8F0 !important;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-login-in-header {
+            color: #0F172A !important;
+            font-weight: 900 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-login-out-header {
+            color: #B91C1C !important;
+            font-weight: 900 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-panel-logins .text-rose-400,
+        #modern-ui-workspace.modern-theme-light #modern-panel-logins .text-red-400 {
+            color: #B91C1C !important;
+            font-weight: 800 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-panel-logins .text-slate-400,
+        #modern-ui-workspace.modern-theme-light #modern-panel-logins .text-slate-500 {
+            color: #64748B !important;
         }
         #modern-ui-workspace.modern-theme-light #modern-login-in-list > div,
-        #modern-ui-workspace.modern-theme-light #modern-login-out-list > div {
+        #modern-ui-workspace.modern-theme-light #modern-login-out-list > div,
+        #modern-ui-workspace.modern-theme-light #modern-login-in-list .bg-black\/40,
+        #modern-ui-workspace.modern-theme-light #modern-login-out-list .bg-black\/40 {
+            background-color: #F8FAFC !important;
             border-color: #E2E8F0 !important;
             color: #0F172A !important;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04) !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-login-in-list > div:hover,
+        #modern-ui-workspace.modern-theme-light #modern-login-out-list > div:hover {
+            background-color: #F1F5F9 !important;
+            border-color: #CBD5E1 !important;
         }
         #modern-ui-workspace.modern-theme-light #modern-login-in-list .text-white,
-        #modern-ui-workspace.modern-theme-light #modern-login-out-list .text-white {
+        #modern-ui-workspace.modern-theme-light #modern-login-out-list .text-white,
+        #modern-ui-workspace.modern-theme-light #modern-login-out-list .text-slate-300 {
             color: #0F172A !important;
+            font-weight: 800 !important;
         }
+        #modern-ui-workspace.modern-theme-light #modern-login-in-list .text-slate-300 {
+            color: #1E293B !important;
+            font-weight: 700 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-login-in-list .text-emerald-400 {
+            color: #047857 !important;
+            font-weight: 800 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-login-in-footer,
+        #modern-ui-workspace.modern-theme-light #modern-login-out-footer {
+            color: #475569 !important;
+            font-weight: 600 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-login-in-footer .text-emerald-400 {
+            color: #047857 !important;
+            font-weight: 800 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-login-out-footer .text-rose-400 {
+            color: #B91C1C !important;
+            font-weight: 800 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-panel-logins > div.p-3 {
+            background: #F8FAFC !important;
+            border-color: #CBD5E1 !important;
+            color: #334155 !important;
+        }
+
+        /* Catered List Light Mode Overrides */
         #modern-ui-workspace.modern-theme-light #modern-panel-catered .bg-\[\#121a1f\],
         #modern-ui-workspace.modern-theme-light #modern-catered-list > div {
             background-color: #FFFFFF !important;
             border-color: #E2E8F0 !important;
             color: #0F172A !important;
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
         }
         #modern-ui-workspace.modern-theme-light #modern-catered-list .text-white {
             color: #0F172A !important;
         }
+        #modern-ui-workspace.modern-theme-light #modern-catered-list .text-amber-300 {
+            color: #0F172A !important;
+            font-weight: 900 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-catered-list .bg-emerald-500\/10 {
+            background-color: #ECFDF5 !important;
+            border-color: #A7F3D0 !important;
+            color: #047857 !important;
+            font-weight: 800 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-catered-list span.font-mono.font-black.text-emerald-400 {
+            background-color: #F1F5F9 !important;
+            border-color: #CBD5E1 !important;
+            color: #0F172A !important;
+            font-weight: 800 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-catered-list .text-slate-300 {
+            color: #334155 !important;
+            font-weight: 700 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-catered-list .text-slate-400 {
+            color: #475569 !important;
+            font-weight: 600 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-catered-list .text-emerald-400 {
+            color: #047857 !important;
+            font-weight: 800 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-catered-list .border-slate-800\/80,
+        #modern-ui-workspace.modern-theme-light #modern-catered-list .border-slate-800 {
+            border-color: #E2E8F0 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-catered-list .text-slate-600 {
+            color: #94A3B8 !important;
+        }
+
+        /* Footer Status Buttons Light Mode Overrides */
         #modern-ui-workspace.modern-theme-light footer {
             background-color: #FFFFFF !important;
             border-color: #E2E8F0 !important;
-            box-shadow: 0 -1px 3px 0 rgba(0, 0, 0, 0.05);
+            box-shadow: 0 -2px 6px 0 rgba(0, 0, 0, 0.05) !important;
         }
         #modern-ui-workspace.modern-theme-light footer button.bg-\[\#18232a\] {
             background-color: #F8FAFC !important;
             border-color: #CBD5E1 !important;
         }
+        #modern-ui-workspace.modern-theme-light #modern-btn-status-avail {
+            background-color: #ECFDF5 !important;
+            border-color: #A7F3D0 !important;
+            color: #047857 !important;
+            font-weight: 800 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-btn-status-cater {
+            background-color: #FFFBEB !important;
+            border-color: #FDE68A !important;
+            color: #B45309 !important;
+            font-weight: 800 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-btn-status-break {
+            background-color: #F0F9FF !important;
+            border-color: #BAE6FD !important;
+            color: #0369A1 !important;
+            font-weight: 800 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-btn-status-end {
+            background-color: #FFF1F2 !important;
+            border-color: #FECDD3 !important;
+            color: #BE123C !important;
+            font-weight: 800 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-btn-status-avail.ring-2 {
+            background-color: #D1FAE5 !important;
+            border-color: #10B981 !important;
+            box-shadow: 0 0 0 2px #10B981 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-btn-status-cater.ring-2 {
+            background-color: #FEF3C7 !important;
+            border-color: #F59E0B !important;
+            box-shadow: 0 0 0 2px #F59E0B !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-btn-status-break.ring-2 {
+            background-color: #E0F2FE !important;
+            border-color: #0EA5E9 !important;
+            box-shadow: 0 0 0 2px #0EA5E9 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-btn-status-end.ring-2 {
+            background-color: #FFE4E6 !important;
+            border-color: #F43F5E !important;
+            box-shadow: 0 0 0 2px #F43F5E !important;
+        }
         #modern-ui-workspace.modern-theme-light #modern-gross-pill {
             background-color: #ECFDF5 !important;
             border-color: #A7F3D0 !important;
-            color: #065F46 !important;
+            color: #047857 !important;
+            font-weight: 900 !important;
         }
     </style>
 </div>
@@ -9490,6 +9642,82 @@
     </div>
 </div>
 
+
+    <!-- src/partials/modals/data-usage-modal.html -->
+<div id="data-usage-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+    <div class="w-full max-w-md bg-white dark:bg-[#0c1418] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        
+        <!-- Header -->
+        <div class="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-[#11191e] shrink-0">
+            <div class="flex items-center gap-2">
+                <span class="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-chart-simple"></i>
+                </span>
+                <div>
+                    <h3 class="font-black text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                        Data Usage Monitor
+                        <span class="inline-flex items-center gap-1 text-[9px] font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Live
+                        </span>
+                    </h3>
+                    <p class="text-[10px] text-slate-500 font-medium">Tracks cellular data consumed by each feature</p>
+                </div>
+            </div>
+            <button type="button" onclick="window.closeDataUsageModal && window.closeDataUsageModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+
+        <!-- Time Windows Pill Filter Bar -->
+        <div class="p-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0e161b] flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+            <button id="data-usage-tab-10m" type="button" onclick="window.switchDataUsageWindow('10m')" class="px-2.5 py-1.5 rounded-xl text-xs font-bold shrink-0">10 Mins</button>
+            <button id="data-usage-tab-30m" type="button" onclick="window.switchDataUsageWindow('30m')" class="px-2.5 py-1.5 rounded-xl text-xs font-bold shrink-0">30 Mins</button>
+            <button id="data-usage-tab-1h"  type="button" onclick="window.switchDataUsageWindow('1h')"  class="px-2.5 py-1.5 rounded-xl text-xs font-bold shrink-0">1 Hour</button>
+            <button id="data-usage-tab-5h"  type="button" onclick="window.switchDataUsageWindow('5h')"  class="px-2.5 py-1.5 rounded-xl text-xs font-bold shrink-0">5 Hours</button>
+            <button id="data-usage-tab-1d"  type="button" onclick="window.switchDataUsageWindow('1d')"  class="px-2.5 py-1.5 rounded-xl text-xs font-bold shrink-0">1 Day</button>
+            <button id="data-usage-tab-1w"  type="button" onclick="window.switchDataUsageWindow('1w')"  class="px-2.5 py-1.5 rounded-xl text-xs font-bold shrink-0">1 Week</button>
+            <button id="data-usage-tab-1mo" type="button" onclick="window.switchDataUsageWindow('1mo')" class="px-2.5 py-1.5 rounded-xl text-xs font-bold shrink-0">1 Month</button>
+        </div>
+
+        <!-- Scrollable Content -->
+        <div class="flex-1 overflow-y-auto p-4 sm:p-5 flex flex-col gap-4">
+            
+            <!-- Hero Stat Card -->
+            <div class="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/20 flex flex-col gap-1.5">
+                <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400" id="data-usage-window-label">Data consumed in the last 1 Day</span>
+                <div class="flex items-baseline gap-2">
+                    <span id="data-usage-total-display" class="text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400">0 KB</span>
+                    <span class="text-[10px] text-slate-400 font-mono">mobile data</span>
+                </div>
+                <div id="data-usage-top-category" class="text-xs text-slate-700 dark:text-slate-300 font-medium pt-1 border-t border-emerald-500/15">
+                    Analyzing network transfer...
+                </div>
+            </div>
+
+            <!-- Category Breakdown Section -->
+            <div class="flex flex-col gap-2.5">
+                <div class="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 px-1">
+                    <span>Usage Breakdown by Part of App</span>
+                    <span>Total Consumed</span>
+                </div>
+                <div id="data-usage-breakdown-list" class="flex flex-col gap-2">
+                    <!-- Dynamic categories injected here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="p-3.5 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#11191e] flex items-center justify-between gap-2 shrink-0">
+            <button type="button" onclick="window.clearDataUsageHistory && window.clearDataUsageHistory()" class="px-3 py-2 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition active:scale-95 cursor-pointer flex items-center gap-1.5" title="Reset usage statistics counter">
+                <i class="fa-solid fa-trash-can text-[11px]"></i> Clear Stats
+            </button>
+            <button type="button" onclick="window.closeDataUsageModal && window.closeDataUsageModal()" class="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-black text-xs transition active:scale-95 cursor-pointer shadow-sm">
+                Done
+            </button>
+        </div>
+
+    </div>
+</div>
 
 
     <!-- STANDALONE PWA SERVICE WORKER REGISTRATION SCRIPT -->
