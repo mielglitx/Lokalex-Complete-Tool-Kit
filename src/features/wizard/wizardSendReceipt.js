@@ -38,6 +38,35 @@ function sanitizeForFirebase(obj) {
     }));
 }
 
+function createLightweightReceiptPreview(dataUrl, maxWidth = 540, quality = 0.48) {
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) {
+        return Promise.resolve(dataUrl);
+    }
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            try {
+                let w = img.width;
+                let h = img.height;
+                if (w > maxWidth) {
+                    h = Math.round((h * maxWidth) / w);
+                    w = maxWidth;
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            } catch (_) {
+                resolve(dataUrl);
+            }
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+    });
+}
+
 /**
  * Directly validates, generates, and delivers the receipt from the Wizard screen.
  * Immediately closes the wizard modal while receipt rendering and dispatch run in the background.
@@ -580,18 +609,24 @@ export async function executeSendReceiptToCustId(targetCustId, recipientName, op
             unreadForRider: false
         });
 
-        // 4. Parallel write to Database
+        // 4. Parallel write to Database (store lightweight compressed preview in DB while sending full-res to Messenger)
+        let dbImageUrl = hostedImageUrl || finalImageUrl;
+        if (typeof dbImageUrl === 'string' && dbImageUrl.startsWith('data:image') && dbImageUrl.length > 55000) {
+            try {
+                dbImageUrl = await createLightweightReceiptPreview(dbImageUrl, 540, 0.48);
+            } catch (_) {}
+        }
+        const dbMsg = { ...newMsg, imageUrl: dbImageUrl };
+
         let newMsgKey = null;
         if (db) {
             const pushRef = db.ref(`customerChats/${targetCustId}/messages`).push();
             newMsgKey = pushRef ? pushRef.key : null;
             if (pushRef) {
-                await pushRef.set(sanitizeForFirebase(newMsg));
+                await pushRef.set(sanitizeForFirebase(dbMsg));
             }
-            await Promise.all([
-                db.ref(`customerChats/${targetCustId}/metadata`).update(metaUpdate),
-                db.ref(`customerChatMeta/${targetCustId}`).update(metaUpdate)
-            ]).catch(err => console.warn("Firebase receipt write warning:", err));
+            await db.ref(`customerChatMeta/${targetCustId}`).update(metaUpdate)
+                .catch(err => console.warn("Firebase receipt write warning:", err));
         }
 
         // 5. Relay directly to Facebook Messenger webhook if customer is from Facebook

@@ -667,12 +667,16 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
         renderRiderCustomerChatFeed();
     }
 
-    // Instant thread sync bridge: If a customer thread is currently open and received a new message, sync it now!
+    // Instant thread sync bridge: Only if the currently open customer thread actually received a newer message
     if (!isFromCache && typeof window !== 'undefined' && window.activeRiderChatCustId && typeof window.syncIncomingMessageFromMeta === 'function') {
         const activeCustId = window.activeRiderChatCustId;
         const matchingThread = allThreads.find(t => t.custId === activeCustId || t.id === activeCustId || isCustomerMatch(t.custId, activeCustId));
         if (matchingThread) {
-            window.syncIncomingMessageFromMeta(activeCustId, matchingThread);
+            const threadSig = `${activeCustId}:${matchingThread.lastUpdated || 0}:${matchingThread.lastMessage || ''}`;
+            if (window._lastActiveThreadMetaSig !== threadSig) {
+                window._lastActiveThreadMetaSig = threadSig;
+                window.syncIncomingMessageFromMeta(activeCustId, matchingThread);
+            }
         }
     }
 }
@@ -697,9 +701,8 @@ export function listenToAllCustomerChatsForRider() {
     setIsCustomerChatMetaListening(true);
 
     // 2. REALTIME WEBSOCKET LISTENER FOR INCOMING LIVE MESSAGES
-    // Ordered by lastUpdated with comprehensive window (350 active conversations)
-    // so active threads across multiple days are never omitted from feed or search.
-    db.ref('customerChatMeta').orderByChild('lastUpdated').limitToLast(350).on('value', (snapshot) => {
+    // Ordered by lastUpdated with optimized window (120 most recent conversations; older threads remain in local cache)
+    db.ref('customerChatMeta').orderByChild('lastUpdated').limitToLast(120).on('value', (snapshot) => {
         const data = snapshot.val();
         try {
             if (data && typeof data === 'object') {
@@ -1169,7 +1172,7 @@ export async function forceRefreshLiveChatsFeed(btn = null, isSilent = false) {
 
     try {
         let chatData = null;
-        const queryLimit = isSilent ? 60 : 250;
+        const queryLimit = isSilent ? 50 : 120;
         if (db) {
             try {
                 const snap = await db.ref('customerChatMeta').orderByChild('lastUpdated').limitToLast(queryLimit).once('value');

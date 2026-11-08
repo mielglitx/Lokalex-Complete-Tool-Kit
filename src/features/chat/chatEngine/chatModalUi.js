@@ -163,18 +163,17 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
         try { db.goOnline(); } catch (_) {}
     }
 
-    if (db && custId) {
-        const payload = { unreadForRider: false };
-        db.ref(`customerChats/${custId}/metadata`).update(payload).catch(() => {});
-        db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
-    }
-
+    let wasThreadUnread = false;
     if (custId && typeof window.getCachedCustomerThreadsMap === 'function') {
         const map = window.getCachedCustomerThreadsMap();
         if (map) {
             for (const thread of map.values()) {
                 if (thread.custId === custId) {
+                    if (thread.isUnread || thread.unreadForRider) {
+                        wasThreadUnread = true;
+                    }
                     thread.isUnread = false;
+                    thread.unreadForRider = false;
                     break;
                 }
             }
@@ -185,6 +184,11 @@ export function openRiderCustomerChatModal(custId, custName, avatarUrl) {
             if (typeof window.updateInboxUnreadBadge === 'function') window.updateInboxUnreadBadge();
             if (typeof window.updateDoneUnreadBadge === 'function') window.updateDoneUnreadBadge();
         }
+    }
+
+    if (db && custId && wasThreadUnread) {
+        const payload = { unreadForRider: false };
+        db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
     }
 
     const modal = document.getElementById('rider-chat-modal') || document.getElementById('rider-customer-chat-modal');

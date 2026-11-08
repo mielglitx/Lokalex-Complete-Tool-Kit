@@ -489,11 +489,21 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
 
     let newMsgKey = null;
     try {
+        // Compress oversized base64 menu images before storing in customer_chats DB table
+        // while keeping full resolution for Facebook Messenger delivery and local view
+        let dbImageUrl = imageUrl;
+        if (typeof imageUrl === 'string' && imageUrl.startsWith('data:image') && imageUrl.length > 45000) {
+            try {
+                dbImageUrl = await compressDataUrlForBridge(imageUrl, 540, 0.42, true);
+            } catch (_) {}
+        }
+        const dbMsg = { ...newMsg, imageUrl: dbImageUrl };
+
         const pushRef = db.ref(`customerChats/${cleanCustId}/messages`).push();
         newMsgKey = pushRef ? pushRef.key : null;
         const writePromises = [];
         if (pushRef) {
-            writePromises.push(pushRef.set(sanitizeForFirebase(newMsg)));
+            writePromises.push(pushRef.set(sanitizeForFirebase(dbMsg)));
         }
 
         if (!isBatch || isLastPage) {
@@ -506,7 +516,6 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
                 metaUpdate.customerName = custName;
             }
 
-            writePromises.push(db.ref(`customerChats/${cleanCustId}/metadata`).update(metaUpdate));
             writePromises.push(db.ref(`customerChatMeta/${cleanCustId}`).update(metaUpdate));
         }
         await Promise.all(writePromises).catch(() => {});
@@ -582,7 +591,7 @@ export async function sendDirectMenuPhotoToCustomer(targetCustId, imageUrl, capt
     }
 }
 
-function compressDataUrlForBridge(dataUrl, maxDim = 800, quality = 0.65) {
+function compressDataUrlForBridge(dataUrl, maxDim = 800, quality = 0.65, forceThumbnail = false) {
     if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) {
         return Promise.resolve(dataUrl);
     }
@@ -592,7 +601,7 @@ function compressDataUrlForBridge(dataUrl, maxDim = 800, quality = 0.65) {
             try {
                 let w = img.width;
                 let h = img.height;
-                const isTallDoc = (h / w) >= 1.6;
+                const isTallDoc = !forceThumbnail && (h / w) >= 1.6;
 
                 if (isTallDoc) {
                     // For receipts & tall documents, preserve width >= 1000px so text & QR codes stay crystal clear
@@ -660,9 +669,27 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
             (newMsgKey && /receipt|menu/i.test(String(newMsgKey)))
         );
 
+        const token = (typeof getFbPageAccessToken === 'function') 
+            ? await getFbPageAccessToken(apiId) 
+            : null;
+
         const markDeliverySuccess = async (rawMid = null) => {
             if (!newMsgKey || !custId) return;
             const safeMid = rawMid ? String(rawMid).replace(/[.#$\[\]\/]/g, '_') : null;
+
+            // If we sent a base64 image and Facebook returned a message_id, resolve its hosted CDN URL
+            // so customer_chats in Supabase stores a tiny 100-byte HTTPS link instead of base64!
+            let hostedFbUrl = null;
+            if (rawMid && token && imageUrl && typeof imageUrl === 'string' && imageUrl.startsWith('data:')) {
+                try {
+                    const msgMetaResp = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(rawMid)}?fields=attachments{image_data,payload}&access_token=${encodeURIComponent(token)}`);
+                    if (msgMetaResp.ok) {
+                        const msgMeta = await msgMetaResp.json();
+                        const att = msgMeta?.attachments?.data?.[0];
+                        hostedFbUrl = att?.image_data?.url || att?.payload?.url || null;
+                    }
+                } catch (_) {}
+            }
 
             // 1. Immediately update loaded memory and cache
             const local = loadedRiderMsgsMap.get(newMsgKey);
@@ -670,6 +697,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                 local.status = 'sent';
                 local.failed = false;
                 local.failedReason = null;
+                if (hostedFbUrl) local.imageUrl = hostedFbUrl;
                 if (safeMid) {
                     local.mid = safeMid;
                     local.metaMid = rawMid;
@@ -682,6 +710,7 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                 memItem.status = 'sent';
                 memItem.failed = false;
                 memItem.failedReason = null;
+                if (hostedFbUrl) memItem.imageUrl = hostedFbUrl;
                 if (safeMid) {
                     memItem.mid = safeMid;
                     memItem.metaMid = rawMid;
@@ -695,13 +724,16 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                 appendOrUpdateSingleRiderMessage(container, local, activeCustData);
             }
 
-            // 3. Persist success status to Firebase RTDB
+            // 3. Persist success status to Firebase RTDB / Supabase
             if (db) {
                 const updates = {
                     status: 'sent',
                     failed: null,
                     failedReason: null
                 };
+                if (hostedFbUrl) {
+                    updates.imageUrl = hostedFbUrl;
+                }
                 if (safeMid) {
                     updates.mid = safeMid;
                     updates.metaMid = rawMid;
@@ -712,17 +744,12 @@ export async function forwardRiderReplyToMessenger({ custId, apiId, text, imageU
                 ];
                 if (safeMid) {
                     promises.push(db.ref(`customerChats/${custId}/midIndex/${safeMid}`).set(newMsgKey));
-                    promises.push(db.ref(`customerChats/${custId}/midIndex/${rawMid}`).set(newMsgKey));
                 }
                 await Promise.all(promises).catch(e => console.warn("Failed to record delivered status in RTDB:", e));
             }
         };
 
         const recordFbMid = markDeliverySuccess;
-
-        const token = (typeof getFbPageAccessToken === 'function') 
-            ? await getFbPageAccessToken(apiId) 
-            : null;
 
         // 0. DIRECT DOCUMENT / FILE ATTACHMENT TO META GRAPH API
         if (fileUrl && token) {

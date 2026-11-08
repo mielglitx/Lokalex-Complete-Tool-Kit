@@ -34,6 +34,8 @@ function getMyRiderInfo() {
     return { riderId, riderName };
 }
 
+const lastThreadSeenWriteMap = new Map();
+
 /**
  * Records that the current rider has opened and seen the chat thread.
  */
@@ -44,15 +46,18 @@ export function markChatThreadSeen(custId) {
     if (!cleanCustKey || !riderId) return;
 
     const now = Date.now();
+    const lastWrite = lastThreadSeenWriteMap.get(cleanCustKey) || 0;
+    if (now - lastWrite < 180000) return; // Throttle to once per 3 minutes per thread
+    lastThreadSeenWriteMap.set(cleanCustKey, now);
+
     const payload = {
         riderId,
         riderName,
         seenAt: now
     };
 
-    // Save to both threadSeenBy and customerChatMeta paths
+    // Save only to threadSeenBy path (do not mutate global customerChatMeta on every view)
     db.ref(`customerChats/${cleanCustKey}/threadSeenBy/${riderId}`).set(payload).catch(() => {});
-    db.ref(`customerChatMeta/${cleanCustKey}/threadSeenBy/${riderId}`).set(payload).catch(() => {});
 }
 
 /**

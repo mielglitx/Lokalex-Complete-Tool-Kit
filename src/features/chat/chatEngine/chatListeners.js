@@ -794,9 +794,6 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         const msgTs = getMessageTimestamp(fullMsg);
         if (!fullMsg.timestamp && msgTs > 0) {
             fullMsg.timestamp = msgTs;
-            if (db && custId) {
-                db.ref(`customerChats/${custId}/messages/${key}/timestamp`).set(msgTs).catch(() => {});
-            }
         }
 
         // Keep master RAM cache & IndexedDB updated
@@ -1109,7 +1106,8 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
         });
 
         // Attach live listener starting strictly after cached timestamp
-        // Prevents re-firing child_added for pre-existing messages!
+        // Skip duplicate initial fetch since deltaQuery.once('value') above already fetched missed deltas!
+        deltaQuery._skipInitialFetch = true;
         setActiveRiderChatChildListener(deltaQuery);
         deltaQuery.on('child_added', handleIncomingLiveChild);
 
@@ -1189,10 +1187,11 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 setHasMoreRiderMsgs(false);
                 setIsInitialScrollDone(true);
 
-                // Listen for incoming messages with a 60s buffer
+                // Listen for incoming messages with a 60s buffer (skip initial HTTP re-fetch)
                 const liveQuery = db.ref(`customerChats/${custId}/messages`)
                     .orderByChild('timestamp')
                     .startAt(Date.now() - 60000);
+                liveQuery._skipInitialFetch = true;
                 setActiveRiderChatChildListener(liveQuery);
                 liveQuery.on('child_added', handleIncomingLiveChild);
             } else {
@@ -1203,9 +1202,6 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                             const resolvedTs = getMessageTimestamp(full);
                             if (resolvedTs > 0) {
                                 full.timestamp = resolvedTs;
-                                if (db && custId) {
-                                    db.ref(`customerChats/${custId}/messages/${key}/timestamp`).set(resolvedTs).catch(() => {});
-                                }
                             }
                         }
                         return full;
@@ -1239,6 +1235,7 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
                 const liveQuery = db.ref(`customerChats/${custId}/messages`)
                     .orderByChild('timestamp')
                     .startAt(maxTs + 1);
+                liveQuery._skipInitialFetch = true;
                 setActiveRiderChatChildListener(liveQuery);
                 liveQuery.on('child_added', handleIncomingLiveChild);
             }
@@ -1331,6 +1328,8 @@ export async function listenToRiderChatMessages(custId, forceReloadFromFirebase 
     });
 }
 
+const lastSyncedMetaSigMap = new Map();
+
 /**
  * Instant Bridge: When customerChatMeta receives an update for the currently active thread,
  * immediately synchronizes the new message to eliminate any delay between feed and open thread.
@@ -1341,19 +1340,42 @@ export function syncIncomingMessageFromMeta(custId, meta) {
     if (!container) return;
 
     const msgs = Array.from(loadedRiderMsgsMap.values());
-    const lastLoaded = msgs.length > 0 ? msgs[msgs.length - 1] : null;
-    const lastLoadedText = (lastLoaded?.text || lastLoaded?.message || '').trim();
-    const metaLastText = (meta?.lastMessage || meta?.text || '').trim();
+    if (msgs.length === 0) return; // Initial load is already handling empty state
 
-    const isDifferentText = Boolean(metaLastText && metaLastText !== lastLoadedText);
-    const isNewId = Boolean(meta?.lastMessageId && !loadedRiderMsgsMap.has(meta.lastMessageId));
+    const lastLoaded = msgs[msgs.length - 1];
+    const lastLoadedText = (lastLoaded?.text || lastLoaded?.message || '').replace(/^You:\s*/i, '').trim();
+    const metaLastText = (meta?.lastMessage || meta?.text || '').replace(/^You:\s*/i, '').trim();
     const lastMsgTime = Number(meta?.lastUpdated) || Number(meta?.timestamp) || 0;
-    const newestLoadedTime = msgs.length > 0 ? Math.max(...msgs.map(m => getMessageTimestamp(m))) : 0;
-    const isNewerTime = Boolean(lastMsgTime > 0 && lastMsgTime > (newestLoadedTime - 3000));
 
-    // If metadata indicates a newer message than what we currently have in memory:
+    // Deduplicate identical metadata snapshots so global feed updates never trigger redundant DB queries
+    const metaSig = `${custId}:${metaLastText}:${meta?.lastMessageId || ''}:${lastMsgTime}`;
+    const prevSync = lastSyncedMetaSigMap.get(custId);
+    if (prevSync && prevSync.sig === metaSig) return;
+    if (prevSync && (Date.now() - prevSync.time) < 2500 && lastMsgTime <= prevSync.lastMsgTime) return;
+
+    const newestLoadedTime = Math.max(...msgs.map(m => getMessageTimestamp(m) || 0), 0);
+    const isNewId = Boolean(meta?.lastMessageId && !loadedRiderMsgsMap.has(meta.lastMessageId));
+    const isNewerTime = Boolean(lastMsgTime > 0 && newestLoadedTime > 0 && lastMsgTime > (newestLoadedTime + 1500));
+    const isDifferentText = Boolean(
+        metaLastText &&
+        lastLoadedText &&
+        metaLastText !== lastLoadedText &&
+        !metaLastText.startsWith('📋') &&
+        !metaLastText.startsWith('🧾') &&
+        !metaLastText.startsWith('📷') &&
+        lastMsgTime > newestLoadedTime
+    );
+
+    // Only query if metadata genuinely indicates a newer message than what we already have in memory:
     if (isDifferentText || isNewId || isNewerTime) {
-        db.ref(`customerChats/${custId}/messages`).orderByChild('timestamp').limitToLast(10).once('value', (snap) => {
+        lastSyncedMetaSigMap.set(custId, { sig: metaSig, time: Date.now(), lastMsgTime });
+        let q = db.ref(`customerChats/${custId}/messages`).orderByChild('timestamp');
+        if (newestLoadedTime > 0) {
+            q = q.startAt(newestLoadedTime - 5000).limitToLast(4);
+        } else {
+            q = q.limitToLast(5);
+        }
+        q.once('value', (snap) => {
             if (activeRiderChatCustId !== custId) return;
             const data = snap.val();
             if (data && typeof data === 'object') {

@@ -115,7 +115,8 @@ export function initCateredDeltaSync() {
     if (!db || isCateredSyncListening) return;
     isCateredSyncListening = true;
 
-    const cateredRef = db.ref('cateredHistory').limitToLast(40);
+    const hasHydratedCatered = Array.isArray(globalState.globalCateredHistory) && globalState.globalCateredHistory.length > 0;
+    const cateredRef = db.ref('cateredHistory').limitToLast(hasHydratedCatered ? 15 : 30);
 
     // 1. Child Added: New delivery completed by any rider
     cateredRef.on('child_added', (snapshot) => {
@@ -197,7 +198,8 @@ export function initReceiptsDeltaSync() {
     if (!db || isReceiptsSyncListening) return;
     isReceiptsSyncListening = true;
 
-    const receiptsRef = db.ref('receipts').limitToLast(40);
+    const hasHydratedReceipts = Array.isArray(globalState.globalDailyReceipts) && globalState.globalDailyReceipts.length > 0;
+    const receiptsRef = db.ref('receipts').limitToLast(hasHydratedReceipts ? 15 : 30);
 
     receiptsRef.on('child_added', (snapshot) => {
         const key = snapshot.key;

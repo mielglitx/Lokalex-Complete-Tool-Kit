@@ -152,6 +152,9 @@ export function getPublicFbSendEndpoint(apiId) {
     return "https://dry-firefly-ee76.lokaledeliver.workers.dev/api/send-reply";
 }
 
+let adminApisFetchPromise = null;
+let hasFetchedAdminApisOnce = false;
+
 export async function getFbPageAccessToken(apiId) {
     if (apiId) {
         const cached = cachedAdminApisMap.get(apiId);
@@ -165,16 +168,28 @@ export async function getFbPageAccessToken(apiId) {
             return api.pageAccessToken.trim();
         }
     }
-    // RTDB fallback
+    if (hasFetchedAdminApisOnce && cachedAdminApisMap.size > 0) {
+        return null;
+    }
+    // RTDB / Supabase fallback (single deduplicated fetch per session, cached in memory)
     if (db) {
         try {
-            if (apiId) {
-                const snap = await db.ref(`adminSettings/facebookApis/${apiId}/pageAccessToken`).once('value');
-                const val = snap.val();
-                if (val && typeof val === 'string' && val.trim()) return val.trim();
+            if (!adminApisFetchPromise) {
+                adminApisFetchPromise = db.ref('adminSettings/facebookApis').once('value').finally(() => {
+                    adminApisFetchPromise = null;
+                });
             }
-            const allSnap = await db.ref('adminSettings/facebookApis').once('value');
+            const allSnap = await adminApisFetchPromise;
             const allVal = allSnap.val() || {};
+            hasFetchedAdminApisOnce = true;
+            for (const [k, api] of Object.entries(allVal)) {
+                if (api && typeof api === 'object') {
+                    cachedAdminApisMap.set(k, { id: k, ...api });
+                }
+            }
+            if (apiId && allVal[apiId]?.pageAccessToken) {
+                return String(allVal[apiId].pageAccessToken).trim();
+            }
             for (const api of Object.values(allVal)) {
                 if (api?.pageAccessToken && typeof api.pageAccessToken === 'string' && api.pageAccessToken.trim()) {
                     return api.pageAccessToken.trim();

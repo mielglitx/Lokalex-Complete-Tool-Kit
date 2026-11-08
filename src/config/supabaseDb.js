@@ -402,7 +402,18 @@ let hasBroadcastConnectedOnce = false;
 let wasBroadcastDisconnected = false;
 let lastRealtimeActivityTime = Date.now();
 const globalBroadcastSubscribers = new Set();
-const sharedTableChannels = new Map(); // targetTable -> { channel, handlers: Set<Function> }
+const sharedTableChannels = new Map(); // channelKey -> { channel, handlers: Set<Function> }
+const globalCustomerMetaCache = new Map(); // custId -> data object
+const globalCustomerChatsMsgCache = new Map(); // rowId -> data object
+
+function cacheCustomerChatMsg(rowId, data) {
+  if (!rowId || !data || typeof data !== 'object') return;
+  if (globalCustomerChatsMsgCache.size > 400 && !globalCustomerChatsMsgCache.has(rowId)) {
+    const firstKey = globalCustomerChatsMsgCache.keys().next().value;
+    if (firstKey) globalCustomerChatsMsgCache.delete(firstKey);
+  }
+  globalCustomerChatsMsgCache.set(rowId, data);
+}
 
 export function getLastRealtimeActivityTime() {
   return lastRealtimeActivityTime;
@@ -427,30 +438,34 @@ function computeFastSignature(val) {
   }
 }
 
-function subscribeTableCdc(client, targetTable, handler) {
+function subscribeTableCdc(client, targetTable, handler, filter = null) {
   if (!client || !targetTable) return () => {};
-  let entry = sharedTableChannels.get(targetTable);
+  const channelKey = filter ? `${targetTable}:${filter}` : targetTable;
+  let entry = sharedTableChannels.get(channelKey);
   if (!entry) {
-    const channel = client.channel(`cdc_table_${targetTable}`);
+    const safeChannelName = `cdc_table_${channelKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    const channel = client.channel(safeChannelName);
     const handlers = new Set();
-    channel.on('postgres_changes', { event: '*', schema: 'public', table: targetTable }, (payload) => {
+    const pgConfig = { event: '*', schema: 'public', table: targetTable };
+    if (filter) pgConfig.filter = filter;
+    channel.on('postgres_changes', pgConfig, (payload) => {
       lastRealtimeActivityTime = Date.now();
       for (const fn of handlers) {
         try {
           fn(payload);
         } catch (err) {
-          console.warn(`[CDC Handler Error on ${targetTable}]:`, err);
+          console.warn(`[CDC Handler Error on ${channelKey}]:`, err);
         }
       }
     }).subscribe();
     entry = { channel, handlers };
-    sharedTableChannels.set(targetTable, entry);
+    sharedTableChannels.set(channelKey, entry);
   }
   entry.handlers.add(handler);
   return () => {
     entry.handlers.delete(handler);
     if (entry.handlers.size === 0) {
-      sharedTableChannels.delete(targetTable);
+      sharedTableChannels.delete(channelKey);
       try {
         client.removeChannel(entry.channel).catch(() => {});
       } catch (_) {}
@@ -788,7 +803,7 @@ export function createSupabaseRef(rawPath, queryState = {}) {
             }
           } else if (pathInfo.table === 'customer_chat_meta') {
             // Data optimization: window query on customer_chat_meta
-            query = query.order('updated_at', { ascending: false }).limit(350);
+            query = query.order('updated_at', { ascending: false }).limit(120);
           } else if (!ref._query.equalTo) {
             // When querying entire table without limit or equalTo, order descending by newest first
             if (pathInfo.table === 'advanced_orders' || pathInfo.table === 'receipts') {
@@ -813,6 +828,9 @@ export function createSupabaseRef(rawPath, queryState = {}) {
             data.forEach(row => {
               let val = row.data !== undefined ? row.data : row;
               result[row.id] = val;
+              if (pathInfo.table === 'customer_chat_meta' && row.id && val && typeof val === 'object') {
+                globalCustomerMetaCache.set(row.id, val);
+              }
             });
 
             // Filter if equalTo query specified (ensure secondary safety match in memory)
@@ -902,6 +920,7 @@ export function createSupabaseRef(rawPath, queryState = {}) {
         channel: null,
         _unsubscribeCdc: null,
         tableCache: null,
+        docCache: undefined,
         lastSignature: null,
         childSignatures: new Map(),
         debounceTimer: null,
@@ -972,18 +991,22 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           const val = snap.val();
           if (isTableValueListener) {
             subRecord.tableCache = new Map(val && typeof val === 'object' ? Object.entries(val) : []);
+          } else {
+            subRecord.docCache = val;
           }
           subRecord.lastSignature = computeFastSignature(val);
           callback(snap);
         });
       } else if (eventType === 'child_added') {
-        ref.once('value', (snap) => {
-          if (subRecord.isClosed) return;
-          snap.forEach((childSnap) => {
+        if (!ref._skipInitialFetch && !ref._query?._skipInitialFetch) {
+          ref.once('value', (snap) => {
             if (subRecord.isClosed) return;
-            emitChildAdded(childSnap.val(), childSnap.key);
+            snap.forEach((childSnap) => {
+              if (subRecord.isClosed) return;
+              emitChildAdded(childSnap.val(), childSnap.key);
+            });
           });
-        });
+        }
       }
 
       // 2. Shared Realtime Multiplexed Subscription (Broadcast + Shared Table CDC)
@@ -1091,12 +1114,53 @@ export function createSupabaseRef(rawPath, queryState = {}) {
               if (subRecord.isClosed) return;
               emitValueSnapshot(Object.fromEntries(subRecord.tableCache), ref.key);
             }, 25);
+          } else if (val !== undefined && (payloadPath === cleanPath || (pInfo.isCustomerChats && pathInfo.isCustomerChats && pathInfo.subType === 'metadata' && pInfo.custId === pathInfo.custId && !pathInfo.targetId && rowSubPath.length === 0))) {
+            if (action === 'remove' || val === null) {
+              subRecord.docCache = null;
+            } else if (action === 'update' && subRecord.docCache && typeof subRecord.docCache === 'object' && typeof val === 'object' && !Array.isArray(val)) {
+              subRecord.docCache = { ...subRecord.docCache, ...val };
+            } else {
+              subRecord.docCache = val;
+            }
+            clearTimeout(subRecord.debounceTimer);
+            subRecord.debounceTimer = setTimeout(() => {
+              if (subRecord.isClosed) return;
+              emitValueSnapshot(subRecord.docCache, ref.key);
+            }, 25);
+          } else if (val !== undefined && payloadPath && payloadPath.startsWith(cleanPath + '/') && subRecord.docCache && typeof subRecord.docCache === 'object') {
+            const relSegs = payloadPath.slice(cleanPath.length + 1).split('/').filter(Boolean);
+            if (relSegs.length > 0) {
+              const nextDoc = { ...subRecord.docCache };
+              let cur = nextDoc;
+              for (let i = 0; i < relSegs.length - 1; i++) {
+                const s = relSegs[i];
+                cur[s] = (cur[s] && typeof cur[s] === 'object') ? { ...cur[s] } : {};
+                cur = cur[s];
+              }
+              const lastS = relSegs[relSegs.length - 1];
+              if (action === 'remove' || val === null) {
+                delete cur[lastS];
+              } else if (action === 'update' && cur[lastS] && typeof cur[lastS] === 'object' && typeof val === 'object') {
+                cur[lastS] = { ...cur[lastS], ...val };
+              } else {
+                cur[lastS] = val;
+              }
+              subRecord.docCache = nextDoc;
+              clearTimeout(subRecord.debounceTimer);
+              subRecord.debounceTimer = setTimeout(() => {
+                if (subRecord.isClosed) return;
+                emitValueSnapshot(subRecord.docCache, ref.key);
+              }, 25);
+            }
           } else {
             clearTimeout(subRecord.debounceTimer);
             subRecord.debounceTimer = setTimeout(async () => {
               if (subRecord.isClosed) return;
               const snap = await ref.once(eventType);
-              if (!subRecord.isClosed) emitValueSnapshot(snap.val(), snap.key);
+              if (!subRecord.isClosed) {
+                subRecord.docCache = snap.val();
+                emitValueSnapshot(subRecord.docCache, snap.key);
+              }
             }, 25);
           }
         } else if (eventType === 'child_added') {
@@ -1180,6 +1244,7 @@ export function createSupabaseRef(rawPath, queryState = {}) {
             subRecord.debounceTimer = setTimeout(async () => {
               if (subRecord.isClosed) return;
               if (payload.eventType === 'DELETE') {
+                subRecord.docCache = null;
                 emitValueSnapshot(null, ref.key);
               } else if (payload.new) {
                 let val = payload.new.data !== undefined ? payload.new.data : payload.new;
@@ -1191,10 +1256,14 @@ export function createSupabaseRef(rawPath, queryState = {}) {
                     val = (val && typeof val === 'object') ? val[seg] : null;
                   }
                 }
+                subRecord.docCache = val;
                 emitValueSnapshot(val, ref.key);
               } else {
                 const snap = await ref.once('value');
-                if (!subRecord.isClosed) emitValueSnapshot(snap.val(), snap.key);
+                if (!subRecord.isClosed) {
+                  subRecord.docCache = snap.val();
+                  emitValueSnapshot(subRecord.docCache, snap.key);
+                }
               }
             }, 35);
           }
@@ -1202,12 +1271,18 @@ export function createSupabaseRef(rawPath, queryState = {}) {
           if (payload.new) {
             const childKey = extractChildKey(payload.new.id, pathInfo);
             const val = payload.new.data !== undefined ? payload.new.data : payload.new;
+            if (targetTable === 'customer_chats' && payload.new.id) {
+              cacheCustomerChatMsg(payload.new.id, val);
+            }
             emitChildAdded(val, childKey);
           }
         } else if (eventType === 'child_changed' && payload.eventType === 'UPDATE') {
           if (payload.new) {
             const childKey = extractChildKey(payload.new.id, pathInfo);
             const val = payload.new.data !== undefined ? payload.new.data : payload.new;
+            if (targetTable === 'customer_chats' && payload.new.id) {
+              cacheCustomerChatMsg(payload.new.id, val);
+            }
             emitChildChanged(val, childKey);
           }
         } else if (eventType === 'child_removed' && payload.eventType === 'DELETE') {
@@ -1219,7 +1294,10 @@ export function createSupabaseRef(rawPath, queryState = {}) {
       };
 
       if (!pathInfo.isEphemeral) {
-        subRecord._unsubscribeCdc = subscribeTableCdc(client, targetTable, handleCdcEvent);
+        const cdcFilter = (targetTable === 'customer_chats' && pathInfo.custId)
+          ? `room_id=eq.${pathInfo.custId}`
+          : null;
+        subRecord._unsubscribeCdc = subscribeTableCdc(client, targetTable, handleCdcEvent, cdcFilter);
       }
 
       // Register subscription for clean, leak-free removal
@@ -1656,8 +1734,12 @@ async function handleMultiPathUpdate(client, rawPath, values) {
       }));
     } else if (group.type === 'cust_meta') {
       tasks.push(runExclusive(`customer_chat_meta:${group.custId}`, async () => {
-        const { data: existing } = await client.from('customer_chat_meta').select('data').eq('id', group.custId).maybeSingle();
-        const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
+        let existingData = globalCustomerMetaCache.get(group.custId);
+        if (!existingData) {
+          const { data: existing } = await client.from('customer_chat_meta').select('data').eq('id', group.custId).maybeSingle();
+          existingData = existing ? existing.data : null;
+        }
+        const current = (existingData && typeof existingData === 'object') ? { ...existingData } : {};
         for (const f of group.fields) {
           if (!f.targetId) {
             if (f.value && typeof f.value === 'object') Object.assign(current, f.value);
@@ -1677,13 +1759,18 @@ async function handleMultiPathUpdate(client, rawPath, values) {
             }
           }
         }
+        globalCustomerMetaCache.set(group.custId, current);
         await client.from('customer_chat_meta').upsert({ id: group.custId, data: current, updated_at: new Date().toISOString() }, { onConflict: 'id' });
         broadcastMutation(client, 'customer_chat_meta', `customerChatMeta/${group.custId}`, current, 'update');
       }));
     } else if (group.type === 'cust_msg') {
       tasks.push(runExclusive(`customer_chats:${group.rowId}`, async () => {
-        const { data: existing } = await client.from('customer_chats').select('data').eq('id', group.rowId).maybeSingle();
-        const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
+        let existingData = globalCustomerChatsMsgCache.get(group.rowId);
+        if (!existingData) {
+          const { data: existing } = await client.from('customer_chats').select('data').eq('id', group.rowId).maybeSingle();
+          existingData = existing ? existing.data : null;
+        }
+        const current = (existingData && typeof existingData === 'object') ? { ...existingData } : {};
         for (const f of group.fields) {
           if (f.subPath.length === 0) {
             if (f.value && typeof f.value === 'object') Object.assign(current, f.value);
@@ -1702,6 +1789,7 @@ async function handleMultiPathUpdate(client, rawPath, values) {
             }
           }
         }
+        cacheCustomerChatMsg(group.rowId, current);
         await client.from('customer_chats').upsert({
           id: group.rowId,
           room_id: group.custId,
@@ -1771,13 +1859,15 @@ async function handleCustomerChatsOnce(client, pathInfo, query) {
       }
       return msgData;
     } else {
-      // All messages in room
+      // All messages in room (use fast room_id index scan first, avoid over-fetching 50 rows)
       const cleanCust = String(custId || '').replace(/^fb_/, '');
       const altCust = String(custId || '').startsWith('fb_') ? cleanCust : `fb_${cleanCust}`;
+      const roomIds = custId === altCust ? [custId] : [custId, altCust];
+
       let q = client
         .from('customer_chats')
         .select('id, data, timestamp')
-        .or(`room_id.eq.${custId},room_id.eq.${altCust},id.like.${custId}_*,id.like.${cleanCust}_*`)
+        .in('room_id', roomIds)
         .not('id', 'like', '%_metadata')
         .not('id', 'like', '%_threadSeenBy')
         .not('id', 'like', '%_midIndex')
@@ -1793,24 +1883,31 @@ async function handleCustomerChatsOnce(client, pathInfo, query) {
       }
 
       if (query.limit && query.limitType === 'last') {
-        const fetchLimit = Math.max(query.limit * 3, 50);
+        const fetchLimit = Math.min(Math.max((Number(query.limit) || 10) + 2, 1), 20);
         q = q.order('timestamp', { ascending: false, nullsFirst: false }).limit(fetchLimit);
       } else if (query.limit && query.limitType === 'first') {
-        q = q.order('timestamp', { ascending: true, nullsFirst: false }).limit(query.limit);
+        q = q.order('timestamp', { ascending: true, nullsFirst: false }).limit(Math.min(Number(query.limit) || 10, 20));
       } else {
-        q = q.order('timestamp', { ascending: true, nullsFirst: false });
+        q = q.order('timestamp', { ascending: false, nullsFirst: false }).limit(20);
       }
 
       let { data, error } = await q;
-      if (error) {
-        console.warn(`[Supabase handleCustomerChatsOnce error on ${custId}]:`, error.message);
+      if (error || ((!data || data.length === 0) && !query.startAt)) {
+        if (error) {
+          console.warn(`[Supabase handleCustomerChatsOnce error on ${custId}]:`, error.message);
+        }
         try {
+          const fbLimit = Math.min(Math.max((Number(query.limit) || 10) + 2, 1), 15);
           const fallback = await client
             .from('customer_chats')
             .select('id, data, timestamp')
-            .or(`room_id.eq.${custId},room_id.eq.${altCust}`)
-            .limit(50);
-          if (fallback.data) data = fallback.data;
+            .or(`room_id.eq.${custId},room_id.eq.${altCust},id.like.${custId}_*`)
+            .not('id', 'like', '%_metadata')
+            .not('id', 'like', '%_threadSeenBy')
+            .not('id', 'like', '%_midIndex')
+            .order('timestamp', { ascending: false, nullsFirst: false })
+            .limit(fbLimit);
+          if (fallback.data && fallback.data.length > 0) data = fallback.data;
         } catch (_) {}
       }
       const messages = {};
@@ -1827,6 +1924,7 @@ async function handleCustomerChatsOnce(client, pathInfo, query) {
 
         finalRows.forEach(r => {
           if (!r.data || typeof r.data !== 'object' || r.id.endsWith('_messages')) return;
+          cacheCustomerChatMsg(r.id, r.data);
           const key = r.id.startsWith(`${custId}_`) ? r.id.slice(custId.length + 1) : r.id;
           messages[key] = r.data;
         });
@@ -1921,6 +2019,7 @@ async function handleCustomerChatsSet(client, pathInfo, value) {
       const rowId = targetId.startsWith(`${custId}_`) ? targetId : `${custId}_${targetId}`;
       return await runExclusive(`customer_chats:${rowId}`, async () => {
         if (subPath.length === 0) {
+          cacheCustomerChatMsg(rowId, value);
           const { error } = await client.from('customer_chats').upsert({
             id: rowId,
             room_id: custId,
@@ -1936,8 +2035,12 @@ async function handleCustomerChatsSet(client, pathInfo, value) {
             broadcastAction: 'insert'
           };
         } else {
-          const { data: existing } = await client.from('customer_chats').select('data').eq('id', rowId).maybeSingle();
-          const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
+          let existingData = globalCustomerChatsMsgCache.get(rowId);
+          if (!existingData) {
+            const { data: existing } = await client.from('customer_chats').select('data').eq('id', rowId).maybeSingle();
+            existingData = existing ? existing.data : null;
+          }
+          const current = (existingData && typeof existingData === 'object') ? { ...existingData } : {};
           let cursor = current;
           for (let i = 0; i < subPath.length - 1; i++) {
             const seg = subPath[i];
@@ -1945,6 +2048,7 @@ async function handleCustomerChatsSet(client, pathInfo, value) {
             cursor = cursor[seg];
           }
           cursor[subPath[subPath.length - 1]] = value;
+          cacheCustomerChatMsg(rowId, current);
 
           const { error } = await client.from('customer_chats').upsert({
             id: rowId,
@@ -1962,6 +2066,7 @@ async function handleCustomerChatsSet(client, pathInfo, value) {
     } else if (value && typeof value === 'object') {
       const rows = Object.entries(value).map(([mKey, mVal]) => {
         const rowId = mKey.startsWith(`${custId}_`) ? mKey : `${custId}_${mKey}`;
+        cacheCustomerChatMsg(rowId, mVal);
         const msgTimestamp = mVal?.timestamp ? new Date(mVal.timestamp).toISOString() : new Date().toISOString();
         return {
           id: rowId,
@@ -1985,8 +2090,12 @@ async function handleCustomerChatsSet(client, pathInfo, value) {
   } else if (subType === 'metadata') {
     return await runExclusive(`customer_chat_meta:${custId}`, async () => {
       if (targetId) {
-        const { data: existing } = await client.from('customer_chat_meta').select('data').eq('id', custId).maybeSingle();
-        const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
+        let existingData = globalCustomerMetaCache.get(custId);
+        if (!existingData) {
+          const { data: existing } = await client.from('customer_chat_meta').select('data').eq('id', custId).maybeSingle();
+          existingData = existing ? existing.data : null;
+        }
+        const current = (existingData && typeof existingData === 'object') ? { ...existingData } : {};
         if (subPath && subPath.length > 0) {
           if (!current[targetId] || typeof current[targetId] !== 'object') current[targetId] = {};
           let cursor = current[targetId];
@@ -1999,7 +2108,7 @@ async function handleCustomerChatsSet(client, pathInfo, value) {
         } else {
           current[targetId] = value;
         }
-
+        globalCustomerMetaCache.set(custId, current);
         await client.from('customer_chat_meta').upsert({ id: custId, data: current, updated_at: new Date().toISOString() }, { onConflict: 'id' });
         return {
           broadcastPath: `customerChatMeta/${custId}`,
@@ -2007,6 +2116,7 @@ async function handleCustomerChatsSet(client, pathInfo, value) {
           broadcastAction: 'update'
         };
       } else {
+        if (value && typeof value === 'object') globalCustomerMetaCache.set(custId, value);
         await client.from('customer_chat_meta').upsert({ id: custId, data: value, updated_at: new Date().toISOString() }, { onConflict: 'id' });
         return {
           broadcastPath: `customerChatMeta/${custId}`,
@@ -2019,9 +2129,14 @@ async function handleCustomerChatsSet(client, pathInfo, value) {
     const rowId = `${custId}_${subType}`;
     return await runExclusive(`customer_chats:${rowId}`, async () => {
       if (targetId) {
-        const { data: existing } = await client.from('customer_chats').select('data').eq('id', rowId).maybeSingle();
-        const current = (existing && existing.data && typeof existing.data === 'object') ? { ...existing.data } : {};
+        let existingData = globalCustomerChatsMsgCache.get(rowId);
+        if (!existingData) {
+          const { data: existing } = await client.from('customer_chats').select('data').eq('id', rowId).maybeSingle();
+          existingData = existing ? existing.data : null;
+        }
+        const current = (existingData && typeof existingData === 'object') ? { ...existingData } : {};
         current[targetId] = value;
+        cacheCustomerChatMsg(rowId, current);
         await client.from('customer_chats').upsert({ id: rowId, room_id: custId, data: current }, { onConflict: 'id' });
         return {
           broadcastPath: `customerChats/${custId}/${subType}`,
@@ -2029,6 +2144,7 @@ async function handleCustomerChatsSet(client, pathInfo, value) {
           broadcastAction: 'update'
         };
       } else {
+        if (value && typeof value === 'object') cacheCustomerChatMsg(rowId, value);
         await client.from('customer_chats').upsert({ id: rowId, room_id: custId, data: value }, { onConflict: 'id' });
         return {
           broadcastPath: `customerChats/${custId}/${subType}`,
@@ -2048,9 +2164,14 @@ async function handleCustomerChatsUpdate(client, pathInfo, values) {
   if (subType === 'messages' && targetId) {
     const rowId = targetId.startsWith(`${custId}_`) ? targetId : `${custId}_${targetId}`;
     return await runExclusive(`customer_chats:${rowId}`, async () => {
-      const { data: existing } = await client.from('customer_chats').select('data').eq('id', rowId).maybeSingle();
-      const current = (existing && existing.data) ? { ...existing.data } : {};
+      let existingData = globalCustomerChatsMsgCache.get(rowId);
+      if (!existingData) {
+        const { data: existing } = await client.from('customer_chats').select('data').eq('id', rowId).maybeSingle();
+        existingData = existing ? existing.data : null;
+      }
+      const current = (existingData && typeof existingData === 'object') ? { ...existingData } : {};
       const merged = { ...current, ...values };
+      cacheCustomerChatMsg(rowId, merged);
 
       const { error } = await client.from('customer_chats').upsert({
         id: rowId,
@@ -2085,10 +2206,15 @@ async function handleCustomerChatsUpdate(client, pathInfo, values) {
         }
       }
 
-      const { data: existing } = await client.from('customer_chat_meta').select('data').eq('id', custId).maybeSingle();
-      const current = (existing && existing.data) ? { ...existing.data } : {};
+      let existingData = globalCustomerMetaCache.get(custId) || (recent ? recent.data : null);
+      if (!existingData) {
+        const { data: existing } = await client.from('customer_chat_meta').select('data').eq('id', custId).maybeSingle();
+        existingData = existing ? existing.data : null;
+      }
+      const current = (existingData && typeof existingData === 'object') ? { ...existingData } : {};
       const merged = { ...current, ...values };
 
+      globalCustomerMetaCache.set(custId, merged);
       await client.from('customer_chat_meta').upsert({ id: custId, data: merged, updated_at: new Date().toISOString() }, { onConflict: 'id' });
       recentCustomerMetaCache.set(custId, { data: merged, time: Date.now() });
       return {
@@ -2280,12 +2406,24 @@ async function handleStoreRiderChatsRemove(client, pathInfo) {
 // DB COMPATIBILITY INTERFACE
 // ----------------------------------------------------------------------------
 
-export async function resyncActiveSubscriptions() {
+let lastGlobalResyncTime = 0;
+const LIVE_RESYNC_ROOTS = new Set(['roster', 'customerChatMeta', 'liveSessions', 'swapRequests', 'orders', 'storeOrders']);
+
+export async function resyncActiveSubscriptions(forceAll = false) {
   const client = getSupabase();
   if (!client) return;
 
+  const now = Date.now();
+  if (!forceAll && (now - lastGlobalResyncTime) < 180000) {
+    return; // Throttle automatic reconnect resyncs to once per 3 minutes
+  }
+  lastGlobalResyncTime = now;
+
   const entries = Array.from(subscriptionsByPath.entries());
-  for (const [, subs] of entries) {
+  for (const [subPath, subs] of entries) {
+    const rootSeg = String(subPath || '').split('/')[0];
+    if (!forceAll && !LIVE_RESYNC_ROOTS.has(rootSeg)) continue;
+
     for (const sub of subs) {
       if (!sub || sub.isClosed) continue;
       if (sub.eventType === 'value') {
@@ -2296,6 +2434,8 @@ export async function resyncActiveSubscriptions() {
           const val = snap.val();
           if (sub.tableCache) {
             sub.tableCache = new Map(val && typeof val === 'object' ? Object.entries(val) : []);
+          } else {
+            sub.docCache = val;
           }
           const sig = computeFastSignature(val);
           if (sub.lastSignature !== sig) {

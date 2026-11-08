@@ -183,8 +183,17 @@ export async function sweepStaleShiftsFromPriorDays() {
                 // Release lingering customer chats from prior shift
                 try {
                     const rName = (rider.riderName || rider.name || "").trim().toLowerCase();
-                    const snap = await db.ref('customerChatMeta').once('value');
-                    const chats = snap.val() || {};
+                    let chats = {};
+                    if (typeof window !== 'undefined' && typeof window.getCachedCustomerThreadsMap === 'function') {
+                        const map = window.getCachedCustomerThreadsMap();
+                        if (map && map.size > 0) {
+                            for (const [k, v] of map.entries()) chats[k] = v;
+                        }
+                    }
+                    if (Object.keys(chats).length === 0) {
+                        const snap = await db.ref('customerChatMeta').limitToLast(100).once('value');
+                        chats = snap.val() || {};
+                    }
                     const chatUpdates = {};
                     Object.entries(chats).forEach(([cId, meta]) => {
                         const cRiderId = (meta.cateredByRiderId || '').toString();

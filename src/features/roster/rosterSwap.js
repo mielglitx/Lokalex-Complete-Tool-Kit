@@ -411,8 +411,17 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
             atomicUpdates[`roster/${sourceRiderId}/startTime`] = sourceTimes.join(', ');
             atomicUpdates[`roster/${sourceRiderId}/lastUpdated`] = nowTimeStr;
 
-            const chatsSnap = await db.ref('customerChatMeta').once('value');
-            const chats = chatsSnap.val() || {};
+            let chats = {};
+            if (typeof window !== 'undefined' && typeof window.getCachedCustomerThreadsMap === 'function') {
+                const map = window.getCachedCustomerThreadsMap();
+                if (map && map.size > 0) {
+                    for (const [k, v] of map.entries()) chats[k] = v;
+                }
+            }
+            if (Object.keys(chats).length === 0) {
+                const chatsSnap = await db.ref('customerChatMeta').limitToLast(100).once('value');
+                chats = chatsSnap.val() || {};
+            }
             const cleanTargetCust = targetCustomerName.toLowerCase().trim();
 
             Object.keys(chats).forEach(custId => {
@@ -495,8 +504,17 @@ export async function executeCustomerSwap(targetRiderId, targetRiderName, target
         atomicUpdates[`roster/${targetRiderId}/startTime`] = targetTimes.join(', ');
         atomicUpdates[`roster/${targetRiderId}/lastUpdated`] = nowTimeStr;
 
-        const chatsSnap = await db.ref('customerChatMeta').once('value');
-        const chats = chatsSnap.val() || {};
+        let chats = {};
+        if (typeof window !== 'undefined' && typeof window.getCachedCustomerThreadsMap === 'function') {
+            const map = window.getCachedCustomerThreadsMap();
+            if (map && map.size > 0) {
+                for (const [k, v] of map.entries()) chats[k] = v;
+            }
+        }
+        if (Object.keys(chats).length === 0) {
+            const chatsSnap = await db.ref('customerChatMeta').limitToLast(100).once('value');
+            chats = chatsSnap.val() || {};
+        }
         const cleanSrc = sourceCustomerName.toLowerCase().trim();
         const cleanTgt = targetCustomerName ? targetCustomerName.toLowerCase().trim() : '';
 
