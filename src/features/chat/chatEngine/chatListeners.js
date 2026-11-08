@@ -358,6 +358,7 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
             const ts = m.created_time ? new Date(m.created_time).getTime() : Date.now();
             let text = m.message || '';
             let imageUrl = null;
+            let thumbnailUrl = null;
             let images = [];
             let audioUrl = null;
             let videoUrl = null;
@@ -369,6 +370,18 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                     const attType = (att.type || '').toLowerCase();
                     const mime = (att.mime_type || '').toLowerCase();
                     const u = att?.image_data?.url || att?.video_data?.url || att?.audio_data?.url || att?.payload?.url || att?.media?.image?.src || att?.file_url;
+                    const thumb = att?.image_data?.preview_url || att?.preview_url;
+                    if (thumb && !thumbnailUrl) thumbnailUrl = thumb;
+
+                    // Strictly detect Google Maps Links or Shared Location attachments
+                    const isMapUrl = typeof u === 'string' && /maps\.google\.com|google\.com\/maps|goo\.gl\/maps|maps\.app\.goo\.gl|maps\.apple\.com|waze\.com/i.test(u);
+                    if (attType === 'location' || isMapUrl) {
+                        type = 'location';
+                        if (!text || text === '📷 Photo' || text.startsWith('📷')) {
+                            text = u || att?.title || 'Shared Location Pin';
+                        }
+                        continue;
+                    }
                     
                     if (attType === 'audio' || attType === 'voice' || mime.includes('audio') || (typeof u === 'string' && (/\.(aac|mp3|m4a|wav|ogg|opus)(\?|$)/i.test(u) || u.includes('audioclip')))) {
                         if (u && !audioUrl) audioUrl = u;
@@ -389,11 +402,12 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                     if (att.subattachments?.data && Array.isArray(att.subattachments.data)) {
                         for (const sub of att.subattachments.data) {
                             const subUrl = sub?.image_data?.url || sub?.video_data?.url || sub?.audio_data?.url || sub?.media?.image?.src || sub?.payload?.url || sub?.file_url;
-                            if (subUrl && !images.includes(subUrl)) images.push(subUrl);
+                            const isSubMap = typeof subUrl === 'string' && /maps\.google\.com|google\.com\/maps|goo\.gl\/maps|maps\.app\.goo\.gl|maps\.apple\.com|waze\.com/i.test(subUrl);
+                            if (subUrl && !isSubMap && !images.includes(subUrl)) images.push(subUrl);
                         }
                     }
 
-                    if (u && !images.includes(u)) {
+                    if (u && !isMapUrl && !images.includes(u)) {
                         images.push(u);
                     }
                 }
@@ -401,6 +415,13 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                     imageUrl = images[0];
                     if (type === 'text') type = 'image';
                 }
+            }
+
+            // Check if text itself contains a Google Map link:
+            if (typeof text === 'string' && /maps\.google\.com|google\.com\/maps|goo\.gl\/maps|maps\.app\.goo\.gl|maps\.apple\.com|waze\.com/i.test(text)) {
+                if (type === 'image') type = 'location';
+                imageUrl = null;
+                images = [];
             }
 
             if (!text) {
@@ -519,6 +540,7 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                 // Refresh image URL if fresh attachment was retrieved from Graph API
                 if (imageUrl && (!existingMatch.imageUrl || existingMatch.imageUrl !== imageUrl)) {
                     existingMatch.imageUrl = imageUrl;
+                    if (thumbnailUrl) existingMatch.thumbnailUrl = thumbnailUrl;
                     if (images && images.length > 0) existingMatch.images = images;
                     if (existingMatch.type === 'text') existingMatch.type = 'image';
 
@@ -529,7 +551,7 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                         const img = bubble.querySelector('img');
                         if (img) {
                             img.referrerPolicy = 'no-referrer';
-                            img.src = imageUrl;
+                            img.src = thumbnailUrl || imageUrl;
                             img.removeAttribute('data-failed');
                             img.style.display = '';
                         }
@@ -538,6 +560,7 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                     if (db) {
                         db.ref(`customerChats/${targetCustId}/messages/${existingMatch.id}`).update({
                             imageUrl: imageUrl,
+                            thumbnailUrl: thumbnailUrl || null,
                             images: (images && images.length > 0) ? images : null,
                             metaMid: rawMid,
                             mid: safeMid,
@@ -584,6 +607,7 @@ export async function syncCurrentThreadFromMetaGraph(custId, showFeedback = fals
                 status: 'delivered',
                 channel: 'messenger',
                 imageUrl: imageUrl,
+                thumbnailUrl: thumbnailUrl || null,
                 images: images.length > 0 ? images : null,
                 audioUrl: audioUrl,
                 videoUrl: videoUrl,

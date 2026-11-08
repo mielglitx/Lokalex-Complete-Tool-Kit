@@ -76,24 +76,31 @@ function persistLogs() {
 export function classifyNetworkUrl(url = '', body = null) {
     const u = String(url || '').toLowerCase();
 
-    if (u.includes('customer_chats') || u.includes('customer_chat_meta') || u.includes('graph.facebook.com') || u.includes('chat-media')) {
+    // 1. Customer Chats & Messages
+    if (u.includes('customer_chats') || u.includes('customer_chat_meta') || u.includes('customerchats') || u.includes('graph.facebook.com') || u.includes('chat-media') || u.includes('customerchatmeta')) {
         return DATA_CATEGORIES.CHATS.key;
     }
-    if (u.includes('store_menus') || u.includes('store-menus') || u.includes('menuimagescache') || u.includes('stores')) {
+    // 2. Menus & Store Catalog
+    if (u.includes('store_menus') || u.includes('store-menus') || u.includes('storemenugalleries') || u.includes('menuimagescache') || u.includes('stores') || u.includes('storehub')) {
         return DATA_CATEGORIES.MENUS.key;
     }
-    if (u.includes('roster') || u.includes('riders') || u.includes('logins') || u.includes('shift_history') || u.includes('shifthistory')) {
+    // 3. Rotations, Roster & Shifts
+    if (u.includes('roster') || u.includes('riders') || u.includes('logins') || u.includes('shift_history') || u.includes('shifthistory') || u.includes('ui-avatars.com')) {
         return DATA_CATEGORIES.ROTATIONS.key;
     }
-    if (u.includes('receipts') || u.includes('catered_history') || u.includes('cateredhistory') || u.includes('commission')) {
+    // 4. Receipts & Commissions
+    if (u.includes('receipts') || u.includes('daily_receipts') || u.includes('catered_history') || u.includes('cateredhistory') || u.includes('commission') || u.includes('gcash')) {
         return DATA_CATEGORIES.RECEIPTS.key;
     }
-    if (u.includes('directory') || u.includes('nominatim') || u.includes('openstreetmap') || u.includes('tile.') || u.includes('leaflet')) {
+    // 5. Directory, Maps & Geocoding
+    if (u.includes('directory') || u.includes('nominatim') || u.includes('openstreetmap') || u.includes('tile.') || u.includes('leaflet') || u.includes('maps.google') || u.includes('googleapis.com/maps')) {
         return DATA_CATEGORIES.DIRECTORY.key;
     }
-    if (u.includes('ota-release') || u.includes('dist.zip') || u.includes('github') || u.includes('raw.githubusercontent')) {
+    // 6. App Updates, Vite Assets & Web Bundles
+    if (u.includes('ota-release') || u.includes('dist.zip') || u.includes('github') || u.includes('raw.githubusercontent') || u.includes('.js') || u.includes('/assets/') || u.includes('@vite')) {
         return DATA_CATEGORIES.UPDATES.key;
     }
+    // 7. System, Auth & Database Heartbeats
     return DATA_CATEGORIES.SYSTEM.key;
 }
 
@@ -104,7 +111,7 @@ export function recordDataTransfer(bytes, categoryKey = 'system', path = '') {
         t: Date.now(),
         b: Math.round(bytes),
         c: categoryKey || 'system',
-        p: String(path || '').substring(0, 60)
+        p: String(path || '').substring(0, 100)
     };
     logs.push(entry);
     persistLogs();
@@ -114,7 +121,33 @@ export function recordDataTransfer(bytes, categoryKey = 'system', path = '') {
 export function getDataUsageSummary(windowKey = '1d') {
     const logs = loadLogs();
     const win = TIME_WINDOWS[windowKey] || TIME_WINDOWS['1d'];
-    const cutoff = Date.now() - win.ms;
+    const now = Date.now();
+    const cutoff = now - win.ms;
+
+    // Calculate actual elapsed monitoring time
+    const earliestLog = logs.length > 0 ? logs[0].t : now;
+    const elapsedTotalMs = Math.max(0, now - earliestLog);
+    
+    let elapsedFormatted = "Just started";
+    if (elapsedTotalMs >= 86400000) {
+        const d = Math.floor(elapsedTotalMs / 86400000);
+        const h = Math.floor((elapsedTotalMs % 86400000) / 3600000);
+        elapsedFormatted = `${d}d ${h}h`;
+    } else if (elapsedTotalMs >= 3600000) {
+        const h = Math.floor(elapsedTotalMs / 3600000);
+        const m = Math.round((elapsedTotalMs % 3600000) / 60000);
+        elapsedFormatted = `${h}h ${m}m`;
+    } else if (elapsedTotalMs >= 60000) {
+        elapsedFormatted = `${Math.round(elapsedTotalMs / 60000)} mins`;
+    } else if (logs.length > 0) {
+        elapsedFormatted = "< 1 min";
+    }
+
+    const startDate = new Date(earliestLog);
+    const isToday = startDate.toDateString() === new Date().toDateString();
+    const startTimeFormatted = isToday 
+        ? `Today at ${startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        : `${startDate.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
     let totalBytes = 0;
     const categoryBytes = {
@@ -127,13 +160,31 @@ export function getDataUsageSummary(windowKey = '1d') {
         system: 0
     };
 
+    const endpointMap = {};
+
     logs.forEach(entry => {
         if (entry.t >= cutoff) {
             totalBytes += entry.b;
             const cat = categoryBytes[entry.c] !== undefined ? entry.c : 'system';
             categoryBytes[cat] += entry.b;
+
+            // Group by endpoint
+            const rawP = entry.p || '';
+            let cleanP = rawP.split('?')[0].replace(/^https?:\/\/[^\/]+/, '');
+            if (rawP.includes('graph.facebook.com')) cleanP = 'Facebook Messenger Graph API';
+            else if (cleanP.includes('/rest/v1/')) cleanP = 'Supabase ' + cleanP.replace('/rest/v1/', '');
+            else if (cleanP.includes('/assets/')) cleanP = 'App Web Assets (Vite / PWA)';
+            else if (!cleanP || cleanP === '/') cleanP = 'General API Request';
+            else if (cleanP.length > 40) cleanP = cleanP.substring(0, 40) + '...';
+
+            endpointMap[cleanP] = (endpointMap[cleanP] || 0) + entry.b;
         }
     });
+
+    const topEndpoints = Object.entries(endpointMap)
+        .map(([name, bytes]) => ({ name, bytes, formatted: formatBytes(bytes) }))
+        .sort((a, b) => b.bytes - a.bytes)
+        .slice(0, 5);
 
     const categoryList = Object.entries(DATA_CATEGORIES).map(([_, catDef]) => {
         const bytes = categoryBytes[catDef.key] || 0;
@@ -151,13 +202,23 @@ export function getDataUsageSummary(windowKey = '1d') {
 
     const topCategory = categoryList[0]?.bytes > 0 ? categoryList[0] : null;
 
+    // Transfer rate per minute in this active window
+    const windowElapsedMs = Math.min(elapsedTotalMs, win.ms);
+    const windowElapsedMins = Math.max(0.5, windowElapsedMs / 60000);
+    const ratePerMinBytes = totalBytes / windowElapsedMins;
+
     return {
         windowKey,
         windowLabel: win.label,
         totalBytes,
         formattedTotal: formatBytes(totalBytes),
         categoryList,
-        topCategory
+        topCategory,
+        elapsedTotalMs,
+        elapsedFormatted,
+        startTimeFormatted,
+        transferRateFormatted: `${formatBytes(ratePerMinBytes)}/min`,
+        topEndpoints
     };
 }
 
@@ -268,9 +329,16 @@ export function renderDataUsageModal(windowKey = '1d') {
     const totalEl = document.getElementById('data-usage-total-display');
     const labelEl = document.getElementById('data-usage-window-label');
     const topEl = document.getElementById('data-usage-top-category');
+    const elapsedBadge = document.getElementById('data-usage-elapsed-badge');
+    const startTimeEl = document.getElementById('data-usage-start-time');
+    const rateEl = document.getElementById('data-usage-transfer-rate');
 
     if (totalEl) totalEl.innerText = summary.formattedTotal;
     if (labelEl) labelEl.innerText = `Data consumed in the last ${summary.windowLabel}`;
+    if (elapsedBadge) elapsedBadge.innerText = `Monitored: ${summary.elapsedFormatted}`;
+    if (startTimeEl) startTimeEl.innerText = `Tracking started: ${summary.startTimeFormatted}`;
+    if (rateEl) rateEl.innerText = `Rate: ${summary.transferRateFormatted}`;
+
     if (topEl) {
         if (summary.topCategory) {
             topEl.innerHTML = `🔥 <strong>Most Used:</strong> ${summary.topCategory.label} (${summary.topCategory.formattedBytes} • ${summary.topCategory.percent}%)`;
@@ -303,6 +371,23 @@ export function renderDataUsageModal(windowKey = '1d') {
                 </div>
             </div>`;
         }).join('');
+    }
+
+    // Render Top Endpoints Section
+    const endpointsContainer = document.getElementById('data-usage-top-endpoints');
+    if (endpointsContainer) {
+        if (summary.topEndpoints && summary.topEndpoints.length > 0) {
+            endpointsContainer.innerHTML = summary.topEndpoints.map((ep, idx) => `
+            <div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-slate-800 text-[11px]">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="text-slate-400 font-bold shrink-0">${idx + 1}.</span>
+                    <span class="text-slate-800 dark:text-slate-200 font-mono truncate" title="${escapeHtml(ep.name)}">${escapeHtml(ep.name)}</span>
+                </div>
+                <span class="text-emerald-600 dark:text-emerald-400 font-black shrink-0 font-mono">${ep.formatted}</span>
+            </div>`).join('');
+        } else {
+            endpointsContainer.innerHTML = `<div class="text-slate-500 italic text-[11px] py-1 text-center">No endpoint traffic logged yet.</div>`;
+        }
     }
 }
 
