@@ -367,21 +367,39 @@ export function getActiveRosterCaterer(custName, custId, meta = {}) {
         if (matched) return matched;
     }
 
-    // 2. Reliable fallback: If thread metadata has cateredBy rider info or folder is catering, check if that rider is currently Catering on the roster
-    const metaRiderId = (meta?.cateredByRiderId || "").toString().trim();
-    const metaRiderName = (meta?.cateredByRiderName || meta?.cateredBy || "").toString().trim().toLowerCase();
-    const isCateringFolder = (meta?.folder || '').toLowerCase() === 'catering';
+    // 2. Strict Fallback: ONLY if thread is explicitly in the 'catering' folder (NEVER inbox or done)
+    // AND that assigned rider is currently 'Catering' on the roster AND customer matches
+    const threadFolder = (meta?.folder || '').toLowerCase();
+    const isExplicitCateringFolder = threadFolder === 'catering';
+    const isInboxOrDone = threadFolder === 'inbox' || threadFolder === 'done' || meta?.status === 'completed' || meta?.status === 'done';
 
-    if (metaRiderId || metaRiderName || isCateringFolder) {
-        const member = liveRoster.find(m => {
-            if (m.status !== 'Catering') return false;
-            const mId = (m.telegramId || m.id || "").toString().trim();
-            const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
-            if (metaRiderId && mId && metaRiderId === mId) return true;
-            if (metaRiderName && mName && (metaRiderName === mName || isRiderMatch(mName, metaRiderName))) return true;
-            return false;
-        });
-        if (member) return member;
+    if (isExplicitCateringFolder && !isInboxOrDone) {
+        const metaRiderId = (meta?.cateredByRiderId || "").toString().trim();
+        const metaRiderName = (meta?.cateredByRiderName || meta?.cateredBy || "").toString().trim().toLowerCase();
+
+        if (metaRiderId || metaRiderName) {
+            const member = liveRoster.find(m => {
+                if (m.status !== 'Catering') return false;
+                const mId = (m.telegramId || m.id || "").toString().trim();
+                const mName = (m.riderName || m.name || "").toString().trim().toLowerCase();
+                const riderMatches = (metaRiderId && mId && metaRiderId === mId) ||
+                                     (metaRiderName && mName && (metaRiderName === mName || isRiderMatch(mName, metaRiderName)));
+                if (!riderMatches) return false;
+
+                // Guard: Verify rider is actually catering this customer or has them in currentCustomerId/forcedCaters
+                if (custId && m.currentCustomerId === custId) return true;
+                if (candidateNames.size > 0 && m.customerName) {
+                    const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase());
+                    for (const c of custs) {
+                        for (const cand of candidateNames) {
+                            if (c === cand || isCustomerMatch(c, cand)) return true;
+                        }
+                    }
+                }
+                return true;
+            });
+            if (member) return member;
+        }
     }
 
     return null;

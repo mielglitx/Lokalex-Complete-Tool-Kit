@@ -130,6 +130,7 @@ export function applyLokalexUiMode(mode = null, notify = false) {
         dockChatMessagesToModern();
         syncModernHeaderUser();
         initModernHeaderClock();
+        initModernTheme();
         initFloatingCartDrag();
         refreshAllModernViews();
         if (typeof window.syncChannelBarLockUI === 'function') window.syncChannelBarLockUI();
@@ -696,7 +697,16 @@ export function getModernFilteredThreads(customCategory = null) {
 
         const folder = (t.folder || 'inbox').toLowerCase();
         const isDone = t.status === 'completed' || t.status === 'done' || t.status === 'cancelled';
-        const isCatered = folder === 'catering' || Boolean(t.cateredByRiderName || t.cateredByRiderId || t.cateredBy);
+
+        // Stale caterer sanitization: If thread is marked inbox or is done, it cannot have active catering
+        if (folder === 'inbox' || isDone) {
+            t.cateredByRiderName = null;
+            t.cateredByRiderId = null;
+            t.cateredBy = null;
+            t.isForcedCater = false;
+        }
+
+        const isCatered = !isDone && (folder === 'catering' || Boolean(t.cateredByRiderName || t.cateredByRiderId || t.cateredBy));
 
         if (cat === 'done') {
             return folder === 'done' || isDone;
@@ -810,7 +820,8 @@ export function renderModernChatLeftList() {
         const isSelected = activeCustId && (t.custId === activeCustId || t.id === activeCustId);
         const isMine = isMyCustomerThread(t, loggedInAuth);
         const isCateringCategory = modernChatCategory === 'catering';
-        const isMyCateredCustomer = isMine && (isCateringCategory || t.folder === 'catering' || (t.cateredByRiderName && t.status !== 'completed' && t.status !== 'done'));
+        const isInboxCategory = modernChatCategory === 'inbox' || (t.folder || '').toLowerCase() === 'inbox';
+        const isMyCateredCustomer = !isInboxCategory && isMine && (isCateringCategory || t.folder === 'catering' || (t.cateredByRiderName && t.status !== 'completed' && t.status !== 'done'));
         const name = formatTitleCase(t.customerName || t.name || "Customer");
         const msg = (t.lastMessage || 'No messages yet').replace(/\[Facebook.*?\]/g, '📷 Photo');
         const cid = t.custId || t.id;
@@ -820,7 +831,7 @@ export function renderModernChatLeftList() {
 
         // Color badge determination
         let badgeColorClass = "bg-emerald-500 text-black";
-        if (t.folder === 'catering' || (t.cateredByRiderName || t.cateredByRiderId)) {
+        if (!isInboxCategory && (t.folder === 'catering' || (t.cateredByRiderName || t.cateredByRiderId))) {
             badgeColorClass = "bg-amber-400 text-black";
         } else if (t.folder === 'stores') {
             badgeColorClass = "bg-blue-500 text-white";
@@ -2090,11 +2101,63 @@ export function syncModernFooterDock() {
 }
 
 // ============================================================================
-// 13. GLOBAL INITIALIZER & WINDOW BINDINGS
+// 13. MODERN UI THEME TOGGLE (LIGHT / DARK MODE)
+// ============================================================================
+
+export function getModernTheme() {
+    if (typeof localStorage === 'undefined') return 'dark';
+    const saved = localStorage.getItem('lokalex_modern_theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+    return 'dark'; // Dark mode is default, riders can toggle anytime
+}
+
+export function applyModernTheme(theme = null, notify = false) {
+    const targetTheme = theme || getModernTheme();
+    const workspace = document.getElementById('modern-ui-workspace');
+    const icon = document.getElementById('modern-theme-icon');
+    const btn = document.getElementById('modern-theme-toggle-btn');
+    if (!workspace) return;
+
+    if (targetTheme === 'light') {
+        workspace.classList.add('modern-theme-light');
+        if (icon) {
+            icon.className = 'fa-solid fa-moon text-slate-700';
+        }
+        if (btn) {
+            btn.title = "Switch to Dark Mode";
+        }
+    } else {
+        workspace.classList.remove('modern-theme-light');
+        if (icon) {
+            icon.className = 'fa-solid fa-sun text-amber-400';
+        }
+        if (btn) {
+            btn.title = "Switch to Light Mode";
+        }
+    }
+    localStorage.setItem('lokalex_modern_theme', targetTheme);
+    if (notify) {
+        showToast(targetTheme === 'light' ? "☀️ Modern UI: Light Mode activated" : "🌙 Modern UI: Dark Mode activated");
+    }
+}
+
+export function toggleModernTheme() {
+    const current = getModernTheme();
+    const next = current === 'light' ? 'dark' : 'light';
+    applyModernTheme(next, true);
+}
+
+export function initModernTheme() {
+    applyModernTheme(getModernTheme(), false);
+}
+
+// ============================================================================
+// 14. GLOBAL INITIALIZER & WINDOW BINDINGS
 // ============================================================================
 
 export function initModernUiController() {
     // Check initial mode from localStorage
+    initModernTheme();
     const savedMode = localStorage.getItem('lokalex_ui_mode') || 'classic';
     if (savedMode === 'modern') {
         applyLokalexUiMode('modern', false);
@@ -2211,5 +2274,8 @@ if (typeof window !== 'undefined') {
     window.handleModernRefreshRotations = handleModernRefreshRotations;
     window.openAdminForceCaterFromChat = openAdminForceCaterFromChat;
     window.setModernSyncState = setModernSyncState;
+    window.toggleModernTheme = toggleModernTheme;
+    window.applyModernTheme = applyModernTheme;
+    window.getModernTheme = getModernTheme;
 }
 

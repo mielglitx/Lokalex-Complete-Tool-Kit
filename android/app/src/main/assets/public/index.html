@@ -922,7 +922,7 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-DDjmFObQ.js"></script>
+  <script type="module" crossorigin src="./assets/index-Bj4Qdbph.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-hePW80VL.js">
   <link rel="modulepreload" crossorigin href="./assets/vendor-CBNqoVD9.js">
 <link rel="manifest" href="./manifest.webmanifest"></head>
@@ -3461,6 +3461,11 @@
                 <span id="modern-header-battery">--%</span>
             </div>
 
+            <!-- LIGHT / DARK MODE TOGGLE BUTTON -->
+            <button id="modern-theme-toggle-btn" type="button" onclick="window.toggleModernTheme && window.toggleModernTheme()" class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-[#18232a] hover:bg-slate-800 border border-slate-700/80 text-amber-400 flex items-center justify-center text-xs transition active:scale-95 cursor-pointer shrink-0 shadow-2xs" title="Toggle Light / Dark Mode">
+                <i id="modern-theme-icon" class="fa-solid fa-sun"></i>
+            </button>
+
             <button type="button" onclick="window.toggleLokalexUiMode && window.toggleLokalexUiMode('classic')" class="px-2.5 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-[10px] sm:text-[11px] font-mono font-bold flex items-center justify-center transition active:scale-95 cursor-pointer shrink-0 shadow-2xs" title="Switch back to Classic / Original UI">
                 Classic
             </button>
@@ -3946,6 +3951,238 @@
             </div>
         </div>
     </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODERN UI LIGHT THEME OVERRIDES (CRISP HIGH-CONTRAST PALETTE)         -->
+    <!-- ===================================================================== -->
+    <style>
+        #modern-ui-workspace.modern-theme-light {
+            background-color: #F1F5F9 !important;
+            color: #0F172A !important;
+        }
+        #modern-ui-workspace.modern-theme-light header {
+            background-color: #FFFFFF !important;
+            border-color: #E2E8F0 !important;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+        }
+        #modern-ui-workspace.modern-theme-light #modern-hamburger-btn {
+            background-color: #F1F5F9 !important;
+            border-color: #CBD5E1 !important;
+            color: #1E293B !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-header-rider-name {
+            color: #0F172A !important;
+        }
+        #modern-ui-workspace.modern-theme-light .text-slate-400 {
+            color: #64748B !important;
+        }
+        #modern-ui-workspace.modern-theme-light header .bg-\[\#18232a\],
+        #modern-ui-workspace.modern-theme-light header div.bg-\[\#18232a\] {
+            background-color: #F1F5F9 !important;
+            border-color: #CBD5E1 !important;
+            color: #1E293B !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-theme-toggle-btn {
+            background-color: #F1F5F9 !important;
+            border-color: #CBD5E1 !important;
+            color: #334155 !important;
+        }
+        #modern-ui-workspace.modern-theme-light nav {
+            background-color: #FFFFFF !important;
+            border-color: #E2E8F0 !important;
+        }
+        #modern-ui-workspace.modern-theme-light nav button {
+            border-color: #E2E8F0 !important;
+        }
+        #modern-ui-workspace.modern-theme-light nav button:not(.border-b-emerald-400):not(.border-b-emerald-600) {
+            color: #64748B !important;
+        }
+        #modern-ui-workspace.modern-theme-light nav button:hover:not(.border-b-emerald-400):not(.border-b-emerald-600) {
+            color: #0F172A !important;
+            background-color: #F8FAFC !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-main-tab-chats.border-b-emerald-400,
+        #modern-ui-workspace.modern-theme-light #modern-main-tab-chats.border-b-emerald-600 {
+            background-color: #ECFDF5 !important;
+            border-bottom-color: #059669 !important;
+            color: #065F46 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-tab-rotations-badge {
+            background-color: #FEF3C7 !important;
+            border-color: #FCD34D !important;
+            color: #92400E !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-tab-logins-badge,
+        #modern-ui-workspace.modern-theme-light #modern-tab-catered-badge {
+            background-color: #E2E8F0 !important;
+            border-color: #CBD5E1 !important;
+            color: #1E293B !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-panel-chats > div:first-child {
+            background-color: #FFFFFF !important;
+            border-color: #E2E8F0 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-search-input {
+            background-color: #F8FAFC !important;
+            border-color: #CBD5E1 !important;
+            color: #0F172A !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-search-input::placeholder {
+            color: #94A3B8 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-panel-chats button.bg-slate-800,
+        #modern-ui-workspace.modern-theme-light #modern-refresh-chats-btn {
+            background-color: #F1F5F9 !important;
+            border-color: #CBD5E1 !important;
+            color: #334155 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-cat-inbox.bg-emerald-500\/15,
+        #modern-ui-workspace.modern-theme-light button[id^="modern-cat-"].bg-emerald-500\/15 {
+            background-color: #D1FAE5 !important;
+            border-color: #34D399 !important;
+            color: #064E3B !important;
+        }
+        #modern-ui-workspace.modern-theme-light button[id^="modern-cat-"].border-transparent {
+            color: #475569 !important;
+            background-color: transparent !important;
+        }
+        #modern-ui-workspace.modern-theme-light button[id^="modern-cat-"].border-transparent:hover {
+            background-color: #F1F5F9 !important;
+            color: #0F172A !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-left-list {
+            background-color: #F8FAFC !important;
+            border-color: #E2E8F0 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-left-list .text-white {
+            color: #0F172A !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-left-list .text-slate-400 {
+            color: #64748B !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-left-list .border-transparent:hover {
+            background-color: #EDF2F7 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-left-list .bg-slate-800 {
+            background-color: #E2E8F0 !important;
+            color: #475569 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-right-room {
+            background-color: #F1F5F9 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-right-room > div:first-child {
+            background-color: #FFFFFF !important;
+            border-color: #E2E8F0 !important;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-room-title {
+            color: #0F172A !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-room-subtitle {
+            color: #64748B !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-menu-btn {
+            background-color: #F1F5F9 !important;
+            border-color: #CBD5E1 !important;
+            color: #1E293B !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-menu-dropdown,
+        #modern-ui-workspace.modern-theme-light #modern-composer-menu-popup,
+        #modern-ui-workspace.modern-theme-light #modern-hamburger-popover {
+            background-color: #FFFFFF !important;
+            border-color: #CBD5E1 !important;
+            color: #0F172A !important;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-hamburger-popover .bg-\[\#11191e\] {
+            background-color: #F8FAFC !important;
+            border-color: #E2E8F0 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-hamburger-popover .text-white {
+            color: #0F172A !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-hamburger-popover button:hover,
+        #modern-ui-workspace.modern-theme-light #modern-chat-menu-dropdown button:hover,
+        #modern-ui-workspace.modern-theme-light #modern-composer-menu-popup button:hover {
+            background-color: #F1F5F9 !important;
+        }
+        #modern-ui-workspace.modern-theme-light .rider-chat-bubble-cust {
+            background-color: #FFFFFF !important;
+            color: #0F172A !important;
+            border-color: #E2E8F0 !important;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-right-room > div:last-child {
+            background-color: #FFFFFF !important;
+            border-color: #E2E8F0 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-chat-right-room .border-slate-600 {
+            background-color: #F8FAFC !important;
+            border-color: #CBD5E1 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-composer-menu-btn {
+            background-color: #FFFFFF !important;
+            border-color: #CBD5E1 !important;
+            color: #1E293B !important;
+        }
+        #modern-ui-workspace.modern-theme-light #rider-cust-chat-input {
+            color: #0F172A !important;
+        }
+        #modern-ui-workspace.modern-theme-light #rider-cust-chat-input::placeholder {
+            color: #94A3B8 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-panel-rotations .bg-\[\#121a1f\] {
+            background-color: #FFFFFF !important;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+        }
+        #modern-ui-workspace.modern-theme-light #modern-rot-avail-list .bg-\[\#18232a\],
+        #modern-ui-workspace.modern-theme-light #modern-rot-cater-list .bg-\[\#18232a\],
+        #modern-ui-workspace.modern-theme-light #modern-rot-break-list .bg-\[\#18232a\] {
+            background-color: #F8FAFC !important;
+            border-color: #E2E8F0 !important;
+            color: #0F172A !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-panel-rotations .text-white {
+            color: #0F172A !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-panel-logins .bg-\[\#121a1f\] {
+            background-color: #FFFFFF !important;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+        }
+        #modern-ui-workspace.modern-theme-light #modern-login-in-list > div,
+        #modern-ui-workspace.modern-theme-light #modern-login-out-list > div {
+            border-color: #E2E8F0 !important;
+            color: #0F172A !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-login-in-list .text-white,
+        #modern-ui-workspace.modern-theme-light #modern-login-out-list .text-white {
+            color: #0F172A !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-panel-catered .bg-\[\#121a1f\],
+        #modern-ui-workspace.modern-theme-light #modern-catered-list > div {
+            background-color: #FFFFFF !important;
+            border-color: #E2E8F0 !important;
+            color: #0F172A !important;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+        }
+        #modern-ui-workspace.modern-theme-light #modern-catered-list .text-white {
+            color: #0F172A !important;
+        }
+        #modern-ui-workspace.modern-theme-light footer {
+            background-color: #FFFFFF !important;
+            border-color: #E2E8F0 !important;
+            box-shadow: 0 -1px 3px 0 rgba(0, 0, 0, 0.05);
+        }
+        #modern-ui-workspace.modern-theme-light footer button.bg-\[\#18232a\] {
+            background-color: #F8FAFC !important;
+            border-color: #CBD5E1 !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-gross-pill {
+            background-color: #ECFDF5 !important;
+            border-color: #A7F3D0 !important;
+            color: #065F46 !important;
+        }
+    </style>
 </div>
 
 

@@ -599,10 +599,16 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                 if (threadObj.isApplicant && threadObj.folder !== 'catering') {
                     threadObj.folder = 'applicant';
                 }
-                if (!threadObj.cateredByRiderName && existing.cateredByRiderName && threadObj.folder !== 'done') {
+                if (threadObj.folder === 'inbox') {
+                    threadObj.cateredByRiderName = null;
+                    threadObj.cateredByRiderId = null;
+                    threadObj.cateredBy = null;
+                    threadObj.isForcedCater = false;
+                    threadObj.forcedBy = null;
+                } else if (!threadObj.cateredByRiderName && existing.cateredByRiderName && threadObj.folder === 'catering') {
                     threadObj.cateredByRiderName = existing.cateredByRiderName;
                     threadObj.cateredByRiderId = existing.cateredByRiderId;
-                    if (existing.folder === 'catering') threadObj.folder = 'catering';
+                    threadObj.cateredBy = existing.cateredBy || existing.cateredByRiderName;
                 }
                 if (!currentHasMsg && existingHasMsg) {
                     threadObj.lastMessage = existing.lastMessage;
@@ -614,10 +620,16 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
                 if (existing.isApplicant && existing.folder !== 'catering') {
                     existing.folder = 'applicant';
                 }
-                if (!existing.cateredByRiderName && threadObj.cateredByRiderName && existing.folder !== 'done') {
+                if (existing.folder === 'inbox') {
+                    existing.cateredByRiderName = null;
+                    existing.cateredByRiderId = null;
+                    existing.cateredBy = null;
+                    existing.isForcedCater = false;
+                    existing.forcedBy = null;
+                } else if (!existing.cateredByRiderName && threadObj.cateredByRiderName && existing.folder === 'catering') {
                     existing.cateredByRiderName = threadObj.cateredByRiderName;
                     existing.cateredByRiderId = threadObj.cateredByRiderId;
-                    if (threadObj.folder === 'catering') existing.folder = 'catering';
+                    existing.cateredBy = threadObj.cateredBy || threadObj.cateredByRiderName;
                 }
                 if (!existingHasMsg && currentHasMsg) {
                     existing.lastMessage = threadObj.lastMessage;

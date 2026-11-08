@@ -2891,6 +2891,20 @@ export async function quickSendStoreMenuToActiveChat(storeName, compositeKey, me
 
     pages.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0));
 
+    // Cache downloaded image URLs to local IndexedDB to eliminate repeat bandwidth
+    for (const p of pages) {
+        const url = p?.imageUrl || p?.url;
+        if (url && typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
+            idbGet('menuImagesCache', url).then(cached => {
+                if (!cached) {
+                    fetch(url, { mode: 'cors' }).then(r => r.ok ? r.blob() : null).then(b => {
+                        if (b) idbSet('menuImagesCache', url, b).catch(() => {});
+                    }).catch(() => {});
+                }
+            }).catch(() => {});
+        }
+    }
+
     // Filter valid image URLs
     const validPages = pages.filter(p => p && (p.imageUrl || p.url || p.photoUrl || p.downloadUrl || p.image));
 

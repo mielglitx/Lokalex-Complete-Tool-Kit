@@ -459,8 +459,9 @@ function executeRenderRiderCustomerChatFeed() {
         const { dateStr, timeStr } = formatChatDateParts(t.lastUpdated);
         const isMine = isMyCustomerThread(t, loggedInAuth);
         const isCateringTab = activeRiderChatFilter === 'catering';
-        const isCurrentlyCatering = isMine && (isCateringTab || t.folder === 'catering' || (t.cateredByRiderName && t.status !== 'completed' && t.status !== 'done'));
-        const isOtherRiderCatering = !isMine && (isCateringTab || t.folder === 'catering' || (t.cateredByRiderName && t.status !== 'completed' && t.status !== 'done'));
+        const isInboxTab = activeRiderChatFilter === 'inbox' || (t.folder || '').toLowerCase() === 'inbox';
+        const isCurrentlyCatering = !isInboxTab && isMine && (isCateringTab || t.folder === 'catering' || (t.cateredByRiderName && t.status !== 'completed' && t.status !== 'done'));
+        const isOtherRiderCatering = !isInboxTab && !isMine && (isCateringTab || t.folder === 'catering' || (t.cateredByRiderName && t.status !== 'completed' && t.status !== 'done'));
 
         let statusBadge = "";
         if (isCurrentlyCatering) {
@@ -1069,14 +1070,28 @@ export function reopenThreadToInbox(custId) {
     if (db) {
         const payload = {
             folder: 'inbox',
-            status: 'open'
+            status: 'open',
+            cateredBy: null,
+            cateredByRiderId: null,
+            cateredByRiderName: null,
+            forcedBy: null,
+            isForcedCater: false,
+            cateredTimestamp: null,
+            completedAt: null
         };
         db.ref(`customerChats/${custId}/metadata`).update(payload).catch(() => {});
         db.ref(`customerChatMeta/${custId}`).update(payload).catch(() => {});
     }
     for (const thread of cachedCustomerThreadsMap.values()) {
-        if (thread.custId === custId) {
+        if (thread.custId === custId || thread.id === custId) {
             thread.folder = 'inbox';
+            thread.status = 'open';
+            thread.cateredBy = null;
+            thread.cateredByRiderId = null;
+            thread.cateredByRiderName = null;
+            thread.forcedBy = null;
+            thread.isForcedCater = false;
+            thread.completedAt = null;
             break;
         }
     }

@@ -19,6 +19,7 @@
  */
 
 import { storage } from '../config/firebase.js';
+import { getSupabase } from '../config/supabaseClient.js';
 
 /**
  * Converts a data URL to a binary Blob.
@@ -150,6 +151,33 @@ export async function uploadImage(fileOrBlobOrDataUrl, storagePath, metadata = {
         blob = dataUrlToBlob(fileOrBlobOrDataUrl);
     }
 
+    // 1. Primary: Direct Supabase Cloud Storage Upload
+    const supabase = getSupabase();
+    if (supabase && supabase.storage && blob) {
+        try {
+            const cleanPath = (storagePath || `uploads/${Date.now()}_${Math.random().toString(36).substring(2, 6)}.jpg`).replace(/^\/+/, '');
+            const bucket = cleanPath.startsWith('menus/') ? 'store-menus' 
+                         : (cleanPath.startsWith('avatars/') ? 'avatars' : 'chat-media');
+            const subPath = cleanPath.replace(/^(menus|avatars|chat-media|chats)\//, '');
+
+            const { data: upData, error: upErr } = await supabase.storage.from(bucket).upload(subPath, blob, {
+                cacheControl: '2592000',
+                upsert: true,
+                contentType: blob.type || 'image/jpeg'
+            });
+
+            if (!upErr && upData) {
+                const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(subPath);
+                if (urlData && urlData.publicUrl) {
+                    return urlData.publicUrl;
+                }
+            }
+        } catch (sbErr) {
+            console.warn('[ImageUpload] Supabase Storage upload skipped/failed:', sbErr?.message || sbErr);
+        }
+    }
+
+    // 2. Secondary: Firebase Storage Legacy Fallback
     if (isStorageAvailable && storage && blob) {
         try {
             const cleanPath = (storagePath || `uploads/${Date.now()}_${Math.random().toString(36).substring(2, 6)}.jpg`).replace(/^\/+/, '');
