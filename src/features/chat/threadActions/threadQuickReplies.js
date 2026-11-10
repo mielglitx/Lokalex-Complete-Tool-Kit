@@ -11,7 +11,43 @@ let draggedQuickReplyId = null;
 let activeSelectedQuickReplyText = "";
 let activeSelectedQuickReplyId = null;
 
+export function ensureQuickRepliesDrawerStructure() {
+    const drawer = document.getElementById('quick-replies-drawer');
+    if (!drawer) return null;
+    let container = document.getElementById('quick-replies-chips-container');
+    if (!container || !drawer.querySelector('#quick-replies-count-badge')) {
+        drawer.className = "hidden bg-[#182229] border-b border-slate-800 p-3 flex flex-col gap-2 shrink-0 max-h-72 sm:max-h-80 shadow-md";
+        drawer.innerHTML = `
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800 shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-bolt"></i> Quick Replies
+                    </span>
+                    <span id="quick-replies-count-badge" class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">0</span>
+                    <span class="text-[10px] text-slate-400 hidden sm:inline">• Use ▲ ▼ to sort</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <button type="button" onclick="window.promptAddQuickReply && window.promptAddQuickReply()" class="bg-amber-500 hover:bg-amber-400 text-black px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Create a new quick reply">
+                        <i class="fa-solid fa-plus text-[10px]"></i> Add
+                    </button>
+                    <button type="button" onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="w-6 h-6 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer" title="Close">
+                        <i class="fa-solid fa-xmark text-[11px]"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- VERTICAL LIST OF QUICK REPLY TITLE CARDS -->
+            <div id="quick-replies-chips-container" class="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5 max-h-56 sm:max-h-64 no-scrollbar">
+                <span class="text-xs text-slate-400 italic py-2">Loading quick replies...</span>
+            </div>
+        `;
+        container = document.getElementById('quick-replies-chips-container');
+    }
+    return container;
+}
+
 export function initSharedQuickRepliesListener() {
+    ensureQuickRepliesDrawerStructure();
     // 1. Immediately render from local cache if available
     try {
         const cached = localStorage.getItem('lokalex_shared_quick_replies_cache');
@@ -56,6 +92,7 @@ export function initSharedQuickRepliesListener() {
 }
 
 export function renderSharedQuickReplies(data) {
+    ensureQuickRepliesDrawerStructure();
     const container = document.getElementById('quick-replies-chips-container');
     const badge = document.getElementById('quick-replies-count-badge');
     if (!container) return;
@@ -67,8 +104,8 @@ export function renderSharedQuickReplies(data) {
         container.innerHTML = `
         <div class="text-center py-6 px-3 flex flex-col items-center gap-2">
             <i class="fa-solid fa-bolt text-2xl text-amber-500/40"></i>
-            <span class="text-xs text-gray-500 dark:text-gray-400">No quick replies yet.</span>
-            <button type="button" onclick="window.promptAddQuickReply && window.promptAddQuickReply()" class="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold rounded-xl text-xs border border-amber-300 dark:border-amber-700/60 transition active:scale-95 cursor-pointer">
+            <span class="text-xs text-slate-400">No quick replies yet.</span>
+            <button type="button" onclick="window.promptAddQuickReply && window.promptAddQuickReply()" class="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-bold rounded-xl text-xs border border-amber-500/40 transition active:scale-95 cursor-pointer">
                 + Add Quick Reply
             </button>
         </div>`;
@@ -119,7 +156,7 @@ export function renderSharedQuickReplies(data) {
         const escapedText = escapeHtml(item.text);
 
         return `
-        <div class="quick-reply-card flex items-center justify-between gap-2.5 p-2 bg-white dark:bg-cardBg hover:bg-amber-50/70 dark:hover:bg-amber-950/20 border border-gray-200 dark:border-gray-800 hover:border-amber-400/60 rounded-xl shadow-2xs transition group cursor-pointer" 
+        <div class="quick-reply-card flex items-center justify-between gap-2.5 p-2 bg-[#121a1f] hover:bg-[#1c272f] border border-slate-700/80 hover:border-amber-400/60 rounded-xl shadow-2xs transition group cursor-pointer" 
              data-id="${item.id}"
              onclick="window.handleQuickReplyChipClick && window.handleQuickReplyChipClick('${item.id}')"
              draggable="true" 
@@ -127,14 +164,14 @@ export function renderSharedQuickReplies(data) {
              ondragover="window.handleQuickReplyDragOver && window.handleQuickReplyDragOver(event)" 
              ondrop="window.handleQuickReplyDrop && window.handleQuickReplyDrop(event, '${item.id}')">
             <!-- REORDER CONTROLS (MOVE TO TOP / UP / DOWN) -->
-            <div class="flex items-center gap-0.5 text-gray-400 shrink-0" onclick="event.stopPropagation()">
-                <button type="button" onclick="window.moveQuickReplyToTop && window.moveQuickReplyToTop('${item.id}')" ${isFirst ? 'disabled class="opacity-20 cursor-not-allowed w-6 h-6 flex items-center justify-center text-gray-400"' : 'class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 text-gray-500 hover:text-amber-600 transition active:scale-90 cursor-pointer"'} title="Move to top">
+            <div class="flex items-center gap-0.5 text-slate-400 shrink-0" onclick="event.stopPropagation()">
+                <button type="button" onclick="window.moveQuickReplyToTop && window.moveQuickReplyToTop('${item.id}')" ${isFirst ? 'disabled class="opacity-20 cursor-not-allowed w-6 h-6 flex items-center justify-center text-slate-600"' : 'class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-400 hover:text-amber-400 transition active:scale-90 cursor-pointer"'} title="Move to top">
                     <i class="fa-solid fa-angles-up text-[10px]"></i>
                 </button>
-                <button type="button" onclick="window.moveQuickReplyOrder && window.moveQuickReplyOrder('${item.id}', -1)" ${isFirst ? 'disabled class="opacity-20 cursor-not-allowed w-6 h-6 flex items-center justify-center text-gray-400"' : 'class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 text-gray-500 hover:text-amber-600 transition active:scale-90 cursor-pointer"'} title="Move up in order">
+                <button type="button" onclick="window.moveQuickReplyOrder && window.moveQuickReplyOrder('${item.id}', -1)" ${isFirst ? 'disabled class="opacity-20 cursor-not-allowed w-6 h-6 flex items-center justify-center text-slate-600"' : 'class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-400 hover:text-amber-400 transition active:scale-90 cursor-pointer"'} title="Move up in order">
                     <i class="fa-solid fa-chevron-up text-[10px]"></i>
                 </button>
-                <button type="button" onclick="window.moveQuickReplyOrder && window.moveQuickReplyOrder('${item.id}', 1)" ${isLast ? 'disabled class="opacity-20 cursor-not-allowed w-6 h-6 flex items-center justify-center text-gray-400"' : 'class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 text-gray-500 hover:text-amber-600 transition active:scale-90 cursor-pointer"'} title="Move down in order">
+                <button type="button" onclick="window.moveQuickReplyOrder && window.moveQuickReplyOrder('${item.id}', 1)" ${isLast ? 'disabled class="opacity-20 cursor-not-allowed w-6 h-6 flex items-center justify-center text-slate-600"' : 'class="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-400 hover:text-amber-400 transition active:scale-90 cursor-pointer"'} title="Move down in order">
                     <i class="fa-solid fa-chevron-down text-[10px]"></i>
                 </button>
             </div>
@@ -142,22 +179,22 @@ export function renderSharedQuickReplies(data) {
             <!-- TITLE CARD (CLICK TO CHOOSE / SEND) -->
             <div class="flex-1 min-w-0 flex flex-col justify-center select-none py-0.5 pointer-events-none" title="Tap to select reply">
                 <div class="flex items-center gap-1.5">
-                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                    <span class="font-bold text-xs text-gray-900 dark:text-gray-100 truncate group-hover:text-amber-600 dark:group-hover:text-amber-400">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
+                    <span class="font-bold text-xs text-slate-100 truncate group-hover:text-amber-300">
                         ${escapedTitle}
                     </span>
                 </div>
-                <p class="text-[10px] text-gray-500 dark:text-gray-400 truncate pl-3 leading-tight pt-0.5">
+                <p class="text-[10px] text-slate-400 truncate pl-3 leading-tight pt-0.5">
                     ${escapedText}
                 </p>
             </div>
 
             <!-- ACTION BUTTONS: EDIT & DELETE -->
             <div class="flex items-center gap-1 shrink-0" onclick="event.stopPropagation()">
-                <button type="button" onclick="window.promptEditQuickReply && window.promptEditQuickReply('${item.id}')" class="text-gray-400 hover:text-amber-500 dark:hover:text-amber-400 p-1.5 text-xs opacity-60 hover:opacity-100 transition active:scale-90 cursor-pointer" title="Edit template permanently">
+                <button type="button" onclick="window.promptEditQuickReply && window.promptEditQuickReply('${item.id}')" class="text-slate-400 hover:text-amber-400 p-1.5 text-xs opacity-60 hover:opacity-100 transition active:scale-90 cursor-pointer" title="Edit template permanently">
                     <i class="fa-solid fa-pen-to-square"></i>
                 </button>
-                <button type="button" onclick="window.deleteQuickReply && window.deleteQuickReply('${item.id}')" class="text-gray-400 hover:text-red-500 p-1.5 text-xs opacity-60 hover:opacity-100 transition active:scale-90 cursor-pointer" title="Delete reply">
+                <button type="button" onclick="window.deleteQuickReply && window.deleteQuickReply('${item.id}')" class="text-slate-400 hover:text-rose-400 p-1.5 text-xs opacity-60 hover:opacity-100 transition active:scale-90 cursor-pointer" title="Delete reply">
                     <i class="fa-solid fa-trash-can"></i>
                 </button>
             </div>
@@ -273,11 +310,21 @@ async function applyQuickRepliesReorder(reorderedList) {
 }
 
 export function toggleQuickReplies() {
+    ensureQuickRepliesDrawerStructure();
     const drawer = document.getElementById('quick-replies-drawer');
     if (!drawer) return;
     drawer.classList.toggle('hidden');
     if (!drawer.classList.contains('hidden')) {
         initSharedQuickRepliesListener();
+        try {
+            const cached = localStorage.getItem('lokalex_shared_quick_replies_cache');
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (parsed && typeof parsed === 'object') {
+                    renderSharedQuickReplies(parsed);
+                }
+            }
+        } catch (_) {}
     }
 }
 

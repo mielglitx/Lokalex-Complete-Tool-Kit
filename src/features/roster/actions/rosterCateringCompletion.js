@@ -329,6 +329,22 @@ export async function completeSingleCateringCustomer(targetId, targetName, custN
                         db.ref(`customerChats/${k}/metadata`).update(doneUpdate).catch(() => {});
                         db.ref(`customerChatMeta/${k}`).update(doneUpdate).catch(() => {});
                     }
+                    if (typeof window.getCachedCustomerThreadsMap === 'function') {
+                        const tMap = window.getCachedCustomerThreadsMap();
+                        if (tMap) {
+                            for (const k of keysToUpdate) {
+                                if (tMap.has(k)) {
+                                    const entry = tMap.get(k);
+                                    entry.folder = 'done';
+                                    entry.status = 'completed';
+                                    entry.completedAt = now;
+                                    entry.cateredByRiderId = null;
+                                    entry.cateredByRiderName = null;
+                                    entry.cateredBy = null;
+                                }
+                            }
+                        }
+                    }
                 } catch (_) {}
             };
 

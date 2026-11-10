@@ -147,6 +147,7 @@ export function initSyncWatchdog() {
         try {
             if (db && navigator.onLine) {
                 try {
+                    db.goOffline();
                     db.goOnline();
                 } catch (_) {}
             }
@@ -217,7 +218,13 @@ export function initSyncWatchdog() {
             wasDocumentHidden = false;
             const awayDuration = Date.now() - (documentHiddenAt || 0);
             // Whenever phone screen turns on or rider returns, immediately refresh roster lineup
-            if (awayDuration > 2000) {
+            if (awayDuration > 1000) {
+                if (db && navigator.onLine) {
+                    try {
+                        db.goOffline();
+                        db.goOnline();
+                    } catch (_) {}
+                }
                 triggerLifecycleResync(true);
             }
         }
@@ -227,7 +234,13 @@ export function initSyncWatchdog() {
         if (wasDocumentHidden) {
             wasDocumentHidden = false;
             const awayDuration = Date.now() - (documentHiddenAt || 0);
-            if (awayDuration > 2000) {
+            if (awayDuration > 1000) {
+                if (db && navigator.onLine) {
+                    try {
+                        db.goOffline();
+                        db.goOnline();
+                    } catch (_) {}
+                }
                 triggerLifecycleResync(true);
             }
         }

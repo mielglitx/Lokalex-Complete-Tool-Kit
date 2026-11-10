@@ -209,8 +209,8 @@ export async function renderReceiptCanvas() {
     const discount = wizState.discount || 0;
 
     const codTotal = Math.max(0, wizState.codTotal || wizState.finalTotal || 0);
-    const epayFee = wizState.finalEpay || (codTotal <= 1000 ? 15 : 15 + Math.ceil((codTotal - 1000) / 500) * 5);
-    const gcashTotal = codTotal + epayFee;
+    const epayFee = 0;
+    const gcashTotal = codTotal;
     const snapshotRawTxId = wizState.currentReceiptTransactionId || `E37FG-${Date.now().toString(36).toUpperCase()}`;
 
     const rawGcashName = appState.gcashName || localStorage.getItem('lokalex_gcash_name') || riderName;
@@ -317,9 +317,8 @@ export async function renderReceiptCanvas() {
     if (discount > 0) feeLinesCount++;
     estimatedHeight += (feeLinesCount * 20) + 20;
 
-    // Badges
-    estimatedHeight += 44; // COD Total Box
-    estimatedHeight += 52; // GCash Box
+    // Total Badge
+    estimatedHeight += 44; // COD Total (Cash/GCash to Pay) Box
 
     // QR & GCash section
     if (hasGcashDetails) {
@@ -485,60 +484,35 @@ export async function renderReceiptCanvas() {
 
     y += 6;
 
-    // 7. COD Total Box (Rounded Green Border)
+    // 7. COD Total (Cash/GCash to Pay) Box (Rounded Green Border)
     const boxWidth = width - (leftMargin * 2);
     ctx.save();
     ctx.strokeStyle = "#16a34a";
     ctx.lineWidth = 1.6;
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-    ctx.roundRect(leftMargin, y, boxWidth, 34, 10);
+    ctx.roundRect(leftMargin, y, boxWidth, 36, 10);
     ctx.fill();
     ctx.stroke();
 
     ctx.fillStyle = "#15803d";
     ctx.font = "800 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
     ctx.textAlign = "left";
-    ctx.fillText("COD TOTAL (CASH TO COLLECT)", leftMargin + 10, y + 21);
+    ctx.fillText("COD Total (Cash/GCash to Pay)", leftMargin + 10, y + 22);
 
     ctx.font = "800 14.5px 'SF Mono', Consolas, 'Courier New', monospace";
     ctx.textAlign = "right";
-    ctx.fillText(`P${codTotal.toFixed(2)}`, rightMargin - 10, y + 21);
+    ctx.fillText(`P${codTotal.toFixed(2)}`, rightMargin - 10, y + 22);
     ctx.restore();
 
-    y += 42;
+    y += 50;
 
-    // 8. ePayment Box (Rounded Light Green Tint)
-    ctx.save();
-    ctx.strokeStyle = "#86efac";
-    ctx.lineWidth = 1.4;
-    ctx.fillStyle = "#f0fdf4";
-    ctx.beginPath();
-    ctx.roundRect(leftMargin, y, boxWidth, 42, 10);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "#166534";
-    ctx.textAlign = "left";
-    ctx.font = "800 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-    ctx.fillText("ePAYMENT", leftMargin + 10, y + 19);
-
-    ctx.font = "700 11px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-    ctx.fillText(`(+P${epayFee.toFixed(2)} Transfer Fee)`, leftMargin + 10, y + 33);
-
-    ctx.textAlign = "right";
-    ctx.font = "800 14.5px 'SF Mono', Consolas, 'Courier New', monospace";
-    ctx.fillText(`P${gcashTotal.toFixed(2)}`, rightMargin - 10, y + 26);
-    ctx.restore();
-
-    y += 56;
-
-    // 9. Scan To Pay Via ePayment & High-Scannability QR Code
+    // 8. Scan To Pay Via GCash & High-Scannability QR Code
     if (hasGcashDetails) {
         ctx.fillStyle = "#111827";
         ctx.textAlign = "center";
         ctx.font = "800 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-        ctx.fillText("SCAN TO PAY VIA GCASH / ePAYMENT", width / 2, y);
+        ctx.fillText("SCAN TO PAY VIA GCASH", width / 2, y);
         y += 17;
 
         ctx.font = "800 13px 'SF Mono', Consolas, 'Courier New', monospace";

@@ -24,8 +24,8 @@ export function renderFinalReceiptText() {
     const rawDiscVal = wizState.rawDiscountVal || 0;
 
     const codTotal = Math.max(0, wizState.codTotal || wizState.finalTotal || 0);
-    const epayFee = wizState.finalEpay || (codTotal <= 1000 ? 15 : 15 + Math.ceil((codTotal - 1000) / 500) * 5);
-    const gcashTotal = codTotal + epayFee;
+    const epayFee = 0;
+    const gcashTotal = codTotal;
 
     let itemsTxt = (currentCart.length > 0)
         ? currentCart.map(i => {
@@ -59,10 +59,10 @@ export function renderFinalReceiptText() {
     let gcashTxt = "";
     if (gcashName || gcashNo) {
         gcashTxt = 
-`\n📱 **ePAYMENT / GCASH DETAILS:**
+`\n📱 **GCASH DETAILS:**
 👤 **GCash Name: ${gcashName || 'N/A'}**
 📱 **GCash Number: \`${gcashNo || 'N/A'}\`**
-📷 **Note:** The QR Code is a GCash account (Scan via GCash App).
+📷 **Note:** Scan via GCash App.
 ➖➖➖➖➖➖➖➖➖➖➖➖\n`;
     }
 
@@ -86,8 +86,7 @@ ${itemsTxt}
 ➖➖➖➖➖➖➖➖➖➖➖➖
 📋 **FEES:**
 ${feesTxt}➖➖➖➖➖➖➖➖➖➖➖➖
-💰 **COD TOTAL (Cash): ₱${codTotal.toFixed(2)}**
-📱 **ePAYMENT TOTAL (+₱${epayFee.toFixed(2)} Fee): ₱${gcashTotal.toFixed(2)}**
+💰 **COD Total (Cash/GCash to Pay): ₱${codTotal.toFixed(2)}**
 ➖➖➖➖➖➖➖➖➖➖➖➖${gcashTxt}
 💙 Thank you for trusting Lokalex!`;
     }

@@ -29,7 +29,7 @@ import { isAdmin } from '../features/roster/rosterUtils.js';
 const LOCAL_STORAGE_KEY = 'lokalex_error_logs_v1';
 const MAX_LOCAL_LOGS = 100;
 const MAX_CLOUD_LOGS = 150;
-const CURRENT_APP_VERSION = '1.2.15';
+const CURRENT_APP_VERSION = '1.2.16';
 
 let inMemoryLogs = null;
 let cloudLogsMap = new Map();

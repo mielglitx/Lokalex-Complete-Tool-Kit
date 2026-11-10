@@ -28,17 +28,6 @@
                 <span id="modern-header-sync-text">Synced</span>
             </div>
 
-            <!-- Optional Clock & Battery: visible on desktop/tablets (>= md), hidden on mobile to give header breathing room -->
-            <div class="hidden md:flex px-2 py-1 rounded-xl bg-[#18232a] border border-slate-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-slate-200 items-center gap-1 shrink-0" title="Current Time">
-                <span>🕒</span>
-                <span id="modern-header-clock">--:--</span>
-            </div>
-
-            <div class="hidden md:flex px-2 py-1 rounded-xl bg-[#18232a] border border-slate-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-emerald-400 items-center gap-1 shrink-0" title="Battery Status">
-                <span>🔋</span>
-                <span id="modern-header-battery">--%</span>
-            </div>
-
             <!-- DATA USAGE MONITOR PILL -->
             <button id="modern-header-data-pill" type="button" onclick="window.openDataUsageModal && window.openDataUsageModal()" class="px-2 py-1 rounded-xl bg-[#18232a] hover:bg-slate-800 border border-slate-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-sky-400 flex items-center gap-1 shrink-0 transition active:scale-95 cursor-pointer shadow-2xs" title="Tap to view App Data Usage Monitor">
                 <i class="fa-solid fa-chart-simple text-[10px] text-sky-400"></i>
@@ -198,9 +187,9 @@
     <!-- ===================================================================== -->
     <nav class="bg-[#10181d] border-b border-slate-800 grid grid-cols-4 shrink-0">
         <!-- TAB 1: LIVE CHATS FEED (5 COLOR-CODED COUNT CIRCLES) -->
-        <button id="modern-main-tab-chats" type="button" onclick="window.switchModernWorkspaceTab('chats')" class="px-2 py-2 border-r border-slate-800/90 border-b-2 border-b-emerald-400 bg-emerald-500/10 text-emerald-400 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-left transition cursor-pointer">
-            <span class="text-[11px] sm:text-xs font-extrabold leading-tight">Live Chats Feed</span>
-            <div id="modern-tab-chats-circles" class="flex items-center gap-1 flex-wrap">
+        <button id="modern-main-tab-chats" type="button" onclick="window.switchModernWorkspaceTab('chats')" class="px-1.5 sm:px-2 py-1.5 sm:py-2 border-r border-slate-800/90 border-b-2 border-b-emerald-400 bg-emerald-500/10 text-emerald-400 flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 sm:gap-1 text-left transition cursor-pointer min-w-0 overflow-hidden">
+            <span class="text-[10px] sm:text-xs font-extrabold leading-tight truncate"><span class="hidden sm:inline">Live </span>Chats</span>
+            <div id="modern-tab-chats-circles" class="flex items-center gap-1 flex-wrap shrink-0">
                 <span id="modern-circle-inbox" class="hidden w-4 h-4 rounded-full bg-emerald-500 text-black font-mono font-black text-[9px] inline-flex items-center justify-center shadow-xs" title="Uncatered Customers in Inbox">0</span>
                 <span id="modern-circle-catering" class="hidden w-4 h-4 rounded-full bg-amber-400 text-black font-mono font-black text-[9px] inline-flex items-center justify-center shadow-xs" title="Customers Catered by You">0</span>
                 <span id="modern-circle-store" class="hidden w-4 h-4 rounded-full bg-blue-500 text-white font-mono font-black text-[9px] inline-flex items-center justify-center shadow-xs" title="Store Messages">0</span>
@@ -210,23 +199,23 @@
         </button>
 
         <!-- TAB 2: LOKALEX RIDER ROTATIONS (EXACT LINE # POSITION) -->
-        <button id="modern-main-tab-rotations" type="button" onclick="window.switchModernWorkspaceTab('rotations')" class="px-2 py-2 border-r border-slate-800/90 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex items-center justify-between gap-1 text-left transition cursor-pointer">
-            <span class="text-[11px] sm:text-xs font-extrabold leading-tight">Lokalex Rider Rotations</span>
-            <span id="modern-tab-rotations-badge" class="px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 font-mono font-black text-[10px] shrink-0" title="Your exact line position in rotation">--</span>
+        <button id="modern-main-tab-rotations" type="button" onclick="window.switchModernWorkspaceTab('rotations')" class="px-1.5 sm:px-2 py-1.5 sm:py-2 border-r border-slate-800/90 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 sm:gap-1 text-left transition cursor-pointer min-w-0 overflow-hidden">
+            <span class="text-[10px] sm:text-xs font-extrabold leading-tight truncate"><span class="hidden sm:inline">Rider </span>Rotations</span>
+            <span id="modern-tab-rotations-badge" class="px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 font-mono font-black text-[9.5px] sm:text-[10px] shrink-0 truncate max-w-full" title="Your exact line position in rotation">--</span>
         </button>
 
         <!-- TAB 3: RIDER LOGIN LIST (LOGGED IN / NOT LOGGED IN RATIO) -->
-        <button id="modern-main-tab-logins" type="button" onclick="window.switchModernWorkspaceTab('logins')" class="px-2 py-2 border-r border-slate-800/90 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex items-center justify-between gap-1 text-left transition cursor-pointer">
-            <span class="text-[11px] sm:text-xs font-extrabold leading-tight">Rider Login List</span>
-            <span id="modern-tab-logins-badge" class="px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 font-mono font-black text-[10px] shrink-0" title="Logged In / Not Logged In">
+        <button id="modern-main-tab-logins" type="button" onclick="window.switchModernWorkspaceTab('logins')" class="px-1.5 sm:px-2 py-1.5 sm:py-2 border-r border-slate-800/90 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 sm:gap-1 text-left transition cursor-pointer min-w-0 overflow-hidden">
+            <span class="text-[10px] sm:text-xs font-extrabold leading-tight truncate"><span class="hidden sm:inline">Rider </span>Logins</span>
+            <span id="modern-tab-logins-badge" class="px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 font-mono font-black text-[9.5px] sm:text-[10px] shrink-0 truncate max-w-full" title="Logged In / Not Logged In">
                 <span class="text-emerald-400">0</span>/<span class="text-rose-400">0</span>
             </span>
         </button>
 
         <!-- TAB 4: CATERED CUSTOMER LIST -->
-        <button id="modern-main-tab-catered" type="button" onclick="window.switchModernWorkspaceTab('catered')" class="px-2 py-2 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex items-center justify-between gap-1 text-left transition cursor-pointer">
-            <span class="text-[11px] sm:text-xs font-extrabold leading-tight">Catered Customer List</span>
-            <span id="modern-tab-catered-badge" class="px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-200 font-mono font-black text-[10px] shrink-0">0</span>
+        <button id="modern-main-tab-catered" type="button" onclick="window.switchModernWorkspaceTab('catered')" class="px-1.5 sm:px-2 py-1.5 sm:py-2 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 sm:gap-1 text-left transition cursor-pointer min-w-0 overflow-hidden">
+            <span class="text-[10px] sm:text-xs font-extrabold leading-tight truncate"><span class="hidden sm:inline">Customer </span>Catered</span>
+            <span id="modern-tab-catered-badge" class="px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-200 font-mono font-black text-[9.5px] sm:text-[10px] shrink-0 truncate max-w-full">0</span>
         </button>
     </nav>
 

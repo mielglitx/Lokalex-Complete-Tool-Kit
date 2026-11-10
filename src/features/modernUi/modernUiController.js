@@ -664,13 +664,13 @@ export function updateModernTabBadges() {
     if (rotBadge) {
         if (!myRecord || myRecord.status === 'End' || !myRecord.status) {
             rotBadge.innerText = "End";
-            rotBadge.className = "px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-400 font-mono font-black text-[10px] shrink-0";
+            rotBadge.className = "px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-400 font-mono font-black text-[9.5px] sm:text-[10px] shrink-0 truncate max-w-full";
         } else if (myRecord.status === 'Break') {
             rotBadge.innerText = "Break";
-            rotBadge.className = "px-1.5 py-0.5 rounded-full bg-sky-500/20 border border-sky-400/50 text-sky-300 font-mono font-black text-[10px] shrink-0";
+            rotBadge.className = "px-1.5 py-0.5 rounded-full bg-sky-500/20 border border-sky-400/50 text-sky-300 font-mono font-black text-[9.5px] sm:text-[10px] shrink-0 truncate max-w-full";
         } else if (myRecord.status === 'Catering') {
             rotBadge.innerText = "Catering";
-            rotBadge.className = "px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 font-mono font-black text-[10px] shrink-0";
+            rotBadge.className = "px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 font-mono font-black text-[9.5px] sm:text-[10px] shrink-0 truncate max-w-full";
         } else {
             const availables = sortAvailableRiders(roster.filter(m => m.status === 'Available'));
             const idx = availables.findIndex(m => {
@@ -680,7 +680,7 @@ export function updateModernTabBadges() {
             });
             const posText = idx !== -1 ? `#${idx + 1}` : '#1';
             rotBadge.innerText = posText;
-            rotBadge.className = "px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 font-mono font-black text-[10px] shrink-0";
+            rotBadge.className = "px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 font-mono font-black text-[9.5px] sm:text-[10px] shrink-0 truncate max-w-full";
         }
     }
 
@@ -1072,13 +1072,18 @@ export function renderModernLockedCateringRoom(targetCustId, targetName, targetA
     }
     if (infoBtn) infoBtn.classList.add('hidden');
 
-    ['rider-chat-presence-banner', 'rider-chat-lock-banner', 'rider-chat-milestone-bar', 'quick-replies-drawer'].forEach(id => {
+    ['rider-chat-presence-banner', 'rider-chat-lock-banner', 'rider-chat-milestone-bar'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.classList.add('hidden');
             el.innerHTML = '';
         }
     });
+
+    const quickDrawer = document.getElementById('quick-replies-drawer');
+    if (quickDrawer) {
+        quickDrawer.classList.add('hidden');
+    }
 
     const msgContainer = document.getElementById('rider-chat-messages-container') || document.getElementById('rider-cust-chat-messages');
     if (msgContainer) {

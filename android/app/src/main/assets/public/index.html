@@ -938,7 +938,7 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-Cejj_htF.js"></script>
+  <script type="module" crossorigin src="./assets/index-DBg_uz1x.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-hePW80VL.js">
   <link rel="modulepreload" crossorigin href="./assets/vendor-CBNqoVD9.js">
 <link rel="manifest" href="./manifest.webmanifest"></head>
@@ -3472,17 +3472,6 @@
                 <span id="modern-header-sync-text">Synced</span>
             </div>
 
-            <!-- Optional Clock & Battery: visible on desktop/tablets (>= md), hidden on mobile to give header breathing room -->
-            <div class="hidden md:flex px-2 py-1 rounded-xl bg-[#18232a] border border-slate-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-slate-200 items-center gap-1 shrink-0" title="Current Time">
-                <span>🕒</span>
-                <span id="modern-header-clock">--:--</span>
-            </div>
-
-            <div class="hidden md:flex px-2 py-1 rounded-xl bg-[#18232a] border border-slate-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-emerald-400 items-center gap-1 shrink-0" title="Battery Status">
-                <span>🔋</span>
-                <span id="modern-header-battery">--%</span>
-            </div>
-
             <!-- DATA USAGE MONITOR PILL -->
             <button id="modern-header-data-pill" type="button" onclick="window.openDataUsageModal && window.openDataUsageModal()" class="px-2 py-1 rounded-xl bg-[#18232a] hover:bg-slate-800 border border-slate-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-sky-400 flex items-center gap-1 shrink-0 transition active:scale-95 cursor-pointer shadow-2xs" title="Tap to view App Data Usage Monitor">
                 <i class="fa-solid fa-chart-simple text-[10px] text-sky-400"></i>
@@ -3642,9 +3631,9 @@
     <!-- ===================================================================== -->
     <nav class="bg-[#10181d] border-b border-slate-800 grid grid-cols-4 shrink-0">
         <!-- TAB 1: LIVE CHATS FEED (5 COLOR-CODED COUNT CIRCLES) -->
-        <button id="modern-main-tab-chats" type="button" onclick="window.switchModernWorkspaceTab('chats')" class="px-2 py-2 border-r border-slate-800/90 border-b-2 border-b-emerald-400 bg-emerald-500/10 text-emerald-400 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-left transition cursor-pointer">
-            <span class="text-[11px] sm:text-xs font-extrabold leading-tight">Live Chats Feed</span>
-            <div id="modern-tab-chats-circles" class="flex items-center gap-1 flex-wrap">
+        <button id="modern-main-tab-chats" type="button" onclick="window.switchModernWorkspaceTab('chats')" class="px-1.5 sm:px-2 py-1.5 sm:py-2 border-r border-slate-800/90 border-b-2 border-b-emerald-400 bg-emerald-500/10 text-emerald-400 flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 sm:gap-1 text-left transition cursor-pointer min-w-0 overflow-hidden">
+            <span class="text-[10px] sm:text-xs font-extrabold leading-tight truncate"><span class="hidden sm:inline">Live </span>Chats</span>
+            <div id="modern-tab-chats-circles" class="flex items-center gap-1 flex-wrap shrink-0">
                 <span id="modern-circle-inbox" class="hidden w-4 h-4 rounded-full bg-emerald-500 text-black font-mono font-black text-[9px] inline-flex items-center justify-center shadow-xs" title="Uncatered Customers in Inbox">0</span>
                 <span id="modern-circle-catering" class="hidden w-4 h-4 rounded-full bg-amber-400 text-black font-mono font-black text-[9px] inline-flex items-center justify-center shadow-xs" title="Customers Catered by You">0</span>
                 <span id="modern-circle-store" class="hidden w-4 h-4 rounded-full bg-blue-500 text-white font-mono font-black text-[9px] inline-flex items-center justify-center shadow-xs" title="Store Messages">0</span>
@@ -3654,23 +3643,23 @@
         </button>
 
         <!-- TAB 2: LOKALEX RIDER ROTATIONS (EXACT LINE # POSITION) -->
-        <button id="modern-main-tab-rotations" type="button" onclick="window.switchModernWorkspaceTab('rotations')" class="px-2 py-2 border-r border-slate-800/90 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex items-center justify-between gap-1 text-left transition cursor-pointer">
-            <span class="text-[11px] sm:text-xs font-extrabold leading-tight">Lokalex Rider Rotations</span>
-            <span id="modern-tab-rotations-badge" class="px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 font-mono font-black text-[10px] shrink-0" title="Your exact line position in rotation">--</span>
+        <button id="modern-main-tab-rotations" type="button" onclick="window.switchModernWorkspaceTab('rotations')" class="px-1.5 sm:px-2 py-1.5 sm:py-2 border-r border-slate-800/90 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 sm:gap-1 text-left transition cursor-pointer min-w-0 overflow-hidden">
+            <span class="text-[10px] sm:text-xs font-extrabold leading-tight truncate"><span class="hidden sm:inline">Rider </span>Rotations</span>
+            <span id="modern-tab-rotations-badge" class="px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 font-mono font-black text-[9.5px] sm:text-[10px] shrink-0 truncate max-w-full" title="Your exact line position in rotation">--</span>
         </button>
 
         <!-- TAB 3: RIDER LOGIN LIST (LOGGED IN / NOT LOGGED IN RATIO) -->
-        <button id="modern-main-tab-logins" type="button" onclick="window.switchModernWorkspaceTab('logins')" class="px-2 py-2 border-r border-slate-800/90 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex items-center justify-between gap-1 text-left transition cursor-pointer">
-            <span class="text-[11px] sm:text-xs font-extrabold leading-tight">Rider Login List</span>
-            <span id="modern-tab-logins-badge" class="px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 font-mono font-black text-[10px] shrink-0" title="Logged In / Not Logged In">
+        <button id="modern-main-tab-logins" type="button" onclick="window.switchModernWorkspaceTab('logins')" class="px-1.5 sm:px-2 py-1.5 sm:py-2 border-r border-slate-800/90 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 sm:gap-1 text-left transition cursor-pointer min-w-0 overflow-hidden">
+            <span class="text-[10px] sm:text-xs font-extrabold leading-tight truncate"><span class="hidden sm:inline">Rider </span>Logins</span>
+            <span id="modern-tab-logins-badge" class="px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 font-mono font-black text-[9.5px] sm:text-[10px] shrink-0 truncate max-w-full" title="Logged In / Not Logged In">
                 <span class="text-emerald-400">0</span>/<span class="text-rose-400">0</span>
             </span>
         </button>
 
         <!-- TAB 4: CATERED CUSTOMER LIST -->
-        <button id="modern-main-tab-catered" type="button" onclick="window.switchModernWorkspaceTab('catered')" class="px-2 py-2 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex items-center justify-between gap-1 text-left transition cursor-pointer">
-            <span class="text-[11px] sm:text-xs font-extrabold leading-tight">Catered Customer List</span>
-            <span id="modern-tab-catered-badge" class="px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-200 font-mono font-black text-[10px] shrink-0">0</span>
+        <button id="modern-main-tab-catered" type="button" onclick="window.switchModernWorkspaceTab('catered')" class="px-1.5 sm:px-2 py-1.5 sm:py-2 border-b-2 border-b-transparent text-slate-400 hover:text-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 sm:gap-1 text-left transition cursor-pointer min-w-0 overflow-hidden">
+            <span class="text-[10px] sm:text-xs font-extrabold leading-tight truncate"><span class="hidden sm:inline">Customer </span>Catered</span>
+            <span id="modern-tab-catered-badge" class="px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-200 font-mono font-black text-[9.5px] sm:text-[10px] shrink-0 truncate max-w-full">0</span>
         </button>
     </nav>
 
@@ -4991,20 +4980,20 @@
         </div>
 
         <!-- SAVED QUICK REPLIES VERTICAL PANEL -->
-        <div id="quick-replies-drawer" class="hidden bg-gray-50 dark:bg-darkBg/95 border-b border-gray-200 dark:border-gray-800 p-3 flex flex-col gap-2 shrink-0 max-h-72 sm:max-h-80 shadow-md">
-            <div class="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-gray-800 shrink-0">
+        <div id="quick-replies-drawer" class="hidden bg-[#182229] border-b border-slate-800 p-3 flex flex-col gap-2 shrink-0 max-h-72 sm:max-h-80 shadow-md">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800 shrink-0">
                 <div class="flex items-center gap-2">
-                    <span class="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                    <span class="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
                         <i class="fa-solid fa-bolt"></i> Quick Replies
                     </span>
-                    <span id="quick-replies-count-badge" class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-300 dark:border-amber-700/60">0</span>
-                    <span class="text-[10px] text-gray-400 dark:text-gray-500 hidden sm:inline">• Use ▲ ▼ to sort</span>
+                    <span id="quick-replies-count-badge" class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">0</span>
+                    <span class="text-[10px] text-slate-400 hidden sm:inline">• Use ▲ ▼ to sort</span>
                 </div>
                 <div class="flex items-center gap-1.5">
-                    <button type="button" onclick="window.promptAddQuickReply && window.promptAddQuickReply()" class="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Create a new quick reply">
+                    <button type="button" onclick="window.promptAddQuickReply && window.promptAddQuickReply()" class="bg-amber-500 hover:bg-amber-400 text-black px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Create a new quick reply">
                         <i class="fa-solid fa-plus text-[10px]"></i> Add
                     </button>
-                    <button type="button" onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer" title="Close">
+                    <button type="button" onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="w-6 h-6 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer" title="Close">
                         <i class="fa-solid fa-xmark text-[11px]"></i>
                     </button>
                 </div>
@@ -5012,7 +5001,7 @@
 
             <!-- VERTICAL LIST OF QUICK REPLY TITLE CARDS -->
             <div id="quick-replies-chips-container" class="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5 max-h-56 sm:max-h-64 no-scrollbar">
-                <span class="text-xs text-gray-500 dark:text-gray-400 italic py-2">Loading quick replies...</span>
+                <span class="text-xs text-slate-400 italic py-2">Loading quick replies...</span>
             </div>
         </div>
 

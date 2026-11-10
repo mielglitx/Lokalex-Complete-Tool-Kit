@@ -247,34 +247,24 @@ function executeRenderRiderCustomerChatFeed() {
                 t.cateredByRiderName = (activeCaterer.riderName || activeCaterer.name || "Rider").toString().trim();
                 t.cateredBy = t.cateredByRiderName;
             } else if (isFinished) {
+                // Explicitly completed or marked done without an active roster caterer: STRICT DONE!
                 t.folder = 'done';
                 t.status = 'completed';
                 t.cateredByRiderId = null;
                 t.cateredByRiderName = null;
                 t.cateredBy = null;
             } else if (wasInCatering) {
-                // If thread was marked catering but nobody on roster is actively catering them:
-                const assignedRiderName = (t.cateredByRiderName || t.cateredBy || '').trim().toLowerCase();
-                const assignedRider = assignedRiderName ? liveRoster.find(m => {
-                    const mName = (m.riderName || m.name || '').trim().toLowerCase();
-                    return mName && (mName === assignedRiderName || (typeof isRiderMatch === 'function' && isRiderMatch(assignedRiderName, mName)));
-                }) : null;
-
-                if (assignedRider && assignedRider.status === 'Catering') {
-                    t.folder = 'catering';
-                    t.status = 'active';
-                    t.completedAt = null;
+                // If thread was previously marked catering but nobody on roster is actively catering them:
+                // Strictly purge catering fields and do NOT resurrect unless rider's roster actually lists this customer!
+                t.cateredByRiderId = null;
+                t.cateredByRiderName = null;
+                t.cateredBy = null;
+                if (isFinished || t.completedAt) {
+                    t.folder = 'done';
+                    t.status = 'completed';
                 } else {
-                    t.cateredByRiderId = null;
-                    t.cateredByRiderName = null;
-                    t.cateredBy = null;
-                    if (isFinished || t.completedAt) {
-                        t.folder = 'done';
-                        t.status = 'completed';
-                    } else {
-                        t.folder = 'inbox';
-                        t.status = 'active';
-                    }
+                    t.folder = 'inbox';
+                    t.status = 'active';
                 }
             }
         }
@@ -1004,10 +994,22 @@ export async function handleThreadSwipeCater(btnOrCustId, optionalName) {
     }
 
     // Always fetch fresh server roster to verify true queue lineup before opening cater
-    if (db && navigator.onLine) {
+    if (navigator.onLine) {
         try {
-            const snap = await db.ref('roster').once('value');
-            const val = snap.val();
+            let val = null;
+            try {
+                const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/roster.json?t=${Date.now()}`;
+                const res = await fetch(directRestUrl, { cache: 'no-store' });
+                if (res.ok) {
+                    val = await res.json();
+                }
+            } catch (_) {}
+
+            if (!val && db) {
+                const snap = await db.ref('roster').once('value');
+                val = snap.val();
+            }
+
             if (val && typeof val === 'object') {
                 globalState.rosterMembers = Object.entries(val).map(([key, item]) => ({
                     ...item,

@@ -549,32 +549,15 @@ export function processCustomerChatMetaData(data, isFromCache = false) {
         };
 
         // Cross-reference with live roster so newly incoming threads immediately transition to catering
-        {
-            const liveRoster = globalState.rosterMembers || [];
-            const activeCateringRider = liveRoster.find(m => {
-                if (m.status !== 'Catering') return false;
-                const tCustName = displayName.toLowerCase().trim();
-                if (!tCustName || tCustName === 'customer' || tCustName === 'customer name') return false;
-                if (m.customerName && tCustName) {
-                    const custs = m.customerName.split(/\s*,\s*/).map(c => c.trim().toLowerCase()).filter(c => c !== 'customer' && c !== 'customer name');
-                    if (custs.some(c => c === tCustName || isCustomerMatch(c, displayName))) return true;
-                }
-                if (m.forcedCaters && typeof m.forcedCaters === 'object') {
-                    for (const [fKey, fVal] of Object.entries(m.forcedCaters)) {
-                        if (fKey === key && fKey !== 'customer') return true;
-                        const fName = (fVal && typeof fVal === 'object' && fVal.customerName) ? fVal.customerName : fKey;
-                        const cleanFName = (fName || '').toLowerCase().trim();
-                        if (cleanFName !== 'customer' && cleanFName !== 'customer name' && tCustName && isCustomerMatch(fName, tCustName)) return true;
-                    }
-                }
-                const metaRId = (meta.cateredByRiderId || "").toString().trim();
-                const metaRName = (meta.cateredByRiderName || meta.cateredBy || "").toString().trim().toLowerCase();
-                const mRId = (m.telegramId || m.id || "").toString().trim();
-                const mRName = (m.riderName || m.name || "").toString().trim().toLowerCase();
-                if (metaRId && metaRId === mRId) return true;
-                if (metaRName && metaRName === mRName) return true;
-                return false;
-            });
+        if (isAlreadyDone) {
+            // Strictly enforce Done folder and sanitized catering fields for completed threads
+            threadObj.folder = 'done';
+            threadObj.status = 'completed';
+            threadObj.cateredByRiderId = null;
+            threadObj.cateredByRiderName = null;
+            threadObj.cateredBy = null;
+        } else {
+            const activeCateringRider = activeCaterer || (typeof getActiveRosterCaterer === 'function' ? getActiveRosterCaterer(displayName, key, meta) : null);
             if (activeCateringRider) {
                 threadObj.folder = 'catering';
                 threadObj.status = 'active';

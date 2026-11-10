@@ -172,10 +172,22 @@ export async function confirmCateringStatus(overrideCustName = null, overrideCus
 
         // Authoritative server check: fetch real-time server roster before lineup validation
         // to prevent queue-jumping after phone screen unlock/sleep or offline reconnect
-        if (db && navigator.onLine) {
+        if (navigator.onLine) {
             try {
-                const snap = await db.ref('roster').once('value');
-                const val = snap.val();
+                let val = null;
+                try {
+                    const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/roster.json?t=${Date.now()}`;
+                    const res = await fetch(directRestUrl, { cache: 'no-store' });
+                    if (res.ok) {
+                        val = await res.json();
+                    }
+                } catch (_) {}
+
+                if (!val && db) {
+                    const snap = await db.ref('roster').once('value');
+                    val = snap.val();
+                }
+
                 if (val && typeof val === 'object') {
                     globalState.rosterMembers = Object.entries(val).map(([key, item]) => ({
                         ...item,

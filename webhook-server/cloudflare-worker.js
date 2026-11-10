@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * LOKALEX DISPATCH - UNIFIED DUAL-WRITE CLOUDFLARE WORKER (SUPABASE + FIREBASE)
+ * LOKALEX DISPATCH - DEDICATED SUPABASE CLOUDFLARE WORKER
  * ============================================================================
  * 
  * Worker Name Suggestion: lokalex-supabase-webhook
@@ -20,8 +20,6 @@
  */
 
 const CONFIG = {
-  // (Optional) Dual-write to Firebase Realtime Database so existing riders using Firebase never miss a message:
-  FIREBASE_DB_URL: "https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app",
   // Supabase Project REST URL & Service Role / Secret Key (or Anon Key)
   SUPABASE_URL: "https://brdvugzjhkimcyabptcw.supabase.co",
   SUPABASE_KEY: "", // Set via Cloudflare Worker Dashboard -> Settings -> Variables -> SUPABASE_KEY
@@ -38,7 +36,7 @@ const CONFIG = {
   PAGE_ACCESS_TOKEN: "",
 
   // (Optional) Forward raw incoming webhooks to the existing Firebase worker so existing riders never miss a message:
-  FIREBASE_FORWARD_URL: "https://lokalex-messenger-webhook.lokaledeliver.workers.dev/webhook"
+  FIREBASE_FORWARD_URL: ""
 };
 
 // Global in-memory caches across worker requests within warm isolates (0ms lookup)
@@ -140,15 +138,13 @@ export default {
     const defaultApiId = env?.DEFAULT_API_ID || CONFIG.DEFAULT_API_ID;
     const defaultApiName = env?.DEFAULT_API_NAME || CONFIG.DEFAULT_API_NAME;
     const firebaseForwardUrl = env?.FIREBASE_FORWARD_URL || CONFIG.FIREBASE_FORWARD_URL;
-    const firebaseDbUrl = env?.FIREBASE_DB_URL || CONFIG.FIREBASE_DB_URL;
 
     const cfg = {
       supabaseUrl,
       supabaseKey,
       pageAccessToken,
       defaultApiId,
-      defaultApiName,
-      firebaseDbUrl
+      defaultApiName
     };
 
     // Handle CORS preflight
@@ -388,42 +384,30 @@ export default {
           fbData = await fbResp.json();
         }
 
-        // Link message key to Meta mid in Supabase
-        if (payload.msgKey && fbData?.message_id && supabaseUrl && supabaseKey) {
+        // Link message key to Meta mid in Supabase & invalidate warm memory cache
+        if (fbData?.message_id && supabaseUrl && supabaseKey) {
           const rawMid = String(fbData.message_id);
           const safeMid = rawMid.replace(/[.#$\[\]\/]/g, '_');
           const custTarget = cleanPsid.startsWith('fb_') ? cleanPsid : `fb_${cleanPsid}`;
           
+          MEM_CUSTOMER_CACHE.delete(custTarget);
+          
           ctx.waitUntil(
             (async () => {
               try {
-                const chatRowId = `${custTarget}_${payload.msgKey}`;
-                const existingRow = await supabaseGetById(supabaseUrl, supabaseKey, "customer_chats", chatRowId);
-                if (existingRow && existingRow.data) {
-                  existingRow.data.mid = safeMid;
-                  existingRow.data.metaMid = rawMid;
-                  await supabaseUpsert(supabaseUrl, supabaseKey, "customer_chats", existingRow);
+                if (payload.msgKey) {
+                  const chatRowId = `${custTarget}_${payload.msgKey}`;
+                  const existingRow = await supabaseGetById(supabaseUrl, supabaseKey, "customer_chats", chatRowId);
+                  if (existingRow && existingRow.data) {
+                    existingRow.data.mid = safeMid;
+                    existingRow.data.metaMid = rawMid;
+                    await supabaseUpsert(supabaseUrl, supabaseKey, "customer_chats", existingRow);
+                  }
                 }
                 await supabaseUpsert(supabaseUrl, supabaseKey, "customer_chats", [
-                  { id: `${custTarget}_midIndex_${safeMid}`, room_id: custTarget, data: { msgKey: payload.msgKey, mid: safeMid, rawMid } },
-                  { id: `${custTarget}_midIndex_${rawMid}`, room_id: custTarget, data: { msgKey: payload.msgKey, mid: safeMid, rawMid } }
+                  { id: `${custTarget}_midIndex_${safeMid}`, room_id: custTarget, data: { msgKey: payload.msgKey || null, mid: safeMid, rawMid } },
+                  { id: `${custTarget}_midIndex_${rawMid}`, room_id: custTarget, data: { msgKey: payload.msgKey || null, mid: safeMid, rawMid } }
                 ]);
-
-                // Dual-link in Firebase RTDB
-                if (firebaseDbUrl) {
-                  try {
-                    fetch(`${firebaseDbUrl}/customerChats/${custTarget}/midIndex/${safeMid}.json`, {
-                      method: "PUT",
-                      body: JSON.stringify(payload.msgKey)
-                    }).catch(() => {});
-                    if (rawMid !== safeMid) {
-                      fetch(`${firebaseDbUrl}/customerChats/${custTarget}/midIndex/${rawMid}.json`, {
-                        method: "PUT",
-                        body: JSON.stringify(payload.msgKey)
-                      }).catch(() => {});
-                    }
-                  } catch (_) {}
-                }
               } catch (e) {
                 console.warn("Supabase send-reply linking note:", e);
               }
@@ -772,36 +756,11 @@ async function processMetaEntries(entries, cfg, ctx) {
                     timestamp: nowIso
                   })
                 ]);
-
-                // Dual-write reaction to Firebase RTDB
-                if (cfg.firebaseDbUrl) {
-                  try {
-                    if (action === "unreact") {
-                      fetch(`${cfg.firebaseDbUrl}/customerChats/${custId}/messages/${targetKey}/reactions/${encodeURIComponent(reactionEmoji)}/${senderId}.json`, { method: "DELETE" }).catch(() => {});
-                    } else {
-                      fetch(`${cfg.firebaseDbUrl}/customerChats/${custId}/messages/${targetKey}/reactions/${encodeURIComponent(reactionEmoji)}/${senderId}.json`, { method: "PUT", body: "true" }).catch(() => {});
-                    }
-                    fetch(`${cfg.firebaseDbUrl}/customerChatMeta/${custId}/lastUpdated.json`, { method: "PUT", body: JSON.stringify(Date.now()) }).catch(() => {});
-                  } catch (_) {}
-                }
               }
             } catch (rxErr) {
               console.warn("Supabase reaction update error:", rxErr);
             }
           }
-        }
-        if (cfg.firebaseDbUrl) {
-          try {
-            const readPatch = {
-              [`customerChatMeta/${custId}/customerLastSeenTimestamp`]: watermark,
-              [`customerChats/${custId}/metadata/customerLastSeenTimestamp`]: watermark
-            };
-            fetch(`${cfg.firebaseDbUrl}/.json`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(readPatch)
-            }).catch(() => {});
-          } catch (_) {}
         }
         continue;
       }
@@ -897,35 +856,13 @@ async function processMetaEntries(entries, cfg, ctx) {
                   ]);
                 }
               }
-              // Dual-write message_edit to Firebase RTDB
-        if (cfg.firebaseDbUrl) {
-          try {
-            const editPatch = {
-              [`customerChats/${custId}/messages/${targetKey}/text`]: newText,
-              [`customerChats/${custId}/messages/${targetKey}/message`]: newText,
-              [`customerChats/${custId}/messages/${targetKey}/isEdited`]: true,
-              [`customerChats/${custId}/messages/${targetKey}/editedAt`]: editTimestamp,
-              [`customerChats/${custId}/messages/${targetKey}/numEdit`]: numEdit,
-              [`customerChats/${custId}/messages/${targetKey}/originalText`]: origText,
-              [`customerChats/${custId}/messages/${targetKey}/previousText`]: row?.data?.previousText || origText,
-              [`customerChatMeta/${custId}/lastUpdated`]: editTimestamp,
-              [`customerChatMeta/${custId}/lastMessage`]: newText,
-              [`customerChats/${custId}/metadata/lastUpdated`]: editTimestamp,
-              [`customerChats/${custId}/metadata/lastMessage`]: newText
-            };
-            fetch(`${cfg.firebaseDbUrl}/.json`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(editPatch)
-            }).catch(() => {});
-          } catch (_) {}
-        }
-      } catch (editErr) {
+            } catch (editErr) {
               console.warn("Supabase message_edit error:", editErr);
             }
           }
-          if (cfg.firebaseDbUrl) {
+          if (cfg.firebaseDbUrl || cfg.dbUrl) {
             try {
+              const dbEndpoint = cfg.firebaseDbUrl || cfg.dbUrl;
               const editPatch = {
                 [`customerChats/${custId}/messages/${targetKey}/text`]: newText,
                 [`customerChats/${custId}/messages/${targetKey}/message`]: newText,
@@ -939,28 +876,13 @@ async function processMetaEntries(entries, cfg, ctx) {
                 [`customerChats/${custId}/metadata/lastUpdated`]: editTimestamp,
                 [`customerChats/${custId}/metadata/lastMessage`]: newText
               };
-              fetch(`${cfg.firebaseDbUrl}/.json`, {
+              fetch(`${dbEndpoint}/.json`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(editPatch)
               }).catch(() => {});
             } catch (_) {}
           }
-        }
-        continue;
-      }
-        if (cfg.firebaseDbUrl) {
-          try {
-            const readPatch = {
-              [`customerChatMeta/${custId}/customerLastSeenTimestamp`]: watermark,
-              [`customerChats/${custId}/metadata/customerLastSeenTimestamp`]: watermark
-            };
-            fetch(`${cfg.firebaseDbUrl}/.json`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(readPatch)
-            }).catch(() => {});
-          } catch (_) {}
         }
         continue;
       }
@@ -1033,19 +955,6 @@ async function processMetaEntries(entries, cfg, ctx) {
             console.warn("Supabase mark seen error:", readErr);
           }
         }
-        if (cfg.firebaseDbUrl) {
-          try {
-            const readPatch = {
-              [`customerChatMeta/${custId}/customerLastSeenTimestamp`]: watermark,
-              [`customerChats/${custId}/metadata/customerLastSeenTimestamp`]: watermark
-            };
-            fetch(`${cfg.firebaseDbUrl}/.json`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(readPatch)
-            }).catch(() => {});
-          } catch (_) {}
-        }
         continue;
       }
 
@@ -1107,6 +1016,25 @@ async function processMetaEntries(entries, cfg, ctx) {
       const timestamp = item.timestamp || Date.now();
       const rawMetaMid = item.message.mid ? String(item.message.mid) : null;
       const mid = rawMetaMid ? rawMetaMid.replace(/[.#$\[\]\/]/g, "_") : `msg_${timestamp}`;
+
+      // Fast-path echo deduplication:
+      // If this message was dispatched by the Lokalex app via /api/send-reply or local send,
+      // it is already saved or indexed in Supabase. Skip re-processing to prevent race conditions.
+      if (isEcho && cfg.supabaseUrl && cfg.supabaseKey) {
+        try {
+          const [exDirect, exMidIndex, exRawMidIndex] = await Promise.all([
+            supabaseGetById(cfg.supabaseUrl, cfg.supabaseKey, "customer_chats", `${custId}_${mid}`),
+            supabaseGetById(cfg.supabaseUrl, cfg.supabaseKey, "customer_chats", `${custId}_midIndex_${mid}`),
+            rawMetaMid && rawMetaMid !== mid
+              ? supabaseGetById(cfg.supabaseUrl, cfg.supabaseKey, "customer_chats", `${custId}_midIndex_${rawMetaMid}`)
+              : Promise.resolve(null)
+          ]);
+          if ((exDirect && exDirect.data) || (exMidIndex && exMidIndex.data) || (exRawMidIndex && exRawMidIndex.data)) {
+            console.log(`ℹ️ Skipping echo for ${custId} (${mid}) - outbound message already handled by Lokalex app.`);
+            continue;
+          }
+        } catch (_) {}
+      }
 
       let messageText = item.message.text || "";
       let hasAttachment = false;
@@ -1178,8 +1106,8 @@ async function processMetaEntries(entries, cfg, ctx) {
       let existingStatus = existingCustomer?.status || null;
       let existingCustomerMeta = null;
 
-      // 1b. If not fresh or no caterer, check Supabase customer_chat_meta
-      if ((!isCacheFresh || !existingCustomer || !existingCateredRider) && cfg.supabaseUrl && cfg.supabaseKey) {
+      // 1b. If echo, or cache stale/missing: check Supabase customer_chat_meta
+      if ((isEcho || !isCacheFresh || !existingCustomer) && cfg.supabaseUrl && cfg.supabaseKey) {
         try {
           const metaRow = await supabaseGetById(cfg.supabaseUrl, cfg.supabaseKey, "customer_chat_meta", custId);
           if (metaRow && metaRow.data) {
@@ -1189,10 +1117,10 @@ async function processMetaEntries(entries, cfg, ctx) {
               existingCustomerName = ex.customerName.trim();
               existingAvatarUrl = ex.avatarUrl;
             }
-            if (ex.folder) existingFolder = ex.folder;
-            if (ex.cateredByRiderName || ex.cateredBy) existingCateredRider = ex.cateredByRiderName || ex.cateredBy;
-            if (ex.cateredByRiderId) existingCateredRiderId = ex.cateredByRiderId;
-            if (ex.status) existingStatus = ex.status;
+            existingFolder = ex.folder || null;
+            existingCateredRider = ex.cateredByRiderName || ex.cateredBy || null;
+            existingCateredRiderId = ex.cateredByRiderId || null;
+            existingStatus = ex.status || null;
 
             MEM_CUSTOMER_CACHE.set(custId, {
               customerName: existingCustomerName,
@@ -1270,6 +1198,9 @@ async function processMetaEntries(entries, cfg, ctx) {
           messageText = `📄 ${docName}`;
         } else if (hasAttachment) {
           messageText = "[Facebook attachment]";
+        } else if (isEcho) {
+          // Ignore empty outbound Meta system/page echoes with no text and no media
+          continue;
         } else {
           messageText = "Facebook Message";
         }
@@ -1352,10 +1283,44 @@ async function processMetaEntries(entries, cfg, ctx) {
 
       // 4. Thread Metadata Payload
       const isExistingDone = (existingFolder === 'done') || existingStatus === 'completed' || existingStatus === 'done';
-      const isCurrentlyCatered = !isExistingDone && (existingFolder === 'catering' || Boolean(existingCateredRider || existingCateredRiderId)) && existingStatus !== 'cancelled';
-      const resolvedFolder = isCurrentlyCatered 
-        ? 'catering' 
-        : (existingFolder === 'followup' ? 'followup' : (existingFolder === 'stores' ? 'stores' : (existingFolder === 'applicant' ? 'applicant' : 'inbox')));
+      
+      // An echo MUST NEVER initiate or force a catering session
+      const isCurrentlyCatered = !isEcho && !isExistingDone && (existingFolder === 'catering' || Boolean(existingCateredRider || existingCateredRiderId)) && existingStatus !== 'cancelled';
+
+      let targetFolder = 'inbox';
+      let targetStatus = 'active';
+
+      if (isEcho) {
+        if (isExistingDone) {
+          targetFolder = 'done';
+          targetStatus = 'completed';
+        } else if (existingFolder === 'catering') {
+          targetFolder = 'catering';
+          targetStatus = 'active';
+        } else if (existingFolder === 'stores' || existingFolder === 'applicant' || existingFolder === 'followup') {
+          targetFolder = existingFolder;
+          targetStatus = existingStatus || 'active';
+        } else {
+          targetFolder = 'inbox';
+          targetStatus = 'active';
+        }
+      } else {
+        // Customer inbound message
+        if (isCurrentlyCatered) {
+          targetFolder = 'catering';
+          targetStatus = 'active';
+        } else if (isExistingDone) {
+          // If customer messages back on a completed thread, reopen in inbox for new inquiry
+          targetFolder = 'inbox';
+          targetStatus = 'active';
+        } else if (existingFolder === 'stores' || existingFolder === 'applicant' || existingFolder === 'followup') {
+          targetFolder = existingFolder;
+          targetStatus = 'active';
+        } else {
+          targetFolder = 'inbox';
+          targetStatus = 'active';
+        }
+      }
 
       let lastSummary = messageText;
       if (isLikeSticker) {
@@ -1378,33 +1343,41 @@ async function processMetaEntries(entries, cfg, ctx) {
         avatarUrl: avatarUrl,
         lastMessage: isEcho ? `You: ${lastSummary}` : lastSummary,
         lastUpdated: timestamp,
-        folder: isEcho ? (existingFolder || 'inbox') : resolvedFolder,
-        status: 'active',
+        folder: targetFolder,
+        status: targetStatus,
         channel: "messenger",
         apiId: cfg.defaultApiId,
         apiName: cfg.defaultApiName,
         unreadForRider: !isEcho,
       };
-      if (!isEcho) {
-        threadMeta.completedAt = null;
-        threadMeta.completedByRiderId = null;
-        threadMeta.completedByRiderName = null;
-        threadMeta.completedBy = null;
-      }
-      if (isCurrentlyCatered) {
-        threadMeta.folder = 'catering';
-        if (existingCateredRider) threadMeta.cateredByRiderName = existingCateredRider;
-        if (existingCateredRiderId) threadMeta.cateredByRiderId = existingCateredRiderId;
-        threadMeta.cateredBy = existingCateredRider || null;
-      } else if (isExistingDone) {
-        threadMeta.folder = isEcho ? 'done' : 'inbox';
+
+      if (targetFolder === 'done' || targetStatus === 'completed') {
+        threadMeta.folder = 'done';
+        threadMeta.status = 'completed';
+        threadMeta.cateredBy = null;
         threadMeta.cateredByRiderName = null;
         threadMeta.cateredByRiderId = null;
-        threadMeta.cateredBy = null;
+        if (existingCustomerMeta?.completedAt) threadMeta.completedAt = existingCustomerMeta.completedAt;
+        if (existingCustomerMeta?.completedBy) threadMeta.completedBy = existingCustomerMeta.completedBy;
+        if (existingCustomerMeta?.completedByRiderId) threadMeta.completedByRiderId = existingCustomerMeta.completedByRiderId;
+        if (existingCustomerMeta?.completedByRiderName) threadMeta.completedByRiderName = existingCustomerMeta.completedByRiderName;
+      } else if (targetFolder === 'catering' && (existingCateredRider || existingCateredRiderId)) {
+        threadMeta.folder = 'catering';
+        threadMeta.status = 'active';
+        threadMeta.cateredBy = existingCateredRider || null;
+        threadMeta.cateredByRiderName = existingCateredRider || null;
+        threadMeta.cateredByRiderId = existingCateredRiderId || null;
       } else {
-        if (existingCateredRider) threadMeta.cateredByRiderName = existingCateredRider;
-        if (existingCateredRiderId) threadMeta.cateredByRiderId = existingCateredRiderId;
-        if (existingCateredRider) threadMeta.cateredBy = existingCateredRider;
+        threadMeta.folder = targetFolder;
+        threadMeta.cateredBy = null;
+        threadMeta.cateredByRiderName = null;
+        threadMeta.cateredByRiderId = null;
+        if (!isEcho) {
+          threadMeta.completedAt = null;
+          threadMeta.completedByRiderId = null;
+          threadMeta.completedByRiderName = null;
+          threadMeta.completedBy = null;
+        }
       }
 
       // 5. Chat Message Payload
@@ -1504,36 +1477,14 @@ async function processMetaEntries(entries, cfg, ctx) {
         }
       }
 
-      // 6b. Dual-Write Directly to Firebase Realtime Database
-      if (cfg.firebaseDbUrl) {
-        try {
-          const multiPathPayload = {
-            [`customerChatMeta/${custId}`]: threadMeta,
-            [`customerChats/${custId}/metadata`]: threadMeta,
-            [`customerChats/${custId}/messages/${mid}`]: chatMessage,
-          };
-          if (rawMetaMid && rawMetaMid !== mid) {
-            multiPathPayload[`customerChats/${custId}/midIndex/${rawMetaMid}`] = mid;
-          }
-          await fetch(`${cfg.firebaseDbUrl}/.json`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(multiPathPayload)
-          });
-          console.log(`⚡ Saved message from ${customerName} to Firebase RTDB!`);
-        } catch (fbErr) {
-          console.warn("Firebase message save error:", fbErr);
-        }
-      }
-
-      // Update in-memory customer cache
+      // Update in-memory customer cache with authoritative state
       MEM_CUSTOMER_CACHE.set(custId, {
         customerName: customerName,
         avatarUrl: avatarUrl,
-        folder: isCurrentlyCatered ? 'catering' : resolvedFolder,
-        cateredBy: isCurrentlyCatered ? existingCateredRider : null,
-        cateredById: isCurrentlyCatered ? existingCateredRiderId : null,
-        status: 'active',
+        folder: threadMeta.folder,
+        cateredBy: threadMeta.cateredBy,
+        cateredById: threadMeta.cateredByRiderId,
+        status: threadMeta.status,
         cachedAt: Date.now()
       });
 
@@ -1636,21 +1587,6 @@ async function processMetaEntries(entries, cfg, ctx) {
                   })
                 ]);
               }
-
-              if (cfg.firebaseDbUrl) {
-                try {
-                  const autoReplyPatch = {
-                    [`customerChats/${custId}/messages/${autoReplyMid}`]: autoReplyMsg,
-                    [`customerChatMeta/${custId}`]: { ...(existingCustomerMeta || {}), ...updatePayload },
-                    [`customerChats/${custId}/metadata`]: { ...(existingCustomerMeta || {}), ...updatePayload }
-                  };
-                  await fetch(`${cfg.firebaseDbUrl}/.json`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(autoReplyPatch)
-                  }).catch(() => {});
-                } catch (_) {}
-              }
               console.log(`🛑 Sent Full Booking auto-reply to ${customerName} on Messenger!`);
             }
           }
@@ -1660,5 +1596,5 @@ async function processMetaEntries(entries, cfg, ctx) {
       }
     }
   }
-
+}
 

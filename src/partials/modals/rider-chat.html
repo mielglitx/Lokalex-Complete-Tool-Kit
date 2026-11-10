@@ -125,20 +125,20 @@
         </div>
 
         <!-- SAVED QUICK REPLIES VERTICAL PANEL -->
-        <div id="quick-replies-drawer" class="hidden bg-gray-50 dark:bg-darkBg/95 border-b border-gray-200 dark:border-gray-800 p-3 flex flex-col gap-2 shrink-0 max-h-72 sm:max-h-80 shadow-md">
-            <div class="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-gray-800 shrink-0">
+        <div id="quick-replies-drawer" class="hidden bg-[#182229] border-b border-slate-800 p-3 flex flex-col gap-2 shrink-0 max-h-72 sm:max-h-80 shadow-md">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800 shrink-0">
                 <div class="flex items-center gap-2">
-                    <span class="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                    <span class="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
                         <i class="fa-solid fa-bolt"></i> Quick Replies
                     </span>
-                    <span id="quick-replies-count-badge" class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-300 dark:border-amber-700/60">0</span>
-                    <span class="text-[10px] text-gray-400 dark:text-gray-500 hidden sm:inline">• Use ▲ ▼ to sort</span>
+                    <span id="quick-replies-count-badge" class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">0</span>
+                    <span class="text-[10px] text-slate-400 hidden sm:inline">• Use ▲ ▼ to sort</span>
                 </div>
                 <div class="flex items-center gap-1.5">
-                    <button type="button" onclick="window.promptAddQuickReply && window.promptAddQuickReply()" class="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Create a new quick reply">
+                    <button type="button" onclick="window.promptAddQuickReply && window.promptAddQuickReply()" class="bg-amber-500 hover:bg-amber-400 text-black px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition active:scale-95 flex items-center gap-1 shadow-xs cursor-pointer" title="Create a new quick reply">
                         <i class="fa-solid fa-plus text-[10px]"></i> Add
                     </button>
-                    <button type="button" onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer" title="Close">
+                    <button type="button" onclick="window.toggleQuickReplies && window.toggleQuickReplies()" class="w-6 h-6 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer" title="Close">
                         <i class="fa-solid fa-xmark text-[11px]"></i>
                     </button>
                 </div>
@@ -146,7 +146,7 @@
 
             <!-- VERTICAL LIST OF QUICK REPLY TITLE CARDS -->
             <div id="quick-replies-chips-container" class="flex-1 overflow-y-auto flex flex-col gap-1.5 pr-0.5 max-h-56 sm:max-h-64 no-scrollbar">
-                <span class="text-xs text-gray-500 dark:text-gray-400 italic py-2">Loading quick replies...</span>
+                <span class="text-xs text-slate-400 italic py-2">Loading quick replies...</span>
             </div>
         </div>
 

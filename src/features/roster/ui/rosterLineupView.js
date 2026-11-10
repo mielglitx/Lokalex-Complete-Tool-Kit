@@ -763,16 +763,8 @@ export async function forceRefreshRosterList(btn = null, isSilent = false) {
     try {
         let rosterData = null;
 
-        if (db) {
-            try {
-                const snap = await db.ref('roster').once('value');
-                rosterData = snap.val();
-            } catch (dbErr) {
-                console.warn("[ForceRefreshRoster] db.ref fetch failed:", dbErr);
-            }
-        }
-
-        if (!rosterData && !isSupabaseSelected()) {
+        // Authoritative server fetch: Direct HTTPS REST query guarantees fresh data even if WebSocket is dormant after screen sleep
+        if (!isSupabaseSelected() && navigator.onLine) {
             try {
                 const directRestUrl = `https://lokalexoptimized-rtdb-default-rtdb.asia-southeast1.firebasedatabase.app/roster.json?t=${Date.now()}`;
                 const res = await fetch(directRestUrl, { cache: 'no-store' });
@@ -781,6 +773,15 @@ export async function forceRefreshRosterList(btn = null, isSilent = false) {
                 }
             } catch (fetchErr) {
                 console.warn("[ForceRefreshRoster] Direct REST fetch fallback:", fetchErr);
+            }
+        }
+
+        if (!rosterData && db) {
+            try {
+                const snap = await db.ref('roster').once('value');
+                rosterData = snap.val();
+            } catch (dbErr) {
+                console.warn("[ForceRefreshRoster] db.ref fetch failed:", dbErr);
             }
         }
 

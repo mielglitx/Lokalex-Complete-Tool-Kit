@@ -278,11 +278,9 @@ export function calculateGrandTotal() {
     const netFees = Math.max(0, totalFeesBeforeDiscount - calculatedDiscount);
     let codTotal = Math.max(0, subtotal + netFees);
 
+    // E-payment / Transfer fee is 0 under Unified One Price Law
     let epayFee = 0;
-    if (codTotal > 0) {
-        epayFee = codTotal <= 1000 ? 15 : 15 + Math.ceil((codTotal - 1000) / 500) * 5;
-    }
-    let gcashTotal = codTotal + epayFee;
+    let gcashTotal = codTotal;
 
     const storeCountEl = document.getElementById('wiz-store-count');
     const grandTotalEl = document.getElementById('wiz-grand-total');
@@ -296,9 +294,9 @@ export function calculateGrandTotal() {
     wizState.deliveryFee = dFee;
     wizState.rawDiscountVal = rawDiscountInput;
     wizState.discount = calculatedDiscount;
-    wizState.finalEpay = epayFee;
+    wizState.finalEpay = 0;
     wizState.codTotal = codTotal;
-    wizState.gcashTotal = gcashTotal;
+    wizState.gcashTotal = codTotal;
     wizState.finalTotal = codTotal;
 }
 

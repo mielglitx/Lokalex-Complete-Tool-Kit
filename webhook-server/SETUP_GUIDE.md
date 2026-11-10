@@ -10,33 +10,29 @@
               │
               ▼
   [ Cloudflare Worker Webhook ]
-(https://lokalex-webhook.workers.dev)
+(https://dry-firefly-ee76.lokaledeliver.workers.dev/webhook)
               │
-              ▼ (Writes to Firebase RTDB)
-[ Firebase Realtime Database ]
-(customerChatMeta & customerChats)
+              ▼ (Writes directly to Supabase)
+  [ Supabase PostgREST & Realtime ]
+(customer_chat_meta & customer_chats)
               │
               ▼ (Realtime sync)
-  [ Lokalex Live Chats Feed ]
-  (Riders see "Camiling FB" feed)
+    [ Lokalex Live Chats Feed ]
+   (Riders see "Camiling FB" feed)
 ```
 
 ---
 
-## ⚡ Fastest Setup: Cloudflare Worker (Free, 2 Minutes)
+## ⚡ Setup: Cloudflare Worker
 
 Cloudflare Workers provides a free HTTPS endpoint that is active 24/7 with zero server management.
 
 ### Step 1: Deploy Worker in Cloudflare
 1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com/) and sign in.
-2. In the left menu, click **Workers & Pages** ➔ select your worker (`lokalex-messenger-webhook`).
+2. In the left menu, click **Workers & Pages** ➔ select your worker (`dry-firefly-ee76` / `lokalex-supabase-webhook`).
 3. Click **Edit code** on the top right.
-4. Replace the code by copying and pasting the entire file [`webhook-server/cloudflare-worker.js`](./cloudflare-worker.js).
+4. Replace the entire code by copying and pasting the file [`webhook-server/cloudflare-worker.js`](./cloudflare-worker.js).
 5. Click **Save and Deploy** (or **Deploy**).
-6. Verify your deployment: open your worker URL in your browser:
-
-> **💡 Automatic Name Resolution in Lokalex Web App:**
-> Even if Cloudflare Worker is not updated or Meta temporarily delays webhook indexing, the Lokalex Web App now has an automatic real-time resolver that catches any incoming `FB Customer (...)` messages, resolves their real name directly via Facebook Graph API, updates the display instantly, and saves the proper name back to Firebase.
 
 ---
 
@@ -44,7 +40,7 @@ Cloudflare Workers provides a free HTTPS endpoint that is active 24/7 with zero 
 1. Go to [developers.facebook.com](https://developers.facebook.com/apps/) and select your App.
 2. Go to **Messenger** ➔ **Settings** (or **Webhooks**).
 3. Under **Webhooks**, click **Edit Callback URL** (or **Configure Webhooks**):
-   - **Callback URL**: `https://lokalex-messenger-webhook.<your-subdomain>.workers.dev/webhook`
+   - **Callback URL**: `https://dry-firefly-ee76.lokaledeliver.workers.dev/webhook`
    - **Verify Token**: `Test1234`
 4. Click **Verify and Save** (Meta will test the endpoint and show a green checkmark ✅).
 5. Next to your Page (`1098954353295816`), click **Add Subscriptions** and check:
@@ -59,7 +55,7 @@ Cloudflare Workers provides a free HTTPS endpoint that is active 24/7 with zero 
 2. Click **Admin Controls** ➔ **Facebook Messenger APIs** (or the Settings gear next to the sources chips).
 3. Edit your **Camiling FB** API:
    - Update **API Link / Webhook URL** to your Cloudflare Worker URL:
-     `https://lokalex-messenger-webhook.<your-subdomain>.workers.dev/webhook`
+     `https://dry-firefly-ee76.lokaledeliver.workers.dev/webhook`
 4. Click **Update Facebook API**.
 
 ---
