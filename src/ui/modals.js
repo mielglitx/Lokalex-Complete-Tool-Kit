@@ -86,6 +86,10 @@ import {
     closeSlideDeleteModal,
     openTypeConfirmModal,
     closeTypeConfirmModal,
+    openSafetyConfirmModal,
+    closeSafetyConfirmModal,
+    handleConfirmCheckboxChange,
+    submitConfirmSafetyModal,
     handleConfirmTypeInput,
     submitConfirmTypeModal,
     onSlideProgress,
@@ -159,6 +163,10 @@ export {
     closeSlideDeleteModal,
     openTypeConfirmModal,
     closeTypeConfirmModal,
+    openSafetyConfirmModal,
+    closeSafetyConfirmModal,
+    handleConfirmCheckboxChange,
+    submitConfirmSafetyModal,
     handleConfirmTypeInput,
     submitConfirmTypeModal,
     onSlideProgress,
@@ -224,6 +232,10 @@ if (typeof window !== 'undefined') {
     window.closeSlideDeleteModal = closeSlideDeleteModal;
     window.openTypeConfirmModal = openTypeConfirmModal;
     window.closeTypeConfirmModal = closeTypeConfirmModal;
+    window.openSafetyConfirmModal = openSafetyConfirmModal;
+    window.closeSafetyConfirmModal = closeSafetyConfirmModal;
+    window.handleConfirmCheckboxChange = handleConfirmCheckboxChange;
+    window.submitConfirmSafetyModal = submitConfirmSafetyModal;
     window.handleConfirmTypeInput = handleConfirmTypeInput;
     window.submitConfirmTypeModal = submitConfirmTypeModal;
     window.onSlideProgress = onSlideProgress;

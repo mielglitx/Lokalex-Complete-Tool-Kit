@@ -107,7 +107,7 @@ export function closeEditItemModal() {
 }
 
 export function openSlideDeleteModal(title, arg2, arg3) {
-    let subtitle = 'Type "confirm" to confirm.';
+    let subtitle = 'Please check the box below to confirm.';
     let callback = null;
 
     if (typeof arg2 === 'function') {
@@ -119,32 +119,39 @@ export function openSlideDeleteModal(title, arg2, arg3) {
         }
     }
 
-    if (subtitle && (subtitle.includes('slider') || subtitle.includes('I-drag') || subtitle.includes('i-drag') || subtitle.includes('slide') || subtitle.includes('Slide'))) {
+    if (subtitle) {
         subtitle = subtitle
-            .replace(/I-drag pakanan ang slider para kumpirmahin\.?/gi, 'Type "confirm" to confirm.')
-            .replace(/I-drag pakanan ang slider upang alisin ang/gi, 'Type "confirm" to remove')
-            .replace(/I-drag pakanan ang slider/gi, 'Type "confirm"')
-            .replace(/I-slide pakanan ang slider/gi, 'Type "confirm"');
+            .replace(/Type "confirm" to confirm\.?/gi, 'Please check the box below to confirm.')
+            .replace(/Type "confirm" to remove/gi, 'Check the box to remove')
+            .replace(/Type "confirm"/gi, 'Check the box')
+            .replace(/type "confirm"/gi, 'check the box')
+            .replace(/I-drag pakanan ang slider para kumpirmahin\.?/gi, 'Please check the box below to confirm.')
+            .replace(/I-drag pakanan ang slider upang alisin ang/gi, 'Check the box to remove')
+            .replace(/I-drag pakanan ang slider/gi, 'Check the box')
+            .replace(/I-slide pakanan ang slider/gi, 'Check the box');
     }
 
     const titleEl = document.getElementById('slide-delete-title');
     const subEl = document.getElementById('slide-delete-sub');
+    const checkboxEl = document.getElementById('confirm-safety-checkbox');
+    const checkboxLabel = document.getElementById('confirm-checkbox-label');
+    const btnEl = document.getElementById('confirm-safety-submit-btn') || document.getElementById('confirm-type-submit-btn');
     const inputEl = document.getElementById('confirm-type-input');
-    const btnEl = document.getElementById('confirm-type-submit-btn');
-    const indicatorEl = document.getElementById('confirm-type-match-indicator');
-    const hintEl = document.getElementById('confirm-type-status-hint');
     const rangeEl = document.getElementById('slide-delete-range');
 
     if (titleEl) titleEl.innerText = title || "Confirm Action";
     if (subEl) subEl.innerText = subtitle;
     if (rangeEl) rangeEl.value = 0;
 
+    if (checkboxEl) {
+        checkboxEl.checked = false;
+    }
+    if (checkboxLabel) {
+        checkboxLabel.classList.remove('border-red-500', 'ring-2', 'ring-red-500/40', 'border-emerald-500/60');
+    }
     if (inputEl) {
         inputEl.value = "";
-        inputEl.classList.remove('border-emerald-500', 'ring-2', 'ring-emerald-500/30', 'border-red-500');
     }
-    if (indicatorEl) indicatorEl.classList.add('hidden');
-    if (hintEl) hintEl.innerHTML = 'Required';
     if (btnEl) {
         btnEl.disabled = true;
         btnEl.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-gray-700/60 border border-gray-600/40 opacity-50 cursor-not-allowed transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm";
@@ -156,7 +163,7 @@ export function openSlideDeleteModal(title, arg2, arg3) {
     if (modal) {
         modal.classList.remove('hidden');
         setTimeout(() => {
-            if (inputEl) inputEl.focus();
+            if (checkboxEl) checkboxEl.focus();
         }, 120);
     }
 }
@@ -164,40 +171,36 @@ export function openSlideDeleteModal(title, arg2, arg3) {
 export function closeSlideDeleteModal() {
     const modal = document.getElementById('slide-delete-modal');
     if (modal) modal.classList.add('hidden');
+    const checkboxEl = document.getElementById('confirm-safety-checkbox');
+    if (checkboxEl) checkboxEl.checked = false;
     const inputEl = document.getElementById('confirm-type-input');
     if (inputEl) inputEl.value = "";
     slideDeleteCallback = null;
     isSlideDragValid = false;
 }
 
-export function handleConfirmTypeInput(val = "") {
+export function handleConfirmCheckboxChange(isChecked = false) {
+    const btnEl = document.getElementById('confirm-safety-submit-btn') || document.getElementById('confirm-type-submit-btn');
+    const checkboxLabel = document.getElementById('confirm-checkbox-label');
     const inputEl = document.getElementById('confirm-type-input');
-    const btnEl = document.getElementById('confirm-type-submit-btn');
-    const indicatorEl = document.getElementById('confirm-type-match-indicator');
-    const hintEl = document.getElementById('confirm-type-status-hint');
     const rangeEl = document.getElementById('slide-delete-range');
 
-    const clean = (val || "").trim().toLowerCase();
-    const isMatched = clean === 'confirm';
-
-    if (isMatched) {
+    if (isChecked) {
         if (rangeEl) rangeEl.value = 100;
-        if (indicatorEl) indicatorEl.classList.remove('hidden');
-        if (hintEl) hintEl.innerHTML = '<span class="text-emerald-400 font-bold">Ready</span>';
-        if (inputEl) {
-            inputEl.classList.add('border-emerald-500', 'ring-2', 'ring-emerald-500/30');
-            inputEl.classList.remove('border-red-500');
+        if (inputEl) inputEl.value = "confirm";
+        if (checkboxLabel) {
+            checkboxLabel.classList.add('border-emerald-500/60', 'ring-1', 'ring-emerald-500/30');
+            checkboxLabel.classList.remove('border-red-500', 'ring-red-500/40');
         }
         if (btnEl) {
             btnEl.disabled = false;
-            btnEl.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-red-600 hover:bg-red-500 border border-red-500/60 cursor-pointer shadow-lg shadow-red-600/40 ring-2 ring-red-400/50 opacity-100 transition active:scale-95 flex items-center justify-center gap-1.5";
+            btnEl.className = "flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 border border-emerald-500/60 cursor-pointer shadow-lg shadow-emerald-600/30 ring-2 ring-emerald-400/40 opacity-100 transition active:scale-95 flex items-center justify-center gap-1.5";
         }
     } else {
         if (rangeEl) rangeEl.value = 0;
-        if (indicatorEl) indicatorEl.classList.add('hidden');
-        if (hintEl) hintEl.innerHTML = 'Required';
-        if (inputEl) {
-            inputEl.classList.remove('border-emerald-500', 'ring-2', 'ring-emerald-500/30');
+        if (inputEl) inputEl.value = "";
+        if (checkboxLabel) {
+            checkboxLabel.classList.remove('border-emerald-500/60', 'ring-1', 'ring-emerald-500/30');
         }
         if (btnEl) {
             btnEl.disabled = true;
@@ -206,18 +209,27 @@ export function handleConfirmTypeInput(val = "") {
     }
 }
 
-export function submitConfirmTypeModal() {
-    const inputEl = document.getElementById('confirm-type-input');
-    const clean = (inputEl?.value || "").trim().toLowerCase();
+export function handleConfirmTypeInput(val = "") {
+    const clean = (val || "").trim().toLowerCase();
+    const isMatched = clean === 'confirm';
+    const checkboxEl = document.getElementById('confirm-safety-checkbox');
+    if (checkboxEl) checkboxEl.checked = isMatched;
+    handleConfirmCheckboxChange(isMatched);
+}
 
-    if (clean !== 'confirm') {
-        if (inputEl) {
-            inputEl.focus();
-            inputEl.classList.add('border-red-500', 'ring-2', 'ring-red-500/40');
+export function submitConfirmSafetyModal() {
+    const checkboxEl = document.getElementById('confirm-safety-checkbox');
+    const isChecked = Boolean(checkboxEl?.checked);
+
+    if (!isChecked) {
+        const checkboxLabel = document.getElementById('confirm-checkbox-label');
+        if (checkboxLabel) {
+            checkboxLabel.classList.add('border-red-500', 'ring-2', 'ring-red-500/40');
             setTimeout(() => {
-                inputEl.classList.remove('ring-2', 'ring-red-500/40');
-            }, 600);
+                checkboxLabel.classList.remove('border-red-500', 'ring-2', 'ring-red-500/40');
+            }, 800);
         }
+        if (checkboxEl) checkboxEl.focus();
         return;
     }
 
@@ -241,15 +253,19 @@ export function submitConfirmTypeModal() {
     }
 }
 
+export const submitConfirmTypeModal = submitConfirmSafetyModal;
+
 // Aliases for modern naming
 export const openTypeConfirmModal = openSlideDeleteModal;
 export const closeTypeConfirmModal = closeSlideDeleteModal;
+export const openSafetyConfirmModal = openSlideDeleteModal;
+export const closeSafetyConfirmModal = closeSlideDeleteModal;
 
 // Backward-compatibility stubs for range slider callers
 export function onSlideStart() {}
 export function onSlideProgress(val) {
     if (parseFloat(val) >= 88) {
-        submitConfirmTypeModal();
+        submitConfirmSafetyModal();
     }
 }
 export function onSlideEnd() {}
@@ -456,6 +472,10 @@ if (typeof window !== 'undefined') {
     window.closeSlideDeleteModal = closeSlideDeleteModal;
     window.openTypeConfirmModal = openTypeConfirmModal;
     window.closeTypeConfirmModal = closeTypeConfirmModal;
+    window.openSafetyConfirmModal = openSafetyConfirmModal;
+    window.closeSafetyConfirmModal = closeSafetyConfirmModal;
+    window.handleConfirmCheckboxChange = handleConfirmCheckboxChange;
+    window.submitConfirmSafetyModal = submitConfirmSafetyModal;
     window.handleConfirmTypeInput = handleConfirmTypeInput;
     window.submitConfirmTypeModal = submitConfirmTypeModal;
     window.onSlideStart = onSlideStart;

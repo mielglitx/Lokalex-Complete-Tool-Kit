@@ -938,7 +938,7 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="./assets/index-DvkMLLIA.js"></script>
+  <script type="module" crossorigin src="./assets/index-CVhh7QF1.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-hePW80VL.js">
   <link rel="modulepreload" crossorigin href="./assets/vendor-CBNqoVD9.js">
 <link rel="manifest" href="./manifest.webmanifest"></head>
@@ -8708,47 +8708,43 @@
     </div>
 </div>
 
-<!-- UNIVERSAL TYPING CONFIRMATION MODAL -->
+<!-- UNIVERSAL CONFIRMATION SAFETY MODAL (CHECKBOX + OK/CANCEL) -->
 <div id="slide-delete-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-[999999] flex items-end sm:items-center justify-center p-4 transition-all" style="z-index: 999999 !important;">
-    <div class="bg-[#1E1A1A] border border-red-500/30 p-5 rounded-3xl max-w-sm w-full text-center shadow-2xl flex flex-col gap-3.5 text-white animate-in fade-in zoom-in-95 duration-150">
-        <div class="w-12 h-12 mx-auto rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-500 text-2xl shadow-inner">
+    <div class="bg-[#182229] border border-amber-500/30 p-5 rounded-3xl max-w-sm w-full text-center shadow-2xl flex flex-col gap-3.5 text-white animate-in fade-in zoom-in-95 duration-150">
+        <div class="w-12 h-12 mx-auto rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 text-2xl shadow-inner">
             <i id="slide-modal-icon" class="fa-solid fa-triangle-exclamation"></i>
         </div>
         <div class="flex flex-col gap-1">
             <h3 id="slide-delete-title" class="font-bold text-base text-white tracking-tight">Confirm Action</h3>
-            <p id="slide-delete-sub" class="text-xs text-gray-400 whitespace-pre-line leading-relaxed">Type "confirm" to confirm.</p>
+            <p id="slide-delete-sub" class="text-xs text-gray-400 whitespace-pre-line leading-relaxed">Check the box below to confirm.</p>
         </div>
         
-        <div class="flex flex-col gap-1.5 text-left bg-black/40 border border-white/10 rounded-2xl p-3">
-            <label for="confirm-type-input" class="text-[11px] font-medium text-gray-300 flex items-center justify-between">
-                <span>Type <span class="font-mono font-black text-red-400 select-all">confirm</span> to proceed:</span>
-                <span id="confirm-type-status-hint" class="text-[10px] text-gray-500">Required</span>
-            </label>
-            <div class="relative">
-                <input type="text" id="confirm-type-input"
-                    autocomplete="off" 
-                    autocapitalize="none" 
-                    spellcheck="false" 
-                    placeholder='Type "confirm"' 
-                    oninput="window.handleConfirmTypeInput && window.handleConfirmTypeInput(this.value)" 
-                    onkeydown="if(event.key==='Enter'){event.preventDefault();window.submitConfirmTypeModal && window.submitConfirmTypeModal();}"
-                    class="w-full bg-black/60 border border-gray-700 focus:border-red-500 rounded-xl px-3 py-2.5 text-sm font-mono text-center tracking-wider text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500/30 transition">
-                <div id="confirm-type-match-indicator" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 text-sm">
-                    <i class="fa-solid fa-circle-check"></i>
-                </div>
-            </div>
-        </div>
+        <!-- CONFIRMATION CHECKBOX BOX -->
+        <label id="confirm-checkbox-label" for="confirm-safety-checkbox" class="flex items-center gap-3 p-3.5 bg-black/40 hover:bg-black/60 border border-gray-700/60 rounded-2xl cursor-pointer select-none transition text-left">
+            <input type="checkbox" id="confirm-safety-checkbox"
+                onchange="window.handleConfirmCheckboxChange && window.handleConfirmCheckboxChange(this.checked)"
+                class="w-5 h-5 rounded-lg text-emerald-500 bg-black/60 border-gray-600 focus:ring-emerald-500/40 cursor-pointer accent-emerald-500 shrink-0">
+            <span id="confirm-checkbox-text" class="text-xs font-semibold text-gray-200 leading-tight">
+                Yes, I understand and confirm this action
+            </span>
+        </label>
 
-        <!-- Hidden legacy range element for backward-compatibility -->
+        <!-- Hidden backward-compatibility elements so existing references never throw ReferenceError -->
+        <input type="hidden" id="confirm-type-input" value="">
         <input type="range" id="slide-delete-range" min="0" max="100" value="0" class="hidden" style="display: none;">
+        <span id="confirm-type-match-indicator" class="hidden"></span>
+        <span id="confirm-type-status-hint" class="hidden"></span>
 
+        <!-- ACTION BUTTONS: CANCEL / OK -->
         <div class="flex items-center gap-2 pt-1">
-            <button type="button" onclick="window.closeSlideDeleteModal && window.closeSlideDeleteModal()" class="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition active:scale-95 cursor-pointer">
+            <button type="button" onclick="window.closeSlideDeleteModal && window.closeSlideDeleteModal()" class="flex-1 py-2.5 px-4 rounded-xl text-xs font-semibold text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition active:scale-95 cursor-pointer">
                 Cancel
             </button>
-            <button type="button" id="confirm-type-submit-btn" disabled onclick="window.submitConfirmTypeModal && window.submitConfirmTypeModal()" class="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-gray-700/60 border border-gray-600/40 opacity-50 cursor-not-allowed transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm">
-                <i class="fa-solid fa-check"></i> <span>Confirm</span>
+            <button type="button" id="confirm-safety-submit-btn" disabled onclick="window.submitConfirmSafetyModal && window.submitConfirmSafetyModal()" class="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-gray-700/60 border border-gray-600/40 opacity-50 cursor-not-allowed transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm">
+                <i class="fa-solid fa-check"></i> <span>OK</span>
             </button>
+            <!-- Backward-compatibility button alias for any callers checking confirm-type-submit-btn -->
+            <button type="button" id="confirm-type-submit-btn" class="hidden" style="display: none;" onclick="window.submitConfirmSafetyModal && window.submitConfirmSafetyModal()"></button>
         </div>
     </div>
 </div>

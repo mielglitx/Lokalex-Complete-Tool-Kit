@@ -47,6 +47,14 @@ const MEM_TOKEN_CACHE = {
 };
 const MEM_CUSTOMER_CACHE = new Map();
 
+function setCustomerCache(custId, data) {
+  if (MEM_CUSTOMER_CACHE.size >= 500) {
+    const oldestKey = MEM_CUSTOMER_CACHE.keys().next().value;
+    if (oldestKey) MEM_CUSTOMER_CACHE.delete(oldestKey);
+  }
+  MEM_CUSTOMER_CACHE.set(custId, data);
+}
+
 // Helper: PostgREST Headers
 function getSupabaseHeaders(key) {
   return {
@@ -1122,7 +1130,7 @@ async function processMetaEntries(entries, cfg, ctx) {
             existingCateredRiderId = ex.cateredByRiderId || null;
             existingStatus = ex.status || null;
 
-            MEM_CUSTOMER_CACHE.set(custId, {
+            setCustomerCache(custId, {
               customerName: existingCustomerName,
               avatarUrl: existingAvatarUrl,
               folder: existingFolder,
@@ -1476,7 +1484,7 @@ async function processMetaEntries(entries, cfg, ctx) {
       }
 
       // Update in-memory customer cache with authoritative state
-      MEM_CUSTOMER_CACHE.set(custId, {
+      setCustomerCache(custId, {
         customerName: customerName,
         avatarUrl: avatarUrl,
         folder: threadMeta.folder,
