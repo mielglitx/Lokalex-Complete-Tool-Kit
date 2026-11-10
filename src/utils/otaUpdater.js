@@ -29,7 +29,7 @@ import { showCustomPrompt } from '../ui/modals.js';
 
 const OTA_MANIFEST_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/version.json';
 const OTA_CHECKSUMS_URL = 'https://raw.githubusercontent.com/mielglitx/LokalexOTAUpdate/main/checksums.json';
-const CURRENT_BUILT_IN_VERSION = '1.2.12';
+const CURRENT_BUILT_IN_VERSION = '1.2.13';
 let isCheckingUpdate = false;
 let globalOtaChecksumsMap = {};
 

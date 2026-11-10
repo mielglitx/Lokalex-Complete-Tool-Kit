@@ -37,6 +37,9 @@
  * ============================================================================
  */
 
+import { initErrorTracker } from './utils/errorTracker.js';
+initErrorTracker();
+
 import { registerServiceWorker, initFCMNotifications, syncDeviceFcmToken } from './app/appPush.js';
 import { updateNetworkStatus, initBatteryMonitor } from './app/appMonitors.js';
 import { runBackgroundPersistenceSync, forceReconnectFirebase, initSyncWatchdog } from './app/appSync.js';

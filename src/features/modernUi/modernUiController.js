@@ -391,8 +391,10 @@ export function openModernMenuCategory(catKey) {
     let items = [];
 
     if (catKey === 'settings') {
+        const isUserAdmin = isAdmin();
         title = "Settings";
         items = [
+            ...(isUserAdmin ? [{ icon: "fa-bug text-rose-400", label: "Error Logs", desc: "View, capture & extract app crash logs", action: () => { closeModernHamburgerMenu(); window.openErrorLogModal && window.openErrorLogModal(); } }] : []),
             { icon: "fa-chart-simple text-emerald-400", label: "Data Usage Monitor", desc: "Track mobile data (10m, 30m, 1h, 1d, 1mo)", action: () => { closeModernHamburgerMenu(); window.openDataUsageModal && window.openDataUsageModal(); } },
             { icon: "fa-text-height text-sky-400", label: "View / Font size", desc: "Adjust app display scale & font size", action: () => { closeModernHamburgerMenu(); window.openProfileSettingsModal && window.openProfileSettingsModal(); } },
             { icon: "fa-user-pen text-emerald-400", label: "Profile", desc: "Edit personal details & avatar", action: () => { closeModernHamburgerMenu(); window.handleHeaderUserClick && window.handleHeaderUserClick(); } },
@@ -438,6 +440,7 @@ export function openModernMenuCategory(catKey) {
             { icon: "fa-umbrella-beach text-teal-400", label: "Day Off", desc: "Weekly scheduled day-off view", permKey: null, adminOnly: false, action: () => { closeModernHamburgerMenu(); window.openRiderDayOffModal && window.openRiderDayOffModal(); } },
             { icon: "fa-sliders text-teal-400", label: "Day-Off Rules", desc: "Quotas and day-off change limits", permKey: "canManageDayOff", action: () => { closeModernHamburgerMenu(); window.openAdminDayOffSettingsModal && window.openAdminDayOffSettingsModal(); } },
             { icon: "fa-user-clock text-rose-400", label: "Early Out", desc: "Shift duration & early exit penalty rules", permKey: "canManageEarlyShift", action: () => { closeModernHamburgerMenu(); window.openAdminEarlyShiftModal && window.openAdminEarlyShiftModal(); } },
+            { icon: "fa-bug text-rose-400", label: "Error Logs", desc: "View, capture & extract app crash logs", permKey: null, adminOnly: true, action: () => { closeModernHamburgerMenu(); window.openErrorLogModal && window.openErrorLogModal(); } },
             { icon: "fa-brands fa-facebook-messenger text-blue-400", label: "FB APIs", desc: "Facebook Messenger webhook tokens", permKey: "canManageFbApis", action: () => { closeModernHamburgerMenu(); window.openAdminFbApiModal && window.openAdminFbApiModal(); } },
             { icon: "fa-map-location-dot text-indigo-400", label: "Find", desc: "Geospatial rider locations map", permKey: null, adminOnly: false, action: () => { closeModernHamburgerMenu(); if (window.openFindRidersModal) window.openFindRidersModal(); else if (window.openFindRidersMap) window.openFindRidersMap(); } },
             { icon: "fa-power-off text-rose-500", label: "Force All End", desc: "Terminate shifts for all riders", permKey: "canEndAllShifts", action: () => { closeModernHamburgerMenu(); window.forceAllEndShift && window.forceAllEndShift(); } },
@@ -1402,6 +1405,7 @@ export function renderModernRotationsToolbar() {
         { label: "Schedules", icon: "fa-clock text-purple-400", permKey: "canManageSchedules", action: "window.openAdminTimeInScheduleModal && window.openAdminTimeInScheduleModal()" },
         { label: "Full Booking", icon: "fa-ban text-rose-400", permKey: "canManageFullBooking", action: "window.openFullBookingModal && window.openFullBookingModal()" },
         { label: "Early Out", icon: "fa-user-clock text-rose-400", permKey: "canManageEarlyShift", action: "window.openAdminEarlyShiftModal && window.openAdminEarlyShiftModal()" },
+        { label: "Error Logs", icon: "fa-bug text-rose-400", permKey: null, adminOnly: true, action: "window.openErrorLogModal && window.openErrorLogModal()" },
         { label: "Auto End", icon: "fa-clock-rotate-left text-purple-400", permKey: "canManageAutoEndShift", action: "window.openAdminAutoEndShiftModal && window.openAdminAutoEndShiftModal()" },
         { label: "Force All End", icon: "fa-power-off text-rose-500", permKey: "canEndAllShifts", action: "window.forceAllEndShift && window.forceAllEndShift()" },
         { label: "Performance", icon: "fa-trophy text-amber-400", permKey: null, action: "window.openAdminPerformanceTrackerModal && window.openAdminPerformanceTrackerModal()" },
@@ -1416,7 +1420,7 @@ export function renderModernRotationsToolbar() {
         { label: "FB APIs", icon: "fa-brands fa-facebook-messenger text-blue-400", permKey: "canManageFbApis", action: "window.openAdminFbApiModal && window.openAdminFbApiModal()" }
     ];
 
-    const visibleButtons = toolbarButtons.filter(btn => isUserAdmin || (btn.permKey ? hasTlPermission(btn.permKey) : true));
+    const visibleButtons = toolbarButtons.filter(btn => isUserAdmin || (!btn.adminOnly && (btn.permKey ? hasTlPermission(btn.permKey) : true)));
 
     if (!isUserAdmin && visibleButtons.length === 0) {
         toolbar.classList.add('hidden');

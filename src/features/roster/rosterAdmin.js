@@ -314,6 +314,7 @@ export function toggleAdminControls(enabled) {
     globalState.adminControlsEnabled = !!enabled;
 
     const adminButtonPermissions = {
+        'admin-error-logs-btn': null,
         'admin-performance-tracker-btn': null,
         'admin-store-hub-btn': 'canManageStoreAccounts',
         'admin-manage-riders-btn': 'canManageRiderAccounts',

@@ -1,0 +1,117 @@
+<!-- src/partials/modals/error-log-modal.html -->
+<div id="error-log-modal" class="hidden fixed inset-0 z-[9999] bg-black/85 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4 select-none">
+    <div class="w-full max-w-2xl bg-white dark:bg-[#0c1418] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        
+        <!-- HEADER -->
+        <div class="p-3.5 sm:p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-[#11191e] shrink-0">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <span class="w-9 h-9 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-500 dark:text-rose-400 flex items-center justify-center text-base shrink-0 shadow-xs">
+                    <i class="fa-solid fa-bug"></i>
+                </span>
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <h3 class="font-black text-sm sm:text-base text-slate-900 dark:text-white truncate">
+                            App Error & Crash Logs
+                        </h3>
+                        <span id="error-log-total-count" class="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20 shrink-0">
+                            0 Errors
+                        </span>
+                    </div>
+                    <p class="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                        Captures uncaught exceptions, promise rejections & crashes across devices
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+                <!-- Instant Copy Button in Header -->
+                <button type="button" onclick="window.copyErrorDiagnosticReport && window.copyErrorDiagnosticReport()" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition active:scale-95 cursor-pointer shadow-xs" title="Copy formatted diagnostic report to clipboard">
+                    <i class="fa-regular fa-clipboard"></i>
+                    <span>Copy Report</span>
+                </button>
+                <button type="button" onclick="window.closeErrorLogModal && window.closeErrorLogModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white flex items-center justify-center transition active:scale-95 cursor-pointer">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- SEARCH & ACTION TOOLBAR -->
+        <div class="p-3 border-b border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-[#0e161b] flex flex-col gap-2 shrink-0">
+            <!-- Search bar -->
+            <div class="relative w-full">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                <input 
+                    id="error-log-search-input" 
+                    type="text" 
+                    placeholder="Search error message, rider name, source file..." 
+                    oninput="window.handleErrorLogSearch && window.handleErrorLogSearch(this.value)"
+                    class="w-full pl-8 pr-3 py-1.5 rounded-xl bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-rose-500/50 transition"
+                />
+            </div>
+
+            <!-- Filter Pills & Export Buttons -->
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+                <!-- Filter Pills -->
+                <div class="flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0">
+                    <button id="error-filter-all" type="button" onclick="window.switchErrorLogFilter('all')" class="px-2.5 py-1 rounded-xl text-xs font-bold transition bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-xs cursor-pointer">All</button>
+                    <button id="error-filter-uncaught" type="button" onclick="window.switchErrorLogFilter('uncaught')" class="px-2.5 py-1 rounded-xl text-xs font-bold transition bg-white/5 text-slate-400 hover:text-slate-200 border border-transparent cursor-pointer">Uncaught</button>
+                    <button id="error-filter-rejection" type="button" onclick="window.switchErrorLogFilter('rejection')" class="px-2.5 py-1 rounded-xl text-xs font-bold transition bg-white/5 text-slate-400 hover:text-slate-200 border border-transparent cursor-pointer">Rejections</button>
+                    <button id="error-filter-console" type="button" onclick="window.switchErrorLogFilter('console')" class="px-2.5 py-1 rounded-xl text-xs font-bold transition bg-white/5 text-slate-400 hover:text-slate-200 border border-transparent cursor-pointer">Console</button>
+                </div>
+
+                <!-- Export & Admin Actions -->
+                <div class="flex items-center gap-1.5 ml-auto flex-wrap">
+                    <button type="button" onclick="window.copyErrorDiagnosticReport && window.copyErrorDiagnosticReport()" class="sm:hidden px-2.5 py-1 rounded-xl bg-rose-600 text-white text-[11px] font-bold transition active:scale-95 cursor-pointer shadow-xs flex items-center gap-1">
+                        <i class="fa-regular fa-clipboard"></i> Copy
+                    </button>
+                    <button type="button" onclick="window.exportErrorsAsJson && window.exportErrorsAsJson()" class="px-2.5 py-1 rounded-xl bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-800 dark:text-slate-200 text-[11px] font-bold transition active:scale-95 cursor-pointer shadow-xs flex items-center gap-1" title="Download all error logs as a JSON file">
+                        <i class="fa-solid fa-file-code text-amber-400"></i> JSON
+                    </button>
+                    <button type="button" onclick="window.exportErrorsAsCsv && window.exportErrorsAsCsv()" class="px-2.5 py-1 rounded-xl bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-800 dark:text-slate-200 text-[11px] font-bold transition active:scale-95 cursor-pointer shadow-xs flex items-center gap-1" title="Export errors to a CSV spreadsheet">
+                        <i class="fa-solid fa-file-excel text-emerald-400"></i> CSV
+                    </button>
+                    <button type="button" onclick="window.testErrorCapture && window.testErrorCapture()" class="px-2 py-1 rounded-xl bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-700 dark:text-slate-300 text-[11px] font-bold transition active:scale-95 cursor-pointer shadow-xs flex items-center gap-1" title="Trigger a test error">
+                        <i class="fa-solid fa-flask text-purple-400"></i> Test
+                    </button>
+                    <button type="button" onclick="window.clearAllErrorLogs && window.clearAllErrorLogs()" class="px-2 py-1 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-[11px] font-bold transition active:scale-95 cursor-pointer flex items-center gap-1" title="Clear all local and cloud error logs">
+                        <i class="fa-solid fa-trash-can"></i> Clear
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- HERO STAT BANNER -->
+        <div class="px-3.5 sm:px-4 py-2.5 bg-gradient-to-r from-rose-500/10 via-rose-500/5 to-transparent border-b border-rose-500/15 flex items-center justify-between text-xs shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="flex items-baseline gap-1.5">
+                    <span id="error-hero-total-count" class="font-black font-mono text-base text-rose-500 dark:text-rose-400">0</span>
+                    <span class="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Total Events</span>
+                </div>
+                <div class="h-4 w-px bg-slate-700/50"></div>
+                <div class="text-[10px] text-slate-400">
+                    Latest: <span id="error-hero-recent-time" class="font-mono text-slate-200 font-bold">None</span>
+                </div>
+            </div>
+            <div id="error-hero-top-message" class="text-[10px] text-slate-400 truncate max-w-[220px] sm:max-w-xs font-mono">
+                App is healthy.
+            </div>
+        </div>
+
+        <!-- SCROLLABLE LIST OF CAPTURED ERRORS -->
+        <div id="error-log-list" class="flex-1 overflow-y-auto p-3 sm:p-4 flex flex-col gap-2.5 overscroll-contain">
+            <!-- Dynamic error cards injected by renderErrorLogsList() -->
+        </div>
+
+        <!-- FOOTER TIP -->
+        <div class="p-2.5 sm:p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0c1418] text-[10px] text-slate-400 flex items-center justify-between shrink-0">
+            <span class="flex items-center gap-1.5">
+                <i class="fa-solid fa-circle-info text-rose-400"></i>
+                <span>Errors auto-sync to cloud when online. Click <b>Copy Report</b> to extract full trace for developer support.</span>
+            </span>
+            <button type="button" onclick="window.renderErrorLogsList && window.renderErrorLogsList()" class="text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1 cursor-pointer">
+                <i class="fa-solid fa-rotate text-[9px]"></i> Refresh
+            </button>
+        </div>
+
+    </div>
+</div>
