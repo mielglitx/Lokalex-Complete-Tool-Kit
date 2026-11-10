@@ -29,7 +29,7 @@ import { isAdmin } from '../features/roster/rosterUtils.js';
 const LOCAL_STORAGE_KEY = 'lokalex_error_logs_v1';
 const MAX_LOCAL_LOGS = 100;
 const MAX_CLOUD_LOGS = 150;
-const CURRENT_APP_VERSION = '1.2.13';
+const CURRENT_APP_VERSION = '1.2.14';
 
 let inMemoryLogs = null;
 let cloudLogsMap = new Map();
@@ -275,11 +275,20 @@ export function initErrorTracker() {
             }
 
             if (errorFound) {
-                captureAppError(errorFound, { type: 'ConsoleError' });
+                const combined = `${errorFound.message || ''} ${errorFound.stack || ''}`;
+                if (!combined.includes('CapgoUpdater') && !combined.includes('on_premise_app')) {
+                    captureAppError(errorFound, { type: 'ConsoleError' });
+                }
             } else if (typeof firstArg === 'string' && (firstArg.toLowerCase().includes('error') || firstArg.toLowerCase().includes('failed') || firstArg.toLowerCase().includes('exception'))) {
                 const combined = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
-                // Exclude internal expected debug notices
-                if (!combined.includes('[Vite]') && !combined.includes('Download the Vue Devtools') && !combined.includes('favicon.ico')) {
+                // Exclude internal expected debug notices & 3rd party SDK telemetry
+                const isBenignNoise = combined.includes('[Vite]') || 
+                                     combined.includes('[CapgoUpdater]') || 
+                                     combined.includes('on_premise_app') || 
+                                     combined.includes('stats queue') || 
+                                     combined.includes('Download the Vue Devtools') || 
+                                     combined.includes('favicon.ico');
+                if (!isBenignNoise) {
                     captureAppError(combined, { type: 'ConsoleError' });
                 }
             }
