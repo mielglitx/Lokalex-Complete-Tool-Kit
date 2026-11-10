@@ -164,6 +164,30 @@
     </header>
 
     <!-- ===================================================================== -->
+    <!-- SCHEDULED ADVANCE ORDER REMINDER BANNER (MODERN WORKSPACE)            -->
+    <!-- ===================================================================== -->
+    <div id="modern-adv-order-banner" class="hidden px-3 py-2 border-b flex items-center justify-between gap-2 cursor-pointer transition-all duration-200 select-none shrink-0 shadow-lg z-20">
+        <div class="flex items-center gap-2.5 min-w-0 flex-1">
+            <div id="modern-adv-banner-icon-box" class="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-sm shrink-0">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+            </div>
+            <div class="flex flex-col min-w-0">
+                <h4 id="modern-adv-banner-title" class="font-black text-xs sm:text-sm truncate leading-tight">🔔 30 MINS NOTICE: Scheduled Delivery Ahead</h4>
+                <p id="modern-adv-banner-msg" class="text-[10px] sm:text-[11px] text-white/90 truncate font-medium mt-0.5">Customer — Scheduled delivery due soon</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+            <span class="text-[10px] sm:text-[11px] font-black bg-white/25 hover:bg-white/35 border border-white/30 px-2.5 py-1.5 rounded-xl transition active:scale-95 text-white flex items-center gap-1.5 shadow-xs">
+                <span>View Order</span>
+                <i class="fa-solid fa-chevron-right text-[9px] text-white/80"></i>
+            </span>
+            <button type="button" onclick="event.stopPropagation(); window.dismissScheduledAlertBanner && window.dismissScheduledAlertBanner()" class="w-7 h-7 rounded-xl bg-black/20 hover:bg-black/40 text-white/80 hover:text-white flex items-center justify-center transition active:scale-95 text-xs cursor-pointer shrink-0" title="Dismiss alarm">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
     <!-- 2. MAIN 4-TAB WORKSPACE BAR                                           -->
     <!-- ===================================================================== -->
     <nav class="bg-[#10181d] border-b border-slate-800 grid grid-cols-4 shrink-0">
@@ -542,6 +566,10 @@
         #modern-ui-workspace.modern-theme-light {
             background-color: #F1F5F9 !important;
             color: #0F172A !important;
+        }
+        #modern-ui-workspace.modern-theme-light #modern-adv-order-banner,
+        #modern-ui-workspace.modern-theme-light #modern-adv-order-banner * {
+            color: #FFFFFF !important;
         }
         #modern-ui-workspace.modern-theme-light header {
             background-color: #FFFFFF !important;

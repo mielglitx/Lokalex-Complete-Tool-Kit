@@ -137,6 +137,7 @@ export function applyLokalexUiMode(mode = null, notify = false) {
         initFloatingCartDrag();
         refreshAllModernViews();
         if (typeof window.syncChannelBarLockUI === 'function') window.syncChannelBarLockUI();
+        if (typeof window.checkScheduledDeliveryAlerts === 'function') window.checkScheduledDeliveryAlerts();
         if (notify) showToast("✨ Switched to New UI");
     } else {
         if (modernWorkspace) {
@@ -147,6 +148,7 @@ export function applyLokalexUiMode(mode = null, notify = false) {
             if (appHeader) appHeader.classList.remove('hidden');
             if (homeView) homeView.classList.remove('hidden');
         }
+        if (typeof window.checkScheduledDeliveryAlerts === 'function') window.checkScheduledDeliveryAlerts();
         // Restore Classic UI saved theme
         const savedClassicTheme = localStorage.getItem('lokalex_theme_preference') || localStorage.getItem('lokalex_theme') || 'light';
         if (typeof window.applyTheme === 'function') {

@@ -22,6 +22,17 @@ import { getLocalTodayStr } from '../../utils/helpers.js';
 let alarmInterval = null;
 let alarmTimeout = null;
 const triggeredAlerts = new Set();
+let dismissedAlertKey = null;
+let currentActiveAlertKey = null;
+
+export function dismissScheduledAlertBanner() {
+    stopReminderAlarm();
+    dismissedAlertKey = currentActiveAlertKey;
+    const banner = document.getElementById('adv-order-banner');
+    const modernBanner = document.getElementById('modern-adv-order-banner');
+    if (banner) banner.classList.add('hidden');
+    if (modernBanner) modernBanner.classList.add('hidden');
+}
 
 /**
  * Parses arbitrary date and time strings into a valid JavaScript Date object.
@@ -147,11 +158,15 @@ export function stopReminderAlarm() {
 export function checkScheduledDeliveryAlerts() {
     const orders = globalState.globalAdvancedOrders || [];
     const banner = document.getElementById('adv-order-banner');
+    const modernBanner = document.getElementById('modern-adv-order-banner');
     const badge = document.getElementById('adv-count-badge');
 
     if (orders.length === 0) {
         if (banner) banner.classList.add('hidden');
+        if (modernBanner) modernBanner.classList.add('hidden');
         if (badge) badge.classList.add('hidden');
+        dismissedAlertKey = null;
+        currentActiveAlertKey = null;
         stopReminderAlarm();
         return;
     }
@@ -247,54 +262,103 @@ export function checkScheduledDeliveryAlerts() {
         }
     }
 
-    if (banner) {
-        if (highestUrgencyOrder && highestUrgencyLevel > 0) {
+    if (highestUrgencyOrder && highestUrgencyLevel > 0) {
+        const activeAlertKey = `${(highestUrgencyOrder.id || highestUrgencyOrder.key || highestUrgencyOrder.custName)}_${highestUrgencyLevel}`;
+        currentActiveAlertKey = activeAlertKey;
+        const isDismissed = dismissedAlertKey && dismissedAlertKey === activeAlertKey;
+
+        let countdownText = "";
+        if (highestUrgencyDiffMins > 0) {
+            countdownText = `(Due in ${highestUrgencyDiffMins} min${highestUrgencyDiffMins === 1 ? '' : 's'})`;
+        } else if (highestUrgencyDiffMins === 0) {
+            countdownText = `(Due right now!)`;
+        } else {
+            countdownText = `(Overdue by ${Math.abs(highestUrgencyDiffMins)} min${Math.abs(highestUrgencyDiffMins) === 1 ? '' : 's'}!)`;
+        }
+
+        const custLabel = highestUrgencyOrder.custName || "Customer";
+        const timeLabel = highestUrgencyOrder.timeToReceive || "";
+        const addrText = highestUrgencyOrder.address ? ` • ${highestUrgencyOrder.address}` : '';
+
+        let titleText = '';
+        let msgText = '';
+        let classicBannerClass = '';
+        let modernBannerClass = '';
+        let modernIconHtml = '';
+
+        if (highestUrgencyLevel === 3) {
+            titleText = `🚨 5 MINS WARNING: Scheduled Delivery ${countdownText}`;
+            msgText = `${custLabel} — Due at ${timeLabel}${addrText}`;
+            classicBannerClass = "bg-red-600 text-white p-3 rounded-2xl border border-red-400 shadow-xl flex items-center justify-between gap-2 cursor-pointer animate-pulse select-none";
+            modernBannerClass = "bg-red-600 text-white px-3 py-2 border-b border-red-500 flex items-center justify-between gap-2 cursor-pointer transition-all duration-200 select-none shrink-0 shadow-lg z-20 animate-pulse";
+            modernIconHtml = '<i class="fa-solid fa-triangle-exclamation"></i>';
+        } else if (highestUrgencyLevel === 2) {
+            titleText = `⚠️ 15 MINS REMINDER: Delivery Upcoming ${countdownText}`;
+            msgText = `${custLabel} — Due at ${timeLabel}${addrText}`;
+            classicBannerClass = "bg-amber-600 text-white p-3 rounded-2xl border border-amber-400 shadow-xl flex items-center justify-between gap-2 cursor-pointer select-none";
+            modernBannerClass = "bg-amber-600 text-white px-3 py-2 border-b border-amber-500 flex items-center justify-between gap-2 cursor-pointer transition-all duration-200 select-none shrink-0 shadow-lg z-20";
+            modernIconHtml = '<i class="fa-solid fa-bell"></i>';
+        } else if (highestUrgencyLevel === 1) {
+            titleText = `🔔 30 MINS NOTICE: Scheduled Delivery Ahead ${countdownText}`;
+            msgText = `${custLabel} — Scheduled for ${timeLabel}${addrText}`;
+            classicBannerClass = "bg-blue-600 text-white p-3 rounded-2xl border border-blue-400 shadow-xl flex items-center justify-between gap-2 cursor-pointer select-none";
+            modernBannerClass = "bg-blue-600 text-white px-3 py-2 border-b border-blue-500 flex items-center justify-between gap-2 cursor-pointer transition-all duration-200 select-none shrink-0 shadow-lg z-20";
+            modernIconHtml = '<i class="fa-solid fa-clock-rotate-left"></i>';
+        }
+
+        // 1. Classic UI Banner
+        if (banner) {
             const titleEl = document.getElementById('adv-banner-title');
             const msgEl = document.getElementById('adv-banner-msg');
-
-            let countdownText = "";
-            if (highestUrgencyDiffMins > 0) {
-                countdownText = `(Due in ${highestUrgencyDiffMins} min${highestUrgencyDiffMins === 1 ? '' : 's'})`;
-            } else if (highestUrgencyDiffMins === 0) {
-                countdownText = `(Due right now!)`;
-            } else {
-                countdownText = `(Overdue by ${Math.abs(highestUrgencyDiffMins)} min${Math.abs(highestUrgencyDiffMins) === 1 ? '' : 's'}!)`;
-            }
-
-            const custLabel = highestUrgencyOrder.custName || "Customer";
-            const timeLabel = highestUrgencyOrder.timeToReceive || "";
-
-            if (highestUrgencyLevel === 3) {
-                if (titleEl) titleEl.innerText = `🚨 5 MINS WARNING: Scheduled Delivery ${countdownText}`;
-                if (msgEl) msgEl.innerText = `${custLabel} — Due at ${timeLabel}${highestUrgencyOrder.address ? ` • ${highestUrgencyOrder.address}` : ''}`;
-                banner.className = "bg-red-600 text-white p-3 rounded-2xl border border-red-400 shadow-xl flex items-center justify-between gap-2 cursor-pointer animate-pulse select-none";
-            } else if (highestUrgencyLevel === 2) {
-                if (titleEl) titleEl.innerText = `⚠️ 15 MINS REMINDER: Delivery Upcoming ${countdownText}`;
-                if (msgEl) msgEl.innerText = `${custLabel} — Due at ${timeLabel}${highestUrgencyOrder.address ? ` • ${highestUrgencyOrder.address}` : ''}`;
-                banner.className = "bg-amber-600 text-white p-3 rounded-2xl border border-amber-400 shadow-xl flex items-center justify-between gap-2 cursor-pointer select-none";
-            } else if (highestUrgencyLevel === 1) {
-                if (titleEl) titleEl.innerText = `🔔 30 MINS NOTICE: Scheduled Delivery Ahead ${countdownText}`;
-                if (msgEl) msgEl.innerText = `${custLabel} — Scheduled for ${timeLabel}${highestUrgencyOrder.address ? ` • ${highestUrgencyOrder.address}` : ''}`;
-                banner.className = "bg-blue-600 text-white p-3 rounded-2xl border border-blue-400 shadow-xl flex items-center justify-between gap-2 cursor-pointer select-none";
-            }
-
+            if (titleEl) titleEl.innerText = titleText;
+            if (msgEl) msgEl.innerText = msgText;
+            banner.className = classicBannerClass;
             banner.onclick = () => {
                 stopReminderAlarm();
                 if (typeof window.openAdvancedOrdersModal === 'function') {
                     window.openAdvancedOrdersModal();
                 }
             };
-
-            banner.classList.remove('hidden');
-
-            if (shouldPlayAlarm) {
-                playReminderAlarm();
+            if (isDismissed) {
+                banner.classList.add('hidden');
+            } else {
+                banner.classList.remove('hidden');
             }
-        } else {
-            banner.classList.add('hidden');
-            stopReminderAlarm();
         }
-    } else if (!highestUrgencyOrder || highestUrgencyLevel === 0) {
+
+        // 2. Modern UI Banner
+        if (modernBanner) {
+            const modernTitleEl = document.getElementById('modern-adv-banner-title');
+            const modernMsgEl = document.getElementById('modern-adv-banner-msg');
+            const modernIconEl = document.getElementById('modern-adv-banner-icon-box');
+
+            modernBanner.className = modernBannerClass;
+            if (modernTitleEl) modernTitleEl.innerText = titleText;
+            if (modernMsgEl) modernMsgEl.innerText = msgText;
+            if (modernIconEl) modernIconEl.innerHTML = modernIconHtml;
+
+            modernBanner.onclick = () => {
+                stopReminderAlarm();
+                if (typeof window.openAdvancedOrdersModal === 'function') {
+                    window.openAdvancedOrdersModal();
+                }
+            };
+
+            if (isDismissed) {
+                modernBanner.classList.add('hidden');
+            } else {
+                modernBanner.classList.remove('hidden');
+            }
+        }
+
+        if (shouldPlayAlarm && !isDismissed) {
+            playReminderAlarm();
+        }
+    } else {
+        dismissedAlertKey = null;
+        currentActiveAlertKey = null;
+        if (banner) banner.classList.add('hidden');
+        if (modernBanner) modernBanner.classList.add('hidden');
         stopReminderAlarm();
     }
 }
@@ -332,4 +396,10 @@ export function addOrderToPhoneCalendar(arg1, timeToReceive = "", address = "", 
     const loc = encodeURIComponent(addr || "");
 
     window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startTimeIso}/${endTimeIso}&details=${details}&location=${loc}`, '_blank');
+}
+
+if (typeof window !== 'undefined') {
+    window.checkScheduledDeliveryAlerts = checkScheduledDeliveryAlerts;
+    window.dismissScheduledAlertBanner = dismissScheduledAlertBanner;
+    window.stopReminderAlarm = stopReminderAlarm;
 }
